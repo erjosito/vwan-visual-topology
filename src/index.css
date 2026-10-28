@@ -1,0 +1,16 @@
+:root { font-family: 'DM Sans', system-ui, sans-serif; color: #23344b; background: #f3f6fa; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 360px; }
+button, input, select { font: inherit; }
+button, select { cursor: pointer; }
+button { border: 1px solid #d5deea; background: #fff; color: #344760; border-radius: 7px; padding: 9px 13px; font-size: 13px; font-weight: 600; transition: background .15s, border-color .15s; }
+button:hover { background: #edf3fa; border-color: #9eafc5; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, g:focus-visible { outline: 3px solid #4f92e9; outline-offset: 3px; }
+input, select { width: 100%; padding: 9px 10px; border: 1px solid #d4dfeb; border-radius: 6px; background: #fff; color: #253751; font-size: 13px; min-width: 0; }
+input:disabled { background: #f0f3f7; }
+h1, h2, h3, p { margin: 0; }
+h2 { font-size: 17px; font-weight: 650; letter-spacing: -.3px; }
+h3 { font-size: 14px; margin-bottom: 12px; }
+a { color: #2764bc; }
+summary { cursor: pointer; color: #3569af; }

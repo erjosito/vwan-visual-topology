@@ -1,0 +1,140 @@
+import type { PrependRule, Topology } from './model'
+
+export function ipv4(value: string): number | undefined {
+  if (!/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(value)) return undefined
+  const octets = value.split('.').map(Number)
+  if (octets.some((n) => n > 255)) return undefined
+  return octets.reduce((result, n) => result * 256 + n, 0)
+}
+
+export function cidr(value: string): { network: number; length: number } | undefined {
+  const parts = value.split('/')
+  if (parts.length !== 2 || !/^(0|[1-9]\d?)$/.test(parts[1])) return undefined
+  const address = ipv4(parts[0])
+  const length = Number(parts[1])
+  if (address === undefined || length > 32) return undefined
+  const block = 2 ** (32 - length)
+  const network = Math.floor(address / block) * block
+  if (address !== network) return undefined
+  return { network, length }
+}
+
+export function contains(prefix: string, address: number): boolean {
+  const parsed = cidr(prefix)
+  return !!parsed && Math.floor(address / 2 ** (32 - parsed.length)) * 2 ** (32 - parsed.length) === parsed.network
+}
+
+export function parseAsPath(value: string): number[] {
+  if (!value.trim()) return []
+  if (!/^\d+(?:[\s,]+\d+)*$/.test(value.trim())) throw new Error('Use space-separated numeric ASNs.')
+  const path = value.trim().split(/[\s,]+/).map(Number)
+  if (path.length > 64 || path.some((n) => !Number.isInteger(n) || n < 1 || n > 4294967294)) {
+    throw new Error('Use up to 64 ASNs between 1 and 4294967294.')
+  }
+  return path
+}
+
+export function validateTopology(input: unknown): Topology {
+  const fail = (message: string): never => { throw new Error(message) }
+  const record = (value: unknown): Record<string, unknown> => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) fail('Expected a JSON object.')
+    return value as Record<string, unknown>
+  }
+  const text = (value: unknown, label: string): string => {
+    if (typeof value !== 'string' || !value.trim() || value.length > 120) fail(`${label} must contain 1-120 characters.`)
+    return value as string
+  }
+  const array = (value: unknown, limit: number, label: string): unknown[] => {
+    if (!Array.isArray(value) || value.length > limit) fail(`${label} must be an array with at most ${limit} entries.`)
+    return value as unknown[]
+  }
+  const ids = new Set<string>()
+  const id = (value: unknown): string => {
+    const result = text(value, 'ID')
+    if (ids.has(result)) fail(`Duplicate ID: ${result}`)
+    ids.add(result)
+    return result
+  }
+  const root = record(input)
+  if (root.version !== 1) fail('Unsupported topology version (expected 1).')
+  const prefixes = (value: unknown, label: string) => array(value, 100, label).map((value) => {
+    const prefix = text(value, label)
+    if (!cidr(prefix)) fail(`Invalid IPv4 network CIDR: ${prefix}`)
+    return prefix
+  })
+  const asns = (value: unknown) => array(value, 64, 'AS path').map((n) => {
+    if (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 4294967294) fail('Invalid ASN.')
+    return n as number
+  })
+  const maps = (value: unknown): PrependRule[] => array(value ?? [], 20, 'Route-map rules').map((value) => {
+    const rule = record(value)
+    const prepend = asns(rule.prepend)
+    if (prepend.some((n) => n > 64511 || [8074, 8075, 12076, 23456].includes(n))) fail('Azure prepend rules require public 2-byte ASNs, excluding Azure-reserved ASNs. Use your own public ASN; documentation ASNs 64496-64511 are also accepted for simulation.')
+    if (!['equals', 'contains'].includes(rule.match as string)) fail('Invalid prefix match mode.')
+    return { id: id(rule.id), prefixes: prefixes(rule.prefixes, 'Rule prefixes'), match: rule.match as 'equals' | 'contains', prepend }
+  })
+  const hubs = array(root.hubs, 20, 'Hubs').map((value) => {
+    const hub = record(value)
+    if (!['ExpressRoute', 'VPN', 'ASPath'].includes(hub.preference as string)) fail('Invalid hub routing preference.')
+    const intent = record(hub.routingIntent ?? { private: false, internet: false, privatePrefixes: [] })
+    if (typeof intent.private !== 'boolean' || typeof intent.internet !== 'boolean') fail('Routing intent policies must be boolean.')
+    return { id: id(hub.id), name: text(hub.name, 'Hub name'), region: text(hub.region, 'Region'), preference: hub.preference,
+      routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') } } as Topology['hubs'][number]
+  })
+  const sites = array(root.sites, 60, 'Sites').map((value) => {
+    const site = record(value)
+    const asn = asns([site.asn ?? 65001])[0]
+    if (asn === 65520 || asn === 65515 || asn === 12076) fail('Use a non-Azure site ASN.')
+    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: prefixes(site.prefixes ?? [], 'Site originated prefixes') }
+  })
+  const siteLinks = array(root.siteLinks ?? [], 120, 'On-premises links').map((value) => {
+    const link = record(value)
+    if (link.a === link.b || !sites.some((s) => s.id === link.a) || !sites.some((s) => s.id === link.b)) fail('On-premises links need two different existing sites.')
+    const policy = (value: unknown) => {
+      const p = record(value)
+      return { prefixes: prefixes(p.prefixes, 'Peer export prefixes'), prepend: asns(p.prepend), receivePrepend: asns(p.receivePrepend ?? []) }
+    }
+    if (typeof link.enabled !== 'boolean') fail('On-premises link enabled must be boolean.')
+    return { id: id(link.id), name: text(link.name, 'Link name'), a: link.a as string, b: link.b as string,
+      enabled: link.enabled as boolean, aToB: policy(link.aToB), bToA: policy(link.bToA) }
+  })
+  const spokes = array(root.spokes, 60, 'Spokes').map((value) => {
+    const spoke = record(value)
+    if (!hubs.some((h) => h.id === spoke.hubId)) fail('Spoke references a missing hub.')
+    const prefixes = array(spoke.prefixes, 30, 'Spoke prefixes').map((value) => {
+      const prefix = text(value, 'Spoke prefix')
+      if (!cidr(prefix)) fail(`Invalid spoke IPv4 network CIDR: ${prefix}`)
+      return prefix
+    })
+    if (!prefixes.length) fail('A spoke needs at least one prefix.')
+    return { id: id(spoke.id), name: text(spoke.name, 'Spoke name'), hubId: spoke.hubId as string, prefixes }
+  })
+  const connections = array(root.connections, 120, 'Connections').map((value) => {
+    const connection = record(value)
+    if (!hubs.some((h) => h.id === connection.hubId) || !sites.some((s) => s.id === connection.siteId)) fail('Connection references a missing hub or site.')
+    if (!['ExpressRoute', 'VPN', 'SDWAN'].includes(connection.transport as string)) fail('Invalid transport.')
+    if (typeof connection.enabled !== 'boolean') fail('Connection enabled must be boolean.')
+    if (connection.learnSiteRoutes !== undefined && typeof connection.learnSiteRoutes !== 'boolean') fail('Learn site routes must be boolean.')
+    const connectionId = id(connection.id)
+    const inbound = maps(connection.inbound)
+    const outbound = maps(connection.outbound)
+    if (connection.transport === 'SDWAN' && (inbound.length || outbound.length)) fail('Azure route maps are not supported on integrated SD-WAN NVA branch connections.')
+    const routes = array(connection.routes, 100, 'Routes per connection').map((value) => {
+      const route = record(value)
+      const prefix = text(route.prefix, 'Prefix')
+      if (!cidr(prefix)) fail(`Invalid IPv4 network CIDR: ${prefix}. Use the network address, not a host address.`)
+      if (!['bgp', 'vpn-static'].includes(route.kind as string)) fail('Invalid route kind.')
+      if (route.kind !== 'bgp' && connection.transport !== 'VPN') fail('Static routes are supported only on VPN connections.')
+      const path = array(route.asPath, 64, 'AS path')
+      if (path.some((n) => typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 4294967294)) fail('Invalid ASN.')
+      if (route.kind === 'bgp' && path.length === 0) fail('BGP routes need an AS path as received by the hub.')
+      if (route.kind === 'bgp' && path.includes(65520)) fail('65520 is reserved for inter-hub propagation in this simulator.')
+      if (route.kind !== 'bgp' && path.length !== 0) fail('Static routes must have an empty AS path.')
+      return { id: id(route.id), prefix, asPath: path, kind: route.kind } as Topology['connections'][number]['routes'][number]
+    })
+    return { id: connectionId, name: text(connection.name, 'Connection name'), hubId: connection.hubId,
+      siteId: connection.siteId, transport: connection.transport, enabled: connection.enabled, routes,
+      inbound, outbound, learnSiteRoutes: connection.learnSiteRoutes ?? false } as Topology['connections'][number]
+  })
+  return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks }
+}
