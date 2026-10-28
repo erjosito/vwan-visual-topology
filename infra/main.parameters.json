@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "westeurope" },
+    "resourceGroupName": { "value": "rg-vwan-visual-topology-dev-426b" },
+    "staticWebAppName": { "value": "swa-vwan-visual-topology-dev-426b" },
+    "environmentName": { "value": "vwan-visual-topology-dev-426b" }
+  }
+}

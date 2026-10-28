@@ -2,6 +2,8 @@
 
 A browser-based Azure Virtual WAN topology designer and **explainable planning simulator**. No Azure credentials, backend, database, or telemetry are needed to run it.
 
+**Live app:** https://black-sea-0b65eb803.4.azurestaticapps.net
+
 ## Features
 
 - Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites.
@@ -78,4 +80,25 @@ Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 
 
 ## Deployment
 
-The app is suitable for Azure Static Web Apps **Free**, with no always-on compute or database. Free-tier limits apply, and Free is not a production SLA tier. Deployment infrastructure and workflows are added only after the Azure target and plan are approved.
+Hosted on Azure Static Web Apps **Free**, with no always-on compute or database: **$0/month within Free-tier limits**. Free is not a production SLA tier. Topology data stays in your browser; deploying the app does not create Virtual WAN resources.
+
+The subscription-scope Bicep in `infra` creates only a tagged resource group and a Free Static Web App. Select your Azure subscription, review or override the names in `infra/main.parameters.json`, then preview and deploy:
+
+```powershell
+az login
+az account set --subscription '<your-subscription-id>'
+az deployment sub what-if --location westeurope --template-file .\infra\main.bicep --parameters '@infra\main.parameters.json' sessionId='<tracking-id>' deployedBy='<operator>'
+az deployment sub create --name vwan-visual-topology --location westeurope --template-file .\infra\main.bicep --parameters '@infra\main.parameters.json' sessionId='<tracking-id>' deployedBy='<operator>'
+```
+
+Store the app's deployment token in the GitHub repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN`; never commit it. The `CI` workflow runs lint, unit tests, production build and Chromium tests, then deploys **those exact built assets** on `main` only. Pull requests cannot deploy. A manual workflow run can redeploy `main`.
+
+To run the same browser tests against the deployed app instead of starting a local server:
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL = 'https://black-sea-0b65eb803.4.azurestaticapps.net'
+npm run test:e2e
+Remove-Item Env:\PLAYWRIGHT_BASE_URL
+```
+
+To remove this installation, first verify the group contains only the resources you intend to delete, then run `az group delete --name rg-vwan-visual-topology-dev-426b`. Deleting the group removes the hosted app; it does not delete exported topology files or browser storage.
