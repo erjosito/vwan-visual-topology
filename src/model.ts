@@ -77,6 +77,18 @@ export interface Topology {
   connections: Connection[]
 }
 
+export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink'
+export interface ObjectSelection { kind: ObjectKind; id: string }
+
+export const objectLabels: Record<ObjectKind, string> = {
+  hub: 'hub', spoke: 'spoke', site: 'site', connection: 'connection', siteLink: 'on-premises link',
+}
+
+export function topologyObject(topology: Topology, selection: ObjectSelection) {
+  const collections = { hub: topology.hubs, spoke: topology.spokes, site: topology.sites, connection: topology.connections, siteLink: topology.siteLinks }
+  return collections[selection.kind].find((item) => item.id === selection.id)
+}
+
 export const transportLabels: Record<Transport, string> = {
   ExpressRoute: 'ExpressRoute',
   VPN: 'S2S VPN',

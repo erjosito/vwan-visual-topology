@@ -6,7 +6,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 
 ## Features
 
-- Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites.
+- Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites with editable ASNs and originated prefixes. Site ASNs are visible in the diagram and sidebar.
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs.
 - Define per-connection BGP advertisements and received AS paths, or VPN site static prefixes. Disable connections to explore failures.
 - Choose ExpressRoute, VPN, or AS Path routing preference independently per hub.
@@ -16,6 +16,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Apply inbound and outbound, first-match AS-path prepend route maps to supported Azure BGP connections. Preview outbound advertisements without confusing them with Azure best paths.
 - Trace IPv4 flows from a hub or attached spoke, with longest-prefix matching and per-hop explanations.
 - Save automatically in browser storage, and import/export validated, versioned JSON.
+- Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 
 ## Run locally
 
@@ -41,10 +42,20 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 1. Use **Hubs**, **Spokes**, **Sites**, and **Links** to construct the topology.
 2. Select a link in the diagram or editor to change its advertised prefixes and received AS paths. Include provider ASNs such as `12076` in explicit ExpressRoute paths.
 3. Click a hub, select a highlight prefix, and adjust **Hub routing preference** to compare paths.
-4. Open **Routing intent** to enable private or Internet policies. Use **Effective route view** to switch between the hub and Azure Firewall.
+4. Select a hub and click **Edit hub** (or **Routing intent**) to configure private/Internet intent and additional private prefixes as hub attributes. Use **Effective route view** to switch between the hub and Azure Firewall.
 5. To model on-premises transit, add site prefixes and BGP links under **On-premises sites & BGP links**. Export allowlists match exact prefixes; `*` means all. On the ingress hub connection, enable **Advertise site-originated and learned on-premises routes**.
-6. On supported connections, add inbound/outbound prepend rules. Prefix match modes are `Equals` and `Contains`; rules terminate on the first match, while unmatched routes pass unchanged.
+6. Right-click a supported connection (or select it and choose **Route maps**) to add inbound/outbound prepend rules in the diagram's editor. Prefix match modes are `Equals` and `Contains`; rules terminate on the first match, while unmatched routes pass unchanged.
 7. Enter a destination IPv4 address and **Trace flow**. Green links show the modeled forwarding path; multiple equal paths are displayed rather than inventing a traffic hash.
+
+### Editing directly from the diagram
+
+Right-click a hub, spoke, site, hub connection or on-premises link for its contextual menu. Hubs offer **Edit configuration**, **Show effective routes**, firewall routes when applicable, creation actions and deletion. Connections offer configuration, **Route maps**, advertisements, effective routes and deletion. Shift+F10 opens the same menu; use arrow keys to navigate and Escape to dismiss. Left-clicking still shows actions above the diagram and preserves hub route highlighting.
+
+Use **Edit configuration** to rename an object or change its properties; existing IDs, relationships, advertisements and policies are preserved. Hub configuration includes routing intent, also summarized in the sidebar's hub cards. Spokes can be moved to another hub, and connections can be retargeted to existing hubs/sites. Invalid changes stay in the editor until corrected or canceled.
+
+Use **+ Add hub** or **+ Add site** above the diagram, or select a hub for **+ Add spoke**, **+ Add connected site** and **+ Connect existing site**. A connected site and its hub connection are created together, with site-prefix advertisements enabled. Select a site for **+ Connect to hub** or **+ Link to another site**. Hub-to-hub links remain automatic.
+
+**Delete** shows a confirmation, including the dependent spokes/connections/links that will also be removed. Deleting a hub keeps its on-premises sites. Export JSON first if you need an undo/backup. Keyboard users can select diagram objects with Enter/Space; the editor supports Tab and Escape. Firewall icons select their hub; routing intent is part of that hub's attributes, not a separate topology object.
 
 ## Routing model and boundaries
 

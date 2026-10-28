@@ -1,12 +1,17 @@
-import { useMemo, useRef, useState } from 'react'
-import type { FormEvent, ReactNode } from 'react'
-import { example, preferenceLabels, routeLabels, transportLabels } from './model'
-import type { Advertisement, Preference, RouteKind, Topology, Transport } from './model'
+import { cloneElement, useMemo, useRef, useState } from 'react'
+import type { FormEvent, ReactElement } from 'react'
+import { example, objectLabels, preferenceLabels, routeLabels, topologyObject, transportLabels } from './model'
+import type { Advertisement, ObjectSelection, Preference, RouteKind, Topology, Transport } from './model'
 import { simulate, traceFlow } from './routing'
 import type { Candidate, FlowPath } from './routing'
 import { ipv4, parseAsPath, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
+import type { DiagramContextMenu } from './TopologyDiagram'
 import { AdvancedEditor } from './AdvancedEditor'
+import { TopologyObjectEditor } from './TopologyObjectEditor'
+import type { EditorRequest } from './TopologyObjectEditor'
+import { TopologyContextMenu } from './TopologyContextMenu'
+import type { ContextAction } from './TopologyContextMenu'
 import './App.css'
 
 const storageKey = 'vwan-visual-topology:v1'
@@ -15,8 +20,8 @@ const message = (error: unknown) => error instanceof Error ? error.message : 'Un
 const label = (route: Candidate) => route.transport === 'VNet' ? 'VNet connection' : route.transport === 'Firewall' ? 'Azure Firewall' : route.transport === 'Internet' ? 'Internet' : transportLabels[route.transport]
 const kindLabel = (route: Candidate) => route.kind === 'system' ? 'System route' : route.kind === 'policy' ? 'Routing intent' : routeLabels[route.kind]
 
-function Field({ title, children }: { title: string; children: ReactNode }) {
-  return <label className="field"><span>{title}</span>{children}</label>
+function Field({ title, children }: { title: string; children: ReactElement<{ 'aria-label'?: string }> }) {
+  return <label className="field"><span>{title}</span>{cloneElement(children, { 'aria-label': title })}</label>
 }
 
 function App() {
@@ -40,6 +45,9 @@ function App() {
   const [source, setSource] = useState('')
   const [tracing, setTracing] = useState(false)
   const [editingConnection, setEditingConnection] = useState('')
+  const [selection, setSelection] = useState<ObjectSelection | undefined>(initial.topology.hubs[0] ? { kind: 'hub', id: initial.topology.hubs[0].id } : undefined)
+  const [editorRequest, setEditorRequest] = useState<EditorRequest>()
+  const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [status, setStatus] = useState('')
   const importer = useRef<HTMLInputElement>(null)
 
@@ -52,6 +60,7 @@ function App() {
   const validSource = topology.spokes.find((s) => s.id === source)
   const paths = tracing ? traceFlow(topology, simulation, validSource?.hubId ?? hubId, destination) : []
   const connection = topology.connections.find((c) => c.id === editingConnection)
+  const selectedObject = selection && topologyObject(topology, selection)
   const highlightedRoutes = [
     ...decisions.filter((d) => !selectedPrefix || d.prefix === selectedPrefix).flatMap((d) => d.selected),
     ...(activeRouteView === 'hub' && hub?.routingIntent.private ? (simulation.firewallTables[hubId] ?? []).filter((d) => !selectedPrefix || d.prefix === selectedPrefix).flatMap((d) => d.selected) : []),
@@ -65,14 +74,17 @@ function App() {
     }
   }
 
+  const saveTopology = (next: Topology) => {
+    setTopology(next)
+    persist(next)
+    setError('')
+    setStatus('')
+  }
   const update = (mutate: (next: Topology) => void) => {
     try {
       const next = structuredClone(topology)
       mutate(next)
-      setTopology(validateTopology(next))
-      persist(next)
-      setError('')
-      setStatus('')
+      saveTopology(validateTopology(next))
     } catch (error) { setError(message(error)) }
   }
   const submit = (event: FormEvent<HTMLFormElement>, action: (data: FormData) => void) => {
@@ -83,20 +95,59 @@ function App() {
   }
   const chooseHub = (id: string) => {
     setSelectedHub(id)
+    setSelection({ kind: 'hub', id })
     setSelectedPrefix('')
     setRouteView('hub')
     setTracing(false)
   }
-  const removeHub = (id: string) => update((next) => {
-    next.hubs = next.hubs.filter((h) => h.id !== id)
-    next.connections = next.connections.filter((c) => c.hubId !== id)
-    next.spokes = next.spokes.filter((s) => s.hubId !== id)
-  })
-  const removeSite = (id: string) => update((next) => {
-    next.sites = next.sites.filter((s) => s.id !== id)
-    next.connections = next.connections.filter((c) => c.siteId !== id)
-    next.siteLinks = next.siteLinks.filter((l) => l.a !== id && l.b !== id)
-  })
+  const selectObject = (value: ObjectSelection) => {
+    if (value.kind === 'hub') chooseHub(value.id)
+    if (value.kind === 'spoke') chooseHub(topology.spokes.find((s) => s.id === value.id)!.hubId)
+    if (value.kind === 'connection') {
+      chooseHub(topology.connections.find((c) => c.id === value.id)!.hubId)
+      setActiveTab('connections')
+      setEditingConnection(value.id)
+    }
+    setSelection(value)
+  }
+  const showSettings = (id: string) => {
+    const element = document.getElementById(id)
+    if (element instanceof HTMLDetailsElement) element.open = true
+    element?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+  const showEffectiveRoutes = (id: string, firewall = false) => {
+    chooseHub(id)
+    setShowRoutes(true)
+    setRouteView(firewall ? 'firewall' : 'hub')
+    requestAnimationFrame(() => showSettings('effective-routes'))
+  }
+  const contextSelection = contextMenu?.selection
+  const contextObject = contextSelection && topologyObject(topology, contextSelection)
+  const contextActions: ContextAction[] = contextSelection ? [
+    { label: 'Edit configuration', run: () => setEditorRequest(contextSelection) },
+    ...(contextSelection.kind === 'hub' ? [
+      { label: 'Show effective routes', run: () => showEffectiveRoutes(contextSelection.id) },
+      ...(topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [
+        { label: 'Show firewall effective routes', run: () => showEffectiveRoutes(contextSelection.id, true) },
+      ] : []),
+      { label: 'Add spoke', run: () => setEditorRequest({ kind: 'spoke', hubId: contextSelection.id }) },
+      { label: 'Add connected site', run: () => setEditorRequest({ kind: 'site', hubId: contextSelection.id }) },
+      { label: 'Connect existing site', disabled: !topology.sites.length, run: () => setEditorRequest({ kind: 'connection', hubId: contextSelection.id }) },
+    ] : []),
+    ...(contextSelection.kind === 'site' ? [
+      { label: 'Connect to hub', disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'connection', siteId: contextSelection.id }) },
+      { label: 'Link to another site', disabled: topology.sites.length < 2, run: () => setEditorRequest({ kind: 'siteLink', siteId: contextSelection.id }) },
+    ] : []),
+    ...(contextSelection.kind === 'connection' ? [
+      { label: 'Route maps', run: () => setEditorRequest({ ...contextSelection, routeMaps: true }) },
+      { label: 'Edit advertisements', run: () => requestAnimationFrame(() => showSettings('connection-advertisements')) },
+      { label: 'Show effective routes', run: () => showEffectiveRoutes(topology.connections.find((c) => c.id === contextSelection.id)!.hubId) },
+    ] : []),
+    ...(contextSelection.kind === 'spoke' ? [
+      { label: 'Show effective routes', run: () => showEffectiveRoutes(topology.spokes.find((s) => s.id === contextSelection.id)!.hubId) },
+    ] : []),
+    { label: `Delete ${objectLabels[contextSelection.kind]}`, danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
+  ] : []
   const exportTopology = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(topology, null, 2)], { type: 'application/json' }))
     const anchor = document.createElement('a')
@@ -114,6 +165,8 @@ function App() {
       setSelectedHub(next.hubs[0]?.id ?? '')
       setSelectedPrefix('')
       setEditingConnection('')
+      setSelection(undefined)
+      setEditorRequest(undefined)
       setSource('')
       setTracing(false)
       persist(next)
@@ -167,9 +220,11 @@ function App() {
               {activeTab === 'hubs' && <>
                 <p className="muted">Standard VWAN hubs are fully meshed. Removing a hub also removes its spokes and links.</p>
                 {topology.hubs.map((item) => <div className={`entity-card ${item.id === hubId ? 'selected' : ''}`} key={item.id}>
-                  <button className="entity-title" onClick={() => chooseHub(item.id)}>{item.name}</button><span className="muted">{item.region}</span>
+                  <button className="entity-title" onClick={() => { chooseHub(item.id); setEditorRequest({ kind: 'hub', id: item.id }) }}>{item.name}</button><span className="muted">{item.region}</span>
+                  <span className="muted">Routing intent: {[item.routingIntent.private && 'Private', item.routingIntent.internet && 'Internet'].filter(Boolean).join(' + ') || 'Off'}</span>
+                  <button className="small" aria-label={`Edit configuration ${item.name}`} onClick={() => { chooseHub(item.id); setEditorRequest({ kind: 'hub', id: item.id }) }}>Edit configuration</button>
                   <Field title={`Routing preference: ${item.name}`}><select value={item.preference} onChange={(e) => update((next) => { next.hubs.find((h) => h.id === item.id)!.preference = e.target.value as Preference })}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>
-                  <button className="danger small" onClick={() => removeHub(item.id)}>Remove hub</button>
+                  <button className="danger small" onClick={() => setEditorRequest({ kind: 'hub', id: item.id, deleting: true })}>Remove hub</button>
                 </div>)}
                 <form onSubmit={(e) => submit(e, (data) => update((next) => { next.hubs.push({ id: uid(), name: String(data.get('name')), region: String(data.get('region')), preference: 'ExpressRoute', routingIntent: { private: false, internet: false, privatePrefixes: [] } }) }))}>
                   <h3>Add a hub</h3><Field title="Hub name"><input name="name" required maxLength={120} placeholder="Asia Pacific hub" /></Field>
@@ -178,14 +233,14 @@ function App() {
               </>}
               {activeTab === 'sites' && <>
                 <p className="muted">Each site can have multiple connections, including links to different hubs.</p>
-                {topology.sites.map((site) => <div className="entity-card" key={site.id}><strong>{site.name}</strong><button className="danger small" onClick={() => removeSite(site.id)}>Remove site and links</button></div>)}
-                <form onSubmit={(e) => submit(e, (data) => update((next) => { next.sites.push({ id: uid(), name: String(data.get('name')), asn: 65001, prefixes: [] }) }))}><h3>Add on-premises site</h3><Field title="Site name"><input name="name" required maxLength={120} placeholder="Singapore office" /></Field><button className="primary">Add site</button></form>
+                {topology.sites.map((site) => <div className="entity-card" key={site.id}><button className="entity-title" onClick={() => setEditorRequest({ kind: 'site', id: site.id })}>{site.name}</button><span className="muted">ASN {site.asn}</span><button className="small" aria-label={`Edit configuration ${site.name}`} onClick={() => setEditorRequest({ kind: 'site', id: site.id })}>Edit configuration</button><button className="danger small" onClick={() => setEditorRequest({ kind: 'site', id: site.id, deleting: true })}>Remove site and links</button></div>)}
+                <form onSubmit={(e) => submit(e, (data) => update((next) => { next.sites.push({ id: uid(), name: String(data.get('name')), asn: Number(data.get('asn')), prefixes: String(data.get('prefixes')).split(/[,\s]+/).filter(Boolean) }) }))}><h3>Add on-premises site</h3><Field title="Site name"><input name="name" required maxLength={120} placeholder="Singapore office" /></Field><Field title="Site ASN"><input name="asn" type="number" min={1} max={4294967294} required defaultValue={65001} /></Field><Field title="Originated prefixes"><input name="prefixes" placeholder="10.80.0.0/16" /></Field><button className="primary">Add site</button></form>
               </>}
               {activeTab === 'spokes' && <>
                 <p className="muted">Spoke prefixes become system routes and propagate between hubs.</p>
-                {topology.spokes.map((spoke) => <div className="entity-card" key={spoke.id}><strong>{spoke.name}</strong><span className="muted">{topology.hubs.find((h) => h.id === spoke.hubId)?.name}</span>
+                {topology.spokes.map((spoke) => <div className="entity-card" key={spoke.id}><button className="entity-title" onClick={() => setEditorRequest({ kind: 'spoke', id: spoke.id })}>{spoke.name}</button><span className="muted">{topology.hubs.find((h) => h.id === spoke.hubId)?.name}</span>
                   <Field title={`Prefixes: ${spoke.name}`}><input key={spoke.prefixes.join(',')} defaultValue={spoke.prefixes.join(', ')} onBlur={(e) => update((next) => { next.spokes.find((s) => s.id === spoke.id)!.prefixes = e.target.value.split(/[,\s]+/).filter(Boolean) })} /></Field>
-                  <button className="danger small" onClick={() => update((next) => { next.spokes = next.spokes.filter((s) => s.id !== spoke.id) })}>Remove spoke</button>
+                  <button className="danger small" onClick={() => setEditorRequest({ kind: 'spoke', id: spoke.id, deleting: true })}>Remove spoke</button>
                 </div>)}
                 <form onSubmit={(e) => submit(e, (data) => update((next) => { next.spokes.push({ id: uid(), name: String(data.get('name')), hubId: String(data.get('hub')), prefixes: String(data.get('prefixes')).split(/[,\s]+/).filter(Boolean) }) }))}>
                   <h3>Add a spoke VNet</h3><Field title="Spoke name"><input name="name" required maxLength={120} placeholder="Production VNet" /></Field>
@@ -196,7 +251,7 @@ function App() {
               {activeTab === 'connections' && <>
                 <p className="muted">Select a link to edit its advertisements. Toggle it off to simulate a failure.</p>
                 {topology.connections.map((item) => <div className={`entity-card ${connection?.id === item.id ? 'selected' : ''}`} key={item.id}>
-                  <div className="row"><button className="entity-title" onClick={() => setEditingConnection(item.id)}>{item.name}</button><label className="switch"><input type="checkbox" aria-label={`Enable ${item.name}`} checked={item.enabled} onChange={(e) => update((next) => { next.connections.find((c) => c.id === item.id)!.enabled = e.target.checked })} /><span>{item.enabled ? 'Up' : 'Down'}</span></label></div>
+                  <div className="row"><button className="entity-title" onClick={() => selectObject({ kind: 'connection', id: item.id })}>{item.name}</button><label className="switch"><input type="checkbox" aria-label={`Enable ${item.name}`} checked={item.enabled} onChange={(e) => update((next) => { next.connections.find((c) => c.id === item.id)!.enabled = e.target.checked })} /><span>{item.enabled ? 'Up' : 'Down'}</span></label></div>
                   <span className={`transport ${item.transport}`}>{transportLabels[item.transport]}</span><span className="muted">{topology.hubs.find((h) => h.id === item.hubId)?.name} · {item.routes.length} routes</span>
                 </div>)}
                 <form onSubmit={(e) => submit(e, (data) => {
@@ -217,14 +272,34 @@ function App() {
             <section className="panel topology-panel">
               <div className="panel-heading"><div><p className="eyebrow">EXPLORE</p><h2>Network topology</h2></div><span className="live-dot">{simulation.converged ? 'Routes calculated' : 'Not converged'}</span></div>
               <div className="diagram-toolbar">
-                <span>Click a hub to inspect its preferred paths</span>
+                <span>Right-click for object actions, or select an object below</span>
                 <label>Highlight prefix <select aria-label="Highlight prefix" value={highlightPrefixes.includes(selectedPrefix) ? selectedPrefix : ''} onChange={(e) => { setSelectedPrefix(e.target.value); setTracing(false) }}><option value="">All effective routes</option>{highlightPrefixes.map((prefix) => <option key={prefix}>{prefix}</option>)}</select></label>
               </div>
-              <TopologyDiagram topology={topology} hubId={hubId} selected={highlightedRoutes} paths={paths} sourceSpokeId={tracing ? validSource?.id : undefined} tracing={tracing} onHubClick={chooseHub} onConnectionClick={(id) => { setActiveTab('connections'); setEditingConnection(id) }} />
+              <div className="topology-actions">
+                <button aria-label="Add hub from topology" onClick={() => setEditorRequest({ kind: 'hub' })}>+ Add hub</button>
+                <button aria-label="Add site from topology" onClick={() => setEditorRequest({ kind: 'site' })}>+ Add site</button>
+                {selectedObject && selection ? <div className="object-actions" role="region" aria-label="Selected topology object">
+                  <strong>{selectedObject.name}</strong>
+                  <button onClick={() => setEditorRequest(selection)}>Edit {objectLabels[selection.kind]}</button>
+                  <button className="danger" onClick={() => setEditorRequest({ ...selection, deleting: true })}>Delete {objectLabels[selection.kind]}</button>
+                  {selection.kind === 'hub' && <>
+                    <button onClick={() => setEditorRequest({ kind: 'spoke', hubId: selection.id })}>+ Add spoke</button>
+                    <button onClick={() => setEditorRequest({ kind: 'site', hubId: selection.id })}>+ Add connected site</button>
+                    <button disabled={!topology.sites.length} onClick={() => setEditorRequest({ kind: 'connection', hubId: selection.id })}>+ Connect existing site</button>
+                    <button onClick={() => setEditorRequest(selection)}>Routing intent</button>
+                  </>}
+                  {selection.kind === 'site' && <>
+                    <button disabled={!topology.hubs.length} onClick={() => setEditorRequest({ kind: 'connection', siteId: selection.id })}>+ Connect to hub</button>
+                    <button disabled={topology.sites.length < 2} onClick={() => setEditorRequest({ kind: 'siteLink', siteId: selection.id })}>+ Link to another site</button>
+                  </>}
+                  {selection.kind === 'connection' && <><button onClick={() => showSettings('connection-advertisements')}>Advertisements</button><button onClick={() => setEditorRequest({ ...selection, routeMaps: true })}>Route maps</button></>}
+                </div> : <span className="muted">Select a node or link for more actions. Enter and Space work too.</span>}
+              </div>
+              <TopologyDiagram topology={topology} hubId={hubId} selected={highlightedRoutes} paths={paths} sourceSpokeId={tracing ? validSource?.id : undefined} tracing={tracing} selection={selectedObject ? selection : undefined} onObjectClick={selectObject} onObjectContextMenu={(value) => { selectObject(value.selection); setContextMenu(value) }} />
               <div className="legend"><span><i className="legend-line er" />ExpressRoute</span><span><i className="legend-line vpn" />VPN</span><span><i className="legend-line sdwan" />SD-WAN</span><span><i className="legend-line preferred" />Preferred / flow path</span><span><i className="legend-line alternative" />Alternative / idle</span></div>
             </section>
             <AdvancedEditor topology={topology} hubId={hubId} connectionId={connection?.id} simulation={simulation} update={update} onError={setError} />
-            {connection && <section className="panel advertisements">
+            {connection && <section id="connection-advertisements" className="panel advertisements">
               <div className="panel-heading"><div><p className="eyebrow">ADVERTISEMENTS</p><h2>{connection.name}</h2><p className="muted">{transportLabels[connection.transport]} · Enter AS paths exactly as received by the hub, including provider ASNs.</p></div><button onClick={() => setEditingConnection('')}>Close</button></div>
               <div className="route-editor">
                 {connection.routes.map((route) => <div className="route-edit-row" key={route.id}>
@@ -238,7 +313,7 @@ function App() {
                   <button className="danger small" aria-label={`Remove route ${route.prefix}`} onClick={() => update((next) => { const c = next.connections.find((c) => c.id === connection.id)!; c.routes = c.routes.filter((r) => r.id !== route.id) })}>Remove</button>
                 </div>)}
                 {!connection.routes.length && <p className="muted">No routes yet. This link is visible but cannot carry routed traffic.</p>}
-                <div className="row"><button onClick={() => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.push({ id: uid(), prefix: '10.99.0.0/16', kind: 'bgp', asPath: [65001] }) })}>Add advertised route</button><button className="danger" onClick={() => { update((next) => { next.connections = next.connections.filter((c) => c.id !== connection.id) }); setEditingConnection('') }}>Delete connection</button></div>
+                <div className="row"><button onClick={() => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.push({ id: uid(), prefix: '10.99.0.0/16', kind: 'bgp', asPath: [65001] }) })}>Add advertised route</button><button onClick={() => setEditorRequest({ kind: 'connection', id: connection.id })}>Edit connection details</button><button className="danger" onClick={() => setEditorRequest({ kind: 'connection', id: connection.id, deleting: true })}>Delete connection</button></div>
               </div>
             </section>}
             <section className="panel flow-panel">
@@ -254,7 +329,7 @@ function App() {
                 {paths.length >= 128 && <p className="notice">Showing the first 128 ECMP branches. Additional combinations may exist.</p>}
               </div>}
             </section>
-            <section className="panel effective-routes">
+            <section id="effective-routes" className="panel effective-routes">
               <div className="panel-heading"><div><p className="eyebrow">INSPECT</p><h2>Effective routes{hub ? ` · ${hub.name}` : ''}</h2></div><button aria-expanded={showRoutes} onClick={() => setShowRoutes(!showRoutes)}>{showRoutes ? 'Hide effective routes' : 'Show effective routes'}</button></div>
               {showRoutes && <>
                 <div className="route-controls"><Field title="Inspect hub"><select aria-label="Inspect hub" value={hubId} onChange={(e) => chooseHub(e.target.value)}>{topology.hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</select></Field>
@@ -277,11 +352,25 @@ function App() {
               {simulation.warnings.map((warning) => <p className="notice" key={warning}>{warning}</p>)}
               <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">Hub routing preference reference ↗</a><a href="https://learn.microsoft.com/azure/virtual-wan/routing-deep-dive" target="_blank" rel="noreferrer">Routing deep dive ↗</a></p>
               <p><a href="https://learn.microsoft.com/azure/virtual-wan/how-to-routing-policies" target="_blank" rel="noreferrer">Routing intent reference ↗</a><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">Route-map limitations ↗</a></p>
-              <button onClick={() => { const next = structuredClone(example); setTopology(next); persist(next); setSelectedHub(example.hubs[0].id); setSelectedPrefix(''); setSource(''); setEditingConnection(''); setTracing(false); setError(''); setStatus('Example loaded. Import an exported JSON file to restore a different topology.') }}>Load example (replaces workspace)</button>
+              <button onClick={() => { const next = structuredClone(example); setTopology(next); persist(next); setSelectedHub(example.hubs[0].id); setSelectedPrefix(''); setSource(''); setEditingConnection(''); setSelection(undefined); setEditorRequest(undefined); setTracing(false); setError(''); setStatus('Example loaded. Import an exported JSON file to restore a different topology.') }}>Load example (replaces workspace)</button>
             </section>
           </div>
         </div>
       </main>
+      {contextMenu && contextObject && <TopologyContextMenu key={`${contextMenu.selection.kind}:${contextMenu.selection.id}`} x={contextMenu.x} y={contextMenu.y} title={`${objectLabels[contextMenu.selection.kind]} actions: ${contextObject.name}`} actions={contextActions} onClose={() => { contextMenu.invoker.focus({ preventScroll: true }); setContextMenu(undefined) }} />}
+      {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}:${!!editorRequest.routeMaps}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onSave={(next, value) => {
+        saveTopology(next)
+        if (editorRequest.deleting) setSelection(undefined)
+        else {
+          if (value.kind === 'hub') chooseHub(value.id)
+          if (value.kind === 'spoke') chooseHub(next.spokes.find((s) => s.id === value.id)!.hubId)
+          if (value.kind === 'connection') { chooseHub(next.connections.find((c) => c.id === value.id)!.hubId); setEditingConnection(value.id) }
+          setSelection(value)
+        }
+        setTracing(false)
+        setEditorRequest(undefined)
+        setStatus(`${objectLabels[value.kind]} ${editorRequest.deleting ? 'deleted' : editorRequest.id ? 'updated' : 'created'}.`)
+      }} />}
       <footer>Virtual WAN Topology Lab · Calculated locally in your browser · Export JSON for portable backups</footer>
     </div>
   )
