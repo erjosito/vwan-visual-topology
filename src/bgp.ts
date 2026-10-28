@@ -18,6 +18,7 @@ export interface SiteRoute {
 
 export interface SiteRouting {
   tables: Record<string, SiteRoute[]>
+  candidates: Record<string, SiteRoute[]>
   converged: boolean
 }
 
@@ -35,12 +36,13 @@ export function propagateSites(topology: Topology): SiteRouting {
     return [...unique.values()].slice(0, 32)
   })
   let tables = Object.fromEntries(topology.sites.map((s) => [s.id, best(origins[s.id])]))
+  let candidates = origins
   const signature = (value: typeof tables) => JSON.stringify(topology.sites.map((s) =>
     value[s.id].map((r) => `${r.key}:${r.sitePath.join(':')}:${r.asPath.join(',')}`).sort(),
   ))
   let converged = topology.siteLinks.length === 0
   for (let round = 0; round < 64 && !converged; round++) {
-    const next = Object.fromEntries(topology.sites.map((receiver) => {
+    const nextCandidates = Object.fromEntries(topology.sites.map((receiver) => {
       const received = topology.siteLinks.filter((l) => l.enabled && (l.a === receiver.id || l.b === receiver.id)).flatMap((link) => {
         const senderId = link.a === receiver.id ? link.b : link.a
         const sender = topology.sites.find((s) => s.id === senderId)!
@@ -54,10 +56,12 @@ export function propagateSites(topology: Topology): SiteRouting {
           sitePath: [receiver.id, ...r.sitePath],
         })).filter((r) => !r.asPath.includes(receiver.asn))
       })
-      return [receiver.id, best([...origins[receiver.id], ...received])]
+      return [receiver.id, [...origins[receiver.id], ...received]]
     }))
+    const next = Object.fromEntries(topology.sites.map((site) => [site.id, best(nextCandidates[site.id])]))
     converged = signature(next) === signature(tables)
     tables = next
+    candidates = nextCandidates
   }
-  return { tables, converged }
+  return { tables, candidates, converged }
 }

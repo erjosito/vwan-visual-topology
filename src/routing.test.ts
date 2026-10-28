@@ -170,6 +170,22 @@ describe('route maps and on-premises transit', () => {
     t.connections[0].learnSiteRoutes = false
     expect(selected(t, 'a', '10.80.0.0/16')).toHaveLength(0)
   })
+  it('retains alternate site candidates without exporting non-preferred routes', () => {
+    const t = mesh()
+    t.siteLinks.push({
+      ...structuredClone(t.siteLinks[0]), id: 'backup-wan',
+      bToA: { prefixes: ['10.80.0.0/16'], prepend: [65050, 65050] },
+    })
+    const result = propagateSites(t)
+    const candidates = result.candidates['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')
+    expect(candidates.map((route) => route.asPath)).toEqual([[65050, 65050], [65050, 65050, 65050]])
+    expect(result.tables['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')).toEqual([candidates[0]])
+    expect(result.candidates['vpn-site'].some((route) => route.prefix === '10.81.0.0/16')).toBe(false)
+    t.siteLinks[0].enabled = false
+    const withdrawn = propagateSites(t)
+    expect(withdrawn.candidates['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')).toEqual([candidates[1]])
+    expect(withdrawn.tables['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')).toEqual([candidates[1]])
+  })
   it('does not advertise a route into an AS already present in its path', () => {
     const t = mesh()
     t.siteLinks[0].bToA.prepend = [65001]

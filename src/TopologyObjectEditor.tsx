@@ -127,14 +127,15 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose }: {
             <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label="Private traffic routing intent" defaultChecked={hub?.routingIntent.private ?? false} />Private traffic via Azure Firewall</label>
             <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label="Internet traffic routing intent" defaultChecked={hub?.routingIntent.internet ?? false} />Internet traffic via Azure Firewall</label>
             <Field title="Additional private traffic prefixes"><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
-            <p className="muted">RFC1918 prefixes are included automatically with private intent. Firewall nodes and effective route views update when you save.</p>
+            <p className="muted">RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.</p>
           </fieldset>
         </>}
         {(request.kind === 'spoke' || request.kind === 'connection') && <div hidden={request.routeMaps}><Field title="Hub"><select name="hub" required defaultValue={spoke?.hubId ?? connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field></div>}
         {request.kind === 'spoke' && <Field title="Prefixes"><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>}
         {request.kind === 'site' && <>
           <Field title="Site ASN"><input name="asn" type="number" required min={1} max={4294967294} defaultValue={site?.asn ?? 65001} /></Field>
-          <Field title="Originated prefixes"><input name="prefixes" defaultValue={site?.prefixes.join(', ') ?? ''} placeholder="10.80.0.0/16" /></Field>
+          <Field title="Originated prefixes"><textarea name="prefixes" rows={3} defaultValue={site?.prefixes.join('\n') ?? ''} placeholder={'10.80.0.0/16\n10.81.0.0/16'} /></Field>
+          <p className="muted">One IPv4 prefix per line; commas or spaces also work. All prefixes originate from this site.</p>
           {connectedSite && <>
             <p className="muted">A connection to {topology.hubs.find((h) => h.id === request.hubId)?.name} is created with site-prefix advertisements enabled.</p>
             <Field title="Connection name"><input name="connectionName" maxLength={120} placeholder="Defaults to site name + connection" /></Field>{transport}

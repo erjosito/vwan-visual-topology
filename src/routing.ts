@@ -28,6 +28,7 @@ export interface Simulation {
   tables: Record<string, Decision[]>
   firewallTables: Record<string, Decision[]>
   siteTables: Record<string, SiteRoute[]>
+  siteCandidates: Record<string, SiteRoute[]>
   outbound: Record<string, Candidate[]>
   converged: boolean
   warnings: string[]
@@ -169,7 +170,7 @@ export function simulate(topology: Topology): Simulation {
     const unique = [...new Set(policies)]
     const effective: Decision[] = unique.map((prefix) => {
       const route = policyRoute(hub, prefix)
-      return { prefix, candidates: [route], selected: [route], explanation: ['Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate effective routes.'] }
+      return { prefix, candidates: [route], selected: [route], explanation: ['Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table.'] }
     })
     if (!intent.private) effective.push(...tables[hub.id].filter((d) => !unique.includes(d.prefix)))
     if (intent.internet) {
@@ -188,7 +189,7 @@ export function simulate(topology: Topology): Simulation {
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
       .map((r) => ({ ...r, asPath: applyRouteMap(r.prefix, [connection.transport === 'ExpressRoute' ? 12076 : 65515, ...r.asPath], connection.outbound) }))]
   }))
-  return { tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, outbound, converged, warnings }
+  return { tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, converged, warnings }
 }
 
 export interface FlowPath {

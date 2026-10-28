@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 import type { Topology } from '../src/model'
+import { example } from '../src/model'
 
 const readTopology = (page: Page): Promise<Topology> => page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))
 
@@ -18,9 +19,9 @@ test('clicking hubs highlights routes, HRP changes winners, and trace crosses hu
   await page.getByRole('button', { name: 'Trace flow', exact: true }).click()
   await expect(page.locator('.flow-result')).toContainText('Europe hub → Americas hub → New York VPN → New York office')
   await expect(page.getByTestId('interhub-eu-us')).toHaveClass(/preferred-link/)
-  await page.getByRole('button', { name: 'Hide effective routes' }).click()
+  await page.getByRole('button', { name: 'Hide BGP routes' }).click()
   await expect(page.locator('.effective-routes table')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Show effective routes' }).click()
+  await page.getByRole('button', { name: 'Show BGP routes' }).click()
   await expect(page.locator('.effective-routes table')).toBeVisible()
   await page.reload()
   await expect(page.getByLabel('Hub routing preference', { exact: true })).toHaveValue('VPN')
@@ -45,6 +46,70 @@ test('adds a spoke, shows its route, and preserves it across JSON export/import'
   await expect(page.locator('.diagram')).toContainText('Analytics VNet')
 })
 
+test('BGP routes show every candidate and visibly mark the preferred path', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByLabel('Select hub Americas hub', { exact: true }).locator('.node-detail')).toHaveText('East US')
+  const rows = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')
+  const preferred = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"][data-preferred="true"]')
+  const alternatives = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"][data-preferred="false"]')
+  await expect(rows).toHaveCount(3)
+  await expect(preferred).toHaveCount(1)
+  await expect(preferred).toContainText('London primary')
+  await expect(preferred.locator('.route-state')).toHaveText('* Preferred')
+  await expect(preferred.locator('.as-path')).toHaveText('12076 65010')
+  await expect(alternatives).toHaveCount(2)
+  await expect(alternatives.nth(0)).toBeVisible()
+  await expect(alternatives.nth(1)).toBeVisible()
+  await expect(alternatives.nth(0)).toContainText('London backup')
+  await expect(alternatives.nth(0).locator('.as-path')).toHaveText('65010 65010 65010')
+  await expect(alternatives.nth(1)).toContainText('Remote hub · S2S VPN')
+  await expect(alternatives.nth(1).locator('.as-path')).toHaveText('65520 65520 65020 65010')
+  expect(await preferred.locator('.as-path').evaluate((element) => getComputedStyle(element).color)).not.toBe(
+    await alternatives.first().locator('.as-path').evaluate((element) => getComputedStyle(element).color),
+  )
+  await expect(rows.locator('.selection-reason')).toContainText('ExpressRoute wins')
+  await page.getByLabel('Hub routing preference', { exact: true }).selectOption('VPN')
+  await expect(rows).toHaveCount(3)
+  await expect(preferred).toContainText('London backup')
+  await expect(preferred.locator('.route-state')).toHaveText('* Preferred')
+  await expect(alternatives).toHaveCount(2)
+  await expect(rows.locator('.selection-reason')).toContainText('VPN wins')
+  await page.locator('.effective-routes').screenshot({ path: 'test-results/route-candidates.png' })
+})
+
+test('all ECMP preferred paths are marked while longer and withdrawn paths remain distinct', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.hubs = topology.hubs.filter((h) => h.id === 'eu')
+  topology.hubs[0].preference = 'ASPath'
+  topology.spokes = topology.spokes.filter((s) => s.hubId === 'eu')
+  topology.connections = [0, 1, 2].map((index) => ({
+    ...structuredClone(example.connections[1]), id: `ecmp-${index}`, name: `VPN ${index + 1}`,
+    routes: [{ id: `ecmp-route-${index}`, prefix: '10.20.0.0/16', kind: 'bgp', asPath: index === 2 ? [65010, 65010] : [65010] }],
+  }))
+  await page.goto('/')
+  await page.getByLabel('Import topology file').setInputFiles({
+    name: 'ecmp.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+  })
+  const rows = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')
+  const preferred = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"][data-preferred="true"]')
+  const alternatives = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"][data-preferred="false"]')
+  await expect(rows).toHaveCount(3)
+  await expect(preferred).toHaveCount(2)
+  await expect(preferred.nth(0).locator('.route-state')).toContainText('* Preferred')
+  await expect(preferred.nth(1).locator('.route-state')).toContainText('* Preferred')
+  await expect(preferred.locator('.ecmp')).toHaveText(['ECMP ×2', 'ECMP ×2'])
+  await expect(alternatives).toContainText('VPN 3')
+  await expect(alternatives.locator('.as-path')).toHaveText('65010 65010')
+  await expect(rows.locator('.selection-reason')).toContainText('2 equal-cost paths')
+  await page.getByLabel('Enable VPN 1', { exact: true }).uncheck()
+  await expect(rows).toHaveCount(2)
+  await expect(preferred).toHaveCount(1)
+  await expect(preferred).toContainText('VPN 2')
+  await expect(preferred.locator('.ecmp')).toHaveCount(0)
+  await expect(alternatives).toContainText('VPN 3')
+  await expect(rows.filter({ hasText: 'VPN 1' })).toHaveCount(0)
+})
+
 test('routing intent separates hub and firewall routes and inspects a flow', async ({ page }) => {
   await page.goto('/')
   await page.getByLabel('Select hub Europe hub', { exact: true }).click({ button: 'right' })
@@ -65,9 +130,11 @@ test('routing intent separates hub and firewall routes and inspects a flow', asy
   await expect(page.locator('.effective-routes table')).toContainText('0.0.0.0/0')
   await expect(page.locator('.effective-routes table')).not.toContainText('10.20.0.0/16')
   await page.getByLabel('Select hub Europe hub', { exact: true }).click({ button: 'right' })
-  await page.getByRole('menu').getByRole('menuitem', { name: 'Show firewall effective routes', exact: true }).click()
-  await expect(page.getByLabel('Effective route view', { exact: true })).toHaveValue('firewall')
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Show firewall routes', exact: true }).click()
+  await expect(page.getByLabel('Route view', { exact: true })).toHaveValue('firewall')
   await expect(page.locator('.effective-routes table')).toContainText('10.20.0.0/16')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(3)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"][data-preferred="false"]')).toHaveCount(2)
   await page.getByLabel('Destination IPv4').fill('10.20.1.1')
   await page.getByRole('button', { name: 'Trace flow', exact: true }).click()
   await expect(page.locator('.flow-result')).toContainText('Azure Firewall')
@@ -101,7 +168,7 @@ test('imports are validated without replacing the workspace and mobile UI works'
 test('on-premises peer advertisements feed hub routes and a colored transit path', async ({ page }) => {
   await page.goto('/')
   await page.getByText('On-premises sites & BGP links (0)', { exact: true }).click()
-  await page.getByLabel('Originated prefixes New York office', { exact: true }).fill('10.80.0.0/16')
+  await page.getByLabel('Originated prefixes New York office', { exact: true }).fill('10.80.0.0/16\n10.81.0.0/16')
   await page.getByLabel('Originated prefixes New York office', { exact: true }).press('Tab')
   await page.getByLabel('On-premises link name', { exact: true }).fill('Corporate WAN')
   await page.getByLabel('Peer site A', { exact: true }).selectOption('dc')
@@ -112,6 +179,7 @@ test('on-premises peer advertisements feed hub routes and a colored transit path
   await page.getByRole('button', { name: 'London backup', exact: true }).click()
   await page.getByLabel('Import site mesh routes', { exact: true }).check()
   await expect(page.locator('.effective-routes table')).toContainText('10.80.0.0/16')
+  await expect(page.locator('.effective-routes table')).toContainText('10.81.0.0/16')
   await page.getByLabel('Azure source', { exact: true }).selectOption('eu-apps')
   await page.getByLabel('Destination IPv4').fill('10.80.0.10')
   await page.getByRole('button', { name: 'Trace flow', exact: true }).click()
@@ -185,12 +253,16 @@ test('builds a topology from the diagram and confirms cascading hub deletion', a
   await actions.getByRole('button', { name: '+ Add connected site', exact: true }).click()
   await dialog.getByLabel('Name', { exact: true }).fill('Lab branch')
   await dialog.getByLabel('Site ASN', { exact: true }).fill('65042')
-  await dialog.getByLabel('Originated prefixes', { exact: true }).fill('10.91.0.0/16')
+  await dialog.getByLabel('Originated prefixes', { exact: true }).fill('10.91.0.0/16\n10.92.0.0/16, 10.93.0.0/16')
   await dialog.getByLabel('Connection name', { exact: true }).fill('Branch VPN')
   await dialog.getByLabel('Transport', { exact: true }).selectOption('VPN')
   await dialog.getByRole('button', { name: 'Create object', exact: true }).click()
   await expect(page.getByLabel('Select site Lab branch', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16 +2')
+  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('title')).toContainText('10.91.0.0/16, 10.92.0.0/16, 10.93.0.0/16')
   await expect(page.locator('.effective-routes table')).toContainText('10.91.0.0/16')
+  await expect(page.locator('.effective-routes table')).toContainText('10.92.0.0/16')
+  await expect(page.locator('.effective-routes table')).toContainText('10.93.0.0/16')
   await page.getByLabel('Select hub Lab hub', { exact: true }).click()
   await actions.getByRole('button', { name: 'Delete hub', exact: true }).click()
   await expect(dialog).toContainText('1 attached spoke and 1 connection')
@@ -204,10 +276,12 @@ test('builds a topology from the diagram and confirms cascading hub deletion', a
   expect(result.connections).toHaveLength(0)
   expect(result.sites.map((s) => s.name)).toEqual(['Lab branch'])
   expect(result.sites[0].asn).toBe(65042)
+  expect(result.sites[0].prefixes).toEqual(['10.91.0.0/16', '10.92.0.0/16', '10.93.0.0/16'])
   await page.getByLabel('Select site Lab branch', { exact: true }).click()
   await expect(actions.getByRole('button', { name: '+ Connect to hub', exact: true })).toBeDisabled()
   await page.reload()
   await expect(page.getByLabel('Select site Lab branch', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16 +2')
 })
 
 test('creates and edits a diagram BGP link and confirms dependent site deletion', async ({ page }) => {
@@ -296,7 +370,7 @@ test('right-clicking a connection creates validated inbound and outbound route m
   const connection = (await readTopology(page)).connections.find((c) => c.id === 'er-eu')!
   expect(connection.inbound[0]).toMatchObject({ prefixes: ['10.20.0.0/16'], match: 'contains', prepend: [64496, 64496] })
   expect(connection.outbound[0]).toMatchObject({ prefixes: [], match: 'equals', prepend: [64497] })
-  await expect(page.locator('.effective-routes tbody tr').filter({ hasText: '10.20.0.0/16' }).locator('.as-path')).toContainText('64496 64496 12076 65010')
+  await expect(page.locator('.effective-routes tbody tr[data-preferred="true"]').filter({ hasText: '10.20.0.0/16' }).locator('.as-path')).toContainText('64496 64496 12076 65010')
   await page.getByLabel('Edit connection London primary', { exact: true }).focus()
   await page.keyboard.press('Shift+F10')
   await page.getByRole('menu').getByRole('menuitem', { name: 'Route maps', exact: true }).click()
@@ -315,19 +389,19 @@ test('right-clicking a connection creates validated inbound and outbound route m
   await expect(page.getByRole('dialog')).toContainText('not supported on integrated SD-WAN')
 })
 
-test('hub context menu exposes effective routes and supports keyboard navigation and dismissal', async ({ page }) => {
+test('hub context menu exposes BGP routes and supports keyboard navigation and dismissal', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('button', { name: 'Hide effective routes', exact: true }).click()
+  await page.getByRole('button', { name: 'Hide BGP routes', exact: true }).click()
   const hub = page.getByLabel('Select hub Americas hub', { exact: true })
   await hub.focus()
   await page.keyboard.press('Shift+F10')
   const menu = page.getByRole('menu', { name: 'hub actions: Americas hub', exact: true })
   await expect(menu.getByRole('menuitem', { name: 'Edit configuration', exact: true })).toBeFocused()
   await page.keyboard.press('ArrowDown')
-  await expect(menu.getByRole('menuitem', { name: 'Show effective routes', exact: true })).toBeFocused()
+  await expect(menu.getByRole('menuitem', { name: 'Show BGP routes', exact: true })).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(menu).toHaveCount(0)
-  await expect(page.locator('.effective-routes h2')).toHaveText('Effective routes · Americas hub')
+  await expect(page.locator('.effective-routes h2')).toHaveText('BGP routes · Americas hub')
   await expect(page.locator('.effective-routes table')).toBeVisible()
   await hub.evaluate((element) => element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: window.innerWidth - 2, clientY: window.innerHeight - 2 })))
   await expect(menu).toBeInViewport({ ratio: 1 })
@@ -341,4 +415,50 @@ test('hub context menu exposes effective routes and supports keyboard navigation
   await page.screenshot({ path: 'test-results/context-menu.png' })
   await page.getByRole('heading', { name: 'Network topology', exact: true }).click()
   await expect(menu).toHaveCount(0)
+})
+
+test('Show BGP routes belongs to routers and displays alternate on-premises paths', async ({ page }) => {
+  await page.goto('/')
+  for (const selector of ['Edit connection London primary', 'Select spoke Europe applications']) {
+    await page.getByLabel(selector, { exact: true }).focus()
+    await page.keyboard.press('Shift+F10')
+    await expect(page.getByRole('menu').getByRole('menuitem', { name: 'Show BGP routes', exact: true })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+  }
+  const topology: Topology = {
+    version: 1, name: 'Site BGP candidates', hubs: [], spokes: [], connections: [],
+    sites: [
+      { id: 'a', name: 'Site A', asn: 65010, prefixes: [] },
+      { id: 'b', name: 'Site B', asn: 65020, prefixes: ['10.80.0.0/16', '10.81.0.0/16'] },
+      { id: 'c', name: 'Site C', asn: 65030, prefixes: ['10.80.0.0/16', '10.81.0.0/16'] },
+    ],
+    siteLinks: [
+      { id: 'ab', name: 'A to B', a: 'a', b: 'b', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } },
+      { id: 'ac', name: 'A to C', a: 'a', b: 'c', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [65030] } },
+    ],
+  }
+  await page.getByLabel('Import topology file').setInputFiles({
+    name: 'site-bgp.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+  })
+  await page.getByLabel('Select site Site A', { exact: true }).click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Show BGP routes', exact: true }).click()
+  await expect(page.locator('.effective-routes h2')).toHaveText('BGP routes · Site A')
+  await expect(page.getByLabel('Inspect router', { exact: true })).toHaveValue('site:a')
+  await expect(page.getByLabel('Select site Site A', { exact: true }).locator('.node-prefixes')).toHaveText('No assigned prefixes')
+  await expect(page.getByLabel('Select site Site B', { exact: true }).locator('.node-prefixes')).toHaveText('10.80.0.0/16 +1')
+  for (const prefix of ['10.80.0.0/16', '10.81.0.0/16']) {
+    const rows = page.locator(`.effective-routes tr[data-prefix="${prefix}"]`)
+    await expect(rows).toHaveCount(2)
+    await expect(rows.locator('.selection-reason')).toContainText('Shortest site AS path (1 ASNs)')
+    const preferred = page.locator(`.effective-routes tr[data-prefix="${prefix}"][data-preferred="true"]`)
+    await expect(preferred).toContainText('Site B')
+    await expect(preferred.locator('.route-state')).toHaveText('* Preferred')
+    await expect(preferred.locator('.as-path')).toHaveText('65020')
+    const alternative = page.locator(`.effective-routes tr[data-prefix="${prefix}"][data-preferred="false"]`)
+    await expect(alternative).toContainText('Site C')
+    await expect(alternative.locator('.as-path')).toHaveText('65030 65030')
+  }
+  await expect(page.getByTestId('peer-link-ab')).toHaveClass(/preferred-link/)
+  await expect(page.getByTestId('peer-link-ac')).not.toHaveClass(/preferred-link/)
+  await page.locator('.effective-routes').screenshot({ path: 'test-results/site-bgp-routes.png' })
 })

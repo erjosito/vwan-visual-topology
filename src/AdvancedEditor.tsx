@@ -69,7 +69,7 @@ export function AdvancedEditor({ topology, hubId, connectionId, simulation, upda
         <div className="site-settings">
           {topology.sites.map((site) => <div className="entity-card" key={site.id}><strong>{site.name}</strong>
             <label className="field"><span>Site ASN</span><input aria-label={`Site ASN ${site.name}`} key={site.asn} defaultValue={site.asn} onBlur={(e) => update((next) => { next.sites.find((s) => s.id === site.id)!.asn = Number(e.target.value) })} /></label>
-            <label className="field"><span>Originated prefixes</span><input aria-label={`Originated prefixes ${site.name}`} key={site.prefixes.join(',')} defaultValue={site.prefixes.join(', ')} placeholder="10.80.0.0/16" onBlur={(e) => update((next) => { next.sites.find((s) => s.id === site.id)!.prefixes = prefixes(e.target.value) })} /></label>
+            <label className="field"><span>Originated prefixes (one per line)</span><textarea rows={3} aria-label={`Originated prefixes ${site.name}`} key={site.prefixes.join(',')} defaultValue={site.prefixes.join('\n')} placeholder={'10.80.0.0/16\n10.81.0.0/16'} onBlur={(e) => update((next) => { next.sites.find((s) => s.id === site.id)!.prefixes = prefixes(e.target.value) })} /></label>
             <details><summary>Learned site routes ({simulation.siteTables[site.id]?.length ?? 0})</summary>{simulation.siteTables[site.id]?.map((r, i) => <p className="muted" key={i}>{r.prefix} · AS {r.asPath.join(' ') || 'local'} · {r.sitePath.map((id) => topology.sites.find((s) => s.id === id)?.name).join(' → ')}</p>)}</details>
           </div>)}
         </div>
