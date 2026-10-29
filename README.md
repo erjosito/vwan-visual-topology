@@ -170,7 +170,7 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 | Area | Model |
 |---|---|
 | Virtual WAN | One Standard VWAN; full-mesh inter-hub connectivity. Default association/propagation unless private routing intent manages it. |
-| Route selection | Per-prefix best-path selection; forwarding uses longest-prefix match. HRP follows the documented order, including local/remote distinctions and the remote-ER AS Path exception. |
+| Route selection | Per-prefix best-path selection; forwarding uses longest-prefix match. AS Path preference compares full received lengths, including inter-hub prepends; a shorter remote ER path can win. Local paths break equal-length local/remote ties. Other HRPs retain their local/remote and ER/VPN distinctions. |
 | Inter-hub advertisements | Only selected local best paths are advertised, with `65520 65520` prepended. No default-route propagation or remote-route re-export over the full mesh. Nonconvergent calculations are flagged and tracing is disabled. |
 | Spokes | Directly attached IPv4 VNets. Local system routes override equal-prefix BGP routes. No subnet UDRs or Private Endpoint policies. |
 | SD-WAN | Independent NVA source, **not** a VPN gateway. After the documented ER/VPN comparison, NVA candidates compete on AS path. Undocumented/vendor tie-breaks are not predicted and a warning is shown. |
@@ -184,6 +184,10 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 | Azure outbound routes | Preview includes post-map advertisements. Azure-originated routes are **not reimported into Azure through the site mesh**. Azure community suppression, route reflection through shared ER circuits, and Global Reach are not simulated. |
 | Timing | Deterministic nominal convergence only. Azure arrival-order race conditions, failback history, and convergence delays are not predicted. |
 | Flow traces | Forward direction only, up to 128 equal-cost branches. No return-flow symmetry, gateway-instance hashing, BGP MED/local preference, custom route tables, IPv6, or multiple VWANs. |
+
+The AS Path treatment of remote ER follows the controlled two-hub customer-MCR observations in [#10](https://github.com/erjosito/vwan-visual-topology/issues/10): remote ER4 beat local VPN10 after both arrival orders, with each input independently verified. Microsoft's HRP page contains a conflicting "remote ER last" note and a shorter-remote-ER example. The model follows the reproduced received-path comparison, not that unconditional exclusion; this is not a guarantee of every Azure topology or convergence history.
+
+See [Azure testing lessons](AZURE-TESTING-LESSONS.md) for experiment design, evidence boundaries, verification pitfalls, cost controls and safe cleanup.
 
 Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 BGP advertisements and 100 site static prefixes per hub connection, and 2 MB per JSON file.
 

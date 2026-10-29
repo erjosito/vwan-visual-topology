@@ -255,9 +255,15 @@ describe('hub best path and inter-hub propagation', () => {
     expect(selected(t)[0]).toMatchObject({ connectionId: 'remote', remote: true, asPath: [65520, 65520, 65002] })
     expect(simulate(t).warnings.join(' ')).not.toContain('arrival-order')
   })
-  it('considers remote ER last in ASPath mode', () => {
-    const t = topology([hub('a', 'ASPath'), hub('b')], [link('local', 'a', 'VPN', Array(8).fill(65001)), link('remote', 'b', 'ExpressRoute', [12076, 65002])])
-    expect(selected(t)[0].connectionId).toBe('local')
+  it.each([[3, 'local'], [4, 'local'], [10, 'remote']] as const)('compares remote ER received length including inter-hub prepends against VPN length %i', (length, expected) => {
+    const t = topology([hub('a', 'ASPath'), hub('b', 'ASPath')], [
+      link('local', 'a', 'VPN', Array(length).fill(65012)),
+      link('remote', 'b', 'ExpressRoute', [12076, 133937]),
+    ])
+    expect(selected(t)[0].connectionId).toBe(expected)
+    if (expected === 'remote') {
+      expect(selected(t)[0].asPath).toEqual([65520, 65520, 12076, 133937])
+    }
   })
   it('exports only the origin hub best paths, not all advertisements', () => {
     const t = topology([hub('a'), hub('b', 'VPN')], [link('er', 'b', 'ExpressRoute', [12076, 65001]), link('vpn', 'b', 'VPN', [65002, 65002])])
@@ -318,7 +324,7 @@ describe('hub best path and inter-hub propagation', () => {
     ])
     expect(selected(t)[0].connectionId).toBe('local')
   })
-  it('uses shortest received paths between remote ER candidates even when they are considered last', () => {
+  it('uses shortest received paths between remote ER candidates', () => {
     const t = topology([hub('a', 'ASPath'), hub('b'), hub('c')], [
       link('short', 'b', 'ExpressRoute', [12076, 65001]),
       link('long', 'c', 'ExpressRoute', [12076, 65002, 65002]),

@@ -56,7 +56,6 @@ function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
       (r) => !r.remote || r.secureOrigin || r.transport !== 'ExpressRoute')
   }
   if (hub.preference === 'ASPath') {
-    filter('Remote ExpressRoute routes are considered last under AS Path preference.', (r) => !(r.remote && r.transport === 'ExpressRoute'))
     const shortest = Math.min(...selected.map((r) => r.asPath.length))
     filter(`Shortest received AS path (${shortest} ASNs, including inter-hub prepends).`, (r) => r.asPath.length === shortest)
   }
