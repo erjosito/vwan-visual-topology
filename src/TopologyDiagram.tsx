@@ -3,13 +3,18 @@ import type { KeyboardEvent, MouseEvent } from 'react'
 import { transportLabels } from './model'
 import type { Candidate, FlowPath } from './routing'
 
-export interface DiagramContextMenu { selection: ObjectSelection; x: number; y: number; invoker: SVGGElement }
+export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
+export type LayoutMode = 'layered' | 'regional'
 
 interface Props {
   topology: Topology
   hubId: string
   selected: Candidate[]
-  preferredSitePaths?: string[][]
+  preferredSiteLinkIds?: string[]
+  sourceConnectionIds?: string[]
+  sourceSiteLinkIds?: string[]
+  layout?: LayoutMode
+  zoom?: number
   paths: FlowPath[]
   tracing: boolean
   sourceSpokeId?: string
@@ -18,21 +23,36 @@ interface Props {
   onObjectContextMenu: (menu: DiagramContextMenu) => void
 }
 
-export function TopologyDiagram({ topology, hubId, selected, preferredSitePaths, paths, sourceSpokeId, tracing, selection, onObjectClick, onObjectContextMenu }: Props) {
+export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkIds, sourceSiteLinkIds = [], sourceConnectionIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeId, tracing, selection, onObjectClick, onObjectContextMenu }: Props) {
   const width = Math.max(900, topology.hubs.length * 250, topology.sites.length * 200, topology.spokes.length * 200)
   const positions = (ids: string[], y: number) => new Map(ids.map((id, i) => [id, { x: width * (i + 1) / (ids.length + 1), y }]))
   const hubs = positions(topology.hubs.map((h) => h.id), 290)
   const sites = positions(topology.sites.map((s) => s.id), 515)
   const spokes = positions(topology.spokes.map((s) => s.id), 80)
-  const activeConnections = new Set(tracing ? paths.map((p) => p.connectionId).filter(Boolean) : selected.map((r) => r.connectionId))
+  if (layout === 'regional') {
+    const groups = [...topology.hubs.map((h) => h.id), 'unattached']
+    const groupWidth = Math.max(250, ...groups.map((id) => Math.max(
+      topology.spokes.filter((s) => s.hubId === id).length,
+      topology.sites.filter((s) => (topology.connections.find((c) => c.siteId === s.id)?.hubId ?? 'unattached') === id).length,
+    ) * 195))
+    const regionalWidth = Math.max(width, groups.length * groupWidth)
+    const place = (ids: string[], center: number, y: number, target: Map<string, { x: number; y: number }>) =>
+      ids.forEach((id, i) => target.set(id, { x: center + (i - (ids.length - 1) / 2) * 195, y }))
+    groups.forEach((id, index) => {
+      const center = regionalWidth * (index + 1) / (groups.length + 1)
+      if (id !== 'unattached') hubs.set(id, { x: center, y: 290 })
+      place(topology.spokes.filter((s) => s.hubId === id).map((s) => s.id), center, 80, spokes)
+      place(topology.sites.filter((s) => (topology.connections.find((c) => c.siteId === s.id)?.hubId ?? 'unattached') === id).map((s) => s.id), center, 515, sites)
+    })
+  }
+  const drawingWidth = Math.max(width, ...[...hubs.values(), ...sites.values(), ...spokes.values()].map((p) => p.x + 120))
+  const activeConnections = new Set(tracing ? [...paths.map((p) => p.connectionId).filter(Boolean), ...sourceConnectionIds] : selected.map((r) => r.connectionId))
   const activeHubEdges = new Set<string>()
   const edgeKey = (a: string, b: string) => [a, b].sort().join(':')
   if (tracing) paths.forEach((p) => p.hubs.slice(1).forEach((id, i) => activeHubEdges.add(edgeKey(p.hubs[i], id))))
   else selected.filter((r) => r.remote).forEach((r) => activeHubEdges.add(edgeKey(hubId, r.originHubId)))
   const sourceSpokes = new Set(topology.spokes.filter((s) => s.hubId === hubId).map((s) => s.id))
-  const activeSiteEdges = new Set<string>()
-  const sitePaths = tracing ? paths.flatMap((p) => p.siteHops ? [p.siteHops] : []) : preferredSitePaths ?? selected.flatMap((r) => r.sitePath ? [r.sitePath] : [])
-  sitePaths.forEach((path) => path.slice(1).forEach((id, i) => activeSiteEdges.add(edgeKey(path[i], id))))
+  const exactSiteLinks = new Set(tracing ? [...paths.flatMap((p) => p.siteLinkIds ?? []), ...sourceSiteLinkIds] : preferredSiteLinkIds ?? selected.flatMap((r) => r.siteLinkIds ?? []))
   const activate = (action: () => void) => (event: KeyboardEvent<SVGGElement>) => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); action() }
   }
@@ -54,9 +74,18 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSitePaths,
     },
   })
   const height = topology.siteLinks.length ? 720 : 610
-  return <div className="diagram-scroll"><svg className="diagram" viewBox={`0 0 ${width} ${height}`} style={{ minWidth: Math.min(width, 1200) }} role="group" aria-label="Interactive Virtual WAN topology. Select objects to edit, delete or add connected objects.">
+  return <div className="diagram-scroll"><svg className="diagram" viewBox={`0 0 ${drawingWidth} ${height}`} style={{ minWidth: Math.min(drawingWidth, 1200) * zoom, width: `${zoom * 100}%` }} role="group" tabIndex={0} aria-label="Interactive Virtual WAN topology. Select objects to edit, delete or add connected objects." onContextMenu={(event) => {
+    if ((event.target as Element).closest('g[role="button"]')) return
+    event.preventDefault()
+    onObjectContextMenu({ x: event.clientX, y: event.clientY, invoker: event.currentTarget })
+  }} onKeyDown={(event) => {
+    if (event.target !== event.currentTarget || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return
+    event.preventDefault()
+    const bounds = event.currentTarget.getBoundingClientRect()
+    onObjectContextMenu({ x: bounds.left + 24, y: bounds.top + 24, invoker: event.currentTarget })
+  }}>
     <defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#d8e2ee" /></pattern></defs>
-    <rect width={width} height={height} fill="url(#grid)" />
+    <rect width={drawingWidth} height={height} fill="url(#grid)" />
     <text x="24" y="28" className="diagram-caption">AZURE SPOKE NETWORKS</text>
     <text x="24" y="210" className="diagram-caption">MICROSOFT GLOBAL BACKBONE</text>
     <text x="24" y="435" className="diagram-caption">ON-PREMISES SITES</text>
@@ -85,7 +114,7 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSitePaths,
     })}
     {topology.siteLinks.map((link, index) => {
       const a = sites.get(link.a)!, b = sites.get(link.b)!
-      const active = link.enabled && activeSiteEdges.has(edgeKey(link.a, link.b))
+      const active = link.enabled && exactSiteLinks.has(link.id)
       const d = `M ${a.x} ${a.y + 42} Q ${(a.x + b.x) / 2} ${650 + (index % 3) * 20} ${b.x} ${b.y + 42}`
       return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, `Select on-premises link ${link.name}`)}><title>{link.name}: {topology.sites.find((s) => s.id === link.a)?.name} ↔ {topology.sites.find((s) => s.id === link.b)?.name}</title><path className="link-hitbox" d={d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={d} /><text x={(a.x + b.x) / 2} y={600 + (index % 3) * 10} className="link-label">{link.name.length > 30 ? link.name.slice(0, 28) + '…' : link.name}</text></g>
     })}

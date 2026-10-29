@@ -1,6 +1,6 @@
 import type { Connection, Hub, RouteKind, Topology, Transport } from './model'
 import { cidr, contains, ipv4 } from './validation'
-import { applyRouteMap, propagateSites } from './bgp'
+import { applyRouteMapRules, connectionMapRules, propagateSites } from './bgp'
 import type { SiteRoute } from './bgp'
 
 export interface Candidate {
@@ -14,7 +14,9 @@ export interface Candidate {
   originHubId: string
   remote: boolean
   sitePath?: string[]
+  siteLinkIds?: string[]
   secureOrigin?: boolean
+  forwardingRoutes?: Candidate[]
 }
 
 export interface Decision {
@@ -74,7 +76,7 @@ function localRoutes(connection: Connection): Candidate[] {
   return connection.routes.map((route) => ({
     key: `${connection.id}:${route.id}`,
     prefix: route.prefix,
-    asPath: route.kind === 'bgp' ? applyRouteMap(route.prefix, route.asPath, connection.inbound) : route.asPath,
+    asPath: [...route.asPath],
     kind: route.kind,
     transport: connection.transport,
     connectionId: connection.id,
@@ -82,6 +84,7 @@ function localRoutes(connection: Connection): Candidate[] {
     originHubId: connection.hubId,
     remote: false,
     sitePath: [connection.siteId],
+    siteLinkIds: [],
   }))
 }
 
@@ -93,21 +96,25 @@ function decide(hub: Hub, candidates: Candidate[]): Decision[] {
 
 export function simulate(topology: Topology): Simulation {
   const siteRouting = propagateSites(topology)
+  const mapRoutes = (connection: Connection, routes: Candidate[], direction: 'inbound' | 'outbound') => [
+    ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), connectionMapRules(topology, connection, direction)),
+    ...routes.filter((route) => route.kind === 'vpn-static'),
+  ]
   const local = Object.fromEntries(topology.hubs.map((hub) => [
     hub.id, [
-      ...topology.connections.filter((c) => c.hubId === hub.id).flatMap(localRoutes),
-      ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id && c.learnSiteRoutes).flatMap((connection) =>
-        siteRouting.tables[connection.siteId].map((r): Candidate => {
+      ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id).flatMap((connection) => mapRoutes(connection, [
+        ...localRoutes(connection),
+        ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId].map((r): Candidate => {
           const site = topology.sites.find((s) => s.id === connection.siteId)!
           const path = r.asPath[0] === site.asn ? r.asPath : [site.asn, ...r.asPath]
           return {
             key: `${connection.id}:learned:${r.key}`, prefix: r.prefix,
-            asPath: applyRouteMap(r.prefix, connection.transport === 'ExpressRoute' ? [12076, ...path] : path, connection.inbound),
+            asPath: connection.transport === 'ExpressRoute' ? [12076, ...path] : path,
             kind: 'bgp', transport: connection.transport, connectionId: connection.id,
-            siteId: r.sitePath.at(-1)!, sitePath: r.sitePath, originHubId: hub.id, remote: false,
+            siteId: r.sitePath.at(-1)!, sitePath: r.sitePath, siteLinkIds: r.siteLinkIds, originHubId: hub.id, remote: false,
           }
-        }),
-      ),
+        }) : []),
+      ], 'inbound')),
       ...topology.spokes.filter((s) => s.hubId === hub.id).flatMap((spoke) => spoke.prefixes.map((prefix): Candidate => ({
         key: `${spoke.id}:${prefix}`, prefix, asPath: [], kind: 'system', transport: 'VNet',
         connectionId: spoke.id, siteId: spoke.id, originHubId: hub.id, remote: false,
@@ -138,6 +145,12 @@ export function simulate(topology: Topology): Simulation {
     seen.add(nextSignature)
   }
   if (!converged) warnings.push('The best-path advertisement model did not converge. Tables are provisional; flow tracing is disabled.')
+  if (topology.routeMaps?.length || topology.connections.some((c) => c.inbound.length || c.outbound.length)) {
+    warnings.push('Route maps model IPv4 prefix conditions and permit, drop, summarize, and prepend actions only. Community and AS-path matching, NAT interactions, and other attribute modifications are not simulated.')
+  }
+  if (Object.values(tables).some((table) => table.some((d) => d.candidates.some((r) => r.forwardingRoutes)))) {
+    warnings.push('Summary forwarding retains known contributing destinations only; aggregate holes are reported as unreachable. Gateway discard-route behavior is not simulated.')
+  }
   if (topology.connections.some((c) => c.enabled && c.transport === 'SDWAN')) {
     warnings.push('SD-WAN is modeled as an independent NVA BGP source, not a VPN gateway. After the documented ER/VPN comparison, NVA candidates compete on AS path. Vendor-specific and undocumented NVA tie-breaks are not predicted.')
   }
@@ -145,10 +158,14 @@ export function simulate(topology: Topology): Simulation {
     warnings.push('VPN site static routes use a simplified gateway import: empty local AS path, VPN transport, and inter-hub propagation. They do not receive hub-table static priority. Validate gateway redistribution and BGP/static coexistence in Azure.')
   }
   for (const hub of topology.hubs) {
+    if (tables[hub.id].some((d) => d.candidates.some((r) => !r.remote && r.transport === 'ExpressRoute')
+      && d.candidates.some((r) => !r.remote && (r.transport === 'VPN' || r.transport === 'SDWAN')))) {
+      warnings.push(`${hub.name}: nominal converged HRP is modeled; dynamic failback timing and withdrawal/recovery history after an ExpressRoute recovery are not simulated.`)
+    }
     if (hub.preference === 'ASPath') continue
     if (tables[hub.id].some((d) => d.candidates.some((a) => !a.remote && d.candidates.some((b) =>
-      b.remote && a.asPath.length >= b.asPath.length,
-    )))) warnings.push(`${hub.name}: local paths are at least two ASNs longer than an original remote advertisement. Azure documents possible arrival-order races; the nominal HRP result shown here is not guaranteed.`)
+      a.kind === 'bgp' && b.kind === 'bgp' && b.remote && a.asPath.length >= b.asPath.length + 2,
+    )))) warnings.push(`${hub.name}: local received paths are at least two ASNs longer than remote received paths (including inter-hub prepends). Azure documents possible arrival-order races; the nominal HRP result shown here is not guaranteed.`)
   }
   if (!siteRouting.converged) {
     converged = false
@@ -184,10 +201,10 @@ export function simulate(topology: Topology): Simulation {
   }))
   const outbound = Object.fromEntries(topology.connections.map((connection) => {
     if (!connection.enabled || connection.transport === 'SDWAN') return [connection.id, []]
-    return [connection.id, tables[connection.hubId].flatMap((d) => d.selected)
+    return [connection.id, mapRoutes(connection, tables[connection.hubId].flatMap((d) => d.selected)
       .filter((r) => r.connectionId !== connection.id && !r.sitePath?.includes(connection.siteId)
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
-      .map((r) => ({ ...r, asPath: applyRouteMap(r.prefix, [connection.transport === 'ExpressRoute' ? 12076 : 65515, ...r.asPath], connection.outbound) }))]
+      .map((r) => ({ ...r, asPath: [connection.transport === 'ExpressRoute' ? 12076 : 65515, ...r.asPath] })), 'outbound')]
   }))
   return { tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, converged, warnings }
 }
@@ -199,6 +216,7 @@ export interface FlowPath {
   steps: string[]
   firewalls?: string[]
   siteHops?: string[]
+  siteLinkIds?: string[]
   status: 'delivered' | 'unreachable' | 'loop'
 }
 
@@ -231,11 +249,25 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
       }
       details.push(`Azure Firewall in ${name}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`)
     }
-    for (const route of decision.selected) {
+    const resolve = (route: Candidate): Candidate[] => {
+      if (route.remote || !route.forwardingRoutes) return [route]
+      const matching = route.forwardingRoutes.filter((r) => contains(r.prefix, address))
+      const longest = Math.max(...matching.map((r) => cidr(r.prefix)!.length))
+      return matching.filter((r) => cidr(r.prefix)!.length === longest).flatMap(resolve)
+    }
+    const forwarding = decision.selected.flatMap((route) => {
+      const resolved = resolve(route)
+      if (!resolved.length && paths.length < 128) {
+        paths.push({ hubs, firewalls: inspected, connectionId: route.connectionId,
+          steps: [...details, 'The summary has no contributing route for this destination.'], status: 'unreachable' })
+      }
+      return resolved
+    })
+    for (const route of forwarding) {
       if (paths.length >= 128) return
       if (route.remote) walk(route.originHubId, hubs, details, inspected)
       else if (route.transport === 'Internet') paths.push({ hubs, firewalls: inspected, steps: [...details, 'Direct Internet egress. Firewall allow/deny and SNAT policies are not simulated.'], status: 'delivered' })
-      else paths.push({ hubs, firewalls: inspected, siteHops: route.sitePath, connectionId: route.connectionId, siteId: route.siteId,
+      else paths.push({ hubs, firewalls: inspected, siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, connectionId: route.connectionId, siteId: route.siteId,
         steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId))!.name}.`,
           ...(route.sitePath && route.sitePath.length > 1 ? [`On-premises transit: ${route.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : [])],
         status: 'delivered' })

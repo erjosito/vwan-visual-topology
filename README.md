@@ -10,11 +10,12 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs.
 - Define per-connection BGP advertisements and received AS paths, or VPN site static prefixes. Disable connections to explore failures.
 - Choose ExpressRoute, VPN, or AS Path routing preference independently per hub.
-- Click hubs and prefixes to highlight preferred links in green. **Show BGP routes** is available on hubs and on-premises sites, not connections or spokes. Route views show every candidate as a separate row, with preferred paths marked `*` in green, visible alternatives, AS paths and selection explanations. All equal-cost preferred paths are marked.
+- Canvas-first workspace with layered and hub-grouped visualization modes, zoom, and right-click/keyboard creation and editing. There is no permanent sidebar or prefix-filter dropdown.
+- **Show BGP routes** on hubs and sites opens a movable, resizable, nonmodal canvas inspector. Compare the table with the topology; preferred paths are green and marked `*`, with visible alternatives, AS paths and selection explanations. Click a table prefix to highlight its paths.
 - Enable private and/or Internet routing intent. Inspect **hub policy routes and firewall forwarding routes separately**, and see firewall traversal in flow traces.
 - Connect on-premises sites with directional BGP export allowlists and AS-path prepends. Configure site ASNs and originated prefixes, then enable mesh route import on the desired hub connections.
-- Apply inbound and outbound, first-match AS-path prepend route maps to supported Azure BGP connections. Preview outbound advertisements without confusing them with Azure best paths.
-- Trace IPv4 flows from a hub or attached spoke, with longest-prefix matching and per-hop explanations.
+- Create named, reusable, hub-scoped route maps independently of connections. Assign one per direction to supported connections, with ordered prefix matching, route blocking, summarization and ASN prepending. Preview outbound advertisements without confusing them with Azure best paths.
+- Use **Show path to** / **Show path from** on hubs, sites and spokes to choose endpoints, a destination prefix or IPv4 address, and highlight actual preferred BGP/forwarding paths with per-hop explanations.
 - Save automatically in browser storage, and import/export validated, versioned JSON.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 
@@ -39,29 +40,44 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 
 ## Working with the app
 
-1. Use **Hubs**, **Spokes**, **Sites**, and **Links** to construct the topology.
-2. Select a link in the diagram or editor to change its advertised prefixes and received AS paths. Include provider ASNs such as `12076` in explicit ExpressRoute paths.
-3. Click a hub, select a highlight prefix, and adjust **Hub routing preference** to compare paths.
-4. Select a hub and click **Edit hub** (or **Routing intent**) to configure private/Internet intent and additional private prefixes as hub attributes. Use **Route view** to switch between the hub and Azure Firewall.
-5. To model on-premises transit, add site prefixes and BGP links under **On-premises sites & BGP links**. Export allowlists match exact prefixes; `*` means all. On the ingress hub connection, enable **Advertise site-originated and learned on-premises routes**.
-6. Right-click a supported connection (or select it and choose **Route maps**) to add inbound/outbound prepend rules in the diagram's editor. Prefix match modes are `Equals` and `Contains`; rules terminate on the first match, while unmatched routes pass unchanged.
-7. Enter a destination IPv4 address and **Trace flow**. Green links show the modeled forwarding path; multiple equal paths are displayed rather than inventing a traffic hash.
+1. Right-click empty canvas to add a hub/site. Right-click a hub to add spokes or connect sites; right-click a site to add hub connections or on-premises BGP links. The toolbar also offers hub/site creation.
+2. Right-click an object for **Edit configuration**, renaming or deletion. Routing intent is part of hub configuration; site configuration includes ASN and multiple prefixes.
+3. Right-click a connection for **Edit advertisements**. Include provider ASNs such as `12076` in explicit ExpressRoute paths. For static-only VPNs, disable site-mesh import, select **VPN site static** for each prefix and remove explicit BGP entries.
+4. Right-click a hub/site for **Show BGP routes**. Adjust **Hub routing preference**, switch hub/firewall **Route view**, or click a table prefix to compare candidate paths against the canvas.
+5. To model on-premises transit, use **Link to another site** and configure directional prefix allowlists and prepends. `*` means all prefixes. Enable site-originated/learned-route import on the desired hub connections.
+6. Open **Route maps** from the canvas/toolbar to create named policies, or from a connection to assign them inbound/outbound. Maps can be shared by supported connections in the same hub; editing a map updates every assignment. Deletion confirms removal of all its assignments.
+7. On a node, **Show path to** fixes the initial source and lets you choose a destination. **Show path from** fixes the initial destination and lets you choose a source. Green links show preferred forwarding paths, including ECMP, on-premises transit and firewall traversal.
+8. Move inspectors by dragging their header, or use **Left**/**Right**; resize with the corner handle on desktop. Close or press Escape without losing the topology. Use **Notes** for warnings, documentation and loading the example.
 
 Hub icons display the hub name and region, not an AS path. **AS Path** in the hub configuration is a routing-preference option; it is not an AS path assigned to the hub. Actual AS paths appear on individual routes in the route tables.
 
 ### Editing directly from the diagram
 
-Right-click a hub, spoke, site, hub connection or on-premises link for its contextual menu. Hubs offer **Edit configuration**, **Show BGP routes**, firewall routes when applicable, creation actions and deletion. Sites also offer **Show BGP routes**, showing originated and learned candidates with their next hops and AS paths. Connections offer configuration, **Route maps**, advertisements and deletion, not a router's BGP table. Shift+F10 opens the same menu; use arrow keys to navigate and Escape to dismiss. Left-clicking still shows actions above the diagram and preserves hub route highlighting.
+Right-click a hub, spoke, site, hub connection, on-premises link or empty canvas for its contextual menu. Hubs/sites offer **Show BGP routes**; hubs also offer firewall routes when applicable. Hubs, spokes and sites offer both path commands. Connections offer configuration, reusable **Route maps**, advertisements, enable/disable and deletion, not a router's BGP table. Shift+F10 opens the same menu; use arrow keys to navigate and Escape to dismiss. Left-click selects objects and hub/site route highlighting.
 
-The **Inspect router** selector switches between hubs and sites. Hub views retain clearly labeled system, VPN-static and routing-intent entries alongside BGP candidates so that routing intent remains explainable; these entries do not have BGP AS paths.
+The **Inspect router** selector switches between hubs and sites. Hub views distinguish system, VPN-static and routing-intent entries from BGP candidates. AS paths describe route advertisements, not hub or firewall identities.
 
 On-premises nodes show their ASN and assigned-prefix summary, just like spoke prefix summaries: the first prefix followed by `+N` for additional prefixes. Hover over the node for the complete list. Sites without assigned prefixes are labeled explicitly; connection advertisements are not assumed to be locally assigned networks.
 
 Use **Edit configuration** to rename an object or change its properties; existing IDs, relationships, advertisements and policies are preserved. Hub configuration includes routing intent, also summarized in the sidebar's hub cards. Spokes can be moved to another hub, and connections can be retargeted to existing hubs/sites. Invalid changes stay in the editor until corrected or canceled.
 
-Use **+ Add hub** or **+ Add site** above the diagram, or select a hub for **+ Add spoke**, **+ Add connected site** and **+ Connect existing site**. A connected site and its hub connection are created together, with site-prefix advertisements enabled. Select a site for **+ Connect to hub** or **+ Link to another site**. Hub-to-hub links remain automatic.
+Use **+ Hub** or **+ Site** above the diagram, or the matching canvas menu commands. A connected site and its hub connection are created together, with site-prefix advertisements enabled. Hub-to-hub links remain automatic.
 
-**Delete** shows a confirmation, including the dependent spokes/connections/links that will also be removed. Deleting a hub keeps its on-premises sites. Export JSON first if you need an undo/backup. Keyboard users can select diagram objects with Enter/Space; the editor supports Tab and Escape. Firewall icons select their hub; routing intent is part of that hub's attributes, not a separate topology object.
+**Delete** shows a confirmation, including the dependent spokes/connections/links that will also be removed. Deleting a hub keeps its on-premises sites and removes its hub-scoped maps. Export JSON first if you need an undo/backup. Keyboard users can select diagram objects with Enter/Space; modeless editors support Tab and Escape. Firewall icons select their hub; routing intent is part of that hub's attributes.
+
+### Reusable route maps
+
+Maps are first-class resources, not embedded copies on connections. Rules support exact/containing IPv4 prefix matches and **Permit**, **Block/drop**, **Summarize** or **Prepend** actions. A match can terminate processing or continue to later rules; unmatched routes are allowed. Summaries must cover the matched prefixes and clear their AS paths, as documented by Azure. A following prepend rule can add ASNs back. Known contributing destinations are retained for forwarding; a summary hole is reported as unreachable rather than invented reachability.
+
+Inbound maps run before Azure path selection. Outbound maps run after selection and only change advertisements; they cannot change the hub's best route. Route maps are unsupported on integrated SD-WAN NVA connections and are not applied to VPN static imports. This implementation targets ER/VPN BGP connections; VNet/P2S map assignments, community/AS-path matching, NAT interactions and other attribute actions are not modeled.
+
+Existing version-1 JSON files and browser workspaces remain supported. Embedded inbound/outbound prepend rules are migrated to named hub-scoped maps and connection references; IDs, route advertisements and legacy behavior are preserved. Export JSON to save the normalized representation.
+
+### Contextual path boundaries
+
+Hub destinations use attached-spoke prefixes because hub address spaces are not configured in this model. A site with assigned prefixes offers those; otherwise its explicit connection advertisements are offered and may include transit destinations. The selected route can legitimately terminate at a different advertiser of the same prefix.
+
+Site-origin paths evaluate received Azure advertisements and on-premises BGP together, including directional peer policies, shortest AS paths and loop checks. Outbound map changes influence this site-side view without reinjecting those routes into Azure's hub simulation. Forward and reverse paths are calculated independently; Azure reimport through site transit, generic SD-WAN outbound learning, host/firewall reachability and return-flow symmetry remain outside the model.
 
 ## Routing model and boundaries
 
@@ -78,14 +94,14 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 | Private routing intent | Hub policy table contains RFC1918 aggregates plus configured private prefixes to Azure Firewall. Firewall table contains selected exact forwarding routes. Non-RFC1918 destinations require explicit private prefixes on each secured hub. |
 | Internet routing intent | Hub default route to Azure Firewall, with direct Internet egress from the firewall. Forced tunneling and per-connection default-route advertisement switches are not modeled. |
 | Firewalls | Forwarding only, assuming permissive policies. No allow/deny, DNAT, SNAT, threat inspection, or health simulation. |
-| Route maps | Ordered prefix-match AS-path prepends only. Inbound applies before hub selection; outbound applies after selection, solely to advertisements. Azure maps are rejected on integrated SD-WAN NVA branch links. |
+| Route maps | Named, reusable hub-scoped policies with ordered prefix matching, permit/drop, summarization and prepending; continue/terminate behavior. Inbound runs before hub selection; outbound modifies advertisements only. No SD-WAN map assignments, communities, AS-path conditions or VNet/P2S assignments. |
 | Prepend ASNs | Azure maps require public 2-byte ASNs and reject Azure-reserved ASNs. Documentation ASNs `64496-64511` are accepted **for simulation only**. On-premises export prepends can use private/32-bit ASNs. |
 | On-premises BGP | Shortest AS path, exact-prefix directional export allowlists, ASN/path loop prevention, up to 32 equal paths per prefix. Explicit connection BGP routes and configured site prefixes are available to the mesh. |
 | Azure outbound routes | Preview includes post-map advertisements. Azure-originated routes are **not reimported into Azure through the site mesh**. Azure community suppression, route reflection through shared ER circuits, and Global Reach are not simulated. |
 | Timing | Deterministic nominal convergence only. Azure arrival-order race conditions, failback history, and convergence delays are not predicted. |
 | Flow traces | Forward direction only, up to 128 equal-cost branches. No return-flow symmetry, gateway-instance hashing, BGP MED/local preference, custom route tables, IPv6, or multiple VWANs. |
 
-Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 100 advertisements per hub connection, and 2 MB per JSON file.
+Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 advertisements per hub connection, and 2 MB per JSON file.
 
 ## Authoritative references
 

@@ -37,7 +37,17 @@ describe('hub best path and inter-hub propagation', () => {
   it('prefers local even when a remote VPN advertisement is shorter in ER mode', () => {
     const t = topology([hub('a'), hub('b')], [link('local', 'a', 'VPN', [65001, 65001, 65001, 65001]), link('remote', 'b', 'VPN', [65002])])
     expect(selected(t)[0].connectionId).toBe('local')
+    expect(simulate(t).warnings.join(' ')).not.toContain('arrival-order')
+  })
+  it.each(['ExpressRoute', 'VPN'] as const)('warns only when local received paths are at least two longer in %s mode', (preference) => {
+    const t = topology([hub('a', preference), hub('b')], [link('local', 'a', 'VPN', Array(3).fill(65001)), link('remote', 'b', 'VPN', [65002])])
+    for (const length of [3, 4]) {
+      t.connections[0].routes[0].asPath = Array(length).fill(65001)
+      expect(simulate(t).warnings.join(' ')).not.toContain('arrival-order')
+    }
+    t.connections[0].routes[0].asPath.push(65001)
     expect(simulate(t).warnings.join(' ')).toContain('arrival-order')
+    expect(selected(t)[0].connectionId).toBe('local')
   })
   it('allows remote VPN to win with ASPath and prepends 65520 twice', () => {
     const t = topology([hub('a', 'ASPath'), hub('b')], [link('local', 'a', 'VPN', [65001, 65001, 65001, 65001]), link('remote', 'b', 'VPN', [65002])])
@@ -89,6 +99,29 @@ describe('hub best path and inter-hub propagation', () => {
     const t = topology([hub('a'), hub('b')], [link('vpn', 'a', 'VPN', [65002], '0.0.0.0/0')])
     expect(simulate(t).tables.b).toHaveLength(0)
     expect(traceFlow(t, simulate(t), 'b', '8.8.8.8')[0].status).toBe('unreachable')
+  })
+  it.each(['ExpressRoute', 'VPN', 'ASPath'] as const)('prefers secure remote paths to unsecured remote ER under %s', (preference) => {
+    const t = topology([hub('a', preference), hub('b'), hub('c')], [
+      link('er', 'b', 'ExpressRoute', [12076, 65001]),
+      link('secure', 'c', 'ExpressRoute', Array(8).fill(65002)),
+    ])
+    t.hubs[2].routingIntent.private = true
+    expect(selected(t)[0].connectionId).toBe('secure')
+    expect(traceFlow(t, simulate(t), 'a', '10.20.1.1')[0]).toMatchObject({ connectionId: 'secure', firewalls: ['c'] })
+  })
+  it('uses locality for equal AS path lengths before transport preference', () => {
+    const t = topology([hub('a', 'ASPath'), hub('b')], [
+      link('local', 'a', 'VPN', [65001, 65001, 65001]),
+      link('remote', 'b', 'VPN', [65002]),
+    ])
+    expect(selected(t)[0].connectionId).toBe('local')
+  })
+  it('uses shortest received paths between remote ER candidates even when they are considered last', () => {
+    const t = topology([hub('a', 'ASPath'), hub('b'), hub('c')], [
+      link('short', 'b', 'ExpressRoute', [12076, 65001]),
+      link('long', 'c', 'ExpressRoute', [12076, 65002, 65002]),
+    ])
+    expect(selected(t)[0].connectionId).toBe('short')
   })
 })
 
@@ -170,7 +203,7 @@ describe('route maps and on-premises transit', () => {
     t.connections[0].learnSiteRoutes = false
     expect(selected(t, 'a', '10.80.0.0/16')).toHaveLength(0)
   })
-  it('retains alternate site candidates without exporting non-preferred routes', () => {
+  it('retains exact selected parallel link IDs through site, hub and summarized flow routes', () => {
     const t = mesh()
     t.siteLinks.push({
       ...structuredClone(t.siteLinks[0]), id: 'backup-wan',
@@ -179,12 +212,24 @@ describe('route maps and on-premises transit', () => {
     const result = propagateSites(t)
     const candidates = result.candidates['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')
     expect(candidates.map((route) => route.asPath)).toEqual([[65050, 65050], [65050, 65050, 65050]])
+    expect(candidates.map((route) => route.siteLinkIds)).toEqual([['wan'], ['backup-wan']])
     expect(result.tables['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')).toEqual([candidates[0]])
     expect(result.candidates['vpn-site'].some((route) => route.prefix === '10.81.0.0/16')).toBe(false)
+    expect(result.tables['remote-site'].filter((route) => route.sitePath.length === 1).every((route) => route.siteLinkIds?.length === 0)).toBe(true)
+    expect(selected(t, 'a', '10.80.0.0/16')[0].siteLinkIds).toEqual(['wan'])
+    expect(traceFlow(t, simulate(t), 'a', '10.80.0.5')[0].siteLinkIds).toEqual(['wan'])
+    t.routeMaps = [{ id: 'summary-map', name: 'Summary', hubId: 'a', rules: [{
+      id: 'summary-rule', prefixes: ['10.80.0.0/16'], match: 'equals', action: 'summarize',
+      summaryPrefixes: ['10.0.0.0/8'], prepend: [], nextStep: 'terminate',
+    }] }]
+    t.connections[0].inboundMapId = 'summary-map'
+    expect(selected(t, 'a', '10.0.0.0/8')[0].forwardingRoutes![0].siteLinkIds).toEqual(['wan'])
+    expect(traceFlow(t, simulate(t), 'a', '10.80.0.5')[0].siteLinkIds).toEqual(['wan'])
     t.siteLinks[0].enabled = false
     const withdrawn = propagateSites(t)
     expect(withdrawn.candidates['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')).toEqual([candidates[1]])
     expect(withdrawn.tables['vpn-site'].filter((route) => route.prefix === '10.80.0.0/16')).toEqual([candidates[1]])
+    expect(traceFlow(t, simulate(t), 'a', '10.80.0.5')[0].siteLinkIds).toEqual(['backup-wan'])
   })
   it('does not advertise a route into an AS already present in its path', () => {
     const t = mesh()
@@ -197,7 +242,8 @@ describe('route maps and on-premises transit', () => {
 
 describe('topology and input validation', () => {
   it('round-trips the example through the versioned schema', () => {
-    expect(validateTopology(JSON.parse(JSON.stringify(example)))).toEqual(example)
+    expect(validateTopology(JSON.parse(JSON.stringify(example)))).toEqual({ ...example, routeMaps: [] })
+    expect(simulate(example)).toEqual(simulate(validateTopology(example)))
   })
   it.each(['10.0.0.1/24', '256.0.0.0/8', '10.0.0.0/33', '10.0.0.0/-1', '010.0.0.0/8'])('rejects invalid network prefix %s', (value) => {
     expect(cidr(value)).toBeUndefined()

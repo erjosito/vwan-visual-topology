@@ -24,6 +24,23 @@ export interface PrependRule {
   prepend: number[]
 }
 
+export interface RouteMapRule {
+  id: string
+  prefixes: string[]
+  match: 'equals' | 'contains'
+  action: 'permit' | 'drop' | 'summarize' | 'prepend'
+  summaryPrefixes: string[]
+  prepend: number[]
+  nextStep: 'continue' | 'terminate'
+}
+
+export interface RouteMap {
+  id: string
+  name: string
+  hubId: string
+  rules: RouteMapRule[]
+}
+
 export interface PeerPolicy {
   prefixes: string[]
   prepend: number[]
@@ -65,6 +82,8 @@ export interface Connection {
   learnSiteRoutes: boolean
   inbound: PrependRule[]
   outbound: PrependRule[]
+  inboundMapId?: string
+  outboundMapId?: string
 }
 
 export interface Topology {
@@ -75,6 +94,7 @@ export interface Topology {
   spokes: Spoke[]
   siteLinks: SiteLink[]
   connections: Connection[]
+  routeMaps?: RouteMap[]
 }
 
 export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink'
