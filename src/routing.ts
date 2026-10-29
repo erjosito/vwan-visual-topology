@@ -207,9 +207,10 @@ export function simulate(topology: Topology): Simulation {
       warnings.push(`${hub.name}: nominal converged HRP is modeled; dynamic failback timing and withdrawal/recovery history after an ExpressRoute recovery are not simulated.`)
     }
     if (hub.preference === 'ASPath') continue
+    // Remote candidates already include the two inter-hub ASNs.
     if (tables[hub.id].some((d) => d.candidates.some((a) => !a.remote && d.candidates.some((b) =>
-      a.kind === 'bgp' && b.kind === 'bgp' && b.remote && a.asPath.length >= b.asPath.length + 2,
-    )))) warnings.push(`${hub.name}: local received paths are at least two ASNs longer than remote received paths (including inter-hub prepends). Azure documents possible arrival-order races; the nominal HRP result shown here is not guaranteed.`)
+      a.kind === 'bgp' && b.kind === 'bgp' && b.remote && a.asPath.length >= b.asPath.length,
+    )))) warnings.push(`${hub.name}: a local AS path is at least two ASNs longer than a remote hub's selected path before inter-hub prepends. Azure documents possible arrival-order races; the nominal HRP result shown here is not guaranteed.`)
   }
   if (!siteRouting.converged) {
     converged = false
