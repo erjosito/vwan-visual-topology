@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, routeLabels, topologyObject, transportLabels } from './model'
-import type { LayoutMode, ObjectSelection, RouteKind, Topology } from './model'
+import type { LayoutMode, ObjectSelection, RouteKind, RouterSelection, Topology } from './model'
 import { simulate } from './routing'
 import { ipv4, parseAsPath, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
@@ -45,6 +45,7 @@ function App() {
   const [router, setRouter] = useState<ObjectSelection>({ kind: 'hub', id: topology.hubs[0]?.id ?? '' })
   const [routeView, setRouteView] = useState<'hub' | 'firewall'>('hub')
   const [connectionId, setConnectionId] = useState('')
+  const [mapRouter, setMapRouter] = useState<RouterSelection>()
   const [prefix, setPrefix] = useState('')
   const [highlighting, setHighlighting] = useState(false)
   const layout = topology.layout?.mode ?? 'layered'
@@ -88,6 +89,7 @@ function App() {
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('hub'); setPrefix(''); setHighlighting(true); setTracing(false) }
+  const openRouteMaps = (value?: RouterSelection) => { setMapRouter(value); setEditorRequest(undefined); setPanel('maps') }
   const selectObject = (value: ObjectSelection) => {
     setSelection(value)
     if (!panel && !tracing && (value.kind === 'hub' || value.kind === 'site')) selectRouter(value)
@@ -129,12 +131,13 @@ function App() {
   const canvasActions: ContextAction[] = [
     { label: 'Add hub', run: () => setEditorRequest({ kind: 'hub' }) },
     { label: 'Add site', run: () => setEditorRequest({ kind: 'site' }) },
-    { label: 'Route maps', run: () => { setConnectionId(''); setPanel('maps') } },
+    { label: 'Route maps', run: () => openRouteMaps() },
     { label: 'Model notes and warnings', run: () => setPanel('notes') },
   ]
   const contextActions: ContextAction[] = contextSelection ? [
     { label: 'Edit configuration', run: () => setEditorRequest(contextSelection) },
     ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: 'Show BGP routes', run: () => showRoutes(contextSelection) }] : []),
+    ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: 'Route maps', run: () => openRouteMaps(contextSelection as RouterSelection) }] : []),
     ...(['hub', 'site', 'spoke'].includes(contextSelection.kind) ? [
       { label: 'Show path to', disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'to') },
       { label: 'Show path from', disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'from') },
@@ -152,7 +155,6 @@ function App() {
     ] : []),
     ...(contextSelection.kind === 'connection' ? [
       { label: 'Edit advertisements', run: () => { setConnectionId(contextSelection.id); setPanel('ads') } },
-      { label: 'Route maps', run: () => { setConnectionId(contextSelection.id); setPanel('maps') } },
       { label: topology.connections.find((c) => c.id === contextSelection.id)?.enabled ? 'Disable connection' : 'Enable connection', run: () => update((next) => { const c = next.connections.find((c) => c.id === contextSelection.id)!; c.enabled = !c.enabled }) },
     ] : []),
     { label: `Delete ${objectLabels[contextSelection.kind]}`, danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
@@ -191,13 +193,13 @@ function App() {
       <section className="canvas-workspace panel" aria-label="Topology workspace">
         <div className="canvas-toolbar"><div><h2>Network topology</h2><p className="muted">Drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.</p></div>
           <div className="canvas-tools"><label className="field"><span>Visualization</span><select aria-label="Visualization mode" value={layout} onChange={(e) => update((next) => { next.layout ??= { mode: 'layered', positions: {} }; next.layout.mode = e.target.value as LayoutMode })}><option value="layered">Layered topology</option><option value="constellation">Network constellation</option></select></label><label className="field"><span>Zoom</span><select aria-label="Canvas zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}><option value={0.75}>75%</option><option value={1}>100%</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label><button disabled={!Object.keys(topology.layout?.positions[layout] ?? {}).length} title="Restore automatic positions in the current visualization only" onClick={() => update((next) => { if (next.layout) delete next.layout.positions[layout] })}>Reset layout</button>
-            <button onClick={() => setEditorRequest({ kind: 'hub' })}>+ Hub</button><button onClick={() => setEditorRequest({ kind: 'site' })}>+ Site</button><button onClick={() => { setConnectionId(''); setPanel('maps') }}>Route maps</button><button aria-label="Open model notes and warnings" onClick={() => setPanel('notes')}>Notes{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
+            <button onClick={() => setEditorRequest({ kind: 'hub' })}>+ Hub</button><button onClick={() => setEditorRequest({ kind: 'site' })}>+ Site</button><button onClick={() => openRouteMaps()}>Route maps</button><button aria-label="Open model notes and warnings" onClick={() => setPanel('notes')}>Notes{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         <div className="canvas-stage">
           <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} paths={paths} sourceSpokeId={tracing && sourceNode?.kind === 'spoke' && paths.some((p) => p.hubs.length) ? sourceNode.id : undefined} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
           {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination} · ${destinationPrefix || destination} · ${pathStatus}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}{tracing && <button onClick={() => setPanel('paths')}>Path details</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
           {panel === 'routes' && inspected && <RouteInspector topology={topology} simulation={simulation} router={router} view={activeView} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
-          {panel === 'maps' && <RouteMapsPanel key={connectionId || 'resources'} topology={topology} simulation={simulation} connectionId={connectionId} onSave={save} onClose={closePanel} />}
+          {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} onRouter={setMapRouter} onSave={save} onClose={closePanel} />}
           {panel === 'ads' && connection && <CanvasOverlay title={`Advertisements · ${connection.name}`} className="advertisements" onClose={closePanel}>
             <p className="muted">{transportLabels[connection.transport]} · AS paths are entered as received by the hub, including provider ASNs. Use VPN site static for non-BGP VPN routes.</p>
             <label className="checkbox-field"><input type="checkbox" aria-label="Import site mesh routes" checked={connection.learnSiteRoutes} onChange={(e) => update((next) => { next.connections.find((c) => c.id === connection.id)!.learnSiteRoutes = e.target.checked })} />Advertise site-originated and learned routes</label>
@@ -223,7 +225,7 @@ function App() {
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">Microsoft hub routing preference</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">Microsoft route-map behavior and limitations</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>Load example (replaces workspace)</button>
           </CanvasOverlay>}
-          {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onSave={(next, value) => {
+          {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onSave={(next, value) => {
             save(next); setSelection(editorRequest.deleting ? undefined : value); setEditorRequest(undefined)
             if (editorRequest.deleting && nodeKey(value) === nodeKey(router)) { setPanel(undefined); setHighlighting(false) }
             else if (!panel && !tracing && (value.kind === 'hub' || value.kind === 'site')) selectRouter(value)

@@ -14,6 +14,7 @@ export interface Hub {
   region: string
   preference: Preference
   routingIntent: { private: boolean; internet: boolean; privatePrefixes: string[] }
+  routeMapAssignments?: RouteMapAssignment[]
 }
 
 export interface Site {
@@ -21,8 +22,11 @@ export interface Site {
   name: string
   asn: number
   prefixes: string[]
+  routeMapAssignments?: RouteMapAssignment[]
 }
 
+export interface RouteMapAssignment { connectionId: string; inboundMapId?: string; outboundMapId?: string }
+export interface RouterSelection { kind: 'hub' | 'site'; id: string }
 export interface PrependRule {
   id: string
   prefixes: string[]
@@ -43,7 +47,8 @@ export interface RouteMapRule {
 export interface RouteMap {
   id: string
   name: string
-  hubId: string
+  hubId?: string
+  siteId?: string
   rules: RouteMapRule[]
 }
 

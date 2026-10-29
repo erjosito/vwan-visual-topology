@@ -1,6 +1,6 @@
 import type { Connection, Hub, RouteKind, Topology, Transport } from './model'
 import { cidr, contains, ipv4 } from './validation'
-import { applyRouteMapRules, connectionMapRules, propagateSites } from './bgp'
+import { applyRouteMapRules, connectionMapRules, propagateSites, siteExports } from './bgp'
 import type { SiteRoute } from './bgp'
 
 export interface Candidate {
@@ -100,21 +100,33 @@ export function simulate(topology: Topology): Simulation {
     ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), connectionMapRules(topology, connection, direction)),
     ...routes.filter((route) => route.kind === 'vpn-static'),
   ]
+  const fromSite = (connection: Connection, routes: Candidate[]) => {
+    const bgp = routes.filter((route) => route.kind !== 'vpn-static')
+    const provider = new Map(bgp.map((route) => [route.key, connection.transport === 'ExpressRoute' && route.asPath[0] === 12076]))
+    return [
+      ...siteExports(topology, connection.siteId, connection.id, bgp.map((route) => ({
+        ...route, asPath: provider.get(route.key) ? route.asPath.slice(1) : route.asPath,
+      }))).map((route) => ({ ...route, asPath: provider.get(route.key) ? [12076, ...route.asPath] : route.asPath })),
+      ...routes.filter((route) => route.kind === 'vpn-static'),
+    ]
+  }
+  const learnedRoute = (connection: Connection, route: SiteRoute): Candidate => {
+    const site = topology.sites.find((s) => s.id === connection.siteId)!
+    const path = route.asPath[0] === site.asn ? route.asPath : [site.asn, ...route.asPath]
+    return {
+      key: `${connection.id}:learned:${route.key}`, prefix: route.prefix,
+      asPath: connection.transport === 'ExpressRoute' ? [12076, ...path] : path,
+      kind: 'bgp', transport: connection.transport, connectionId: connection.id,
+      siteId: route.sitePath.at(-1)!, sitePath: route.sitePath, siteLinkIds: route.siteLinkIds, originHubId: connection.hubId, remote: false,
+      ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => learnedRoute(connection, child)) } : {}),
+    }
+  }
   const local = Object.fromEntries(topology.hubs.map((hub) => [
     hub.id, [
-      ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id).flatMap((connection) => mapRoutes(connection, [
+      ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id).flatMap((connection) => mapRoutes(connection, fromSite(connection, [
         ...localRoutes(connection),
-        ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId].map((r): Candidate => {
-          const site = topology.sites.find((s) => s.id === connection.siteId)!
-          const path = r.asPath[0] === site.asn ? r.asPath : [site.asn, ...r.asPath]
-          return {
-            key: `${connection.id}:learned:${r.key}`, prefix: r.prefix,
-            asPath: connection.transport === 'ExpressRoute' ? [12076, ...path] : path,
-            kind: 'bgp', transport: connection.transport, connectionId: connection.id,
-            siteId: r.sitePath.at(-1)!, sitePath: r.sitePath, siteLinkIds: r.siteLinkIds, originHubId: hub.id, remote: false,
-          }
-        }) : []),
-      ], 'inbound')),
+        ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId].map((route) => learnedRoute(connection, route)) : []),
+      ]), 'inbound')),
       ...topology.spokes.filter((s) => s.hubId === hub.id).flatMap((spoke) => spoke.prefixes.map((prefix): Candidate => ({
         key: `${spoke.id}:${prefix}`, prefix, asPath: [], kind: 'system', transport: 'VNet',
         connectionId: spoke.id, siteId: spoke.id, originHubId: hub.id, remote: false,

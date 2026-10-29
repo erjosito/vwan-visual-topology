@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { FormEvent } from 'react'
-import type { RouteMap, RouteMapRule, Topology } from './model'
+import type { RouteMap, RouteMapRule, RouterSelection, Topology, Transport } from './model'
 import type { Simulation } from './routing'
 import { parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
@@ -43,12 +43,21 @@ function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: RouteMap)
   </form>
 }
 
-export function RouteMapsPanel({ topology, simulation, connectionId, onSave, onClose }: {
-  topology: Topology; simulation: Simulation; connectionId?: string; onSave: (topology: Topology) => void; onClose: () => void
+export function RouteMapsPanel({ topology, simulation, router, onRouter, onSave, onClose }: {
+  topology: Topology; simulation: Simulation; router?: RouterSelection; onRouter: (router: RouterSelection) => void; onSave: (topology: Topology) => void; onClose: () => void
 }) {
-  const connection = topology.connections.find((c) => c.id === connectionId)
-  const [hubId, setHubId] = useState(connection?.hubId ?? topology.hubs[0]?.id ?? '')
-  const [mapId, setMapId] = useState(connection?.inboundMapId ?? connection?.outboundMapId ?? '')
+  const owner: RouterSelection = router ?? (topology.hubs[0] ? { kind: 'hub', id: topology.hubs[0].id } : { kind: 'site', id: topology.sites[0]?.id ?? '' })
+  const routerKey = owner.id ? `${owner.kind}:${owner.id}` : ''
+  const node = (owner.kind === 'hub' ? topology.hubs : topology.sites).find((n) => n.id === owner.id)
+  const owned = (map: RouteMap) => (owner.kind === 'hub' ? map.hubId : map.siteId) === owner.id
+  const links: { id: string; name: string; transport?: Transport }[] = [
+    ...topology.connections.filter((c) => (owner.kind === 'hub' ? c.hubId : c.siteId) === owner.id),
+    ...(owner.kind === 'site' ? topology.siteLinks.filter((l) => l.a === owner.id || l.b === owner.id) : []),
+  ]
+  const [linkId, setLinkId] = useState('')
+  const link = links.find((l) => l.id === linkId) ?? links[0]
+  const binding = node?.routeMapAssignments?.find((a) => a.connectionId === link?.id)
+  const [mapId, setMapId] = useState('')
   const [draft, setDraft] = useState<RouteMap>()
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -57,19 +66,26 @@ export function RouteMapsPanel({ topology, simulation, connectionId, onSave, onC
   const assign = (direction: 'inboundMapId' | 'outboundMapId', id: string) => {
     try {
       const next = structuredClone(topology)
-      next.connections.find((c) => c.id === connectionId)![direction] = id || undefined
+      const target = (owner.kind === 'hub' ? next.hubs : next.sites).find((n) => n.id === owner.id)!
+      const assignment = { ...binding, connectionId: link.id, [direction]: id || undefined }
+      target.routeMapAssignments = [...(target.routeMapAssignments ?? []).filter((a) => a.connectionId !== link.id),
+        ...(assignment.inboundMapId || assignment.outboundMapId ? [assignment] : [])]
       commit(next); setError('')
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid assignment.') }
   }
-  return <CanvasOverlay title={connection ? `Route maps · ${connection.name}` : 'Route maps'} className="route-map-panel" onClose={onClose}>
-    <p className="muted">Reusable, hub-scoped resources. One map per connection direction; editing a shared map updates every assignment. Unmatched routes are allowed. Summaries clear AS paths; use a following prepend rule to add one. Only prefix matching is modeled.</p>
-    {connection && <section className="assignment-panel"><h3>Connection assignments</h3><div className="form-grid">{(['inboundMapId', 'outboundMapId'] as const).map((direction) => <label className="field" key={direction}><span>{direction === 'inboundMapId' ? 'Inbound route map' : 'Outbound route map'}</span><select aria-label={direction === 'inboundMapId' ? 'Inbound route map' : 'Outbound route map'} disabled={connection.transport === 'SDWAN'} value={connection[direction] ?? ''} onChange={(e) => assign(direction, e.target.value)}><option value="">None</option>{topology.routeMaps?.filter((m) => m.hubId === connection.hubId).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>)}</div>
-      {connection.transport === 'SDWAN' && <p className="notice">Azure route maps are unsupported on integrated SD-WAN NVA connections.</p>}
-      <details><summary>Outbound advertisement preview ({simulation.outbound[connection.id]?.length ?? 0})</summary><div className="table-scroll"><table><thead><tr><th>Prefix</th><th>AS path</th></tr></thead><tbody>{simulation.outbound[connection.id]?.map((r, i) => <tr key={`${r.key}:${i}`}><td>{r.prefix}</td><td>{r.asPath.join(' ') || '—'}</td></tr>)}</tbody></table></div></details>
+  return <CanvasOverlay title={node ? `Route maps · ${node.name}` : 'Route maps'} className="route-map-panel" onClose={onClose}>
+    <p className="muted">Policies belong to this router, with independent assignments on each connection. Inbound means received by {node?.name ?? 'the router'}; outbound means advertised by it. A shared map updates every assignment on this router. Unmatched routes are allowed.</p>
+    <div className="inspector-controls"><label className="field"><span>Route map router</span><select aria-label="Route map router" value={routerKey} onChange={(e) => onRouter({ kind: e.target.value.startsWith('site:') ? 'site' : 'hub', id: e.target.value.slice(e.target.value.indexOf(':') + 1) })}>
+      {!topology.hubs.length && !topology.sites.length && <option value="">Add a hub or site first</option>}
+      <optgroup label="Virtual hubs">{topology.hubs.map((h) => <option key={h.id} value={`hub:${h.id}`}>{h.name}</option>)}</optgroup><optgroup label="On-premises sites">{topology.sites.map((s) => <option key={s.id} value={`site:${s.id}`}>{s.name}</option>)}</optgroup>
+    </select></label><button disabled={!node} onClick={() => { setDraft({ id: crypto.randomUUID(), name: 'New route map', [owner.kind === 'hub' ? 'hubId' : 'siteId']: owner.id, rules: [] }); setMapId(''); setConfirmDelete(false) }}>Create route map</button></div>
+    {link && <section className="assignment-panel"><h3>Router connection policies</h3>
+      <label className="field"><span>Connection</span><select aria-label="Route map connection" value={link.id} onChange={(e) => { setLinkId(e.target.value); setError('') }}>{links.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
+      <div className="form-grid">{(['inboundMapId', 'outboundMapId'] as const).map((direction) => <label className="field" key={direction}><span>{direction === 'inboundMapId' ? `Inbound to ${node?.name}` : `Outbound from ${node?.name}`}</span><select aria-label={direction === 'inboundMapId' ? 'Inbound route map' : 'Outbound route map'} disabled={owner.kind === 'hub' && link.transport === 'SDWAN'} value={binding?.[direction] ?? ''} onChange={(e) => assign(direction, e.target.value)}><option value="">None</option>{topology.routeMaps?.filter(owned).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>)}</div>
+      {owner.kind === 'hub' && link.transport === 'SDWAN' && <p className="notice">Azure route maps are unsupported on integrated SD-WAN NVA connections. Site-side policies are separate.</p>}
+      {owner.kind === 'hub' && <details><summary>Outbound advertisement preview ({simulation.outbound[link.id]?.length ?? 0})</summary><div className="table-scroll"><table><thead><tr><th>Prefix</th><th>AS path</th></tr></thead><tbody>{simulation.outbound[link.id]?.map((r, i) => <tr key={`${r.key}:${i}`}><td>{r.prefix}</td><td>{r.asPath.join(' ') || '—'}</td></tr>)}</tbody></table></div></details>}
     </section>}
-    <div className="inspector-controls"><label className="field"><span>Route map hub</span><select aria-label="Route map hub" disabled={!!connection} value={hubId} onChange={(e) => { setHubId(e.target.value); setMapId(''); setDraft(undefined); setConfirmDelete(false) }}>{topology.hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}</select></label>
-      <button disabled={!hubId} onClick={() => { setDraft({ id: crypto.randomUUID(), name: 'New route map', hubId, rules: [] }); setMapId(''); setConfirmDelete(false) }}>Create route map</button></div>
-    <div className="resource-list">{topology.routeMaps?.filter((m) => m.hubId === hubId).map((m) => <button key={m.id} aria-pressed={map?.id === m.id} onClick={() => { setMapId(m.id); setDraft(undefined); setConfirmDelete(false) }}>{m.name}<small>{m.rules.length} rules · {topology.connections.filter((c) => c.inboundMapId === m.id || c.outboundMapId === m.id).length} connections</small></button>)}</div>
+    <div className="resource-list">{topology.routeMaps?.filter(owned).map((m) => <button key={m.id} aria-pressed={map?.id === m.id} onClick={() => { setMapId(m.id); setDraft(undefined); setConfirmDelete(false) }}>{m.name}<small>{m.rules.length} rules · {node?.routeMapAssignments?.filter((a) => a.inboundMapId === m.id || a.outboundMapId === m.id).length ?? 0} connections</small></button>)}</div>
     {map && <><MapDefinition key={map.id} map={map} onSave={(value) => {
       const next = structuredClone(topology)
       next.routeMaps ??= []
@@ -81,12 +97,15 @@ export function RouteMapsPanel({ topology, simulation, connectionId, onSave, onC
       {!draft && <div className="delete-resource">{confirmDelete ? <><p>Delete this route map and remove all of its connection assignments?</p><div className="row"><button onClick={() => setConfirmDelete(false)}>Cancel deletion</button><button className="danger" onClick={() => {
         const next = structuredClone(topology)
         next.routeMaps = next.routeMaps?.filter((m) => m.id !== map.id)
-        next.connections.forEach((c) => { if (c.inboundMapId === map.id) delete c.inboundMapId; if (c.outboundMapId === map.id) delete c.outboundMapId })
+        for (const router of [...next.hubs, ...next.sites]) {
+          router.routeMapAssignments?.forEach((a) => { if (a.inboundMapId === map.id) delete a.inboundMapId; if (a.outboundMapId === map.id) delete a.outboundMapId })
+          if (router.routeMapAssignments) router.routeMapAssignments = router.routeMapAssignments.filter((a) => a.inboundMapId || a.outboundMapId)
+        }
         commit(next); setMapId(''); setConfirmDelete(false)
       }}>Confirm route map deletion</button></div></> : <button className="danger" onClick={() => setConfirmDelete(true)}>Delete route map</button>}</div>}
     </>}
     {!map && <p className="empty">Select a route map or create a reusable policy.</p>}
     {error && <p role="alert" className="notice error">{error}</p>}
-    <p className="muted">Prepend public 2-byte ASNs, excluding Azure-reserved ASNs. 64496–64511 are accepted only for simulation. Outbound maps affect advertisements, not Azure best-path selection.</p>
+    <p className="muted">{owner.kind === 'hub' ? 'Hub policies require public 2-byte prepend ASNs, excluding Azure-reserved ASNs. 64496–64511 are accepted only for simulation. Spoke/inter-hub policies are not simulated.' : 'Site policies accept private and 32-bit ASNs, and apply to hub connections and on-premises links. They are independent of Azure-side policies.'} Summaries retain known forwarding destinations; aggregate holes are not treated as reachable. Static VPN entries bypass BGP policies.</p>
   </CanvasOverlay>
 }

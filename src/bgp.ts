@@ -1,4 +1,4 @@
-import type { Connection, PrependRule, RouteMapRule, Topology } from './model'
+import type { Connection, PrependRule, RouteMapRule, RouterSelection, Site, SiteLink, Topology } from './model'
 import { cidr, contains } from './validation'
 
 export function applyRouteMap(prefix: string, asPath: number[], rules: PrependRule[]): number[] {
@@ -10,7 +10,17 @@ export function applyRouteMap(prefix: string, asPath: number[], rules: PrependRu
 }
 
 export function connectionMapRules(topology: Topology, connection: Connection, direction: 'inbound' | 'outbound'): RouteMapRule[] {
-  if (connection.transport === 'SDWAN') return []
+  return routerMapRules(topology, { kind: 'hub', id: connection.hubId }, connection.id, direction)
+}
+
+export function routerMapRules(topology: Topology, router: RouterSelection, connectionId: string, direction: 'inbound' | 'outbound'): RouteMapRule[] {
+  const node = (router.kind === 'hub' ? topology.hubs : topology.sites).find((node) => node.id === router.id)
+  const assignment = node?.routeMapAssignments?.find((a) => a.connectionId === connectionId)
+  const connection = topology.connections.find((c) => c.id === connectionId)
+  if (router.kind === 'hub' && connection?.transport === 'SDWAN') return []
+  const assigned = assignment?.[`${direction}MapId`]
+  if (assigned !== undefined) return topology.routeMaps?.find((map) => map.id === assigned && (router.kind === 'hub' ? map.hubId : map.siteId) === router.id)?.rules ?? []
+  if (router.kind !== 'hub' || !connection) return []
   const reference = connection[`${direction}MapId`]
   if (reference !== undefined) {
     return topology.routeMaps?.find((map) => map.id === reference && map.hubId === connection.hubId)?.rules ?? []
@@ -74,6 +84,7 @@ export interface SiteRoute {
   asPath: number[]
   sitePath: string[]
   siteLinkIds?: string[]
+  forwardingRoutes?: SiteRoute[]
 }
 
 export interface SiteRouting {
@@ -82,8 +93,33 @@ export interface SiteRouting {
   converged: boolean
 }
 
+export function siteExports<T extends RouteMapAdvertisement>(topology: Topology, siteId: string, connectionId: string, routes: T[]): T[] {
+  const rules = routerMapRules(topology, { kind: 'site', id: siteId }, connectionId, 'outbound')
+  if (!rules.length) return routes
+  const asn = topology.sites.find((site) => site.id === siteId)!.asn
+  return applyRouteMapRules(routes, rules)
+    .map((route) => ({ ...route, asPath: route.asPath.length && (!route.forwardingRoutes || route.asPath.includes(asn)) ? route.asPath : [asn, ...route.asPath] }))
+}
+
+export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, receiver: Site, link: SiteLink, routes: T[], repeatOriginAsn = false): T[] {
+  const senderId = link.a === receiver.id ? link.b : link.a
+  const sender = topology.sites.find((site) => site.id === senderId)!
+  const policy = link.a === senderId ? link.aToB : link.bToA
+  const transit = (route: T): T => ({
+    ...route, key: `${link.id}:${route.key}`,
+    asPath: [...policy.prepend, ...(!repeatOriginAsn && route.asPath[0] === sender.asn ? route.asPath : [sender.asn, ...route.asPath])],
+    sitePath: [receiver.id, ...route.sitePath], siteLinkIds: [link.id, ...(route.siteLinkIds ?? [])],
+    ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => transit(child as T)) } : {}),
+  })
+  const exported = siteExports(topology, senderId, link.id, routes.filter((route) => !route.sitePath.includes(receiver.id)
+    && !route.asPath.includes(receiver.asn) && (!policy.prefixes.length || policy.prefixes.includes(route.prefix))).map(transit))
+  const received = exported.map((route) => ({ ...route, asPath: [...(policy.receivePrepend ?? []), ...route.asPath] }))
+  return applyRouteMapRules(received, routerMapRules(topology, { kind: 'site', id: receiver.id }, link.id, 'inbound'))
+    .filter((route) => !route.asPath.includes(receiver.asn))
+}
+
 export function propagateSites(topology: Topology): SiteRouting {
-  const origins = Object.fromEntries(topology.sites.map((site) => [site.id, [
+  const origins: Record<string, SiteRoute[]> = Object.fromEntries(topology.sites.map((site) => [site.id, [
     ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [], sitePath: [site.id], siteLinkIds: [] as string[] })),
     ...topology.connections.filter((c) => c.siteId === site.id).flatMap((c) => c.routes.filter((r) => r.kind === 'bgp').map((r) => ({
       key: `${c.id}:${r.id}`, prefix: r.prefix, asPath: r.asPath[0] === 12076 ? r.asPath.slice(1) : r.asPath, sitePath: [site.id], siteLinkIds: [] as string[],
@@ -98,24 +134,14 @@ export function propagateSites(topology: Topology): SiteRouting {
   let tables = Object.fromEntries(topology.sites.map((s) => [s.id, best(origins[s.id])]))
   let candidates = origins
   const signature = (value: typeof tables) => JSON.stringify(topology.sites.map((s) =>
-    value[s.id].map((r) => `${r.key}:${r.sitePath.join(':')}:${r.asPath.join(',')}`).sort(),
+    value[s.id].map((r) => JSON.stringify(r)).sort(),
   ))
   let converged = topology.siteLinks.length === 0
   for (let round = 0; round < 64 && !converged; round++) {
     const nextCandidates = Object.fromEntries(topology.sites.map((receiver) => {
       const received = topology.siteLinks.filter((l) => l.enabled && (l.a === receiver.id || l.b === receiver.id)).flatMap((link) => {
         const senderId = link.a === receiver.id ? link.b : link.a
-        const sender = topology.sites.find((s) => s.id === senderId)!
-        const policy = link.a === senderId ? link.aToB : link.bToA
-        return tables[senderId].filter((r) => !r.sitePath.includes(receiver.id)
-          && !r.asPath.includes(receiver.asn)
-          && (!policy.prefixes.length || policy.prefixes.includes(r.prefix))).map((r) => ({
-          ...r,
-          key: `${link.id}:${r.key}`,
-          asPath: [...(policy.receivePrepend ?? []), ...policy.prepend, ...(r.asPath[0] === sender.asn ? r.asPath : [sender.asn, ...r.asPath])],
-          sitePath: [receiver.id, ...r.sitePath],
-          siteLinkIds: [link.id, ...(r.siteLinkIds ?? [])],
-        })).filter((r) => !r.asPath.includes(receiver.asn))
+        return receiveSiteRoutes(topology, receiver, link, tables[senderId])
       })
       return [receiver.id, [...origins[receiver.id], ...received]]
     }))

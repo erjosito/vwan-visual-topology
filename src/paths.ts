@@ -1,6 +1,8 @@
 import type { ObjectSelection, Topology } from './model'
 import type { FlowPath, Simulation } from './routing'
 import { traceFlow } from './routing'
+import { applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
+import type { SiteRoute } from './bgp'
 import { cidr, contains, ipv4 } from './validation'
 
 export type PathNode = ObjectSelection & { kind: 'hub' | 'spoke' | 'site' }
@@ -13,22 +15,30 @@ export function nodePrefixes(topology: Topology, node: PathNode): string[] {
   return site?.prefixes.length ? site.prefixes : [...new Set(topology.connections.filter((c) => c.siteId === node.id).flatMap((c) => c.routes.map((r) => r.prefix)))]
 }
 
-interface SiteAdvertisement {
-  key: string; prefix: string; asPath: number[]; sitePath: string[]; siteLinkIds: string[]; connectionId: string
-}
+interface SiteAdvertisement extends SiteRoute { connectionId: string }
 
 function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
+  const advertisement = (route: SiteRoute, connectionId: string): SiteAdvertisement => ({
+    ...route, connectionId,
+    ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => advertisement(child, connectionId)) } : {}),
+  })
   const best = (routes: SiteAdvertisement[]) => [...new Set(routes.map((r) => r.prefix))].flatMap((prefix) => {
     const matches = routes.filter((r) => r.prefix === prefix)
     const shortest = Math.min(...matches.map((r) => r.asPath.length))
     return matches.filter((r) => r.asPath.length === shortest).sort((a, b) => a.key.localeCompare(b.key)).slice(0, 32)
   })
   const origins = Object.fromEntries(topology.sites.map((site) => [site.id, [
-    ...(simulation.siteCandidates[site.id] ?? []).filter((r) => r.sitePath.length === 1).map((r) => ({ ...r, siteLinkIds: [], connectionId: '' })),
+    ...(simulation.siteCandidates[site.id] ?? []).filter((r) => r.sitePath.length === 1).map((r) => advertisement(r, '')),
     ...topology.connections.filter((c) => c.enabled && c.siteId === site.id)
-      .flatMap((c) => (simulation.outbound[c.id] ?? []).filter((r) => !r.asPath.includes(site.asn)).map((r) => ({
-        key: `${c.id}:${r.key}`, prefix: r.prefix, asPath: r.asPath, sitePath: [site.id], siteLinkIds: [], connectionId: c.id,
-      }))),
+      .flatMap((c) => {
+        const routes = simulation.outbound[c.id] ?? []
+        const received = [...applyRouteMapRules(routes.filter((r) => r.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'site', id: site.id }, c.id, 'inbound')), ...routes.filter((r) => r.kind === 'vpn-static')]
+        const origin = (r: typeof routes[number]): SiteAdvertisement => ({
+          key: `${c.id}:${r.key}`, prefix: r.prefix, asPath: r.asPath, sitePath: [site.id], siteLinkIds: [], connectionId: c.id,
+          ...(r.forwardingRoutes ? { forwardingRoutes: r.forwardingRoutes.map(origin) } : {}),
+        })
+        return received.filter((r) => !r.asPath.includes(site.asn)).map(origin)
+      }),
   ]]))
   let tables = Object.fromEntries(topology.sites.map((s) => [s.id, best(origins[s.id])]))
   let converged = topology.siteLinks.length === 0
@@ -36,13 +46,7 @@ function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
     const next = Object.fromEntries(topology.sites.map((receiver) => {
       const received = topology.siteLinks.filter((l) => l.enabled && (l.a === receiver.id || l.b === receiver.id)).flatMap((link) => {
         const senderId = link.a === receiver.id ? link.b : link.a
-        const sender = topology.sites.find((s) => s.id === senderId)!
-        const policy = link.a === senderId ? link.aToB : link.bToA
-        return tables[senderId].filter((r) => !r.sitePath.includes(receiver.id) && (!policy.prefixes.length || policy.prefixes.includes(r.prefix)))
-          .map((r) => ({
-            ...r, key: `${link.id}:${r.key}`, sitePath: [receiver.id, ...r.sitePath], siteLinkIds: [link.id, ...r.siteLinkIds],
-            asPath: [...(policy.receivePrepend ?? []), ...policy.prepend, sender.asn, ...r.asPath],
-          })).filter((r) => !r.asPath.includes(receiver.asn))
+        return receiveSiteRoutes(topology, receiver, link, tables[senderId], true)
       })
       return [receiver.id, best([...origins[receiver.id], ...received])]
     }))
@@ -71,17 +75,27 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
   const shortest = Math.min(...matches.map((r) => r.asPath.length))
   const preferred = matches.filter((r) => r.asPath.length === shortest).slice(0, 32)
   if (!preferred.length) return [{ hubs: [], steps: ['No BGP route at the source site. Azure routes must be advertised on a supported connection; SD-WAN outbound learning is not modeled.'], status: 'unreachable' }]
-  return preferred.flatMap((route): NodePath[] => {
-    const steps = [`Source site: longest prefix ${route.prefix}, shortest AS path ${route.asPath.join(' ') || 'local'}.`]
-    if (!route.connectionId) return [{ hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, siteId: route.sitePath.at(-1), steps, status: 'delivered' }]
-    const connection = topology.connections.find((c) => c.id === route.connectionId)!
-    return traceFlow(topology, simulation, connection.hubId, destination).map((path) => {
-      const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
-      return {
-        ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,
-        status: loop ? 'loop' : path.status,
-        steps: [...steps, `Enter Azure via ${connection.name}.`, ...path.steps, ...(loop ? ['The selected Azure route returns to the source-side site path.'] : [])],
-      }
+  const contributions = (route: SiteAdvertisement): SiteAdvertisement[] => {
+    if (!route.forwardingRoutes) return [route]
+    const matches = route.forwardingRoutes.filter((child) => contains(child.prefix, address)).flatMap((child) => contributions(child as SiteAdvertisement))
+    const longest = Math.max(...matches.map((child) => cidr(child.prefix)!.length))
+    return matches.filter((child) => cidr(child.prefix)!.length === longest)
+  }
+  return preferred.flatMap((selected): NodePath[] => {
+    const actual = contributions(selected)
+    if (!actual.length) return [{ hubs: [], steps: ['The mapped summary has no known contributing route for this destination.'], status: 'unreachable' }]
+    return actual.flatMap((route): NodePath[] => {
+      const steps = [`Source site: longest prefix ${selected.prefix}, shortest AS path ${selected.asPath.join(' ') || 'local'}.`]
+      if (!route.connectionId) return [{ hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, siteId: route.sitePath.at(-1), steps, status: 'delivered' }]
+      const connection = topology.connections.find((c) => c.id === route.connectionId)!
+      return traceFlow(topology, simulation, connection.hubId, destination).map((path) => {
+        const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
+        return {
+          ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,
+          status: loop ? 'loop' : path.status,
+          steps: [...steps, `Enter Azure via ${connection.name}.`, ...path.steps, ...(loop ? ['The selected Azure route returns to the source-side site path.'] : [])],
+        }
+      })
     })
   }).slice(0, 128)
 }

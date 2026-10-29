@@ -1,7 +1,7 @@
 import { cloneElement, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, topologyObject, transportLabels } from './model'
-import type { ObjectKind, ObjectSelection, Preference, Topology, Transport } from './model'
+import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
 import { parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 
@@ -13,8 +13,8 @@ function Field({ title, children }: { title: string; children: ReactElement<{ 'a
 
 const prefixes = (value: string) => value.trim() === '*' ? [] : value.split(/[,\s]+/).filter(Boolean)
 
-export function TopologyObjectEditor({ topology, request, onSave, onClose }: {
-  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void
+export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps }: {
+  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void
 }) {
   const [error, setError] = useState('')
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
@@ -44,16 +44,21 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose }: {
           next.sites = next.sites.filter((s) => s.id !== id)
           next.connections = next.connections.filter((c) => c.siteId !== id)
           next.siteLinks = next.siteLinks.filter((l) => l.a !== id && l.b !== id)
+          next.routeMaps = next.routeMaps?.filter((map) => map.siteId !== id)
         } else if (request.kind === 'spoke') next.spokes = next.spokes.filter((s) => s.id !== id)
         else if (request.kind === 'connection') next.connections = next.connections.filter((c) => c.id !== id)
         else next.siteLinks = next.siteLinks.filter((l) => l.id !== id)
+        const remaining = new Set([...next.connections, ...next.siteLinks].map((link) => link.id))
+        for (const router of [...next.hubs, ...next.sites]) {
+          if (router.routeMapAssignments) router.routeMapAssignments = router.routeMapAssignments.filter((a) => remaining.has(a.connectionId))
+        }
       } else {
         const data = new FormData(event.currentTarget)
         const text = (name: string) => String(data.get(name) ?? '').trim()
         const name = text('name')
         if (request.kind === 'hub') {
           const value = {
-            id, name, region: text('region'), preference: text('preference') as Preference,
+            ...hub, id, name, region: text('region'), preference: text('preference') as Preference,
             routingIntent: { private: data.has('privateIntent'), internet: data.has('internetIntent'), privatePrefixes: prefixes(text('privatePrefixes')) },
           }
           if (hub) next.hubs[next.hubs.findIndex((h) => h.id === id)] = value
@@ -63,7 +68,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose }: {
           if (spoke) next.spokes[next.spokes.findIndex((s) => s.id === id)] = value
           else next.spokes.push(value)
         } else if (request.kind === 'site') {
-          const value = { id, name, asn: Number(text('asn')), prefixes: text('prefix') ? [text('prefix')] : [] }
+          const value = { ...site, id, name, asn: Number(text('asn')), prefixes: text('prefix') ? [text('prefix')] : [] }
           if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
           else next.sites.push(value)
           if (connectedSite) next.connections.push({
@@ -132,10 +137,14 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose }: {
           <Field title="On-premises site"><select name="site" required defaultValue={connection?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>{transport}
           <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={connection?.enabled ?? true} />Connection enabled</label>
           <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={connection?.learnSiteRoutes ?? true} />Advertise site-originated and learned routes</label>
-          <p className="muted">Existing advertisements and route maps are preserved. Incompatible transport changes are rejected; remove VPN static routes or unsupported route maps explicitly first.</p>
+          <p className="muted">Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.</p>
           </div>
-          <p className="muted">Create and assign reusable policies through the connection's Route maps action. Unassign maps before moving a connection to another hub or changing it to SD-WAN.</p>
+          <p className="muted">Use Route maps on either endpoint to configure inbound/outbound policies for this connection.</p>
         </>}
+        {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>Connection route maps</legend>
+          <p>Inbound/outbound policies belong to this router and are assigned per connection. Save any configuration changes before opening its policies.</p>
+          <button type="button" onClick={() => onRouteMaps({ kind: request.kind as RouterSelection['kind'], id: item.id })}>Configure route maps</button>
+        </fieldset>}
         {request.kind === 'siteLink' && <>
           <Field title="Site A"><select name="a" required defaultValue={link?.a ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>
           <Field title="Site B"><select name="b" required defaultValue={link?.b ?? topology.sites.find((s) => s.id !== (request.siteId ?? topology.sites[0]?.id))?.id}>{siteOptions}</select></Field>

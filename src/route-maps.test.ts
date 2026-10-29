@@ -4,6 +4,7 @@ import { example } from './model'
 import type { RouteMap, RouteMapRule, Topology } from './model'
 import { simulate, traceFlow } from './routing'
 import { validateTopology } from './validation'
+import { traceNodePath } from './paths'
 
 const rule = (overrides: Partial<RouteMapRule> = {}): RouteMapRule => ({
   id: 'rule', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate', ...overrides,
@@ -81,11 +82,101 @@ describe('route-map resources and migration', () => {
     expect(normalized.routeMaps).toHaveLength(2)
     expect(normalized.routeMaps![0].name).toContain(original.connections[0].name)
     expect(normalized.connections[0].inbound).toEqual([])
-    expect(normalized.connections[0].inboundMapId).toBe(normalized.routeMaps![0].id)
+    expect(normalized.hubs[0].routeMapAssignments?.find((a) => a.connectionId === normalized.connections[0].id)?.inboundMapId).toBe(normalized.routeMaps![0].id)
+    expect(normalized.connections[0]).not.toHaveProperty('inboundMapId')
     expect(normalized.connections[1].outbound).toEqual([])
     expect(normalized.routeMaps![0].rules.every((rule) => rule.nextStep === 'terminate')).toBe(true)
     expect(simulate(normalized)).toEqual(simulate(original))
     expect(validateTopology(JSON.parse(JSON.stringify(normalized)))).toEqual(normalized)
+  })
+
+  describe('router endpoint route-map assignments', () => {
+    it('applies site outbound before provider and hub inbound policies, with independent directions and links', () => {
+      const t = network()
+      t.routeMaps = [
+        { id: 'site-map', name: 'Site export', siteId: 'dc', rules: [rule({ id: 'site-rule', action: 'prepend', prepend: [65010, 65010] })] },
+        map([rule({ action: 'prepend', prepend: [64496] })]),
+      ]
+      t.sites[0].routeMapAssignments = [{ connectionId: 'er-eu', outboundMapId: 'site-map' }]
+      t.hubs[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'map' }]
+      const normalized = validateTopology(t)
+      const rows = simulate(normalized).firewallTables.eu.find((d) => d.prefix === '10.20.0.0/16')!.candidates
+      expect(rows.find((r) => r.connectionId === 'er-eu')!.asPath).toEqual([64496, 12076, 65010, 65010, 65010])
+      expect(rows.find((r) => r.connectionId === 'vpn-eu')!.asPath).toEqual([65010, 65010, 65010])
+      expect(validateTopology(normalized)).toEqual(normalized)
+    })
+
+    it('filters site imports from Azure independently on each connection without modifying hub exports', () => {
+      const t = structuredClone(example)
+      t.routeMaps = [{ id: 'site-map', name: 'Site import', siteId: 'dc', rules: [rule({ action: 'drop', prefixes: ['10.1.0.0/16'] })] }]
+      t.sites[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'site-map' }]
+      expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'dc' }, '10.1.0.1')[0].sourceConnectionId).toBe('vpn-eu')
+      t.sites[0].routeMapAssignments.push({ connectionId: 'vpn-eu', inboundMapId: 'site-map' })
+      expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'dc' }, '10.1.0.1')[0].status).toBe('unreachable')
+      expect(simulate(t).outbound['er-eu'].some((r) => r.prefix === '10.1.0.0/16')).toBe(true)
+    })
+
+    it('resolves site inbound Azure summaries to their contributing connection and rejects holes', () => {
+      const t = network()
+      t.connections[1].enabled = false
+      t.routeMaps = [{ id: 'import', name: 'Import', siteId: 'dc', rules: [rule({ action: 'summarize', prefixes: ['10.1.0.0/16'], summaryPrefixes: ['10.0.0.0/8'] })] }]
+      t.sites[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'import' }]
+      const result = simulate(validateTopology(t))
+      expect(traceNodePath(t, result, { kind: 'site', id: 'dc' }, '10.1.0.1')[0]).toMatchObject({ status: 'delivered', sourceConnectionId: 'er-eu' })
+      expect(traceNodePath(t, result, { kind: 'site', id: 'dc' }, '10.9.0.1')[0].status).toBe('unreachable')
+    })
+
+    it('applies both peer endpoints, detects policy-induced AS loops and retains summary forwarding provenance', () => {
+      const t: Topology = { version: 1, name: 'Peer policies', hubs: [], spokes: [], connections: [], sites: [
+        { id: 'a', name: 'A', asn: 65001, prefixes: [] },
+        { id: 'b', name: 'B', asn: 65002, prefixes: ['10.20.1.0/24'] },
+      ], siteLinks: [{ id: 'wan', name: 'WAN', a: 'a', b: 'b', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }] }
+      t.routeMaps = [
+        { id: 'export', name: 'Export', siteId: 'b', rules: [
+          rule({ id: 'export-rule', action: 'summarize', prefixes: ['10.20.0.0/16'], match: 'contains', summaryPrefixes: ['10.20.0.0/16'], nextStep: 'continue' }),
+          rule({ id: 'export-prepend', action: 'prepend', prepend: [65004] }),
+        ] },
+        { id: 'import', name: 'Import', siteId: 'a', rules: [rule({ id: 'import-rule', action: 'prepend', prepend: [65003] })] },
+      ]
+      t.sites[0].routeMapAssignments = [{ connectionId: 'wan', inboundMapId: 'import' }]
+      t.sites[1].routeMapAssignments = [{ connectionId: 'wan', outboundMapId: 'export' }]
+      const normalized = validateTopology(t)
+      const result = simulate(normalized)
+      expect(result.siteTables.a[0]).toMatchObject({ prefix: '10.20.0.0/16', asPath: [65003, 65002, 65004], siteLinkIds: ['wan'] })
+      expect(traceNodePath(normalized, result, { kind: 'site', id: 'a' }, '10.20.1.1')[0]).toMatchObject({ status: 'delivered', siteHops: ['a', 'b'], siteLinkIds: ['wan'] })
+      expect(traceNodePath(normalized, result, { kind: 'site', id: 'a' }, '10.20.2.1')[0].status).toBe('unreachable')
+      t.routeMaps[1].rules[0].prepend = [65001]
+      expect(simulate(t).siteTables.a).toEqual([])
+    })
+
+    it('keeps site summaries reachable only through known contributors and never applies BGP maps to VPN static entries', () => {
+      const t = network()
+      t.connections[0].routes = [{ id: 'component', prefix: '10.20.1.0/24', asPath: [12076, 65010], kind: 'bgp' }]
+      t.routeMaps = [{ id: 'export', name: 'Export', siteId: 'dc', rules: [rule({ action: 'summarize', prefixes: ['10.20.0.0/16'], match: 'contains', summaryPrefixes: ['10.20.0.0/16'] })] }]
+      t.sites[0].routeMapAssignments = [{ connectionId: 'er-eu', outboundMapId: 'export' }]
+      t.connections[1].enabled = false
+      const result = simulate(validateTopology(t))
+      expect(traceFlow(t, result, 'eu', '10.20.1.1')[0].status).toBe('delivered')
+      expect(traceFlow(t, result, 'eu', '10.20.2.1')[0].status).toBe('unreachable')
+      t.routeMaps[0].rules = [rule({ action: 'drop' })]
+      t.connections[0].transport = 'VPN'
+      t.connections[0].routes[0].kind = 'vpn-static'; t.connections[0].routes[0].asPath = []
+      expect(traceFlow(t, simulate(validateTopology(t)), 'eu', '10.20.1.1')[0].status).toBe('delivered')
+    })
+
+    it('rejects unattached links, cross-router maps, duplicate bindings and ambiguous ownership', () => {
+      const t = network()
+      t.routeMaps = [{ id: 'site-map', name: 'Policy', siteId: 'dc', rules: [] }]
+      t.sites[0].routeMapAssignments = [{ connectionId: 'vpn-eu', inboundMapId: 'site-map' }]
+      expect(() => validateTopology(t)).toThrow('not attached')
+      t.sites[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'site-map' }, { connectionId: 'er-eu', outboundMapId: 'site-map' }]
+      expect(() => validateTopology(t)).toThrow('Duplicate router')
+      t.sites[0].routeMapAssignments = []
+      t.hubs[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'site-map' }]
+      expect(() => validateTopology(t)).toThrow('same hub or site')
+      t.routeMaps[0].hubId = 'eu'
+      expect(() => validateTopology(t)).toThrow('exactly one')
+    })
   })
   it('shares a hub-scoped map and gives references precedence over legacy rules', () => {
     const t = network()

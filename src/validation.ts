@@ -1,4 +1,4 @@
-import type { DiagramLayout, LayoutMode, PrependRule, RouteMap, RouteMapRule, Topology } from './model'
+import type { DiagramLayout, LayoutMode, PrependRule, RouteMap, RouteMapAssignment, RouteMapRule, Topology } from './model'
 
 export function ipv4(value: string): number | undefined {
   if (!/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(value)) return undefined
@@ -77,13 +77,26 @@ export function validateTopology(input: unknown): Topology {
     if (!['equals', 'contains'].includes(rule.match as string)) fail('Invalid prefix match mode.')
     return { id: id(rule.id), prefixes: prefixes(rule.prefixes, 'Rule prefixes'), match: rule.match as 'equals' | 'contains', prepend }
   })
+  const assignments = (value: unknown): RouteMapAssignment[] => {
+    const seen = new Set<string>()
+    return array(value, 240, 'Router route-map assignments').map((value) => {
+      const entry = record(value)
+      const connectionId = text(entry.connectionId, 'Assignment connection')
+      if (seen.has(connectionId)) fail('Duplicate router route-map assignment for a connection.')
+      seen.add(connectionId)
+      return { connectionId,
+        ...(entry.inboundMapId === undefined ? {} : { inboundMapId: text(entry.inboundMapId, 'Inbound route map') }),
+        ...(entry.outboundMapId === undefined ? {} : { outboundMapId: text(entry.outboundMapId, 'Outbound route map') }) }
+    })
+  }
   const hubs = array(root.hubs, 20, 'Hubs').map((value) => {
     const hub = record(value)
     if (!['ExpressRoute', 'VPN', 'ASPath'].includes(hub.preference as string)) fail('Invalid hub routing preference.')
     const intent = record(hub.routingIntent ?? { private: false, internet: false, privatePrefixes: [] })
     if (typeof intent.private !== 'boolean' || typeof intent.internet !== 'boolean') fail('Routing intent policies must be boolean.')
     return { id: id(hub.id), name: text(hub.name, 'Hub name'), region: text(hub.region, 'Region'), preference: hub.preference,
-      routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') } } as Topology['hubs'][number]
+      routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') },
+      ...(hub.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(hub.routeMapAssignments) }) } as Topology['hubs'][number]
   })
   const sites = array(root.sites, 60, 'Sites').map((value) => {
     const site = record(value)
@@ -91,7 +104,8 @@ export function validateTopology(input: unknown): Topology {
     if (asn === 65520 || asn === 65515 || asn === 12076) fail('Use a non-Azure site ASN.')
     const originated = array(site.prefixes ?? [], 100, 'Site originated prefixes')
     if (originated.length > 1) fail(`Site "${text(site.name, 'Site name')}" supports only one originated prefix. Reduce its prefixes to one before importing; no networks have been discarded.`)
-    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: prefixes(originated, 'Site originated prefix') }
+    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: prefixes(originated, 'Site originated prefix'),
+      ...(site.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(site.routeMapAssignments) }) }
   })
   const siteLinks = array(root.siteLinks ?? [], 120, 'On-premises links').map((value) => {
     const link = record(value)
@@ -117,9 +131,12 @@ export function validateTopology(input: unknown): Topology {
   })
   const routeMaps: RouteMap[] = array(root.routeMaps ?? [], 240, 'Route maps').map((value) => {
     const map = record(value)
-    if (!hubs.some((hub) => hub.id === map.hubId)) fail('Route map references a missing hub.')
+    if ((map.hubId === undefined) === (map.siteId === undefined)) fail('A route map must belong to exactly one hub or site.')
+    if (map.hubId !== undefined && !hubs.some((hub) => hub.id === map.hubId)) fail('Route map references a missing hub.')
+    if (map.siteId !== undefined && !sites.some((site) => site.id === map.siteId)) fail('Route map references a missing site.')
     return {
-      id: id(map.id), name: text(map.name, 'Route map name'), hubId: map.hubId as string,
+      id: id(map.id), name: text(map.name, 'Route map name'),
+      ...(map.hubId === undefined ? { siteId: map.siteId as string } : { hubId: map.hubId as string }),
       rules: array(map.rules, 20, 'Route-map rules').map((value): RouteMapRule => {
         const rule = record(value)
         if (!['equals', 'contains'].includes(rule.match as string)) fail('Invalid prefix match mode.')
@@ -127,7 +144,7 @@ export function validateTopology(input: unknown): Topology {
         if (!['continue', 'terminate'].includes(rule.nextStep as string)) fail('Invalid route-map next step.')
         const matchPrefixes = prefixes(rule.prefixes, 'Rule prefixes')
         const summaryPrefixes = prefixes(rule.summaryPrefixes, 'Summary prefixes')
-        const prepend = prependAsns(rule.prepend)
+        const prepend = map.hubId === undefined ? asns(rule.prepend) : prependAsns(rule.prepend)
         if (rule.action === 'summarize') {
           if (!summaryPrefixes.length) fail('A summarize action needs summary prefixes.')
           const covered = (prefix: string, summary: string) => cidr(summary)!.length <= cidr(prefix)!.length && contains(summary, cidr(prefix)!.network)
@@ -201,6 +218,34 @@ export function validateTopology(input: unknown): Topology {
         connection[`${direction}MapId`] = mapId
       }
       connection[direction] = []
+    }
+    const hub = hubs.find((h) => h.id === connection.hubId)!
+    for (const direction of ['inboundMapId', 'outboundMapId'] as const) {
+      const reference = connection[direction]
+      if (reference === undefined) continue
+      hub.routeMapAssignments ??= []
+      let binding = hub.routeMapAssignments.find((a) => a.connectionId === connection.id)
+      if (!binding) { binding = { connectionId: connection.id }; hub.routeMapAssignments.push(binding) }
+      if (binding[direction] !== undefined && binding[direction] !== reference) fail('Conflicting legacy and hub route-map assignments.')
+      binding[direction] = reference
+      delete connection[direction]
+    }
+  }
+  for (const router of [...hubs, ...sites]) {
+    const isHub = hubs.some((h) => h.id === router.id)
+    for (const assignment of router.routeMapAssignments ?? []) {
+      const connection = connections.find((c) => c.id === assignment.connectionId)
+      const peer = siteLinks.find((link) => link.id === assignment.connectionId)
+      if (isHub ? connection?.hubId !== router.id : connection?.siteId !== router.id && peer?.a !== router.id && peer?.b !== router.id) {
+        fail('Route-map assignment references a connection not attached to this router.')
+      }
+      if (isHub && connection?.transport === 'SDWAN' && (assignment.inboundMapId || assignment.outboundMapId)) fail('Azure route maps are not supported on integrated SD-WAN NVA branch connections.')
+      for (const reference of [assignment.inboundMapId, assignment.outboundMapId]) {
+        if (reference === undefined) continue
+        const map = routeMaps.find((m) => m.id === reference)
+        if (!map) fail('Router assignment references a missing route map.')
+        if ((isHub ? map!.hubId : map!.siteId) !== router.id) fail('Route map must belong to the same hub or site as the assignment.')
+      }
     }
   }
   if (routeMaps.length > 240) fail('Route maps must be an array with at most 240 entries.')
