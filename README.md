@@ -6,16 +6,16 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 
 ## Features
 
-- Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites with editable ASNs and multiple originated prefixes. Enter site prefixes one per line, or separate them with commas/spaces. Site ASNs are visible in the diagram and sidebar.
+- Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites with editable ASNs and **one optional originated prefix** each. The site's ASN and prefix are visible on its node. Connections can still advertise multiple routes.
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs.
 - Define per-connection BGP advertisements and received AS paths, or VPN site static prefixes. Disable connections to explore failures.
 - Choose ExpressRoute, VPN, or AS Path routing preference independently per hub.
 - Canvas-first workspace with **Layered topology** and **Network constellation** visuals, zoom, and right-click/keyboard creation and editing. Drag nodes to rearrange; links follow live. Positions are saved independently per view in browser storage and exported JSON. **Reset layout** restores only the active view. There is no permanent sidebar or prefix-filter dropdown.
-- **Show BGP routes** on hubs and sites opens a movable, resizable, nonmodal canvas inspector. Compare the table with the topology; preferred paths are green and marked `*`, with visible alternatives, AS paths and selection explanations. Click a table prefix to highlight its paths.
+- **Show BGP routes** on hubs and sites opens a movable, resizable, nonmodal canvas inspector. Compact prefix/reason headings group every candidate; the first column contains only `*` for preferred routes or is blank for alternatives. Preferred paths remain green, with every AS path visible. Click a heading prefix to highlight its paths.
 - Enable private and/or Internet routing intent. Inspect **hub policy routes and firewall forwarding routes separately**, and see firewall traversal in flow traces.
 - Connect on-premises sites with directional BGP export allowlists and AS-path prepends. Configure site ASNs and originated prefixes, then enable mesh route import on the desired hub connections.
 - Create named, reusable, hub-scoped route maps independently of connections. Assign one per direction to supported connections, with ordered prefix matching, route blocking, summarization and ASN prepending. Preview outbound advertisements without confusing them with Azure best paths.
-- Use **Show path to** / **Show path from** on hubs, sites and spokes to choose endpoints, a destination prefix or IPv4 address, and highlight actual preferred BGP/forwarding paths with per-hop explanations.
+- Hover **Show path to** / **Show path from** on hubs, sites and spokes, then choose an endpoint and prefix from cascading menus to highlight forwarding paths immediately. No inspector opens automatically; use **Path details** for per-hop explanations or **Open path explorer** for custom addresses.
 - Save automatically in browser storage, and import/export validated, versioned JSON.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 
@@ -41,12 +41,12 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 ## Working with the app
 
 1. Right-click empty canvas to add a hub/site. Right-click a hub to add spokes or connect sites; right-click a site to add hub connections or on-premises BGP links. The toolbar also offers hub/site creation.
-2. Right-click an object for **Edit configuration**, renaming or deletion. Routing intent is part of hub configuration; site configuration includes ASN and multiple prefixes.
+2. Right-click an object for **Edit configuration**, renaming or deletion. Routing intent is part of hub configuration; site configuration includes ASN and one optional originated prefix.
 3. Right-click a connection for **Edit advertisements**. Include provider ASNs such as `12076` in explicit ExpressRoute paths. For static-only VPNs, disable site-mesh import, select **VPN site static** for each prefix and remove explicit BGP entries.
 4. Right-click a hub/site for **Show BGP routes**. Adjust **Hub routing preference**, switch hub/firewall **Route view**, or click a table prefix to compare candidate paths against the canvas.
 5. To model on-premises transit, use **Link to another site** and configure directional prefix allowlists and prepends. `*` means all prefixes. Enable site-originated/learned-route import on the desired hub connections.
 6. Open **Route maps** from the canvas/toolbar to create named policies, or from a connection to assign them inbound/outbound. Maps can be shared by supported connections in the same hub; editing a map updates every assignment. Deletion confirms removal of all its assignments.
-7. On a node, **Show path to** fixes the initial source and lets you choose a destination. **Show path from** fixes the initial destination and lets you choose a source. Select a destination prefix; no IP entry is required. A prefix traces its network address, not every possible more-specific exception within it. Choose **Custom IPv4 address** when testing an exact destination. Green links show preferred forwarding paths, including ECMP, on-premises transit and firewall traversal.
+7. Hover **Show path to → destination → prefix** to highlight a path directly. **Show path from → source → prefix** uses prefixes belonging to the node you right-clicked, not the chosen source. Reachability appears on the canvas; **Path details** opens explanations only on request. Submenus also open by click/tap or Right Arrow; Left Arrow/Escape returns a level. Choose **Open path explorer** for custom IPv4 addresses. A selected prefix traces its network address, not every possible more-specific exception within it. Green links show preferred forwarding paths, including ECMP, on-premises transit and firewall traversal.
 8. Move inspectors by dragging their header, or use **Left**/**Right**; resize with the corner handle on desktop. Close or press Escape without losing the topology. Use **Notes** for warnings, documentation and loading the example.
 
 Hub icons display the hub name and region, not an AS path. **AS Path** in the hub configuration is a routing-preference option; it is not an AS path assigned to the hub. Actual AS paths appear on individual routes in the route tables.
@@ -59,9 +59,11 @@ Drag any hub, spoke or site to reposition it without changing its configuration 
 
 The **Inspect router** selector switches between hubs and sites. Hub views distinguish system, VPN-static and routing-intent entries from BGP candidates. AS paths describe route advertisements, not hub or firewall identities.
 
-On-premises nodes show their ASN and assigned-prefix summary, just like spoke prefix summaries: the first prefix followed by `+N` for additional prefixes. Hover over the node for the complete list. Sites without assigned prefixes are labeled explicitly; connection advertisements are not assumed to be locally assigned networks.
+On-premises nodes show their ASN and single assigned prefix. Sites without one are labeled explicitly; connection advertisements are not assumed to be locally assigned networks. Spokes still support multiple prefixes.
 
-Use **Edit configuration** to rename an object or change its properties; existing IDs, relationships, advertisements and policies are preserved. Hub configuration includes routing intent, also summarized in the sidebar's hub cards. Spokes can be moved to another hub, and connections can be retargeted to existing hubs/sites. Invalid changes stay in the editor until corrected or canceled.
+The version-1 JSON `sites[].prefixes` field remains an array for compatibility, but accepts at most one entry. Multi-prefix imports are rejected without replacing the current workspace or discarding networks; reduce the list explicitly before importing. If an old browser workspace contains multiple prefixes, the example opens with an error and a **Download original saved topology** recovery button. Download it before editing or closing the page.
+
+Use **Edit configuration** to rename an object or change its properties; existing IDs, relationships, advertisements and policies are preserved. Hub configuration includes routing intent. Spokes can be moved to another hub, and connections can be retargeted to existing hubs/sites. Invalid changes stay in the editor until corrected or canceled.
 
 Use **+ Hub** or **+ Site** above the diagram, or the matching canvas menu commands. A connected site and its hub connection are created together, with site-prefix advertisements enabled. Hub-to-hub links remain automatic.
 

@@ -89,7 +89,9 @@ export function validateTopology(input: unknown): Topology {
     const site = record(value)
     const asn = asns([site.asn ?? 65001])[0]
     if (asn === 65520 || asn === 65515 || asn === 12076) fail('Use a non-Azure site ASN.')
-    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: prefixes(site.prefixes ?? [], 'Site originated prefixes') }
+    const originated = array(site.prefixes ?? [], 100, 'Site originated prefixes')
+    if (originated.length > 1) fail(`Site "${text(site.name, 'Site name')}" supports only one originated prefix. Reduce its prefixes to one before importing; no networks have been discarded.`)
+    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: prefixes(originated, 'Site originated prefix') }
   })
   const siteLinks = array(root.siteLinks ?? [], 120, 'On-premises links').map((value) => {
     const link = record(value)

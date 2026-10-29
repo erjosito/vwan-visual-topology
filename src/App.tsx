@@ -27,11 +27,12 @@ const parseNode = (key: string): PathNode => {
 
 function App() {
   const [initial] = useState(() => {
+    let saved: string | null = null
     try {
-      const saved = localStorage.getItem(storageKey)
-      return { topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(example)), error: '' }
+      saved = localStorage.getItem(storageKey)
+      return { topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(example)), error: '', backup: '' }
     } catch (error) {
-      return { topology: validateTopology(structuredClone(example)), error: `Saved topology could not be loaded: ${message(error)}. The saved data has not been overwritten.` }
+      return { topology: validateTopology(structuredClone(example)), error: `Saved topology could not be loaded: ${message(error)}. The saved data has not been overwritten.`, backup: saved ?? '' }
     }
   })
   const [topology, setTopology] = useState(initial.topology)
@@ -101,6 +102,28 @@ function App() {
     setDestinationPrefix(dst ? nodePrefixes(topology, dst)[0] ?? '' : '')
     setTracing(false); setHighlighting(false); setPanel('paths')
   }
+  const pathActions = (value: PathNode, direction: 'to' | 'from'): ContextAction[] => {
+    const others = nodes.filter((node) => nodeKey(node) !== nodeKey(value))
+    return others.length ? others.map((other) => {
+      const src = direction === 'to' ? value : other
+      const dst = direction === 'to' ? other : value
+      const prefixes = [...new Set(nodePrefixes(topology, dst))]
+      return {
+        label: `${other.name} (${other.kind})`,
+        children: prefixes.length ? prefixes.map((prefix) => ({
+          label: prefix,
+          run: () => {
+            setSource(nodeKey(src)); setTarget(nodeKey(dst)); setDestinationPrefix(prefix); setDestination(prefix.split('/')[0])
+            setHighlighting(false); setTracing(true)
+            if (panel === 'paths') setPanel(undefined)
+          },
+        })) : [{ label: 'No destination prefixes configured', disabled: true }],
+      }
+    }) : [{ label: 'No other nodes available', disabled: true }]
+  }
+  const pathStatus = !paths.length ? 'No trace available' : paths.every((path) => path.status === 'delivered') ? 'Reachable'
+    : paths.some((path) => path.status === 'delivered') ? 'Partially reachable'
+      : paths.some((path) => path.status === 'loop') ? 'Forwarding loop' : 'No route'
   const contextSelection = contextMenu?.selection
   const contextObject = contextSelection && topologyObject(topology, contextSelection)
   const canvasActions: ContextAction[] = [
@@ -113,8 +136,9 @@ function App() {
     { label: 'Edit configuration', run: () => setEditorRequest(contextSelection) },
     ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: 'Show BGP routes', run: () => showRoutes(contextSelection) }] : []),
     ...(['hub', 'site', 'spoke'].includes(contextSelection.kind) ? [
-      { label: 'Show path to', run: () => openPath(contextSelection as PathNode, 'to') },
-      { label: 'Show path from', run: () => openPath(contextSelection as PathNode, 'from') },
+      { label: 'Show path to', disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'to') },
+      { label: 'Show path from', disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'from') },
+      { label: 'Open path explorer', run: () => openPath(contextSelection as PathNode, 'to') },
     ] : []),
     ...(contextSelection.kind === 'hub' ? [
       ...(topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [{ label: 'Show firewall routes', run: () => showRoutes(contextSelection, true) }] : []),
@@ -133,8 +157,8 @@ function App() {
     ] : []),
     { label: `Delete ${objectLabels[contextSelection.kind]}`, danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
   ] : canvasActions
-  const exportTopology = () => {
-    const url = URL.createObjectURL(new Blob([JSON.stringify(topology, null, 2)], { type: 'application/json' }))
+  const exportTopology = (original = '') => {
+    const url = URL.createObjectURL(new Blob([original || JSON.stringify(topology, null, 2)], { type: 'application/json' }))
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'vwan-topology.json'; anchor.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
@@ -157,11 +181,12 @@ function App() {
 
   return <div className="app canvas-app">
     <header className="topbar"><div className="brand"><div className="brand-icon" aria-hidden="true">W</div><div><h1>Virtual WAN <span>Topology Lab</span></h1><p>Design the network. Understand the path.</p></div></div>
-      <div className="actions"><span className="local-badge">Local-first · no Azure credentials</span><button onClick={exportTopology}>Export JSON</button><button onClick={() => importer.current?.click()}>Import JSON</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label="Import topology file" onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+      <div className="actions"><span className="local-badge">Local-first · no Azure credentials</span><button onClick={() => exportTopology()}>Export JSON</button><button onClick={() => importer.current?.click()}>Import JSON</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label="Import topology file" onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     <main>
       <section className="workspace-heading"><div><p className="eyebrow">NETWORK WORKSPACE</p><input className="topology-name" aria-label="Topology name" maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong> hubs</span><span><strong>{topology.spokes.length}</strong> spokes</span><span><strong>{topology.sites.length}</strong> sites</span></div></section>
       {error && <div role="alert" className="notice error">{error}<button aria-label="Dismiss error" onClick={() => setError('')}>Dismiss</button></div>}
+      {initial.backup && <div className="notice">The example is displayed because the saved workspace could not be loaded. Download the original before editing or closing this page. <button onClick={() => exportTopology(initial.backup)}>Download original saved topology</button></div>}
       {saveError && <p role="alert" className="notice error">{saveError}</p>}
       <section className="canvas-workspace panel" aria-label="Topology workspace">
         <div className="canvas-toolbar"><div><h2>Network topology</h2><p className="muted">Drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.</p></div>
@@ -170,7 +195,7 @@ function App() {
         </div>
         <div className="canvas-stage">
           <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} paths={paths} sourceSpokeId={tracing && sourceNode?.kind === 'spoke' && paths.some((p) => p.hubs.length) ? sourceNode.id : undefined} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
-          {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
+          {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination} · ${destinationPrefix || destination} · ${pathStatus}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}{tracing && <button onClick={() => setPanel('paths')}>Path details</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
           {panel === 'routes' && inspected && <RouteInspector topology={topology} simulation={simulation} router={router} view={activeView} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
           {panel === 'maps' && <RouteMapsPanel key={connectionId || 'resources'} topology={topology} simulation={simulation} connectionId={connectionId} onSave={save} onClose={closePanel} />}
           {panel === 'ads' && connection && <CanvasOverlay title={`Advertisements · ${connection.name}`} className="advertisements" onClose={closePanel}>

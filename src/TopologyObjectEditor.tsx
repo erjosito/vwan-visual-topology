@@ -63,7 +63,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose }: {
           if (spoke) next.spokes[next.spokes.findIndex((s) => s.id === id)] = value
           else next.spokes.push(value)
         } else if (request.kind === 'site') {
-          const value = { id, name, asn: Number(text('asn')), prefixes: prefixes(text('prefixes')) }
+          const value = { id, name, asn: Number(text('asn')), prefixes: text('prefix') ? [text('prefix')] : [] }
           if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
           else next.sites.push(value)
           if (connectedSite) next.connections.push({
@@ -120,8 +120,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose }: {
         {request.kind === 'spoke' && <Field title="Prefixes"><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>}
         {request.kind === 'site' && <>
           <Field title="Site ASN"><input name="asn" type="number" required min={1} max={4294967294} defaultValue={site?.asn ?? 65001} /></Field>
-          <Field title="Originated prefixes"><textarea name="prefixes" rows={3} defaultValue={site?.prefixes.join('\n') ?? ''} placeholder={'10.80.0.0/16\n10.81.0.0/16'} /></Field>
-          <p className="muted">One IPv4 prefix per line; commas or spaces also work. All prefixes originate from this site.</p>
+          <Field title="Originated prefix"><input name="prefix" defaultValue={site?.prefixes[0] ?? ''} placeholder="10.80.0.0/16" /></Field>
+          <p className="muted">One optional IPv4 network for this site. Leave blank for a transit-only site or explicit connection advertisements.</p>
           {connectedSite && <>
             <p className="muted">A connection to {topology.hubs.find((h) => h.id === request.hubId)?.name} is created with site-prefix advertisements enabled.</p>
             <Field title="Connection name"><input name="connectionName" maxLength={120} placeholder="Defaults to site name + connection" /></Field>{transport}

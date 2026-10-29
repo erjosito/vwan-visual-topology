@@ -18,6 +18,101 @@ async function createMap(page: Page, name: string) {
   await page.getByRole('button', { name: 'Create route map', exact: true }).click()
   await page.getByLabel('Route map name', { exact: true }).fill(name)
 }
+async function downloadTopology(page: Page, button = 'Export JSON'): Promise<Topology> {
+  const event = page.waitForEvent('download')
+  await page.getByRole('button', { name: button, exact: true }).click()
+  const chunks: Buffer[] = []
+  for await (const chunk of (await (await event).createReadStream())!) chunks.push(chunk)
+  return JSON.parse(Buffer.concat(chunks).toString())
+}
+
+async function pathMenu(page: Page, object: string, direction: 'to' | 'from', endpoint: string) {
+  await page.getByLabel(object, { exact: true }).focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: `Show path ${direction}`, exact: true }).hover()
+  await page.getByRole('menu', { name: `Show path ${direction}`, exact: true }).getByRole('menuitem', { name: endpoint, exact: true }).hover()
+  return page.getByRole('menu', { name: endpoint, exact: true })
+}
+
+test('cascading hover menus trace to/from the chosen prefix without opening an inspector', async ({ page }) => {
+  await page.goto('/')
+  const to = await pathMenu(page, 'Select spoke Europe applications', 'to', 'London datacenter (site)')
+  await expect(to.getByRole('menuitem', { name: '10.20.0.0/16', exact: true })).toBeVisible()
+  await to.getByRole('menuitem', { name: '10.20.10.0/24', exact: true }).click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('status')).toContainText('Europe applications → London datacenter · 10.20.10.0/24 · Reachable')
+  await expect(page.getByTestId('link-er-eu')).toHaveAttribute('data-preferred', 'true')
+  const from = await pathMenu(page, 'Select spoke Europe applications', 'from', 'New York office (site)')
+  await expect(from.getByRole('menuitem', { name: '10.30.0.0/16', exact: true })).toHaveCount(0)
+  await from.getByRole('menuitem', { name: '10.1.0.0/16', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('status')).toContainText('New York office → Europe applications · 10.1.0.0/16 · Reachable')
+  await expect(page.getByTestId('link-vpn-us')).toHaveAttribute('data-preferred', 'true')
+  await expect(page.getByTestId('interhub-eu-us')).toHaveClass(/preferred-link/)
+  await page.getByRole('button', { name: 'Path details', exact: true }).click()
+  await expect(page.locator('.flow-result')).toContainText('New York office')
+  await expect(page.getByLabel('Source node', { exact: true })).toHaveValue('site:ny')
+})
+
+test('nested menus flip at viewport edges, support keyboard backtracking and restore focus', async ({ page }) => {
+  await page.goto('/')
+  const node = page.getByLabel('Select spoke Europe applications', { exact: true })
+  await node.evaluate((element) => element.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: innerWidth - 5, clientY: innerHeight - 5 })))
+  const parent = page.getByRole('menuitem', { name: 'Show path to', exact: true })
+  await parent.focus(); await page.keyboard.press('ArrowRight')
+  const endpoint = page.getByRole('menu', { name: 'Show path to', exact: true }).getByRole('menuitem', { name: 'New York office (site)', exact: true })
+  await endpoint.focus(); await page.keyboard.press('ArrowRight')
+  await expect(page.getByRole('menuitem', { name: '10.30.0.0/16', exact: true })).toBeFocused()
+  for (const menu of await page.getByRole('menu').all()) {
+    const box = (await menu.boundingBox())!
+    expect(box.x).toBeGreaterThanOrEqual(8); expect(box.y).toBeGreaterThanOrEqual(8)
+    expect(box.x + box.width).toBeLessThanOrEqual(1272); expect(box.y + box.height).toBeLessThanOrEqual(712)
+  }
+  await page.screenshot({ path: 'test-results/cascading-path-menus.png', fullPage: true })
+  await page.keyboard.press('ArrowLeft')
+  await expect(endpoint).toBeFocused(); await expect(page.getByRole('menu')).toHaveCount(2)
+  await page.keyboard.press('ArrowLeft')
+  await expect(parent).toBeFocused(); await expect(page.getByRole('menu')).toHaveCount(1)
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('Escape')
+  await expect(parent).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(node).toBeFocused(); await expect(page.getByRole('menu')).toHaveCount(0)
+})
+
+test('compact menus work by tapping and explain missing prefixes and unreachable destinations', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const topology = structuredClone(example)
+  topology.sites.push({ id: 'isolated', name: 'Isolated site', asn: 65090, prefixes: ['192.0.2.0/24'] },
+    { id: 'transit', name: 'Transit only', asn: 65091, prefixes: [] })
+  await page.goto('/'); await importTopology(page, topology)
+  await action(page, 'Select spoke Europe applications', 'Show path to')
+  const endpoints = page.getByRole('menu', { name: 'Show path to', exact: true })
+  await endpoints.getByRole('menuitem', { name: 'Transit only (site)', exact: true }).click()
+  await expect(page.getByRole('menuitem', { name: 'No destination prefixes configured', exact: true })).toBeDisabled()
+  await page.getByRole('menuitem', { name: 'Back from Transit only (site)', exact: true }).click()
+  await endpoints.getByRole('menuitem', { name: 'Isolated site (site)', exact: true }).click()
+  await page.getByRole('menuitem', { name: '192.0.2.0/24', exact: true }).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('status')).toContainText('No route')
+  await expect(page.locator('[data-testid^="link-"][data-preferred="true"]')).toHaveCount(0)
+})
+
+test('multi-prefix imports preserve the workspace and legacy browser data can be downloaded intact', async ({ page }) => {
+  const legacy = structuredClone(example)
+  legacy.sites[0].prefixes = ['10.90.0.0/16', '10.91.0.0/16']
+  await page.goto('/')
+  await importTopology(page, example)
+  const before = await readTopology(page)
+  await importTopology(page, legacy)
+  await expect(page.getByRole('alert')).toContainText('only one originated prefix')
+  expect(await readTopology(page)).toEqual(before)
+  await page.evaluate((topology) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology)), legacy)
+  await page.reload()
+  await expect(page.getByRole('alert')).toContainText('saved data has not been overwritten')
+  expect(await readTopology(page)).toEqual(legacy)
+  expect(await downloadTopology(page, 'Download original saved topology')).toEqual(legacy)
+})
 
 async function dragNode(page: Page, id: string, dx: number, dy: number) {
   const node = page.locator(`[data-node-id="${id}"]`)
@@ -59,12 +154,7 @@ test('dragging updates links live, saves per-view positions and round-trips the 
   await expect(hub).toHaveAttribute('transform', original!)
   await page.getByLabel('Visualization mode').selectOption('constellation')
   await expect(page.locator('[data-node-id="eu-apps"]')).toHaveAttribute('transform', spokePosition!)
-  const downloadEvent = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
-  const stream = (await (await downloadEvent).createReadStream())!
-  const chunks: Buffer[] = []
-  for await (const chunk of stream) chunks.push(chunk)
-  const exported = JSON.parse(Buffer.concat(chunks).toString()) as Topology
+  const exported = await downloadTopology(page)
   await importTopology(page, example)
   await importTopology(page, exported)
   await expect(page.getByLabel('Visualization mode')).toHaveValue('constellation')
@@ -106,7 +196,7 @@ test('prefix-only paths work without an IP field and custom addresses remain ava
   topology.hubs[0].preference = 'VPN'
   topology.connections[0].routes.push({ id: 'same-base-prefix', prefix: '10.20.0.0/24', asPath: [12076, 65010], kind: 'bgp' })
   await page.goto('/'); await importTopology(page, topology)
-  await action(page, 'Select spoke Europe applications', 'Show path to')
+  await action(page, 'Select spoke Europe applications', 'Open path explorer')
   await page.getByLabel('Destination node', { exact: true }).selectOption('site:dc')
   await page.getByLabel('Destination prefix', { exact: true }).selectOption('10.20.10.0/24')
   await expect(page.getByLabel('Destination IPv4', { exact: true })).toHaveCount(0)
@@ -156,13 +246,16 @@ test('BGP overlay preserves all candidates, colors, preference changes and topol
   await expect(preferred).toContainText('London primary')
   await expect(preferred.locator('.as-path')).toHaveText('12076 65010')
   await expect(inspector.locator('tr[data-prefix="10.20.0.0/16"][data-preferred="false"]')).toHaveCount(2)
+  await expect(inspector.locator('thead th')).toHaveCount(3)
+  await expect(rows.locator('.route-state')).toHaveText(['*', '', ''])
+  await expect(inspector).not.toContainText(/\d+ candidates? · \d+ preferred/)
   await expect(inspector.locator('tr[data-reason-prefix="10.20.0.0/16"]')).toContainText('ExpressRoute wins')
   const before = await inspector.boundingBox()
   await inspector.getByRole('button', { name: 'Move BGP routes · Europe hub to left', exact: true }).click()
   expect((await inspector.boundingBox())!.x).toBeLessThan(before!.x)
   await page.getByLabel('Hub routing preference', { exact: true }).selectOption('VPN')
   await expect(preferred).toContainText('London backup')
-  await preferred.getByRole('button', { name: '10.20.0.0/16', exact: true }).click()
+  await inspector.locator('tr[data-reason-prefix="10.20.0.0/16"]').getByRole('button', { name: '10.20.0.0/16', exact: true }).click()
   await expect(page.getByTestId('link-vpn-eu')).toHaveAttribute('data-preferred', 'true')
   await expect(page.getByTestId('link-er-eu')).toHaveAttribute('data-preferred', 'false')
   expect(await preferred.locator('.as-path').evaluate((e) => getComputedStyle(e).color)).not.toBe(
@@ -186,10 +279,10 @@ test('ECMP alternatives remain visible and connection failure withdraws only the
   await page.goto('/'); await importTopology(page, t); await showRoutes(page)
   const rows = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')
   await expect(rows).toHaveCount(3)
-  await expect(rows.locator('.ecmp')).toHaveText(['ECMP ×2', 'ECMP ×2'])
+  await expect(rows.locator('.route-state')).toHaveText(['*', '*', ''])
   await action(page, 'Edit connection VPN 1', 'Disable connection')
   await expect(rows).toHaveCount(2)
-  await expect(rows.locator('.ecmp')).toHaveCount(0)
+  await expect(rows.locator('.route-state')).toHaveText(['*', ''])
   await expect(rows.filter({ hasText: 'VPN 1' })).toHaveCount(0)
 })
 
@@ -207,7 +300,7 @@ test('routing intent stays on hubs, with separate overlay tables and firewall pa
   await action(page, 'Select hub Europe hub', 'Show firewall routes')
   await expect(page.getByLabel('Route view', { exact: true })).toHaveValue('firewall')
   await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(3)
-  await action(page, 'Select spoke Europe applications', 'Show path to')
+  await action(page, 'Select spoke Europe applications', 'Open path explorer')
   await page.getByLabel('Destination node', { exact: true }).selectOption('site:dc')
   await page.getByLabel('Destination prefix', { exact: true }).selectOption('10.20.0.0/16')
   await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
@@ -262,24 +355,27 @@ test('creates nodes through canvas menus, validates prefixes and confirms cascad
   const site = dialog(page, 'Add connected site')
   await site.getByLabel('Name', { exact: true }).fill('Lab branch')
   await site.getByLabel('Site ASN', { exact: true }).fill('65042')
-  await site.getByLabel('Originated prefixes', { exact: true }).fill('10.91.0.0/16\n10.92.0.0/16, 10.93.0.0/16')
+  await site.getByLabel('Originated prefix', { exact: true }).fill('10.91.0.0/16, 10.92.0.0/16')
+  await site.getByRole('button', { name: 'Create object', exact: true }).click()
+  await expect(site.getByRole('alert')).toContainText('Invalid IPv4 network CIDR')
+  await site.getByLabel('Originated prefix', { exact: true }).fill('10.91.0.0/16')
   await site.getByLabel('Transport', { exact: true }).selectOption('VPN')
   await site.getByRole('button', { name: 'Create object', exact: true }).click()
-  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16 +2')
+  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16')
   await showRoutes(page, 'Lab hub')
-  await expect(page.locator('.effective-routes table')).toContainText('10.93.0.0/16')
+  await expect(page.locator('.effective-routes table')).toContainText('10.91.0.0/16')
   await action(page, 'Select hub Lab hub', 'Delete hub')
   await expect(dialog(page, 'Delete hub')).toContainText('1 attached spoke and 1 connection')
   await dialog(page, 'Delete hub').getByRole('button', { name: 'Confirm deletion', exact: true }).click()
   expect((await readTopology(page)).hubs).toHaveLength(0)
   expect((await readTopology(page)).sites).toHaveLength(1)
   await page.reload()
-  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16 +2')
+  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16')
 })
 
-test('path-to and path-from menus calculate forward and reverse BGP paths independently', async ({ page }) => {
+test('advanced path explorer calculates forward and reverse BGP paths independently', async ({ page }) => {
   await page.goto('/')
-  await action(page, 'Select spoke Europe applications', 'Show path to')
+  await action(page, 'Select spoke Europe applications', 'Open path explorer')
   await expect(page.getByLabel('Source node', { exact: true })).toHaveValue('spoke:eu-apps')
   await page.getByLabel('Destination node', { exact: true }).selectOption('site:ny')
   await expect(page.getByLabel('Destination IPv4', { exact: true })).toHaveCount(0)
@@ -288,7 +384,7 @@ test('path-to and path-from menus calculate forward and reverse BGP paths indepe
   await expect(page.locator('.flow-result')).toContainText('Europe hub → Americas hub → New York VPN → New York office')
   await expect(page.getByTestId('interhub-eu-us')).toHaveClass(/preferred-link/)
   await expect(page.getByTestId('spoke-link-eu-apps')).toHaveClass(/preferred-link/)
-  await action(page, 'Select spoke Europe applications', 'Show path from')
+  await page.getByLabel('Destination node', { exact: true }).selectOption('spoke:eu-apps')
   await expect(page.getByLabel('Destination node', { exact: true })).toHaveValue('spoke:eu-apps')
   await page.getByLabel('Source node', { exact: true }).selectOption('site:ny')
   await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
@@ -303,7 +399,7 @@ test('path-to and path-from menus calculate forward and reverse BGP paths indepe
 test('on-premises links and directional policies feed hub routes and transit paths', async ({ page }) => {
   await page.goto('/')
   await action(page, 'Select site New York office', 'Edit configuration')
-  await dialog(page, 'Edit site').getByLabel('Originated prefixes', { exact: true }).fill('10.80.0.0/16\n10.81.0.0/16')
+  await dialog(page, 'Edit site').getByLabel('Originated prefix', { exact: true }).fill('10.80.0.0/16')
   await dialog(page, 'Edit site').getByRole('button', { name: 'Save changes', exact: true }).click()
   await action(page, 'Select site London datacenter', 'Link to another site')
   const editor = dialog(page, 'Add on-premises link')
@@ -314,8 +410,8 @@ test('on-premises links and directional policies feed hub routes and transit pat
   await action(page, 'Edit connection London backup', 'Edit advertisements')
   await page.getByLabel('Import site mesh routes', { exact: true }).check()
   await showRoutes(page)
-  await expect(page.locator('.effective-routes table')).toContainText('10.81.0.0/16')
-  await action(page, 'Select spoke Europe applications', 'Show path to')
+  await expect(page.locator('.effective-routes table')).toContainText('10.80.0.0/16')
+  await action(page, 'Select spoke Europe applications', 'Open path explorer')
   await page.getByLabel('Destination node', { exact: true }).selectOption('site:ny')
   await page.getByLabel('Destination prefix', { exact: true }).selectOption('10.80.0.0/16')
   await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
@@ -379,7 +475,7 @@ test('outbound block maps affect advertisements and site ingress, not Azure best
   await expect(page.locator('.assignment-panel table')).not.toContainText('10.1.0.0/16')
   await showRoutes(page)
   await expect(page.locator('.effective-routes table')).toContainText('10.1.0.0/16')
-  await action(page, 'Select site London datacenter', 'Show path to')
+  await action(page, 'Select site London datacenter', 'Open path explorer')
   await page.getByLabel('Destination node', { exact: true }).selectOption('spoke:eu-apps')
   await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
   await expect(page.getByTestId('link-er-eu')).toHaveAttribute('data-preferred', 'false')
@@ -395,8 +491,8 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   }
   const t: Topology = { version: 1, name: 'Site BGP', hubs: [], spokes: [], connections: [], sites: [
     { id: 'a', name: 'Site A', asn: 65010, prefixes: [] },
-    { id: 'b', name: 'Site B', asn: 65020, prefixes: ['10.80.0.0/16', '10.81.0.0/16'] },
-    { id: 'c', name: 'Site C', asn: 65030, prefixes: ['10.80.0.0/16', '10.81.0.0/16'] },
+    { id: 'b', name: 'Site B', asn: 65020, prefixes: ['10.80.0.0/16'] },
+    { id: 'c', name: 'Site C', asn: 65030, prefixes: ['10.80.0.0/16'] },
   ], siteLinks: [
     { id: 'ab', name: 'A to B', a: 'a', b: 'b', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } },
     { id: 'ac', name: 'A to C', a: 'a', b: 'c', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [65030] } },
@@ -408,7 +504,7 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toContainText('Site B')
   await expect(page.getByTestId('peer-link-ab')).toHaveClass(/preferred-link/)
   await expect(page.getByTestId('peer-link-ac')).not.toHaveClass(/preferred-link/)
-  await expect(page.getByLabel('Select site Site B', { exact: true }).locator('.node-prefixes')).toHaveText('10.80.0.0/16 +1')
+  await expect(page.getByLabel('Select site Site B', { exact: true }).locator('.node-prefixes')).toHaveText('10.80.0.0/16')
 })
 
 test('JSON import/export, mobile overlays and Escape preserve user data', async ({ page }) => {

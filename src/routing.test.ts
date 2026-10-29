@@ -182,9 +182,12 @@ describe('route maps and on-premises transit', () => {
   const mesh = () => {
     const t = topology([hub('a')], [link('vpn', 'a', 'VPN', [65001], '10.10.0.0/16')])
     t.sites[0].asn = 65001
-    t.sites.push({ id: 'remote-site', name: 'Remote branch', asn: 65050, prefixes: ['10.80.0.0/16', '10.81.0.0/16'] })
+    t.sites.push({ id: 'remote-site', name: 'Remote branch', asn: 65050, prefixes: ['10.80.0.0/16'] },
+      { id: 'other-branch', name: 'Other branch', asn: 65051, prefixes: ['10.81.0.0/16'] })
     t.siteLinks.push({ id: 'wan', name: 'WAN', a: t.sites[0].id, b: 'remote-site', enabled: true,
       aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: ['10.80.0.0/16'], prepend: [65050] } })
+    t.siteLinks.push({ id: 'branch-wan', name: 'Branch WAN', a: 'remote-site', b: 'other-branch', enabled: true,
+      aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } })
     t.connections[0].learnSiteRoutes = true
     return t
   }
@@ -241,6 +244,17 @@ describe('route maps and on-premises transit', () => {
 })
 
 describe('topology and input validation', () => {
+  it('accepts zero or one site prefix and multiple connection routes, but rejects multiple originated prefixes without mutating input', () => {
+    const topology = structuredClone(example)
+    topology.sites[0].prefixes = ['10.90.0.0/16']
+    expect(validateTopology(topology).sites[0].prefixes).toEqual(['10.90.0.0/16'])
+    expect(validateTopology(topology).connections[0].routes).toHaveLength(2)
+    topology.sites[0].prefixes.push('10.91.0.0/16')
+    expect(() => validateTopology(topology)).toThrow('only one originated prefix')
+    expect(topology.sites[0].prefixes).toEqual(['10.90.0.0/16', '10.91.0.0/16'])
+    topology.sites[0].prefixes = []
+    expect(validateTopology(topology).sites[0].prefixes).toEqual([])
+  })
   it('round-trips the example through the versioned schema', () => {
     expect(validateTopology(JSON.parse(JSON.stringify(example)))).toEqual({ ...example, routeMaps: [] })
     expect(simulate(example)).toEqual(simulate(validateTopology(example)))

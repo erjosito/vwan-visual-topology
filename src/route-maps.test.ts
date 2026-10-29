@@ -193,9 +193,12 @@ describe('route-map selection and actual forwarding', () => {
     t.connections[0].learnSiteRoutes = true
     t.sites = [
       { id: 'dc', name: 'Datacenter', asn: 65001, prefixes: [] },
-      { id: 'branch', name: 'Branch', asn: 65002, prefixes: ['10.20.1.0/24', '10.20.2.0/24'] },
+      { id: 'branch', name: 'Branch', asn: 65002, prefixes: ['10.20.1.0/24'] },
+      { id: 'branch-two', name: 'Branch two', asn: 65003, prefixes: ['10.20.2.0/24'] },
     ]
     t.siteLinks = [{ id: 'wan', name: 'WAN', a: 'dc', b: 'branch', enabled: true,
+      aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } },
+    { id: 'wan-two', name: 'WAN two', a: 'dc', b: 'branch-two', enabled: true,
       aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }]
     t.routeMaps = [map([rule({ prefixes: ['10.20.0.0/16'], match: 'contains', action: 'summarize', summaryPrefixes: ['10.20.0.0/16'] })])]
     t.connections[0].inboundMapId = 'map'
@@ -204,7 +207,7 @@ describe('route-map selection and actual forwarding', () => {
     expect(summary.selected).toHaveLength(1)
     expect(summary.selected[0]).toMatchObject({ asPath: [], forwardingRoutes: [{ prefix: '10.20.1.0/24' }, { prefix: '10.20.2.0/24' }] })
     expect(traceFlow(t, result, 'us', '10.20.2.1')[0]).toMatchObject({
-      status: 'delivered', hubs: ['us', 'eu'], connectionId: 'er-eu', siteHops: ['dc', 'branch'],
+      status: 'delivered', hubs: ['us', 'eu'], connectionId: 'er-eu', siteHops: ['dc', 'branch-two'],
     })
     expect(traceFlow(t, result, 'us', '10.20.3.1')[0].status).toBe('unreachable')
   })
