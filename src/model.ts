@@ -27,6 +27,17 @@ export interface Site {
 }
 
 export interface VpnStaticRoute { id: string; prefix: string; connectionId: string }
+export interface ErLocation { id: string; name: string }
+export interface ErLink {
+  id: string
+  name: string
+  locationId: string
+  hubId?: string
+  siteId?: string
+  enabled: boolean
+  routes: Advertisement[]
+  learnSiteRoutes: boolean
+}
 export interface RouteMapAssignment { connectionId: string; inboundMapId?: string; outboundMapId?: string }
 export interface RouterSelection { kind: 'hub' | 'site'; id: string }
 export type RouteMapDirection = 'inbound' | 'outbound'
@@ -109,18 +120,20 @@ export interface Topology {
   siteLinks: SiteLink[]
   connections: Connection[]
   routeMaps?: RouteMap[]
+  erLocations?: ErLocation[]
+  erLinks?: ErLink[]
   layout?: DiagramLayout
 }
 
-export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink'
+export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink' | 'erLocation' | 'erLink'
 export interface ObjectSelection { kind: ObjectKind; id: string }
 
 export const objectLabels: Record<ObjectKind, string> = {
-  hub: 'hub', spoke: 'spoke', site: 'site', connection: 'connection', siteLink: 'on-premises link',
+  hub: 'hub', spoke: 'spoke', site: 'site', connection: 'connection', siteLink: 'on-premises link', erLocation: 'ER location', erLink: 'ER connection',
 }
 
 export function topologyObject(topology: Topology, selection: ObjectSelection) {
-  const collections = { hub: topology.hubs, spoke: topology.spokes, site: topology.sites, connection: topology.connections, siteLink: topology.siteLinks }
+  const collections = { hub: topology.hubs, spoke: topology.spokes, site: topology.sites, connection: topology.connections, siteLink: topology.siteLinks, erLocation: topology.erLocations ?? [], erLink: topology.erLinks ?? [] }
   return collections[selection.kind].find((item) => item.id === selection.id)
 }
 

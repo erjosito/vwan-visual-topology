@@ -2,13 +2,14 @@ import type { LayoutMode, NodePosition, Topology } from './model'
 
 export function diagramLayout(topology: Topology, mode: LayoutMode) {
   const positions = new Map<string, NodePosition>()
-  let width = Math.max(1000, topology.hubs.length * 260, topology.sites.length * 200, topology.spokes.length * 200)
-  let height = topology.siteLinks.length ? 750 : 650
+  const locations = topology.erLocations ?? []
+  let width = Math.max(1000, topology.hubs.length * 260, topology.sites.length * 200, topology.spokes.length * 200, locations.length * 200)
+  let height = locations.length ? 900 : topology.siteLinks.length ? 750 : 650
   if (mode === 'layered') {
     const row = (nodes: { id: string }[], y: number) => nodes.forEach((node, i) => positions.set(node.id, { x: width * (i + 1) / (nodes.length + 1), y }))
-    row(topology.spokes, 85); row(topology.hubs, 310); row(topology.sites, 550)
+    row(topology.spokes, 85); row(topology.hubs, 310); row(locations, 540); row(topology.sites, locations.length ? 780 : 550)
   } else {
-    const outer = [...topology.spokes, ...topology.sites]
+    const outer = [...topology.spokes, ...locations, ...topology.sites]
     const rings = Math.max(1, Math.ceil(outer.length / 12))
     const radiusX = Math.max(440, topology.hubs.length * 130 + 200)
     const radiusY = Math.max(300, Math.ceil(topology.hubs.length / 8) * 110 + 180)

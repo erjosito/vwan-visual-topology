@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from 'react'
+import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { transportLabels } from './model'
@@ -6,34 +6,59 @@ import type { Candidate, FlowPath } from './routing'
 import { diagramCurve, diagramLayout } from './diagram-layout'
 import virtualWanHubIcon from './assets/azure/virtual-wan-hub.svg'
 import virtualNetworkIcon from './assets/azure/virtual-network.svg'
+import expressRouteIcon from './assets/azure/expressroute.svg'
+import { RouteMapPreview } from './RouteMapPreview'
 
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
 interface Props {
   topology: Topology; hubId: string; selected: Candidate[]; preferredSiteLinkIds?: string[]
-  sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; layout?: LayoutMode; zoom?: number
+  sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; layout?: LayoutMode; zoom?: number
   paths: FlowPath[]; tracing: boolean; sourceSpokeId?: string; selection?: ObjectSelection
   onObjectClick: (selection: ObjectSelection) => void; onObjectContextMenu: (menu: DiagramContextMenu) => void
   onNodeMove: (id: string, position: NodePosition) => void
   onShowRouteMapRules: (router: RouterSelection, direction: RouteMapDirection, connectionId: string) => void
 }
 
-function NodeIcon({ kind }: { kind: 'hub' | 'spoke' | 'site' }) {
+function NodeIcon({ kind }: { kind: 'hub' | 'spoke' | 'site' | 'erLocation' }) {
   return <g className={`node-icon ${kind}`} aria-hidden="true" transform="translate(-79,-21)">
     {kind === 'site' ? <><circle r="13" /><path d="M -7 7 V -7 H 2 V -2 H 7 V 7 Z M -3 -3 H -1 M -3 1 H -1 M -3 5 H -1 M 3 2 H 5" /></>
-      : <image href={kind === 'hub' ? virtualWanHubIcon : virtualNetworkIcon} x="-14" y="-14" width="28" height="28" preserveAspectRatio="xMidYMid meet" />}
+      : <image href={kind === 'hub' ? virtualWanHubIcon : kind === 'erLocation' ? expressRouteIcon : virtualNetworkIcon} x="-14" y="-14" width="28" height="28" preserveAspectRatio="xMidYMid meet" />}
   </g>
 }
 
-export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkIds, sourceSiteLinkIds = [], sourceConnectionIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeId, tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
+export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkIds, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeId, tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
   const svg = useRef<SVGSVGElement>(null)
+  const scroll = useRef<HTMLDivElement>(null)
+  const [viewport, setViewport] = useState({ width: 0, height: 0 })
+  const [preview, setPreview] = useState<{ owner: RouterSelection; connectionId: string; direction: RouteMapDirection; anchor: SVGGElement }>()
+  const previewId = useId()
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const cancelPreviewClose = () => clearTimeout(previewTimer.current)
+  const closePreview = () => { cancelPreviewClose(); setPreview(undefined) }
+  const leavePreview = () => {
+    if (preview?.anchor === document.activeElement) return
+    cancelPreviewClose()
+    previewTimer.current = setTimeout(() => setPreview(undefined), 150)
+  }
+  useEffect(() => () => clearTimeout(previewTimer.current), [])
+  useEffect(() => {
+    const observer = new ResizeObserver(([entry]) => setViewport({ width: entry.contentRect.width, height: entry.contentRect.height }))
+    observer.observe(scroll.current!)
+    return () => observer.disconnect()
+  }, [])
   const drag = useRef<{ id: string; kind: ObjectSelection['kind']; start: NodePosition; origin: NodePosition; moved: boolean } | undefined>(undefined)
   const suppressClick = useRef(false)
   const [moving, setMoving] = useState<{ id: string; position: NodePosition }>()
-  const { positions, width, height } = diagramLayout(topology, layout)
+  const { positions, width: layoutWidth, height: layoutHeight } = diagramLayout(topology, layout)
+  const pixelWidth = Math.max(viewport.width, Math.min(layoutWidth, 1200))
+  const pixelHeight = Math.max(viewport.height, 560)
+  const scale = Math.min(pixelWidth / layoutWidth, pixelHeight / layoutHeight)
+  const width = pixelWidth / scale, height = pixelHeight / scale
   if (moving) positions.set(moving.id, moving.position)
   const point = (id: string) => positions.get(id)!
   const hubSize = { x: 112, y: 48 }, nodeSize = { x: 94, y: 44 }
   const activeConnections = new Set(tracing ? [...paths.map((p) => p.connectionId).filter(Boolean), ...sourceConnectionIds] : selected.map((r) => r.connectionId))
+  const activeErLinks = new Set(tracing ? [...paths.flatMap((path) => path.erLinkIds ?? []), ...sourceErLinkIds] : selected.flatMap((route) => [route.erHubLinkId, route.erSiteLinkId].filter(Boolean)))
   const edgeKey = (a: string, b: string) => [a, b].sort().join(':')
   const policyLinks = [
     ...topology.connections.map((connection) => {
@@ -48,8 +73,18 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       return { ...link, curve: diagramCurve(point(link.a), point(link.b), nodeSize, nodeSize, bend), side: 1,
         endpoints: [{ kind: 'site', id: link.a }, { kind: 'site', id: link.b }] as RouterSelection[] }
     }),
+    ...(topology.erLinks ?? []).map((link) => {
+      const owner: RouterSelection = link.hubId ? { kind: 'hub', id: link.hubId } : { kind: 'site', id: link.siteId! }
+      const siblings = (topology.erLinks ?? []).filter((other) => other.locationId === link.locationId && other.hubId === link.hubId && other.siteId === link.siteId)
+      const bend = 18 + siblings.findIndex((other) => other.id === link.id) * 65
+      return { ...link, curve: diagramCurve(point(owner.id), point(link.locationId), link.hubId ? hubSize : nodeSize, nodeSize, bend), side: 1, endpoints: [owner] }
+    }),
   ]
   const curves = new Map(policyLinks.map((link) => [link.id, link.curve]))
+  const previewNode = preview && (preview.owner.kind === 'hub' ? topology.hubs : topology.sites).find((node) => node.id === preview.owner.id)
+  const previewLink = preview && policyLinks.find((link) => link.id === preview.connectionId)
+  const previewMapId = previewNode?.routeMapAssignments?.find((assignment) => assignment.connectionId === preview?.connectionId)?.[`${preview!.direction}MapId`]
+  const previewMap = topology.routeMaps?.find((map) => map.id === previewMapId)
   const activeHubEdges = new Set<string>()
   if (tracing) paths.forEach((p) => p.hubs.slice(1).forEach((id, i) => activeHubEdges.add(edgeKey(p.hubs[i], id))))
   else selected.filter((r) => r.remote).forEach((r) => activeHubEdges.add(edgeKey(hubId, r.originHubId)))
@@ -80,7 +115,7 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       } else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate() }
     },
   })
-  const movable = (kind: 'hub' | 'spoke' | 'site', id: string) => ({
+  const movable = (kind: 'hub' | 'spoke' | 'site' | 'erLocation', id: string) => ({
     onPointerDown: (event: PointerEvent<SVGGElement>) => {
       if (event.button !== 0 || !event.isPrimary) return
       suppressClick.current = false
@@ -120,19 +155,24 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       const position = { x: p.x + normal.x * 28, y: p.y + normal.y * 28 }
       const angle = Math.atan2(p.dy, p.dx) * 180 / Math.PI + ((direction === 'inbound') === !!endpoint ? 0 : 180)
       const label = `${direction === 'inbound' ? 'Inbound' : 'Outbound'} route map rules for ${node.name} on ${link.name}`
-      const map = topology.routeMaps?.find((m) => m.id === binding![`${direction}MapId`])
       return <Fragment key={`${owner.id}:${link.id}:${direction}`}>
         <g className={`policy-guide ${direction} ${link.enabled ? '' : 'is-down'}`} aria-hidden="true">
           <path d={`M ${p.x} ${p.y} L ${position.x} ${position.y}`} className="policy-leader" />
+          <path transform={`translate(${p.x},${p.y}) rotate(${angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow-halo" />
           <path transform={`translate(${p.x},${p.y}) rotate(${angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow" />
         </g>
-        <g className={`policy-marker ${direction} ${link.enabled ? '' : 'is-down'} clickable`} data-connection-id={link.id} data-router-id={owner.id} data-direction={direction} transform={`translate(${position.x},${position.y})`} {...selectable(owner.kind, owner.id, label, () => onShowRouteMapRules(owner, direction, link.id))} aria-pressed={undefined}>
-          <title>{label}{'\n'}{map?.name}{link.enabled ? '' : ' · Connection down; configured but inactive'}{'\n'}Arrow shows advertisement direction relative to this router. Click to inspect this assignment.</title><rect x="-17" y="-10" width="34" height="20" rx="7" /><text y="4">{direction === 'inbound' ? 'IN' : 'OUT'}</text>
+        <g className={`policy-marker ${direction} ${link.enabled ? '' : 'is-down'} clickable`} data-connection-id={link.id} data-router-id={owner.id} data-direction={direction} transform={`translate(${position.x},${position.y})`} {...selectable(owner.kind, owner.id, label, () => onShowRouteMapRules(owner, direction, link.id))} aria-pressed={undefined}
+          aria-describedby={preview && preview.owner.id === owner.id && preview.connectionId === link.id && preview.direction === direction && previewMap ? previewId : undefined}
+          onPointerEnter={(event) => { cancelPreviewClose(); setPreview({ owner, connectionId: link.id, direction, anchor: event.currentTarget }) }}
+          onPointerLeave={leavePreview}
+          onFocus={(event) => { cancelPreviewClose(); setPreview({ owner, connectionId: link.id, direction, anchor: event.currentTarget }) }}
+          onBlur={closePreview}>
+          <rect x="-23" y="-11" width="46" height="22" rx="7" /><path className="policy-filter" d="M -17 -5 H -7 L -10 0 V 5 L -14 3 V 0 Z" /><text x="7" y="4">{direction === 'inbound' ? 'IN' : 'OUT'}</text>
         </g>
       </Fragment>
     })
   }))
-  return <div className={`diagram-scroll ${moving ? 'is-repositioning' : ''}`}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`0 0 ${width} ${height}`} style={{ minWidth: Math.min(width, 1200) * zoom, minHeight: 560 * zoom, width: `${zoom * 100}%`, height: `${zoom * 100}%` }} role="group" tabIndex={0} aria-label="Interactive Virtual WAN topology. Drag nodes to arrange; right-click for actions. Alt+Arrow keys move a focused node." onContextMenu={(event) => {
+  return <div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`0 0 ${width} ${height}`} style={{ width: pixelWidth * zoom, height: pixelHeight * zoom }} role="group" tabIndex={0} aria-label="Interactive Virtual WAN topology. Drag nodes to arrange; right-click for actions. Alt+Arrow keys move a focused node." onPointerDownCapture={closePreview} onContextMenu={(event) => {
     if ((event.target as Element).closest('g[role="button"]')) return
     event.preventDefault()
     onObjectContextMenu({ x: event.clientX, y: event.clientY, invoker: event.currentTarget })
@@ -148,7 +188,7 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       <linearGradient id="hub-card" x2="0" y2="1"><stop stopColor="#fff" /><stop offset="1" stopColor="#eef4ff" /></linearGradient>
     </defs>
     <rect width={width} height={height} fill={layout === 'constellation' ? 'url(#constellation-glow)' : 'url(#grid)'} />
-    {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">AZURE SPOKE NETWORKS</text><text x="24" y="225" className="diagram-caption">MICROSOFT GLOBAL BACKBONE</text><text x="24" y="465" className="diagram-caption">ON-PREMISES SITES</text></g>
+    {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">AZURE SPOKE NETWORKS</text><text x="24" y="225" className="diagram-caption">MICROSOFT GLOBAL BACKBONE</text><text x="24" y="465" className="diagram-caption">{topology.erLocations?.length ? 'EXPRESSROUTE LOCATIONS' : 'ON-PREMISES SITES'}</text>{!!topology.erLocations?.length && <text x="24" y="700" className="diagram-caption">ON-PREMISES SITES</text>}</g>
       : <g className="constellation-orbits" aria-hidden="true"><ellipse cx={width / 2} cy={height / 2} rx={width / 2 - 130} ry={height / 2 - 80} /><ellipse cx={width / 2} cy={height / 2} rx={Math.max(180, topology.hubs.length * 130)} ry="145" /><text x="24" y="30" className="diagram-caption">VIRTUAL WAN · NETWORK CONSTELLATION</text></g>}
     {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).map((other) => {
       const edge = diagramCurve(point(h.id), point(other.id), hubSize, hubSize, -35)
@@ -169,6 +209,11 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       const edge = curves.get(link.id)!
       return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, `Select on-premises link ${link.name}`)}><title>{link.name}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${link.enabled && exactSiteLinks.has(link.id) ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(link.name.length > 30 ? `${link.name.slice(0, 28)}…` : link.name, edge.label)}</g>
     })}
+    {(topology.erLinks ?? []).map((link) => {
+      const edge = curves.get(link.id)!
+      const active = link.enabled && activeErLinks.has(link.id)
+      return <g key={link.id} className="clickable" {...selectable('erLink', link.id, `Edit ER connection ${link.name}`)}><title>{link.name} · ExpressRoute · {link.enabled ? 'Enabled' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : ' (down)'}`, edge.label)}</g>
+    })}
     {topology.hubs.filter((h) => h.routingIntent.private || h.routingIntent.internet).map((hub) => {
       const p = point(hub.id)
       const active = tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId
@@ -186,7 +231,11 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       const p = point(site.id)
       return <g key={site.id} data-node-id={site.id} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, `Select site ${site.name}`)} {...movable('site', site.id)}><title>{site.name} · ASN {site.asn} · Originated prefix: {site.prefixes[0] || 'none'}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="site" /><text x="10" y="-24" className="node-kind">ON-PREMISES</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{site.prefixes[0] ?? 'No assigned prefix'}</text></g>
     })}
+    {(topology.erLocations ?? []).map((location) => {
+      const p = point(location.id)
+      return <g key={location.id} data-node-id={location.id} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, `Select ER location ${location.name}`)} {...movable('erLocation', location.id)}><title>{location.name} · ExpressRoute peering location</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">ER LOCATION</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">ExpressRoute private peering</text></g>
+    })}
     {policyMarks}
-    {!topology.hubs.length && !topology.sites.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">Right-click the canvas to add your first hub or site.</text>}
-  </svg></div>
+    {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">Right-click the canvas to add your first hub or site.</text>}
+  </svg>{preview && previewNode && previewLink && previewMap && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
 }

@@ -166,6 +166,31 @@ export function validateTopology(input: unknown): Topology {
       }),
     }
   })
+  const erLocations = array(root.erLocations ?? [], 60, 'ER locations').map((value) => {
+    const location = record(value)
+    return { id: id(location.id), name: text(location.name, 'ER location name') }
+  })
+  const erLinks: NonNullable<Topology['erLinks']> = array(root.erLinks ?? [], 240, 'ER connections').map((value) => {
+    const link = record(value)
+    if (!erLocations.some((location) => location.id === link.locationId)) fail('ER connection references a missing ER location.')
+    if ((link.hubId === undefined) === (link.siteId === undefined)) fail('An ER connection needs exactly one hub or site endpoint.')
+    if (link.hubId !== undefined && !hubs.some((hub) => hub.id === link.hubId)) fail('ER connection references a missing hub.')
+    if (link.siteId !== undefined && !sites.some((site) => site.id === link.siteId)) fail('ER connection references a missing site.')
+    if (typeof link.enabled !== 'boolean') fail('ER connection enabled must be boolean.')
+    if (link.learnSiteRoutes !== undefined && typeof link.learnSiteRoutes !== 'boolean') fail('ER learn site routes must be boolean.')
+    const routes = array(link.routes ?? [], 100, 'ER advertisements').map((value) => {
+      const route = record(value)
+      const prefix = text(route.prefix, 'ER advertised prefix')
+      if (!cidr(prefix)) fail(`Invalid IPv4 network CIDR: ${prefix}`)
+      const asPath = asns(route.asPath)
+      if (route.kind !== 'bgp' || !asPath.length || asPath.some((asn) => [12076, 65515, 65520].includes(asn))) fail('ER site advertisements require a BGP AS path without Azure/provider ASNs; 12076 is added automatically.')
+      return { id: id(route.id), prefix, asPath, kind: 'bgp' as const }
+    })
+    if (link.hubId !== undefined && (routes.length || link.learnSiteRoutes)) fail('Configure ER advertisements on the site attachment, not the hub attachment.')
+    return { id: id(link.id), name: text(link.name, 'ER connection name'), locationId: link.locationId as string,
+      ...(link.hubId === undefined ? { siteId: link.siteId as string } : { hubId: link.hubId as string }),
+      enabled: link.enabled as boolean, routes, learnSiteRoutes: link.learnSiteRoutes === true }
+  })
   const connections = array(root.connections, 120, 'Connections').map((value) => {
     const connection = record(value)
     if (!hubs.some((h) => h.id === connection.hubId) || !sites.some((s) => s.id === connection.siteId)) fail('Connection references a missing hub or site.')
@@ -260,7 +285,8 @@ export function validateTopology(input: unknown): Topology {
     for (const assignment of router.routeMapAssignments ?? []) {
       const connection = connections.find((c) => c.id === assignment.connectionId)
       const peer = siteLinks.find((link) => link.id === assignment.connectionId)
-      if (isHub ? connection?.hubId !== router.id : connection?.siteId !== router.id && peer?.a !== router.id && peer?.b !== router.id) {
+      const er = erLinks.find((link) => link.id === assignment.connectionId)
+      if (isHub ? connection?.hubId !== router.id && er?.hubId !== router.id : connection?.siteId !== router.id && er?.siteId !== router.id && peer?.a !== router.id && peer?.b !== router.id) {
         fail('Route-map assignment references a connection not attached to this router.')
       }
       if (isHub && connection?.transport === 'SDWAN' && (assignment.inboundMapId || assignment.outboundMapId)) fail('Azure route maps are not supported on integrated SD-WAN NVA branch connections.')
@@ -279,12 +305,12 @@ export function validateTopology(input: unknown): Topology {
     if (!['layered', 'constellation'].includes(value.mode as string)) fail('Invalid visualization mode.')
     const positions = record(value.positions ?? {})
     if (Object.keys(positions).some((key) => !['layered', 'constellation'].includes(key))) fail('Invalid position layout.')
-    const nodeIds = new Set([...hubs, ...sites, ...spokes].map((node) => node.id))
+    const nodeIds = new Set([...hubs, ...sites, ...spokes, ...erLocations].map((node) => node.id))
     layout = { mode: value.mode as LayoutMode, positions: {} }
     for (const mode of ['layered', 'constellation'] as const) {
       if (positions[mode] === undefined) continue
       const entries = Object.entries(record(positions[mode]))
-      if (entries.length > 140) fail('Node positions must contain at most 140 entries per layout.')
+      if (entries.length > 200) fail('Node positions must contain at most 200 entries per layout.')
       layout.positions[mode] = Object.fromEntries(entries.map(([id, value]) => {
         const point = record(value)
         if (typeof point.x !== 'number' || typeof point.y !== 'number' || !Number.isFinite(point.x) || !Number.isFinite(point.y)
@@ -293,5 +319,6 @@ export function validateTopology(input: unknown): Topology {
       }).filter(([id]) => nodeIds.has(id)))
     }
   }
-  return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps, ...(layout ? { layout } : {}) }
+  return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,
+    ...(root.erLocations === undefined && root.erLinks === undefined ? {} : { erLocations, erLinks }), ...(layout ? { layout } : {}) }
 }

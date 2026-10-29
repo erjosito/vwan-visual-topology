@@ -5,7 +5,7 @@ import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology
 import { parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 
-export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; deleting?: boolean }
+export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; deleting?: boolean }
 
 function Field({ title, children }: { title: string; children: ReactElement<{ 'aria-label'?: string }> }) {
   return <label className="field"><span>{title}</span>{cloneElement(children, { 'aria-label': title })}</label>
@@ -22,6 +22,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const spoke = topology.spokes.find((s) => s.id === request.id)
   const site = topology.sites.find((s) => s.id === request.id)
   const connection = topology.connections.find((c) => c.id === request.id)
+  const erLink = topology.erLinks?.find((link) => link.id === request.id)
+  const [erEndpoint, setErEndpoint] = useState<'hub' | 'site'>(erLink?.siteId || request.siteId ? 'site' : 'hub')
   const [transportValue, setTransportValue] = useState<Transport>(connection?.transport ?? 'ExpressRoute')
   const link = topology.siteLinks.find((l) => l.id === request.id)
   const label = objectLabels[request.kind]
@@ -39,16 +41,22 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           next.hubs = next.hubs.filter((h) => h.id !== id)
           next.spokes = next.spokes.filter((s) => s.hubId !== id)
           next.connections = next.connections.filter((c) => c.hubId !== id)
+          next.erLinks = next.erLinks?.filter((link) => link.hubId !== id)
           next.routeMaps = next.routeMaps?.filter((m) => m.hubId !== id)
         } else if (request.kind === 'site') {
           next.sites = next.sites.filter((s) => s.id !== id)
           next.connections = next.connections.filter((c) => c.siteId !== id)
           next.siteLinks = next.siteLinks.filter((l) => l.a !== id && l.b !== id)
+          next.erLinks = next.erLinks?.filter((link) => link.siteId !== id)
           next.routeMaps = next.routeMaps?.filter((map) => map.siteId !== id)
         } else if (request.kind === 'spoke') next.spokes = next.spokes.filter((s) => s.id !== id)
         else if (request.kind === 'connection') next.connections = next.connections.filter((c) => c.id !== id)
+        else if (request.kind === 'erLocation') {
+          next.erLocations = next.erLocations?.filter((location) => location.id !== id)
+          next.erLinks = next.erLinks?.filter((link) => link.locationId !== id)
+        } else if (request.kind === 'erLink') next.erLinks = next.erLinks?.filter((link) => link.id !== id)
         else next.siteLinks = next.siteLinks.filter((l) => l.id !== id)
-        const remaining = new Set([...next.connections, ...next.siteLinks].map((link) => link.id))
+        const remaining = new Set([...next.connections, ...next.siteLinks, ...(next.erLinks ?? [])].map((link) => link.id))
         for (const router of [...next.hubs, ...next.sites]) {
           if (router.routeMapAssignments) router.routeMapAssignments = router.routeMapAssignments.filter((a) => remaining.has(a.connectionId))
         }
@@ -86,6 +94,23 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           }
           if (connection) next.connections[next.connections.findIndex((c) => c.id === id)] = value
           else next.connections.push(value)
+        } else if (request.kind === 'erLocation') {
+          next.erLocations ??= []
+          const index = next.erLocations.findIndex((location) => location.id === id)
+          if (index < 0) next.erLocations.push({ id, name })
+          else next.erLocations[index] = { id, name }
+        } else if (request.kind === 'erLink') {
+          const routes = erEndpoint === 'site' ? text('advertisements').split(/\r?\n/).filter((line) => line.trim()).map((line, index) => {
+            const [prefix, ...path] = line.trim().split(/\s+/)
+            return { id: erLink?.routes[index]?.id ?? crypto.randomUUID(), prefix, asPath: parseAsPath(path.join(' ')), kind: 'bgp' as const }
+          }) : []
+          const value = { id, name, locationId: text('location'), enabled: data.has('enabled'),
+            ...(erEndpoint === 'hub' ? { hubId: text('endpoint') } : { siteId: text('endpoint') }),
+            routes, learnSiteRoutes: erEndpoint === 'site' && data.has('learnSiteRoutes') }
+          next.erLinks ??= []
+          const index = next.erLinks.findIndex((link) => link.id === id)
+          if (index < 0) next.erLinks.push(value)
+          else next.erLinks[index] = value
         } else {
           const policy = (direction: string) => ({
             prefixes: prefixes(text(`${direction}Prefixes`)), prepend: parseAsPath(text(`${direction}Prepend`)),
@@ -112,8 +137,21 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         <p>Delete <strong>{item?.name}</strong>? This cannot be undone. Export JSON first if you need a backup.</p>
         {request.kind === 'hub' && <p>This also removes {removedSpokes} attached spoke{removedSpokes === 1 ? '' : 's'} and {removedConnections} connection{removedConnections === 1 ? '' : 's'}. On-premises sites are kept.</p>}
         {request.kind === 'site' && <p>This also removes {removedConnections} hub connection{removedConnections === 1 ? '' : 's'} and {removedPeers} on-premises link{removedPeers === 1 ? '' : 's'}.</p>}
+        {(request.kind === 'hub' || request.kind === 'site' || request.kind === 'erLocation') && <p>Attached ER connections are also removed; the other endpoints are kept.</p>}
       </> : <>
         <Field title="Name"><input name="name" required maxLength={120} defaultValue={item?.name ?? ''} autoFocus /></Field>
+        {request.kind === 'erLocation' && <p className="muted">An ExpressRoute peering location groups site circuit attachments and their hub connections. Connect sites and hubs after creating it. ER-to-ER transit and Global Reach are not enabled.</p>}
+        {request.kind === 'erLink' && <>
+          <Field title="ER location"><select name="location" required defaultValue={erLink?.locationId ?? request.locationId ?? topology.erLocations?.[0]?.id}>{topology.erLocations?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
+          <Field title="Endpoint type"><select value={erEndpoint} onChange={(event) => setErEndpoint(event.target.value as 'hub' | 'site')}><option value="hub">Virtual WAN hub</option><option value="site">On-premises site</option></select></Field>
+          <Field title={erEndpoint === 'hub' ? 'Hub' : 'On-premises site'}><select key={erEndpoint} name="endpoint" required defaultValue={erEndpoint === 'hub' ? erLink?.hubId ?? request.hubId ?? topology.hubs[0]?.id : erLink?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{erEndpoint === 'hub' ? hubOptions : siteOptions}</select></Field>
+          <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={erLink?.enabled ?? true} />Connection enabled</label>
+          {erEndpoint === 'site' ? <>
+            <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={erLink?.learnSiteRoutes ?? true} />Advertise site-originated and learned routes</label>
+            <Field title="ER BGP advertisements"><textarea name="advertisements" rows={4} defaultValue={erLink?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
+            <p className="muted">Optional explicit advertisements: one prefix and site-side AS path per line. Provider ASN 12076 is added automatically. Each site attachment represents an independent private-peering circuit; other ER circuits are not advertised to it.</p>
+          </> : <p className="muted">This attachment imports site advertisements from the location and exports selected Azure, VPN and NVA routes. ER-learned routes and default routes are not exported. Configure advertisements on site attachments and route maps on the hub/site.</p>}
+        </>}
         {request.kind === 'hub' && <>
           <Field title="Region"><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
           <Field title="Routing preference"><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>

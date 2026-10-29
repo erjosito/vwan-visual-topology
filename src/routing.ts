@@ -1,6 +1,6 @@
 import type { Connection, Hub, RouteKind, Topology, Transport } from './model'
 import { cidr, contains, ipv4 } from './validation'
-import { applyRouteMapRules, connectionMapRules, propagateSites, siteExports } from './bgp'
+import { applyRouteMapRules, connectionMapRules, propagateSites, routerMapRules, siteExports } from './bgp'
 import type { SiteRoute } from './bgp'
 
 export interface Candidate {
@@ -17,6 +17,9 @@ export interface Candidate {
   siteLinkIds?: string[]
   secureOrigin?: boolean
   forwardingRoutes?: Candidate[]
+  erLocationId?: string
+  erSiteLinkId?: string
+  erHubLinkId?: string
 }
 
 export interface Decision {
@@ -32,6 +35,7 @@ export interface Simulation {
   siteTables: Record<string, SiteRoute[]>
   siteCandidates: Record<string, SiteRoute[]>
   outbound: Record<string, Candidate[]>
+  erAdvertisements: Record<string, Candidate[]>
   converged: boolean
   warnings: string[]
 }
@@ -122,8 +126,35 @@ export function simulate(topology: Topology): Simulation {
       ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => learnedRoute(connection, child)) } : {}),
     }
   }
+  const erLinks = (topology.erLinks ?? []).filter((link) => link.enabled)
+  const erAdvertisements: Record<string, Candidate[]> = {}
+  for (const link of erLinks.filter((link) => link.siteId)) {
+    const site = topology.sites.find((site) => site.id === link.siteId)!
+    const candidate = (route: SiteRoute): Candidate => ({
+      key: `${link.id}:${route.key}`, prefix: route.prefix, asPath: route.asPath[0] === site.asn ? route.asPath : [site.asn, ...route.asPath],
+      kind: 'bgp', transport: 'ExpressRoute', connectionId: link.id, siteId: route.sitePath.at(-1)!,
+      sitePath: route.sitePath, siteLinkIds: route.siteLinkIds, originHubId: '', remote: false,
+      erLocationId: link.locationId, erSiteLinkId: link.id,
+      ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map(candidate) } : {}),
+    })
+    erAdvertisements[link.id] = siteExports(topology, site.id, link.id, [
+      ...link.routes.map((route) => candidate({ ...route, key: route.id, sitePath: [site.id], siteLinkIds: [] })),
+      ...(link.learnSiteRoutes ? siteRouting.tables[site.id].filter((route) => !route.key.startsWith(`${link.id}:`)).map(candidate) : []),
+    ])
+  }
+  const erImports = (hubId: string) => erLinks.filter((link) => link.hubId === hubId).flatMap((hubLink) => {
+    const receive = (route: Candidate): Candidate => ({
+      ...route, key: `${hubLink.id}:${route.key}`, asPath: [12076, ...route.asPath],
+      connectionId: hubLink.id, originHubId: hubId, erHubLinkId: hubLink.id,
+      ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map(receive) } : {}),
+    })
+    const routes = erLinks.filter((link) => link.siteId && link.locationId === hubLink.locationId)
+      .flatMap((link) => (erAdvertisements[link.id] ?? []).map(receive))
+    return applyRouteMapRules(routes, routerMapRules(topology, { kind: 'hub', id: hubId }, hubLink.id, 'inbound'))
+  })
   const local = Object.fromEntries(topology.hubs.map((hub) => [
     hub.id, [
+      ...erImports(hub.id),
       ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id).flatMap((connection) => mapRoutes(connection, fromSite(connection, [
         ...localRoutes(connection, topology),
         ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId].map((route) => learnedRoute(connection, route)) : []),
@@ -212,14 +243,31 @@ export function simulate(topology: Topology): Simulation {
     }
     return [hub.id, effective.length || intent.private ? effective : tables[hub.id]]
   }))
-  const outbound = Object.fromEntries(topology.connections.map((connection) => {
+  const outbound: Record<string, Candidate[]> = Object.fromEntries(topology.connections.map((connection) => {
     if (!connection.enabled || connection.transport === 'SDWAN') return [connection.id, []]
     return [connection.id, mapRoutes(connection, tables[connection.hubId].flatMap((d) => d.selected)
       .filter((r) => r.connectionId !== connection.id && !r.sitePath?.includes(connection.siteId)
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
       .map((r) => ({ ...r, asPath: [connection.transport === 'ExpressRoute' ? 12076 : 65515, ...r.asPath] })), 'outbound')]
   }))
-  return { tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, converged, warnings }
+  for (const link of erLinks.filter((link) => link.hubId)) {
+    const routes = tables[link.hubId!].flatMap((decision) => decision.selected)
+      .filter((route) => route.transport !== 'ExpressRoute' && route.prefix !== '0.0.0.0/0')
+    const mapped = [
+      ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'hub', id: link.hubId! }, link.id, 'outbound')),
+      ...routes.filter((route) => route.kind === 'vpn-static'),
+    ]
+    outbound[link.id] = mapped
+      .map((route) => ({ ...route, asPath: [12076, ...route.asPath], erHubLinkId: link.id, erLocationId: link.locationId }))
+    erAdvertisements[link.id] = outbound[link.id]
+  }
+  for (const link of erLinks.filter((link) => link.siteId)) {
+    outbound[link.id] = erLinks.filter((hubLink) => hubLink.hubId && hubLink.locationId === link.locationId)
+      .flatMap((hubLink) => outbound[hubLink.id] ?? [])
+      .filter((route) => !route.sitePath?.includes(link.siteId!))
+  }
+  if ((topology.erLocations ?? []).length) warnings.push('ER locations group private-peering attachments: each site attachment is an independent circuit. Azure advertises selected VNet, VPN and NVA routes, but not ER-learned routes, to those circuits. Global Reach, shared-circuit hub-to-hub reflection, redundant MSEE sessions, circuit bandwidth and gateway limits are not simulated.')
+  return { tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, erAdvertisements, converged, warnings }
 }
 
 export interface FlowPath {
@@ -230,6 +278,7 @@ export interface FlowPath {
   firewalls?: string[]
   siteHops?: string[]
   siteLinkIds?: string[]
+  erLinkIds?: string[]
   status: 'delivered' | 'unreachable' | 'loop'
 }
 
@@ -281,7 +330,9 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
       if (route.remote) walk(route.originHubId, hubs, details, inspected)
       else if (route.transport === 'Internet') paths.push({ hubs, firewalls: inspected, steps: [...details, 'Direct Internet egress. Firewall allow/deny and SNAT policies are not simulated.'], status: 'delivered' })
       else paths.push({ hubs, firewalls: inspected, siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, connectionId: route.connectionId, siteId: route.siteId,
-        steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId))!.name}.`,
+        ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
+        steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId))?.name ?? route.connectionId}.`,
+          ...(route.erLocationId ? [`ExpressRoute location: ${topology.erLocations?.find((location) => location.id === route.erLocationId)?.name}.`] : []),
           ...(route.sitePath && route.sitePath.length > 1 ? [`On-premises transit: ${route.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : [])],
         status: 'delivered' })
     }

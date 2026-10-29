@@ -121,7 +121,7 @@ export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, recei
 export function propagateSites(topology: Topology): SiteRouting {
   const origins: Record<string, SiteRoute[]> = Object.fromEntries(topology.sites.map((site) => [site.id, [
     ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [], sitePath: [site.id], siteLinkIds: [] as string[] })),
-    ...topology.connections.filter((c) => c.siteId === site.id).flatMap((c) => c.routes.filter((r) => r.kind === 'bgp').map((r) => ({
+    ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.siteId === site.id).flatMap((c) => c.routes.filter((r) => r.kind === 'bgp').map((r) => ({
       key: `${c.id}:${r.id}`, prefix: r.prefix, asPath: r.asPath[0] === 12076 ? r.asPath.slice(1) : r.asPath, sitePath: [site.id], siteLinkIds: [] as string[],
     }))),
   ]]))

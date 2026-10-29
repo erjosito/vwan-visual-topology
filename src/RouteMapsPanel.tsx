@@ -52,6 +52,7 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
   const owned = (map: RouteMap) => (owner.kind === 'hub' ? map.hubId : map.siteId) === owner.id
   const links: { id: string; name: string; transport?: Transport }[] = [
     ...topology.connections.filter((c) => (owner.kind === 'hub' ? c.hubId : c.siteId) === owner.id),
+    ...(topology.erLinks ?? []).filter((link) => (owner.kind === 'hub' ? link.hubId : link.siteId) === owner.id),
     ...(owner.kind === 'site' ? topology.siteLinks.filter((l) => l.a === owner.id || l.b === owner.id) : []),
   ]
   const [linkId, setLinkId] = useState(connectionId ?? '')

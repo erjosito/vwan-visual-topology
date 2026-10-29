@@ -64,7 +64,11 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .canvas-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 20px; border-bottom: 1px solid #e1e9f3; background: #fff; }
 .canvas-toolbar h2 { margin-bottom: 4px; }.canvas-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }.canvas-tools .field { width: auto; }.canvas-tools button { font-size: 12px; min-height: 36px; }
 .canvas-stage { position: relative; isolation: isolate; height: calc(100dvh - 270px); min-height: 600px; overflow: hidden; background: #f9fbfe; }
-.canvas-stage .diagram-scroll { height: 100%; }.canvas-stage .diagram { height: 100%; max-height: none; min-height: 560px; }
+.canvas-stage .diagram-scroll { height: 100%; }.canvas-stage .diagram { max-height: none; }
+.canvas-tools .zoom-controls { display: flex; align-items: end; gap: 4px; }
+.zoom-controls > button { width: 34px; padding-inline: 8px; }
+.er-location-node > rect { fill: #faf7ff; stroke: #bcacd6; }
+.er-location-node .node-kind { fill: #80649e; }
 .draggable-node { cursor: grab; touch-action: none; user-select: none; }
 .is-repositioning, .is-repositioning .draggable-node { cursor: grabbing; }
 .draggable-node > rect { filter: drop-shadow(0 5px 9px #203f6b13); transition: stroke .15s, filter .15s; }
@@ -85,15 +89,17 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .is-repositioning .edge-badge { pointer-events: none; }
 .policy-marker { cursor: pointer; }
 .policy-marker rect { stroke-width: 1; }
-.policy-marker.inbound rect { fill: #f0eaff; stroke: #b4a0de; }
-.policy-marker.outbound rect { fill: #e6f4fb; stroke: #8bbbd3; }
+.policy-marker.inbound { color: #62419c; }.policy-marker.inbound rect { fill: #f5f0ff; stroke: #74539e; }
+.policy-marker.outbound { color: #215084; }.policy-marker.outbound rect { fill: #edf4ff; stroke: #345fa8; }
+.policy-filter { fill: white; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; pointer-events: none; }
 .policy-marker text { text-anchor: middle; font-size: 10px; font-weight: 700; pointer-events: none; }
 .policy-marker.inbound text { fill: #62419c; }.policy-marker.outbound text { fill: #21617f; }
 .policy-marker:hover rect, .policy-marker:focus-visible rect { stroke: #2568d7; stroke-width: 2; }
 .policy-marker:focus-visible { outline: 2px solid #2568d7; outline-offset: 3px; }
 .policy-marker.is-down rect { stroke-dasharray: 3 2; }
 .policy-guide { pointer-events: none; fill: none; }.policy-guide.inbound { stroke: #8463b7; }.policy-guide.outbound { stroke: #397c9e; }
-.policy-leader { stroke-width: 1; opacity: .65; }.policy-arrow { stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.policy-leader { stroke-width: 1; opacity: .65; }.policy-arrow { stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.policy-arrow-halo { stroke: white; stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
 .policy-guide.is-down { opacity: .5; }
 .policy-tag { display: inline-block; border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .policy-tag.inbound { color: #62419c; background: #f0eaff; }.policy-tag.outbound { color: #21617f; background: #e6f4fb; }
@@ -103,6 +109,10 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .policy-inspector .policy-assignment .table-scroll { margin: 0; }.policy-assignment table { min-width: 370px; }.policy-assignment th:first-child { width: 1ch; }
 .policy-assignment code { display: block; font-size: 10px; overflow-wrap: anywhere; }.policy-assignment td { overflow-wrap: anywhere; }.policy-assignment > .muted { padding: 12px; }
 .policy-drop { color: #ad4351; }
+.route-map-preview { position: fixed; z-index: 1100; width: min(460px, calc(100vw - 16px)); max-height: min(420px, calc(100dvh - 16px)); overflow: auto; padding: 12px; background: white; border: 1px solid #b5c9e6; border-radius: 10px; box-shadow: 0 8px 30px #142b4b30; font-size: 12px; }
+.route-map-preview h3 { display: flex; align-items: center; gap: 8px; font-size: 13px; overflow-wrap: anywhere; }
+.route-map-preview > p { margin: 8px 0; overflow-wrap: anywhere; }.route-map-preview .table-scroll { margin-top: 10px; }
+.route-map-preview th, .route-map-preview td { padding: 7px 8px; }.route-map-preview code { display: block; font-size: 10px; overflow-wrap: anywhere; }
 .static-routes-form { display: grid; gap: 14px; margin-top: 16px; }.static-routes-form > button { justify-self: start; }
 .canvas-overlay { position: absolute; z-index: 5; top: 16px; right: 16px; width: min(740px, 48%); max-width: calc(100% - 24px); max-height: calc(100% - 32px); min-width: min(340px, calc(100% - 24px)); min-height: 140px; background: #fff; border: 1px solid #b5c9e6; border-radius: 12px; box-shadow: 0 16px 55px #18345629; display: flex; flex-direction: column; resize: both; overflow: hidden; }
 .canvas-overlay:focus { outline: none; }.canvas-overlay:focus-visible { outline: 2px solid #4f92e9; }
