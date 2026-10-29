@@ -4,6 +4,8 @@ import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, Rout
 import { transportLabels } from './model'
 import type { Candidate, FlowPath } from './routing'
 import { diagramCurve, diagramLayout } from './diagram-layout'
+import virtualWanHubIcon from './assets/azure/virtual-wan-hub.svg'
+import virtualNetworkIcon from './assets/azure/virtual-network.svg'
 
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
 interface Props {
@@ -17,10 +19,8 @@ interface Props {
 
 function NodeIcon({ kind }: { kind: 'hub' | 'spoke' | 'site' }) {
   return <g className={`node-icon ${kind}`} aria-hidden="true" transform="translate(-79,-21)">
-    <circle r="13" />
-    {kind === 'hub' ? <><path d="M -6 -5 L 6 -5 L 0 6 Z" /><circle cx="-6" cy="-5" r="2" /><circle cx="6" cy="-5" r="2" /><circle cy="6" r="2" /></>
-      : kind === 'spoke' ? <path d="M -7 5 H 7 V -2 H 3 V -6 H -3 V -2 H -7 Z M -3 1 H 3" />
-        : <path d="M -7 7 V -7 H 2 V -2 H 7 V 7 Z M -3 -3 H -1 M -3 1 H -1 M -3 5 H -1 M 3 2 H 5" />}
+    {kind === 'site' ? <><circle r="13" /><path d="M -7 7 V -7 H 2 V -2 H 7 V 7 Z M -3 -3 H -1 M -3 1 H -1 M -3 5 H -1 M 3 2 H 5" /></>
+      : <image href={kind === 'hub' ? virtualWanHubIcon : virtualNetworkIcon} x="-14" y="-14" width="28" height="28" preserveAspectRatio="xMidYMid meet" />}
   </g>
 }
 

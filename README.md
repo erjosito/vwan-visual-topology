@@ -53,6 +53,8 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 
 Hub icons display the hub name and region, not an AS path. **AS Path** in the hub configuration is a routing-preference option; it is not an AS path assigned to the hub. Actual AS paths appear on individual routes in the route tables.
 
+Canvas hubs and spokes use Microsoft's official **Virtual WAN Hub** and **Virtual Networks** icons, respectively, from the [Azure Architecture Center icon collection](https://learn.microsoft.com/azure/architecture/icons/) (V24). The SVGs in `src/assets/azure` are unchanged originals, displayed proportionally without recoloring. Microsoft permits copying, distributing and displaying these icons in architectural diagrams, training materials or documentation; all other rights are reserved by Microsoft.
+
 ### Editing directly from the diagram
 
 Right-click a hub, spoke, site, hub connection, on-premises link or empty canvas for its contextual menu. Hubs/sites offer **Show BGP routes** and **Route maps**; hubs also offer firewall routes when applicable. Hubs, spokes and sites offer both path commands. Connections offer configuration, advertisements, enable/disable and deletion, not router policies or a router's BGP table. Shift+F10 opens the same menu; use arrow keys to navigate and Escape to dismiss. Left-click selects objects and hub/site route highlighting.

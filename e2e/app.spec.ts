@@ -50,6 +50,27 @@ test('tab icon resolves to a browser-decodable SVG rather than the app fallback'
   }, url)).toBe(true)
 })
 
+test('canvas hubs and spokes render official Azure SVG icons in both layouts', async ({ page }) => {
+  await page.goto('/')
+  for (const [kind, count] of [['hub', example.hubs.length], ['spoke', example.spokes.length]] as const) {
+    const icons = page.locator(`.node-icon.${kind} image`)
+    await expect(icons).toHaveCount(count)
+    const url = await icons.first().getAttribute('href')
+    expect(await page.evaluate(async (url) => {
+      const response = await fetch(url)
+      const image = new Image()
+      image.src = url
+      await image.decode()
+      return response.ok && response.headers.get('content-type')?.includes('image/svg+xml') && image.naturalWidth > 0 && image.naturalHeight > 0
+    }, url!)).toBe(true)
+    await expect(icons.first()).toBeVisible()
+  }
+  await page.getByLabel('Visualization').selectOption('constellation')
+  await expect(page.locator('.node-icon.hub image').first()).toBeVisible()
+  await expect(page.locator('.node-icon.spoke image').first()).toBeVisible()
+  await page.screenshot({ path: 'test-results/official-azure-canvas-icons.png', fullPage: true })
+})
+
 test('per-connection policy marks distinguish parallel links, owners and directions and open only their rules', async ({ page }) => {
   const topology = structuredClone(example)
   topology.siteLinks = [{ id: 'policy-peer', name: 'Private WAN', a: 'dc', b: 'ny', enabled: false,
