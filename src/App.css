@@ -58,6 +58,25 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .canvas-toolbar h2 { margin-bottom: 4px; }.canvas-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }.canvas-tools .field { width: auto; }.canvas-tools button { font-size: 12px; min-height: 36px; }
 .canvas-stage { position: relative; isolation: isolate; height: calc(100dvh - 270px); min-height: 600px; overflow: hidden; background: #f9fbfe; }
 .canvas-stage .diagram-scroll { height: 100%; }.canvas-stage .diagram { height: 100%; max-height: none; min-height: 560px; }
+.draggable-node { cursor: grab; touch-action: none; user-select: none; }
+.is-repositioning, .is-repositioning .draggable-node { cursor: grabbing; }
+.draggable-node > rect { filter: drop-shadow(0 5px 9px #203f6b13); transition: stroke .15s, filter .15s; }
+.hub-node > rect { fill: url(#hub-card); stroke: #9fbce7; }
+.site-node > rect { fill: #fff; stroke: #b6d5ce; }
+.spoke-node > rect { fill: #fff; stroke: #c4cae5; }
+.draggable-node:hover > rect, .draggable-node[aria-pressed="true"] > rect, .draggable-node:focus-visible > rect { stroke: #3276d9; stroke-width: 2.5; filter: drop-shadow(0 5px 12px #306fca25); }
+.draggable-node:focus-visible { outline: 2px solid #3276d9; outline-offset: 4px; }
+.node-icon > circle { fill: #e3edff; stroke: none; }
+.node-icon path, .node-icon circle:not(:first-child) { fill: none; stroke: #326cca; stroke-width: 1.4; stroke-linejoin: round; }
+.node-icon.site > circle { fill: #e5f4ee; }.node-icon.site path { stroke: #368a70; }
+.node-icon.spoke > circle { fill: #efedfb; }.node-icon.spoke path { stroke: #7d6aba; }
+.site-node .node-kind { fill: #5f8c7d; }.spoke-node .node-kind { fill: #82759e; }
+.constellation-orbits { pointer-events: none; }.constellation-orbits ellipse { fill: none; stroke: #b9cce6; stroke-width: 1; stroke-dasharray: 4 9; opacity: .5; }
+.layout-constellation .backbone { stroke: #8da7d2; stroke-width: 3; stroke-dasharray: none; }
+.layout-constellation .preferred-link { stroke: #13a58d; stroke-width: 4; }
+.edge-badge rect { fill: #ffffffed; stroke: #e0e7f2; stroke-width: 1; }
+.edge-badge .link-label { stroke: none; fill: #697f9c; font-size: 10px; }
+.is-repositioning .edge-badge { pointer-events: none; }
 .canvas-overlay { position: absolute; z-index: 5; top: 16px; right: 16px; width: min(740px, 48%); max-width: calc(100% - 24px); max-height: calc(100% - 32px); min-width: min(340px, calc(100% - 24px)); min-height: 140px; background: #fff; border: 1px solid #b5c9e6; border-radius: 12px; box-shadow: 0 16px 55px #18345629; display: flex; flex-direction: column; resize: both; overflow: hidden; }
 .canvas-overlay:focus { outline: none; }.canvas-overlay:focus-visible { outline: 2px solid #4f92e9; }
 .overlay-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #e1e9f3; background: #f6f9ff; cursor: grab; touch-action: none; flex-shrink: 0; }.overlay-heading:active { cursor: grabbing; }.overlay-heading h2 { font-size: 15px; overflow-wrap: anywhere; }.overlay-heading .eyebrow { font-size: 8px; }.overlay-heading button { padding: 7px 9px; font-size: 11px; }.overlay-heading > .row { flex-shrink: 0; }

@@ -1,11 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, routeLabels, topologyObject, transportLabels } from './model'
-import type { ObjectSelection, RouteKind, Topology } from './model'
+import type { LayoutMode, ObjectSelection, RouteKind, Topology } from './model'
 import { simulate } from './routing'
 import { ipv4, parseAsPath, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
-import type { DiagramContextMenu, LayoutMode } from './TopologyDiagram'
+import type { DiagramContextMenu } from './TopologyDiagram'
 import { TopologyContextMenu } from './TopologyContextMenu'
 import type { ContextAction } from './TopologyContextMenu'
 import { TopologyObjectEditor } from './TopologyObjectEditor'
@@ -46,11 +46,12 @@ function App() {
   const [connectionId, setConnectionId] = useState('')
   const [prefix, setPrefix] = useState('')
   const [highlighting, setHighlighting] = useState(false)
-  const [layout, setLayout] = useState<LayoutMode>('layered')
+  const layout = topology.layout?.mode ?? 'layered'
   const [zoom, setZoom] = useState(1)
   const [source, setSource] = useState('')
   const [target, setTarget] = useState('')
   const [destination, setDestination] = useState('')
+  const [destinationPrefix, setDestinationPrefix] = useState('')
   const [tracing, setTracing] = useState(false)
   const importer = useRef<HTMLInputElement>(null)
   const simulation = useMemo(() => simulate(topology), [topology])
@@ -97,6 +98,7 @@ function App() {
     const dst = direction === 'to' ? other : value
     setSource(src ? nodeKey(src) : ''); setTarget(dst ? nodeKey(dst) : '')
     setDestination(dst ? nodePrefixes(topology, dst)[0]?.split('/')[0] ?? '' : '')
+    setDestinationPrefix(dst ? nodePrefixes(topology, dst)[0] ?? '' : '')
     setTracing(false); setHighlighting(false); setPanel('paths')
   }
   const contextSelection = contextMenu?.selection
@@ -162,12 +164,12 @@ function App() {
       {error && <div role="alert" className="notice error">{error}<button aria-label="Dismiss error" onClick={() => setError('')}>Dismiss</button></div>}
       {saveError && <p role="alert" className="notice error">{saveError}</p>}
       <section className="canvas-workspace panel" aria-label="Topology workspace">
-        <div className="canvas-toolbar"><div><h2>Network topology</h2><p className="muted">Right-click a node, connection or empty canvas. Shift+F10 works too.</p></div>
-          <div className="canvas-tools"><label className="field"><span>Visualization</span><select aria-label="Visualization mode" value={layout} onChange={(e) => setLayout(e.target.value as LayoutMode)}><option value="layered">Layered topology</option><option value="regional">Grouped by hub</option></select></label><label className="field"><span>Zoom</span><select aria-label="Canvas zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}><option value={0.75}>75%</option><option value={1}>100%</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label>
+        <div className="canvas-toolbar"><div><h2>Network topology</h2><p className="muted">Drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.</p></div>
+          <div className="canvas-tools"><label className="field"><span>Visualization</span><select aria-label="Visualization mode" value={layout} onChange={(e) => update((next) => { next.layout ??= { mode: 'layered', positions: {} }; next.layout.mode = e.target.value as LayoutMode })}><option value="layered">Layered topology</option><option value="constellation">Network constellation</option></select></label><label className="field"><span>Zoom</span><select aria-label="Canvas zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}><option value={0.75}>75%</option><option value={1}>100%</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label><button disabled={!Object.keys(topology.layout?.positions[layout] ?? {}).length} title="Restore automatic positions in the current visualization only" onClick={() => update((next) => { if (next.layout) delete next.layout.positions[layout] })}>Reset layout</button>
             <button onClick={() => setEditorRequest({ kind: 'hub' })}>+ Hub</button><button onClick={() => setEditorRequest({ kind: 'site' })}>+ Site</button><button onClick={() => { setConnectionId(''); setPanel('maps') }}>Route maps</button><button aria-label="Open model notes and warnings" onClick={() => setPanel('notes')}>Notes{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         <div className="canvas-stage">
-          <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} paths={paths} sourceSpokeId={tracing && sourceNode?.kind === 'spoke' && paths.some((p) => p.hubs.length) ? sourceNode.id : undefined} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
+          <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} paths={paths} sourceSpokeId={tracing && sourceNode?.kind === 'spoke' && paths.some((p) => p.hubs.length) ? sourceNode.id : undefined} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
           {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
           {panel === 'routes' && inspected && <RouteInspector topology={topology} simulation={simulation} router={router} view={activeView} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
           {panel === 'maps' && <RouteMapsPanel key={connectionId || 'resources'} topology={topology} simulation={simulation} connectionId={connectionId} onSave={save} onClose={closePanel} />}
@@ -183,9 +185,9 @@ function App() {
           </CanvasOverlay>}
           {panel === 'paths' && <CanvasOverlay title="Path explorer" className="path-panel" onClose={closePanel}>
             <p className="muted">Longest-prefix forwarding and preferred BGP paths, not shortest graphical distance. ECMP paths remain highlighted together. Hub destinations use attached-spoke prefixes. Sites without assigned prefixes offer explicit connection advertisements as destination choices; these can be transit prefixes.</p>
-            <form className="path-form" onSubmit={submitPath}><div className="form-grid"><label className="field"><span>Source node</span><select aria-label="Source node" value={source} onChange={(e) => { setSource(e.target.value); setTracing(false) }}><option value="">Select source</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({n.kind})</option>)}</select></label><label className="field"><span>Destination node</span><select aria-label="Destination node" value={target} onChange={(e) => { setTarget(e.target.value); setDestination(nodePrefixes(topology, parseNode(e.target.value))[0]?.split('/')[0] ?? ''); setTracing(false) }}><option value="">Select destination</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({n.kind})</option>)}</select></label></div>
-              <label className="field"><span>Destination prefix</span><select aria-label="Destination prefix" value={targetNode ? nodePrefixes(topology, targetNode).find((p) => p.split('/')[0] === destination) ?? '' : ''} onChange={(e) => { setDestination(e.target.value.split('/')[0]); setTracing(false) }}><option value="">Custom IPv4 address</option>{targetNode && nodePrefixes(topology, targetNode).map((p) => <option key={p}>{p}</option>)}</select></label>
-              <label className="field"><span>Destination IPv4</span><input aria-label="Destination IPv4" value={destination} onChange={(e) => { setDestination(e.target.value); setTracing(false) }} required /></label><button className="primary" disabled={!sourceNode || !targetNode || ipv4(destination) === undefined || !simulation.converged}>Show preferred path</button>
+            <form className="path-form" onSubmit={submitPath}><div className="form-grid"><label className="field"><span>Source node</span><select aria-label="Source node" value={source} onChange={(e) => { setSource(e.target.value); setTracing(false) }}><option value="">Select source</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({n.kind})</option>)}</select></label><label className="field"><span>Destination node</span><select aria-label="Destination node" value={target} onChange={(e) => { const prefixes = nodePrefixes(topology, parseNode(e.target.value)); setTarget(e.target.value); setDestination(prefixes[0]?.split('/')[0] ?? ''); setDestinationPrefix(prefixes[0] ?? ''); setTracing(false) }}><option value="">Select destination</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({n.kind})</option>)}</select></label></div>
+              <label className="field"><span>Destination prefix</span><select aria-label="Destination prefix" value={destinationPrefix} onChange={(e) => { setDestinationPrefix(e.target.value); setDestination(e.target.value.split('/')[0]); setTracing(false) }}><option value="">Custom IPv4 address</option>{targetNode && nodePrefixes(topology, targetNode).map((p) => <option key={p}>{p}</option>)}</select></label>
+              {!destinationPrefix && <label className="field"><span>Destination IPv4</span><input aria-label="Destination IPv4" value={destination} onChange={(e) => { setDestination(e.target.value); setTracing(false) }} required /></label>}<p className="muted">A prefix selection traces its network address. Choose Custom IPv4 address to test a more-specific destination within that range.</p><button className="primary" disabled={!sourceNode || !targetNode || ipv4(destination) === undefined || !simulation.converged}>Show preferred path</button>
             </form>
             <p className="muted">Routes may terminate at another advertiser of the same prefix. Reverse paths are calculated independently; symmetry, firewall permissions and host reachability are not assumed. Site ingress uses advertised AS paths; SD-WAN outbound learning is not modeled.</p>
             {tracing && <div className="flow-results" aria-live="polite">{paths.map((path, i) => <article key={i} className={`flow-result ${path.status}`}><strong>{path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route'}{paths.length > 1 ? ` · path ${i + 1}` : ''}</strong><p>{pathTitle(path)}</p><details><summary>Why this path?</summary><ol>{path.steps.map((step, index) => <li key={index}>{step}</li>)}</ol></details></article>)}{!paths.length && <p className="empty">No trace available for this source or provisional routing state.</p>}</div>}

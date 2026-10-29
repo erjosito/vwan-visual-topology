@@ -1,80 +1,99 @@
-import type { ObjectSelection, Topology } from './model'
-import type { KeyboardEvent, MouseEvent } from 'react'
+import { useRef, useState } from 'react'
+import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
+import type { LayoutMode, NodePosition, ObjectSelection, Topology } from './model'
 import { transportLabels } from './model'
 import type { Candidate, FlowPath } from './routing'
+import { diagramCurve, diagramLayout } from './diagram-layout'
 
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
-export type LayoutMode = 'layered' | 'regional'
-
 interface Props {
-  topology: Topology
-  hubId: string
-  selected: Candidate[]
-  preferredSiteLinkIds?: string[]
-  sourceConnectionIds?: string[]
-  sourceSiteLinkIds?: string[]
-  layout?: LayoutMode
-  zoom?: number
-  paths: FlowPath[]
-  tracing: boolean
-  sourceSpokeId?: string
-  selection?: ObjectSelection
-  onObjectClick: (selection: ObjectSelection) => void
-  onObjectContextMenu: (menu: DiagramContextMenu) => void
+  topology: Topology; hubId: string; selected: Candidate[]; preferredSiteLinkIds?: string[]
+  sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; layout?: LayoutMode; zoom?: number
+  paths: FlowPath[]; tracing: boolean; sourceSpokeId?: string; selection?: ObjectSelection
+  onObjectClick: (selection: ObjectSelection) => void; onObjectContextMenu: (menu: DiagramContextMenu) => void
+  onNodeMove: (id: string, position: NodePosition) => void
 }
 
-export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkIds, sourceSiteLinkIds = [], sourceConnectionIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeId, tracing, selection, onObjectClick, onObjectContextMenu }: Props) {
-  const width = Math.max(900, topology.hubs.length * 250, topology.sites.length * 200, topology.spokes.length * 200)
-  const positions = (ids: string[], y: number) => new Map(ids.map((id, i) => [id, { x: width * (i + 1) / (ids.length + 1), y }]))
-  const hubs = positions(topology.hubs.map((h) => h.id), 290)
-  const sites = positions(topology.sites.map((s) => s.id), 515)
-  const spokes = positions(topology.spokes.map((s) => s.id), 80)
-  if (layout === 'regional') {
-    const groups = [...topology.hubs.map((h) => h.id), 'unattached']
-    const groupWidth = Math.max(250, ...groups.map((id) => Math.max(
-      topology.spokes.filter((s) => s.hubId === id).length,
-      topology.sites.filter((s) => (topology.connections.find((c) => c.siteId === s.id)?.hubId ?? 'unattached') === id).length,
-    ) * 195))
-    const regionalWidth = Math.max(width, groups.length * groupWidth)
-    const place = (ids: string[], center: number, y: number, target: Map<string, { x: number; y: number }>) =>
-      ids.forEach((id, i) => target.set(id, { x: center + (i - (ids.length - 1) / 2) * 195, y }))
-    groups.forEach((id, index) => {
-      const center = regionalWidth * (index + 1) / (groups.length + 1)
-      if (id !== 'unattached') hubs.set(id, { x: center, y: 290 })
-      place(topology.spokes.filter((s) => s.hubId === id).map((s) => s.id), center, 80, spokes)
-      place(topology.sites.filter((s) => (topology.connections.find((c) => c.siteId === s.id)?.hubId ?? 'unattached') === id).map((s) => s.id), center, 515, sites)
-    })
-  }
-  const drawingWidth = Math.max(width, ...[...hubs.values(), ...sites.values(), ...spokes.values()].map((p) => p.x + 120))
+function NodeIcon({ kind }: { kind: 'hub' | 'spoke' | 'site' }) {
+  return <g className={`node-icon ${kind}`} aria-hidden="true" transform="translate(-79,-21)">
+    <circle r="13" />
+    {kind === 'hub' ? <><path d="M -6 -5 L 6 -5 L 0 6 Z" /><circle cx="-6" cy="-5" r="2" /><circle cx="6" cy="-5" r="2" /><circle cy="6" r="2" /></>
+      : kind === 'spoke' ? <path d="M -7 5 H 7 V -2 H 3 V -6 H -3 V -2 H -7 Z M -3 1 H 3" />
+        : <path d="M -7 7 V -7 H 2 V -2 H 7 V 7 Z M -3 -3 H -1 M -3 1 H -1 M -3 5 H -1 M 3 2 H 5" />}
+  </g>
+}
+
+export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkIds, sourceSiteLinkIds = [], sourceConnectionIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeId, tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove }: Props) {
+  const svg = useRef<SVGSVGElement>(null)
+  const drag = useRef<{ id: string; kind: ObjectSelection['kind']; start: NodePosition; origin: NodePosition; moved: boolean } | undefined>(undefined)
+  const suppressClick = useRef(false)
+  const [moving, setMoving] = useState<{ id: string; position: NodePosition }>()
+  const { positions, width, height } = diagramLayout(topology, layout)
+  if (moving) positions.set(moving.id, moving.position)
+  const point = (id: string) => positions.get(id)!
+  const hubSize = { x: 112, y: 48 }, nodeSize = { x: 94, y: 44 }
   const activeConnections = new Set(tracing ? [...paths.map((p) => p.connectionId).filter(Boolean), ...sourceConnectionIds] : selected.map((r) => r.connectionId))
-  const activeHubEdges = new Set<string>()
   const edgeKey = (a: string, b: string) => [a, b].sort().join(':')
+  const activeHubEdges = new Set<string>()
   if (tracing) paths.forEach((p) => p.hubs.slice(1).forEach((id, i) => activeHubEdges.add(edgeKey(p.hubs[i], id))))
   else selected.filter((r) => r.remote).forEach((r) => activeHubEdges.add(edgeKey(hubId, r.originHubId)))
-  const sourceSpokes = new Set(topology.spokes.filter((s) => s.hubId === hubId).map((s) => s.id))
   const exactSiteLinks = new Set(tracing ? [...paths.flatMap((p) => p.siteLinkIds ?? []), ...sourceSiteLinkIds] : preferredSiteLinkIds ?? selected.flatMap((r) => r.siteLinkIds ?? []))
-  const activate = (action: () => void) => (event: KeyboardEvent<SVGGElement>) => {
-    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); action() }
-  }
+  const coordinates = (event: PointerEvent<SVGGElement>) => new DOMPoint(event.clientX, event.clientY).matrixTransform(svg.current!.getScreenCTM()!.inverse())
+  const bound = (position: NodePosition, kind: ObjectSelection['kind']) => ({
+    x: Math.round(Math.max(120, Math.min(20000, width - 130, position.x))),
+    y: Math.round(Math.max(65, Math.min(20000, height - (kind === 'hub' ? 115 : 65), position.y))),
+  })
   const selectable = (kind: ObjectSelection['kind'], id: string, label: string) => ({
     role: 'button', tabIndex: 0, 'aria-label': label,
     'aria-pressed': selection?.kind === kind && selection.id === id,
-    onClick: () => onObjectClick({ kind, id }),
+    onClick: () => { if (suppressClick.current) { suppressClick.current = false; return }; onObjectClick({ kind, id }) },
     onContextMenu: (event: MouseEvent<SVGGElement>) => {
       event.preventDefault()
       event.currentTarget.focus({ preventScroll: true })
       onObjectContextMenu({ selection: { kind, id }, x: event.clientX, y: event.clientY, invoker: event.currentTarget })
     },
     onKeyDown: (event: KeyboardEvent<SVGGElement>) => {
-      if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+      if (event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && positions.has(id)) {
+        event.preventDefault()
+        const p = point(id), step = event.shiftKey ? 30 : 10
+        onNodeMove(id, bound({ x: p.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0), y: p.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0) }, kind))
+      } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
         event.preventDefault()
         const bounds = event.currentTarget.getBoundingClientRect()
         onObjectContextMenu({ selection: { kind, id }, x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, invoker: event.currentTarget })
-      } else activate(() => onObjectClick({ kind, id }))(event)
+      } else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onObjectClick({ kind, id }) }
     },
   })
-  const height = topology.siteLinks.length ? 720 : 610
-  return <div className="diagram-scroll"><svg className="diagram" viewBox={`0 0 ${drawingWidth} ${height}`} style={{ minWidth: Math.min(drawingWidth, 1200) * zoom, width: `${zoom * 100}%` }} role="group" tabIndex={0} aria-label="Interactive Virtual WAN topology. Select objects to edit, delete or add connected objects." onContextMenu={(event) => {
+  const movable = (kind: 'hub' | 'spoke' | 'site', id: string) => ({
+    onPointerDown: (event: PointerEvent<SVGGElement>) => {
+      if (event.button !== 0 || !event.isPrimary) return
+      suppressClick.current = false
+      drag.current = { id, kind, start: coordinates(event), origin: point(id), moved: false }
+      event.currentTarget.setPointerCapture(event.pointerId)
+    },
+    onPointerMove: (event: PointerEvent<SVGGElement>) => {
+      const value = drag.current
+      if (!value || value.id !== id) return
+      const p = coordinates(event), dx = p.x - value.start.x, dy = p.y - value.start.y
+      if (!value.moved && Math.hypot(dx, dy) < 4) return
+      value.moved = true
+      setMoving({ id, position: bound({ x: value.origin.x + dx, y: value.origin.y + dy }, kind) })
+    },
+    onPointerUp: (event: PointerEvent<SVGGElement>) => {
+      const value = drag.current
+      if (!value || value.id !== id) return
+      if (value.moved) {
+        const p = coordinates(event)
+        suppressClick.current = true
+        onNodeMove(id, bound({ x: value.origin.x + p.x - value.start.x, y: value.origin.y + p.y - value.start.y }, kind))
+      }
+      drag.current = undefined; setMoving(undefined)
+    },
+    onPointerCancel: () => { drag.current = undefined; setMoving(undefined) },
+    onLostPointerCapture: () => { drag.current = undefined; setMoving(undefined) },
+  })
+  const badge = (text: string, p: NodePosition) => <g className="edge-badge" transform={`translate(${p.x},${p.y})`} aria-hidden="true"><rect x={-text.length * 3.2 - 7} y="-10" width={text.length * 6.4 + 14} height="20" rx="10" /><text y="3" className="link-label">{text}</text></g>
+  return <div className={`diagram-scroll ${moving ? 'is-repositioning' : ''}`}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`0 0 ${width} ${height}`} style={{ minWidth: Math.min(width, 1200) * zoom, minHeight: 560 * zoom, width: `${zoom * 100}%`, height: `${zoom * 100}%` }} role="group" tabIndex={0} aria-label="Interactive Virtual WAN topology. Drag nodes to arrange; right-click for actions. Alt+Arrow keys move a focused node." onContextMenu={(event) => {
     if ((event.target as Element).closest('g[role="button"]')) return
     event.preventDefault()
     onObjectContextMenu({ x: event.clientX, y: event.clientY, invoker: event.currentTarget })
@@ -84,59 +103,54 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
     const bounds = event.currentTarget.getBoundingClientRect()
     onObjectContextMenu({ x: bounds.left + 24, y: bounds.top + 24, invoker: event.currentTarget })
   }}>
-    <defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#d8e2ee" /></pattern></defs>
-    <rect width={drawingWidth} height={height} fill="url(#grid)" />
-    <text x="24" y="28" className="diagram-caption">AZURE SPOKE NETWORKS</text>
-    <text x="24" y="210" className="diagram-caption">MICROSOFT GLOBAL BACKBONE</text>
-    <text x="24" y="435" className="diagram-caption">ON-PREMISES SITES</text>
+    <defs>
+      <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#d8e2ee" /></pattern>
+      <radialGradient id="constellation-glow"><stop offset="0" stopColor="#e9f1ff" /><stop offset="1" stopColor="#f8fbff" /></radialGradient>
+      <linearGradient id="hub-card" x2="0" y2="1"><stop stopColor="#fff" /><stop offset="1" stopColor="#eef4ff" /></linearGradient>
+    </defs>
+    <rect width={width} height={height} fill={layout === 'constellation' ? 'url(#constellation-glow)' : 'url(#grid)'} />
+    {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">AZURE SPOKE NETWORKS</text><text x="24" y="225" className="diagram-caption">MICROSOFT GLOBAL BACKBONE</text><text x="24" y="465" className="diagram-caption">ON-PREMISES SITES</text></g>
+      : <g className="constellation-orbits" aria-hidden="true"><ellipse cx={width / 2} cy={height / 2} rx={width / 2 - 130} ry={height / 2 - 80} /><ellipse cx={width / 2} cy={height / 2} rx={Math.max(180, topology.hubs.length * 130)} ry="145" /><text x="24" y="30" className="diagram-caption">VIRTUAL WAN · NETWORK CONSTELLATION</text></g>}
     {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).map((other) => {
-      const a = hubs.get(h.id)!, b = hubs.get(other.id)!
-      const active = activeHubEdges.has(edgeKey(h.id, other.id))
-      return <g key={edgeKey(h.id, other.id)}><path data-testid={`interhub-${h.id}-${other.id}`} className={`network-link backbone ${active ? 'preferred-link' : ''}`} d={`M ${a.x} ${a.y} Q ${(a.x + b.x) / 2} ${a.y - 100} ${b.x} ${b.y}`} /><text x={(a.x + b.x) / 2} y={a.y - 53} className="link-label">Inter-hub</text></g>
+      const edge = diagramCurve(point(h.id), point(other.id), hubSize, hubSize, -35)
+      return <g key={edgeKey(h.id, other.id)}><path data-testid={`interhub-${h.id}-${other.id}`} className={`network-link backbone ${activeHubEdges.has(edgeKey(h.id, other.id)) ? 'preferred-link' : ''}`} d={edge.d} />{badge('Inter-hub', edge.label)}</g>
     }))}
     {topology.spokes.map((spoke) => {
-      const a = spokes.get(spoke.id)!, b = hubs.get(spoke.hubId)!
-      const active = activeConnections.has(spoke.id) || sourceSpokeId === spoke.id || (!tracing && sourceSpokes.has(spoke.id))
-      const d = `M ${a.x} ${a.y + 35} C ${a.x} 160 ${b.x} 160 ${b.x} ${b.y - 40}`
-      return <g key={spoke.id} className="clickable" {...selectable('spoke', spoke.id, `Edit spoke connection ${spoke.name}`)}><path className="link-hitbox" d={d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${active ? 'preferred-link' : ''}`} d={d} /></g>
+      const active = activeConnections.has(spoke.id) || sourceSpokeId === spoke.id || (!tracing && spoke.hubId === hubId)
+      const edge = diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12)
+      return <g key={spoke.id} className="clickable" {...selectable('spoke', spoke.id, `Edit spoke connection ${spoke.name}`)}><path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${active ? 'preferred-link' : ''}`} d={edge.d} /></g>
     })}
     {topology.connections.map((connection) => {
-      const a = hubs.get(connection.hubId)!, b = sites.get(connection.siteId)!
       const siblings = topology.connections.filter((c) => c.hubId === connection.hubId && c.siteId === connection.siteId)
-      const offset = (siblings.findIndex((c) => c.id === connection.id) - (siblings.length - 1) / 2) * 55
+      const bend = siblings.length === 1 ? 18 : (siblings.findIndex((c) => c.id === connection.id) - (siblings.length - 1) / 2) * 85
+      const edge = diagramCurve(point(connection.hubId), point(connection.siteId), hubSize, nodeSize, bend)
       const active = connection.enabled && activeConnections.has(connection.id)
-      return <g key={connection.id} className="clickable" {...selectable('connection', connection.id, `Edit connection ${connection.name}`)}>
-        <title>{connection.name} · {transportLabels[connection.transport]} · {connection.enabled ? active ? 'Preferred' : 'Alternative' : 'Down'}</title>
-        <path className="link-hitbox" d={`M ${a.x} ${a.y + 40} C ${a.x + offset} 395 ${b.x + offset} 420 ${b.x} ${b.y - 42}`} />
-        <path data-testid={`link-${connection.id}`} data-preferred={active} className={`network-link ${connection.transport} ${active ? 'preferred-link' : ''} ${connection.enabled ? '' : 'disabled-link'}`} d={`M ${a.x} ${a.y + 40} C ${a.x + offset} 395 ${b.x + offset} 420 ${b.x} ${b.y - 42}`} />
-        <text className="link-label" x={(a.x + b.x) / 2 + offset * 0.75} y={408 + offset * 0.2}>{connection.transport === 'ExpressRoute' ? 'ER' : connection.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'}{!connection.enabled ? ' (down)' : ''}</text>
-      </g>
+      const name = connection.transport === 'ExpressRoute' ? 'ER' : connection.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'
+      return <g key={connection.id} className="clickable" {...selectable('connection', connection.id, `Edit connection ${connection.name}`)}><title>{connection.name} · {transportLabels[connection.transport]} · {connection.enabled ? active ? 'Preferred' : 'Alternative' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`link-${connection.id}`} data-preferred={active} className={`network-link ${connection.transport} ${active ? 'preferred-link' : ''} ${connection.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`${name}${connection.enabled ? '' : ' (down)'}`, edge.label)}</g>
     })}
-    {topology.siteLinks.map((link, index) => {
-      const a = sites.get(link.a)!, b = sites.get(link.b)!
-      const active = link.enabled && exactSiteLinks.has(link.id)
-      const d = `M ${a.x} ${a.y + 42} Q ${(a.x + b.x) / 2} ${650 + (index % 3) * 20} ${b.x} ${b.y + 42}`
-      return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, `Select on-premises link ${link.name}`)}><title>{link.name}: {topology.sites.find((s) => s.id === link.a)?.name} ↔ {topology.sites.find((s) => s.id === link.b)?.name}</title><path className="link-hitbox" d={d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={d} /><text x={(a.x + b.x) / 2} y={600 + (index % 3) * 10} className="link-label">{link.name.length > 30 ? link.name.slice(0, 28) + '…' : link.name}</text></g>
+    {topology.siteLinks.map((link) => {
+      const siblings = topology.siteLinks.filter((l) => edgeKey(l.a, l.b) === edgeKey(link.a, link.b))
+      const bend = 65 + siblings.findIndex((l) => l.id === link.id) * 60
+      const edge = diagramCurve(point(link.a), point(link.b), nodeSize, nodeSize, bend)
+      return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, `Select on-premises link ${link.name}`)}><title>{link.name}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${link.enabled && exactSiteLinks.has(link.id) ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(link.name.length > 30 ? `${link.name.slice(0, 28)}…` : link.name, edge.label)}</g>
     })}
     {topology.hubs.filter((h) => h.routingIntent.private || h.routingIntent.internet).map((hub) => {
-      const p = hubs.get(hub.id)!
+      const p = point(hub.id)
       const active = tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId
-      return <g key={`fw:${hub.id}`} className="firewall-node clickable" transform={`translate(${p.x + 82}, ${p.y + 83})`} {...selectable('hub', hub.id, `Select firewall for ${hub.name}`)}><title>Azure Firewall · {hub.name}</title><path className={`network-link ${active ? 'preferred-link' : ''}`} d="M -40 -42 L -10 -18" /><rect x="-52" y="-17" width="104" height="34" rx="8" /><text y="4" className="node-detail">Azure Firewall</text></g>
+      return <g key={`fw:${hub.id}`} className="firewall-node draggable-node" transform={`translate(${p.x + 82}, ${p.y + 83})`} {...selectable('hub', hub.id, `Select firewall for ${hub.name}`)} {...movable('hub', hub.id)}><title>Azure Firewall · {hub.name}</title><path className={`network-link ${active ? 'preferred-link' : ''}`} d="M -40 -35 L -10 -18" /><rect x="-52" y="-17" width="104" height="34" rx="10" /><text y="4" className="node-detail">Azure Firewall</text></g>
     })}
     {topology.hubs.map((hub) => {
-      const p = hubs.get(hub.id)!
-      return <g key={hub.id} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, `Select hub ${hub.name}`)} className={`hub-node clickable ${hub.id === hubId ? 'active' : ''}`}>
-        <title>{hub.name} · {hub.region}</title><rect x="-105" y="-44" width="210" height="88" rx="14" /><text y="-15" className="node-kind">VIRTUAL HUB</text><text y="7" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="28" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text>
-      </g>
+      const p = point(hub.id)
+      return <g key={hub.id} data-node-id={hub.id} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, `Select hub ${hub.name}`)} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''}`}><title>{hub.name} · {hub.region}</title><rect x="-112" y="-48" width="224" height="96" rx="18" /><NodeIcon kind="hub" /><text x="12" y="-19" className="node-kind">VIRTUAL HUB</text><text y="6" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="29" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text></g>
     })}
     {topology.spokes.map((spoke) => {
-      const p = spokes.get(spoke.id)!
-      return <g key={spoke.id} transform={`translate(${p.x}, ${p.y})`} className="spoke-node clickable" {...selectable('spoke', spoke.id, `Select spoke ${spoke.name}`)}><title>{spoke.name}: {spoke.prefixes.join(', ')}</title><rect x="-88" y="-35" width="176" height="70" rx="10" /><text y="-12" className="node-kind">SPOKE VNET</text><text y="8" className="node-name">{spoke.name.length > 22 ? spoke.name.slice(0, 20) + '…' : spoke.name}</text><text y="26" className="node-detail">{spoke.prefixes[0]}{spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}</text></g>
+      const p = point(spoke.id)
+      return <g key={spoke.id} data-node-id={spoke.id} transform={`translate(${p.x}, ${p.y})`} className="spoke-node draggable-node" {...selectable('spoke', spoke.id, `Select spoke ${spoke.name}`)} {...movable('spoke', spoke.id)}><title>{spoke.name}: {spoke.prefixes.join(', ')}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="spoke" /><text x="10" y="-19" className="node-kind">SPOKE VNET</text><text y="6" className="node-name">{spoke.name.length > 22 ? spoke.name.slice(0, 20) + '…' : spoke.name}</text><text y="28" className="node-detail">{spoke.prefixes[0]}{spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}</text></g>
     })}
     {topology.sites.map((site) => {
-      const p = sites.get(site.id)!
-      return <g key={site.id} transform={`translate(${p.x}, ${p.y})`} className="site-node clickable" {...selectable('site', site.id, `Select site ${site.name}`)}><title>{site.name} · ASN {site.asn} · Originated prefixes: {site.prefixes.join(', ') || 'none'}</title><rect x="-88" y="-42" width="176" height="84" rx="10" /><text y="-24" className="node-kind">ON-PREMISES</text><text y="-5" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="14" className="node-detail">ASN {site.asn}</text><text y="33" className="node-detail node-prefixes">{site.prefixes[0] ?? 'No assigned prefixes'}{site.prefixes.length > 1 ? ` +${site.prefixes.length - 1}` : ''}</text></g>
+      const p = point(site.id)
+      return <g key={site.id} data-node-id={site.id} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, `Select site ${site.name}`)} {...movable('site', site.id)}><title>{site.name} · ASN {site.asn} · Originated prefixes: {site.prefixes.join(', ') || 'none'}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="site" /><text x="10" y="-24" className="node-kind">ON-PREMISES</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{site.prefixes[0] ?? 'No assigned prefixes'}{site.prefixes.length > 1 ? ` +${site.prefixes.length - 1}` : ''}</text></g>
     })}
-    {!topology.hubs.length && <text x={width / 2} y="290" textAnchor="middle" className="empty-diagram">Add your first hub in the topology editor.</text>}
+    {!topology.hubs.length && !topology.sites.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">Right-click the canvas to add your first hub or site.</text>}
   </svg></div>
 }

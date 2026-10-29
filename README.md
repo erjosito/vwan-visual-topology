@@ -10,7 +10,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs.
 - Define per-connection BGP advertisements and received AS paths, or VPN site static prefixes. Disable connections to explore failures.
 - Choose ExpressRoute, VPN, or AS Path routing preference independently per hub.
-- Canvas-first workspace with layered and hub-grouped visualization modes, zoom, and right-click/keyboard creation and editing. There is no permanent sidebar or prefix-filter dropdown.
+- Canvas-first workspace with **Layered topology** and **Network constellation** visuals, zoom, and right-click/keyboard creation and editing. Drag nodes to rearrange; links follow live. Positions are saved independently per view in browser storage and exported JSON. **Reset layout** restores only the active view. There is no permanent sidebar or prefix-filter dropdown.
 - **Show BGP routes** on hubs and sites opens a movable, resizable, nonmodal canvas inspector. Compare the table with the topology; preferred paths are green and marked `*`, with visible alternatives, AS paths and selection explanations. Click a table prefix to highlight its paths.
 - Enable private and/or Internet routing intent. Inspect **hub policy routes and firewall forwarding routes separately**, and see firewall traversal in flow traces.
 - Connect on-premises sites with directional BGP export allowlists and AS-path prepends. Configure site ASNs and originated prefixes, then enable mesh route import on the desired hub connections.
@@ -46,7 +46,7 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 4. Right-click a hub/site for **Show BGP routes**. Adjust **Hub routing preference**, switch hub/firewall **Route view**, or click a table prefix to compare candidate paths against the canvas.
 5. To model on-premises transit, use **Link to another site** and configure directional prefix allowlists and prepends. `*` means all prefixes. Enable site-originated/learned-route import on the desired hub connections.
 6. Open **Route maps** from the canvas/toolbar to create named policies, or from a connection to assign them inbound/outbound. Maps can be shared by supported connections in the same hub; editing a map updates every assignment. Deletion confirms removal of all its assignments.
-7. On a node, **Show path to** fixes the initial source and lets you choose a destination. **Show path from** fixes the initial destination and lets you choose a source. Green links show preferred forwarding paths, including ECMP, on-premises transit and firewall traversal.
+7. On a node, **Show path to** fixes the initial source and lets you choose a destination. **Show path from** fixes the initial destination and lets you choose a source. Select a destination prefix; no IP entry is required. A prefix traces its network address, not every possible more-specific exception within it. Choose **Custom IPv4 address** when testing an exact destination. Green links show preferred forwarding paths, including ECMP, on-premises transit and firewall traversal.
 8. Move inspectors by dragging their header, or use **Left**/**Right**; resize with the corner handle on desktop. Close or press Escape without losing the topology. Use **Notes** for warnings, documentation and loading the example.
 
 Hub icons display the hub name and region, not an AS path. **AS Path** in the hub configuration is a routing-preference option; it is not an AS path assigned to the hub. Actual AS paths appear on individual routes in the route tables.
@@ -54,6 +54,8 @@ Hub icons display the hub name and region, not an AS path. **AS Path** in the hu
 ### Editing directly from the diagram
 
 Right-click a hub, spoke, site, hub connection, on-premises link or empty canvas for its contextual menu. Hubs/sites offer **Show BGP routes**; hubs also offer firewall routes when applicable. Hubs, spokes and sites offer both path commands. Connections offer configuration, reusable **Route maps**, advertisements, enable/disable and deletion, not a router's BGP table. Shift+F10 opens the same menu; use arrow keys to navigate and Escape to dismiss. Left-click selects objects and hub/site route highlighting.
+
+Drag any hub, spoke or site to reposition it without changing its configuration or routing. Focus a node and use **Alt+Arrow** to move it, or **Alt+Shift+Arrow** for larger steps. Switching visualization preserves each view's arrangement; **Reset layout** restores its automatic positions without changing the other view. Node positions and the active visualization survive reloads and JSON import/export. Firewall icons move with their hub.
 
 The **Inspect router** selector switches between hubs and sites. Hub views distinguish system, VPN-static and routing-intent entries from BGP candidates. AS paths describe route advertisements, not hub or firewall identities.
 

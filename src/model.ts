@@ -1,6 +1,12 @@
 export type Preference = 'ExpressRoute' | 'VPN' | 'ASPath'
 export type Transport = 'ExpressRoute' | 'VPN' | 'SDWAN'
 export type RouteKind = 'bgp' | 'vpn-static'
+export type LayoutMode = 'layered' | 'constellation'
+export interface NodePosition { x: number; y: number }
+export interface DiagramLayout {
+  mode: LayoutMode
+  positions: Partial<Record<LayoutMode, Record<string, NodePosition>>>
+}
 
 export interface Hub {
   id: string
@@ -95,6 +101,7 @@ export interface Topology {
   siteLinks: SiteLink[]
   connections: Connection[]
   routeMaps?: RouteMap[]
+  layout?: DiagramLayout
 }
 
 export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink'

@@ -1,4 +1,4 @@
-import type { PrependRule, RouteMap, RouteMapRule, Topology } from './model'
+import type { DiagramLayout, LayoutMode, PrependRule, RouteMap, RouteMapRule, Topology } from './model'
 
 export function ipv4(value: string): number | undefined {
   if (!/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(value)) return undefined
@@ -202,5 +202,25 @@ export function validateTopology(input: unknown): Topology {
     }
   }
   if (routeMaps.length > 240) fail('Route maps must be an array with at most 240 entries.')
-  return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps }
+  let layout: DiagramLayout | undefined
+  if (root.layout !== undefined) {
+    const value = record(root.layout)
+    if (!['layered', 'constellation'].includes(value.mode as string)) fail('Invalid visualization mode.')
+    const positions = record(value.positions ?? {})
+    if (Object.keys(positions).some((key) => !['layered', 'constellation'].includes(key))) fail('Invalid position layout.')
+    const nodeIds = new Set([...hubs, ...sites, ...spokes].map((node) => node.id))
+    layout = { mode: value.mode as LayoutMode, positions: {} }
+    for (const mode of ['layered', 'constellation'] as const) {
+      if (positions[mode] === undefined) continue
+      const entries = Object.entries(record(positions[mode]))
+      if (entries.length > 140) fail('Node positions must contain at most 140 entries per layout.')
+      layout.positions[mode] = Object.fromEntries(entries.map(([id, value]) => {
+        const point = record(value)
+        if (typeof point.x !== 'number' || typeof point.y !== 'number' || !Number.isFinite(point.x) || !Number.isFinite(point.y)
+          || point.x < 120 || point.y < 65 || point.x > 20000 || point.y > 20000) fail('Node positions must be finite canvas coordinates within bounds.')
+        return [id, { x: point.x as number, y: point.y as number }] as const
+      }).filter(([id]) => nodeIds.has(id)))
+    }
+  }
+  return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps, ...(layout ? { layout } : {}) }
 }
