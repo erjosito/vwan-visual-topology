@@ -56,6 +56,48 @@ describe('ExpressRoute locations and private-peering attachments', () => {
     expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'er-site-a' }, '10.21.0.1')[0].status).toBe('unreachable')
   })
 
+  it('removes both private-AS ranges from ER customer exports without changing hub inputs or VPN exports', () => {
+    const t = network()
+    const path = [64512, 64511, 65534, 65536, 4200000000, 4199999999, 4294967294]
+    t.connections[0].routes[0].asPath = path
+    const simulation = simulate(t)
+    for (const id of ['hub-a-er', 'site-a-er', 'hub-b-er', 'site-b-er']) {
+      expect(simulation.outbound[id].find((route) => route.prefix === '10.30.0.0/16')!.asPath)
+        .toEqual([12076, 64511, 65536, 4199999999])
+    }
+    expect(selected(t, 'b', '10.30.0.0/16')[0].asPath).toEqual(path)
+    expect(simulation.outbound.vpn.find((route) => route.prefix === '10.1.0.0/16')!.asPath)
+      .toEqual([65515, 65520, 65520])
+  })
+
+  it('retains public outbound route-map prepends ahead of the stripped VPN path', () => {
+    const t = network()
+    t.routeMaps = [{ id: 'prepend', name: 'Prepend', hubId: 'a', rules: [{
+      id: 'prepend-rule', prefixes: ['10.30.0.0/16'], match: 'equals', action: 'prepend',
+      summaryPrefixes: [], prepend: [64496, 64496], nextStep: 'terminate',
+    }] }]
+    t.hubs[0].routeMapAssignments = [{ connectionId: 'hub-a-er', outboundMapId: 'prepend' }]
+    const simulation = simulate(validateTopology(t))
+    expect(simulation.outbound['site-a-er'].find((route) => route.prefix === '10.30.0.0/16')!.asPath)
+      .toEqual([12076, 64496, 64496])
+  })
+
+  it('uses the same post-policy customer export boundary for legacy ER connections', () => {
+    const t = topology([hub('a')], [
+      link('er', 'a', 'ExpressRoute', [12076, 65001]),
+      link('vpn', 'a', 'VPN', [65002], '10.30.0.0/16'),
+    ])
+    t.connections[0].outbound = [{
+      id: 'prepend', prefixes: ['10.30.0.0/16'], match: 'equals', prepend: [64496],
+    }]
+    const simulation = simulate(t)
+    expect(simulation.outbound.er.find((route) => route.prefix === '10.30.0.0/16')!.asPath)
+      .toEqual([12076, 64496])
+    expect(selected(t, 'a', '10.30.0.0/16')[0].asPath).toEqual([65002])
+    expect(simulation.outbound.vpn.find((route) => route.prefix === '10.20.0.0/16')!.asPath)
+      .toEqual([65515, 12076, 65001])
+  })
+
   it.each(['site-a-er', 'hub-a-er'])('withdraws routes and forwarding when %s fails', (id) => {
     const t = network()
     t.erLinks!.find((link) => link.id === id)!.enabled = false

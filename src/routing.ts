@@ -99,6 +99,12 @@ function decide(hub: Hub, candidates: Candidate[]): Decision[] {
     .map((prefix) => choose(hub, prefix, candidates.filter((r) => r.prefix === prefix)))
 }
 
+function erCustomerExport(route: Candidate): Candidate {
+  // MSEE removes RFC 6996 private ASNs at the customer boundary, after hub policies.
+  return { ...route, asPath: [12076, ...route.asPath.filter((asn) =>
+    !(asn >= 64512 && asn <= 65534) && !(asn >= 4200000000 && asn <= 4294967294))] }
+}
+
 export function simulate(topology: Topology): Simulation {
   const siteRouting = propagateSites(topology)
   const mapRoutes = (connection: Connection, routes: Candidate[], direction: 'inbound' | 'outbound') => [
@@ -246,10 +252,11 @@ export function simulate(topology: Topology): Simulation {
   }))
   const outbound: Record<string, Candidate[]> = Object.fromEntries(topology.connections.map((connection) => {
     if (!connection.enabled || connection.transport === 'SDWAN') return [connection.id, []]
-    return [connection.id, mapRoutes(connection, tables[connection.hubId].flatMap((d) => d.selected)
+    const routes = mapRoutes(connection, tables[connection.hubId].flatMap((d) => d.selected)
       .filter((r) => r.connectionId !== connection.id && !r.sitePath?.includes(connection.siteId)
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
-      .map((r) => ({ ...r, asPath: [connection.transport === 'ExpressRoute' ? 12076 : 65515, ...r.asPath] })), 'outbound')]
+      .map((r) => ({ ...r, asPath: connection.transport === 'ExpressRoute' ? r.asPath : [65515, ...r.asPath] })), 'outbound')
+    return [connection.id, connection.transport === 'ExpressRoute' ? routes.map(erCustomerExport) : routes]
   }))
   for (const link of erLinks.filter((link) => link.hubId)) {
     const routes = tables[link.hubId!].flatMap((decision) => decision.selected)
@@ -259,7 +266,7 @@ export function simulate(topology: Topology): Simulation {
       ...routes.filter((route) => route.kind === 'vpn-static'),
     ]
     outbound[link.id] = mapped
-      .map((route) => ({ ...route, asPath: [12076, ...route.asPath], erHubLinkId: link.id, erLocationId: link.locationId }))
+      .map((route) => ({ ...erCustomerExport(route), erHubLinkId: link.id, erLocationId: link.locationId }))
     erAdvertisements[link.id] = outbound[link.id]
   }
   for (const link of erLinks.filter((link) => link.siteId)) {
