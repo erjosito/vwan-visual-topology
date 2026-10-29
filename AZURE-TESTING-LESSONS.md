@@ -71,6 +71,22 @@ enabled. In the private-only test, both firewall tables included Internet
 `0.0.0.0/0`, while both hub tables contained only RFC1918 redirects and no
 default. Keep the forwarding planes and the policy configuration distinct.
 
+Default advertisements also depend on connection flags, not just the hub policy.
+The Internet-only lab positively observed VPN defaults with wire AS path
+`65515` and customer ER defaults with `12076` on connections whose Internet
+security flag was true. These defaults were outside the declared positive-wire
+subset and current model scope, tracked separately in
+[#13](https://github.com/erjosito/vwan-visual-topology/issues/13).
+
+A newly learned default can invalidate the probe endpoint's return path. Here,
+BIRD installed a VPN default with metric32 ahead of the endpoint's DHCP
+underlay default with metric100. Replies to both owned firewall public IPs then
+selected XFRM tunnels. Two exact public `/32` underlay response guards restored
+the expected HTTP deliveries without changing BGP exports or cloud permissions.
+Retain the initial failed observations and declare the corrected-lab repeat;
+do not silently discard failures or withdraw a legitimate advertisement just
+to make a probe pass. Forward-path selection is not return-path symmetry.
+
 ### ExpressRoute-specific findings
 
 - The native hub RIB, upstream MSEE diagnostics, VPN receiver and final ER
