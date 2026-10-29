@@ -16,6 +16,9 @@ import { RouteMapsPanel } from './RouteMapsPanel'
 import { RouteMapInspector } from './RouteMapInspector'
 import { StaticRoutingPanel } from './StaticRoutingPanel'
 import { ErLocationInspector } from './ErLocationInspector'
+import { VpnRoutingWizard } from './VpnRoutingWizard'
+import { vpnRoutingMode } from './vpn-routing'
+import type { VpnRoutingMode } from './vpn-routing'
 import { nodePrefixes, traceAllDestinations, traceNodePath } from './paths'
 import type { DestinationPath, NodePath, PathNode } from './paths'
 import './App.css'
@@ -45,7 +48,8 @@ function App() {
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [clearRequested, setClearRequested] = useState(false)
-  const [panel, setPanel] = useState<'routes' | 'ads' | 'maps' | 'rules' | 'static' | 'paths' | 'notes'>()
+  const [panel, setPanel] = useState<'routes' | 'ads' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes'>()
+  const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
   const [router, setRouter] = useState<ObjectSelection>({ kind: 'hub', id: topology.hubs[0]?.id ?? '' })
   const [routeView, setRouteView] = useState<'hub' | 'firewall'>('hub')
   const [connectionId, setConnectionId] = useState('')
@@ -93,7 +97,7 @@ function App() {
   }
   const reset = (next: Topology) => {
     save(next); setSelection(undefined); setPanel(undefined); setEditorRequest(undefined); setContextMenu(undefined); setClearRequested(false)
-    setTracing(false); setAllDestinations(false); setHighlighting(false); setPrefix(''); setConnectionId('')
+    setTracing(false); setAllDestinations(false); setHighlighting(false); setPrefix(''); setConnectionId(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('hub'); setPrefix(''); setHighlighting(true); setTracing(false) }
@@ -140,6 +144,12 @@ function App() {
       : paths.some((path) => path.status === 'loop') ? 'Forwarding loop' : 'No route'
   const contextSelection = contextMenu?.selection
   const contextObject = contextSelection && topologyObject(topology, contextSelection)
+  const contextConnection = contextSelection?.kind === 'connection' ? topology.connections.find((connection) => connection.id === contextSelection.id) : undefined
+  const vpnActions: ContextAction[] = contextConnection?.transport === 'VPN'
+    ? (['static', 'bgp'] as const).filter((mode) => vpnRoutingMode(topology, contextConnection) !== mode).map((mode) => ({
+      label: mode === 'static' ? 'Change to static routing' : 'Change to BGP routing',
+      run: () => { setVpnConversion({ connectionId: contextConnection.id, mode }); setEditorRequest(undefined); setPanel('vpnWizard') },
+    })) : []
   const canvasActions: ContextAction[] = [
     { label: 'Add hub', run: () => setEditorRequest({ kind: 'hub' }) },
     { label: 'Add site', run: () => setEditorRequest({ kind: 'site' }) },
@@ -187,6 +197,7 @@ function App() {
     ] : []),
     ...(contextSelection.kind === 'connection' ? [
       { label: 'Edit advertisements', run: () => { setConnectionId(contextSelection.id); setPanel('ads') } },
+      ...vpnActions,
       { label: topology.connections.find((c) => c.id === contextSelection.id)?.enabled ? 'Disable connection' : 'Enable connection', run: () => update((next) => { const c = next.connections.find((c) => c.id === contextSelection.id)!; c.enabled = !c.enabled }) },
     ] : []),
     { label: `Delete ${objectLabels[contextSelection.kind]}`, danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
@@ -236,6 +247,7 @@ function App() {
           {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}
           {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
           {panel === 'static' && mapRouter && <StaticRoutingPanel key={nodeKey(mapRouter)} topology={topology} router={mapRouter} onSave={save} onClose={closePanel} />}
+          {panel === 'vpnWizard' && vpnConversion && <VpnRoutingWizard key={`${vpnConversion.connectionId}:${vpnConversion.mode}`} topology={topology} connectionId={vpnConversion.connectionId} mode={vpnConversion.mode} onSave={save} onClose={closePanel} />}
           {panel === 'ads' && connection && <CanvasOverlay title={`Advertisements · ${connection.name}`} className="advertisements" onClose={closePanel}>
             <p className="muted">{transportLabels[connection.transport]} · BGP advertisements only. AS paths are entered as received by the hub, including provider ASNs. Configure non-BGP VPN prefixes through Static routing on the site or hub.</p>
             <label className="checkbox-field"><input type="checkbox" aria-label="Import site mesh routes" checked={connection.learnSiteRoutes} onChange={(e) => update((next) => { next.connections.find((c) => c.id === connection.id)!.learnSiteRoutes = e.target.checked })} />Advertise site-originated and learned routes</label>

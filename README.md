@@ -10,6 +10,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs.
 - Add **ER location** nodes with the official ExpressRoute icon and connect them to hubs and sites. Inspect per-attachment BGP advertisements and trace both physical links. Default ER-to-ER transit is blocked, including ER routes from remote hubs.
 - Define per-connection BGP advertisements and received AS paths. Configure non-BGP VPN static prefixes as **site attributes**, associated with the relevant VPN connection and accessible from either endpoint. Disable connections to explore failures.
+- Right-click a VPN connection for **Change to static routing** / **Change to BGP routing**. A configure/review wizard seeds editable site-side destinations and changes connection advertisements, site statics and learning settings together. Mixed routing offers both conversions.
 - Choose ExpressRoute, VPN, or AS Path routing preference independently per hub.
 - Canvas-first workspace with **Layered topology** and **Network constellation** visuals, zoom, and right-click/keyboard creation and editing. Drag nodes to rearrange; links follow live. Positions are saved independently per view in browser storage and exported JSON. **Reset layout** restores only the active view. There is no permanent sidebar or prefix-filter dropdown.
 - **+ / - zoom controls** synchronize with the percentage selector. The SVG viewport fills the available canvas without unusable side gutters, so nodes can be dragged to either side in both layouts.
@@ -105,6 +106,12 @@ Azure-side policies target ER/VPN BGP connections and require public 2-byte prep
 Version-1 imports with legacy connection map references or embedded prepend rules are migrated into the hub's assignments, preserving IDs, directions and route behavior. New exports store references on routers, not connections. Legacy empty prepend lists remain compatible. The single-originated-prefix restriction described above still applies.
 
 ### Site-owned VPN static routing
+
+For a guided conversion, right-click the **VPN connection** and select **Change to static routing** or **Change to BGP routing**, depending on its current configuration (mixed routing offers both). The wizard first configures destinations, then reviews every change before applying it. Cancel/Escape or Back makes no changes. It detects connection changes after review rather than overwriting them with a stale plan.
+
+Destination suggestions use the site's assigned prefix, existing advertisements/static routes for that VPN, and learned site prefixes when enabled. Hub/spoke prefixes appear as source context, never as invented on-premises static destinations. Unknown destinations must be entered explicitly. Static conversion saves site-owned routes and clears that VPN's BGP advertisements/learning. BGP conversion removes only that VPN's site statics and creates editable BGP advertisements, initially using the site's ASN for former static destinations; optional site-originated/learned import is configurable. Static routes have no old AS paths to restore.
+
+Connection/node IDs, existing route IDs where possible, enabled state, route-map assignments, site ASN/prefix, other connections and layouts are retained. The data schema is unchanged. This converts the existing Azure-to-site model; it does not configure on-premises return static routes or tunnel endpoint IP addresses.
 
 Non-BGP S2S VPN destinations are stored on sites as `vpnStaticRoutes: [{ id, prefix, connectionId }]`, not in a connection's BGP advertisements. The hub's **Static routing** inspector edits these same site attributes for its attached VPN connections; it does not create hub-table static overrides. Associations allow modeling different destination sets through different VPNs. Each connection supports up to 100 static prefixes; these can include transit destinations without changing the site's single originated prefix.
 

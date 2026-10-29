@@ -114,6 +114,8 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .route-map-preview > p { margin: 8px 0; overflow-wrap: anywhere; }.route-map-preview .table-scroll { margin-top: 10px; }
 .route-map-preview th, .route-map-preview td { padding: 7px 8px; }.route-map-preview code { display: block; font-size: 10px; overflow-wrap: anywhere; }
 .static-routes-form { display: grid; gap: 14px; margin-top: 16px; }.static-routes-form > button { justify-self: start; }
+.vpn-bgp-draft { display: grid; grid-template-columns: 1fr 1fr auto; align-items: end; gap: 8px; }
+@media (max-width: 760px) { .vpn-bgp-draft { grid-template-columns: 1fr; } }
 .canvas-overlay { position: absolute; z-index: 5; top: 16px; right: 16px; width: min(740px, 48%); max-width: calc(100% - 24px); max-height: calc(100% - 32px); min-width: min(340px, calc(100% - 24px)); min-height: 140px; background: #fff; border: 1px solid #b5c9e6; border-radius: 12px; box-shadow: 0 16px 55px #18345629; display: flex; flex-direction: column; resize: both; overflow: hidden; }
 .canvas-overlay:focus { outline: none; }.canvas-overlay:focus-visible { outline: 2px solid #4f92e9; }
 .overlay-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid #e1e9f3; background: #f6f9ff; cursor: grab; touch-action: none; flex-shrink: 0; }.overlay-heading:active { cursor: grabbing; }.overlay-heading h2 { font-size: 15px; overflow-wrap: anywhere; }.overlay-heading .eyebrow { font-size: 8px; }.overlay-heading button { padding: 7px 9px; font-size: 11px; }.overlay-heading > .row { flex-shrink: 0; }
