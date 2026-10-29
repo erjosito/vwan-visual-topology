@@ -362,6 +362,23 @@ describe('routing intent has distinct hub and firewall forwarding tables', () =>
     expect(result.tables.a[0].selected[0].transport).toBe('Firewall')
     expect(traceFlow(t, result, 'a', '8.8.8.8')[0].steps.join(' ')).toContain('Direct Internet egress')
   })
+  it('retains a private-only firewall Internet fallback without installing a hub default', () => {
+    const t = topology([hub('a')], [])
+    t.hubs[0].routingIntent.private = true
+    const result = simulate(t)
+    expect(result.firewallTables.a.find((d) => d.prefix === '0.0.0.0/0')?.selected[0].transport).toBe('Internet')
+    expect(result.tables.a.some((d) => d.prefix === '0.0.0.0/0')).toBe(false)
+    expect(traceFlow(t, result, 'a', '8.8.8.8')[0].status).toBe('unreachable')
+    t.hubs[0].routingIntent.privatePrefixes = ['8.8.8.8/32']
+    expect(traceFlow(t, simulate(t), 'a', '8.8.8.8')[0]).toMatchObject({ status: 'delivered', firewalls: ['a'] })
+  })
+  it('preserves a learned private-only firewall default instead of replacing it with Internet egress', () => {
+    const t = topology([hub('a')], [link('vpn', 'a', 'VPN', [65001], '0.0.0.0/0')])
+    t.hubs[0].routingIntent.private = true
+    const result = simulate(t)
+    expect(result.firewallTables.a.find((d) => d.prefix === '0.0.0.0/0')?.selected[0].connectionId).toBe('vpn')
+    expect(traceFlow(t, result, 'a', '10.90.1.1')[0]).toMatchObject({ status: 'delivered', firewalls: ['a'], connectionId: 'vpn' })
+  })
 })
 
 describe('route maps and on-premises transit', () => {

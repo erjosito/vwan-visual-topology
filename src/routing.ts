@@ -3,6 +3,8 @@ import { cidr, contains, ipv4 } from './validation'
 import { applyRouteMapRules, connectionMapRules, propagateSites, routerMapRules, siteExports } from './bgp'
 import type { SiteRoute } from './bgp'
 
+const RFC1918_PREFIXES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
+
 export interface Candidate {
   key: string
   prefix: string
@@ -232,7 +234,7 @@ export function simulate(topology: Topology): Simulation {
   })
   const forwardingTables = Object.fromEntries(topology.hubs.map((hub) => {
     const intent = hub.routingIntent
-    const policies = intent.private ? ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', ...intent.privatePrefixes] : []
+    const policies = intent.private ? [...RFC1918_PREFIXES, ...intent.privatePrefixes] : []
     if (intent.internet) policies.push('0.0.0.0/0')
     const unique = [...new Set(policies)]
     const effective: Decision[] = unique.map((prefix) => {
@@ -240,11 +242,13 @@ export function simulate(topology: Topology): Simulation {
       return { prefix, candidates: [route], selected: [route], explanation: ['Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table.'] }
     })
     if (!intent.private) effective.push(...tables[hub.id].filter((d) => !unique.includes(d.prefix)))
-    if (intent.internet) {
+    if (intent.internet || (intent.private && !firewallTables[hub.id].some((d) => d.prefix === '0.0.0.0/0'))) {
       const route = policyRoute(hub, '0.0.0.0/0', true)
       firewallTables[hub.id] = [
         ...firewallTables[hub.id].filter((d) => d.prefix !== '0.0.0.0/0'),
-        { prefix: route.prefix, candidates: [route], selected: [route], explanation: ['Internet routing intent uses direct Internet egress from Azure Firewall.'] },
+        { prefix: route.prefix, candidates: [route], selected: [route], explanation: [intent.internet
+          ? 'Internet routing intent uses direct Internet egress from Azure Firewall.'
+          : 'Azure Firewall has a direct Internet fallback when no default is learned. This does not install a hub default route.'] },
       ]
     }
     return [hub.id, effective.length || intent.private ? effective : tables[hub.id]]
@@ -335,7 +339,14 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
     for (const route of forwarding) {
       if (paths.length >= 128) return
       if (route.remote) walk(route.originHubId, hubs, details, inspected)
-      else if (route.transport === 'Internet') paths.push({ hubs, firewalls: inspected, steps: [...details, 'Direct Internet egress. Firewall allow/deny and SNAT policies are not simulated.'], status: 'delivered' })
+      else if (route.transport === 'Internet') {
+        const privateDestination = RFC1918_PREFIXES.some((prefix) => contains(prefix, address))
+        paths.push({ hubs, firewalls: inspected,
+          steps: [...details, privateDestination
+            ? 'Internet egress does not provide reachability to an RFC1918 destination without a private forwarding route.'
+            : 'Direct Internet egress. Firewall allow/deny and SNAT policies are not simulated.'],
+          status: privateDestination ? 'unreachable' : 'delivered' })
+      }
       else paths.push({ hubs, firewalls: inspected, siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, connectionId: route.connectionId, siteId: route.siteId,
         ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
         steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId))?.name ?? route.connectionId}.`,
