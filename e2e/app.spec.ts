@@ -34,6 +34,22 @@ async function pathMenu(page: Page, object: string, direction: 'to' | 'from', en
   return page.getByRole('menu', { name: endpoint, exact: true })
 }
 
+test('tab icon resolves to a browser-decodable SVG rather than the app fallback', async ({ page }) => {
+  await page.goto('/')
+  const icon = page.locator('link[rel="icon"]')
+  await expect(icon).toHaveAttribute('type', 'image/svg+xml')
+  const url = await icon.evaluate((link) => (link as HTMLLinkElement).href)
+  const response = await page.request.get(url)
+  expect(response.ok()).toBe(true)
+  expect(response.headers()['content-type']).toContain('image/svg+xml')
+  expect(await page.evaluate(async (url) => {
+    const image = new Image()
+    image.src = url
+    await image.decode()
+    return image.naturalWidth > 0 && image.naturalHeight > 0
+  }, url)).toBe(true)
+})
+
 test('cascading hover menus trace to/from the chosen prefix without opening an inspector', async ({ page }) => {
   await page.goto('/')
   const to = await pathMenu(page, 'Select spoke Europe applications', 'to', 'London datacenter (site)')
