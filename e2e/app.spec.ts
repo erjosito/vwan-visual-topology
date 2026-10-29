@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { readFile } from 'node:fs/promises'
 import type { Page } from '@playwright/test'
 import { example } from '../src/model'
 import type { Topology } from '../src/model'
@@ -688,6 +689,7 @@ test('ECMP alternatives remain visible and connection failure withdraws only the
 
 test('either routing policy secures the existing hub icon in both layouts and disabling both restores it', async ({ page }) => {
   await page.goto('/')
+  const securedHubReference = await readFile(new URL('../src/assets/azure/secured-virtual-hub.png', import.meta.url))
   const hub = page.getByLabel('Select hub Europe hub', { exact: true })
   const icon = hub.locator('.node-icon.hub image')
   const originalIcon = await icon.getAttribute('href')
@@ -709,6 +711,9 @@ test('either routing policy secures the existing hub icon in both layouts and di
       const currentIcon = await icon.getAttribute('href')
       if (secured) {
         expect(currentIcon).not.toBe(originalIcon)
+        const artwork = await page.request.get(currentIcon!)
+        expect(artwork.ok()).toBe(true)
+        expect(await artwork.body()).toEqual(securedHubReference)
         if (securedIcon) expect(currentIcon).toBe(securedIcon)
         securedIcon = currentIcon
         expect(await page.evaluate(async (url) => {
