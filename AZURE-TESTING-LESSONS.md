@@ -56,6 +56,12 @@ an empty-route result.
 Always collect all available layers. A convenient API is not necessarily the
 right observation boundary.
 
+With routing intent, distinguish the default table's security redirects from
+the security next hop's post-inspection forwarding table. Microsoft documents
+next-hop resource effective routes for private routing policy; for Internet-only
+policy, use the default route table instead. Bind a reported next hop to the
+queried owned firewall resource ID or private IP, not just its display label.
+
 ### ExpressRoute-specific findings
 
 - The native hub RIB, upstream MSEE diagnostics, VPN receiver and final ER
@@ -129,6 +135,12 @@ port. Test allow, SE deny, NE deny and restore-allow epochs with repeated probes
 These are external causal controls; the simulator does not model firewall
 filtering or SNAT. Until those epochs run, successful connectivity is not proof
 that traffic traversed the expected firewall or firewall sequence.
+
+Validate the control policy itself before enabling intent: Azure rejected a
+rule collection group priority of 50 because the minimum is 100. A probe
+collection at 100 can precede the functional allow collection at 200 within the
+existing reviewed group. Preserve and verify the original functional rules,
+and skip unchanged policy writes instead of triggering needless reprovisioning.
 
 Preserve the controller's provider/management HTTPS access and the VMs' required
 AzureCloud TCP 443 Run Command return channel before enabling Internet intent.
