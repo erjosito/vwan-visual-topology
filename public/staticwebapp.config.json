@@ -1,4 +1,5 @@
 {
+  "mimeTypes": { ".ps1": "text/plain" },
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": ["/assets/*", "/*.{css,js,json,png,jpg,svg,ico,txt}"]

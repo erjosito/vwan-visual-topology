@@ -20,6 +20,12 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - run: npm run test:collector
+      - name: Compile generated Bicep (no deployment)
+        run: |
+          az bicep install --version v0.40.2
+          az bicep build --file test-artifacts/azure-files/bicep/main.bicep --stdout > test-artifacts/azure-files/bicep/main.json
+          az bicep build --file test-artifacts/azure-files/bicep/single-hub.bicep --stdout > test-artifacts/azure-files/bicep/single-hub.json
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e

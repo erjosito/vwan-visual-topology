@@ -17,6 +17,8 @@ import { RouteMapInspector } from './RouteMapInspector'
 import { StaticRoutingPanel } from './StaticRoutingPanel'
 import { ErLocationInspector } from './ErLocationInspector'
 import { VpnRoutingWizard } from './VpnRoutingWizard'
+import { AzureFilesPanel } from './AzureFilesPanel'
+import { importAzureCapture } from './azure-import'
 import { vpnRoutingMode } from './vpn-routing'
 import type { VpnRoutingMode } from './vpn-routing'
 import { nodePrefixes, traceGroupedPaths, traceNodePath } from './paths'
@@ -53,7 +55,8 @@ function App() {
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [clearRequested, setClearRequested] = useState(false)
-  const [panel, setPanel] = useState<'routes' | 'ads' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes'>()
+  const [panel, setPanel] = useState<'routes' | 'ads' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure'>()
+  const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
   const [router, setRouter] = useState<ObjectSelection>({ kind: 'hub', id: topology.hubs[0]?.id ?? '' })
   const [routeView, setRouteView] = useState<'hub' | 'firewall'>('hub')
@@ -72,6 +75,7 @@ function App() {
   const [tracing, setTracing] = useState(false)
   const [groupTrace, setGroupTrace] = useState<{ group: PathGroup; direction: PathDirection }>()
   const importer = useRef<HTMLInputElement>(null)
+  const importRequest = useRef(0)
   const simulation = useMemo(() => simulate(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
@@ -104,6 +108,8 @@ function App() {
     catch (error) { setError(message(error)) }
   }
   const reset = (next: Topology) => {
+    importRequest.current++
+    setPendingAzureImport(undefined)
     save(next); setSelection(undefined); setPanel(undefined); setEditorRequest(undefined); setContextMenu(undefined); setClearRequested(false)
     setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setConnectionId(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
@@ -221,10 +227,17 @@ function App() {
   }
   const importTopology = async (file?: File) => {
     if (!file) return
+    const revision = ++importRequest.current
+    setPendingAzureImport(undefined)
     try {
       if (file.size > 2_000_000) throw new Error('Topology files must be smaller than 2 MB.')
-      reset(validateTopology(JSON.parse(await file.text())))
-    } catch (error) { setError(`Import rejected: ${message(error)}`) }
+      const input: unknown = JSON.parse(await file.text())
+      if (revision !== importRequest.current) return
+      if (input && typeof input === 'object' && 'kind' in input && input.kind === 'azure-vwan-capture') {
+        const next = importAzureCapture(input)
+        setPendingAzureImport({ revision, topology: next }); setError(''); setPanel('azure')
+      } else reset(validateTopology(input))
+    } catch (error) { if (revision === importRequest.current) setError(`Import rejected: ${message(error)}`) }
   }
   const pathTitle = (path: NodePath) => [
     'sourceName' in path ? path.sourceName : sourceNode?.name, ...(path.sourceSiteHops?.slice(1).map((id) => topology.sites.find((s) => s.id === id)?.name) ?? []),
@@ -240,19 +253,21 @@ function App() {
 
   return <div className="app canvas-app">
     <header className="topbar"><div className="brand"><div className="brand-icon" aria-hidden="true">W</div><div><h1>Virtual WAN <span>Topology Lab</span></h1><p>Design the network. Understand the path.</p></div></div>
-      <div className="actions"><span className="local-badge">Local-first · no Azure credentials</span><button onClick={() => exportTopology()}>Export JSON</button><button onClick={() => importer.current?.click()}>Import JSON</button><button onClick={() => setClearRequested(true)}>Clear topology</button><a className="button-link" href="https://github.com/erjosito/vwan-visual-topology/issues/new" target="_blank" rel="noopener noreferrer">File issue</a><input ref={importer} hidden type="file" accept=".json,application/json" aria-label="Import topology file" onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+      <div className="actions"><span className="local-badge">Local-first · no Azure credentials</span><button onClick={() => exportTopology()}>Export JSON</button><button onClick={() => importer.current?.click()}>Import JSON</button><button onClick={() => setPanel('azure')}>Azure files</button><button onClick={() => setClearRequested(true)}>Clear topology</button><a className="button-link" href="https://github.com/erjosito/vwan-visual-topology/issues/new" target="_blank" rel="noopener noreferrer">File issue</a><input ref={importer} hidden type="file" accept=".json,application/json" aria-label="Import topology file" onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     <main>
       <section className="workspace-heading"><div><p className="eyebrow">NETWORK WORKSPACE</p><input className="topology-name" aria-label="Topology name" maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong> hubs</span><span><strong>{topology.spokes.length}</strong> spokes</span><span><strong>{topology.sites.length}</strong> sites</span>{!!topology.erLocations?.length && <span><strong>{topology.erLocations.length}</strong> ER locations</span>}</div></section>
       {error && <div role="alert" className="notice error">{error}<button aria-label="Dismiss error" onClick={() => setError('')}>Dismiss</button></div>}
       {initial.backup && <div className="notice">The example is displayed because the saved workspace could not be loaded. Download the original before editing or closing this page. <button onClick={() => exportTopology(initial.backup)}>Download original saved topology</button></div>}
       {saveError && <p role="alert" className="notice error">{saveError}</p>}
+      {topology.azureImport && <div className="notice" role="status">Azure structure-only import · simulated routes are not verified Azure effective routes. <button onClick={() => setPanel('azure')}>Review import limitations</button></div>}
       <section className="canvas-workspace panel" aria-label="Topology workspace">
         <div className="canvas-toolbar"><div><h2>Network topology</h2><p className="muted">Drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.</p></div>
           <div className="canvas-tools"><label className="field"><span>Visualization</span><select aria-label="Visualization mode" value={layout} onChange={(e) => update((next) => { next.layout ??= { mode: 'layered', positions: {} }; next.layout.mode = e.target.value as LayoutMode })}><option value="layered">Layered topology</option><option value="constellation">Network constellation</option></select></label><div className="zoom-controls"><button aria-label="Zoom out" disabled={zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}>-</button><label className="field"><span>Zoom</span><select aria-label="Canvas zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}><option value={0.75}>75%</option><option value={1}>100%</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label><button aria-label="Zoom in" disabled={zoom >= 1.5} onClick={() => setZoom((value) => Math.min(1.5, value + 0.25))}>+</button></div><button disabled={!Object.keys(topology.layout?.positions[layout] ?? {}).length} title="Restore automatic positions in the current visualization only" onClick={() => update((next) => { if (next.layout) delete next.layout.positions[layout] })}>Reset layout</button>
             <button onClick={() => setEditorRequest({ kind: 'hub' })}>+ Hub</button><button onClick={() => setEditorRequest({ kind: 'site' })}>+ Site</button><button onClick={() => setEditorRequest({ kind: 'erLocation' })}>+ ER location</button><button onClick={() => openRouteMaps()}>Route maps</button><button aria-label="Open model notes and warnings" onClick={() => setPanel('notes')}>Notes{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         <div className="canvas-stage">
+          {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
           <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={paths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={paths} sourceSpokeIds={paths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
           {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : 'No matching sources or destination prefixes configured'}` : `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination} · ${destinationPrefix || destination} · ${pathStatus}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}{tracing && <button onClick={() => setPanel('paths')}>Path details</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
           {panel === 'routes' && inspected && (router.kind === 'erLocation' ? <ErLocationInspector topology={topology} simulation={simulation} locationId={router.id} onClose={closePanel} /> : <RouteInspector topology={topology} simulation={simulation} router={router} view={activeView} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />)}

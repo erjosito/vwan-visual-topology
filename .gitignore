@@ -25,3 +25,4 @@ dist-ssr
 .copilot-azure/
 playwright-report/
 test-results/
+test-artifacts/

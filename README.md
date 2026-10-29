@@ -24,6 +24,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Hover **Show path to** / **Show path from** on hubs, sites and spokes, then choose an endpoint and prefix from cascading menus to highlight forwarding paths immediately. No inspector opens automatically; use **Path details** for per-hop explanations or **Open path explorer** for custom addresses.
 - **Show path to/from → All Azure VNets / All onprem sites / Everywhere** highlights grouped paths on hubs, sites and spokes. “To” traces from the selected node to that group's destination prefixes; “from” traces independently from each group member to the selected node's prefixes. Everywhere combines VNets and sites, excluding the selected node; hubs are not duplicated as copies of their spokes. **Path details** identifies each source, destination, prefix and unreachable result, retaining ECMP. Shared outgoing destination prefixes are traced once, but distinct incoming sources are never merged.
 - Save automatically in browser storage, and import/export validated, versioned JSON.
+- **Azure files** imports a local, read-only Azure CLI capture after review and exports an offline Bicep starter for a new Standard WAN and selected unsecured hubs. No Azure authentication, SDK or deployment service is added to the app.
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 
@@ -39,12 +40,15 @@ npm run dev
 ```shell
 npm run lint
 npm test
+npm run test:collector
 npm run build
 npx playwright install chromium
 npm run test:e2e
 ```
 
 Production output is `dist`. The app uses relative asset URLs and can be served as static files. Browser storage is specific to the origin and device; export JSON before clearing storage or moving to a different URL. Exported files contain your topology and must be treated according to your organization's data policies.
+
+The collector integration tests require PowerShell 7 but use a mocked Azure CLI, with no Azure access. CI also compiles a representative generated Bicep file with Bicep **v0.40.2**, without authenticating or deploying.
 
 ## Working with the app
 
@@ -60,6 +64,36 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 Hub icons display the hub name and region, not an AS path. **AS Path** in the hub configuration is a routing-preference option; it is not an AS path assigned to the hub. Actual AS paths appear on individual routes in the route tables.
 
 Canvas hubs, spokes and ER locations use Microsoft's official **Virtual WAN Hub**, **Virtual Networks** and **ExpressRoute Circuits** icons, respectively, from the [Azure Architecture Center icon collection](https://learn.microsoft.com/azure/architecture/icons/) (V24). These SVGs in `src/assets/azure` are unchanged originals, displayed proportionally without recoloring. Secured hubs use the supplied **secured virtual hub reference image** (`secured-virtual-hub.png`), showing a red firewall surrounded by gray hub spokes, not the different Firewall Manager icon. This PNG is the user-provided reference; its original SVG source has not been independently verified. Microsoft permits copying, distributing and displaying its icons in architectural diagrams, training materials or documentation; all other rights are reserved by Microsoft.
+
+### Azure files: offline import and Bicep export
+
+Open **Azure files** in the header. All application processing stays in the browser; this feature adds no Azure sign-in, backend, SDK, account selector or deploy button. Ordinary native JSON import/export remains unchanged.
+
+**Import:** download and review `collect-azure-vwan.ps1`, then run it with PowerShell 7 and an Azure CLI session authenticated **outside** this app (locally or in Cloud Shell PowerShell):
+
+```powershell
+.\collect-azure-vwan.ps1 `
+  -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' `
+  -OutputFile .\vwan-capture.json
+```
+
+The collector supports **one Standard Virtual WAN in public Azure**. It discovers hubs across resource groups in that WAN's subscription and reads their VNet references/address spaces, routing preferences, routing-intent policies and indicators of unsupported routing. It uses only bounded `az rest` GET requests, with a 60-second timeout per attempt, at most three attempts, pagination/resource/request limits and a 2 MB output cap. Existing output files require explicit `-Force`.
+
+Reads require subscription-wide hub-list access plus read access to the selected WAN, its hubs/child resources and referenced VNets. Cross-subscription VNet reads are **off by default**; `-AllowCrossSubscriptionVnets` opts into reading only directly referenced VNets, never subscription enumeration. Denied child/VNet reads produce an explicitly incomplete capture; failed WAN/discovery reads abort rather than inventing an empty environment. The collector does not request tokens, keys, tunnel secrets or effective routes, and only allowlisted configuration fields are written.
+
+Import the result with **Import Azure capture** or **Import JSON**. The app shows counts and omissions **before** replacement; acknowledgement and confirmation are required. Cancel/Escape, malformed captures and unsupported versions leave the workspace intact. Export its native JSON first if you need a backup. The versioned `azure-vwan-capture` format is intentionally **not** arbitrary ARM-template or Azure CLI JSON.
+
+Imports create hubs and IPv4 spoke attachments with stable IDs derived from ARM IDs, and map `VpnGateway` to the simulator's `VPN` preference. Azure Firewall private/Internet routing intent is shown where recognized; no separate firewall site is fabricated. Sites, circuits, BGP advertisements/ASNs, subnet UDRs, firewall enforcement, route maps, custom propagation and observed effective routes are **not reconstructed**. Unsupported policies, custom routing, missing VNets and IPv6 omissions stay visible as **structure-only** limitations, not a promise of Azure-equivalent routing. Unknown hub preferences, Basic WANs, duplicate/ambiguous references, malformed prefixes and app-limit violations are rejected.
+
+Capture time, source WAN/hub IDs, imported infrastructure prefixes and limitations persist in a small validated `azureImport` field through browser reload and native JSON exchange. The persistent workspace banner identifies imported routes as simulations, not observed Azure effective routes. Captures/JSON contain resource names, IDs and network configuration: handle them according to your organization's data policies.
+
+**Export:** review the WAN/hub deployment names, canonical Azure locations and a separate **infrastructure CIDR for every included hub**. Newly drawn hubs have no CIDR default; destination prefixes are never reused automatically. Imported infrastructure prefixes are suggestions requiring review. IPv4 network CIDRs must be /24 or larger (/23 or larger recommended) and must not overlap selected hubs or known spoke/site networks. Unknown display-region names require manual canonical input; actual Azure region availability, capacity and address ownership cannot be checked offline.
+
+**Review Bicep export** shows the resources, complete generated text and explicit omission report. After acknowledging resources, exclusions and charges, **Download main.bicep** saves one self-contained resource-group-scoped file using Network API `2024-10-01`. It creates a **new Standard WAN and bare hubs**, maps all three routing preferences and defaults router minimum capacity to **2 RIUs** (editable in Bicep). Simulator changes invalidate an existing preview.
+
+Secured hubs, assigned hub route maps and incompletely captured/unsupported hub routing are **blocked**, not silently downgraded. You can explicitly exclude those hubs and export the supported subset; exclusions are recorded in the preview and template comments. No VNet creation/attachments, ER resources, gateways, VPN/on-premises sites, NVAs, firewall/rule resources, route-map policies or observed routes are generated.
+
+This is a **starter, not a lossless clone, reconciliation tool or deployment guarantee**. The app never deploys it. Review names against the intended target resource group, compile externally (`az bicep build --file main.bicep`), and run Azure what-if before any deployment; deployments incur charges even for empty hubs. Effective-route snapshots remain tracked in [#3](https://github.com/erjosito/vwan-visual-topology/issues/3); VNet attachments and secured-hub export remain in [#4](https://github.com/erjosito/vwan-visual-topology/issues/4).
 
 ### ExpressRoute locations
 

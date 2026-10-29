@@ -142,3 +142,7 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 @media (min-width: 1600px) { .workspace { grid-template-columns: 330px minmax(0, 1fr); } }
 @media (max-width: 1100px) { .topbar { padding: 20px; }.local-badge { display: none; }main { padding: 22px 20px; }.workspace { grid-template-columns: 260px minmax(0, 1fr); gap: 15px; }.diagram-toolbar { flex-wrap: wrap; }.stats { gap: 14px; }.route-edit-row { grid-template-columns: 1fr 1fr; }.route-controls { flex-wrap: wrap; }.route-controls > .muted { margin-left: 0; } }
 @media (max-width: 760px) { .topbar { flex-direction: column; align-items: start; }.workspace-heading { align-items: start; flex-direction: column; }.workspace { grid-template-columns: 1fr; }.editor { position: static; max-height: 450px; }.editor-content { display: block; }.topology-name { font-size: 22px; width: 100%; }.flow-form { grid-template-columns: 1fr; }.panel-heading { padding: 16px; }.diagram-toolbar { padding: 12px 16px; }.route-controls { padding-inline: 16px; }.route-controls .field { flex: 1; }.stats { flex-wrap: wrap; }.live-dot { font-size: 10px; }main { padding: 22px 12px; } }
+.azure-files { width: min(760px, calc(100% - 24px)); }
+.azure-files fieldset { border: 1px solid var(--border, #dce4ef); border-radius: 8px; margin: 16px 0; padding: 12px; }
+.azure-code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: #f3f6fa; padding: 12px; border-radius: 8px; }
+.azure-resource-id { overflow-wrap: anywhere; font-size: 12px; }

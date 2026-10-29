@@ -111,6 +111,14 @@ export interface Connection {
   outboundMapId?: string
 }
 
+export interface AzureImportInfo {
+  capturedAt: string
+  collectorVersion: string
+  wanId: string
+  warnings: string[]
+  hubs: { hubId: string; resourceId: string; addressPrefix: string; limitations: string[] }[]
+}
+
 export interface Topology {
   version: 1
   name: string
@@ -123,6 +131,7 @@ export interface Topology {
   erLocations?: ErLocation[]
   erLinks?: ErLink[]
   layout?: DiagramLayout
+  azureImport?: AzureImportInfo
 }
 
 export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink' | 'erLocation' | 'erLink'

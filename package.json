@@ -9,6 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "test:collector": "pwsh -NoLogo -NoProfile -File tests/collect-azure-vwan.test.ps1",
     "test:e2e": "playwright test"
   },
   "dependencies": {

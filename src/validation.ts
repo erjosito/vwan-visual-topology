@@ -319,6 +319,36 @@ export function validateTopology(input: unknown): Topology {
       }).filter(([id]) => nodeIds.has(id)))
     }
   }
+  let azureImport: Topology['azureImport']
+  if (root.azureImport !== undefined) {
+    const source = record(root.azureImport)
+    const sourceText = (value: unknown, label: string, limit: number) => {
+      if (typeof value !== 'string' || !value.trim() || value.length > limit) fail(`Invalid ${label}.`)
+      return value as string
+    }
+    const messages = (value: unknown) => array(value, 200, 'Azure import warnings').map((item) => sourceText(item, 'Azure import warning', 500))
+    const resourceId = (value: unknown) => {
+      const result = sourceText(value, 'Azure resource ID', 2048)
+      if (!/^\/subscriptions\/[a-f0-9-]{36}\/resourceGroups\/[^/?#\r\n]+\/providers\/Microsoft\.Network\/[^?#\r\n]+$/i.test(result)) fail('Invalid Azure resource ID.')
+      return result
+    }
+    const capturedAt = sourceText(source.capturedAt, 'Azure capture timestamp', 40)
+    if (!/^\d{4}-\d\d-\d\dT/.test(capturedAt) || !Number.isFinite(Date.parse(capturedAt))) fail('Invalid Azure capture timestamp.')
+    const seen = new Set<string>()
+    azureImport = {
+      capturedAt, collectorVersion: sourceText(source.collectorVersion, 'Azure collector version', 40),
+      wanId: resourceId(source.wanId), warnings: messages(source.warnings),
+      hubs: array(source.hubs, 20, 'Azure source hubs').map((value) => {
+        const hub = record(value)
+        const hubId = sourceText(hub.hubId, 'Azure source hub', 120)
+        if (seen.has(hubId)) fail('Duplicate Azure source hub.')
+        seen.add(hubId)
+        const addressPrefix = sourceText(hub.addressPrefix, 'Azure hub prefix', 40)
+        if (!cidr(addressPrefix)) fail('Invalid Azure hub IPv4 prefix.')
+        return { hubId, resourceId: resourceId(hub.resourceId), addressPrefix, limitations: messages(hub.limitations) }
+      }).filter((entry) => hubs.some((hub) => hub.id === entry.hubId)),
+    }
+  }
   return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,
-    ...(root.erLocations === undefined && root.erLinks === undefined ? {} : { erLocations, erLinks }), ...(layout ? { layout } : {}) }
+    ...(root.erLocations === undefined && root.erLinks === undefined ? {} : { erLocations, erLinks }), ...(layout ? { layout } : {}), ...(azureImport ? { azureImport } : {}) }
 }
