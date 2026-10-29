@@ -1,10 +1,11 @@
 # Lessons learned: testing and verification in Azure
 
 These practices come from the real two-hub Virtual WAN conformance exercise in
-[#5](https://github.com/erjosito/vwan-visual-topology/issues/5). The exercise is
-ongoing; this is a reusable testing guide, not a certificate that every routing
-scenario has passed. Keep scenario outcomes, limitations and cleanup evidence in
-the tracking issue.
+[#5](https://github.com/erjosito/vwan-visual-topology/issues/5). The
+[scoped lab report](https://github.com/erjosito/vwan-routing-verification-20261029-4cf83ab4)
+contains the measured outcomes, sanitized evidence and editable diagrams. This
+is a reusable testing guide, not a certificate that every routing scenario has
+passed. Keep limitations and final cleanup evidence in the report and issue.
 
 ## Design experiments that can disprove the model
 
@@ -79,8 +80,8 @@ subset and current model scope, tracked separately in
 [#13](https://github.com/erjosito/vwan-visual-topology/issues/13).
 
 A newly learned default can invalidate the probe endpoint's return path. Here,
-BIRD installed a VPN default with metric32 ahead of the endpoint's DHCP
-underlay default with metric100. Replies to both owned firewall public IPs then
+BIRD installed a VPN default with metric 32 ahead of the endpoint's DHCP
+underlay default with metric 100. Replies to both owned firewall public IPs then
 selected XFRM tunnels. Two exact public `/32` underlay response guards restored
 the expected HTTP deliveries without changing BGP exports or cloud permissions.
 Retain the initial failed observations and declare the corrected-lab repeat;
@@ -255,6 +256,18 @@ Do not delete the Azure resource group first and assume provider cleanup will
 follow. Verify deletions and residual liabilities; preserve the pre-existing
 vault, provider inventory and any other borrowed validation resources.
 
+Keep the controller and private credential path until provider removal has been
+independently verified and the proof is retained locally. A staged early-cleanup
+mode can remove the owned ER attachments, peerings and provider products while
+deliberately retaining the resource group. Test that mode separately without
+replacing or disabling the active deadline watchdog.
+
+Before deletion, privately fingerprint unrelated provider product IDs and
+states, including nested VXCs rather than only top-level MCRs. After cleanup,
+verify those records are unchanged and each owned product is decommissioned or
+returns HTTP 404. Publish only the counts and verification outcome, not the
+unrelated account inventory.
+
 ## Reporting and regression discipline
 
 Keep a durable issue checkpoint after each milestone, including failures,
@@ -270,6 +283,11 @@ again. Do not replace the original prediction with the corrected answer.
 Publish only sanitized evidence. Remove service keys, tokens, credentials,
 passwords and secret-bearing provider payloads. Keep private ownership and
 recovery material outside the public repository.
+
+Redacted derivatives have different bytes. Record the original private SHA256
+and the published sanitized SHA256 separately, and verify hashes against the
+staged Git blobs after line-ending normalization. Do not present an original
+prediction commitment as the hash of its redacted public copy.
 
 ## References
 
