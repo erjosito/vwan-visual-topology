@@ -147,8 +147,7 @@ foreach ($hub in $selectedHubs) {
             @($labels | Where-Object { $_ -ine 'Default' }).Count -eq 0 -and
             !$routing.inboundRouteMap.id -and !$routing.outboundRouteMap.id -and
             $routing.vnetRoutes.staticRoutes.Count -eq 0 -and
-            $routing.vnetRoutes.staticRoutesConfig.propagateStaticRoutes -ne $false -and
-            !$routing.vnetRoutes.staticRoutesConfig.vnetLocalRouteOverrideCriteria
+            $routing.vnetRoutes.staticRoutesConfig.propagateStaticRoutes -ne $false
         $connections.Add(@{
             name = ($vnetId -split '/')[-1]
             virtualNetworkId = $vnetId

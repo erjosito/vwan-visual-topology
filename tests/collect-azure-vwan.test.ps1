@@ -21,7 +21,7 @@ try {
     $env:PATH = "$output$([IO.Path]::PathSeparator)$originalPath"
     $env:MOCK_AZ_LOG = Join-Path $output 'requests.log'
     Set-Content -LiteralPath $env:MOCK_AZ_LOG -Value ''
-    foreach ($mode in @('normal', 'partial', 'cross', 'basic', 'bad-next')) {
+    foreach ($mode in @('normal', 'static-routes', 'partial', 'cross', 'basic', 'bad-next')) {
         $env:MOCK_AZ_MODE = if ($mode -eq 'cross') { 'partial' } else { $mode }
         $file = Join-Path $output "$mode.json"
         [string[]]$extra = if ($mode -eq 'cross') { @('-AllowCrossSubscriptionVnets') } else { @() }
@@ -40,9 +40,9 @@ try {
         Assert ($capture.hubs.Count -eq 1) 'WAN filtering/pagination must ignore hubs belonging to other WANs.'
         Assert ($json -notlike '*must-not-be-exported*') 'Unexpected Azure properties must not leak into captures.'
         Assert ($capture.hubs[0].gatewayTypes[0] -eq 'VPN') 'Gateway presence must be captured.'
-        Assert $capture.hubs[0].connections[0].defaultRouting 'Default association/propagation should be recognized.'
+        Assert ($capture.hubs[0].connections[0].defaultRouting -eq ($mode -ne 'static-routes')) 'Azure-materialized defaults should be recognized without accepting real static routes.'
         Assert ($capture.hubs[0].connections[0].name -eq 'app') 'Use the actual VNet name, not the connection name.'
-        if ($mode -eq 'normal') {
+        if ($mode -in @('normal', 'static-routes')) {
             Assert $capture.complete 'Successful reads should yield a complete capture.'
             Assert ($capture.hubs[0].connections[0].addressPrefixes[0] -eq '10.20.0.0/16') 'VNet address space should be captured.'
         } else {

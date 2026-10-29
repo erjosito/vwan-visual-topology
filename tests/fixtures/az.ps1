@@ -37,6 +37,16 @@ $response = switch -Wildcard ($path) {
                 propagatedRouteTables = @{ ids = @(@{ id = "$hub/hubRouteTables/defaultRouteTable" }); labels = @('Default') }
             }
         } })
+        if ($env:MOCK_AZ_MODE -in @('normal', 'static-routes')) {
+            $connections[0].properties.routingConfiguration.vnetRoutes = @{
+                staticRoutes = @(
+                    if ($env:MOCK_AZ_MODE -eq 'static-routes') {
+                        @{ name = 'nva'; addressPrefixes = @('10.60.0.0/16'); nextHopIpAddress = '10.20.1.4' }
+                    }
+                )
+                staticRoutesConfig = @{ propagateStaticRoutes = $true; vnetLocalRouteOverrideCriteria = 'Contains' }
+            }
+        }
         if ($env:MOCK_AZ_MODE -eq 'partial') {
             $connections += @{ name = 'cross-subscription'; properties = @{ remoteVirtualNetwork = @{ id = $cross } } }
         }
