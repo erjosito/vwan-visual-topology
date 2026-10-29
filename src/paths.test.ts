@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { example } from './model'
-import { nodePrefixes, traceAllDestinations, traceNodePath } from './paths'
+import { nodePrefixes, traceGroupedPaths, traceNodePath } from './paths'
 import { simulate } from './routing'
 
 describe('contextual node paths', () => {
@@ -10,12 +10,12 @@ describe('contextual node paths', () => {
     t.sites[1].prefixes = ['203.0.113.0/24']
     t.connections.push({ ...structuredClone(t.connections[0]), id: 'parallel-er', name: 'Parallel ER',
       routes: t.connections[0].routes.map((route) => ({ ...route, id: `parallel-${route.id}` })) })
-    const paths = traceAllDestinations(t, simulate(t), { kind: 'spoke', id: 'eu-apps' })
+    const paths = traceGroupedPaths(t, simulate(t), { kind: 'spoke', id: 'eu-apps' }, 'to', 'everywhere')
     expect(new Set(paths.map((path) => path.destinationPrefix))).toEqual(new Set(['10.2.0.0/16', '10.20.0.0/16', '203.0.113.0/24', '10.40.0.0/16']))
     expect(paths.filter((path) => path.destinationPrefix === '10.20.0.0/16').every((path) => path.status === 'delivered')).toBe(true)
     expect(new Set(paths.filter((path) => path.destinationPrefix === '10.20.0.0/16').map((path) => path.connectionId))).toEqual(new Set(['er-eu', 'parallel-er']))
     expect(paths.find((path) => path.destinationPrefix === '203.0.113.0/24')).toMatchObject({ destinationName: 'New York office', status: 'unreachable' })
-    const sitePaths = traceAllDestinations(t, simulate(t), { kind: 'site', id: 'dc' })
+    const sitePaths = traceGroupedPaths(t, simulate(t), { kind: 'site', id: 'dc' }, 'to', 'everywhere')
     expect(sitePaths.some((path) => path.destinationPrefix === '10.20.0.0/16')).toBe(false)
     expect(sitePaths.find((path) => path.destinationPrefix === '10.2.0.0/16')).toMatchObject({ status: 'delivered', sourceSiteHops: ['dc'] })
   })
@@ -24,11 +24,54 @@ describe('contextual node paths', () => {
     const t = structuredClone(example)
     t.spokes[1].prefixes.push('10.1.0.0/16')
     t.sites[0].prefixes = ['10.2.0.0/16']
-    const paths = traceAllDestinations(t, simulate(t), { kind: 'site', id: 'ny' })
+    const paths = traceGroupedPaths(t, simulate(t), { kind: 'site', id: 'ny' }, 'to', 'everywhere')
     expect(paths.filter((path) => path.destinationPrefix === '10.2.0.0/16').every((path) => path.destinationName === 'Americas applications, London datacenter')).toBe(true)
-    expect(traceAllDestinations(t, { ...simulate(t), converged: false }, { kind: 'site', id: 'ny' })).toEqual([])
+    expect(traceGroupedPaths(t, { ...simulate(t), converged: false }, { kind: 'site', id: 'ny' }, 'to', 'everywhere')).toEqual([])
+    expect(traceGroupedPaths(t, { ...simulate(t), converged: false }, { kind: 'site', id: 'ny' }, 'from', 'everywhere')).toEqual([])
     t.spokes = []; t.sites = [t.sites[1]]; t.connections = []; t.siteLinks = []
-    expect(traceAllDestinations(t, simulate(t), { kind: 'site', id: 'ny' })).toEqual([])
+    expect(traceGroupedPaths(t, simulate(t), { kind: 'site', id: 'ny' }, 'to', 'everywhere')).toEqual([])
+    expect(traceGroupedPaths(t, simulate(t), { kind: 'site', id: 'ny' }, 'from', 'everywhere')).toEqual([])
+  })
+
+  it('filters outgoing groups to VNets or on-premises sites without adding hubs as duplicate destinations', () => {
+    const t = structuredClone(example)
+    const simulation = simulate(t)
+    const source = { kind: 'spoke' as const, id: 'eu-apps' }
+    expect(traceGroupedPaths(t, simulation, source, 'to', 'vnets').map((path) => path.destinationName)).toEqual(['Americas applications'])
+    const sites = traceGroupedPaths(t, simulation, source, 'to', 'sites')
+    expect(new Set(sites.flatMap((path) => path.destinationName.split(', ')))).toEqual(new Set(['London datacenter', 'New York office', 'Berlin branch']))
+    expect(sites.every((path) => path.sourceName === 'Europe applications')).toBe(true)
+    expect(new Set(traceGroupedPaths(t, simulation, { kind: 'hub', id: 'eu' }, 'to', 'vnets').map((path) => path.destinationPrefix)))
+      .toEqual(new Set(['10.1.0.0/16', '10.2.0.0/16']))
+    expect(traceGroupedPaths(t, simulation, { kind: 'spoke', id: 'deleted' }, 'to', 'everywhere')).toEqual([])
+  })
+
+  it('traces incoming groups independently from each source, including prefixless sites and unreachable paths', () => {
+    const t = structuredClone(example)
+    const simulation = simulate(t)
+    const target = { kind: 'spoke' as const, id: 'eu-apps' }
+    const sites = traceGroupedPaths(t, simulation, target, 'from', 'sites')
+    expect(new Set(sites.map((path) => path.sourceName))).toEqual(new Set(['London datacenter', 'New York office', 'Berlin branch']))
+    expect(sites.every((path) => path.destinationName === 'Europe applications' && path.destinationPrefix === '10.1.0.0/16')).toBe(true)
+    expect(sites.find((path) => path.sourceName === 'New York office')).toMatchObject({ status: 'delivered', sourceConnectionId: 'vpn-us', hubs: ['us', 'eu'] })
+    expect(sites.find((path) => path.sourceName === 'Berlin branch')).toMatchObject({ status: 'unreachable', hubs: [] })
+    const vnets = traceGroupedPaths(t, simulation, target, 'from', 'vnets')
+    expect(vnets).toHaveLength(1)
+    expect(vnets[0]).toMatchObject({ sourceName: 'Americas applications', sourceSpokeId: 'us-apps', destinationPrefix: '10.1.0.0/16', status: 'delivered', hubs: ['us', 'eu'] })
+    const everywhere = traceGroupedPaths(t, simulation, target, 'from', 'everywhere')
+    expect(everywhere).toEqual([...vnets, ...sites])
+    t.spokes[0].prefixes = []
+    expect(traceGroupedPaths(t, simulate(t), target, 'from', 'everywhere')).toEqual([])
+  })
+
+  it('retains different incoming sources sharing a prefix and traces every selected destination prefix', () => {
+    const t = structuredClone(example)
+    t.spokes.push({ ...t.spokes[1], id: 'shared-vnet', name: 'Shared-prefix VNet' })
+    const paths = traceGroupedPaths(t, simulate(t), { kind: 'site', id: 'dc' }, 'from', 'vnets')
+    expect(new Set(paths.map((path) => path.sourceName))).toEqual(new Set(['Europe applications', 'Americas applications', 'Shared-prefix VNet']))
+    expect(new Set(paths.map((path) => path.sourceSpokeId))).toEqual(new Set(['eu-apps', 'us-apps', 'shared-vnet']))
+    expect(new Set(paths.map((path) => path.destinationPrefix))).toEqual(new Set(['10.20.0.0/16', '10.20.10.0/24']))
+    expect(paths.every((path) => path.status === 'delivered')).toBe(true)
   })
 
   it('uses the selected hub routes for a spoke-to-site path', () => {

@@ -1,4 +1,5 @@
 import type { ObjectSelection, Topology } from './model'
+import { topologyObject } from './model'
 import type { FlowPath, Simulation } from './routing'
 import { traceFlow } from './routing'
 import { applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
@@ -6,8 +7,10 @@ import type { SiteRoute } from './bgp'
 import { cidr, contains, ipv4 } from './validation'
 
 export type PathNode = ObjectSelection & { kind: 'hub' | 'spoke' | 'site' }
-export interface NodePath extends FlowPath { sourceConnectionId?: string; sourceSiteHops?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[] }
-export interface DestinationPath extends NodePath { destinationPrefix: string; destinationName: string }
+export interface NodePath extends FlowPath { sourceConnectionId?: string; sourceSiteHops?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; sourceSpokeId?: string }
+export interface GroupPath extends NodePath { sourceName: string; destinationPrefix: string; destinationName: string }
+export type PathGroup = 'vnets' | 'sites' | 'everywhere'
+export type PathDirection = 'to' | 'from'
 
 export function nodePrefixes(topology: Topology, node: PathNode): string[] {
   if (node.kind === 'spoke') return topology.spokes.find((s) => s.id === node.id)?.prefixes ?? []
@@ -60,21 +63,28 @@ function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
   return { tables, converged }
 }
 
-export function traceAllDestinations(topology: Topology, simulation: Simulation, source: PathNode): DestinationPath[] {
-  if (!simulation.converged) return []
+export function traceGroupedPaths(topology: Topology, simulation: Simulation, anchor: PathNode, direction: PathDirection, group: PathGroup): GroupPath[] {
+  const object = topologyObject(topology, anchor)
+  if (!simulation.converged || !object) return []
+  const nodes = [
+    ...(group !== 'sites' ? topology.spokes.map((spoke) => ({ ...spoke, kind: 'spoke' as const })) : []),
+    ...(group !== 'vnets' ? topology.sites.map((site) => ({ ...site, kind: 'site' as const })) : []),
+  ].filter((node) => node.kind !== anchor.kind || node.id !== anchor.id)
+  const siteRoutes = (direction === 'to' ? anchor.kind === 'site' : nodes.some((node) => node.kind === 'site'))
+    ? azureRoutesAtSites(topology, simulation) : undefined
+  if (direction === 'from') {
+    return nodes.flatMap((source) => [...new Set(nodePrefixes(topology, anchor))].flatMap((prefix) =>
+      traceNodePath(topology, simulation, source, prefix.split('/')[0], siteRoutes)
+        .map((path) => ({ ...path, sourceName: source.name, destinationPrefix: prefix, destinationName: object.name }))))
+  }
   const destinations = new Map<string, string[]>()
-  for (const node of [
-    ...topology.spokes.map((spoke) => ({ ...spoke, kind: 'spoke' as const })),
-    ...topology.sites.map((site) => ({ ...site, kind: 'site' as const })),
-  ]) {
-    if (node.kind === source.kind && node.id === source.id) continue
+  for (const node of nodes) {
     for (const prefix of nodePrefixes(topology, node)) {
       destinations.set(prefix, [...new Set([...(destinations.get(prefix) ?? []), node.name])])
     }
   }
-  const siteRoutes = source.kind === 'site' ? azureRoutesAtSites(topology, simulation) : undefined
-  return [...destinations].flatMap(([prefix, names]) => traceNodePath(topology, simulation, source, prefix.split('/')[0], siteRoutes)
-    .map((path) => ({ ...path, destinationPrefix: prefix, destinationName: names.join(', ') })))
+  return [...destinations].flatMap(([prefix, names]) => traceNodePath(topology, simulation, anchor, prefix.split('/')[0], siteRoutes)
+    .map((path) => ({ ...path, sourceName: object.name, destinationPrefix: prefix, destinationName: names.join(', ') })))
 }
 
 export function traceNodePath(topology: Topology, simulation: Simulation, source: PathNode, destination: string, siteRoutes?: ReturnType<typeof azureRoutesAtSites>): NodePath[] {
@@ -86,7 +96,9 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
       hubs: [], siteId: spoke.id, steps: ['Destination is within the source spoke; no Virtual WAN hop is required.'], status: 'delivered',
     }]
     const hubId = source.kind === 'hub' ? source.id : spoke?.hubId
-    return hubId ? traceFlow(topology, simulation, hubId, destination) : []
+    return hubId ? traceFlow(topology, simulation, hubId, destination).map((path) => ({
+      ...path, ...(spoke && path.hubs.length ? { sourceSpokeId: spoke.id } : {}),
+    })) : []
   }
   const learned = siteRoutes ?? azureRoutesAtSites(topology, simulation)
   if (!learned.converged) return [{ hubs: [], steps: ['On-premises Azure advertisement propagation did not converge.'], status: 'unreachable' }]

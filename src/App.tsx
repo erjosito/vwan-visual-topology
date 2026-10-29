@@ -19,11 +19,16 @@ import { ErLocationInspector } from './ErLocationInspector'
 import { VpnRoutingWizard } from './VpnRoutingWizard'
 import { vpnRoutingMode } from './vpn-routing'
 import type { VpnRoutingMode } from './vpn-routing'
-import { nodePrefixes, traceAllDestinations, traceNodePath } from './paths'
-import type { DestinationPath, NodePath, PathNode } from './paths'
+import { nodePrefixes, traceGroupedPaths, traceNodePath } from './paths'
+import type { GroupPath, NodePath, PathDirection, PathGroup, PathNode } from './paths'
 import './App.css'
 
 const storageKey = 'vwan-visual-topology:v1'
+const pathGroups: { group: PathGroup; label: string }[] = [
+  { group: 'vnets', label: 'All Azure VNets' },
+  { group: 'sites', label: 'All onprem sites' },
+  { group: 'everywhere', label: 'Everywhere' },
+]
 const message = (error: unknown) => error instanceof Error ? error.message : 'Unexpected error.'
 const nodeKey = (node: ObjectSelection) => `${node.kind}:${node.id}`
 const parseNode = (key: string): PathNode => {
@@ -65,7 +70,7 @@ function App() {
   const [destination, setDestination] = useState('')
   const [destinationPrefix, setDestinationPrefix] = useState('')
   const [tracing, setTracing] = useState(false)
-  const [allDestinations, setAllDestinations] = useState(false)
+  const [groupTrace, setGroupTrace] = useState<{ group: PathGroup; direction: PathDirection }>()
   const importer = useRef<HTMLInputElement>(null)
   const simulation = useMemo(() => simulate(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
@@ -75,8 +80,11 @@ function App() {
   ]
   const sourceNode = nodes.find((n) => nodeKey(n) === source)
   const targetNode = nodes.find((n) => nodeKey(n) === target)
-  const paths: (NodePath | DestinationPath)[] = useMemo(() => tracing && source && topologyObject(topology, parseNode(source))
-    ? allDestinations ? traceAllDestinations(topology, simulation, parseNode(source)) : traceNodePath(topology, simulation, parseNode(source), destination) : [], [tracing, source, topology, simulation, destination, allDestinations])
+  const paths: (NodePath | GroupPath)[] = useMemo(() => {
+    if (!tracing) return []
+    if (groupTrace) return traceGroupedPaths(topology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
+    return source && topologyObject(topology, parseNode(source)) ? traceNodePath(topology, simulation, parseNode(source), destination) : []
+  }, [tracing, source, target, topology, simulation, destination, groupTrace])
   const connection = topology.connections.find((c) => c.id === connectionId)
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
@@ -97,7 +105,7 @@ function App() {
   }
   const reset = (next: Topology) => {
     save(next); setSelection(undefined); setPanel(undefined); setEditorRequest(undefined); setContextMenu(undefined); setClearRequested(false)
-    setTracing(false); setAllDestinations(false); setHighlighting(false); setPrefix(''); setConnectionId(''); setVpnConversion(undefined)
+    setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setConnectionId(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('hub'); setPrefix(''); setHighlighting(true); setTracing(false) }
@@ -110,7 +118,7 @@ function App() {
   }
   const showRoutes = (value: ObjectSelection, firewall = false) => { selectRouter(value); setRouteView(firewall ? 'firewall' : 'hub'); setPanel('routes') }
   const openPath = (value: PathNode, direction: 'to' | 'from') => {
-    setAllDestinations(false)
+    setGroupTrace(undefined)
     const other = nodes.find((n) => nodeKey(n) !== nodeKey(value) && (direction === 'from' || nodePrefixes(topology, n).length))
     const src = direction === 'to' ? value : other
     const dst = direction === 'to' ? other : value
@@ -121,7 +129,15 @@ function App() {
   }
   const pathActions = (value: PathNode, direction: 'to' | 'from'): ContextAction[] => {
     const others = nodes.filter((node) => nodeKey(node) !== nodeKey(value))
-    return others.length ? others.map((other) => {
+    return [...pathGroups.map(({ group, label }) => ({
+      label,
+      run: () => {
+        setGroupTrace({ group, direction })
+        setSource(direction === 'to' ? nodeKey(value) : ''); setTarget(direction === 'from' ? nodeKey(value) : '')
+        setDestination(''); setDestinationPrefix(''); setHighlighting(false); setTracing(true)
+        if (panel === 'paths') setPanel(undefined)
+      },
+    })), ...(others.length ? others.map((other) => {
       const src = direction === 'to' ? value : other
       const dst = direction === 'to' ? other : value
       const prefixes = [...new Set(nodePrefixes(topology, dst))]
@@ -130,18 +146,22 @@ function App() {
         children: prefixes.length ? prefixes.map((prefix) => ({
           label: prefix,
           run: () => {
-            setAllDestinations(false)
+            setGroupTrace(undefined)
             setSource(nodeKey(src)); setTarget(nodeKey(dst)); setDestinationPrefix(prefix); setDestination(prefix.split('/')[0])
             setHighlighting(false); setTracing(true)
             if (panel === 'paths') setPanel(undefined)
           },
         })) : [{ label: 'No destination prefixes configured', disabled: true }],
       }
-    }) : [{ label: 'No other nodes available', disabled: true }]
+    }) : [{ label: 'No other nodes available', disabled: true }])]
   }
   const pathStatus = !paths.length ? 'No trace available' : paths.every((path) => path.status === 'delivered') ? 'Reachable'
     : paths.some((path) => path.status === 'delivered') ? 'Partially reachable'
       : paths.some((path) => path.status === 'loop') ? 'Forwarding loop' : 'No route'
+  const groupLabel = pathGroups.find(({ group }) => group === groupTrace?.group)?.label
+  const groupSummary = groupTrace && (groupTrace.direction === 'to'
+    ? `Paths from ${sourceNode?.name ?? 'source'} to ${groupLabel}`
+    : `Paths from ${groupLabel} to ${targetNode?.name ?? 'destination'}`)
   const contextSelection = contextMenu?.selection
   const contextObject = contextSelection && topologyObject(topology, contextSelection)
   const contextConnection = contextSelection?.kind === 'connection' ? topology.connections.find((connection) => connection.id === contextSelection.id) : undefined
@@ -168,14 +188,6 @@ function App() {
       { label: 'Show path from', disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'from') },
       { label: 'Open path explorer', run: () => openPath(contextSelection as PathNode, 'to') },
     ] : []),
-    ...(['site', 'spoke'].includes(contextSelection.kind) ? [{
-      label: 'Show paths to all destinations', disabled: !simulation.converged,
-      run: () => {
-        setSource(nodeKey(contextSelection)); setTarget(''); setDestination(''); setDestinationPrefix('')
-        setAllDestinations(true); setHighlighting(false); setTracing(true)
-        if (panel === 'paths') setPanel(undefined)
-      },
-    }] : []),
     ...(contextSelection.kind === 'hub' ? [
       ...(topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [{ label: 'Show firewall routes', run: () => showRoutes(contextSelection, true) }] : []),
       { label: 'Add spoke', run: () => setEditorRequest({ kind: 'spoke', hubId: contextSelection.id }) },
@@ -215,7 +227,7 @@ function App() {
     } catch (error) { setError(`Import rejected: ${message(error)}`) }
   }
   const pathTitle = (path: NodePath) => [
-    sourceNode?.name, ...(path.sourceSiteHops?.slice(1).map((id) => topology.sites.find((s) => s.id === id)?.name) ?? []),
+    'sourceName' in path ? path.sourceName : sourceNode?.name, ...(path.sourceSiteHops?.slice(1).map((id) => topology.sites.find((s) => s.id === id)?.name) ?? []),
     topology.connections.find((c) => c.id === path.sourceConnectionId)?.name,
     ...(path.sourceErLinkIds?.map((id) => topology.erLinks?.find((link) => link.id === id)?.name) ?? []),
     ...path.hubs.flatMap((id) => [topology.hubs.find((h) => h.id === id)?.name, ...(path.firewalls?.includes(id) ? ['Azure Firewall'] : [])]),
@@ -223,7 +235,7 @@ function App() {
     ...(path.erLinkIds?.map((id) => topology.erLinks?.find((link) => link.id === id)?.name) ?? []),
     ...(path.siteHops?.map((id) => topology.sites.find((s) => s.id === id)?.name) ?? [topology.spokes.find((s) => s.id === path.siteId)?.name]),
   ].filter((name, index, all) => !!name && name !== all[index - 1]).join(' → ')
-  const submitPath = (event: FormEvent) => { event.preventDefault(); setAllDestinations(false); setHighlighting(false); setTracing(true) }
+  const submitPath = (event: FormEvent) => { event.preventDefault(); setGroupTrace(undefined); setHighlighting(false); setTracing(true) }
   const closePanel = () => setPanel(undefined)
 
   return <div className="app canvas-app">
@@ -241,8 +253,8 @@ function App() {
             <button onClick={() => setEditorRequest({ kind: 'hub' })}>+ Hub</button><button onClick={() => setEditorRequest({ kind: 'site' })}>+ Site</button><button onClick={() => setEditorRequest({ kind: 'erLocation' })}>+ ER location</button><button onClick={() => openRouteMaps()}>Route maps</button><button aria-label="Open model notes and warnings" onClick={() => setPanel('notes')}>Notes{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         <div className="canvas-stage">
-          <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={paths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={paths} sourceSpokeId={tracing && sourceNode?.kind === 'spoke' && paths.some((p) => p.hubs.length) ? sourceNode.id : undefined} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
-          {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? allDestinations ? `Paths from ${sourceNode?.name ?? 'source'} to all destinations · ${new Set(paths.filter((path) => 'destinationPrefix' in path).map((path) => path.destinationPrefix)).size} prefixes · ${paths.length ? pathStatus : 'No destination prefixes configured'}` : `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination} · ${destinationPrefix || destination} · ${pathStatus}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}{tracing && <button onClick={() => setPanel('paths')}>Path details</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
+          <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={paths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={paths} sourceSpokeIds={paths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
+          {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : 'No matching sources or destination prefixes configured'}` : `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination} · ${destinationPrefix || destination} · ${pathStatus}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}{tracing && <button onClick={() => setPanel('paths')}>Path details</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
           {panel === 'routes' && inspected && (router.kind === 'erLocation' ? <ErLocationInspector topology={topology} simulation={simulation} locationId={router.id} onClose={closePanel} /> : <RouteInspector topology={topology} simulation={simulation} router={router} view={activeView} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />)}
           {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}
           {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
@@ -258,13 +270,14 @@ function App() {
             </div>)}<button onClick={() => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.push({ id: crypto.randomUUID(), prefix: '10.99.0.0/16', kind: 'bgp', asPath: [65001] }) })}>Add advertised route</button></div>
           </CanvasOverlay>}
           {panel === 'paths' && <CanvasOverlay title="Path explorer" className="path-panel" onClose={closePanel}>
+            {tracing && groupTrace && <p><strong>{groupSummary}</strong>. Each source is traced independently to the destination prefixes; reverse-path symmetry is not assumed.</p>}
             <p className="muted">Longest-prefix forwarding and preferred BGP paths, not shortest graphical distance. ECMP paths remain highlighted together. Hub destinations use attached-spoke prefixes. Sites without assigned prefixes offer explicit connection advertisements as destination choices; these can be transit prefixes.</p>
             <form className="path-form" onSubmit={submitPath}><div className="form-grid"><label className="field"><span>Source node</span><select aria-label="Source node" value={source} onChange={(e) => { setSource(e.target.value); setTracing(false) }}><option value="">Select source</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({n.kind})</option>)}</select></label><label className="field"><span>Destination node</span><select aria-label="Destination node" value={target} onChange={(e) => { const prefixes = nodePrefixes(topology, parseNode(e.target.value)); setTarget(e.target.value); setDestination(prefixes[0]?.split('/')[0] ?? ''); setDestinationPrefix(prefixes[0] ?? ''); setTracing(false) }}><option value="">Select destination</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({n.kind})</option>)}</select></label></div>
               <label className="field"><span>Destination prefix</span><select aria-label="Destination prefix" value={destinationPrefix} onChange={(e) => { setDestinationPrefix(e.target.value); setDestination(e.target.value.split('/')[0]); setTracing(false) }}><option value="">Custom IPv4 address</option>{targetNode && nodePrefixes(topology, targetNode).map((p) => <option key={p}>{p}</option>)}</select></label>
               {!destinationPrefix && <label className="field"><span>Destination IPv4</span><input aria-label="Destination IPv4" value={destination} onChange={(e) => { setDestination(e.target.value); setTracing(false) }} required /></label>}<p className="muted">A prefix selection traces its network address. Choose Custom IPv4 address to test a more-specific destination within that range.</p><button className="primary" disabled={!sourceNode || !targetNode || ipv4(destination) === undefined || !simulation.converged}>Show preferred path</button>
             </form>
             <p className="muted">Routes may terminate at another advertiser of the same prefix. Reverse paths are calculated independently; symmetry, firewall permissions and host reachability are not assumed. Site ingress uses advertised AS paths; SD-WAN outbound learning is not modeled.</p>
-            {tracing && <div className="flow-results" aria-live="polite">{paths.map((path, i) => <article key={i} className={`flow-result ${path.status}`}><strong>{'destinationPrefix' in path && `${path.destinationName} · ${path.destinationPrefix} · `}{path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route'}{paths.length > 1 ? ` · path ${i + 1}` : ''}</strong><p>{pathTitle(path)}</p><details><summary>Why this path?</summary><ol>{path.steps.map((step, index) => <li key={index}>{step}</li>)}</ol></details></article>)}{!paths.length && <p className="empty">{allDestinations ? 'No other destination prefixes are configured.' : 'No trace available for this source or provisional routing state.'}</p>}</div>}
+            {tracing && <div className="flow-results" aria-live="polite">{paths.map((path, i) => <article key={i} className={`flow-result ${path.status}`}><strong>{'destinationPrefix' in path && `${path.sourceName} → ${path.destinationName} · ${path.destinationPrefix} · `}{path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route'}{paths.length > 1 ? ` · path ${i + 1}` : ''}</strong><p>{pathTitle(path)}</p><details><summary>Why this path?</summary><ol>{path.steps.map((step, index) => <li key={index}>{step}</li>)}</ol></details></article>)}{!paths.length && <p className="empty">{groupTrace ? 'No matching sources or destination prefixes configured.' : 'No trace available for this source or provisional routing state.'}</p>}</div>}
           </CanvasOverlay>}
           {panel === 'notes' && <CanvasOverlay title="Model notes and warnings" className="model-notes" onClose={closePanel}>
             <h3>Planning model, not an Azure control plane</h3><p>One Standard Virtual WAN, fully meshed hubs and Default propagation. HRP follows Microsoft's documented local/remote, transport and AS-path ordering. Hub-table static overrides are not configurable; VPN site static routes do not get hub-static precedence.</p><p>Routing intent uses separate hub policy and firewall forwarding tables. Firewall rules, SNAT, return-flow symmetry, custom route tables, communities, MED, Global Reach, shared-circuit reflection and arrival/failback timing are not simulated.</p>

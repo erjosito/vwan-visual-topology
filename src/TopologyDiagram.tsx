@@ -13,7 +13,7 @@ export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y:
 interface Props {
   topology: Topology; hubId: string; selected: Candidate[]; preferredSiteLinkIds?: string[]
   sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; layout?: LayoutMode; zoom?: number
-  paths: FlowPath[]; tracing: boolean; sourceSpokeId?: string; selection?: ObjectSelection
+  paths: FlowPath[]; tracing: boolean; sourceSpokeIds?: string[]; selection?: ObjectSelection
   onObjectClick: (selection: ObjectSelection) => void; onObjectContextMenu: (menu: DiagramContextMenu) => void
   onNodeMove: (id: string, position: NodePosition) => void
   onShowRouteMapRules: (router: RouterSelection, direction: RouteMapDirection, connectionId: string) => void
@@ -26,7 +26,7 @@ function NodeIcon({ kind }: { kind: 'hub' | 'spoke' | 'site' | 'erLocation' }) {
   </g>
 }
 
-export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkIds, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeId, tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
+export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkIds, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
   const svg = useRef<SVGSVGElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -195,7 +195,7 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       return <g key={edgeKey(h.id, other.id)}><path data-testid={`interhub-${h.id}-${other.id}`} className={`network-link backbone ${activeHubEdges.has(edgeKey(h.id, other.id)) ? 'preferred-link' : ''}`} d={edge.d} />{badge('Inter-hub', edge.label)}</g>
     }))}
     {topology.spokes.map((spoke) => {
-      const active = activeConnections.has(spoke.id) || sourceSpokeId === spoke.id || (!tracing && spoke.hubId === hubId)
+      const active = activeConnections.has(spoke.id) || sourceSpokeIds.includes(spoke.id) || (!tracing && spoke.hubId === hubId)
       const edge = diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12)
       return <g key={spoke.id} className="clickable" {...selectable('spoke', spoke.id, `Edit spoke connection ${spoke.name}`)}><path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${active ? 'preferred-link' : ''}`} d={edge.d} /></g>
     })}
