@@ -61,6 +61,15 @@ the security next hop's post-inspection forwarding table. Microsoft documents
 next-hop resource effective routes for private routing policy; for Internet-only
 policy, use the default route table instead. Bind a reported next hop to the
 queried owned firewall resource ID or private IP, not just its display label.
+For the CLI effective-route request, the working firewall resource type was
+`AzureFirewalls` (plural). `AzureFirewall` returned HTTP 200 with an empty table
+even after private intent completed; the plural request returned the known
+routes. Check the request encoding before treating an empty result as evidence.
+
+A firewall Internet default does not establish that Internet routing intent is
+enabled. In the private-only test, both firewall tables included Internet
+`0.0.0.0/0`, while both hub tables contained only RFC1918 redirects and no
+default. Keep the forwarding planes and the policy configuration distinct.
 
 ### ExpressRoute-specific findings
 
