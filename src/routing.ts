@@ -71,9 +71,10 @@ function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
   return { prefix, candidates, selected, explanation }
 }
 
-function localRoutes(connection: Connection): Candidate[] {
+function localRoutes(connection: Connection, topology: Topology): Candidate[] {
   if (!connection.enabled) return []
-  return connection.routes.map((route) => ({
+  const staticRoutes = topology.sites.find((site) => site.id === connection.siteId)?.vpnStaticRoutes?.filter((route) => route.connectionId === connection.id) ?? []
+  return [...connection.routes, ...staticRoutes.map((route) => ({ ...route, asPath: [], kind: 'vpn-static' as const }))].map((route) => ({
     key: `${connection.id}:${route.id}`,
     prefix: route.prefix,
     asPath: [...route.asPath],
@@ -124,7 +125,7 @@ export function simulate(topology: Topology): Simulation {
   const local = Object.fromEntries(topology.hubs.map((hub) => [
     hub.id, [
       ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id).flatMap((connection) => mapRoutes(connection, fromSite(connection, [
-        ...localRoutes(connection),
+        ...localRoutes(connection, topology),
         ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId].map((route) => learnedRoute(connection, route)) : []),
       ]), 'inbound')),
       ...topology.spokes.filter((s) => s.hubId === hub.id).flatMap((spoke) => spoke.prefixes.map((prefix): Candidate => ({

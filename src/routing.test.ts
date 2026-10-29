@@ -4,6 +4,7 @@ import type { Connection, Hub, Topology, Transport } from './model'
 import { simulate, traceFlow } from './routing'
 import { applyRouteMap, propagateSites } from './bgp'
 import { cidr, contains, ipv4, parseAsPath, validateTopology } from './validation'
+import { nodePrefixes } from './paths'
 
 const hub = (id: string, preference: Hub['preference'] = 'ExpressRoute'): Hub => ({
   id, name: id, region: 'West Europe', preference, routingIntent: { private: false, internet: false, privatePrefixes: [] },
@@ -18,6 +19,57 @@ const topology = (hubs: Hub[], connections: Connection[]): Topology => ({
 })
 const selected = (t: Topology, hubId = 'a', prefix = '10.20.0.0/16') =>
   simulate(t).firewallTables[hubId].find((d) => d.prefix === prefix)?.selected ?? []
+
+describe('site-owned VPN static prefixes', () => {
+  it('migrates connection static entries without changing IDs, paths or round-trip behavior', () => {
+    const t = structuredClone(example)
+    t.connections[1].routes = [
+      { id: 'legacy-static-a', prefix: '10.90.0.0/16', kind: 'vpn-static', asPath: [] },
+      { id: 'legacy-static-b', prefix: '10.91.0.0/16', kind: 'vpn-static', asPath: [] },
+    ]
+    const normalized = validateTopology(t)
+    expect(normalized.connections[1].routes).toEqual([])
+    expect(normalized.sites[0].vpnStaticRoutes).toEqual([
+      { id: 'legacy-static-a', prefix: '10.90.0.0/16', connectionId: 'vpn-eu' },
+      { id: 'legacy-static-b', prefix: '10.91.0.0/16', connectionId: 'vpn-eu' },
+    ])
+    expect(validateTopology(JSON.parse(JSON.stringify(normalized)))).toEqual(normalized)
+    expect(traceFlow(normalized, simulate(normalized), 'eu', '10.90.0.1')).toEqual(traceFlow(t, simulate(t), 'eu', '10.90.0.1'))
+    expect(nodePrefixes(normalized, { kind: 'site', id: 'dc' })).toContain('10.91.0.0/16')
+  })
+
+  it('imports site static prefixes only on their associated VPN and withdraws them on failure', () => {
+    const t = structuredClone(example)
+    t.sites[0].vpnStaticRoutes = [{ id: 'site-static', prefix: '10.80.0.0/16', connectionId: 'vpn-eu' }]
+    t.routeMaps = [{ id: 'drop-static-test', name: 'Drop BGP', siteId: 'dc', rules: [
+      { id: 'drop-bgp', prefixes: [], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' },
+    ] }]
+    t.sites[0].routeMapAssignments = [{ connectionId: 'vpn-eu', outboundMapId: 'drop-static-test' }]
+    const normalized = validateTopology(t)
+    const result = simulate(normalized)
+    expect(result.tables.eu.find((d) => d.prefix === '10.80.0.0/16')!.selected).toMatchObject([
+      { kind: 'vpn-static', connectionId: 'vpn-eu', asPath: [], siteId: 'dc' },
+    ])
+    expect(traceFlow(normalized, result, 'us', '10.80.0.1')[0]).toMatchObject({ status: 'delivered', connectionId: 'vpn-eu' })
+    normalized.connections[1].enabled = false
+    expect(traceFlow(normalized, simulate(normalized), 'eu', '10.80.0.1')[0].status).toBe('unreachable')
+  })
+
+  it('rejects invalid networks, duplicate IDs and missing, foreign or non-VPN associations', () => {
+    const t = structuredClone(example)
+    t.sites[0].vpnStaticRoutes = [{ id: 'site-static', prefix: '10.80.0.0/16', connectionId: 'vpn-eu' }]
+    for (const connectionId of ['missing', 'vpn-us', 'er-eu']) {
+      t.sites[0].vpnStaticRoutes[0].connectionId = connectionId
+      expect(() => validateTopology(t)).toThrow('attached S2S VPN')
+    }
+    t.sites[0].vpnStaticRoutes[0].connectionId = 'vpn-eu'
+    t.sites[0].vpnStaticRoutes[0].prefix = '10.80.0.1/16'
+    expect(() => validateTopology(t)).toThrow('Invalid static IPv4')
+    t.sites[0].vpnStaticRoutes[0].prefix = '10.80.0.0/16'
+    t.sites[0].vpnStaticRoutes[0].id = t.connections[0].routes[0].id
+    expect(() => validateTopology(t)).toThrow('Duplicate ID')
+  })
+})
 
 describe('hub best path and inter-hub propagation', () => {
   it('prefers local ER over shorter VPN with default HRP', () => {

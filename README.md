@@ -8,15 +8,17 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 
 - Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites with editable ASNs and **one optional originated prefix** each. The site's ASN and prefix are visible on its node. Connections can still advertise multiple routes.
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs.
-- Define per-connection BGP advertisements and received AS paths, or VPN site static prefixes. Disable connections to explore failures.
+- Define per-connection BGP advertisements and received AS paths. Configure non-BGP VPN static prefixes as **site attributes**, associated with the relevant VPN connection and accessible from either endpoint. Disable connections to explore failures.
 - Choose ExpressRoute, VPN, or AS Path routing preference independently per hub.
 - Canvas-first workspace with **Layered topology** and **Network constellation** visuals, zoom, and right-click/keyboard creation and editing. Drag nodes to rearrange; links follow live. Positions are saved independently per view in browser storage and exported JSON. **Reset layout** restores only the active view. There is no permanent sidebar or prefix-filter dropdown.
 - **Show BGP routes** on hubs and sites opens a movable, resizable, nonmodal canvas inspector. Compact prefix/reason headings group every candidate; the first column contains only `*` for preferred routes or is blank for alternatives. Preferred paths remain green, with every AS path visible. Click a heading prefix to highlight its paths.
 - Enable private and/or Internet routing intent. Inspect **hub policy routes and firewall forwarding routes separately**, and see firewall traversal in flow traces.
 - Connect on-premises sites with directional BGP export allowlists and AS-path prepends. Configure site ASNs and originated prefixes, then enable mesh route import on the desired hub connections.
 - Create named, reusable route maps owned by a **hub or on-premises site**. Each router assigns its own inbound/outbound policies to specific connections; the two ends are independent. Policies support ordered prefix matching, blocking, summarization and ASN prepending.
+- **IN / OUT badges** on hubs/sites show how many connections have maps in each direction. Click a badge, or choose **Show route map rules**, for a read-only canvas inspector listing connection names, assigned maps and ordered rules.
 - Hover **Show path to** / **Show path from** on hubs, sites and spokes, then choose an endpoint and prefix from cascading menus to highlight forwarding paths immediately. No inspector opens automatically; use **Path details** for per-hop explanations or **Open path explorer** for custom addresses.
 - Save automatically in browser storage, and import/export validated, versioned JSON.
+- **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 
 ## Run locally
@@ -42,7 +44,7 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 
 1. Right-click empty canvas to add a hub/site. Right-click a hub to add spokes or connect sites; right-click a site to add hub connections or on-premises BGP links. The toolbar also offers hub/site creation.
 2. Right-click an object for **Edit configuration**, renaming or deletion. Routing intent is part of hub configuration; site configuration includes ASN and one optional originated prefix.
-3. Right-click a connection for **Edit advertisements**. Include provider ASNs such as `12076` in explicit ExpressRoute paths. For static-only VPNs, disable site-mesh import, select **VPN site static** for each prefix and remove explicit BGP entries.
+3. Right-click a connection for **Edit advertisements** (BGP only). Include provider ASNs such as `12076` in explicit ExpressRoute paths. For non-BGP S2S VPN routing, right-click the **site or hub → Static routing** (also under **Edit configuration → Configure static routing**), choose a VPN connection, enter the site's reachable prefixes, and save. **Static-only VPN** explicitly removes existing BGP advertisements and disables site-mesh BGP import on that connection.
 4. Right-click a hub/site for **Show BGP routes**. Adjust **Hub routing preference**, switch hub/firewall **Route view**, or click a table prefix to compare candidate paths against the canvas.
 5. To model on-premises transit, use **Link to another site** and configure directional prefix allowlists and prepends. `*` means all prefixes. Enable site-originated/learned-route import on the desired hub connections.
 6. Right-click a **hub or site → Route maps**, or use **Edit configuration → Configure route maps**. Choose a connection, then its inbound/outbound maps relative to that router. A map can be shared across its router's connections; policies on the opposite endpoint remain independent. The toolbar/canvas entry offers a router selector. Deletion removes the map's assignments.
@@ -59,13 +61,15 @@ Drag any hub, spoke or site to reposition it without changing its configuration 
 
 The **Inspect router** selector switches between hubs and sites. Hub views distinguish system, VPN-static and routing-intent entries from BGP candidates. AS paths describe route advertisements, not hub or firewall identities.
 
-On-premises nodes show their ASN and single assigned prefix. Sites without one are labeled explicitly; connection advertisements are not assumed to be locally assigned networks. Spokes still support multiple prefixes.
+On-premises nodes show their ASN and single assigned prefix. Sites without one are labeled explicitly; connection advertisements and explicit VPN static routes are not assumed to be locally assigned networks. Spokes still support multiple prefixes.
 
 The version-1 JSON `sites[].prefixes` field remains an array for compatibility, but accepts at most one entry. Multi-prefix imports are rejected without replacing the current workspace or discarding networks; reduce the list explicitly before importing. If an old browser workspace contains multiple prefixes, the example opens with an error and a **Download original saved topology** recovery button. Download it before editing or closing the page.
 
 Use **Edit configuration** to rename an object or change its properties; existing IDs, relationships, advertisements and policies are preserved. Hub configuration includes routing intent. Spokes can be moved to another hub, and connections can be retargeted to existing hubs/sites. Invalid changes stay in the editor until corrected or canceled.
 
 Use **+ Hub** or **+ Site** above the diagram, or the matching canvas menu commands. A connected site and its hub connection are created together, with site-prefix advertisements enabled. Hub-to-hub links remain automatic.
+
+Use **Clear topology** in the header to start from scratch. Confirmation removes all objects, route maps, static prefixes and saved layout positions, resets zoom/view, and replaces the browser's saved workspace. Reloading keeps it empty; add a hub/site to begin again or import a backup.
 
 **Delete** shows a confirmation, including dependent spokes/connections/links. Deleting a router removes its owned maps; deleting a connection removes its endpoint assignments but retains reusable maps. Deleting a hub keeps its on-premises sites. Export JSON first if you need a backup. Keyboard users can select objects with Enter/Space; modeless editors support Tab and Escape. Firewall icons select their hub.
 
@@ -75,9 +79,19 @@ Maps are named resources owned by exactly one hub (`hubId`) or on-premises site 
 
 **Inbound** means routes received by the selected router; **outbound** means advertisements leaving it. Site outbound policies run before hub inbound policies. Hub outbound policies run before receiving-site inbound policies. On-premises links support independent outbound/inbound policies at both ends, alongside their existing directional peer settings. Site imports from Azure influence site-origin path tracing; the site BGP inspector remains the on-premises candidate table, not a combined Azure/on-premises table.
 
+Purple **IN** and blue **OUT** node badges count configured connections, not unique maps or rules. Hover for connection/map names; click or focus and press Enter/Space to inspect that direction. **Show route map rules** in a hub/site menu shows both directions, including exact/containing prefix matches, actions, summary prefixes, prepend ASNs and continue/stop processing. The inspector is read-only; **Configure route maps** opens the editor. Badges include assignments on disabled links, which the inspector marks inactive. Unassigned resources and legacy peer-link prepend settings do not produce route-map badges.
+
 Azure-side policies target ER/VPN BGP connections and require public 2-byte prepend ASNs. Site policies can use private/32-bit ASNs, including site-side SD-WAN policies. Azure-side integrated SD-WAN maps, spoke/inter-hub/P2S assignments, community/AS-path conditions and NAT are not modeled. Static VPN entries bypass BGP maps. Changing a connection's endpoints requires unassigning incompatible endpoint policies first.
 
 Version-1 imports with legacy connection map references or embedded prepend rules are migrated into the hub's assignments, preserving IDs, directions and route behavior. New exports store references on routers, not connections. Legacy empty prepend lists remain compatible. The single-originated-prefix restriction described above still applies.
+
+### Site-owned VPN static routing
+
+Non-BGP S2S VPN destinations are stored on sites as `vpnStaticRoutes: [{ id, prefix, connectionId }]`, not in a connection's BGP advertisements. The hub's **Static routing** inspector edits these same site attributes for its attached VPN connections; it does not create hub-table static overrides. Associations allow modeling different destination sets through different VPNs. Each connection supports up to 100 static prefixes; these can include transit destinations without changing the site's single originated prefix.
+
+Static routes have no local AS path, bypass BGP policies, and withdraw when their VPN is down. Existing route selection, inter-hub propagation and forwarding semantics are unchanged. Static-only configuration removes that VPN's explicit BGP entries and disables site-originated/learned BGP import only after you select the option and save. BGP and static entries can otherwise coexist as a planning approximation. This configures Azure-to-site destinations only; separate on-premises return static routes are not modeled.
+
+Legacy version-1 `connections[].routes` entries with `kind: "vpn-static"` migrate to the owning site's list, preserving IDs and VPN associations. Imports/exports round-trip the new fields. Deleting a VPN/hub removes dangling site static associations; incompatible site/transport changes are rejected until its static entries are removed or reassigned.
 
 ### Contextual path boundaries
 
@@ -107,7 +121,7 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 | Timing | Deterministic nominal convergence only. Azure arrival-order race conditions, failback history, and convergence delays are not predicted. |
 | Flow traces | Forward direction only, up to 128 equal-cost branches. No return-flow symmetry, gateway-instance hashing, BGP MED/local preference, custom route tables, IPv6, or multiple VWANs. |
 
-Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 advertisements per hub connection, and 2 MB per JSON file.
+Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 BGP advertisements and 100 site static prefixes per hub connection, and 2 MB per JSON file.
 
 ## Authoritative references
 

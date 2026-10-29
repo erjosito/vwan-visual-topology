@@ -104,7 +104,14 @@ export function validateTopology(input: unknown): Topology {
     if (asn === 65520 || asn === 65515 || asn === 12076) fail('Use a non-Azure site ASN.')
     const originated = array(site.prefixes ?? [], 100, 'Site originated prefixes')
     if (originated.length > 1) fail(`Site "${text(site.name, 'Site name')}" supports only one originated prefix. Reduce its prefixes to one before importing; no networks have been discarded.`)
+    const vpnStaticRoutes = array(site.vpnStaticRoutes ?? [], 12000, 'Site VPN static routes').map((value) => {
+      const route = record(value)
+      const prefix = text(route.prefix, 'Static prefix')
+      if (!cidr(prefix)) fail(`Invalid static IPv4 network CIDR: ${prefix}`)
+      return { id: id(route.id), prefix, connectionId: text(route.connectionId, 'Static route VPN connection') }
+    })
     return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: prefixes(originated, 'Site originated prefix'),
+      ...(site.vpnStaticRoutes === undefined ? {} : { vpnStaticRoutes }),
       ...(site.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(site.routeMapAssignments) }) }
   })
   const siteLinks = array(root.siteLinks ?? [], 120, 'On-premises links').map((value) => {
@@ -208,6 +215,13 @@ export function validateTopology(input: unknown): Topology {
     return result
   }
   for (const connection of connections) {
+    const staticRoutes = connection.routes.filter((route) => route.kind === 'vpn-static')
+    if (staticRoutes.length) {
+      const site = sites.find((s) => s.id === connection.siteId)!
+      site.vpnStaticRoutes ??= []
+      site.vpnStaticRoutes.push(...staticRoutes.map((route) => ({ id: route.id, prefix: route.prefix, connectionId: connection.id })))
+      connection.routes = connection.routes.filter((route) => route.kind !== 'vpn-static')
+    }
     for (const direction of ['inbound', 'outbound'] as const) {
       const legacy = connection[direction]
       if (!legacy.length) continue
@@ -229,6 +243,16 @@ export function validateTopology(input: unknown): Topology {
       if (binding[direction] !== undefined && binding[direction] !== reference) fail('Conflicting legacy and hub route-map assignments.')
       binding[direction] = reference
       delete connection[direction]
+    }
+  }
+  for (const site of sites) {
+    const counts = new Map<string, number>()
+    for (const route of site.vpnStaticRoutes ?? []) {
+      const connection = connections.find((c) => c.id === route.connectionId)
+      if (!connection || connection.siteId !== site.id || connection.transport !== 'VPN') fail('Site static routes require an attached S2S VPN connection. Remove or reassign them before changing the connection.')
+      const count = (counts.get(route.connectionId) ?? 0) + 1
+      if (count > 100) fail('At most 100 static routes are supported per VPN connection.')
+      counts.set(route.connectionId, count)
     }
   }
   for (const router of [...hubs, ...sites]) {

@@ -50,6 +50,91 @@ test('tab icon resolves to a browser-decodable SVG rather than the app fallback'
   }, url)).toBe(true)
 })
 
+test('policy badges count connections per router and reveal ordered rules without editing the topology', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.siteLinks = [{ id: 'policy-peer', name: 'Private WAN', a: 'dc', b: 'ny', enabled: false,
+    aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }]
+  topology.routeMaps = [
+    { id: 'visual-in', name: 'Site receive', siteId: 'dc', rules: [
+      { id: 'visual-permit', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'continue' },
+      { id: 'visual-prepend', prefixes: ['10.0.0.0/8'], match: 'contains', action: 'prepend', summaryPrefixes: [], prepend: [65040, 65040], nextStep: 'continue' },
+      { id: 'visual-summary', prefixes: ['10.1.0.0/16'], match: 'equals', action: 'summarize', summaryPrefixes: ['10.0.0.0/8'], prepend: [], nextStep: 'terminate' },
+      { id: 'visual-drop', prefixes: ['203.0.113.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'continue' },
+    ] },
+    { id: 'visual-out', name: 'Site export', siteId: 'dc', rules: [] },
+    { id: 'visual-hub', name: 'Hub receive', hubId: 'eu', rules: [] },
+    { id: 'visual-unused', name: 'Unassigned resource', siteId: 'ny', rules: [] },
+  ]
+  topology.sites[0].routeMapAssignments = [
+    { connectionId: 'er-eu', inboundMapId: 'visual-in' }, { connectionId: 'vpn-eu', inboundMapId: 'visual-in' },
+    { connectionId: 'policy-peer', outboundMapId: 'visual-out' },
+  ]
+  topology.hubs[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'visual-hub' }]
+  await page.goto('/'); await importTopology(page, topology)
+  const inbound = page.getByRole('button', { name: 'Inbound route map rules for London datacenter (2 connections)', exact: true })
+  const outbound = page.getByRole('button', { name: 'Outbound route map rules for London datacenter (1 connection)', exact: true })
+  await expect(inbound).toHaveText(/IN 2$/)
+  await expect(outbound).toHaveText(/OUT 1$/)
+  await expect(inbound.locator('title')).toContainText('London primary: Site receive')
+  await expect(page.getByRole('button', { name: 'Inbound route map rules for Europe hub (1 connection)', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: /route map rules for New York office/ })).toHaveCount(0)
+  const saved = await readTopology(page)
+  await inbound.click()
+  const rules = dialog(page, 'Route map rules · London datacenter')
+  await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('inbound')
+  const table = rules.getByRole('table', { name: 'Rules for Site receive on London primary, inbound', exact: true })
+  await expect(table.locator('tbody tr')).toHaveCount(4)
+  await expect(table.locator('tbody tr').nth(0)).toContainText('All prefixes')
+  await expect(table.locator('tbody tr').nth(1)).toContainText('Contains (including more specific)')
+  await expect(table.locator('tbody tr').nth(1)).toContainText('65040 65040')
+  await expect(table.locator('tbody tr').nth(2)).toContainText('Summarize to')
+  await expect(table.locator('tbody tr').nth(2)).toContainText('10.0.0.0/8')
+  await expect(table.locator('tbody tr').nth(3)).toContainText('Stop (drop)')
+  await expect(rules.getByRole('textbox')).toHaveCount(0)
+  expect(await readTopology(page)).toEqual(saved)
+  await rules.getByRole('button', { name: 'Close Route map rules · London datacenter', exact: true }).click()
+  await outbound.focus(); await page.keyboard.press('Enter')
+  await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('outbound')
+  await expect(rules).toContainText('Private WAN')
+  await expect(rules).toContainText('configured but inactive')
+  await expect(rules).toContainText('No rules; all routes pass unchanged.')
+  await action(page, 'Select site London datacenter', 'Show route map rules')
+  await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('all')
+  await expect(rules.locator('.policy-assignment')).toHaveCount(3)
+  await page.screenshot({ path: 'test-results/policy-badges-and-rules.png', fullPage: true })
+  await rules.getByRole('button', { name: 'Configure route maps', exact: true }).click()
+  await page.getByLabel('Route map connection', { exact: true }).selectOption('policy-peer')
+  await page.getByLabel('Outbound route map', { exact: true }).selectOption('')
+  await expect(outbound).toHaveCount(0)
+  await expect(inbound).toHaveCount(1)
+  expect((await readTopology(page)).routeMaps!.some((m) => m.id === 'visual-out')).toBe(true)
+  await page.getByRole('button', { name: 'Close Route maps · London datacenter', exact: true }).click()
+  const before = (await inbound.boundingBox())!
+  await page.getByLabel('Select site London datacenter', { exact: true }).focus()
+  await page.keyboard.press('Alt+ArrowRight')
+  expect((await inbound.boundingBox())!.x).toBeGreaterThan(before.x)
+  await page.getByLabel('Visualization mode', { exact: true }).selectOption('constellation')
+  await inbound.scrollIntoViewIfNeeded(); await inbound.click()
+  await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('inbound')
+  await action(page, 'Select site London datacenter', 'Delete site')
+  await dialog(page, 'Delete site').getByRole('button', { name: 'Confirm deletion', exact: true }).click()
+  await expect(rules).toHaveCount(0)
+  await expect(page.locator('.policy-badge')).toHaveCount(0)
+})
+
+test('routers without assigned maps have no policy badges and can inspect the empty state on mobile', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto('/')
+  await expect(page.locator('.policy-badge')).toHaveCount(0)
+  await action(page, 'Select hub Europe hub', 'Show route map rules')
+  const rules = dialog(page, 'Route map rules · Europe hub')
+  await expect(rules).toContainText('No route maps assigned to this router.')
+  await rules.getByLabel('Policy direction', { exact: true }).selectOption('outbound')
+  await expect(rules).toContainText('No outbound route maps assigned to this router.')
+  await rules.getByRole('button', { name: 'Configure route maps', exact: true }).click()
+  await expect(page.getByLabel('Route map router', { exact: true })).toHaveValue('hub:eu')
+})
+
 test('cascading hover menus trace to/from the chosen prefix without opening an inspector', async ({ page }) => {
   await page.goto('/')
   const to = await pathMenu(page, 'Select spoke Europe applications', 'to', 'London datacenter (site)')
@@ -617,7 +702,7 @@ test('JSON import/export, mobile overlays and Escape preserve user data', async 
   await expect(page.getByLabel('Topology name')).toHaveValue('Portable workspace')
 })
 
-test('VPN static editing uses the actual mouse context menu and rejects incompatible transport changes', async ({ page }) => {
+test('VPN static prefixes are site attributes, editable from either endpoint and cleaned up with the VPN', async ({ page }) => {
   await page.goto('/')
   const point = await page.getByLabel('Edit connection London backup', { exact: true }).locator('.link-hitbox').evaluate((element) => {
     const path = element as SVGPathElement
@@ -626,14 +711,77 @@ test('VPN static editing uses the actual mouse context menu and rejects incompat
     return { x: screen.x, y: screen.y }
   })
   await page.mouse.click(point.x, point.y, { button: 'right' })
+  await expect(page.getByRole('menuitem', { name: 'Static routing', exact: true })).toHaveCount(0)
   await page.getByRole('menuitem', { name: 'Edit advertisements', exact: true }).click()
-  await page.getByLabel('Route type', { exact: true }).selectOption('vpn-static')
-  await expect(page.getByLabel('Received AS path', { exact: true })).toBeDisabled()
-  expect((await readTopology(page)).connections[1].routes[0].asPath).toEqual([])
+  await expect(page.getByLabel('Route type', { exact: true })).toHaveCount(0)
+  await expect(dialog(page, 'Advertisements · London backup')).toContainText('Configure non-BGP VPN prefixes through Static routing on the site or hub')
+  await action(page, 'Select site London datacenter', 'Edit configuration')
+  await dialog(page, 'Edit site').getByRole('button', { name: 'Configure static routing', exact: true }).click()
+  await expect(page.getByLabel('Static routing VPN connection', { exact: true })).toHaveValue('vpn-eu')
+  await page.getByLabel('Site VPN static prefixes', { exact: true }).fill('10.90.0.0/16\n10.91.0.0/16')
+  await page.getByLabel('Static-only VPN', { exact: true }).check()
+  await page.getByRole('button', { name: 'Save static routing', exact: true }).click()
+  const saved = await readTopology(page)
+  expect(saved.sites[0].vpnStaticRoutes).toMatchObject([
+    { prefix: '10.90.0.0/16', connectionId: 'vpn-eu' }, { prefix: '10.91.0.0/16', connectionId: 'vpn-eu' },
+  ])
+  expect(saved.connections[1].routes).toEqual([])
+  expect(saved.connections[1].learnSiteRoutes).toBe(false)
+  await page.getByLabel('Site VPN static prefixes', { exact: true }).fill('10.90.0.1/16')
+  await page.getByRole('button', { name: 'Save static routing', exact: true }).click()
+  await expect(dialog(page, 'Static routing · London datacenter').getByRole('alert')).toContainText('Invalid static IPv4')
+  expect(await readTopology(page)).toEqual(saved)
+  await showRoutes(page)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.90.0.0/16"]')).toContainText('VPN site static')
+  await action(page, 'Select hub Europe hub', 'Static routing')
+  await expect(page.getByLabel('Site VPN static prefixes', { exact: true })).toHaveValue('10.90.0.0/16\n10.91.0.0/16')
+  await page.screenshot({ path: 'test-results/site-static-routing.png', fullPage: true })
+  await page.reload()
+  await action(page, 'Select site London datacenter', 'Static routing')
+  await expect(page.getByLabel('Site VPN static prefixes', { exact: true })).toHaveValue('10.90.0.0/16\n10.91.0.0/16')
   await action(page, 'Edit connection London backup', 'Edit configuration')
   const editor = dialog(page, 'Edit connection')
   await editor.getByLabel('Transport', { exact: true }).selectOption('ExpressRoute')
   await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
-  await expect(editor.getByRole('alert')).toContainText('Static routes are supported only on VPN')
+  await expect(editor.getByRole('alert')).toContainText('Site static routes require an attached S2S VPN')
   expect((await readTopology(page)).connections[1].transport).toBe('VPN')
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await action(page, 'Edit connection London backup', 'Delete connection')
+  await dialog(page, 'Delete connection').getByRole('button', { name: 'Confirm deletion', exact: true }).click()
+  expect((await readTopology(page)).sites[0].vpnStaticRoutes).toEqual([])
+  await expect(dialog(page, 'Static routing · London datacenter')).toContainText('No S2S VPN connections attached')
+})
+
+test('clearing requires confirmation, persists an empty workspace and allows starting from scratch', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.sites[0].vpnStaticRoutes = [{ id: 'clear-static', prefix: '10.90.0.0/16', connectionId: 'vpn-eu' }]
+  topology.routeMaps = [{ id: 'clear-map', name: 'Clear policy', hubId: 'eu', rules: [] }]
+  topology.hubs[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'clear-map' }]
+  topology.layout = { mode: 'constellation', positions: { constellation: { eu: { x: 500, y: 300 } } } }
+  await page.goto('/'); await importTopology(page, topology)
+  const original = await readTopology(page)
+  await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
+  await expect(dialog(page, 'Clear topology')).toContainText('cannot be undone')
+  await dialog(page, 'Clear topology').getByRole('button', { name: 'Cancel clearing', exact: true }).click()
+  expect(await readTopology(page)).toEqual(original)
+  await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
+  await page.keyboard.press('Escape')
+  expect(await readTopology(page)).toEqual(original)
+  await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
+  await dialog(page, 'Clear topology').getByRole('button', { name: 'Clear all objects', exact: true }).click()
+  const empty = await readTopology(page)
+  expect(empty).toEqual({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })
+  await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
+  await expect(page.locator('.policy-badge')).toHaveCount(0)
+  await expect(page.getByLabel('Visualization mode', { exact: true })).toHaveValue('layered')
+  await page.reload()
+  expect(await readTopology(page)).toEqual(empty)
+  await expect(page.locator('.empty-diagram')).toBeVisible()
+  await page.getByRole('button', { name: '+ Hub', exact: true }).click()
+  await dialog(page, 'Add hub').getByLabel('Name', { exact: true }).fill('Fresh hub')
+  await dialog(page, 'Add hub').getByLabel('Region', { exact: true }).fill('West Europe')
+  await dialog(page, 'Add hub').getByRole('button', { name: 'Create object', exact: true }).click()
+  expect((await readTopology(page)).hubs).toHaveLength(1)
+  await importTopology(page, original)
+  expect(await readTopology(page)).toEqual(original)
 })

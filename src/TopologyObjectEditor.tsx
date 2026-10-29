@@ -13,8 +13,8 @@ function Field({ title, children }: { title: string; children: ReactElement<{ 'a
 
 const prefixes = (value: string) => value.trim() === '*' ? [] : value.split(/[,\s]+/).filter(Boolean)
 
-export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps }: {
-  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void
+export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting }: {
+  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void
 }) {
   const [error, setError] = useState('')
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
@@ -51,6 +51,9 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         const remaining = new Set([...next.connections, ...next.siteLinks].map((link) => link.id))
         for (const router of [...next.hubs, ...next.sites]) {
           if (router.routeMapAssignments) router.routeMapAssignments = router.routeMapAssignments.filter((a) => remaining.has(a.connectionId))
+        }
+        for (const site of next.sites) {
+          if (site.vpnStaticRoutes) site.vpnStaticRoutes = site.vpnStaticRoutes.filter((r) => remaining.has(r.connectionId))
         }
       } else {
         const data = new FormData(event.currentTarget)
@@ -140,10 +143,15 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <p className="muted">Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.</p>
           </div>
           <p className="muted">Use Route maps on either endpoint to configure inbound/outbound policies for this connection.</p>
+          <p className="muted">Configure VPN static prefixes through Static routing on the site or hub. Remove or reassign site static routes before changing this VPN connection's site or transport.</p>
         </>}
         {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>Connection route maps</legend>
           <p>Inbound/outbound policies belong to this router and are assigned per connection. Save any configuration changes before opening its policies.</p>
           <button type="button" onClick={() => onRouteMaps({ kind: request.kind as RouterSelection['kind'], id: item.id })}>Configure route maps</button>
+        </fieldset>}
+        {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>S2S VPN static routing</legend>
+          <p>VPN static prefixes belong to the site and are associated with its VPN connections. Save configuration changes before opening static routing.</p>
+          <button type="button" onClick={() => onStaticRouting({ kind: request.kind as RouterSelection['kind'], id: item.id })}>Configure static routing</button>
         </fieldset>}
         {request.kind === 'siteLink' && <>
           <Field title="Site A"><select name="a" required defaultValue={link?.a ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>

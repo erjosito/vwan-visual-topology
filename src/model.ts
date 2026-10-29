@@ -23,10 +23,13 @@ export interface Site {
   asn: number
   prefixes: string[]
   routeMapAssignments?: RouteMapAssignment[]
+  vpnStaticRoutes?: VpnStaticRoute[]
 }
 
+export interface VpnStaticRoute { id: string; prefix: string; connectionId: string }
 export interface RouteMapAssignment { connectionId: string; inboundMapId?: string; outboundMapId?: string }
 export interface RouterSelection { kind: 'hub' | 'site'; id: string }
+export type RouteMapDirection = 'inbound' | 'outbound'
 export interface PrependRule {
   id: string
   prefixes: string[]
