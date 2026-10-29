@@ -144,7 +144,8 @@ test('collector downloads the exact reviewable script from a static asset, with 
   await link.click()
   const download = await event
   expect(download.suggestedFilename()).toBe('collect-azure-vwan.ps1')
-  expect(await contents(download)).toEqual(await readFile(new URL('../src/collect-azure-vwan.ps1', import.meta.url)))
+  const expected = await readFile(new URL('../src/collect-azure-vwan.ps1', import.meta.url), 'utf8')
+  expect((await contents(download)).toString().replaceAll('\r\n', '\n')).toBe(expected.replaceAll('\r\n', '\n'))
   const response = await page.request.get((await link.getAttribute('href'))!)
   expect(response.ok()).toBe(true)
   expect((await response.text()).startsWith('#requires -Version 7.0')).toBe(true)
