@@ -50,6 +50,7 @@ function App() {
   const [connectionId, setConnectionId] = useState('')
   const [mapRouter, setMapRouter] = useState<RouterSelection>()
   const [mapDirection, setMapDirection] = useState<RouteMapDirection>()
+  const [mapConnectionId, setMapConnectionId] = useState<string>()
   const [prefix, setPrefix] = useState('')
   const [highlighting, setHighlighting] = useState(false)
   const layout = topology.layout?.mode ?? 'layered'
@@ -93,8 +94,8 @@ function App() {
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('hub'); setPrefix(''); setHighlighting(true); setTracing(false) }
-  const openRouteMaps = (value?: RouterSelection) => { setMapRouter(value); setEditorRequest(undefined); setPanel('maps') }
-  const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection) => { setMapRouter(value); setMapDirection(direction); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
+  const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
+  const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
   const openStaticRouting = (value: RouterSelection) => { setMapRouter(value); setEditorRequest(undefined); setPanel('static') }
   const selectObject = (value: ObjectSelection) => {
     setSelection(value)
@@ -207,8 +208,8 @@ function App() {
           <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} preferredSiteLinkIds={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix).flatMap((r) => r.siteLinkIds ?? []) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} paths={paths} sourceSpokeId={tracing && sourceNode?.kind === 'spoke' && paths.some((p) => p.hubs.length) ? sourceNode.id : undefined} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
           {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination} · ${destinationPrefix || destination} · ${pathStatus}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}{tracing && <button onClick={() => setPanel('paths')}>Path details</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
           {panel === 'routes' && inspected && <RouteInspector topology={topology} simulation={simulation} router={router} view={activeView} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
-          {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} onRouter={setMapRouter} onSave={save} onClose={closePanel} />}
-          {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} onDirection={setMapDirection} onConfigure={openRouteMaps} onClose={closePanel} />}
+          {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}
+          {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
           {panel === 'static' && mapRouter && <StaticRoutingPanel key={nodeKey(mapRouter)} topology={topology} router={mapRouter} onSave={save} onClose={closePanel} />}
           {panel === 'ads' && connection && <CanvasOverlay title={`Advertisements · ${connection.name}`} className="advertisements" onClose={closePanel}>
             <p className="muted">{transportLabels[connection.transport]} · BGP advertisements only. AS paths are entered as received by the hub, including provider ASNs. Configure non-BGP VPN prefixes through Static routing on the site or hub.</p>
@@ -245,7 +246,7 @@ function App() {
             <div className="row dialog-actions"><button onClick={() => setClearRequested(false)}>Cancel clearing</button><button className="danger" onClick={() => { reset(validateTopology({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })); setZoom(1) }}>Clear all objects</button></div>
           </CanvasOverlay>}
         </div>
-        <div className="legend"><span><i className="legend-line er" />ExpressRoute</span><span><i className="legend-line vpn" />VPN</span><span><i className="legend-line sdwan" />SD-WAN</span><span><i className="legend-line preferred" />Preferred / flow path</span><span><b className="policy-tag inbound">IN</b><b className="policy-tag outbound">OUT</b>Mapped connections · click badge for rules</span><span className="live-dot">{simulation.converged ? 'Routes calculated' : 'Provisional routes'}</span></div>
+        <div className="legend"><span><i className="legend-line er" />ExpressRoute</span><span><i className="legend-line vpn" />VPN</span><span><i className="legend-line sdwan" />SD-WAN</span><span><i className="legend-line preferred" />Preferred / flow path</span><span><b className="policy-tag inbound">IN</b><b className="policy-tag outbound">OUT</b>Per-connection maps · near owning router · click for rules</span><span className="live-dot">{simulation.converged ? 'Routes calculated' : 'Provisional routes'}</span></div>
       </section>
     </main>
     {contextMenu && <TopologyContextMenu key={contextSelection ? nodeKey(contextSelection) : 'canvas'} x={contextMenu.x} y={contextMenu.y} title={contextSelection ? `${objectLabels[contextSelection.kind]} actions: ${contextObject?.name ?? ''}` : 'Canvas actions'} actions={contextActions} onClose={() => { contextMenu.invoker.focus({ preventScroll: true }); setContextMenu(undefined) }} />}

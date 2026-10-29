@@ -8,12 +8,17 @@ function RuleAction({ rule }: { rule: RouteMapRule }) {
   return <>Permit unchanged</>
 }
 
-export function RouteMapInspector({ topology, router, direction, onDirection, onConfigure, onClose }: {
-  topology: Topology; router: RouterSelection; direction?: RouteMapDirection
-  onDirection: (direction?: RouteMapDirection) => void; onConfigure: (router: RouterSelection) => void; onClose: () => void
+export function RouteMapInspector({ topology, router, direction, connectionId, onDirection, onConnection, onConfigure, onClose }: {
+  topology: Topology; router: RouterSelection; direction?: RouteMapDirection; connectionId?: string
+  onDirection: (direction?: RouteMapDirection) => void; onConnection: (connectionId?: string) => void; onConfigure: (router: RouterSelection, connectionId?: string) => void; onClose: () => void
 }) {
   const node = (router.kind === 'hub' ? topology.hubs : topology.sites).find((n) => n.id === router.id)
-  const assignments = (node?.routeMapAssignments ?? []).flatMap((binding) => {
+  const links = [
+    ...topology.connections.filter((c) => (router.kind === 'hub' ? c.hubId : c.siteId) === router.id),
+    ...(router.kind === 'site' ? topology.siteLinks.filter((l) => l.a === router.id || l.b === router.id) : []),
+  ]
+  const selectedConnection = links.some((link) => link.id === connectionId) ? connectionId : undefined
+  const assignments = (node?.routeMapAssignments ?? []).filter((a) => !selectedConnection || a.connectionId === selectedConnection).flatMap((binding) => {
     const connection = topology.connections.find((c) => c.id === binding.connectionId)
     const peer = topology.siteLinks.find((l) => l.id === binding.connectionId)
     const link = connection ?? peer
@@ -30,8 +35,9 @@ export function RouteMapInspector({ topology, router, direction, onDirection, on
   return <CanvasOverlay title={`Route map rules · ${node?.name ?? 'Router'}`} className="policy-inspector" onClose={onClose}>
     <p className="muted">Inbound means received by {node?.name}; outbound means advertised by it. Rules run in order; unmatched routes pass unchanged. Static VPN routes bypass BGP policies.</p>
     <div className="inspector-controls">
+      <label className="field"><span>Connection</span><select aria-label="Policy connection" value={selectedConnection ?? ''} onChange={(e) => onConnection(e.target.value || undefined)}><option value="">All connections</option>{links.map((link) => <option key={link.id} value={link.id}>{link.name}</option>)}</select></label>
       <label className="field"><span>Policy direction</span><select aria-label="Policy direction" value={direction ?? 'all'} onChange={(e) => onDirection(e.target.value === 'all' ? undefined : e.target.value as RouteMapDirection)}><option value="all">Inbound and outbound</option><option value="inbound">Inbound only</option><option value="outbound">Outbound only</option></select></label>
-      <button onClick={() => onConfigure(router)}>Configure route maps</button>
+      <button onClick={() => onConfigure(router, selectedConnection)}>Configure route maps</button>
     </div>
     {assignments.map(({ link, other, maps }) => <section key={link.id} className="policy-connection" aria-label={`Policies on ${link.name}`}>
       <h3>{link.name}</h3><p className="muted">To {other?.name}{!link.enabled && ' · Connection down; policies are configured but inactive'}</p>
@@ -48,6 +54,6 @@ export function RouteMapInspector({ topology, router, direction, onDirection, on
         </table></div> : <p className="muted">No rules; all routes pass unchanged.</p>}
       </section>)}
     </section>)}
-    {!assignments.length && <p className="empty">No {direction ? `${direction} ` : ''}route maps assigned to this router.</p>}
+    {!assignments.length && <p className="empty">No {direction ? `${direction} ` : ''}route maps assigned to {selectedConnection ? 'this connection' : 'this router'}.</p>}
   </CanvasOverlay>
 }

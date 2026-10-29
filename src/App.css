@@ -84,14 +84,18 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .edge-badge rect { fill: #ffffffed; stroke: #e0e7f2; stroke-width: 1; }
 .edge-badge .link-label { stroke: none; fill: #697f9c; font-size: 10px; }
 .is-repositioning .edge-badge { pointer-events: none; }
-.policy-badge { cursor: pointer; }
-.policy-badge rect { stroke-width: 1; }
-.policy-badge.inbound rect { fill: #f0eaff; stroke: #b4a0de; }
-.policy-badge.outbound rect { fill: #e6f4fb; stroke: #8bbbd3; }
-.policy-badge text { text-anchor: middle; font-size: 11px; font-weight: 700; pointer-events: none; }
-.policy-badge.inbound text { fill: #62419c; }.policy-badge.outbound text { fill: #21617f; }
-.policy-badge:hover rect, .policy-badge:focus-visible rect { stroke: #2568d7; stroke-width: 2; }
-.policy-badge:focus-visible { outline: 2px solid #2568d7; outline-offset: 3px; }
+.policy-marker { cursor: pointer; }
+.policy-marker rect { stroke-width: 1; }
+.policy-marker.inbound rect { fill: #f0eaff; stroke: #b4a0de; }
+.policy-marker.outbound rect { fill: #e6f4fb; stroke: #8bbbd3; }
+.policy-marker text { text-anchor: middle; font-size: 10px; font-weight: 700; pointer-events: none; }
+.policy-marker.inbound text { fill: #62419c; }.policy-marker.outbound text { fill: #21617f; }
+.policy-marker:hover rect, .policy-marker:focus-visible rect { stroke: #2568d7; stroke-width: 2; }
+.policy-marker:focus-visible { outline: 2px solid #2568d7; outline-offset: 3px; }
+.policy-marker.is-down rect { stroke-dasharray: 3 2; }
+.policy-guide { pointer-events: none; fill: none; }.policy-guide.inbound { stroke: #8463b7; }.policy-guide.outbound { stroke: #397c9e; }
+.policy-leader { stroke-width: 1; opacity: .65; }.policy-arrow { stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.policy-guide.is-down { opacity: .5; }
 .policy-tag { display: inline-block; border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: 700; white-space: nowrap; }
 .policy-tag.inbound { color: #62419c; background: #f0eaff; }.policy-tag.outbound { color: #21617f; background: #e6f4fb; }
 .policy-connection { margin-top: 20px; }.policy-connection > h3 { font-size: 14px; overflow-wrap: anywhere; }.policy-connection > .muted { margin: 4px 0 12px; }

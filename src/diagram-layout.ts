@@ -49,5 +49,11 @@ export function diagramCurve(a: NodePosition, b: NodePosition, aSize: NodePositi
   return {
     d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
     label: { x: (start.x + 2 * control.x + end.x) / 4, y: (start.y + 2 * control.y + end.y) / 4 },
+    at: (t: number) => ({
+      x: (1 - t) ** 2 * start.x + 2 * (1 - t) * t * control.x + t ** 2 * end.x,
+      y: (1 - t) ** 2 * start.y + 2 * (1 - t) * t * control.y + t ** 2 * end.y,
+      dx: 2 * (1 - t) * (control.x - start.x) + 2 * t * (end.x - control.x),
+      dy: 2 * (1 - t) * (control.y - start.y) + 2 * t * (end.y - control.y),
+    }),
   }
 }

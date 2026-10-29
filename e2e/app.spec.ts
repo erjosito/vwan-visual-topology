@@ -50,7 +50,7 @@ test('tab icon resolves to a browser-decodable SVG rather than the app fallback'
   }, url)).toBe(true)
 })
 
-test('policy badges count connections per router and reveal ordered rules without editing the topology', async ({ page }) => {
+test('per-connection policy marks distinguish parallel links, owners and directions and open only their rules', async ({ page }) => {
   const topology = structuredClone(example)
   topology.siteLinks = [{ id: 'policy-peer', name: 'Private WAN', a: 'dc', b: 'ny', enabled: false,
     aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }]
@@ -64,24 +64,47 @@ test('policy badges count connections per router and reveal ordered rules withou
     { id: 'visual-out', name: 'Site export', siteId: 'dc', rules: [] },
     { id: 'visual-hub', name: 'Hub receive', hubId: 'eu', rules: [] },
     { id: 'visual-unused', name: 'Unassigned resource', siteId: 'ny', rules: [] },
+    { id: 'visual-peer-in', name: 'Peer receive', siteId: 'ny', rules: [] },
   ]
   topology.sites[0].routeMapAssignments = [
-    { connectionId: 'er-eu', inboundMapId: 'visual-in' }, { connectionId: 'vpn-eu', inboundMapId: 'visual-in' },
+    { connectionId: 'er-eu', inboundMapId: 'visual-in', outboundMapId: 'visual-out' }, { connectionId: 'vpn-eu', inboundMapId: 'visual-in' },
     { connectionId: 'policy-peer', outboundMapId: 'visual-out' },
   ]
-  topology.hubs[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'visual-hub' }]
+  topology.sites[1].routeMapAssignments = [{ connectionId: 'policy-peer', inboundMapId: 'visual-peer-in' }]
+  topology.hubs[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'visual-hub', outboundMapId: 'visual-hub' }]
   await page.goto('/'); await importTopology(page, topology)
-  const inbound = page.getByRole('button', { name: 'Inbound route map rules for London datacenter (2 connections)', exact: true })
-  const outbound = page.getByRole('button', { name: 'Outbound route map rules for London datacenter (1 connection)', exact: true })
-  await expect(inbound).toHaveText(/IN 2$/)
-  await expect(outbound).toHaveText(/OUT 1$/)
-  await expect(inbound.locator('title')).toContainText('London primary: Site receive')
-  await expect(page.getByRole('button', { name: 'Inbound route map rules for Europe hub (1 connection)', exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: /route map rules for New York office/ })).toHaveCount(0)
+  const inbound = page.getByRole('button', { name: 'Inbound route map rules for London datacenter on London primary', exact: true })
+  const backup = page.getByRole('button', { name: 'Inbound route map rules for London datacenter on London backup', exact: true })
+  const outbound = page.getByRole('button', { name: 'Outbound route map rules for London datacenter on Private WAN', exact: true })
+  const hubInbound = page.getByRole('button', { name: 'Inbound route map rules for Europe hub on London primary', exact: true })
+  const hubOutbound = page.getByRole('button', { name: 'Outbound route map rules for Europe hub on London primary', exact: true })
+  await expect(page.locator('.policy-badge')).toHaveCount(0)
+  await expect(page.locator('.policy-marker')).toHaveCount(7)
+  await expect(inbound.locator('text')).toHaveText('IN')
+  await expect(outbound.locator('text')).toHaveText('OUT')
+  await expect(inbound.locator('title')).toContainText('Site receive')
+  await expect(inbound).toHaveAttribute('data-connection-id', 'er-eu')
+  await expect(backup).toHaveAttribute('data-connection-id', 'vpn-eu')
+  expect(await inbound.getAttribute('transform')).not.toBe(await backup.getAttribute('transform'))
+  await expect(page.getByRole('button', { name: /route map rules for Berlin branch/ })).toHaveCount(0)
+  for (const [marker, sign] of [[inbound, 1], [hubInbound, 1], [hubOutbound, -1]] as const) {
+    const dot = await marker.evaluate((element) => {
+      const arrow = element.previousElementSibling!.querySelector('.policy-arrow') as SVGGraphicsElement
+      const matrix = arrow.getScreenCTM()!
+      const from = new DOMPoint(-9, 0).matrixTransform(matrix), to = new DOMPoint(9, 0).matrixTransform(matrix)
+      const owner = [...document.querySelectorAll('[data-node-id]')].find((node) => node.getAttribute('data-node-id') === element.getAttribute('data-router-id'))!.getBoundingClientRect()
+      return (to.x - from.x) * (owner.x + owner.width / 2 - (from.x + to.x) / 2) + (to.y - from.y) * (owner.y + owner.height / 2 - (from.y + to.y) / 2)
+    })
+    expect(dot * sign).toBeGreaterThan(0)
+  }
+  await page.screenshot({ path: 'test-results/connection-policy-marks.png', fullPage: true })
   const saved = await readTopology(page)
   await inbound.click()
   const rules = dialog(page, 'Route map rules · London datacenter')
   await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('inbound')
+  await expect(rules.getByLabel('Policy connection', { exact: true })).toHaveValue('er-eu')
+  await expect(rules.locator('.policy-assignment')).toHaveCount(1)
+  await expect(rules.getByRole('region', { name: 'Policies on London backup', exact: true })).toHaveCount(0)
   const table = rules.getByRole('table', { name: 'Rules for Site receive on London primary, inbound', exact: true })
   await expect(table.locator('tbody tr')).toHaveCount(4)
   await expect(table.locator('tbody tr').nth(0)).toContainText('All prefixes')
@@ -93,39 +116,68 @@ test('policy badges count connections per router and reveal ordered rules withou
   await expect(rules.getByRole('textbox')).toHaveCount(0)
   expect(await readTopology(page)).toEqual(saved)
   await rules.getByRole('button', { name: 'Close Route map rules · London datacenter', exact: true }).click()
+  await backup.click()
+  await expect(rules.getByLabel('Policy connection', { exact: true })).toHaveValue('vpn-eu')
+  await expect(rules.getByRole('table', { name: 'Rules for Site receive on London backup, inbound', exact: true })).toBeVisible()
+  await rules.getByRole('button', { name: 'Close Route map rules · London datacenter', exact: true }).click()
+  await hubInbound.click()
+  const hubRules = dialog(page, 'Route map rules · Europe hub')
+  await expect(hubRules).toContainText('Hub receive')
+  await expect(hubRules.getByLabel('Policy connection', { exact: true })).toHaveValue('er-eu')
+  await hubRules.getByRole('button', { name: 'Close Route map rules · Europe hub', exact: true }).click()
   await outbound.focus(); await page.keyboard.press('Enter')
   await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('outbound')
+  await expect(rules.getByLabel('Policy connection', { exact: true })).toHaveValue('policy-peer')
   await expect(rules).toContainText('Private WAN')
   await expect(rules).toContainText('configured but inactive')
   await expect(rules).toContainText('No rules; all routes pass unchanged.')
   await action(page, 'Select site London datacenter', 'Show route map rules')
   await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('all')
-  await expect(rules.locator('.policy-assignment')).toHaveCount(3)
-  await page.screenshot({ path: 'test-results/policy-badges-and-rules.png', fullPage: true })
+  await expect(rules.getByLabel('Policy connection', { exact: true })).toHaveValue('')
+  await expect(rules.locator('.policy-assignment')).toHaveCount(4)
+  await rules.getByLabel('Policy connection', { exact: true }).selectOption('policy-peer')
+  await page.screenshot({ path: 'test-results/connection-policy-rules.png', fullPage: true })
   await rules.getByRole('button', { name: 'Configure route maps', exact: true }).click()
-  await page.getByLabel('Route map connection', { exact: true }).selectOption('policy-peer')
+  await expect(page.getByLabel('Route map connection', { exact: true })).toHaveValue('policy-peer')
   await page.getByLabel('Outbound route map', { exact: true }).selectOption('')
   await expect(outbound).toHaveCount(0)
   await expect(inbound).toHaveCount(1)
   expect((await readTopology(page)).routeMaps!.some((m) => m.id === 'visual-out')).toBe(true)
   await page.getByRole('button', { name: 'Close Route maps · London datacenter', exact: true }).click()
-  const before = (await inbound.boundingBox())!
+  const before = await inbound.getAttribute('transform')
   await page.getByLabel('Select site London datacenter', { exact: true }).focus()
   await page.keyboard.press('Alt+ArrowRight')
-  expect((await inbound.boundingBox())!.x).toBeGreaterThan(before.x)
+  expect(await inbound.getAttribute('transform')).not.toBe(before)
   await page.getByLabel('Visualization mode', { exact: true }).selectOption('constellation')
+  await page.getByLabel('Canvas zoom', { exact: true }).selectOption('1.5')
+  const distance = await inbound.evaluate((element) => {
+    const arrow = element.previousElementSibling!.querySelector('.policy-arrow') as SVGGraphicsElement
+    const anchor = new DOMPoint(0, 0).matrixTransform(arrow.getScreenCTM()!)
+    const curve = document.querySelector('[data-testid="link-er-eu"]') as SVGPathElement
+    return Math.min(...Array.from({ length: 201 }, (_, i) => {
+      const point = curve.getPointAtLength(curve.getTotalLength() * i / 200)
+      const screen = new DOMPoint(point.x, point.y).matrixTransform(curve.getScreenCTM()!)
+      return Math.hypot(anchor.x - screen.x, anchor.y - screen.y)
+    }))
+  })
+  expect(distance).toBeLessThan(3)
   await inbound.scrollIntoViewIfNeeded(); await inbound.click()
   await expect(rules.getByLabel('Policy direction', { exact: true })).toHaveValue('inbound')
+  await action(page, 'Edit connection London primary', 'Delete connection')
+  await dialog(page, 'Delete connection').getByRole('button', { name: 'Confirm deletion', exact: true }).click()
+  await expect(inbound).toHaveCount(0)
+  await expect(rules.getByLabel('Policy connection', { exact: true })).toHaveValue('')
+  await expect(rules.getByRole('region', { name: 'Policies on London backup', exact: true })).toBeVisible()
   await action(page, 'Select site London datacenter', 'Delete site')
   await dialog(page, 'Delete site').getByRole('button', { name: 'Confirm deletion', exact: true }).click()
   await expect(rules).toHaveCount(0)
-  await expect(page.locator('.policy-badge')).toHaveCount(0)
+  await expect(page.locator('.policy-marker')).toHaveCount(0)
 })
 
-test('routers without assigned maps have no policy badges and can inspect the empty state on mobile', async ({ page }) => {
+test('routers without assigned maps have no connection policy marks and can inspect the empty state on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
-  await expect(page.locator('.policy-badge')).toHaveCount(0)
+  await expect(page.locator('.policy-marker')).toHaveCount(0)
   await action(page, 'Select hub Europe hub', 'Show route map rules')
   const rules = dialog(page, 'Route map rules · Europe hub')
   await expect(rules).toContainText('No route maps assigned to this router.')
@@ -772,7 +824,7 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   const empty = await readTopology(page)
   expect(empty).toEqual({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
-  await expect(page.locator('.policy-badge')).toHaveCount(0)
+  await expect(page.locator('.policy-marker')).toHaveCount(0)
   await expect(page.getByLabel('Visualization mode', { exact: true })).toHaveValue('layered')
   await page.reload()
   expect(await readTopology(page)).toEqual(empty)

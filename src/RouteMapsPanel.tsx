@@ -43,8 +43,8 @@ function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: RouteMap)
   </form>
 }
 
-export function RouteMapsPanel({ topology, simulation, router, onRouter, onSave, onClose }: {
-  topology: Topology; simulation: Simulation; router?: RouterSelection; onRouter: (router: RouterSelection) => void; onSave: (topology: Topology) => void; onClose: () => void
+export function RouteMapsPanel({ topology, simulation, router, connectionId, onRouter, onSave, onClose }: {
+  topology: Topology; simulation: Simulation; router?: RouterSelection; connectionId?: string; onRouter: (router: RouterSelection) => void; onSave: (topology: Topology) => void; onClose: () => void
 }) {
   const owner: RouterSelection = router ?? (topology.hubs[0] ? { kind: 'hub', id: topology.hubs[0].id } : { kind: 'site', id: topology.sites[0]?.id ?? '' })
   const routerKey = owner.id ? `${owner.kind}:${owner.id}` : ''
@@ -54,7 +54,7 @@ export function RouteMapsPanel({ topology, simulation, router, onRouter, onSave,
     ...topology.connections.filter((c) => (owner.kind === 'hub' ? c.hubId : c.siteId) === owner.id),
     ...(owner.kind === 'site' ? topology.siteLinks.filter((l) => l.a === owner.id || l.b === owner.id) : []),
   ]
-  const [linkId, setLinkId] = useState('')
+  const [linkId, setLinkId] = useState(connectionId ?? '')
   const link = links.find((l) => l.id === linkId) ?? links[0]
   const binding = node?.routeMapAssignments?.find((a) => a.connectionId === link?.id)
   const [mapId, setMapId] = useState('')
