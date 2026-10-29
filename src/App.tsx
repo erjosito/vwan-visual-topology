@@ -172,8 +172,9 @@ function App() {
   const contextObject = contextSelection && topologyObject(topology, contextSelection)
   const contextConnection = contextSelection?.kind === 'connection' ? topology.connections.find((connection) => connection.id === contextSelection.id) : undefined
   const vpnActions: ContextAction[] = contextConnection?.transport === 'VPN'
-    ? (['static', 'bgp'] as const).filter((mode) => vpnRoutingMode(topology, contextConnection) !== mode).map((mode) => ({
+    ? (['static', 'bgp'] as const).map((mode) => ({
       label: mode === 'static' ? 'Change to static routing' : 'Change to BGP routing',
+      disabled: vpnRoutingMode(topology, contextConnection) === mode,
       run: () => { setVpnConversion({ connectionId: contextConnection.id, mode }); setEditorRequest(undefined); setPanel('vpnWizard') },
     })) : []
   const canvasActions: ContextAction[] = [

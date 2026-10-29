@@ -143,7 +143,7 @@ Version-1 imports with legacy connection map references or embedded prepend rule
 
 ### Site-owned VPN static routing
 
-For a guided conversion, right-click the **VPN connection** and select **Change to static routing** or **Change to BGP routing**, depending on its current configuration (mixed routing offers both). The wizard first configures destinations, then reviews every change before applying it. Cancel/Escape or Back makes no changes. It detects connection changes after review rather than overwriting them with a stale plan.
+For a guided conversion, right-click the **VPN connection** and select **Change to static routing** or **Change to BGP routing**. The command for the current routing mode is grayed out; mixed static/BGP routing enables both conversions. The wizard first configures destinations, then reviews every change before applying it. Cancel/Escape or Back makes no changes. It detects connection changes after review rather than overwriting them with a stale plan.
 
 Destination suggestions use the site's assigned prefix, existing advertisements/static routes for that VPN, and learned site prefixes when enabled. Hub/spoke prefixes appear as source context, never as invented on-premises static destinations. Unknown destinations must be entered explicitly. Static conversion saves site-owned routes and clears that VPN's BGP advertisements/learning. BGP conversion removes only that VPN's site statics and creates editable BGP advertisements, initially using the site's ASN for former static destinations; optional site-originated/learned import is configurable. Static routes have no old AS paths to restore.
 
