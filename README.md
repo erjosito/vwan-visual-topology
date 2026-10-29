@@ -16,6 +16,8 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **+ / - zoom controls** synchronize with the percentage selector. The SVG viewport fills the available canvas without unusable side gutters, so nodes can be dragged to either side in both layouts.
 - **Show BGP routes** on hubs and sites opens a movable, resizable, nonmodal canvas inspector. Compact prefix/reason headings group every candidate; the first column contains only `*` for preferred routes or is blank for alternatives. Preferred paths remain green, with every AS path visible. Click a heading prefix to highlight its paths.
 - Enable private and/or Internet routing intent. Inspect **hub policy routes and firewall forwarding routes separately**, and see firewall traversal in flow traces.
+- Routing intent changes the hub itself into a **Secured virtual hub** on the canvas, without an extra firewall node or attachment. Either policy enables the secured icon; disabling both restores the normal hub. Firewall traversal highlights the secured hub and remains explicit in path details.
+- **File issue** in the header opens this repository's new GitHub issue page in a separate tab, leaving the workspace unchanged. No topology data is attached automatically.
 - Connect on-premises sites with directional BGP export allowlists and AS-path prepends. Configure site ASNs and originated prefixes, then enable mesh route import on the desired hub connections.
 - Create named, reusable route maps owned by a **hub or on-premises site**. Each router assigns its own inbound/outbound policies to specific connections; the two ends are independent. Policies support ordered prefix matching, blocking, summarization and ASN prepending.
 - **IN / OUT filter marks** identify each mapped connection near its owning hub/site, with contrasting, white-outlined arrows showing advertisement direction. Hover or focus a mark to preview the applied rules; click to inspect that exact endpoint, connection and direction, or choose **Show route map rules** for the router's complete policy list.
@@ -57,7 +59,7 @@ Production output is `dist`. The app uses relative asset URLs and can be served 
 
 Hub icons display the hub name and region, not an AS path. **AS Path** in the hub configuration is a routing-preference option; it is not an AS path assigned to the hub. Actual AS paths appear on individual routes in the route tables.
 
-Canvas hubs, spokes and ER locations use Microsoft's official **Virtual WAN Hub**, **Virtual Networks** and **ExpressRoute Circuits** icons, respectively, from the [Azure Architecture Center icon collection](https://learn.microsoft.com/azure/architecture/icons/) (V24). The SVGs in `src/assets/azure` are unchanged originals, displayed proportionally without recoloring. Microsoft permits copying, distributing and displaying these icons in architectural diagrams, training materials or documentation; all other rights are reserved by Microsoft.
+Canvas hubs, spokes and ER locations use Microsoft's official **Virtual WAN Hub**, **Virtual Networks** and **ExpressRoute Circuits** icons, respectively, from the [Azure Architecture Center icon collection](https://learn.microsoft.com/azure/architecture/icons/) (V24). Secured hubs use the collection's **Azure Firewall Manager** security artwork (`00271-icon-service-Azure-Firewall-Manager.svg`); V24 has no separately named secured-virtual-hub asset. The SVGs in `src/assets/azure` are unchanged originals, displayed proportionally without recoloring. Microsoft permits copying, distributing and displaying these icons in architectural diagrams, training materials or documentation; all other rights are reserved by Microsoft.
 
 ### ExpressRoute locations
 
@@ -75,7 +77,7 @@ ExpressRoute Global Reach, shared-circuit hub-to-hub route reflection, redundant
 
 Right-click a hub, spoke, site, hub connection, on-premises link or empty canvas for its contextual menu. Hubs/sites offer **Show BGP routes** and **Route maps**; hubs also offer firewall routes when applicable. Hubs, spokes and sites offer both path commands. Connections offer configuration, advertisements, enable/disable and deletion, not router policies or a router's BGP table. Shift+F10 opens the same menu; use arrow keys to navigate and Escape to dismiss. Left-click selects objects and hub/site route highlighting.
 
-Drag any hub, spoke or site to reposition it without changing its configuration or routing. Focus a node and use **Alt+Arrow** to move it, or **Alt+Shift+Arrow** for larger steps. Switching visualization preserves each view's arrangement; **Reset layout** restores its automatic positions without changing the other view. Node positions and the active visualization survive reloads and JSON import/export. Firewall icons move with their hub.
+Drag any hub, spoke or site to reposition it without changing its configuration or routing. Focus a node and use **Alt+Arrow** to move it, or **Alt+Shift+Arrow** for larger steps. Switching visualization preserves each view's arrangement; **Reset layout** restores its automatic positions without changing the other view. Node positions and the active visualization survive reloads and JSON import/export. Secured hubs remain single hub nodes with the same identity and saved position.
 
 The **Inspect router** selector switches between hubs and sites. Hub views distinguish system, VPN-static and routing-intent entries from BGP candidates. AS paths describe route advertisements, not hub or firewall identities.
 
@@ -89,7 +91,7 @@ Use **+ Hub** or **+ Site** above the diagram, or the matching canvas menu comma
 
 Use **Clear topology** in the header to start from scratch. Confirmation removes all objects, route maps, static prefixes and saved layout positions, resets zoom/view, and replaces the browser's saved workspace. Reloading keeps it empty; add a hub/site to begin again or import a backup.
 
-**Delete** shows a confirmation, including dependent spokes/connections/links. Deleting a router removes its owned maps; deleting a connection removes its endpoint assignments but retains reusable maps. Deleting a hub keeps its on-premises sites. Export JSON first if you need a backup. Keyboard users can select objects with Enter/Space; modeless editors support Tab and Escape. Firewall icons select their hub.
+**Delete** shows a confirmation, including dependent spokes/connections/links. Deleting a router removes its owned maps; deleting a connection removes its endpoint assignments but retains reusable maps. Deleting a hub keeps its on-premises sites. Export JSON first if you need a backup. Keyboard users can select objects with Enter/Space; modeless editors support Tab and Escape. Right-click a secured hub for **Show firewall routes**; hub/firewall route tables and path semantics are unchanged.
 
 ### Reusable route maps
 

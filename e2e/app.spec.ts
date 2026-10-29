@@ -54,6 +54,24 @@ test('tab icon resolves to a browser-decodable SVG rather than the app fallback'
   }, url)).toBe(true)
 })
 
+test('File issue opens the repository issue form in a new tab without changing or sharing the workspace', async ({ page }) => {
+  await page.goto('/')
+  const topology = await readTopology(page)
+  const url = page.url()
+  const issueUrl = 'https://github.com/erjosito/vwan-visual-topology/issues/new'
+  await page.context().route(issueUrl, (route) => route.fulfill({ contentType: 'text/html', body: '<title>New issue</title>' }))
+  const link = page.getByRole('link', { name: 'File issue', exact: true })
+  await expect(link).toHaveAttribute('href', issueUrl)
+  await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
+  const popup = page.waitForEvent('popup')
+  await link.click()
+  const issuePage = await popup
+  await expect(issuePage).toHaveURL(issueUrl)
+  await issuePage.close()
+  expect(page.url()).toBe(url)
+  expect(await readTopology(page)).toEqual(topology)
+})
+
 test('canvas hubs and spokes render official Azure SVG icons in both layouts', async ({ page }) => {
   await page.goto('/')
   for (const [kind, count] of [['hub', example.hubs.length], ['spoke', example.spokes.length]] as const) {
@@ -668,6 +686,46 @@ test('ECMP alternatives remain visible and connection failure withdraws only the
   await expect(rows.filter({ hasText: 'VPN 1' })).toHaveCount(0)
 })
 
+test('either routing policy secures the existing hub icon in both layouts and disabling both restores it', async ({ page }) => {
+  await page.goto('/')
+  const hub = page.getByLabel('Select hub Europe hub', { exact: true })
+  const icon = hub.locator('.node-icon.hub image')
+  const originalIcon = await icon.getAttribute('href')
+  let securedIcon: string | null = null
+  for (const [privateTraffic, internetTraffic] of [[true, false], [false, true], [false, false]]) {
+    await action(page, 'Select hub Europe hub', 'Edit configuration')
+    const editor = dialog(page, 'Edit hub')
+    await editor.getByLabel('Private traffic routing intent', { exact: true }).setChecked(privateTraffic)
+    await editor.getByLabel('Internet traffic routing intent', { exact: true }).setChecked(internetTraffic)
+    await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+    const secured = privateTraffic || internetTraffic
+    for (const layout of ['layered', 'constellation']) {
+      await page.getByLabel('Visualization mode', { exact: true }).selectOption(layout)
+      await expect(hub.locator('.node-kind')).toHaveText(secured ? 'SECURED VIRTUAL HUB' : 'VIRTUAL HUB')
+      await expect(hub.locator('.node-icon.secured')).toHaveCount(secured ? 1 : 0)
+      await expect(page.locator('.firewall-node')).toHaveCount(0)
+      await expect(page.locator('.hub-node')).toHaveCount(example.hubs.length)
+      await expect(page.locator('.site-node')).toHaveCount(example.sites.length)
+      const currentIcon = await icon.getAttribute('href')
+      if (secured) {
+        expect(currentIcon).not.toBe(originalIcon)
+        if (securedIcon) expect(currentIcon).toBe(securedIcon)
+        securedIcon = currentIcon
+        expect(await page.evaluate(async (url) => {
+          const image = new Image(); image.src = url!; await image.decode()
+          return image.naturalWidth > 0 && image.naturalHeight > 0
+        }, currentIcon)).toBe(true)
+        await expect(hub.locator('title')).toContainText('Azure Firewall')
+      } else expect(currentIcon).toBe(originalIcon)
+    }
+    if (internetTraffic) {
+      await page.reload()
+      await expect(hub.locator('.node-icon.secured')).toHaveCount(1)
+      await page.screenshot({ path: 'test-results/secured-virtual-hub.png', fullPage: true })
+    }
+  }
+})
+
 test('routing intent stays on hubs, with separate overlay tables and firewall paths', async ({ page }) => {
   await page.goto('/')
   await action(page, 'Select hub Europe hub', 'Edit configuration')
@@ -676,6 +734,8 @@ test('routing intent stays on hubs, with separate overlay tables and firewall pa
   await editor.getByLabel('Internet traffic routing intent', { exact: true }).check()
   await editor.getByLabel('Additional private traffic prefixes', { exact: true }).fill('100.64.0.0/10')
   await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+  await expect(page.locator('.firewall-node')).toHaveCount(0)
+  await expect(page.getByLabel('Select hub Europe hub', { exact: true }).locator('.node-icon.secured')).toHaveCount(1)
   await showRoutes(page)
   await expect(page.locator('.effective-routes table')).toContainText('100.64.0.0/10')
   await expect(page.locator('.effective-routes table')).not.toContainText('10.20.0.0/16')
@@ -687,6 +747,8 @@ test('routing intent stays on hubs, with separate overlay tables and firewall pa
   await page.getByLabel('Destination prefix', { exact: true }).selectOption('10.20.0.0/16')
   await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
   await expect(page.locator('.flow-result')).toContainText('Azure Firewall')
+  await expect(page.getByLabel('Select hub Europe hub', { exact: true })).toHaveClass(/firewall-active/)
+  await expect(page.getByLabel('Select hub Europe hub', { exact: true }).locator('title')).toContainText('Active path traverses Azure Firewall')
   expect((await readTopology(page)).hubs[0].routingIntent.private).toBe(true)
 })
 

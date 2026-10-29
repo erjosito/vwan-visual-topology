@@ -5,6 +5,7 @@ import { transportLabels } from './model'
 import type { Candidate, FlowPath } from './routing'
 import { diagramCurve, diagramLayout } from './diagram-layout'
 import virtualWanHubIcon from './assets/azure/virtual-wan-hub.svg'
+import securedHubIcon from './assets/azure/azure-firewall-manager.svg'
 import virtualNetworkIcon from './assets/azure/virtual-network.svg'
 import expressRouteIcon from './assets/azure/expressroute.svg'
 import { RouteMapPreview } from './RouteMapPreview'
@@ -19,10 +20,10 @@ interface Props {
   onShowRouteMapRules: (router: RouterSelection, direction: RouteMapDirection, connectionId: string) => void
 }
 
-function NodeIcon({ kind }: { kind: 'hub' | 'spoke' | 'site' | 'erLocation' }) {
-  return <g className={`node-icon ${kind}`} aria-hidden="true" transform="translate(-79,-21)">
+function NodeIcon({ kind, secured = false }: { kind: 'hub' | 'spoke' | 'site' | 'erLocation'; secured?: boolean }) {
+  return <g className={`node-icon ${kind}${secured ? ' secured' : ''}`} aria-hidden="true" transform="translate(-79,-21)">
     {kind === 'site' ? <><circle r="13" /><path d="M -7 7 V -7 H 2 V -2 H 7 V 7 Z M -3 -3 H -1 M -3 1 H -1 M -3 5 H -1 M 3 2 H 5" /></>
-      : <image href={kind === 'hub' ? virtualWanHubIcon : kind === 'erLocation' ? expressRouteIcon : virtualNetworkIcon} x="-14" y="-14" width="28" height="28" preserveAspectRatio="xMidYMid meet" />}
+      : <image href={kind === 'hub' ? secured ? securedHubIcon : virtualWanHubIcon : kind === 'erLocation' ? expressRouteIcon : virtualNetworkIcon} x="-14" y="-14" width="28" height="28" preserveAspectRatio="xMidYMid meet" />}
   </g>
 }
 
@@ -214,14 +215,11 @@ export function TopologyDiagram({ topology, hubId, selected, preferredSiteLinkId
       const active = link.enabled && activeErLinks.has(link.id)
       return <g key={link.id} className="clickable" {...selectable('erLink', link.id, `Edit ER connection ${link.name}`)}><title>{link.name} · ExpressRoute · {link.enabled ? 'Enabled' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : ' (down)'}`, edge.label)}</g>
     })}
-    {topology.hubs.filter((h) => h.routingIntent.private || h.routingIntent.internet).map((hub) => {
-      const p = point(hub.id)
-      const active = tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId
-      return <g key={`fw:${hub.id}`} className="firewall-node draggable-node" transform={`translate(${p.x + 82}, ${p.y + 83})`} {...selectable('hub', hub.id, `Select firewall for ${hub.name}`)} {...movable('hub', hub.id)}><title>Azure Firewall · {hub.name}</title><path className={`network-link ${active ? 'preferred-link' : ''}`} d="M -40 -35 L -10 -18" /><rect x="-52" y="-17" width="104" height="34" rx="10" /><text y="4" className="node-detail">Azure Firewall</text></g>
-    })}
     {topology.hubs.map((hub) => {
       const p = point(hub.id)
-      return <g key={hub.id} data-node-id={hub.id} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, `Select hub ${hub.name}`)} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''}`}><title>{hub.name} · {hub.region}</title><rect x="-112" y="-48" width="224" height="96" rx="18" /><NodeIcon kind="hub" /><text x="12" y="-19" className="node-kind">VIRTUAL HUB</text><text y="6" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="29" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text></g>
+      const secured = hub.routingIntent.private || hub.routingIntent.internet
+      const firewallActive = secured && (tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId)
+      return <g key={hub.id} data-node-id={hub.id} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, `Select hub ${hub.name}`)} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{secured && ` · Secured virtual hub · Azure Firewall (${[hub.routingIntent.private && 'private traffic', hub.routingIntent.internet && 'Internet traffic'].filter(Boolean).join(', ')})`}{tracing && firewallActive && ' · Active path traverses Azure Firewall'}</title><rect x="-112" y="-48" width="224" height="96" rx="18" /><NodeIcon kind="hub" secured={secured} /><text x="12" y="-19" className="node-kind">{secured ? 'SECURED VIRTUAL HUB' : 'VIRTUAL HUB'}</text><text y="6" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="29" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text></g>
     })}
     {topology.spokes.map((spoke) => {
       const p = point(spoke.id)
