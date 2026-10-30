@@ -19,9 +19,10 @@ function download(value: unknown, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighlight, onClose }: {
+export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighlight, onProfileChange, onClose }: {
   topology: Topology; onFinding: (finding: DiagnosticsFinding) => void
   onInspect: (node: ObjectSelection) => void; onClearHighlight: () => void; onClose: () => void
+  onProfileChange?: () => void
 }) {
   const nodes = [
     ...topology.spokes.map((node) => ({ kind: 'spoke' as const, id: node.id, name: node.name })),
@@ -67,6 +68,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighli
   const change = (next: DiagnosticsProfile) => {
     try {
       const valid = validateDiagnosticsProfile(next)
+      onProfileChange?.()
       importRequest.current++
       onClearHighlight()
       setProfile(valid); setReport(undefined); setError('')

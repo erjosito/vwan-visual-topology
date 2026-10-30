@@ -56,6 +56,7 @@ export interface DiagnosticsReport {
   limitations: string[]
 }
 export interface DiagnosticsOptions {
+  automatic?: boolean
   maxProbes?: number
   maxCells?: number
   maxFindings?: number
@@ -81,6 +82,9 @@ const messages = {
   'export-ok': ['Route advertisement constraint satisfied', 'The scoped after-policy advertisement matches the declared constraint. This is not proof of neighbor acceptance.'],
   failure: ['Single-link dependency', 'Removing this enabled modeled link breaks a previously satisfied required flow. Endpoint attachment loss is included; independent physical failure domains and recovery timing are not modeled.'],
   'failure-unknown': ['Single-link scenario not fully assessed', 'The cloned failure scenario has unsupported or incomplete coverage. No resilience conclusion is established.'],
+  'network-unreachable': ['Unreachable network', 'No selected path reaches this network from the other endpoint. This may be intentional isolation; add a flow requirement to declare the expected behavior.'],
+  'network-return': ['Missing return route', 'Forward delivery exists, but no selected return path reaches the source network.'],
+  'unowned-advertisement': ['Advertised networks have no declared owner', 'These advertisements or VPN static routes cannot be verified end to end because their destination networks are not assigned to a site or VNet. An advertisement alone does not establish ownership.'],
 } as const
 const limits = {
   budget: 'Analysis budget reached; some declared cases were not assessed.',
@@ -94,6 +98,7 @@ const limits = {
   imported: 'Imported topology reports coverage limitations; unobserved controls are not proven by this model.',
   policy: 'The requested router, neighbor or route-policy stage is unavailable or unsupported.',
   inspection: 'The required firewall hub does not exist in this topology.',
+  endpoints: 'No network pairs could be checked. Add assigned networks to at least two endpoints.',
 } as const
 const profileError = 'Invalid diagnostics profile.'
 const budgetError = 'Invalid diagnostics budget.'
@@ -246,6 +251,8 @@ interface Scenario {
   boundaries: number[]
   limitations: string[]
   cache: Map<string, NodePath[]>
+  limitsCache: Map<string, string[]>
+  ownersCache: Map<string, PathNode[]>
 }
 function scenario(topology: Topology): Scenario {
   const simulation = simulate(topology)
@@ -271,7 +278,7 @@ function scenario(topology: Topology): Scenario {
   if (!simulation.converged || !learned.converged) limitations.push(limits.convergence)
   if (simulation.siteSelectionComplete === false || !learned.selectionComplete) limitations.push(limits.selection)
   if (topology.azureImport && (topology.azureImport.warnings.length || topology.azureImport.hubs.some((hub) => hub.limitations.length))) limitations.push(limits.imported)
-  return { topology, simulation, learned, boundaries: [...boundaries].sort((a, b) => a - b), limitations, cache: new Map() }
+  return { topology, simulation, learned, boundaries: [...boundaries].sort((a, b) => a - b), limitations, cache: new Map(), limitsCache: new Map(), ownersCache: new Map() }
 }
 function owners(topology: Topology, address: string): PathNode[] {
   const n = ipv4(address)!
@@ -281,13 +288,17 @@ function owners(topology: Topology, address: string): PathNode[] {
   ]
 }
 const same = (a: PathNode, b: PathNode) => a.kind === b.kind && a.id === b.id
-function owned(topology: Topology, node: PathNode, address: string) {
-  const found = owners(topology, address)
+function owned(state: Scenario, node: PathNode, address: string) {
+  const found = state.ownersCache.get(address) ?? owners(state.topology, address)
+  state.ownersCache.set(address, found)
   return found.length === 1 && same(found[0], node)
 }
 const delivered = (path: NodePath, target: PathNode) => path.status === 'delivered' && path.termination === 'owner' && path.terminalKind === target.kind && path.siteId === target.id
 
 function modelLimits(state: Scenario, source: PathNode, destination: string, paths: NodePath[]): string[] {
+  const key = stable([source, destination])
+  const cached = state.limitsCache.get(key)
+  if (cached) return cached
   const { topology, simulation } = state
   const address = ipv4(destination)!
   const reasons: string[] = []
@@ -324,6 +335,7 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
   const ownAs = (asPath: number[]) => asPath.includes(65515) || asPath.includes(65520)
   if ([...topology.connections, ...(topology.erLinks ?? [])].some((c) => c.enabled && c.routes.some((r) => contains(r.prefix, address) && ownAs(r.asPath))) ||
     topology.sites.some((site) => [65515, 65520].includes(site.asn) && (site.id === source.id || paths.some((path) => path.siteHops?.includes(site.id) || path.sourceSiteHops?.includes(site.id))))) reasons.push(limits.ownAs)
+  state.limitsCache.set(key, reasons)
   return reasons
 }
 
@@ -334,8 +346,12 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   const ceilings = { maxProbes: 100000, maxCells: 50000, maxFindings: 10000, maxFailureCases: 240, maxMillis: 60000 }
   const budget = { ...defaults }
   for (const key of Object.keys(options)) {
+    if (key === 'automatic') {
+      if (options.automatic !== undefined && typeof options.automatic !== 'boolean') throw new Error(budgetError)
+      continue
+    }
     if (!Object.hasOwn(defaults, key)) throw new Error(budgetError)
-    const value = options[key as keyof DiagnosticsOptions]
+    const value = options[key as keyof typeof defaults]
     if (value === undefined) continue
     if (!Number.isSafeInteger(value) || value < 0 || value > ceilings[key as keyof typeof ceilings]) throw new Error(budgetError)
     budget[key as keyof typeof budget] = value
@@ -368,6 +384,33 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     ...topology.spokes.map((node) => ({ node: { kind: 'spoke' as const, id: node.id }, prefixes: node.prefixes })),
     ...topology.sites.map((node) => ({ node: { kind: 'site' as const, id: node.id }, prefixes: node.prefixes })),
   ].sort((a, b) => `${a.node.kind}:${a.node.id}`.localeCompare(`${b.node.kind}:${b.node.id}`))
+  if (options.automatic) {
+    for (const site of topology.sites) {
+      if (!room()) break
+      const prefixes = [...new Set([
+        ...[...topology.connections, ...(topology.erLinks ?? [])].filter((link) => link.siteId === site.id && link.enabled).flatMap((link) => link.routes.map((route) => route.prefix)),
+        ...(site.vpnStaticRoutes ?? []).filter((route) => topology.connections.some((link) => link.id === route.connectionId && link.enabled)).map((route) => route.prefix),
+      ])].filter((prefix) => !allOwners.some((owner) => owner.prefixes.some((assigned) => {
+        const range = addressRange(prefix), container = addressRange(assigned)
+        return container.start <= range.start && container.end >= range.end
+      })))
+      if (prefixes.length) {
+        limited(limits.ownership)
+        add('unowned-advertisement', 'unknown', site.id, {
+          related: [{ kind: 'site', id: site.id }], prefix: prefixes[0],
+          evidence: prefixes.map((prefix) => ({ code: 'unowned-advertisement', prefix })),
+        })
+      }
+    }
+    if (allOwners.filter((owner) => owner.prefixes.length).length < 2) limited(limits.endpoints)
+    for (const intent of profile.intents) {
+      for (const prefix of [intent.sourcePrefix, intent.destinationPrefix]) {
+        const range = addressRange(prefix)
+        base.boundaries.push(range.start, range.end)
+      }
+    }
+    base.boundaries = [...new Set(base.boundaries)].sort((a, b) => a - b)
+  }
   for (let i = 0; i < allOwners.length; i++) {
     for (let j = i + 1; j < allOwners.length; j++) {
       if (!time()) { limited(limits.budget); break }
@@ -394,7 +437,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     if (!forward || !reverse) return undefined
     const reasons = [...state.limitations, ...modelLimits(state, intent.source, targetCell.address, forward),
       ...(intent.expectation === 'allow' ? modelLimits(state, intent.target, sourceCell.address, reverse) : [])]
-    if (!owned(state.topology, intent.source, sourceCell.address) || !owned(state.topology, intent.target, targetCell.address)) reasons.push(limits.ownership)
+    if (!owned(state, intent.source, sourceCell.address) || !owned(state, intent.target, targetCell.address)) reasons.push(limits.ownership)
     if (intent.requiredFirewallHubId && !state.topology.hubs.some((hub) => hub.id === intent.requiredFirewallHubId)) reasons.push(limits.inspection)
     if ([...forward, ...reverse].some((path) => path.traceComplete === false)) reasons.push(limits.trace)
     if (!forward.length || (intent.expectation === 'allow' && !reverse.length)) reasons.push(limits.ownership)
@@ -405,22 +448,60 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   }
   type Baseline = { intent: DiagnosticIntent; source: Cell; target: Cell }
   const healthy: Baseline[] = []
-  intents: for (const intent of [...profile.intents].sort((a, b) => a.id.localeCompare(b.id))) {
+  const pathSignatures = new WeakMap<NodePath[], { forward: string; reverse: string }>()
+  const signature = (paths: NodePath[], source: PathNode, reverse = false) => {
+    let cached = pathSignatures.get(paths)
+    if (!cached) {
+      const tokens = paths.map((path) => physical(path, source))
+      cached = {
+        forward: stable([...new Set(tokens.map(stable))].sort()),
+        reverse: stable([...new Set(tokens.map((path) => stable([...path].reverse())))].sort()),
+      }
+      pathSignatures.set(paths, cached)
+    }
+    return reverse ? cached.reverse : cached.forward
+  }
+  function* intents(): Generator<DiagnosticIntent & { automatic?: true }> {
+    yield* [...profile.intents].sort((a, b) => a.id.localeCompare(b.id))
+    if (!options.automatic) return
+    for (let i = 0; i < allOwners.length; i++) {
+      for (let j = i + 1; j < allOwners.length; j++) {
+        for (const sourcePrefix of allOwners[i].prefixes) for (const destinationPrefix of allOwners[j].prefixes) {
+          yield {
+            id: `automatic:${hash(stable([allOwners[i].node, sourcePrefix, allOwners[j].node, destinationPrefix]))}`,
+            source: allOwners[i].node, target: allOwners[j].node, sourcePrefix, destinationPrefix, expectation: 'allow', automatic: true,
+          }
+        }
+      }
+    }
+  }
+  const covers = (prefix: string, cell: Cell) => {
+    const a = addressRange(prefix), b = addressRange(cell.prefix)
+    return a.start <= b.start && a.end >= b.end
+  }
+  intents: for (const intent of intents()) {
     const sources = partition(intent.sourcePrefix, base.boundaries, budget.maxCells + 1)
     const targets = partition(intent.destinationPrefix, base.boundaries, budget.maxCells + 1)
     for (const source of sources) {
       for (const target of targets) {
         if (!room()) break intents
+        if (intent.automatic && profile.intents.some((requirement) =>
+          same(requirement.source, intent.source) && same(requirement.target, intent.target) && covers(requirement.sourcePrefix, source) && covers(requirement.destinationPrefix, target)
+          || same(requirement.source, intent.target) && same(requirement.target, intent.source) && covers(requirement.sourcePrefix, target) && covers(requirement.destinationPrefix, source))) continue
         report.cells++
         const result = evaluate(base, intent, source, target)
         if (!result) break intents
         const { forward, reverse, reasons, f, r, inspection } = result
+        if (intent.automatic && !reasons.length && result.success && signature(forward, intent.source) === signature(reverse, intent.target, true)) {
+          if (profile.failureAnalysis) healthy.push({ intent, source, target })
+          continue
+        }
         const scope = stable([intent, source.prefix, target.prefix])
         const fields: Partial<DiagnosticsFinding> = {
           source: intent.source, target: intent.target, sourceAddress: source.address, destinationAddress: target.address, prefix: target.prefix,
           forward, reverse, related: [intent.source, intent.target, ...pathObjects([...forward, ...reverse])],
           evidence: [
-            { code: 'intent', nodeId: intent.id },
+            { code: intent.automatic ? 'automatic-network-pair' : 'intent', nodeId: intent.id },
             { code: 'source-cell', prefix: source.prefix }, { code: 'destination-cell', prefix: target.prefix },
             ...forward.map((path) => ({ code: `forward:${path.termination ?? 'unknown'}`, nodeId: path.siteId ?? path.hubs.at(-1), connectionId: path.connectionId, prefix: path.lookupPrefix })),
             ...reverse.map((path) => ({ code: `reverse:${path.termination ?? 'unknown'}`, nodeId: path.siteId ?? path.hubs.at(-1), connectionId: path.connectionId, prefix: path.lookupPrefix })),
@@ -435,8 +516,8 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
           add(f ? 'deny-violation' : 'denied', f ? 'error' : 'info', scope, fields)
           continue
         }
-        if (!f) add('unreachable', 'error', scope, fields)
-        if (f && !r) add('missing-return', 'error', scope, fields)
+        if (!f) add(intent.automatic ? 'network-unreachable' : 'unreachable', intent.automatic ? 'warning' : 'error', scope, fields)
+        if (f && !r) add(intent.automatic ? 'network-return' : 'missing-return', 'error', scope, fields)
         if ((f > 0 && f < forward.length) || (r > 0 && r < reverse.length)) add('partial-ecmp', 'error', scope, fields)
         if ([...forward, ...reverse].some((path) => path.status === 'loop')) add('loop', 'error', scope, fields)
         if ([...forward, ...reverse].some((path) => path.termination === 'summary-hole')) add('summary-hole', 'error', scope, fields)
@@ -449,8 +530,8 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
           if (stable(a) !== stable(b)) add('asymmetric', 'warning', scope, fields)
         }
         if (result.success) {
-          add('reachable', 'info', scope, fields)
-          healthy.push({ intent, source, target })
+          if (!intent.automatic) add('reachable', 'info', scope, fields)
+          if (profile.failureAnalysis) healthy.push({ intent, source, target })
         }
       }
     }

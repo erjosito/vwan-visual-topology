@@ -2,7 +2,8 @@ import { t } from './i18n'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
-import { transportLabels } from './model'
+import { topologyObject, transportLabels } from './model'
+import type { DiagnosticsFinding } from './diagnostics'
 import type { Candidate } from './routing'
 import type { NodePath } from './paths'
 import type { SiteRoute } from './bgp'
@@ -24,6 +25,7 @@ const destinationPalette = [
 
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
 interface Props {
+  issues?: DiagnosticsFinding[]; onShowIssues?: (object: ObjectSelection) => void
   topology: Topology; hubId: string; erLocationId?: string; selected: Candidate[]; selectedSiteRoutes?: SiteRoute[]
   sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; layout?: LayoutMode; zoom?: number
   paths: NodePath[]; tracing: boolean; sourceSpokeIds?: string[]; selection?: ObjectSelection
@@ -39,7 +41,7 @@ function NodeIcon({ kind, secured = false }: { kind: 'hub' | 'spoke' | 'site' | 
   </g>
 }
 
-export function TopologyDiagram({ topology, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
+export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
   const svg = useRef<SVGSVGElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -94,6 +96,17 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
     }),
   ]
   const curves = new Map(policyLinks.map((link) => [link.id, link.curve]))
+  const issueObjects = new Map<string, { object: ObjectSelection; count: number; unknown: boolean }>()
+  for (const finding of issues) {
+    if (finding.severity === 'info') continue
+    const objects = new Map([finding.source, finding.target, ...finding.related].filter((object) => object && topologyObject(topology, object))
+      .map((object) => [`${object!.kind}:${object!.id}`, object!]))
+    for (const [key, object] of objects) {
+      const marker = issueObjects.get(key) ?? { object, count: 0, unknown: true }
+      marker.count++; marker.unknown &&= finding.severity === 'unknown'
+      issueObjects.set(key, marker)
+    }
+  }
   const previewNode = preview && (preview.owner.kind === 'hub' ? topology.hubs : topology.sites).find((node) => node.id === preview.owner.id)
   const previewLink = preview && policyLinks.find((link) => link.id === preview.connectionId)
   const previewMapId = previewNode?.routeMapAssignments?.find((assignment) => assignment.connectionId === preview?.connectionId)?.[`${preview!.direction}MapId`]
@@ -321,6 +334,23 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
       return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">{t("ER LOCATION")}</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">{t("ExpressRoute private peering")}</text></g>
     })}
     {policyMarks}
+    {[...issueObjects].map(([key, { object, count, unknown }]) => {
+      const node = positions.get(object.id)
+      const edge = curves.get(object.id)?.at(0.5)
+      const p = node ? { x: node.x + (object.kind === 'hub' ? 100 : 82), y: node.y - 36 }
+        : edge && { x: edge.x, y: edge.y - 30 / (scale * zoom) }
+      if (!p || !onShowIssues) return null
+      const label = t('Routing issues for {0}: {1}', topologyObject(topology, object)?.name, count)
+      return <g key={key} className={`routing-issue-marker ${unknown ? 'unknown' : 'danger'}`} data-object-key={key} role="button" tabIndex={0} aria-label={label}
+        transform={`translate(${p.x},${p.y}) scale(${1 / (scale * zoom)})`}
+        onClick={(event) => { event.stopPropagation(); onShowIssues(object) }}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); onShowIssues(object) } }}>
+        <title>{label}</title><rect x="-22" y="-22" width="44" height="44" fill="transparent" />
+        <path className="warning-triangle" d="M 0 -18 L 19 16 H -19 Z" />
+        <text className="warning-symbol" y="10">{unknown ? '?' : '!'}</text>
+        {count > 1 && <g aria-hidden="true"><circle className="warning-count" cx="19" cy="-14" r="10" /><text className="warning-count-text" x="19" y="-10">{count > 99 ? '99+' : count}</text></g>}
+      </g>
+    })}
     {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">{t("Right-click the canvas to add your first hub or site.")}</text>}
   </svg>{preview && previewNode && previewLink && previewMap && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
 }

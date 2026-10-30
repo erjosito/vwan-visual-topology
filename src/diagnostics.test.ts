@@ -29,6 +29,60 @@ function dropReturn(t: Topology) {
 }
 
 describe('routing diagnostic intent and evidence', () => {
+  it('automatically checks all assigned endpoint networks without a configured flow profile', () => {
+    const t = fixture(), empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
+    const original = JSON.stringify(t)
+    const healthy = analyzeRouting(t, empty, { automatic: true })
+    expect(healthy).toMatchObject({ complete: true, probes: 2, cells: 1, findings: [] })
+    expect(JSON.stringify(t)).toBe(original)
+    t.connections[0].enabled = false
+    const failed = analyzeRouting(t, empty, { automatic: true })
+    expect(failed.findings.find((finding) => finding.rule === 'network-unreachable')).toMatchObject({ severity: 'warning' })
+    expect(failed.findings[0].related).toContainEqual({ kind: 'site', id: 'b' })
+  })
+
+  it('lets explicit isolation override automatic connectivity checks only within its address scope', () => {
+    const t = fixture()
+    t.connections[0].enabled = false
+    const deny = profile(flow({ sourcePrefix: '10.1.0.0/16', destinationPrefix: '10.2.0.0/16', expectation: 'deny' }))
+    const isolated = analyzeRouting(t, deny, { automatic: true })
+    expect(isolated.complete).toBe(true)
+    expect(isolated.findings.map((finding) => finding.rule)).toEqual(['denied'])
+    deny.intents[0].destinationPrefix = '10.2.0.0/24'
+    const partial = analyzeRouting(t, deny, { automatic: true })
+    expect(partial.findings.some((finding) => finding.rule === 'network-unreachable')).toBe(true)
+    expect(partial.findings.filter((finding) => finding.rule === 'network-unreachable').every((finding) => !finding.sourceAddress?.startsWith('10.2.0.'))).toBe(true)
+  })
+
+  it('does not present unowned advertisements or exhausted automatic coverage as a healthy result', () => {
+    const t = fixture(), empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
+    t.sites[0].prefixes = []
+    t.connections[0].routes = [{ id: 'advertisement', prefix: '10.2.0.0/16', asPath: [65002], kind: 'bgp' }]
+    const report = analyzeRouting(t, empty, { automatic: true })
+    expect(report.complete).toBe(false)
+    expect(report.findings.find((finding) => finding.rule === 'unowned-advertisement')).toMatchObject({ severity: 'unknown', related: [{ kind: 'site', id: 'b' }] })
+    expect(analyzeRouting(fixture(), empty, { automatic: true, maxCells: 0 }).complete).toBe(false)
+  })
+
+  it('checks hundreds of prefixes without healthy finding spam and bounds larger meshes honestly', () => {
+    const t = fixture(), empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
+    t.sites = []; t.connections = []
+    t.spokes = Array.from({ length: 10 }, (_, i) => ({
+      id: `spoke-${i}`, name: `Spoke ${i}`, hubId: 'h',
+      prefixes: Array.from({ length: 20 }, (_, j) => `10.${i + 1}.${j}.0/24`),
+    }))
+    const report = analyzeRouting(t, empty, { automatic: true, maxCells: 50000, maxProbes: 20000, maxMillis: 15000 })
+    expect(report).toMatchObject({ complete: true, cells: 18000, findings: [] })
+    expect(report.probes).toBeLessThan(report.cells)
+    t.spokes = Array.from({ length: 40 }, (_, i) => ({
+      id: `spoke-${i}`, name: `Spoke ${i}`, hubId: 'h',
+      prefixes: Array.from({ length: 25 }, (_, j) => `10.${i + 1}.${j}.0/24`),
+    }))
+    const bounded = analyzeRouting(t, empty, { automatic: true, maxCells: 100, maxMillis: 15000 })
+    expect(bounded).toMatchObject({ complete: false, cells: 100 })
+    expect(bounded.limitations).toContain('Analysis budget reached; some declared cases were not assessed.')
+  }, 20000)
+
   it('assesses a declared flow bidirectionally with stable results and no unrestricted mesh', () => {
     const t = fixture()
     const report = analyzeRouting(t, profile())
