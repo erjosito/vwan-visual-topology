@@ -268,6 +268,14 @@ verify those records are unchanged and each owned product is decommissioned or
 returns HTTP 404. Publish only the counts and verification outcome, not the
 unrelated account inventory.
 
+An accepted DELETE is not completed cleanup. Wait for actual group absence,
+check for remaining run-tagged resources, and verify the exact external RBAC and
+endpoint IDs are absent. Azure CLI can wrap 404s in structured JSON, and RBAC
+uses `RoleAssignmentNotFound`; recognize specific API error codes, never treat
+every failed request as absence. After the controller VM is deleted, rely on
+the accepted Azure operation and caller-side verification, not its former
+watchdog.
+
 ## Reporting and regression discipline
 
 Keep a durable issue checkpoint after each milestone, including failures,
