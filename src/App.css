@@ -27,7 +27,8 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .advanced-content { padding: 0 22px 22px; }.advanced-content > details { border-top: 1px solid #e8eef5; padding-top: 14px; margin-top: 12px; }.advanced-content > details > summary { font-size: 12px; font-weight: 600; }.policy-settings { padding: 15px 0 0; display: grid; gap: 12px; font-size: 12px; }.policy-settings > label:not(.field) { display: flex; align-items: center; gap: 8px; }.policy-settings input[type=checkbox] { width: auto; accent-color: #2568d7; }.map-editors, .site-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 15px; }.map-editors h3 { font-size: 12px; }.map-rule { padding: 12px; border: 1px solid #dfe7f1; border-radius: 7px; display: grid; gap: 10px; margin-bottom: 12px; }.map-rule > strong { font-size: 11px; }.peer-form { margin-top: 18px; display: grid; gap: 12px; }.advanced-content > details > .muted { margin: 15px 0; }.peer-link { stroke: #b5928b; stroke-dasharray: 6 3; }
 .link-hitbox { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; }
 .path-flow { pointer-events: none; }
-.path-flow-circle { fill: #f4fffc; stroke: #087564; stroke-width: 2; filter: drop-shadow(0 0 2px #087564); }
+.path-flow-circle { fill: currentColor; stroke: #fff; stroke-width: 2; filter: drop-shadow(0 0 1px #344e7080); }
+.diagram .draggable-node[data-destination-color] > rect { fill: color-mix(in srgb, currentColor 20%, white); }
 @media (prefers-reduced-motion: reduce) { .path-flow { display: none; } }
 .route-legend { padding: 0 22px 14px; font-size: 11px; color: #64748b; }.route-legend strong { color: #087564; }
 .preferred-route { color: #087564; font-weight: 600; }.preferred-route .prefix-button { color: inherit; font-weight: 700; }.preferred-route small { color: #527d72; }

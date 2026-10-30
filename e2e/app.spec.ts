@@ -133,7 +133,7 @@ test('zoom buttons stay synchronized and nodes can use both canvas sides in eith
   }
 })
 
-test('highlighted paths move one larger circle end to end at constant speed in either direction and layout', async ({ page }) => {
+test('highlighted paths stream larger circles end to end at constant speed in either direction and layout', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto('/')
   await expect(page.locator('.path-flow-circle')).toHaveCount(0)
@@ -148,7 +148,8 @@ test('highlighted paths move one larger circle end to end at constant speed in e
         await page.getByLabel('Select hub Europe hub', { exact: true }).focus()
         await page.keyboard.press('Alt+ArrowDown')
       }
-      await expect(page.locator('.path-flow-circle')).toHaveCount(1)
+      await expect(page.locator('.path-flow')).toHaveCount(1)
+      expect(await page.locator('.path-flow-circle').count()).toBeGreaterThan(1)
       const source = reverse ? 'us' : 'eu', destination = reverse ? 'eu' : 'us'
       expect(await motionFlows(page)).toEqual([[
         { id: `${source}-apps`, from: `${source}-apps`, to: source },
@@ -182,16 +183,22 @@ test('highlighted paths move one larger circle end to end at constant speed in e
         for (const fraction of [0.99, 1.02]) {
           await sample(duration * fraction, track.getPointAtLength(track.getTotalLength() * (fraction % 1)))
         }
+        const circles = element.querySelectorAll<SVGCircleElement>('circle'), interval = duration / circles.length
+        await sample(interval * 1.1, track.getPointAtLength(track.getTotalLength() * 1.1 / circles.length))
+        const newest = new DOMPoint().matrixTransform(circles[circles.length - 1].getScreenCTM()!)
+        const expected = track.getPointAtLength(track.getTotalLength() * 0.1 / circles.length).matrixTransform(transform)
+        errors.push(Math.hypot(newest.x - expected.x, newest.y - expected.y))
         svg.unpauseAnimations()
         return {
           speed: track.getTotalLength() * scale / duration, errors, radius: circle.r.baseVal.value,
-          pointerEvents: getComputedStyle(circle).pointerEvents, totalLength: track.getTotalLength(), distance,
+          pointerEvents: getComputedStyle(circle).pointerEvents, totalLength: track.getTotalLength(), distance, interval,
         }
       }, { source, destination, reverse })
       expect(movement.speed).toBeCloseTo(200, 1)
       expect(movement.radius).toBeGreaterThanOrEqual(6)
       expect(movement.pointerEvents).toBe('none')
       expect(movement.totalLength).toBeCloseTo(movement.distance, 0)
+      expect(movement.interval).toBeLessThanOrEqual(0.651)
       expect(Math.max(...movement.errors)).toBeLessThan(2)
     }
   }
@@ -234,7 +241,7 @@ test('static VPN traces highlight the final downstream site link and its traffic
       .getByRole('menuitem', { name: '10.80.0.0/16', exact: true }).click()
     await expect(page.getByTestId('peer-link-last-hop')).toHaveClass(/preferred-link/)
     await expect.poll(() => motionDirections(page, 'last-hop')).toEqual([{ from: 'dc', to: 'destination' }])
-    await expect(page.locator('.path-flow-circle')).toHaveCount(1)
+    await expect(page.locator('.path-flow')).toHaveCount(1)
     expect((await motionFlows(page))[0].map((edge) => edge.id)).toEqual(['us-apps', 'interhub:eu:us', 'vpn-eu', 'last-hop'])
     await groupPath(page, 'Select site Downstream site', 'from', 'All Azure VNets')
     await expect(page.getByTestId('peer-link-last-hop')).toHaveClass(/preferred-link/)
@@ -252,7 +259,10 @@ test('grouped paths deduplicate complete routes, show both directions and respec
   await expect.poll(async () => (await motionDirections(page, 'interhub:eu:us')).map((edge) => edge.from).sort()).toEqual(['eu', 'us'])
   const flows = await motionFlows(page)
   expect(new Set(flows.map((flow) => JSON.stringify(flow))).size).toBe(flows.length)
-  await expect(page.locator('.path-flow-circle')).toHaveCount(flows.length)
+  const circles = await page.locator('.path-flow-circle').count()
+  expect(circles).toBeGreaterThan(flows.length)
+  const destinationColor = await page.locator('[data-node-id="dc"]').getAttribute('data-destination-color')
+  expect(destinationColor).toBeTruthy()
   const speeds = await page.locator('.path-flow').evaluateAll((elements) => elements.map((element) => {
     const track = element.querySelector<SVGPathElement>('path')!, transform = track.getScreenCTM()!
     return track.getTotalLength() * Math.hypot(transform.a, transform.b) / element.querySelector('animateMotion')!.getSimpleDuration()
@@ -262,9 +272,69 @@ test('grouped paths deduplicate complete routes, show both directions and respec
   await expect(page.locator('.path-flow-circle')).toHaveCount(0)
   await expect(page.locator('animateMotion')).toHaveCount(0)
   await expect(page.getByTestId('interhub-eu-us')).toHaveClass(/preferred-link/)
+  await expect(page.locator('[data-node-id="dc"]')).toHaveAttribute('data-destination-color', destinationColor!)
   await page.emulateMedia({ reducedMotion: 'no-preference' })
-  await expect(page.locator('.path-flow-circle')).toHaveCount(flows.length)
-  await expect(page.locator('animateMotion')).toHaveCount(flows.length)
+  await expect(page.locator('.path-flow-circle')).toHaveCount(circles)
+  await expect(page.locator('animateMotion')).toHaveCount(circles)
+})
+
+test('destination streams share sequential palette colors with node backgrounds, reuse ECMP colors and wrap after twenty', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.hubs = [topology.hubs[0]]
+  topology.spokes = [topology.spokes[0]]
+  topology.sites = Array.from({ length: 21 }, (_, i) => ({
+    id: `target-${i}`, name: `Destination ${i + 1}`, asn: 65010 + i, prefixes: [`10.${80 + i}.0.0/16`],
+  }))
+  topology.connections = topology.sites.map((site, i) => ({
+    id: `vpn-${i}`, name: `VPN to ${site.name}`, hubId: 'eu', siteId: site.id, transport: 'VPN',
+    enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [],
+  }))
+  topology.connections.push({ ...topology.connections[0], id: 'alternate-vpn', name: 'Alternate VPN to Destination 1' })
+  await page.setViewportSize({ width: 1440, height: 1100 })
+  await page.goto('/'); await importTopology(page, topology)
+  const original = await readTopology(page)
+  const normalFills = await page.locator('[data-node-id^="target-"] > rect').evaluateAll((elements) =>
+    elements.map((element) => getComputedStyle(element).fill))
+  await groupPath(page, 'Select spoke Europe applications', 'to', 'All onprem sites')
+  await expect(page.locator('.path-flow')).toHaveCount(22)
+  const nodes = await page.locator('[data-node-id^="target-"]').evaluateAll((elements) => elements.map((element) => ({
+    id: element.getAttribute('data-node-id')!, color: getComputedStyle(element).color,
+    fill: getComputedStyle(element.querySelector(':scope > rect')!).fill,
+  })))
+  expect(new Set(nodes.slice(0, 20).map((node) => node.color)).size).toBe(20)
+  expect(nodes[20].color).toBe(nodes[0].color)
+  nodes.forEach((node, i) => expect(node.fill).not.toBe(normalFills[i]))
+  const streams = await page.locator('.path-flow').evaluateAll((elements) => elements.map((element) => ({
+    destination: element.getAttribute('data-destination-id'),
+    colors: [...element.querySelectorAll('circle')].map((circle) => getComputedStyle(circle).fill),
+  })))
+  for (const stream of streams) {
+    expect(stream.colors.length).toBeGreaterThan(1)
+    expect(new Set(stream.colors)).toEqual(new Set([nodes.find((node) => node.id === stream.destination)!.color]))
+  }
+  expect(streams.filter((stream) => stream.destination === 'target-0')).toHaveLength(2)
+  expect(await readTopology(page)).toEqual(original)
+  await page.getByLabel('Visualization mode').selectOption('constellation')
+  await page.getByLabel('Canvas zoom').selectOption('1.25')
+  expect(await page.locator('[data-node-id^="target-"]').evaluateAll((elements) => elements.map((element) => getComputedStyle(element).color)))
+    .toEqual(nodes.map((node) => node.color))
+  await page.getByRole('button', { name: 'Clear highlighting', exact: true }).click()
+  await expect(page.locator('[data-destination-color]')).toHaveCount(0)
+  await expect(page.locator('.path-flow-circle')).toHaveCount(0)
+
+  topology.sites = topology.sites.slice(0, 5)
+  topology.connections = topology.connections.filter((connection) => topology.sites.some((site) => site.id === connection.siteId))
+  await importTopology(page, topology)
+  await page.getByLabel('Canvas zoom').selectOption('1')
+  await page.getByLabel('Visualization mode').selectOption('constellation')
+  await groupPath(page, 'Select spoke Europe applications', 'to', 'All onprem sites')
+  await expect(page.locator('[data-destination-color]')).toHaveCount(5)
+  await page.locator('svg.diagram').evaluate((element) => {
+    const svg = element as SVGSVGElement
+    svg.pauseAnimations()
+    svg.setCurrentTime(svg.getCurrentTime() + 1)
+  })
+  await page.screenshot({ path: 'test-results/destination-colored-streams.png', fullPage: true })
 })
 
 test('ER locations connect hubs and sites, expose filtered advertisements, trace both legs and persist safely', async ({ page }) => {
@@ -393,7 +463,7 @@ test('ER BGP table shows best paths, alternatives and ties, filters prefixes and
   await expect(page.getByTestId('er-link-er-backup')).not.toHaveClass(/preferred-link/)
   await expect(page.getByTestId('er-link-er-hub')).not.toHaveClass(/preferred-link/)
   await expect.poll(() => motionDirections(page, 'er-primary')).toEqual([{ from: 'er', to: 'dc' }])
-  await expect(page.locator('.path-flow-circle')).toHaveCount(2)
+  await expect(page.locator('.path-flow')).toHaveCount(2)
   await table.getByLabel('Filter by prefix', { exact: true }).fill('10.1.')
   await table.locator('.prefix-button').click()
   await expect(page.getByTestId('er-link-er-hub')).toHaveClass(/preferred-link/)

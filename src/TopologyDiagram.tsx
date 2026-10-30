@@ -14,6 +14,13 @@ import { RouteMapPreview } from './RouteMapPreview'
 import { PathMotion } from './PathMotion'
 import type { MotionSegment } from './PathMotion'
 
+const destinationPalette = [
+  '#0f8b78', '#2568d7', '#cf8a16', '#8054c7', '#cb5076',
+  '#0087a8', '#bd6229', '#5b7f2b', '#b348a5', '#5073a6',
+  '#22996b', '#6b62bd', '#b99916', '#bf635d', '#417e87',
+  '#8a6c45', '#738c37', '#a36593', '#3b6b99', '#708391',
+] as const
+
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
 interface Props {
   topology: Topology; hubId: string; erLocationId?: string; selected: Candidate[]; selectedSiteRoutes?: SiteRoute[]
@@ -159,6 +166,15 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
     }
     selectedSiteRoutes?.forEach((route) => { siteTravel(route.siteLinkIds, route.sitePath); finishFlow() })
   }
+  const destinationColors = new Map<string, string>()
+  for (const flow of flows) {
+    const id = flow.at(-1)!.to
+    if (!destinationColors.has(id)) destinationColors.set(id, destinationPalette[destinationColors.size % destinationPalette.length])
+  }
+  const destinationProps = (id: string) => {
+    const color = destinationColors.get(id)
+    return color ? { 'data-destination-color': color, style: { color } } : {}
+  }
   const coordinates = (event: PointerEvent<SVGGElement>) => new DOMPoint(event.clientX, event.clientY).matrixTransform(svg.current!.getScreenCTM()!.inverse())
   const bound = (position: NodePosition, kind: ObjectSelection['kind']) => ({
     x: Math.round(Math.max(120, Math.min(20000, width - 130, position.x))),
@@ -284,24 +300,24 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
       const active = link.enabled && activeErLinks.has(link.id)
       return <g key={link.id} className="clickable" {...selectable('erLink', link.id, `Edit ER connection ${link.name}`)}><title>{link.name} · ExpressRoute · {link.enabled ? 'Enabled' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : ' (down)'}`, edge.label)}</g>
     })}
-    <PathMotion flows={flows} pixelsPerUnit={scale * zoom} />
+    <PathMotion flows={flows} pixelsPerUnit={scale * zoom} colors={destinationColors} />
     {topology.hubs.map((hub) => {
       const p = point(hub.id)
       const secured = hub.routingIntent.private || hub.routingIntent.internet
       const firewallActive = secured && (tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId)
-      return <g key={hub.id} data-node-id={hub.id} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, `Select hub ${hub.name}`)} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{secured && ` · Secured virtual hub · Azure Firewall (${[hub.routingIntent.private && 'private traffic', hub.routingIntent.internet && 'Internet traffic'].filter(Boolean).join(', ')})`}{tracing && firewallActive && ' · Active path traverses Azure Firewall'}</title><rect x="-112" y="-48" width="224" height="96" rx="18" /><NodeIcon kind="hub" secured={secured} /><text x="12" y="-19" className="node-kind">{secured ? 'SECURED VIRTUAL HUB' : 'VIRTUAL HUB'}</text><text y="6" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="29" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text></g>
+      return <g key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, `Select hub ${hub.name}`)} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{secured && ` · Secured virtual hub · Azure Firewall (${[hub.routingIntent.private && 'private traffic', hub.routingIntent.internet && 'Internet traffic'].filter(Boolean).join(', ')})`}{tracing && firewallActive && ' · Active path traverses Azure Firewall'}</title><rect x="-112" y="-48" width="224" height="96" rx="18" /><NodeIcon kind="hub" secured={secured} /><text x="12" y="-19" className="node-kind">{secured ? 'SECURED VIRTUAL HUB' : 'VIRTUAL HUB'}</text><text y="6" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="29" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text></g>
     })}
     {topology.spokes.map((spoke) => {
       const p = point(spoke.id)
-      return <g key={spoke.id} data-node-id={spoke.id} transform={`translate(${p.x}, ${p.y})`} className="spoke-node draggable-node" {...selectable('spoke', spoke.id, `Select spoke ${spoke.name}`)} {...movable('spoke', spoke.id)}><title>{spoke.name}: {spoke.prefixes.join(', ')}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="spoke" /><text x="10" y="-19" className="node-kind">SPOKE VNET</text><text y="6" className="node-name">{spoke.name.length > 22 ? spoke.name.slice(0, 20) + '…' : spoke.name}</text><text y="28" className="node-detail">{spoke.prefixes[0]}{spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}</text></g>
+      return <g key={spoke.id} data-node-id={spoke.id} {...destinationProps(spoke.id)} transform={`translate(${p.x}, ${p.y})`} className="spoke-node draggable-node" {...selectable('spoke', spoke.id, `Select spoke ${spoke.name}`)} {...movable('spoke', spoke.id)}><title>{spoke.name}: {spoke.prefixes.join(', ')}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="spoke" /><text x="10" y="-19" className="node-kind">SPOKE VNET</text><text y="6" className="node-name">{spoke.name.length > 22 ? spoke.name.slice(0, 20) + '…' : spoke.name}</text><text y="28" className="node-detail">{spoke.prefixes[0]}{spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}</text></g>
     })}
     {topology.sites.map((site) => {
       const p = point(site.id)
-      return <g key={site.id} data-node-id={site.id} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, `Select site ${site.name}`)} {...movable('site', site.id)}><title>{site.name} · ASN {site.asn} · Originated prefix: {site.prefixes[0] || 'none'}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="site" /><text x="10" y="-24" className="node-kind">ON-PREMISES</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{site.prefixes[0] ?? 'No assigned prefix'}</text></g>
+      return <g key={site.id} data-node-id={site.id} {...destinationProps(site.id)} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, `Select site ${site.name}`)} {...movable('site', site.id)}><title>{site.name} · ASN {site.asn} · Originated prefix: {site.prefixes[0] || 'none'}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="site" /><text x="10" y="-24" className="node-kind">ON-PREMISES</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{site.prefixes[0] ?? 'No assigned prefix'}</text></g>
     })}
     {(topology.erLocations ?? []).map((location) => {
       const p = point(location.id)
-      return <g key={location.id} data-node-id={location.id} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, `Select ER location ${location.name}`)} {...movable('erLocation', location.id)}><title>{location.name} · ExpressRoute peering location</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">ER LOCATION</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">ExpressRoute private peering</text></g>
+      return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, `Select ER location ${location.name}`)} {...movable('erLocation', location.id)}><title>{location.name} · ExpressRoute peering location</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">ER LOCATION</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">ExpressRoute private peering</text></g>
     })}
     {policyMarks}
     {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">Right-click the canvas to add your first hub or site.</text>}

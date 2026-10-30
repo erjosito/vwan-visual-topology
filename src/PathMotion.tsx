@@ -6,25 +6,29 @@ export interface MotionSegment {
   start: NodePosition; control: NodePosition; end: NodePosition
 }
 
-function PathCircle({ segments, pixelsPerUnit }: { segments: MotionSegment[]; pixelsPerUnit: number }) {
+function PathStream({ segments, pixelsPerUnit, color }: { segments: MotionSegment[]; pixelsPerUnit: number; color: string }) {
   const track = useRef<SVGPathElement>(null)
-  const animation = useRef<SVGAnimateMotionElement>(null)
+  const group = useRef<SVGGElement>(null)
+  const [count, setCount] = useState(2)
   // Straight joins cross the intervening node underneath its card.
   const d = segments.map((segment, i) => `${i ? 'L' : 'M'} ${segment.start.x} ${segment.start.y} Q ${segment.control.x} ${segment.control.y} ${segment.end.x} ${segment.end.y}`).join(' ')
   useLayoutEffect(() => {
-    const duration = track.current!.getTotalLength() * pixelsPerUnit / 200
-    animation.current!.setAttribute('dur', `${Math.max(duration, 0.001)}s`)
-    animation.current!.beginElement()
-  }, [d, pixelsPerUnit])
-  return <g className="path-flow" aria-hidden="true" data-segments={JSON.stringify(segments.map(({ id, from, to }) => ({ id, from, to })))}>
+    const duration = Math.max(track.current!.getTotalLength() * pixelsPerUnit / 200, 0.001)
+    setCount(Math.max(2, Math.ceil(duration / 0.65)))
+    group.current!.querySelectorAll('animateMotion').forEach((animation, i) => {
+      animation.setAttribute('dur', `${duration}s`)
+      animation.beginElementAt(-i * duration / count)
+    })
+  }, [d, pixelsPerUnit, count])
+  return <g ref={group} className="path-flow" style={{ color }} aria-hidden="true" data-destination-id={segments.at(-1)!.to} data-segments={JSON.stringify(segments.map(({ id, from, to }) => ({ id, from, to })))}>
     <path ref={track} className="path-flow-track" d={d} fill="none" stroke="none" />
-    <circle className="path-flow-circle" r="7">
-      <animateMotion ref={animation} path={d} begin="indefinite" calcMode="paced" repeatCount="indefinite" />
-    </circle>
+    {Array.from({ length: count }, (_, i) => <circle key={i} className="path-flow-circle" r="7">
+      <animateMotion path={d} begin="indefinite" calcMode="paced" repeatCount="indefinite" />
+    </circle>)}
   </g>
 }
 
-export function PathMotion({ flows, pixelsPerUnit }: { flows: MotionSegment[][]; pixelsPerUnit: number }) {
+export function PathMotion({ flows, pixelsPerUnit, colors }: { flows: MotionSegment[][]; pixelsPerUnit: number; colors: Map<string, string> }) {
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   useEffect(() => {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -36,5 +40,5 @@ export function PathMotion({ flows, pixelsPerUnit }: { flows: MotionSegment[][];
   const distinct = new Map(flows.filter((flow) => flow.length).map((flow) => [
     JSON.stringify(flow.map(({ id, from }) => [id, from])), flow,
   ]))
-  return [...distinct].map(([key, segments]) => <PathCircle key={key} segments={segments} pixelsPerUnit={pixelsPerUnit} />)
+  return [...distinct].map(([key, segments]) => <PathStream key={key} segments={segments} pixelsPerUnit={pixelsPerUnit} color={colors.get(segments.at(-1)!.to)!} />)
 }
