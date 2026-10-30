@@ -27,6 +27,8 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .advanced-content { padding: 0 22px 22px; }.advanced-content > details { border-top: 1px solid #e8eef5; padding-top: 14px; margin-top: 12px; }.advanced-content > details > summary { font-size: 12px; font-weight: 600; }.policy-settings { padding: 15px 0 0; display: grid; gap: 12px; font-size: 12px; }.policy-settings > label:not(.field) { display: flex; align-items: center; gap: 8px; }.policy-settings input[type=checkbox] { width: auto; accent-color: #2568d7; }.map-editors, .site-settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 15px; }.map-editors h3 { font-size: 12px; }.map-rule { padding: 12px; border: 1px solid #dfe7f1; border-radius: 7px; display: grid; gap: 10px; margin-bottom: 12px; }.map-rule > strong { font-size: 11px; }.peer-form { margin-top: 18px; display: grid; gap: 12px; }.advanced-content > details > .muted { margin: 15px 0; }.peer-link { stroke: #b5928b; stroke-dasharray: 6 3; }
 .link-hitbox { fill: none; stroke: transparent; stroke-width: 18; pointer-events: stroke; }
 .path-flow { pointer-events: none; }
+.routing-path-stop { pointer-events: none; }.routing-path-stop circle { fill: #fff; stroke: #b43832; stroke-width: 2; }.routing-path-stop path { fill: none; stroke: #b43832; stroke-width: 2; }
+.analysis-coverage { padding: 12px; margin: 12px 0; border: 1px solid #d5dfec; border-radius: 7px; background: #f6f9fc; color: #48617d; font-size: 12px; overflow-wrap: anywhere; }.analysis-coverage p { line-height: 1.6; }.coverage-note { border-top: 1px solid #d5dfec; padding: 12px 0; }.finding-title[aria-pressed="true"] { text-decoration: underline; }
 .path-flow-circle { fill: currentColor; stroke: #fff; stroke-width: 2; filter: drop-shadow(0 0 1px #344e7080); }
 .diagram .draggable-node[data-destination-color] > rect { fill: color-mix(in srgb, currentColor 20%, white); }
 @media (prefers-reduced-motion: reduce) { .path-flow { display: none; } }
@@ -152,10 +154,9 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .diagnostic-finding { padding: 14px; border: 1px solid #d5dfec; border-left: 4px solid #8195af; border-radius: 7px; font-size: 12px; overflow-wrap: anywhere; }.diagnostic-finding p { line-height: 1.6; }.diagnostic-finding.error { border-left-color: #b75550; }.diagnostic-finding.warning { border-left-color: #c28b22; }.diagnostic-finding.info { border-left-color: #2568d7; }.diagnostic-finding .row { flex-wrap: wrap; }.diagnostic-finding details { margin-top: 10px; }.diagnostic-severity { font-size: 10px; font-weight: 650; }.finding-title { border: 0; padding: 0; background: transparent; text-align: left; font-weight: 650; color: #3066ae; }.analysis-complete { background: #eff7fc; border-color: #cddfea; color: #40627d; }
 .routing-check-status { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid #dfe7f1; font-size: 12px; background: #f6f9ff; overflow-wrap: anywhere; }
 .routing-check-status button { padding: 6px 9px; font-size: 11px; }
-.routing-issue-marker { cursor: pointer; color: #c33f38; }.routing-issue-marker.unknown { color: #b07d15; }
+.routing-issue-marker { cursor: pointer; color: #c33f38; }
 .warning-triangle { fill: white; stroke: currentColor; stroke-width: 4; stroke-linejoin: round; }
 .warning-symbol { fill: #202c3d; font-size: 27px; font-weight: 800; text-anchor: middle; pointer-events: none; }
-.warning-count { fill: currentColor; stroke: white; stroke-width: 2; }.warning-count-text { fill: white; font-size: 10px; font-weight: 700; text-anchor: middle; pointer-events: none; }
 .routing-issue-marker:hover .warning-triangle, .routing-issue-marker:focus-visible .warning-triangle { fill: #fff3d4; stroke-width: 5; }
 .routing-issue-marker:focus-visible { outline: 2px solid #2568d7; outline-offset: 3px; }
 .routing-issues-panel h3 { margin-bottom: 12px; overflow-wrap: anywhere; }.routing-issues-panel .diagnostic-finding .row { margin-top: 8px; }

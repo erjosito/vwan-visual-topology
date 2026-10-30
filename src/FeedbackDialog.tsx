@@ -31,7 +31,8 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   const [draft, setDraft] = useState(load)
   const [identity, setIdentity] = useState('')
-  const [availability, setAvailability] = useState<'loading' | 'ready' | 'unavailable'>('loading')
+  const [availability, setAvailability] = useState<'loading' | 'ready' | 'not-configured' | 'unavailable'>('loading')
+  const [statusCheck, setStatusCheck] = useState(0)
   const [consent, setConsent] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
@@ -47,12 +48,15 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
       url.searchParams.delete('feedback')
       history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`)
     }
+    return () => { if (previous instanceof HTMLElement) previous.focus() }
+  }, [])
+  useEffect(() => {
     const controller = new AbortController()
     const timeout = setTimeout(() => { setAvailability('unavailable'); controller.abort() }, 10_000)
     void Promise.all([
       fetch('/api/feedback/status', { signal: controller.signal, cache: 'no-store' }).then(async (result) => {
         if (!result.ok) throw new Error()
-        return result.json() as Promise<{ available: boolean }>
+        return result.json() as Promise<{ available: boolean; reason?: string }>
       }),
       fetch('/.auth/me', { signal: controller.signal, cache: 'no-store' }).then(async (result) => {
         if (!result.ok) throw new Error()
@@ -60,16 +64,15 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
       }),
     ]).then(([status, auth]) => {
       if (controller.signal.aborted) return
-      setAvailability(status.available ? 'ready' : 'unavailable')
+      setAvailability(status.available ? 'ready' : status.reason === 'not-configured' ? 'not-configured' : 'unavailable')
       const principal = auth.clientPrincipal
       setIdentity(principal?.identityProvider === 'github' && principal.userRoles.includes('authenticated') ? principal.userDetails : '')
     }).catch(() => { if (!controller.signal.aborted) setAvailability('unavailable') }).finally(() => clearTimeout(timeout))
     return () => {
       controller.abort()
       clearTimeout(timeout)
-      if (previous instanceof HTMLElement) previous.focus()
     }
-  }, [])
+  }, [statusCheck])
   const change = (field: keyof Omit<Draft, 'requestId'>, value: string) => {
     const next = { ...draft, [field]: value, requestId: crypto.randomUUID() }
     setDraft(next)
@@ -125,7 +128,10 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
     <div className="row dialog-heading"><h2 id="feedback-title">{t("Send feedback")}</h2><LanguageSelector /><button type="button" disabled={pending} aria-label={t("Close feedback")} onClick={onClose}>{t("Close")}</button></div>
     <p id="feedback-privacy">{t("Feedback is optional and online. Only the text you enter, your GitHub reporter name and app revision are sent to a private GitHub issue visible to this app's maintainers. No topology, network configuration, screenshots or browser logs are attached. Do not include secrets or confidential information.")}</p>
     {reference ? <div role="status"><p>{t("Feedback received. Reference:")} <strong>{reference}</strong></p><p>{t("The private issue is not publicly accessible. No automatic status notifications are provided.")}</p></div> : <form onSubmit={(event) => { void submit(event) }}>
-      {availability !== 'ready' && <p role="status">{availability === 'loading' ? t("Checking feedback availability...") : t("Feedback is not configured or is temporarily unavailable. The simulator still works offline.")}</p>}
+      {availability !== 'ready' && <div role="status"><p>{availability === 'loading' ? t("Checking feedback availability...")
+        : availability === 'not-configured' ? t("Feedback submission has not been enabled by the app owner. You can sign in with GitHub, but sending remains unavailable. Your draft stays in this tab.")
+        : t("The feedback service could not be reached. You can try GitHub sign-in independently, but sending is unavailable. Your draft stays in this tab.")}</p>
+        {availability !== 'loading' && <button type="button" onClick={() => { setAvailability('loading'); setStatusCheck((count) => count + 1) }}>{t('Check feedback availability again')}</button>}</div>}
       <label className="field"><span>{t("Category")}</span><select disabled={pending} value={draft.category} onChange={(event) => change('category', event.target.value)}><option value="bug">{t("Bug")}</option><option value="feature">{t("Feature request")}</option><option value="other">{t("Other")}</option></select></label>
       <label className="field"><span>{t("Summary")}</span><input required minLength={5} maxLength={120} disabled={pending} value={draft.title} onChange={(event) => change('title', event.target.value)} /></label>
       <label className="field"><span>{t("Description")}</span><textarea aria-label={t('Description')} required minLength={20} maxLength={8000} rows={6} disabled={pending} value={draft.description} onChange={(event) => change('description', event.target.value)} placeholder={t("What happened, what did you expect, and how can we reproduce it?")} /></label>
@@ -136,7 +142,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
       {storageError && <p role="alert" className="notice">{localizeDiagnostic(storageError)}</p>}
       {error && <p role="alert" className="notice error">{localizeDiagnostic(error)}</p>}
       <div className="row dialog-actions"><button type="button" disabled={pending} onClick={discard}>{t("Discard draft")}</button>{!identity
-        ? <button type="button" className="primary" disabled={availability !== 'ready'} onClick={signIn}>{t("Sign in with GitHub")}</button>
+        ? <button type="button" className="primary" onClick={signIn}>{t("Sign in with GitHub")}</button>
         : <button type="submit" className="primary" disabled={pending || !consent || availability !== 'ready'}>{pending ? t("Sending...") : t("Send feedback")}</button>}</div>
     </form>}
   </dialog>

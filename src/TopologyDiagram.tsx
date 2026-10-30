@@ -4,8 +4,9 @@ import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { topologyObject, transportLabels } from './model'
 import type { DiagnosticsFinding } from './diagnostics'
+import { isolationLinkName } from './resilience'
 import type { Candidate } from './routing'
-import type { NodePath } from './paths'
+import type { GroupPath, NodePath } from './paths'
 import type { SiteRoute } from './bgp'
 import { diagramCurve, diagramLayout } from './diagram-layout'
 import virtualWanHubIcon from './assets/azure/virtual-wan-hub.svg'
@@ -14,7 +15,7 @@ import virtualNetworkIcon from './assets/azure/virtual-network.svg'
 import expressRouteIcon from './assets/azure/expressroute.svg'
 import { RouteMapPreview } from './RouteMapPreview'
 import { PathMotion } from './PathMotion'
-import type { MotionSegment } from './PathMotion'
+import type { MotionFlow, MotionSegment } from './PathMotion'
 
 const destinationPalette = [
   '#0f8b78', '#2568d7', '#cf8a16', '#8054c7', '#cb5076',
@@ -25,10 +26,10 @@ const destinationPalette = [
 
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
 interface Props {
-  issues?: DiagnosticsFinding[]; onShowIssues?: (object: ObjectSelection) => void
+  issues?: DiagnosticsFinding[]; onShowIssues?: (finding: DiagnosticsFinding) => void
   topology: Topology; hubId: string; erLocationId?: string; selected: Candidate[]; selectedSiteRoutes?: SiteRoute[]
   sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; layout?: LayoutMode; zoom?: number
-  paths: NodePath[]; tracing: boolean; sourceSpokeIds?: string[]; selection?: ObjectSelection
+  paths: (NodePath | GroupPath)[]; tracing: boolean; sourceSpokeIds?: string[]; selection?: ObjectSelection
   onObjectClick: (selection: ObjectSelection) => void; onObjectContextMenu: (menu: DiagramContextMenu) => void
   onNodeMove: (id: string, position: NodePosition) => void
   onShowRouteMapRules: (router: RouterSelection, direction: RouteMapDirection, connectionId: string) => void
@@ -72,8 +73,9 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
   if (moving) positions.set(moving.id, moving.position)
   const point = (id: string) => positions.get(id)!
   const hubSize = { x: 112, y: 48 }, nodeSize = { x: 94, y: 44 }
-  const activeConnections = new Set(tracing ? [...paths.map((p) => p.connectionId).filter(Boolean), ...sourceConnectionIds] : selected.map((r) => r.connectionId))
-  const activeErLinks = new Set(tracing ? [...paths.flatMap((path) => path.erLinkIds ?? []), ...sourceErLinkIds] : selected.flatMap((route) => [route.erHubLinkId, route.erSiteLinkId].filter(Boolean)))
+  const exitsHub = (path: NodePath) => path.termination !== 'summary-hole'
+  const activeConnections = new Set(tracing ? [...paths.filter(exitsHub).map((p) => p.connectionId).filter(Boolean), ...sourceConnectionIds] : selected.map((r) => r.connectionId))
+  const activeErLinks = new Set(tracing ? [...paths.filter(exitsHub).flatMap((path) => path.erLinkIds ?? []), ...sourceErLinkIds] : selected.flatMap((route) => [route.erHubLinkId, route.erSiteLinkId].filter(Boolean)))
   const edgeKey = (a: string, b: string) => [a, b].sort().join(':')
   const policyLinks = [
     ...topology.connections.map((connection) => {
@@ -96,17 +98,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     }),
   ]
   const curves = new Map(policyLinks.map((link) => [link.id, link.curve]))
-  const issueObjects = new Map<string, { object: ObjectSelection; count: number; unknown: boolean }>()
-  for (const finding of issues) {
-    if (finding.severity === 'info') continue
-    const objects = new Map([finding.source, finding.target, ...finding.related].filter((object) => object && topologyObject(topology, object))
-      .map((object) => [`${object!.kind}:${object!.id}`, object!]))
-    for (const [key, object] of objects) {
-      const marker = issueObjects.get(key) ?? { object, count: 0, unknown: true }
-      marker.count++; marker.unknown &&= finding.severity === 'unknown'
-      issueObjects.set(key, marker)
-    }
-  }
+  const markerSlots = new Map<string, number>()
   const previewNode = preview && (preview.owner.kind === 'hub' ? topology.hubs : topology.sites).find((node) => node.id === preview.owner.id)
   const previewLink = preview && policyLinks.find((link) => link.id === preview.connectionId)
   const previewMapId = previewNode?.routeMapAssignments?.find((assignment) => assignment.connectionId === preview?.connectionId)?.[`${preview!.direction}MapId`]
@@ -114,7 +106,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
   const activeHubEdges = new Set<string>()
   if (tracing) paths.forEach((p) => p.hubs.slice(1).forEach((id, i) => activeHubEdges.add(edgeKey(p.hubs[i], id))))
   else selected.filter((r) => r.remote).forEach((r) => activeHubEdges.add(edgeKey(hubId, r.originHubId)))
-  const exactSiteLinks = new Set(tracing ? [...paths.flatMap((p) => p.siteLinkIds ?? []), ...sourceSiteLinkIds] : (selectedSiteRoutes ?? selected).flatMap((r) => r.siteLinkIds ?? []))
+  const exactSiteLinks = new Set(tracing ? [...paths.filter(exitsHub).flatMap((p) => p.siteLinkIds ?? []), ...sourceSiteLinkIds] : (selectedSiteRoutes ?? selected).flatMap((r) => r.siteLinkIds ?? []))
   const motionEdges = new Map<string, { a: string; b: string; curve: ReturnType<typeof diagramCurve> }>()
   topology.connections.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.hubId, b: link.siteId, curve: curves.get(link.id)! }))
   topology.siteLinks.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.a, b: link.b, curve: curves.get(link.id)! }))
@@ -123,9 +115,14 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
   topology.hubs.forEach((hub, i) => topology.hubs.slice(i + 1).forEach((other) => motionEdges.set(`interhub:${edgeKey(hub.id, other.id)}`, {
     a: hub.id, b: other.id, curve: diagramCurve(point(hub.id), point(other.id), hubSize, hubSize, -35),
   })))
-  const flows: MotionSegment[][] = []
+  const flows: MotionFlow[] = []
+  const stops = new Set<string>()
   let flow: MotionSegment[] = []
-  const finishFlow = () => { if (flow.length) flows.push(flow); flow = [] }
+  let destinationId: string | undefined, direction: MotionFlow['direction']
+  const finishFlow = (stopped = false) => {
+    if (flow.length) flows.push({ segments: flow, destinationId: destinationId ?? flow.at(-1)!.to, direction, stopped })
+    flow = []
+  }
   const direct = (id: string | undefined, from: string | undefined) => {
     if (!id || !from) return
     const edge = motionEdges.get(id)
@@ -148,15 +145,22 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
   }
   if (tracing) {
     for (const path of paths) {
+      const diagnostic = 'direction' in path ? path : undefined
+      destinationId = diagnostic?.targetNode?.id; direction = diagnostic?.direction
       attachmentTravel(path.sourceSpokeId, true)
       siteTravel(path.sourceSiteLinkIds, path.sourceSiteHops)
       if (path.sourceErLinkIds?.length) path.sourceErLinkIds.forEach((id) => attachmentTravel(id, true))
       else attachmentTravel(path.sourceConnectionId, true)
       path.hubs.slice(1).forEach((id, i) => direct(`interhub:${edgeKey(path.hubs[i], id)}`, path.hubs[i]))
-      if (path.erLinkIds?.length) path.erLinkIds.forEach((id) => attachmentTravel(id))
-      else attachmentTravel(path.connectionId)
-      siteTravel(path.siteLinkIds, path.siteHops)
-      finishFlow()
+      if (exitsHub(path)) {
+        if (path.erLinkIds?.length) path.erLinkIds.forEach((id) => attachmentTravel(id))
+        else attachmentTravel(path.connectionId)
+        siteTravel(path.siteLinkIds, path.siteHops)
+      }
+      const stopped = !!diagnostic && path.status === 'unreachable'
+      const stop = stopped && (flow.at(-1)?.to ?? diagnostic.sourceNode?.id)
+      if (stop) stops.add(stop)
+      finishFlow(stopped)
     }
   } else {
     for (const route of selected) {
@@ -182,7 +186,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
   }
   const destinationColors = new Map<string, string>()
   for (const flow of flows) {
-    const id = flow.at(-1)!.to
+    const id = flow.destinationId
     if (!destinationColors.has(id)) destinationColors.set(id, destinationPalette[destinationColors.size % destinationPalette.length])
   }
   const destinationProps = (id: string) => {
@@ -334,21 +338,37 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">{t("ER LOCATION")}</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">{t("ExpressRoute private peering")}</text></g>
     })}
     {policyMarks}
-    {[...issueObjects].map(([key, { object, count, unknown }]) => {
-      const node = positions.get(object.id)
-      const edge = curves.get(object.id)?.at(0.5)
-      const p = node ? { x: node.x + (object.kind === 'hub' ? 100 : 82), y: node.y - 36 }
-        : edge && { x: edge.x, y: edge.y - 30 / (scale * zoom) }
+    {[...stops].map((id) => {
+      const p = positions.get(id)
+      if (!p) return null
+      const label = t('Routing stops at {0}. No modeled onward route.', topologyObject(topology, { kind: topology.hubs.some((hub) => hub.id === id) ? 'hub' : topology.spokes.some((spoke) => spoke.id === id) ? 'spoke' : 'site', id })?.name ?? id)
+      return <g key={id} className="routing-path-stop" data-node-id={id} role="img" aria-label={label} transform={`translate(${p.x - 80},${p.y + 38}) scale(${1 / (scale * zoom)})`}>
+        <title>{label}</title><circle r="11" /><path d="M -4 -4 L 4 4 M -4 4 L 4 -4" />
+      </g>
+    })}
+    {issues.filter((finding) => finding.severity === 'error' || finding.severity === 'warning').map((finding) => {
+      const failed = [...finding.forward, ...finding.reverse].find((path) => path.status !== 'delivered')
+      const failedSource = failed && (finding.forward.includes(failed) ? finding.source : finding.target)
+      const failedId = failed && (failed.siteHops?.at(-1) ?? failed.hubs.at(-1) ?? failedSource?.id)
+      const object = finding.isolation?.object
+        ?? (failedId ? finding.related.find((node) => node.id === failedId) : undefined)
+        ?? finding.source ?? finding.related.find((node) => topologyObject(topology, node))
+      const node = object && positions.get(object.id)
+      const edge = (finding.isolation ? motionEdges.get(finding.isolation.linkId)?.curve : object && curves.get(object.id))?.at(0.5)
+      const p = edge ? { x: edge.x, y: edge.y - 30 / (scale * zoom) }
+        : node && { x: node.x + (object?.kind === 'hub' ? 100 : 82), y: node.y - 36 }
       if (!p || !onShowIssues) return null
-      const label = t('Routing issues for {0}: {1}', topologyObject(topology, object)?.name, count)
-      return <g key={key} className={`routing-issue-marker ${unknown ? 'unknown' : 'danger'}`} data-object-key={key} role="button" tabIndex={0} aria-label={label}
-        transform={`translate(${p.x},${p.y}) scale(${1 / (scale * zoom)})`}
-        onClick={(event) => { event.stopPropagation(); onShowIssues(object) }}
-        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); onShowIssues(object) } }}>
+      const key = finding.isolation ? `link:${finding.isolation.linkId}` : object ? `${object.kind}:${object.id}` : finding.id
+      const slot = markerSlots.get(key) ?? 0
+      markerSlots.set(key, slot + 1)
+      const label = `${t(finding.title)}${finding.prefix ? ` · ${finding.prefix}` : ''}${finding.source ? ` · ${topologyObject(topology, finding.source)?.name} → ${finding.target ? topologyObject(topology, finding.target)?.name : ''}` : finding.isolation ? ` · ${isolationLinkName(topology, finding.isolation)}` : ''}`
+      return <g key={finding.id} className="routing-issue-marker danger" data-issue-id={finding.id} data-object-key={key} role="button" tabIndex={0} aria-label={label}
+        transform={`translate(${p.x - slot % 3 * 44 / (scale * zoom)},${p.y + Math.floor(slot / 3) * 44 / (scale * zoom)}) scale(${1 / (scale * zoom)})`}
+        onClick={(event) => { event.stopPropagation(); onShowIssues(finding) }}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); onShowIssues(finding) } }}>
         <title>{label}</title><rect x="-22" y="-22" width="44" height="44" fill="transparent" />
         <path className="warning-triangle" d="M 0 -18 L 19 16 H -19 Z" />
-        <text className="warning-symbol" y="10">{unknown ? '?' : '!'}</text>
-        {count > 1 && <g aria-hidden="true"><circle className="warning-count" cx="19" cy="-14" r="10" /><text className="warning-count-text" x="19" y="-10">{count > 99 ? '99+' : count}</text></g>}
+        <text className="warning-symbol" y="10">!</text>
       </g>
     })}
     {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">{t("Right-click the canvas to add your first hub or site.")}</text>}

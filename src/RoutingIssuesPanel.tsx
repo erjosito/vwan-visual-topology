@@ -1,31 +1,37 @@
 import { useState } from 'react'
 import { CanvasOverlay } from './CanvasOverlay'
+import { AnalysisCoverage } from './AnalysisCoverage'
 import { localizeDiagnostic, t } from './i18n'
 import type { DiagnosticsFinding, DiagnosticsReport } from './diagnostics'
 import type { ObjectSelection, Topology } from './model'
 import { topologyObject } from './model'
+import { isolationLinkName } from './resilience'
 
-export function RoutingIssuesPanel({ topology, report, object, onFinding, onInspect, onClose }: {
-  topology: Topology; report: DiagnosticsReport; object?: ObjectSelection
+export function RoutingIssuesPanel({ topology, report, findingId, selectedFindingId, coverageOpen, onFinding, onShowAll, onInspect, onClose }: {
+  topology: Topology; report: DiagnosticsReport; findingId?: string; selectedFindingId?: string; coverageOpen?: boolean
   onFinding: (finding: DiagnosticsFinding) => void; onInspect: (object: ObjectSelection) => void; onClose: () => void
+  onShowAll: () => void
 }) {
   const [filter, setFilter] = useState('')
   const [visibleCount, setVisibleCount] = useState(50)
   const name = (node?: ObjectSelection) => node ? topologyObject(topology, node)?.name ?? node.id : ''
-  const findings = report.findings.filter((finding) => finding.severity !== 'info'
-    && (!object || [finding.source, finding.target, ...finding.related].some((node) => node?.kind === object.kind && node.id === object.id))
+  const findings = report.findings.filter((finding) => finding.severity !== 'info' && finding.severity !== 'unknown'
+    && (!findingId || finding.id === findingId)
     && (!filter || [finding.prefix, finding.sourceAddress, finding.destinationAddress, name(finding.source), name(finding.target), t(finding.title), t(finding.detail)]
       .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))))
   const severity = { error: 'Error', warning: 'Warning', unknown: 'Not assessed', info: 'Information' } as const
   return <CanvasOverlay title={t('Routing issues')} className="routing-issues-panel" onClose={onClose}>
-    {object && <h3>{name(object)}</h3>}
+    {findingId && <button onClick={onShowAll}>{t('Show all routing issues')}</button>}
     <p className="muted">{t('Checks cover modeled connectivity between assigned networks and saved requirements. Intentional isolation may need an explicit requirement. Actual hosts, firewall rules and NAT are not verified.')}</p>
-    {!report.complete && <p className="notice" role="status">{t('Routing check is incomplete. Some networks or scenarios could not be assessed.')}</p>}
-    {report.limitations.map((limitation) => <p className="notice" key={limitation}>{t(limitation)}</p>)}
+    <AnalysisCoverage report={report} topology={topology} initiallyOpen={coverageOpen} />
     <label className="field"><span>{t('Filter by prefix or endpoint')}</span><input aria-label={t('Filter routing issues')} value={filter} onChange={(event) => { setFilter(event.target.value); setVisibleCount(50) }} /></label>
     <div className="flow-results">{findings.slice(0, visibleCount).map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
-      <div className="row"><span className="diagnostic-severity">{t(severity[finding.severity])}</span><strong>{t(finding.title)}</strong></div>
+      <div className="row"><span className="diagnostic-severity">{t(severity[finding.severity])}</span><button className="finding-title" aria-pressed={selectedFindingId === finding.id} onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
       <p>{t(finding.detail)}</p>
+      {!finding.source && <p>{t('Affected objects: {0}', finding.related.map(name).join(', '))}</p>}
+      {finding.isolation && <div className="isolation-groups"><p>{t('Link: {0}', isolationLinkName(topology, finding.isolation))}</p>
+        {finding.isolation.groups.map((group, index) => <p key={index}><strong>{t('Separated group {0} ({1} nodes)', index + 1, group.length)}</strong>: {group.map(name).join(', ')}</p>)}
+      </div>}
       {finding.source && <p>{name(finding.source)} · {finding.sourceAddress} → {name(finding.target)} · {finding.destinationAddress}</p>}
       {finding.prefix && <p><code>{finding.prefix}</code></p>}
       <small>{t(finding.confidence === 'modeled' ? 'Modeled result' : finding.confidence === 'risk' ? 'Potential risk' : 'Unknown')}</small>

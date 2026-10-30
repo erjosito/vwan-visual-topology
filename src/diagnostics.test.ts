@@ -33,12 +33,14 @@ describe('routing diagnostic intent and evidence', () => {
     const t = fixture(), empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
     const original = JSON.stringify(t)
     const healthy = analyzeRouting(t, empty, { automatic: true })
-    expect(healthy).toMatchObject({ complete: true, probes: 2, cells: 1, findings: [] })
+    expect(healthy).toMatchObject({ complete: true, probes: 2, cells: 1 })
+    expect(healthy.findings.filter((finding) => finding.rule !== 'link-isolation')).toEqual([])
+    expect(healthy.findings.filter((finding) => finding.rule === 'link-isolation')).toHaveLength(2)
     expect(JSON.stringify(t)).toBe(original)
     t.connections[0].enabled = false
     const failed = analyzeRouting(t, empty, { automatic: true })
     expect(failed.findings.find((finding) => finding.rule === 'network-unreachable')).toMatchObject({ severity: 'warning' })
-    expect(failed.findings[0].related).toContainEqual({ kind: 'site', id: 'b' })
+    expect(failed.findings.find((finding) => finding.rule === 'network-unreachable')?.related).toContainEqual({ kind: 'site', id: 'b' })
   })
 
   it('lets explicit isolation override automatic connectivity checks only within its address scope', () => {
@@ -47,7 +49,7 @@ describe('routing diagnostic intent and evidence', () => {
     const deny = profile(flow({ sourcePrefix: '10.1.0.0/16', destinationPrefix: '10.2.0.0/16', expectation: 'deny' }))
     const isolated = analyzeRouting(t, deny, { automatic: true })
     expect(isolated.complete).toBe(true)
-    expect(isolated.findings.map((finding) => finding.rule)).toEqual(['denied'])
+    expect(isolated.findings.filter((finding) => finding.rule !== 'link-isolation').map((finding) => finding.rule)).toEqual(['denied'])
     deny.intents[0].destinationPrefix = '10.2.0.0/24'
     const partial = analyzeRouting(t, deny, { automatic: true })
     expect(partial.findings.some((finding) => finding.rule === 'network-unreachable')).toBe(true)
@@ -72,7 +74,9 @@ describe('routing diagnostic intent and evidence', () => {
       prefixes: Array.from({ length: 20 }, (_, j) => `10.${i + 1}.${j}.0/24`),
     }))
     const report = analyzeRouting(t, empty, { automatic: true, maxCells: 50000, maxProbes: 20000, maxMillis: 15000 })
-    expect(report).toMatchObject({ complete: true, cells: 18000, findings: [] })
+    expect(report).toMatchObject({ complete: true, cells: 18000 })
+    expect(report.findings.filter((finding) => finding.rule !== 'link-isolation')).toEqual([])
+    expect(report.findings).toHaveLength(10)
     expect(report.probes).toBeLessThan(report.cells)
     t.spokes = Array.from({ length: 40 }, (_, i) => ({
       id: `spoke-${i}`, name: `Spoke ${i}`, hubId: 'h',
@@ -81,6 +85,7 @@ describe('routing diagnostic intent and evidence', () => {
     const bounded = analyzeRouting(t, empty, { automatic: true, maxCells: 100, maxMillis: 15000 })
     expect(bounded).toMatchObject({ complete: false, cells: 100 })
     expect(bounded.limitations).toContain('Analysis budget reached; some declared cases were not assessed.')
+    expect(bounded.limitsReached).toContain('maxCells')
   }, 20000)
 
   it('assesses a declared flow bidirectionally with stable results and no unrestricted mesh', () => {
@@ -313,6 +318,7 @@ describe('diagnostic contracts, policies and bounds', () => {
       const report = analyzeRouting(t, profile(), options)
       expect(report.complete).toBe(false)
       expect(report.limitations).toContain('Analysis budget reached; some declared cases were not assessed.')
+      expect(report.limitsReached).toContain(Object.keys(options)[0])
     }
     const prefix = analyzeRouting(t, profile(flow({ sourcePrefix: '10.0.0.0/8', destinationPrefix: '10.0.0.0/8' })), { maxCells: 2, maxFindings: 2 })
     expect(prefix.cells).toBeLessThanOrEqual(2)
@@ -320,6 +326,7 @@ describe('diagnostic contracts, policies and bounds', () => {
     const failure = analyzeRouting(t, profile(flow(), true), { maxFailureCases: 0 })
     expect(failure.complete).toBe(false)
     expect(failure.failureCases).toBe(0)
+    expect(failure.limitsReached).toContain('maxFailureCases')
   })
 
   it('tests single-link loss on immutable clones and finds a missing backup', () => {

@@ -8,7 +8,8 @@ app.http('feedbackStatus', {
   authLevel: 'anonymous',
   handler: async () => {
     const config = settings()
-    return response(200, { available: available(config), deploymentId: config.deploymentId })
+    const ready = available(config)
+    return response(200, { available: ready, ...(!ready ? { reason: 'not-configured' } : {}), deploymentId: config.deploymentId })
   },
 })
 app.http('feedback', {

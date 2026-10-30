@@ -74,13 +74,15 @@ function App() {
   const [feedbackOpen, setFeedbackOpen] = useState(() => new URLSearchParams(location.search).get('feedback') === '1')
   const [panel, setPanel] = useState<'routes' | 'ads' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison'>()
   const [comparisonSession, setComparisonSession] = useState<ComparisonSession>()
-  const [diagnosticHighlight, setDiagnosticHighlight] = useState<{ revision: string; paths: GroupPath[] }>()
+  const [diagnosticHighlight, setDiagnosticHighlight] = useState<{ revision: string; findingId: string; paths: GroupPath[] }>()
   const [routingCheck, setRoutingCheck] = useState<{ revision: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; report?: DiagnosticsReport }>()
-  const [routingIssueObject, setRoutingIssueObject] = useState<ObjectSelection>()
+  const [routingIssueId, setRoutingIssueId] = useState<string>()
+  const [reviewCoverage, setReviewCoverage] = useState(false)
   const checkWorker = useRef<Worker | undefined>(undefined)
   const routingKey = useMemo(() => routingRevision(topology), [topology])
   const currentCheck = routingCheck?.revision === routingKey ? routingCheck : undefined
-  const routingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity !== 'info') ?? []
+  const routingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity === 'error' || finding.severity === 'warning') ?? []
+  const unassessedCases = currentCheck?.report?.findings.filter((finding) => finding.severity === 'unknown').length ?? 0
   useEffect(() => {
     checkWorker.current?.terminate(); checkWorker.current = undefined
     return () => { checkWorker.current?.terminate(); checkWorker.current = undefined }
@@ -178,9 +180,9 @@ function App() {
   const diagramPaths = diagnosticPaths ?? (tracing ? paths : siteHighlight)
   const showDiagnostic = (finding: DiagnosticsFinding) => {
     const name = (node?: PathNode) => node ? topologyObject(topology, node)?.name ?? node.id : ''
-    setDiagnosticHighlight({ revision: routingRevision(topology), paths: [
-      ...finding.forward.map((path) => ({ ...path, sourceName: name(finding.source), destinationName: name(finding.target), destinationPrefix: finding.destinationAddress ?? finding.prefix ?? '' })),
-      ...finding.reverse.map((path) => ({ ...path, sourceName: name(finding.target), destinationName: name(finding.source), destinationPrefix: finding.sourceAddress ?? '' })),
+    setDiagnosticHighlight({ revision: routingRevision(topology), findingId: finding.id, paths: [
+      ...finding.forward.map((path) => ({ ...path, sourceNode: finding.source, targetNode: finding.target, direction: 'forward' as const, sourceName: name(finding.source), destinationName: name(finding.target), destinationPrefix: finding.destinationAddress ?? finding.prefix ?? '' })),
+      ...finding.reverse.map((path) => ({ ...path, sourceNode: finding.target, targetNode: finding.source, direction: 'return' as const, sourceName: name(finding.target), destinationName: name(finding.source), destinationPrefix: finding.sourceAddress ?? '' })),
     ] })
     setTracing(false); setHighlighting(false); setSelection(finding.related[0])
   }
@@ -368,19 +370,20 @@ function App() {
           <span>{t(!currentCheck ? 'Routing changed. Check routing again.' : currentCheck.status === 'running' ? 'Checking all modeled networks…'
             : currentCheck.status === 'cancelled' ? 'Routing check cancelled. No complete result is available.'
             : currentCheck.status === 'failed' ? 'Routing check failed. No complete result is available.'
-            : !currentCheck.report?.complete ? 'Routing check is incomplete. Some networks or scenarios could not be assessed.'
+            : !currentCheck.report?.complete ? 'Analysis coverage is incomplete.'
             : routingIssues.length ? 'Routing check completed.' : 'No routing issues found within the checked model scope.')}</span>
-          {currentCheck?.report && <><span>{t('{0} issues · {1} not assessed', routingIssues.filter((finding) => finding.severity !== 'unknown').length, routingIssues.filter((finding) => finding.severity === 'unknown').length)}</span>
-            <button onClick={() => { setRoutingIssueObject(undefined); setPanel('issues') }}>{t('Review routing issues')}</button></>}
+          {currentCheck?.report && <><span>{t('{0} routing issues · {1} unassessed cases', routingIssues.length, unassessedCases)}</span>
+            <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(false); setPanel('issues') }}>{t('Review routing issues')}</button>
+            {(!currentCheck.report.complete || currentCheck.report.limitations.length > 0) && <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(true); setPanel('issues') }}>{t('Review analysis coverage')}</button>}</>}
           {currentCheck?.status === 'running' && <button onClick={() => { checkWorker.current?.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
           <button onClick={openDiagnostics}>{t('Advanced checks')}</button>
         </div>}
         <div className="canvas-stage">
           {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
-          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueObject ? nodeKey(routingIssueObject) : ''}`} topology={topology} report={currentCheck.report} object={routingIssueObject} onFinding={showDiagnostic} onInspect={showRoutes} onClose={closePanel} />}
+          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
           {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
-          <TopologyDiagram topology={topology} issues={routingIssues} onShowIssues={(object) => { setDiagnosticHighlight(undefined); setRoutingIssueObject(object); setPanel('issues') }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
+          <TopologyDiagram topology={topology} issues={routingIssues} onShowIssues={(finding) => { setRoutingIssueId(finding.id); setReviewCoverage(false); setPanel('issues'); showDiagnostic(finding) }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
           {(highlighting || tracing || !!diagnosticPaths?.length) && <div className="highlight-status" role="status">{diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}<button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button></div>}
           {panel === 'routes' && inspected && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={topology} simulation={simulation} router={router} view={activeView} mode={routeMode} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix(''); setHighlighting(false) }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
           {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}

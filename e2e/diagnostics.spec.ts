@@ -67,7 +67,7 @@ test('invalid profile imports preserve the current requirements and expected den
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:diagnostics:v1'))).toBe(before)
   await panel(page).getByRole('button', { name: 'Run diagnostics', exact: true }).click()
   await expect(panel(page).locator('.diagnostic-finding.error').first()).toBeVisible()
-  await panel(page).getByLabel('Diagnostic severity').selectOption('unknown')
+  await panel(page).getByLabel('Diagnostic severity').selectOption('warning')
   await expect(panel(page).getByText('No findings match these filters.', { exact: false })).toBeVisible()
 })
 
@@ -89,21 +89,24 @@ test('worker analysis can be cancelled and mobile reports stay within the viewpo
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
 })
 
-test('one click discovers problems and danger signs explain them without starting path animations', async ({ page }) => {
+test('one click shows one sign per issue and selecting a sign explains and animates that issue only', async ({ page }) => {
   await setup(page, false)
   await expect(page.getByRole('dialog')).toHaveCount(0)
-  const marker = page.locator('.routing-issue-marker[data-object-key="site:isolated"]')
+  const marker = page.locator('.routing-issue-marker[data-issue-id^="network-unreachable:"]').first()
   await expect(marker).toBeVisible()
   await expect(marker).toHaveClass(/danger/)
   await expect(page.locator('.network-link.preferred-link')).toHaveCount(0)
   const saved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
   await marker.click()
   const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
-  await expect(issues.getByText('Unreachable network', { exact: true })).toHaveCount(2)
+  await expect(issues.getByRole('button', { name: 'Unreachable network', exact: true })).toHaveCount(1)
   await expect(issues).toContainText('No selected path reaches this network')
-  await expect(page.locator('.network-link.preferred-link')).toHaveCount(0)
-  await issues.getByRole('button', { name: 'Highlight issue paths', exact: true }).first().click()
   await expect(page.locator('.network-link.preferred-link').first()).toBeVisible()
+  await issues.getByRole('button', { name: 'Show all routing issues', exact: true }).click()
+  const findingCount = await issues.locator('.diagnostic-finding').count()
+  const ids = await page.locator('.routing-issue-marker').evaluateAll((markers) => markers.map((marker) => marker.getAttribute('data-issue-id')))
+  expect(ids).toHaveLength(findingCount)
+  expect(new Set(ids).size).toBe(findingCount)
   await page.getByRole('button', { name: 'Clear highlighting', exact: true }).click()
   await page.keyboard.press('Escape')
   await marker.focus()
@@ -145,12 +148,13 @@ test('automatic checks report unknown ownership instead of a healthy topology an
   })
   await page.getByLabel('Import topology file').setInputFiles({ name: 'unknown.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(unknown)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
-  const marker = page.locator('.routing-issue-marker[data-object-key="site:isolated"]')
-  await expect(marker).toHaveClass(/unknown/)
-  await expect(page.locator('.routing-check-status')).toContainText('Routing check is incomplete')
-  await marker.click()
+  await expect(page.locator('.routing-check-status')).toContainText('Analysis coverage is incomplete')
+  await expect(page.locator('.routing-issue-marker[data-issue-id^="unowned-advertisement:"]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Review analysis coverage', exact: true }).click()
   const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
   await expect(issues).toContainText('Advertised networks have no declared owner')
+  await expect(issues.locator('.diagnostic-finding.unknown')).toHaveCount(0)
+  await expect(issues.locator('.analysis-coverage')).toHaveAttribute('open', '')
   const bounds = await issues.boundingBox()
   expect(bounds!.x).toBeGreaterThanOrEqual(0)
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(391)
@@ -168,9 +172,118 @@ test('cancelling an automatic scan or replacing the topology prevents late worke
   await expect(page.getByRole('button', { name: 'Check routing', exact: true })).toBeEnabled()
   await expect(page.locator('.routing-issue-marker')).toHaveCount(0)
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
-  const healthy = { ...structuredClone(topology), sites: [] }
+  const healthy = structuredClone(topology)
+  healthy.spokes = []
+  healthy.sites = ['one', 'two'].map((id, index) => ({ id, name: id, asn: 65001 + index, prefixes: [`10.${index + 1}.0.0/24`] }))
+  healthy.connections = healthy.sites.flatMap((site) => [0, 1].map((index) => ({
+    id: `${site.id}-${index}`, name: `${site.id}-${index}`, hubId: 'h', siteId: site.id, transport: 'VPN' as const, enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [],
+  })))
   await page.getByLabel('Import topology file').setInputFiles({ name: 'healthy.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(healthy)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
   await expect(page.locator('.routing-check-status')).toContainText('No routing issues found within the checked model scope.')
   await expect(page.locator('.routing-issue-marker')).toHaveCount(0)
+})
+
+test('selecting an asymmetric issue animates independently selected forward and return attachments', async ({ page }) => {
+  const asymmetric = structuredClone(topology)
+  asymmetric.spokes = []
+  asymmetric.sites = [
+    { id: 'one', name: 'First site', asn: 65001, prefixes: ['10.1.0.0/24'] },
+    { id: 'two', name: 'Second site', asn: 65002, prefixes: ['10.2.0.0/24'] },
+  ]
+  asymmetric.connections = [
+    { id: 'first', name: 'First VPN', hubId: 'h', siteId: 'one', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [] },
+    { id: 'outward', name: 'Outbound VPN', hubId: 'h', siteId: 'two', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [], routes: [{ id: 'r', prefix: '10.2.0.0/24', asPath: [65002], kind: 'bgp' }], outboundMapId: 'drop' },
+    { id: 'return', name: 'Return VPN', hubId: 'h', siteId: 'two', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [], routes: [{ id: 'r2', prefix: '10.2.0.0/24', asPath: [65002, 65002], kind: 'bgp' }] },
+  ]
+  asymmetric.routeMaps = [{ id: 'drop', name: 'Return filter', hubId: 'h', rules: [{ id: 'rule', prefixes: ['10.1.0.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }] }]
+  await page.goto('/')
+  await page.getByLabel('Import topology file').setInputFiles({ name: 'asymmetric.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(asymmetric)) })
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await page.locator('.routing-issue-marker[data-issue-id^="asymmetric:"]').click()
+  await expect(page.locator('.diagnostic-finding')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Asymmetric physical path sets', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  const forward = page.locator('.path-flow[data-direction="forward"]'), reverse = page.locator('.path-flow[data-direction="return"]')
+  await expect(forward).toHaveCount(1); await expect(reverse).toHaveCount(1)
+  expect(JSON.parse((await forward.getAttribute('data-segments'))!)).toEqual([{ id: 'first', from: 'one', to: 'h' }, { id: 'outward', from: 'h', to: 'two' }])
+  expect(JSON.parse((await reverse.getAttribute('data-segments'))!)).toEqual([{ id: 'return', from: 'two', to: 'h' }, { id: 'first', from: 'h', to: 'one' }])
+  expect(await forward.getAttribute('style')).not.toBe(await reverse.getAttribute('style'))
+  await expect(forward.locator('animateMotion').first()).toHaveAttribute('repeatCount', 'indefinite')
+  await expect(reverse.locator('animateMotion').first()).toHaveAttribute('repeatCount', 'indefinite')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await expect(page.locator('.path-flow')).toHaveCount(0)
+  await expect(page.getByTestId('link-outward')).toHaveClass(/preferred-link/)
+})
+
+for (const failure of ['hub', 'aggregate', 'downstream'] as const) {
+  test(`unreachable ${failure} paths stop at the actual failed router without inventing egress`, async ({ page }) => {
+    const broken = structuredClone(topology)
+    broken.spokes = [broken.spokes[0]]
+    if (failure !== 'hub') {
+      broken.sites.push({ id: 'transit', name: 'Transit site', asn: 65002, prefixes: ['10.9.1.0/24'] })
+      broken.connections = [{ id: 'vpn', name: 'Transit VPN', hubId: 'h', siteId: 'transit', transport: 'VPN', enabled: true, learnSiteRoutes: failure === 'aggregate', inbound: [], outbound: [], routes: [] }]
+      if (failure === 'aggregate') {
+        broken.routeMaps = [{ id: 'summary', name: 'Summary', hubId: 'h', rules: [{ id: 's', match: 'contains', prefixes: ['10.9.0.0/16'], action: 'summarize', summaryPrefixes: ['10.9.0.0/16'], prepend: [], nextStep: 'terminate' }] }]
+        broken.connections[0].inboundMapId = 'summary'
+      } else broken.sites[1].vpnStaticRoutes = [{ id: 'static', prefix: '10.9.0.0/24', connectionId: 'vpn' }]
+    }
+    await page.goto('/')
+    await page.getByLabel('Import topology file').setInputFiles({ name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken)) })
+    await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+    await page.getByRole('button', { name: 'Advanced checks', exact: true }).click()
+    await page.getByRole('button', { name: 'Add flow requirement', exact: true }).click()
+    await page.getByRole('button', { name: 'Run diagnostics', exact: true }).click()
+    await page.getByRole('button', { name: 'Required destination is unreachable', exact: true }).click()
+    const stopId = failure === 'downstream' ? 'transit' : 'h'
+    const stream = page.locator('.path-flow[data-direction="forward"]')
+    await expect(stream).toHaveAttribute('data-stop-node-id', stopId)
+    expect(JSON.parse((await stream.getAttribute('data-segments'))!).map((segment: { id: string }) => segment.id)).toEqual(failure === 'downstream' ? ['a', 'vpn'] : ['a'])
+    await expect(page.locator(`.routing-path-stop[data-node-id="${stopId}"]`)).toHaveCount(1)
+    await expect(page.locator('.routing-path-stop[data-node-id="isolated"]')).toHaveCount(1)
+    await expect(page.locator('.path-flow[data-direction="return"]')).toHaveCount(0)
+    if (failure === 'aggregate') await expect(page.getByTestId('link-vpn')).not.toHaveClass(/preferred-link/)
+  })
+}
+
+test('overlapping IP ranges identify both endpoints while coverage stays separate', async ({ page }) => {
+  const overlapping = structuredClone(topology)
+  overlapping.sites = []
+  overlapping.spokes[1].prefixes = ['10.1.0.0/25']
+  await page.goto('/')
+  await page.getByLabel('Import topology file').setInputFiles({ name: 'overlap.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(overlapping)) })
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await page.locator('.routing-issue-marker[data-issue-id^="ownership:"]').click()
+  const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
+  await expect(issues.locator('.diagnostic-finding')).toHaveCount(1)
+  await expect(issues).toContainText('Duplicate or overlapping IP ranges')
+  await expect(issues).toContainText('Source VNet, Destination VNet')
+  await expect(issues).toContainText('10.1.0.0/25')
+  await page.getByRole('button', { name: 'Show all routing issues', exact: true }).click()
+  await expect(issues.getByRole('button', { name: 'Single point of failure', exact: true })).toHaveCount(2)
+  await expect(issues).toContainText('Separated group')
+})
+
+test('unsupported SD-WAN checks stay in neutral coverage notes in automatic and advanced reports', async ({ page }) => {
+  const unsupported = structuredClone(topology)
+  unsupported.connections = [{ id: 'sdwan', name: 'SD-WAN', hubId: 'h', siteId: 'isolated', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [] }]
+  await page.goto('/')
+  await page.getByLabel('Import topology file').setInputFiles({ name: 'unsupported.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(unsupported)) })
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await page.getByRole('button', { name: 'Review analysis coverage', exact: true }).click()
+  const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
+  await expect(issues.locator('.analysis-coverage')).toContainText('SD-WAN outbound learning and vendor-specific NVA ranking are not validated.')
+  await expect(issues.locator('.analysis-coverage')).toContainText('50000 address cells')
+  await expect(issues.locator('.diagnostic-finding.unknown')).toHaveCount(0)
+  await expect(page.locator('.routing-issue-marker[data-issue-id^="unknown:"]')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Advanced checks', exact: true }).click()
+  await panel(page).getByLabel('Diagnostic destination', { exact: true }).selectOption('site:isolated')
+  await panel(page).getByRole('button', { name: 'Add flow requirement', exact: true }).click()
+  await panel(page).getByRole('button', { name: 'Run diagnostics', exact: true }).click()
+  await expect(panel(page).getByRole('region', { name: 'Diagnostic results' })).toBeVisible()
+  await panel(page).getByText('Analysis coverage and model limitations', { exact: true }).click()
+  await expect(panel(page).locator('.analysis-coverage')).toContainText('2048 address cells')
+  await expect(panel(page).locator('.analysis-coverage')).toContainText('SD-WAN outbound learning')
+  await expect(panel(page).locator('.diagnostic-finding')).toHaveCount(0)
+  const report = await downloadedJson(page, 'Export diagnostic report')
+  expect(report.report.findings.some((finding: { severity: string }) => finding.severity === 'unknown')).toBe(true)
 })

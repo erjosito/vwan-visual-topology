@@ -5,6 +5,8 @@ import { simulate } from './routing'
 import type { NodePath, PathNode } from './paths'
 import { azureRoutesAtSites, traceNodePath } from './paths'
 import { cidr, contains, ipv4 } from './validation'
+import { singleLinkIsolation } from './resilience'
+import type { LinkIsolation } from './resilience'
 
 export type DiagnosticIntent = {
   id: string
@@ -30,6 +32,7 @@ export type DiagnosticsProfile = {
   exportConstraints?: ExportConstraint[]
 }
 export interface DiagnosticsFinding {
+  isolation?: LinkIsolation
   id: string
   rule: string
   severity: 'error' | 'warning' | 'info' | 'unknown'
@@ -47,6 +50,8 @@ export interface DiagnosticsFinding {
   evidence: { code: string; nodeId?: string; prefix?: string; connectionId?: string }[]
 }
 export interface DiagnosticsReport {
+  budget?: { maxProbes: number; maxCells: number; maxFindings: number; maxFailureCases: number; maxMillis: number }
+  limitsReached?: string[]
   revision: string
   findings: DiagnosticsFinding[]
   probes: number
@@ -76,11 +81,12 @@ const messages = {
   'wrong-exit': ['Wrong destination exit', 'A selected branch terminates at the Internet or a different owner instead of the declared endpoint.'],
   asymmetric: ['Asymmetric physical path sets', 'Forward physical paths and reversed return paths differ. Asymmetry alone is not a demonstrated fault; ECMP hash pairing is unknown.'],
   firewall: ['Required inspection waypoint is bypassed', 'A selected branch does not traverse the required modeled firewall. Firewall rules, NAT and session enforcement are not modeled.'],
-  ownership: ['Overlapping declared ownership', 'Distinct endpoints declare overlapping address space. Repeated transit advertisements are not ownership declarations.'],
+  ownership: ['Duplicate or overlapping IP ranges', 'Distinct sites or VNets declare overlapping IP ranges. This makes destination ownership ambiguous, but does not prove duplicate addresses on live hosts. Repeated BGP advertisements alone are not duplicate addressing.'],
   unknown: ['Routing result is not fully assessed', 'Missing ownership, unsupported model behavior, nonconvergence or truncated coverage prevents a definitive intent assessment.'],
   export: ['Route advertisement constraint violated', 'The scoped after-policy advertisement differs from the declared constraint. Before-policy evidence distinguishes filtering and summarization.'],
   'export-ok': ['Route advertisement constraint satisfied', 'The scoped after-policy advertisement matches the declared constraint. This is not proof of neighbor acceptance.'],
   failure: ['Single-link dependency', 'Removing this enabled modeled link breaks a previously satisfied required flow. Endpoint attachment loss is included; independent physical failure domains and recovery timing are not modeled.'],
+  'link-isolation': ['Single point of failure', 'Removing this enabled logical link separates a currently connected topology component. This is a structural resilience risk, not a current outage. Alternate routing, convergence and shared physical failure domains are not validated.'],
   'failure-unknown': ['Single-link scenario not fully assessed', 'The cloned failure scenario has unsupported or incomplete coverage. No resilience conclusion is established.'],
   'network-unreachable': ['Unreachable network', 'No selected path reaches this network from the other endpoint. This may be intentional isolation; add a flow requirement to declare the expected behavior.'],
   'network-return': ['Missing return route', 'Forward delivery exists, but no selected return path reaches the source network.'],
@@ -357,19 +363,29 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     budget[key as keyof typeof budget] = value
   }
   const started = Date.now()
-  const report: DiagnosticsReport = { revision: routingRevision(topology), findings: [], probes: 0, cells: 0, failureCases: 0, complete: true, limitations: [] }
+  const report: DiagnosticsReport = { revision: routingRevision(topology), findings: [], probes: 0, cells: 0, failureCases: 0, complete: true, limitations: [], budget: { ...budget }, limitsReached: [] }
   const limited = (message: string) => {
     report.complete = false
     if (!report.limitations.includes(message)) report.limitations.push(message)
   }
   const time = () => Date.now() - started < budget.maxMillis
+  const exhausted = (...keys: (keyof typeof budget)[]) => {
+    limited(limits.budget)
+    for (const key of keys) if (!report.limitsReached!.includes(key)) report.limitsReached!.push(key)
+  }
   const room = () => {
-    if (!time() || report.cells >= budget.maxCells || report.findings.length >= budget.maxFindings) { limited(limits.budget); return false }
+    if (time() && report.cells < budget.maxCells && report.findings.length < budget.maxFindings) return true
+    const reached = [
+      ...(!time() ? ['maxMillis' as const] : []),
+      ...(report.cells >= budget.maxCells ? ['maxCells' as const] : []),
+      ...(report.findings.length >= budget.maxFindings ? ['maxFindings' as const] : []),
+    ]
+    if (reached.length) { exhausted(...reached); return false }
     return true
   }
   type Rule = keyof typeof messages
   const add = (rule: Rule, severity: DiagnosticsFinding['severity'], scope: string, fields: Partial<DiagnosticsFinding> = {}) => {
-    if (report.findings.length >= budget.maxFindings) { limited(limits.budget); return }
+    if (report.findings.length >= budget.maxFindings) { exhausted('maxFindings'); return }
     const finding: DiagnosticsFinding = {
       id: `${rule}:${hash(scope)}`, rule, severity, confidence: severity === 'unknown' ? 'unknown' : severity === 'warning' ? 'risk' : 'modeled',
       title: messages[rule][0], detail: messages[rule][1], related: [], forward: [], reverse: [], evidence: [], ...fields,
@@ -377,7 +393,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     finding.related = [...new Map(finding.related.map((object) => [`${object.kind}:${object.id}`, object])).values()].sort((a, b) => `${a.kind}:${a.id}`.localeCompare(`${b.kind}:${b.id}`))
     if (!report.findings.some((f) => f.id === finding.id)) report.findings.push(finding)
   }
-  if (!time()) { limited(limits.budget); return report }
+  if (!time()) { exhausted('maxMillis'); return report }
   const base = scenario(topology)
   for (const limitation of base.limitations) limited(limitation)
   const allOwners = [
@@ -413,7 +429,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   }
   for (let i = 0; i < allOwners.length; i++) {
     for (let j = i + 1; j < allOwners.length; j++) {
-      if (!time()) { limited(limits.budget); break }
+      if (!time()) { exhausted('maxMillis'); break }
       const overlaps = allOwners[i].prefixes.flatMap((a) => allOwners[j].prefixes.filter((b) => contains(a, cidr(b)!.network) || contains(b, cidr(a)!.network)).map((b) => cidr(a)!.length >= cidr(b)!.length ? a : b))
       if (overlaps.length) add('ownership', 'warning', stable([allOwners[i].node, allOwners[j].node]), {
         related: [allOwners[i].node, allOwners[j].node], prefix: overlaps.sort()[0],
@@ -425,7 +441,8 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     const key = stable([node, destination])
     const cached = state.cache.get(key)
     if (cached) return cached
-    if (!time() || report.probes >= budget.maxProbes) { limited(limits.budget); return undefined }
+    if (!time()) { exhausted('maxMillis'); return undefined }
+    if (report.probes >= budget.maxProbes) { exhausted('maxProbes'); return undefined }
     report.probes++
     const paths = traceNodePath(state.topology, state.simulation, node, destination, state.learned)
     state.cache.set(key, paths)
@@ -576,13 +593,23 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       add(matches ? 'export-ok' : 'export', matches ? 'info' : 'error', stable(constraint), fields)
     }
   }
+  if (options.automatic) {
+    for (const isolation of singleLinkIsolation(topology)) {
+      if (!room()) break
+      add('link-isolation', 'warning', stable([isolation.object, isolation.linkId]), {
+        isolation, related: [...(isolation.object ? [isolation.object] : []), ...isolation.groups.flat()],
+        evidence: [{ code: 'structural-bridge', connectionId: isolation.linkId }],
+      })
+    }
+  }
   if (profile.failureAnalysis && healthy.length) {
     const links = [...topology.connections.map((link) => ({ kind: 'connection' as const, link })),
       ...topology.siteLinks.map((link) => ({ kind: 'siteLink' as const, link })),
       ...(topology.erLinks ?? []).map((link) => ({ kind: 'erLink' as const, link }))].filter(({ link }) => link.enabled)
       .sort((a, b) => `${a.kind}:${a.link.id}`.localeCompare(`${b.kind}:${b.link.id}`))
     failures: for (const { kind, link } of links) {
-      if (!room() || report.failureCases >= budget.maxFailureCases) { limited(limits.budget); break }
+      if (!room()) break
+      if (report.failureCases >= budget.maxFailureCases) { exhausted('maxFailureCases'); break }
       report.failureCases++
       const clone = structuredClone(topology)
       const collection = kind === 'connection' ? clone.connections : kind === 'siteLink' ? clone.siteLinks : clone.erLinks!
@@ -602,7 +629,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       }
     }
   }
-  if (!time()) limited(limits.budget)
+  if (!time()) exhausted('maxMillis')
   report.findings.sort((a, b) => a.id.localeCompare(b.id))
   report.limitations.sort()
   return report

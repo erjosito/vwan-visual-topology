@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { CanvasOverlay } from './CanvasOverlay'
+import { AnalysisCoverage } from './AnalysisCoverage'
 import { localizeDiagnostic, t } from './i18n'
 import { routingRevision, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsFinding, DiagnosticsProfile, DiagnosticsReport, ExportConstraint } from './diagnostics'
@@ -8,6 +9,7 @@ import type { PathNode } from './paths'
 import { nodePrefixes } from './paths'
 import type { ObjectSelection, Topology } from './model'
 import { topologyObject } from './model'
+import { isolationLinkName } from './resilience'
 
 const storageKey = 'vwan-visual-topology:diagnostics:v1'
 const emptyProfile = (): DiagnosticsProfile => ({ version: 1, intents: [], failureAnalysis: false })
@@ -123,12 +125,12 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighli
   }
   const currentReport = report?.revision === revision && reportProfile === profileRevision ? report : undefined
   const name = (node?: PathNode) => node ? topologyObject(topology, node)?.name ?? node.id : ''
-  const visible = currentReport?.findings.filter((finding) =>
+  const visible = currentReport?.findings.filter((finding) => finding.severity !== 'unknown' &&
     (!severity || finding.severity === severity) && (!category || finding.rule === category)
     && (!nodeFilter || [finding.source, finding.target, ...finding.related].some((node) => node && key(node) === nodeFilter))
     && (!filter || [finding.prefix, finding.sourceAddress, finding.destinationAddress, name(finding.source), name(finding.target), t(finding.title), t(finding.detail)]
       .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase())))) ?? []
-  const categories = [...new Map(currentReport?.findings.map((finding) => [finding.rule, finding.title]) ?? []).entries()]
+  const categories = [...new Map(currentReport?.findings.filter((finding) => finding.severity !== 'unknown').map((finding) => [finding.rule, finding.title]) ?? []).entries()]
   return <CanvasOverlay title={t('Routing diagnostics')} className="diagnostics-panel" onClose={onClose}>
     <p className="muted">{t('Offline, intent-aware routing checks. Declare expected communication; asymmetric transit alone is not an error. Actual hosts, firewall rules, NAT and traffic hashes are not verified.')}</p>
     <details open><summary>{t('Flow requirements')}</summary>
@@ -181,9 +183,9 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighli
       <p className={currentReport.complete ? 'notice analysis-complete' : 'notice'} role="status">{t(currentReport.complete ? 'Analysis completed within the requested model scope.' : 'Analysis is partial or some cases could not be assessed.')}
         {' '}{t('{0} probes · {1} address cells · {2} failure cases', currentReport.probes, currentReport.cells, currentReport.failureCases)}
         {' '}{Object.entries(severities).map(([value, label]) => `${t(label)}: ${currentReport.findings.filter((finding) => finding.severity === value).length}`).join(' · ')}</p>
-      {currentReport.limitations.map((limitation) => <p className="notice" key={limitation}>{t(limitation)}</p>)}
+      <AnalysisCoverage report={currentReport} topology={topology} />
       <div className="form-grid">
-        <label className="field"><span>{t('Severity')}</span><select aria-label={t('Diagnostic severity')} value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">{t('All severities')}</option>{Object.entries(severities).map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
+        <label className="field"><span>{t('Severity')}</span><select aria-label={t('Diagnostic severity')} value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">{t('All severities')}</option>{Object.entries(severities).filter(([value]) => value !== 'unknown').map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
         <label className="field"><span>{t('Diagnostic category')}</span><select aria-label={t('Diagnostic category')} value={category} onChange={(event) => setCategory(event.target.value)}><option value="">{t('All categories')}</option>{categories.map(([rule, title]) => <option key={rule} value={rule}>{t(title)}</option>)}</select></label>
         <label className="field"><span>{t('Node')}</span><select aria-label={t('Diagnostic node filter')} value={nodeFilter} onChange={(event) => setNodeFilter(event.target.value)}><option value="">{t('All nodes')}</option>{nodes.map((node) => <option key={key(node)} value={key(node)}>{node.name}</option>)}</select></label>
         <label className="field"><span>{t('Filter by prefix or endpoint')}</span><input aria-label={t('Filter by prefix or endpoint')} value={filter} onChange={(event) => setFilter(event.target.value)} /></label>
@@ -192,6 +194,10 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighli
       <div className="flow-results">{visible.map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
         <div className="row"><span className="diagnostic-severity">{t(severities[finding.severity])}</span><button className="finding-title" onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
         <p>{t(finding.detail)}</p>
+        {!finding.source && <p>{t('Affected objects: {0}', finding.related.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', '))}</p>}
+        {finding.isolation && <div className="isolation-groups"><p>{t('Link: {0}', isolationLinkName(topology, finding.isolation))}</p>
+          {finding.isolation.groups.map((group, index) => <p key={index}><strong>{t('Separated group {0} ({1} nodes)', index + 1, group.length)}</strong>: {group.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', ')}</p>)}
+        </div>}
         {finding.source && <p>{name(finding.source)} · {finding.sourceAddress ?? finding.prefix} → {name(finding.target)} · {finding.destinationAddress ?? finding.prefix}</p>}
         <small>{t(finding.confidence === 'modeled' ? 'Modeled result' : finding.confidence === 'risk' ? 'Potential risk' : 'Unknown')}</small>
         <details><summary>{t('Evidence and investigation')}</summary>

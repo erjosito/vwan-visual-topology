@@ -5,8 +5,12 @@ export interface MotionSegment {
   id: string; from: string; to: string
   start: NodePosition; control: NodePosition; end: NodePosition
 }
+export interface MotionFlow {
+  segments: MotionSegment[]; destinationId: string; direction?: 'forward' | 'return'; stopped?: boolean
+}
 
-function PathStream({ segments, pixelsPerUnit, color }: { segments: MotionSegment[]; pixelsPerUnit: number; color: string }) {
+function PathStream({ flow, pixelsPerUnit, color }: { flow: MotionFlow; pixelsPerUnit: number; color: string }) {
+  const { segments } = flow
   const track = useRef<SVGPathElement>(null)
   const group = useRef<SVGGElement>(null)
   const [count, setCount] = useState(2)
@@ -20,7 +24,7 @@ function PathStream({ segments, pixelsPerUnit, color }: { segments: MotionSegmen
       animation.beginElementAt(-i * duration / count)
     })
   }, [d, pixelsPerUnit, count])
-  return <g ref={group} className="path-flow" style={{ color }} aria-hidden="true" data-destination-id={segments.at(-1)!.to} data-segments={JSON.stringify(segments.map(({ id, from, to }) => ({ id, from, to })))}>
+  return <g ref={group} className="path-flow" style={{ color }} aria-hidden="true" data-destination-id={flow.destinationId} data-direction={flow.direction} data-stop-node-id={flow.stopped ? segments.at(-1)!.to : undefined} data-segments={JSON.stringify(segments.map(({ id, from, to }) => ({ id, from, to })))}>
     <path ref={track} className="path-flow-track" d={d} fill="none" stroke="none" />
     {Array.from({ length: count }, (_, i) => <circle key={i} className="path-flow-circle" r="7">
       <animateMotion path={d} begin="indefinite" calcMode="paced" repeatCount="indefinite" />
@@ -28,7 +32,7 @@ function PathStream({ segments, pixelsPerUnit, color }: { segments: MotionSegmen
   </g>
 }
 
-export function PathMotion({ flows, pixelsPerUnit, colors }: { flows: MotionSegment[][]; pixelsPerUnit: number; colors: Map<string, string> }) {
+export function PathMotion({ flows, pixelsPerUnit, colors }: { flows: MotionFlow[]; pixelsPerUnit: number; colors: Map<string, string> }) {
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches)
   useEffect(() => {
     const query = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -37,8 +41,8 @@ export function PathMotion({ flows, pixelsPerUnit, colors }: { flows: MotionSegm
     return () => query.removeEventListener('change', change)
   }, [])
   if (reducedMotion) return null
-  const distinct = new Map(flows.filter((flow) => flow.length).map((flow) => [
-    JSON.stringify(flow.map(({ id, from }) => [id, from])), flow,
+  const distinct = new Map(flows.filter((flow) => flow.segments.length).map((flow) => [
+    JSON.stringify([flow.destinationId, flow.direction, flow.stopped, flow.segments.map(({ id, from }) => [id, from])]), flow,
   ]))
-  return [...distinct].map(([key, segments]) => <PathStream key={key} segments={segments} pixelsPerUnit={pixelsPerUnit} color={colors.get(segments.at(-1)!.to)!} />)
+  return [...distinct].map(([key, flow]) => <PathStream key={key} flow={flow} pixelsPerUnit={pixelsPerUnit} color={colors.get(flow.destinationId)!} />)
 }
