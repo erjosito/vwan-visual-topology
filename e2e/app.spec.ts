@@ -1304,6 +1304,8 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   await expect(page.getByLabel('Inspect router', { exact: true })).toHaveValue('site:a')
   await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"]')).toHaveCount(2)
   await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toContainText('Site B')
+  await expect(page.locator('.network-link.preferred-link')).toHaveCount(0)
+  await page.getByRole('button', { name: '10.80.0.0/16', exact: true }).first().click()
   await expect(page.getByTestId('peer-link-ab')).toHaveClass(/preferred-link/)
   await expect(page.getByTestId('peer-link-ac')).not.toHaveClass(/preferred-link/)
   await expect.poll(() => motionDirections(page, 'ab')).toEqual([{ from: 'a', to: 'b' }])

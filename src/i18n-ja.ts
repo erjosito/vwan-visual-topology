@@ -747,4 +747,6 @@ export const ja: Record<string, string> = {
   'Compared field': '比較項目',
   'Designed value': '設計の値',
   'Azure snapshot value': 'Azure スナップショットの値',
+  'Highlight preferred routes': '優先ルートを強調表示',
+  'Diagnostic path evidence': '診断の経路の根拠',
 }

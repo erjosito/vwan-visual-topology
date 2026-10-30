@@ -153,16 +153,16 @@ function App() {
     setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setConnectionId(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
-  const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlighting(true); setTracing(false) }
+  const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlighting(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
   const openStaticRouting = (value: RouterSelection) => { setMapRouter(value); setEditorRequest(undefined); setPanel('static') }
   const selectObject = (value: ObjectSelection) => {
     setSelection(value)
-    if (!panel && !tracing && (value.kind === 'hub' || value.kind === 'site')) selectRouter(value)
   }
-  const showRoutes = (value: ObjectSelection, firewall = false, mode: RouteMode = 'bgp') => { selectRouter(value); setRouteView(firewall ? 'firewall' : 'bgp'); setRouteMode(mode); setHighlighting(mode === 'bgp'); setPanel('routes') }
+  const showRoutes = (value: ObjectSelection, firewall = false, mode: RouteMode = 'bgp') => { selectRouter(value); setRouteView(firewall ? 'firewall' : 'bgp'); setRouteMode(mode); setPanel('routes') }
   const openPath = (value: PathNode, direction: 'to' | 'from') => {
+    setDiagnosticHighlight(undefined)
     setGroupTrace(undefined)
     const other = nodes.find((n) => nodeKey(n) !== nodeKey(value) && (direction === 'from' || nodePrefixes(topology, n).length))
     const src = direction === 'to' ? value : other
@@ -177,6 +177,7 @@ function App() {
     return [...pathGroups.map(({ group, label }) => ({
       label: t(label),
       run: () => {
+        setDiagnosticHighlight(undefined)
         setGroupTrace({ group, direction })
         setSource(direction === 'to' ? nodeKey(value) : ''); setTarget(direction === 'from' ? nodeKey(value) : '')
         setDestination(''); setDestinationPrefix(''); setHighlighting(false); setTracing(true)
@@ -191,6 +192,7 @@ function App() {
         children: prefixes.length ? prefixes.map((prefix) => ({
           label: prefix,
           run: () => {
+            setDiagnosticHighlight(undefined)
             setGroupTrace(undefined)
             setSource(nodeKey(src)); setTarget(nodeKey(dst)); setDestinationPrefix(prefix); setDestination(prefix.split('/')[0])
             setHighlighting(false); setTracing(true)
@@ -230,6 +232,7 @@ function App() {
       { label: t("BGP table"), run: () => showRoutes(contextSelection) },
       { label: t("Learned routes"), run: () => showRoutes(contextSelection, false, 'learned') },
       { label: t("Advertised routes"), run: () => showRoutes(contextSelection, false, 'advertised') },
+      { label: t('Highlight preferred routes'), run: () => { selectRouter(contextSelection); setDiagnosticHighlight(undefined); setHighlighting(true); setTracing(false) } },
     ] : []),
     ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Route maps"), run: () => openRouteMaps(contextSelection as RouterSelection) }] : []),
     ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Show route map rules"), run: () => showRouteMapRules(contextSelection as RouterSelection) }] : []),
@@ -317,8 +320,8 @@ function App() {
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
           {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
           <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
-          {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button></div>}
-          {panel === 'routes' && inspected && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={topology} simulation={simulation} router={router} view={activeView} mode={routeMode} onRouter={(value) => { selectRouter(value); setHighlighting(routeMode === 'bgp') }} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
+          {(highlighting || tracing || !!diagnosticPaths?.length) && <div className="highlight-status" role="status">{diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}<button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button></div>}
+          {panel === 'routes' && inspected && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={topology} simulation={simulation} router={router} view={activeView} mode={routeMode} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix(''); setHighlighting(false) }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
           {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}
           {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
           {panel === 'static' && mapRouter && <StaticRoutingPanel key={nodeKey(mapRouter)} topology={topology} router={mapRouter} onSave={save} onClose={closePanel} />}
@@ -352,7 +355,6 @@ function App() {
             save(next); setSelection(editorRequest.deleting ? undefined : value); setEditorRequest(undefined)
             if (editorRequest.deleting && nodeKey(value) === nodeKey(router)) { setPanel(undefined); setHighlighting(false) }
             else if (editorRequest.deleting && mapRouter && nodeKey(value) === nodeKey(mapRouter) && (panel === 'maps' || panel === 'rules' || panel === 'static')) setPanel(undefined)
-            else if (!panel && !tracing && (value.kind === 'hub' || value.kind === 'site')) selectRouter(value)
           }} />}
           {clearRequested && <CanvasOverlay title={t("Clear topology")} className="object-editor" onClose={() => setClearRequested(false)}>
             <p>{t("Remove all hubs, sites, spokes, ER locations, connections, route maps and saved layouts? This replaces the workspace saved in this browser and cannot be undone. Export JSON first if you need a backup.")}</p>
