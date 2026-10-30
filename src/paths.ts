@@ -22,9 +22,9 @@ export function nodePrefixes(topology: Topology, node: PathNode): string[] {
   ])]
 }
 
-interface SiteAdvertisement extends SiteRoute { connectionId: string; erHubLinkId?: string }
+export interface SiteAdvertisement extends SiteRoute { connectionId: string; erHubLinkId?: string }
 
-function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
+export function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
   const advertisement = (route: SiteRoute, connectionId: string): SiteAdvertisement => ({
     ...route, connectionId,
     ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => advertisement(child, connectionId)) } : {}),
@@ -48,6 +48,7 @@ function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
       }),
   ]]))
   let tables = Object.fromEntries(topology.sites.map((s) => [s.id, best(origins[s.id])]))
+  let candidates = origins
   let converged = topology.siteLinks.length === 0
   for (let round = 0; round < 64 && !converged; round++) {
     const next = Object.fromEntries(topology.sites.map((receiver) => {
@@ -55,12 +56,14 @@ function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
         const senderId = link.a === receiver.id ? link.b : link.a
         return receiveSiteRoutes(topology, receiver, link, tables[senderId], true)
       })
-      return [receiver.id, best([...origins[receiver.id], ...received])]
+      return [receiver.id, [...origins[receiver.id], ...received]]
     }))
-    converged = JSON.stringify(next) === JSON.stringify(tables)
-    tables = next
+    const selected = Object.fromEntries(topology.sites.map((site) => [site.id, best(next[site.id])]))
+    converged = JSON.stringify(selected) === JSON.stringify(tables)
+    tables = selected
+    candidates = next
   }
-  return { tables, converged }
+  return { tables, candidates, converged }
 }
 
 export function traceGroupedPaths(topology: Topology, simulation: Simulation, anchor: PathNode, direction: PathDirection, group: PathGroup): GroupPath[] {

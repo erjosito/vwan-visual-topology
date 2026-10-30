@@ -29,7 +29,7 @@ export function RouteMapInspector({ topology, router, direction, connectionId, o
     return link && maps.length ? [{ link, other, maps }] : []
   })
   return <CanvasOverlay title={`Route map rules · ${node?.name ?? 'Router'}`} className="policy-inspector" onClose={onClose}>
-    <p className="muted">Inbound means received by {node?.name}; outbound means advertised by it. Rules run in order; unmatched routes pass unchanged. Static VPN routes bypass BGP policies.</p>
+    <p className="muted">Inbound means learned by {node?.name}; outbound means advertised by it. Rules run in order; unmatched routes pass unchanged. Static VPN routes bypass BGP policies.</p>
     <div className="inspector-controls">
       <label className="field"><span>Connection</span><select aria-label="Policy connection" value={selectedConnection ?? ''} onChange={(e) => onConnection(e.target.value || undefined)}><option value="">All connections</option>{links.map((link) => <option key={link.id} value={link.id}>{link.name}</option>)}</select></label>
       <label className="field"><span>Policy direction</span><select aria-label="Policy direction" value={direction ?? 'all'} onChange={(e) => onDirection(e.target.value === 'all' ? undefined : e.target.value as RouteMapDirection)}><option value="all">Inbound and outbound</option><option value="inbound">Inbound only</option><option value="outbound">Outbound only</option></select></label>

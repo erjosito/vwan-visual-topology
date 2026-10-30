@@ -101,7 +101,7 @@ export function siteExports<T extends RouteMapAdvertisement>(topology: Topology,
     .map((route) => ({ ...route, asPath: route.asPath.length && (!route.forwardingRoutes || route.asPath.includes(asn)) ? route.asPath : [asn, ...route.asPath] }))
 }
 
-export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, receiver: Site, link: SiteLink, routes: T[], repeatOriginAsn = false): T[] {
+export function advertiseSiteRoutes<T extends SiteRoute>(topology: Topology, receiver: Site, link: SiteLink, routes: T[], repeatOriginAsn = false, stage: 'before' | 'after' = 'after'): T[] {
   const senderId = link.a === receiver.id ? link.b : link.a
   const sender = topology.sites.find((site) => site.id === senderId)!
   const policy = link.a === senderId ? link.aToB : link.bToA
@@ -111,9 +111,16 @@ export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, recei
     sitePath: [receiver.id, ...route.sitePath], siteLinkIds: [link.id, ...(route.siteLinkIds ?? [])],
     ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => transit(child as T)) } : {}),
   })
-  const exported = siteExports(topology, senderId, link.id, routes.filter((route) => !route.sitePath.includes(receiver.id)
-    && !route.asPath.includes(receiver.asn) && (!policy.prefixes.length || policy.prefixes.includes(route.prefix))).map(transit))
+  const eligible = routes.filter((route) => !route.sitePath.includes(receiver.id)
+    && !route.asPath.includes(receiver.asn) && (!policy.prefixes.length || policy.prefixes.includes(route.prefix))).map(transit)
+  return stage === 'before' ? eligible : siteExports(topology, senderId, link.id, eligible)
+}
+
+export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, receiver: Site, link: SiteLink, routes: T[], repeatOriginAsn = false, stage: 'before' | 'after' = 'after'): T[] {
+  const policy = link.a === receiver.id ? link.bToA : link.aToB
+  const exported = advertiseSiteRoutes(topology, receiver, link, routes, repeatOriginAsn)
   const received = exported.map((route) => ({ ...route, asPath: [...(policy.receivePrepend ?? []), ...route.asPath] }))
+  if (stage === 'before') return received
   return applyRouteMapRules(received, routerMapRules(topology, { kind: 'site', id: receiver.id }, link.id, 'inbound'))
     .filter((route) => !route.asPath.includes(receiver.asn))
 }

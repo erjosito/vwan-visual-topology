@@ -220,7 +220,7 @@ export function validateTopology(input: unknown): Topology {
       if (route.kind !== 'bgp' && connection.transport !== 'VPN') fail('Static routes are supported only on VPN connections.')
       const path = array(route.asPath, 64, 'AS path')
       if (path.some((n) => typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 4294967294)) fail('Invalid ASN.')
-      if (route.kind === 'bgp' && path.length === 0) fail('BGP routes need an AS path as received by the hub.')
+      if (route.kind === 'bgp' && path.length === 0) fail('BGP routes need an AS path as learned by the hub.')
       if (route.kind === 'bgp' && path.includes(65520)) fail('65520 is reserved for inter-hub propagation in this simulator.')
       if (route.kind !== 'bgp' && path.length !== 0) fail('Static routes must have an empty AS path.')
       return { id: id(route.id), prefix, asPath: path, kind: route.kind } as Topology['connections'][number]['routes'][number]

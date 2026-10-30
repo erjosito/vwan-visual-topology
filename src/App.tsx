@@ -15,13 +15,13 @@ import { RouteInspector } from './RouteInspector'
 import { RouteMapsPanel } from './RouteMapsPanel'
 import { RouteMapInspector } from './RouteMapInspector'
 import { StaticRoutingPanel } from './StaticRoutingPanel'
-import { ErLocationInspector } from './ErLocationInspector'
+import type { RouteMode } from './route-views'
 import { VpnRoutingWizard } from './VpnRoutingWizard'
 import { AzureFilesPanel } from './AzureFilesPanel'
 import { importAzureCapture } from './azure-import'
 import { vpnRoutingMode } from './vpn-routing'
 import type { VpnRoutingMode } from './vpn-routing'
-import { nodePrefixes, traceGroupedPaths, traceNodePath } from './paths'
+import { azureRoutesAtSites, nodePrefixes, traceGroupedPaths, traceNodePath } from './paths'
 import type { GroupPath, NodePath, PathDirection, PathGroup, PathNode } from './paths'
 import './App.css'
 
@@ -59,7 +59,8 @@ function App() {
   const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
   const [router, setRouter] = useState<ObjectSelection>({ kind: 'hub', id: topology.hubs[0]?.id ?? '' })
-  const [routeView, setRouteView] = useState<'hub' | 'firewall'>('hub')
+  const [routeView, setRouteView] = useState<'bgp' | 'hub' | 'firewall'>('bgp')
+  const [routeMode, setRouteMode] = useState<RouteMode>('bgp')
   const [connectionId, setConnectionId] = useState('')
   const [mapRouter, setMapRouter] = useState<RouterSelection>()
   const [mapDirection, setMapDirection] = useState<RouteMapDirection>()
@@ -92,12 +93,19 @@ function App() {
   const connection = topology.connections.find((c) => c.id === connectionId)
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
-  const activeView = routeView === 'firewall' && (hub?.routingIntent.private || hub?.routingIntent.internet) ? 'firewall' : 'hub'
-  const decisions = (activeView === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []
+  const activeView = routeView === 'firewall' && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView
+  const decisions = (activeView === 'bgp' ? simulation.bgpTables : activeView === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []
   const selectedRoutes = highlighting && router.kind === 'hub' ? [
     ...decisions.filter((d) => !prefix || d.prefix === prefix).flatMap((d) => d.selected),
     ...(activeView === 'hub' && hub?.routingIntent.private ? (simulation.firewallTables[hub.id] ?? []).filter((d) => !prefix || d.prefix === prefix).flatMap((d) => d.selected) : []),
   ] : []
+  const siteHighlight = useMemo(() => {
+    if (!highlighting || router.kind !== 'site') return []
+    const routing = azureRoutesAtSites(topology, simulation)
+    const prefixes = [...new Set((routing.tables[router.id] ?? []).filter((route) => !prefix || route.prefix === prefix).map((route) => route.prefix))]
+    return prefixes.flatMap((prefix) => traceNodePath(topology, simulation, { kind: 'site', id: router.id }, prefix.split('/')[0], routing))
+  }, [highlighting, router, topology, simulation, prefix])
+  const diagramPaths = tracing ? paths : siteHighlight
   const persist = (next: Topology) => {
     try { localStorage.setItem(storageKey, JSON.stringify(next)); setSaveError('') }
     catch { setSaveError('Browser storage is unavailable or full. Export JSON to preserve your topology.') }
@@ -114,7 +122,7 @@ function App() {
     setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setConnectionId(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
-  const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('hub'); setPrefix(''); setHighlighting(true); setTracing(false) }
+  const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlighting(true); setTracing(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
   const openStaticRouting = (value: RouterSelection) => { setMapRouter(value); setEditorRequest(undefined); setPanel('static') }
@@ -122,7 +130,7 @@ function App() {
     setSelection(value)
     if (!panel && !tracing && (value.kind === 'hub' || value.kind === 'site')) selectRouter(value)
   }
-  const showRoutes = (value: ObjectSelection, firewall = false) => { selectRouter(value); setRouteView(firewall ? 'firewall' : 'hub'); setPanel('routes') }
+  const showRoutes = (value: ObjectSelection, firewall = false, mode: RouteMode = 'bgp') => { selectRouter(value); setRouteView(firewall ? 'firewall' : 'bgp'); setRouteMode(mode); setHighlighting(mode === 'bgp'); setPanel('routes') }
   const openPath = (value: PathNode, direction: 'to' | 'from') => {
     setGroupTrace(undefined)
     const other = nodes.find((n) => nodeKey(n) !== nodeKey(value) && (direction === 'from' || nodePrefixes(topology, n).length))
@@ -186,7 +194,11 @@ function App() {
   ]
   const contextActions: ContextAction[] = contextSelection ? [
     { label: 'Edit configuration', run: () => setEditorRequest(contextSelection) },
-    ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [{ label: 'Show BGP routes', run: () => showRoutes(contextSelection) }] : []),
+    ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
+      { label: 'BGP table', run: () => showRoutes(contextSelection) },
+      { label: 'Learned routes', run: () => showRoutes(contextSelection, false, 'learned') },
+      { label: 'Advertised routes', run: () => showRoutes(contextSelection, false, 'advertised') },
+    ] : []),
     ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: 'Route maps', run: () => openRouteMaps(contextSelection as RouterSelection) }] : []),
     ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: 'Show route map rules', run: () => showRouteMapRules(contextSelection as RouterSelection) }] : []),
     ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: 'Static routing', run: () => openStaticRouting(contextSelection as RouterSelection) }] : []),
@@ -269,19 +281,19 @@ function App() {
         </div>
         <div className="canvas-stage">
           {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
-          <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={paths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={paths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={paths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={paths} sourceSpokeIds={paths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
+          <TopologyDiagram topology={topology} hubId={highlighting && router.kind === 'hub' ? router.id : ''} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
           {(highlighting || tracing) && <div className="highlight-status" role="status">{tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : 'No matching sources or destination prefixes configured'}` : `Path: ${sourceNode?.name ?? 'source'} → ${targetNode?.name ?? destination} · ${destinationPrefix || destination} · ${pathStatus}` : prefix ? `Preferred routes to ${prefix}` : `Preferred routes · ${inspected?.name ?? 'router'}`}{tracing && <button onClick={() => setPanel('paths')}>Path details</button>}<button onClick={() => { setHighlighting(false); setTracing(false); setPrefix('') }}>Clear highlighting</button></div>}
-          {panel === 'routes' && inspected && (router.kind === 'erLocation' ? <ErLocationInspector topology={topology} simulation={simulation} locationId={router.id} onClose={closePanel} /> : <RouteInspector topology={topology} simulation={simulation} router={router} view={activeView} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />)}
+          {panel === 'routes' && inspected && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={topology} simulation={simulation} router={router} view={activeView} mode={routeMode} onRouter={(value) => { selectRouter(value); setHighlighting(routeMode === 'bgp') }} onView={(view) => { setRouteView(view); setPrefix('') }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
           {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}
           {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
           {panel === 'static' && mapRouter && <StaticRoutingPanel key={nodeKey(mapRouter)} topology={topology} router={mapRouter} onSave={save} onClose={closePanel} />}
           {panel === 'vpnWizard' && vpnConversion && <VpnRoutingWizard key={`${vpnConversion.connectionId}:${vpnConversion.mode}`} topology={topology} connectionId={vpnConversion.connectionId} mode={vpnConversion.mode} onSave={save} onClose={closePanel} />}
           {panel === 'ads' && connection && <CanvasOverlay title={`Advertisements · ${connection.name}`} className="advertisements" onClose={closePanel}>
-            <p className="muted">{transportLabels[connection.transport]} · BGP advertisements only. AS paths are entered as received by the hub, including provider ASNs. Configure non-BGP VPN prefixes through Static routing on the site or hub.</p>
+            <p className="muted">{transportLabels[connection.transport]} · BGP advertisements only. AS paths are entered as learned by the hub, including provider ASNs. Configure non-BGP VPN prefixes through Static routing on the site or hub.</p>
             <label className="checkbox-field"><input type="checkbox" aria-label="Import site mesh routes" checked={connection.learnSiteRoutes} onChange={(e) => update((next) => { next.connections.find((c) => c.id === connection.id)!.learnSiteRoutes = e.target.checked })} />Advertise site-originated and learned routes</label>
             <div className="route-editor">{connection.routes.map((route) => <div className="route-edit-row" key={route.id}>
               <label className="field"><span>Advertised prefix</span><input aria-label="Advertised prefix" key={route.prefix} defaultValue={route.prefix} onBlur={(e) => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.find((r) => r.id === route.id)!.prefix = e.target.value })} /></label>
-              <label className="field"><span>Received AS path</span><input aria-label="Received AS path" key={route.asPath.join(' ')} disabled={route.kind !== 'bgp'} defaultValue={route.asPath.join(' ')} onBlur={(e) => { try { const asPath = parseAsPath(e.target.value); update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.find((r) => r.id === route.id)!.asPath = asPath }) } catch (error) { setError(message(error)) } }} /></label>
+              <label className="field"><span>Learned AS path</span><input aria-label="Learned AS path" key={route.asPath.join(' ')} disabled={route.kind !== 'bgp'} defaultValue={route.asPath.join(' ')} onBlur={(e) => { try { const asPath = parseAsPath(e.target.value); update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.find((r) => r.id === route.id)!.asPath = asPath }) } catch (error) { setError(message(error)) } }} /></label>
               <button className="danger" aria-label={`Remove route ${route.prefix}`} onClick={() => update((next) => { const c = next.connections.find((c) => c.id === connection.id)!; c.routes = c.routes.filter((r) => r.id !== route.id) })}>Remove</button>
             </div>)}<button onClick={() => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.push({ id: crypto.randomUUID(), prefix: '10.99.0.0/16', kind: 'bgp', asPath: [65001] }) })}>Add advertised route</button></div>
           </CanvasOverlay>}

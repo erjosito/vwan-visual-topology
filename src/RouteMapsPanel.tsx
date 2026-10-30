@@ -75,7 +75,7 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid assignment.') }
   }
   return <CanvasOverlay title={node ? `Route maps · ${node.name}` : 'Route maps'} className="route-map-panel" onClose={onClose}>
-    <p className="muted">Policies belong to this router, with independent assignments on each connection. Inbound means received by {node?.name ?? 'the router'}; outbound means advertised by it. A shared map updates every assignment on this router. Unmatched routes are allowed.</p>
+    <p className="muted">Policies belong to this router, with independent assignments on each connection. Inbound means learned by {node?.name ?? 'the router'}; outbound means advertised by it. A shared map updates every assignment on this router. Unmatched routes are allowed.</p>
     <div className="inspector-controls"><label className="field"><span>Route map router</span><select aria-label="Route map router" value={routerKey} onChange={(e) => onRouter({ kind: e.target.value.startsWith('site:') ? 'site' : 'hub', id: e.target.value.slice(e.target.value.indexOf(':') + 1) })}>
       {!topology.hubs.length && !topology.sites.length && <option value="">Add a hub or site first</option>}
       <optgroup label="Virtual hubs">{topology.hubs.map((h) => <option key={h.id} value={`hub:${h.id}`}>{h.name}</option>)}</optgroup><optgroup label="On-premises sites">{topology.sites.map((s) => <option key={s.id} value={`site:${s.id}`}>{s.name}</option>)}</optgroup>

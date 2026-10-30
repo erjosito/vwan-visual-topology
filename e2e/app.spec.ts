@@ -14,7 +14,7 @@ async function action(page: Page, object: string, command: string) {
   await page.getByRole('menu').getByRole('menuitem', { name: command, exact: true }).click()
 }
 const dialog = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true })
-async function showRoutes(page: Page, hub = 'Europe hub') { await action(page, `Select hub ${hub}`, 'Show BGP routes') }
+async function showRoutes(page: Page, hub = 'Europe hub') { await action(page, `Select hub ${hub}`, 'BGP table') }
 async function createMap(page: Page, name: string) {
   await page.getByRole('button', { name: 'Create route map', exact: true }).click()
   await page.getByLabel('Route map name', { exact: true }).fill(name)
@@ -249,11 +249,22 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   await expect(page.locator(`.path-flow-dots[data-link-id="${hubLink.id}"]`)).toHaveAttribute('data-from-id', 'eu')
   await expect(page.locator(`.path-flow-dots[data-link-id="${siteLink.id}"]`)).toHaveAttribute('data-from-id', saved.erLocations![0].id)
   await page.keyboard.press('Escape')
-  await action(page, 'Select ER location Frankfurt ER', 'Show BGP routes')
-  const attachment = page.getByRole('region', { name: 'ER advertisements on London circuit', exact: true })
+  await action(page, 'Select ER location Frankfurt ER', 'Advertised routes')
+  await page.getByLabel('Neighbor', { exact: true }).selectOption(siteLink.id)
+  const attachment = dialog(page, 'Advertised routes · Frankfurt ER')
   await expect(attachment).toContainText('10.1.0.0/16')
   await expect(attachment).toContainText('10.2.0.0/16')
   await expect(attachment).not.toContainText('10.30.0.0/16')
+  await page.keyboard.press('Escape')
+  await action(page, 'Select ER location Frankfurt ER', 'Learned routes')
+  await page.getByLabel('Neighbor', { exact: true }).selectOption(siteLink.id)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.88.0.0/16"]')).toHaveCount(1)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.1.0.0/16"]')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await action(page, 'Select ER location Frankfurt ER', 'BGP table')
+  await expect(dialog(page, 'BGP table · Frankfurt ER')).toContainText('location-wide MSEE BGP best-path table')
+  await page.getByRole('button', { name: 'BGP table · Europe hub · Frankfurt to Europe', exact: true }).click()
+  await expect(dialog(page, 'BGP table · Europe hub')).toBeVisible()
   await page.keyboard.press('Escape')
   await (await pathMenu(page, 'Select site London datacenter', 'to', 'Americas applications (spoke)')).getByRole('menuitem', { name: '10.2.0.0/16', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Reachable')
@@ -654,7 +665,7 @@ test('dragging updates links live, saves per-view positions and round-trips the 
   await expect(page.getByLabel('Visualization mode')).toHaveValue('constellation')
   await expect(page.locator('[data-node-id="eu-apps"]')).toHaveAttribute('transform', spokePosition!)
   await page.screenshot({ path: 'test-results/network-constellation.png', fullPage: true })
-  await action(page, 'Select hub Europe hub', 'Show BGP routes')
+  await action(page, 'Select hub Europe hub', 'BGP table')
   await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(3)
 })
 
@@ -733,7 +744,7 @@ test('canvas is the workspace, with layouts, zoom and keyboard background action
 test('BGP overlay preserves all candidates, colors, preference changes and topology comparison', async ({ page }) => {
   await page.goto('/')
   await showRoutes(page)
-  const inspector = dialog(page, 'BGP routes · Europe hub')
+  const inspector = dialog(page, 'BGP table · Europe hub')
   const rows = inspector.locator('tr[data-prefix="10.20.0.0/16"]')
   const preferred = inspector.locator('tr[data-prefix="10.20.0.0/16"][data-preferred="true"]')
   await expect(rows).toHaveCount(3)
@@ -745,7 +756,7 @@ test('BGP overlay preserves all candidates, colors, preference changes and topol
   await expect(inspector).not.toContainText(/\d+ candidates? · \d+ preferred/)
   await expect(inspector.locator('tr[data-reason-prefix="10.20.0.0/16"]')).toContainText('ExpressRoute wins')
   const before = await inspector.boundingBox()
-  await inspector.getByRole('button', { name: 'Move BGP routes · Europe hub to left', exact: true }).click()
+  await inspector.getByRole('button', { name: 'Move BGP table · Europe hub to left', exact: true }).click()
   expect((await inspector.boundingBox())!.x).toBeLessThan(before!.x)
   await page.getByLabel('Hub routing preference', { exact: true }).selectOption('VPN')
   await expect(preferred).toContainText('London backup')
@@ -755,7 +766,7 @@ test('BGP overlay preserves all candidates, colors, preference changes and topol
   expect(await preferred.locator('.as-path').evaluate((e) => getComputedStyle(e).color)).not.toBe(
     await inspector.locator('tr[data-preferred="false"] .as-path').first().evaluate((e) => getComputedStyle(e).color),
   )
-  await inspector.getByRole('button', { name: 'Move BGP routes · Europe hub to right', exact: true }).click()
+  await inspector.getByRole('button', { name: 'Move BGP table · Europe hub to right', exact: true }).click()
   await page.screenshot({ path: 'test-results/canvas-routes.png', fullPage: true })
   await page.reload()
   await showRoutes(page)
@@ -835,6 +846,10 @@ test('routing intent stays on hubs, with separate overlay tables and firewall pa
   await expect(page.locator('.firewall-node')).toHaveCount(0)
   await expect(page.getByLabel('Select hub Europe hub', { exact: true }).locator('.node-icon.secured')).toHaveCount(1)
   await showRoutes(page)
+  await expect(page.getByLabel('Route view', { exact: true })).toHaveValue('bgp')
+  await expect(page.locator('.effective-routes table')).toContainText('10.20.0.0/16')
+  await expect(page.locator('.effective-routes table')).not.toContainText('100.64.0.0/10')
+  await page.getByLabel('Route view', { exact: true }).selectOption('hub')
   await expect(page.locator('.effective-routes table')).toContainText('100.64.0.0/10')
   await expect(page.locator('.effective-routes table')).not.toContainText('10.20.0.0/16')
   await action(page, 'Select hub Europe hub', 'Show firewall routes')
@@ -1083,7 +1098,7 @@ test('site-peer policies belong to the endpoint and are cleaned up with deleted 
   await page.getByRole('button', { name: 'Save route map', exact: true }).click()
   const mapId = (await readTopology(page)).routeMaps![0].id
   await page.getByLabel('Outbound route map', { exact: true }).selectOption(mapId)
-  await action(page, 'Select site Site A', 'Show BGP routes')
+  await action(page, 'Select site Site A', 'BGP table')
   await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(0)
   await action(page, 'Select on-premises link WAN', 'Delete on-premises link')
   await dialog(page, 'Delete on-premises link').getByRole('button', { name: 'Confirm deletion', exact: true }).click()
@@ -1098,7 +1113,9 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   await page.goto('/')
   for (const object of ['Edit connection London primary', 'Select spoke Europe applications']) {
     await page.getByLabel(object, { exact: true }).focus(); await page.keyboard.press('Shift+F10')
-    await expect(page.getByRole('menuitem', { name: 'Show BGP routes', exact: true })).toHaveCount(0)
+    for (const command of ['BGP table', 'Learned routes', 'Advertised routes']) {
+      await expect(page.getByRole('menuitem', { name: command, exact: true })).toHaveCount(0)
+    }
     await page.keyboard.press('Escape')
   }
   const t: Topology = { version: 1, name: 'Site BGP', hubs: [], spokes: [], connections: [], sites: [
@@ -1110,7 +1127,7 @@ test('site BGP view retains alternatives, with route commands restricted to rout
     { id: 'ac', name: 'A to C', a: 'a', b: 'c', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [65030] } },
   ] }
   await importTopology(page, t)
-  await action(page, 'Select site Site A', 'Show BGP routes')
+  await action(page, 'Select site Site A', 'BGP table')
   await expect(page.getByLabel('Inspect router', { exact: true })).toHaveValue('site:a')
   await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"]')).toHaveCount(2)
   await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toContainText('Site B')
@@ -1119,6 +1136,103 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   await expect(page.locator('.path-flow-dots[data-link-id="ab"]')).toHaveAttribute('data-from-id', 'a')
   await expect(page.locator('.path-flow-dots[data-link-id="ac"]')).toHaveCount(0)
   await expect(page.getByLabel('Select site Site B', { exact: true }).locator('.node-prefixes')).toHaveText('10.80.0.0/16')
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('/24')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(0)
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.80')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(2)
+})
+
+test('learned and advertised route views default after maps and retain neighbor and prefix filters before maps', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  const t = structuredClone(example)
+  t.connections[1].routes = ['10.60.0.0/16', '10.61.0.0/16', '10.62.0.0/16']
+    .map((prefix) => ({ id: prefix, prefix, asPath: [65010], kind: 'bgp' }))
+  t.routeMaps = [{
+    id: 'in', name: 'Inbound test', hubId: 'eu', rules: [
+      { id: 'drop', prefixes: ['10.60.0.0/16'], match: 'equals', action: 'drop', prepend: [], summaryPrefixes: [], nextStep: 'terminate' },
+      { id: 'prepend', prefixes: ['10.61.0.0/16'], match: 'equals', action: 'prepend', prepend: [64496], summaryPrefixes: [], nextStep: 'terminate' },
+      { id: 'summary', prefixes: ['10.62.0.0/16'], match: 'equals', action: 'summarize', prepend: [], summaryPrefixes: ['10.0.0.0/8'], nextStep: 'terminate' },
+    ],
+  }, {
+    id: 'out', name: 'Outbound test', hubId: 'eu', rules: [
+      { id: 'drop-out', prefixes: ['10.1.0.0/16'], match: 'equals', action: 'drop', prepend: [], summaryPrefixes: [], nextStep: 'terminate' },
+    ],
+  }]
+  t.hubs[0].routeMapAssignments = [{ connectionId: 'vpn-eu', inboundMapId: 'in', outboundMapId: 'out' }]
+  await page.goto('/'); await importTopology(page, t)
+  const original = await readTopology(page)
+  await action(page, 'Select hub Europe hub', 'Learned routes')
+  await expect(page.getByLabel('Route-map stage', { exact: true })).toHaveValue('after')
+  await page.getByLabel('Neighbor', { exact: true }).selectOption('vpn-eu')
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.6')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(1)
+  await expect(page.locator('.effective-routes .as-path')).toHaveText('64496 65010')
+  await page.getByLabel('Route-map stage', { exact: true }).selectOption('before')
+  await expect(page.getByLabel('Neighbor', { exact: true })).toHaveValue('vpn-eu')
+  await expect(page.getByLabel('Filter by prefix', { exact: true })).toHaveValue('10.6')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(3)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.61.0.0/16"] .as-path')).toHaveText('65010')
+  await page.screenshot({ path: 'test-results/route-policy-stage-inspector.png', fullPage: true })
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('/8')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(0)
+  await page.getByLabel('Route-map stage', { exact: true }).selectOption('after')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.0.0.0/8"]')).toHaveCount(1)
+  await action(page, 'Select hub Europe hub', 'Advertised routes')
+  await expect(page.getByLabel('Route-map stage', { exact: true })).toHaveValue('after')
+  await page.getByLabel('Neighbor', { exact: true }).selectOption('vpn-eu')
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.1.')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(0)
+  await page.getByLabel('Route-map stage', { exact: true }).selectOption('before')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.1.0.0/16"]')).toHaveCount(1)
+  await showRoutes(page)
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.60')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(0)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await action(page, 'Select hub Europe hub', 'Learned routes')
+  await page.getByLabel('Neighbor', { exact: true }).selectOption('vpn-eu')
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.61')
+  await page.getByLabel('Route-map stage', { exact: true }).selectOption('before')
+  await expect(page.locator('.effective-routes .as-path')).toHaveText('65010')
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  expect(await readTopology(page)).toEqual(original)
+})
+
+test('site route views inspect Azure policies and highlight Azure-learned BGP paths', async ({ page }) => {
+  const t = structuredClone(example)
+  t.connections = [t.connections[1]]
+  t.connections[0].routes = [{ id: 'site-origin', prefix: '10.20.0.0/16', kind: 'bgp', asPath: [65010] }]
+  t.routeMaps = [
+    { id: 'site-in', name: 'Site inbound', siteId: 'dc', rules: [{
+      id: 'site-drop', prefixes: ['10.1.0.0/16'], match: 'equals', action: 'drop', prepend: [], summaryPrefixes: [], nextStep: 'terminate',
+    }] },
+    { id: 'site-out', name: 'Site outbound', siteId: 'dc', rules: [{
+      id: 'site-prepend', prefixes: ['10.20.0.0/16'], match: 'equals', action: 'prepend', prepend: [64496], summaryPrefixes: [], nextStep: 'terminate',
+    }] },
+  ]
+  t.sites[0].routeMapAssignments = [{ connectionId: 'vpn-eu', inboundMapId: 'site-in', outboundMapId: 'site-out' }]
+  await page.goto('/'); await importTopology(page, t)
+  const original = await readTopology(page)
+  await action(page, 'Select site London datacenter', 'Learned routes')
+  await expect(page.getByLabel('Route-map stage', { exact: true })).toHaveValue('after')
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.1.')
+  await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(0)
+  await page.getByLabel('Route-map stage', { exact: true }).selectOption('before')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.1.0.0/16"]')).toHaveCount(1)
+  await action(page, 'Select site London datacenter', 'Advertised routes')
+  await expect(page.getByLabel('Route-map stage', { exact: true })).toHaveValue('after')
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.20.')
+  await expect(page.locator('.effective-routes .as-path')).toHaveText('64496 65010')
+  await page.getByLabel('Route-map stage', { exact: true }).selectOption('before')
+  await expect(page.locator('.effective-routes .as-path')).toHaveText('65010')
+  await action(page, 'Select site London datacenter', 'BGP table')
+  await page.getByLabel('Filter by prefix', { exact: true }).fill('10.2.')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.2.0.0/16"][data-preferred="true"]')).toContainText('Azure BGP')
+  await page.locator('.effective-routes .prefix-button').click()
+  await expect(page.getByTestId('link-vpn-eu')).toHaveClass(/preferred-link/)
+  await expect(page.getByTestId('interhub-eu-us')).toHaveClass(/preferred-link/)
+  await expect(page.getByTestId('spoke-link-us-apps')).toHaveClass(/preferred-link/)
+  await expect(page.locator('.path-flow-dots[data-link-id="vpn-eu"]')).toHaveAttribute('data-from-id', 'dc')
+  expect(await readTopology(page)).toEqual(original)
 })
 
 test('JSON import/export, mobile overlays and Escape preserve user data', async ({ page }) => {

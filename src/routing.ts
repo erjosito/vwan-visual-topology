@@ -1,4 +1,4 @@
-import type { Connection, Hub, RouteKind, Topology, Transport } from './model'
+import type { Connection, Hub, RouteKind, RouteMapDirection, RouterSelection, Topology, Transport } from './model'
 import { cidr, contains, ipv4 } from './validation'
 import { applyRouteMapRules, connectionMapRules, propagateSites, routerMapRules, siteExports } from './bgp'
 import type { SiteRoute } from './bgp'
@@ -32,14 +32,24 @@ export interface Decision {
 }
 
 export interface Simulation {
+  bgpTables: Record<string, Decision[]>
   tables: Record<string, Decision[]>
   firewallTables: Record<string, Decision[]>
   siteTables: Record<string, SiteRoute[]>
   siteCandidates: Record<string, SiteRoute[]>
   outbound: Record<string, Candidate[]>
   erAdvertisements: Record<string, Candidate[]>
+  routePolicies: RoutePolicySnapshot[]
   converged: boolean
   warnings: string[]
+}
+
+export interface RoutePolicySnapshot {
+  router: RouterSelection
+  connectionId: string
+  direction: RouteMapDirection
+  before: Candidate[]
+  after: Candidate[]
 }
 
 function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
@@ -59,7 +69,7 @@ function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
   }
   if (hub.preference === 'ASPath') {
     const shortest = Math.min(...selected.map((r) => r.asPath.length))
-    filter(`Shortest received AS path (${shortest} ASNs, including inter-hub prepends).`, (r) => r.asPath.length === shortest)
+    filter(`Shortest learned AS path (${shortest} ASNs, including inter-hub prepends).`, (r) => r.asPath.length === shortest)
   }
   filter('Local connections are preferred over remote-hub connections.', (r) => !r.remote)
   // HRP compares ER and S2S VPN explicitly. An NVA is not classified as a VPN gateway.
@@ -69,7 +79,7 @@ function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
   }
   if (hub.preference !== 'ASPath') {
     const shortest = Math.min(...selected.map((r) => r.asPath.length))
-    filter(`Shortest received AS path (${shortest} ASNs).`, (r) => r.asPath.length === shortest)
+    filter(`Shortest learned AS path (${shortest} ASNs).`, (r) => r.asPath.length === shortest)
   }
   if (explanation.length === 0) explanation.push('Only available path, or all paths have equal modeled preference.')
   if (selected.length > 1) explanation.push(`${selected.length} equal-cost paths remain; no single traffic hash is predicted.`)
@@ -108,17 +118,24 @@ function erCustomerExport(route: Candidate): Candidate {
 
 export function simulate(topology: Topology): Simulation {
   const siteRouting = propagateSites(topology)
-  const mapRoutes = (connection: Connection, routes: Candidate[], direction: 'inbound' | 'outbound') => [
-    ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), connectionMapRules(topology, connection, direction)),
-    ...routes.filter((route) => route.kind === 'vpn-static'),
-  ]
+  const routePolicies: RoutePolicySnapshot[] = []
+  const policy = (router: RouterSelection, connectionId: string, direction: RouteMapDirection, before: Candidate[], after: Candidate[]) => {
+    routePolicies.push({ router, connectionId, direction, before, after })
+    return after
+  }
+  const mapRoutes = (connection: Connection, routes: Candidate[], direction: RouteMapDirection) => policy(
+    { kind: 'hub', id: connection.hubId }, connection.id, direction, routes, [
+      ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), connectionMapRules(topology, connection, direction)),
+      ...routes.filter((route) => route.kind === 'vpn-static'),
+    ])
   const fromSite = (connection: Connection, routes: Candidate[]) => {
     const bgp = routes.filter((route) => route.kind !== 'vpn-static')
     const provider = new Map(bgp.map((route) => [route.key, connection.transport === 'ExpressRoute' && route.asPath[0] === 12076]))
+    const before = bgp.map((route) => ({ ...route, asPath: provider.get(route.key) ? route.asPath.slice(1) : route.asPath }))
+    const after = policy({ kind: 'site', id: connection.siteId }, connection.id, 'outbound', before,
+      siteExports(topology, connection.siteId, connection.id, before))
     return [
-      ...siteExports(topology, connection.siteId, connection.id, bgp.map((route) => ({
-        ...route, asPath: provider.get(route.key) ? route.asPath.slice(1) : route.asPath,
-      }))).map((route) => ({ ...route, asPath: provider.get(route.key) ? [12076, ...route.asPath] : route.asPath })),
+      ...after.map((route) => ({ ...route, asPath: provider.get(route.key) ? [12076, ...route.asPath] : route.asPath })),
       ...routes.filter((route) => route.kind === 'vpn-static'),
     ]
   }
@@ -144,10 +161,12 @@ export function simulate(topology: Topology): Simulation {
       erLocationId: link.locationId, erSiteLinkId: link.id,
       ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map(candidate) } : {}),
     })
-    erAdvertisements[link.id] = siteExports(topology, site.id, link.id, [
+    const routes = [
       ...link.routes.map((route) => candidate({ ...route, key: route.id, sitePath: [site.id], siteLinkIds: [] })),
       ...(link.learnSiteRoutes ? siteRouting.tables[site.id].filter((route) => !route.key.startsWith(`${link.id}:`)).map(candidate) : []),
-    ])
+    ]
+    erAdvertisements[link.id] = policy({ kind: 'site', id: site.id }, link.id, 'outbound', routes,
+      siteExports(topology, site.id, link.id, routes))
   }
   const erImports = (hubId: string) => erLinks.filter((link) => link.hubId === hubId).flatMap((hubLink) => {
     const receive = (route: Candidate): Candidate => ({
@@ -157,7 +176,8 @@ export function simulate(topology: Topology): Simulation {
     })
     const routes = erLinks.filter((link) => link.siteId && link.locationId === hubLink.locationId)
       .flatMap((link) => (erAdvertisements[link.id] ?? []).map(receive))
-    return applyRouteMapRules(routes, routerMapRules(topology, { kind: 'hub', id: hubId }, hubLink.id, 'inbound'))
+    return policy({ kind: 'hub', id: hubId }, hubLink.id, 'inbound', routes,
+      applyRouteMapRules(routes, routerMapRules(topology, { kind: 'hub', id: hubId }, hubLink.id, 'inbound')))
   })
   const local = Object.fromEntries(topology.hubs.map((hub) => [
     hub.id, [
@@ -264,10 +284,10 @@ export function simulate(topology: Topology): Simulation {
   for (const link of erLinks.filter((link) => link.hubId)) {
     const routes = tables[link.hubId!].flatMap((decision) => decision.selected)
       .filter((route) => route.transport !== 'ExpressRoute' && route.prefix !== '0.0.0.0/0')
-    const mapped = [
+    const mapped = policy({ kind: 'hub', id: link.hubId! }, link.id, 'outbound', routes, [
       ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'hub', id: link.hubId! }, link.id, 'outbound')),
       ...routes.filter((route) => route.kind === 'vpn-static'),
-    ]
+    ])
     outbound[link.id] = mapped
       .map((route) => ({ ...erCustomerExport(route), erHubLinkId: link.id, erLocationId: link.locationId }))
     erAdvertisements[link.id] = outbound[link.id]
@@ -278,7 +298,7 @@ export function simulate(topology: Topology): Simulation {
       .filter((route) => !route.sitePath?.includes(link.siteId!))
   }
   if ((topology.erLocations ?? []).length) warnings.push('ER locations group private-peering attachments: each site attachment is an independent circuit. Azure advertises selected VNet, VPN and NVA routes, but not ER-learned routes, to those circuits. Global Reach, shared-circuit hub-to-hub reflection, redundant MSEE sessions, circuit bandwidth and gateway limits are not simulated.')
-  return { tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, erAdvertisements, converged, warnings }
+  return { bgpTables: tables, tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, erAdvertisements, routePolicies, converged, warnings }
 }
 
 export interface FlowPath {

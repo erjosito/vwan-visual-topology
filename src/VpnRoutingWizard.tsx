@@ -52,7 +52,7 @@ export function VpnRoutingWizard({ topology, connectionId, mode, onSave, onClose
           <p className="muted">Static routes have no AS paths to restore. Their initial BGP path uses site ASN {site.asn}; edit it for transit routes or prepending.</p>
           {bgpRoutes.map((route, index) => <div className="vpn-bgp-draft" key={index}>
             <label className="field"><span>Destination prefix</span><input aria-label={`BGP destination prefix ${index + 1}`} value={route.prefix} onChange={(event) => setBgpRoutes((routes) => routes.map((route, i) => i === index ? { ...route, prefix: event.target.value } : route))} /></label>
-            <label className="field"><span>Received AS path</span><input aria-label={`BGP AS path ${index + 1}`} value={route.asPath} onChange={(event) => setBgpRoutes((routes) => routes.map((route, i) => i === index ? { ...route, asPath: event.target.value } : route))} /></label>
+            <label className="field"><span>Learned AS path</span><input aria-label={`BGP AS path ${index + 1}`} value={route.asPath} onChange={(event) => setBgpRoutes((routes) => routes.map((route, i) => i === index ? { ...route, asPath: event.target.value } : route))} /></label>
             <button type="button" className="danger" aria-label={`Remove BGP destination ${index + 1}`} onClick={() => setBgpRoutes((routes) => routes.filter((_, i) => i !== index))}>Remove</button>
           </div>)}
           <button type="button" disabled={bgpRoutes.length >= 100} onClick={() => setBgpRoutes((routes) => [...routes, { prefix: '', asPath: String(site.asn) }])}>Add BGP destination</button>
@@ -67,7 +67,7 @@ export function VpnRoutingWizard({ topology, connectionId, mode, onSave, onClose
         </> : <>
           <p>Remove {currentStatics.length} site-owned static destination(s) for this VPN and save {proposed?.routes.length} explicit BGP advertisement(s).</p>
           <p>Site-originated/learned BGP import will be {learnSiteRoutes ? 'enabled' : 'disabled'}. Other connections' static destinations are unchanged.</p>
-          <div className="table-scroll"><table aria-label="Reviewed BGP destinations"><thead><tr><th>Destination prefix</th><th>Received AS path</th></tr></thead><tbody>{proposed?.routes.map((route) => <tr key={route.id}><td>{route.prefix}</td><td className="as-path">{route.asPath.join(' ')}</td></tr>)}</tbody></table></div>
+          <div className="table-scroll"><table aria-label="Reviewed BGP destinations"><thead><tr><th>Destination prefix</th><th>Learned AS path</th></tr></thead><tbody>{proposed?.routes.map((route) => <tr key={route.id}><td>{route.prefix}</td><td className="as-path">{route.asPath.join(' ')}</td></tr>)}</tbody></table></div>
         </>}
         <p className="notice">Route maps remain assigned. Static VPN routes bypass them; BGP routes are subject to those policies. Connection state, site prefix/ASN, other connections and saved layouts are not changed.</p>
       </>}
