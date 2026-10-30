@@ -25,6 +25,7 @@ export function nodePrefixes(topology: Topology, node: PathNode): string[] {
 export interface SiteAdvertisement extends SiteRoute { connectionId: string; erHubLinkId?: string }
 
 export function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
+  let selectionComplete = simulation.siteSelectionComplete !== false
   const advertisement = (route: SiteRoute, connectionId: string): SiteAdvertisement => ({
     ...route, connectionId,
     ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => advertisement(child, connectionId)) } : {}),
@@ -32,6 +33,7 @@ export function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
   const best = (routes: SiteAdvertisement[]) => [...new Set(routes.map((r) => r.prefix))].flatMap((prefix) => {
     const matches = routes.filter((r) => r.prefix === prefix)
     const shortest = Math.min(...matches.map((r) => r.asPath.length))
+    if (matches.filter((r) => r.asPath.length === shortest).length > 32) selectionComplete = false
     return matches.filter((r) => r.asPath.length === shortest).sort((a, b) => a.key.localeCompare(b.key)).slice(0, 32)
   })
   const origins = Object.fromEntries(topology.sites.map((site) => [site.id, [
@@ -54,7 +56,7 @@ export function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
     const next = Object.fromEntries(topology.sites.map((receiver) => {
       const received = topology.siteLinks.filter((l) => l.enabled && (l.a === receiver.id || l.b === receiver.id)).flatMap((link) => {
         const senderId = link.a === receiver.id ? link.b : link.a
-        return receiveSiteRoutes(topology, receiver, link, tables[senderId], true)
+        return receiveSiteRoutes(topology, receiver, link, tables[senderId])
       })
       return [receiver.id, [...origins[receiver.id], ...received]]
     }))
@@ -63,7 +65,7 @@ export function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
     tables = selected
     candidates = next
   }
-  return { tables, candidates, converged }
+  return { tables, candidates, converged, selectionComplete }
 }
 
 export function traceGroupedPaths(topology: Topology, simulation: Simulation, anchor: PathNode, direction: PathDirection, group: PathGroup): GroupPath[] {
@@ -97,6 +99,7 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
     const spoke = source.kind === 'spoke' ? topology.spokes.find((s) => s.id === source.id) : undefined
     if (spoke?.prefixes.some((prefix) => contains(prefix, address))) return [{
       hubs: [], siteId: spoke.id, steps: ['Destination is within the source spoke; no Virtual WAN hop is required.'], status: 'delivered',
+      termination: 'owner', terminalKind: 'spoke', traceComplete: true,
     }]
     const hubId = source.kind === 'hub' ? source.id : spoke?.hubId
     return hubId ? traceFlow(topology, simulation, hubId, destination).map((path) => ({
@@ -104,38 +107,41 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
     })) : []
   }
   const learned = siteRoutes ?? azureRoutesAtSites(topology, simulation)
-  if (!learned.converged) return [{ hubs: [], steps: ['On-premises Azure advertisement propagation did not converge.'], status: 'unreachable' }]
+  if (!learned.converged) return [{ hubs: [], steps: ['On-premises Azure advertisement propagation did not converge.'], status: 'unreachable', termination: 'nonconverged', traceComplete: false }]
   const routes = (learned.tables[source.id] ?? []).filter((r) => contains(r.prefix, address))
   const longest = Math.max(...routes.map((r) => cidr(r.prefix)!.length))
   const matches = routes.filter((r) => cidr(r.prefix)!.length === longest)
   const shortest = Math.min(...matches.map((r) => r.asPath.length))
   const preferred = matches.filter((r) => r.asPath.length === shortest).slice(0, 32)
-  if (!preferred.length) return [{ hubs: [], steps: ['No BGP route at the source site. Azure routes must be advertised on a supported connection; SD-WAN outbound learning is not modeled.'], status: 'unreachable' }]
+  if (!preferred.length) return [{ hubs: [], steps: ['No BGP route at the source site. Azure routes must be advertised on a supported connection; SD-WAN outbound learning is not modeled.'], status: 'unreachable', termination: 'no-route', traceComplete: learned.selectionComplete }]
   const contributions = (route: SiteAdvertisement): SiteAdvertisement[] => {
     if (!route.forwardingRoutes) return [route]
     const matches = route.forwardingRoutes.filter((child) => contains(child.prefix, address)).flatMap((child) => contributions(child as SiteAdvertisement))
     const longest = Math.max(...matches.map((child) => cidr(child.prefix)!.length))
     return matches.filter((child) => cidr(child.prefix)!.length === longest)
   }
-  return preferred.flatMap((selected): NodePath[] => {
+  const paths = preferred.flatMap((selected): NodePath[] => {
     const actual = contributions(selected)
-    if (!actual.length) return [{ hubs: [], steps: ['The mapped summary has no known contributing route for this destination.'], status: 'unreachable' }]
+    if (!actual.length) return [{ hubs: [], steps: ['The mapped summary has no known contributing route for this destination.'], status: 'unreachable', termination: 'summary-hole', lookupPrefix: selected.prefix }]
     return actual.flatMap((route): NodePath[] => {
       const steps = [`Source site: longest prefix ${selected.prefix}, shortest AS path ${selected.asPath.join(' ') || 'local'}.`]
-      if (!route.connectionId) return [{ hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, siteId: route.sitePath.at(-1), steps, status: 'delivered' }]
+      if (!route.connectionId) return [{ hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, siteId: route.sitePath.at(-1), steps, status: 'delivered', termination: 'owner', terminalKind: 'site', lookupPrefix: selected.prefix }]
       const connection = topology.connections.find((c) => c.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId)
       const erHub = topology.erLinks?.find((link) => link.id === route.erHubLinkId)
       const hubId = connection?.hubId ?? erHub?.hubId
-      if (!connection || !hubId) return [{ hubs: [], steps: [...steps, 'The Azure attachment is unavailable.'], status: 'unreachable' }]
+      if (!connection || !hubId) return [{ hubs: [], steps: [...steps, 'The Azure attachment is unavailable.'], status: 'unreachable', termination: 'attachment-unavailable', lookupPrefix: selected.prefix }]
       return traceFlow(topology, simulation, hubId, destination).map((path) => {
         const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
         return {
           ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,
           ...(erHub ? { sourceErLinkIds: [connection.id, erHub.id] } : {}),
           status: loop ? 'loop' : path.status,
+          termination: loop ? 'loop' : path.termination,
           steps: [...steps, `Enter Azure via ${connection.name}${erHub ? ` → ${topology.erLocations?.find((location) => location.id === erHub.locationId)?.name} → ${erHub.name}` : ''}.`, ...path.steps, ...(loop ? ['The selected Azure route returns to the source-side site path.'] : [])],
         }
       })
     })
-  }).slice(0, 128)
+  })
+  const complete = learned.selectionComplete && paths.length <= 128 && paths.every((path) => path.traceComplete !== false)
+  return paths.slice(0, 128).map((path) => ({ ...path, traceComplete: complete }))
 }

@@ -42,6 +42,7 @@ export interface Simulation {
   routePolicies: RoutePolicySnapshot[]
   converged: boolean
   warnings: string[]
+  siteSelectionComplete?: boolean
 }
 
 export interface RoutePolicySnapshot {
@@ -298,7 +299,7 @@ export function simulate(topology: Topology): Simulation {
       .filter((route) => !route.sitePath?.includes(link.siteId!))
   }
   if ((topology.erLocations ?? []).length) warnings.push('ER locations group private-peering attachments: each site attachment is an independent circuit. Azure advertises selected VNet, VPN and NVA routes, but not ER-learned routes, to those circuits. Global Reach, shared-circuit hub-to-hub reflection, redundant MSEE sessions, circuit bandwidth and gateway limits are not simulated.')
-  return { bgpTables: tables, tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, erAdvertisements, routePolicies, converged, warnings }
+  return { bgpTables: tables, tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, erAdvertisements, routePolicies, converged, warnings, siteSelectionComplete: siteRouting.selectionComplete }
 }
 
 export interface FlowPath {
@@ -311,16 +312,21 @@ export interface FlowPath {
   siteLinkIds?: string[]
   erLinkIds?: string[]
   status: 'delivered' | 'unreachable' | 'loop'
+  termination?: 'owner' | 'internet' | 'no-route' | 'firewall-no-route' | 'summary-hole' | 'attachment-unavailable' | 'downstream-no-route' | 'loop' | 'nonconverged'
+  terminalKind?: 'spoke' | 'site'
+  traceComplete?: boolean
+  lookupPrefix?: string
 }
 
 export function traceFlow(topology: Topology, simulation: Simulation, hubId: string, destination: string): FlowPath[] {
   const address = ipv4(destination)
   if (address === undefined || !topology.hubs.some((h) => h.id === hubId) || !simulation.converged) return []
   const paths: FlowPath[] = []
+  let traceComplete = true
   const walk = (current: string, visited: string[], steps: string[], firewalls: string[]) => {
     const name = topology.hubs.find((h) => h.id === current)!.name
     if (visited.includes(current)) {
-      paths.push({ hubs: [...visited, current], firewalls, steps: [...steps, `Forwarding loop at ${name}.`], status: 'loop' })
+      paths.push({ hubs: [...visited, current], firewalls, steps: [...steps, `Forwarding loop at ${name}.`], status: 'loop', termination: 'loop' })
       return
     }
     const hubs = [...visited, current]
@@ -328,16 +334,17 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
       .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
     let decision = lookup(simulation.tables[current])
     if (!decision) {
-      paths.push({ hubs, firewalls, steps: [...steps, `${name}: no matching hub route for ${destination}. Check routing-intent private prefixes if enabled.`], status: 'unreachable' })
+      paths.push({ hubs, firewalls, steps: [...steps, `${name}: no matching hub route for ${destination}. Check routing-intent private prefixes if enabled.`], status: 'unreachable', termination: 'no-route' })
       return
     }
     const details = [...steps, `${name}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`]
     let inspected = firewalls
     if (decision.selected[0]?.transport === 'Firewall') {
       inspected = [...firewalls, current]
+      const policyPrefix = decision.prefix
       decision = lookup(simulation.firewallTables[current])
       if (!decision) {
-        paths.push({ hubs, firewalls: inspected, steps: [...details, `Azure Firewall in ${name}: no matching forwarding route.`], status: 'unreachable' })
+        paths.push({ hubs, firewalls: inspected, steps: [...details, `Azure Firewall in ${name}: no matching forwarding route.`], status: 'unreachable', termination: 'firewall-no-route', lookupPrefix: policyPrefix })
         return
       }
       details.push(`Azure Firewall in ${name}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`)
@@ -350,14 +357,15 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
     }
     const forwarding = decision.selected.flatMap((route) => {
       const resolved = resolve(route)
-      if (!resolved.length && paths.length < 128) {
-        paths.push({ hubs, firewalls: inspected, connectionId: route.connectionId,
-          steps: [...details, 'The summary has no contributing route for this destination.'], status: 'unreachable' })
+      if (!resolved.length) {
+        if (paths.length >= 128) traceComplete = false
+        else paths.push({ hubs, firewalls: inspected, connectionId: route.connectionId,
+          steps: [...details, 'The summary has no contributing route for this destination.'], status: 'unreachable', termination: 'summary-hole', lookupPrefix: decision.prefix })
       }
       return resolved
     })
     for (const route of forwarding) {
-      if (paths.length >= 128) return
+      if (paths.length >= 128) { traceComplete = false; return }
       if (route.remote) walk(route.originHubId, hubs, details, inspected)
       else if (route.transport === 'Internet') {
         const privateDestination = RFC1918_PREFIXES.some((prefix) => contains(prefix, address))
@@ -365,7 +373,7 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
           steps: [...details, privateDestination
             ? 'Internet egress does not provide reachability to an RFC1918 destination without a private forwarding route.'
             : 'Direct Internet egress. Firewall allow/deny and SNAT policies are not simulated.'],
-          status: privateDestination ? 'unreachable' : 'delivered' })
+          status: privateDestination ? 'unreachable' : 'delivered', termination: 'internet', lookupPrefix: decision.prefix })
       }
       else {
         const matching = route.kind === 'vpn-static'
@@ -375,7 +383,7 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
         const missing = route.kind === 'vpn-static' && !onward.length && (matching.length > 0
           || topology.sites.some((site) => site.id !== route.siteId && site.prefixes.some((prefix) => contains(prefix, address))))
         for (const tail of onward.length ? onward : [route]) {
-          if (paths.length >= 128) return
+          if (paths.length >= 128) { traceComplete = false; return }
           paths.push({ hubs, firewalls: inspected, siteHops: tail.sitePath, siteLinkIds: tail.siteLinkIds,
             connectionId: route.connectionId, siteId: tail.sitePath?.[tail.sitePath.length - 1] ?? route.siteId,
             ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
@@ -383,11 +391,12 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
               ...(route.erLocationId ? [`ExpressRoute location: ${topology.erLocations?.find((location) => location.id === route.erLocationId)?.name}.`] : []),
               ...(tail.sitePath && tail.sitePath.length > 1 ? [`On-premises transit: ${tail.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : []),
               ...(missing ? ['No known on-premises forwarding route to the destination site.'] : [])],
-            status: missing ? 'unreachable' : 'delivered' })
+            status: missing ? 'unreachable' : 'delivered', termination: missing ? 'downstream-no-route' : 'owner',
+            terminalKind: route.transport === 'VNet' ? 'spoke' : 'site', lookupPrefix: decision.prefix })
         }
       }
     }
   }
   walk(hubId, [], [], [])
-  return paths
+  return paths.map((path) => ({ ...path, traceComplete }))
 }

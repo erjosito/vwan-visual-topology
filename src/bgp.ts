@@ -91,6 +91,7 @@ export interface SiteRouting {
   tables: Record<string, SiteRoute[]>
   candidates: Record<string, SiteRoute[]>
   converged: boolean
+  selectionComplete: boolean
 }
 
 export function siteExports<T extends RouteMapAdvertisement>(topology: Topology, siteId: string, connectionId: string, routes: T[]): T[] {
@@ -101,13 +102,14 @@ export function siteExports<T extends RouteMapAdvertisement>(topology: Topology,
     .map((route) => ({ ...route, asPath: route.asPath.length && (!route.forwardingRoutes || route.asPath.includes(asn)) ? route.asPath : [asn, ...route.asPath] }))
 }
 
-export function advertiseSiteRoutes<T extends SiteRoute>(topology: Topology, receiver: Site, link: SiteLink, routes: T[], repeatOriginAsn = false, stage: 'before' | 'after' = 'after'): T[] {
+export function advertiseSiteRoutes<T extends SiteRoute>(topology: Topology, receiver: Site, link: SiteLink, routes: T[], _repeatOriginAsn = false, stage: 'before' | 'after' = 'after'): T[] {
   const senderId = link.a === receiver.id ? link.b : link.a
   const sender = topology.sites.find((site) => site.id === senderId)!
   const policy = link.a === senderId ? link.aToB : link.bToA
   const transit = (route: T): T => ({
     ...route, key: `${link.id}:${route.key}`,
-    asPath: [...policy.prepend, ...(!repeatOriginAsn && route.asPath[0] === sender.asn ? route.asPath : [sender.asn, ...route.asPath])],
+    // Both site planes contain already-normalized local origins; Azure-learned paths still need the sender ASN.
+    asPath: [...policy.prepend, ...(route.asPath[0] === sender.asn ? route.asPath : [sender.asn, ...route.asPath])],
     sitePath: [receiver.id, ...route.sitePath], siteLinkIds: [link.id, ...(route.siteLinkIds ?? [])],
     ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => transit(child as T)) } : {}),
   })
@@ -126,6 +128,7 @@ export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, recei
 }
 
 export function propagateSites(topology: Topology): SiteRouting {
+  let selectionComplete = true
   const origins: Record<string, SiteRoute[]> = Object.fromEntries(topology.sites.map((site) => [site.id, [
     ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [], sitePath: [site.id], siteLinkIds: [] as string[] })),
     ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.siteId === site.id).flatMap((c) => c.routes.filter((r) => r.kind === 'bgp').map((r) => ({
@@ -136,6 +139,7 @@ export function propagateSites(topology: Topology): SiteRouting {
     const matching = routes.filter((r) => r.prefix === prefix)
     const shortest = Math.min(...matching.map((r) => r.asPath.length))
     const unique = new Map(matching.filter((r) => r.asPath.length === shortest).map((r) => [r.key + r.sitePath.join(':'), r]))
+    if (unique.size > 32) selectionComplete = false
     return [...unique.values()].slice(0, 32)
   })
   let tables = Object.fromEntries(topology.sites.map((s) => [s.id, best(origins[s.id])]))
@@ -157,5 +161,5 @@ export function propagateSites(topology: Topology): SiteRouting {
     tables = next
     candidates = nextCandidates
   }
-  return { tables, candidates, converged }
+  return { tables, candidates, converged, selectionComplete }
 }

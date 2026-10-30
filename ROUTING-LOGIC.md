@@ -206,6 +206,24 @@ Historical investigations [#9](https://github.com/erjosito/vwan-visual-topology/
 
 ## 10. Verification and references
 
+### Diagnostic-layer follow-up (#17)
+
+The intent-aware checker in `src/diagnostics.ts` uses independent forward and
+return traces, declared endpoint ownership, address-range partitions, physical
+path sets and bounded single-link scenarios. It distinguishes modeled failures,
+risks and unassessed cases; application delivery, firewall rules, NAT and ECMP
+hash pairing remain outside its scope.
+
+R1 is now corrected at the shared site-export boundary: an already-leading
+sender ASN is not prepended again, while Azure-learned transit routes still
+receive the sender ASN when absent. Explicit/configured origins, Azure transit
+and ECMP have regression coverage.
+
+R2-R4 are not claimed resolved. Diagnostics gate affected ER-default cases,
+reserved hub-AS/input assumptions, NVA selection and unavailable SD-WAN outbound
+learning as unknown. Unrelated supported flows remain assessable. This does not
+change the historic lab evidence or certify new Azure behavior.
+
 Focused source coverage lives in [`routing.test.ts`](src/routing.test.ts), [`paths.test.ts`](src/paths.test.ts), [`route-maps.test.ts`](src/route-maps.test.ts), and [`route-views.test.ts`](src/route-views.test.ts). Passing those tests verifies their assertions, not the disputed Azure assumptions. The four review probes above were separate read-only reproductions, not new regression tests that would enshrine inconsistent behavior.
 
 ```powershell

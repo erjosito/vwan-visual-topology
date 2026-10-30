@@ -27,6 +27,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **Azure files** imports a local, read-only Azure CLI capture after review and exports an offline Bicep starter for a new Standard WAN and selected unsecured hubs. No Azure authentication, SDK or deployment service is added to the app.
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
+- **Check routing** opens an offline, intent-aware diagnostics inspector. Declare bidirectional or forbidden flows, source/destination IPv4 addresses or prefixes, optional firewall waypoints, and neighbor route requirements. Analysis runs in a cancellable local worker, with explicit coverage/limitations and separate forward/return evidence; no Azure credentials or packet probes are used.
 
 ## Languages and networking terminology
 
@@ -50,6 +51,16 @@ Japanese terminology follows Microsoft's Japanese Virtual WAN documentation, cro
 Established product/protocol names and acronyms such as Azure, Virtual WAN, ExpressRoute, BGP, VPN, SD-WAN, ASN and ECMP stay unchanged. User-defined/imported/example names and regions, numeric data, schema keys and executable code are data, not translated interface text. Unknown externally supplied warnings stay as supplied rather than being machine-translated; browser-native validation follows the browser's own language.
 
 Sources checked before implementation: [Microsoft hub routing preference](https://learn.microsoft.com/ja-jp/azure/virtual-wan/about-virtual-hub-routing-preference), [effective routes](https://learn.microsoft.com/ja-jp/azure/virtual-wan/effective-routes-virtual-hub), [route maps](https://learn.microsoft.com/ja-jp/azure/virtual-wan/route-maps-about), and [Cisco BGP best-path selection](https://www.cisco.com/c/ja_jp/support/docs/ip/border-gateway-protocol-bgp/13753-25.html).
+
+## Routing diagnostics
+
+Choose **Check routing**, add the communication you expect, then **Run diagnostics**. An allow requirement checks both directions; a deny requirement checks that the specified forward direction cannot reach its destination. Source addresses matter for return routing. Prefix requirements evaluate routing-equivalent address intervals, not a ping to every host or only the prefix base address.
+
+Findings distinguish modeled errors, potential risks, information and cases that cannot be assessed. Asymmetric transit is not automatically an error, and ECMP candidates do not predict the forward/return traffic hash. Firewall waypoint checks do not execute firewall rules, NAT or session state. Unknown ownership, unsupported learning, provisional routing and exhausted analysis limits must not be interpreted as a healthy real network.
+
+Click a finding to highlight its forward/return evidence; use its route-inspection links for the relevant router. Filter by severity, category, node or prefix. Optional single-link failure checks work on model copies only. Editing routing invalidates results; layout and language changes do not change the calculation.
+
+Analysis profiles are stored separately from topology JSON in this browser. Profiles can be downloaded/imported; diagnostic reports can be downloaded. These files contain endpoint addresses, object IDs and modeled route details and must be handled under your organization's data policies. No profile/report is sent to Azure, feedback or a new backend. Importing an analysis profile does not replace the topology.
 
 ## Run locally
 
