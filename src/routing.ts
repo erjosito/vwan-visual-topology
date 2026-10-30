@@ -322,7 +322,7 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
       }
       details.push(`Azure Firewall in ${name}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`)
     }
-    const resolve = (route: Candidate): Candidate[] => {
+    const resolve = <T extends { prefix: string; remote?: boolean; forwardingRoutes?: T[] }>(route: T): T[] => {
       if (route.remote || !route.forwardingRoutes) return [route]
       const matching = route.forwardingRoutes.filter((r) => contains(r.prefix, address))
       const longest = Math.max(...matching.map((r) => cidr(r.prefix)!.length))
@@ -347,12 +347,25 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
             : 'Direct Internet egress. Firewall allow/deny and SNAT policies are not simulated.'],
           status: privateDestination ? 'unreachable' : 'delivered' })
       }
-      else paths.push({ hubs, firewalls: inspected, siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, connectionId: route.connectionId, siteId: route.siteId,
-        ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
-        steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId))?.name ?? route.connectionId}.`,
-          ...(route.erLocationId ? [`ExpressRoute location: ${topology.erLocations?.find((location) => location.id === route.erLocationId)?.name}.`] : []),
-          ...(route.sitePath && route.sitePath.length > 1 ? [`On-premises transit: ${route.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : [])],
-        status: 'delivered' })
+      else {
+        const matching = route.kind === 'vpn-static'
+          ? (simulation.siteTables[route.siteId] ?? []).filter((r) => contains(r.prefix, address)) : []
+        const longest = Math.max(...matching.map((r) => cidr(r.prefix)!.length))
+        const onward = matching.filter((r) => cidr(r.prefix)!.length === longest).flatMap(resolve)
+        const missing = route.kind === 'vpn-static' && !onward.length && (matching.length > 0
+          || topology.sites.some((site) => site.id !== route.siteId && site.prefixes.some((prefix) => contains(prefix, address))))
+        for (const tail of onward.length ? onward : [route]) {
+          if (paths.length >= 128) return
+          paths.push({ hubs, firewalls: inspected, siteHops: tail.sitePath, siteLinkIds: tail.siteLinkIds,
+            connectionId: route.connectionId, siteId: tail.sitePath?.[tail.sitePath.length - 1] ?? route.siteId,
+            ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
+            steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId))?.name ?? route.connectionId}.`,
+              ...(route.erLocationId ? [`ExpressRoute location: ${topology.erLocations?.find((location) => location.id === route.erLocationId)?.name}.`] : []),
+              ...(tail.sitePath && tail.sitePath.length > 1 ? [`On-premises transit: ${tail.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : []),
+              ...(missing ? ['No known on-premises forwarding route to the destination site.'] : [])],
+            status: missing ? 'unreachable' : 'delivered' })
+        }
+      }
     }
   }
   walk(hubId, [], [], [])

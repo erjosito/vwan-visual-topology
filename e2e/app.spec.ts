@@ -126,7 +126,7 @@ test('zoom buttons stay synchronized and nodes can use both canvas sides in eith
   }
 })
 
-test('highlighted paths move subtle dots in the actual traffic direction in either layout', async ({ page }) => {
+test('highlighted paths move visible dots in the actual traffic direction in either layout', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto('/')
   await expect(page.locator('.path-flow-dots')).toHaveCount(0)
@@ -161,9 +161,38 @@ test('highlighted paths move subtle dots in the actual traffic direction in eith
       }
     }
   }
-  await page.screenshot({ path: 'test-results/subtle-directional-paths.png', fullPage: true })
+  await page.screenshot({ path: 'test-results/visible-directional-paths.png', fullPage: true })
   await page.getByRole('button', { name: 'Clear highlighting', exact: true }).click()
   await expect(page.locator('.path-flow-dots')).toHaveCount(0)
+})
+
+test('static VPN traces highlight the final downstream site link and its traffic direction', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.connections = [topology.connections[1]]
+  topology.connections[0].routes = []
+  topology.sites = [
+    { id: 'dc', name: 'VPN transit site', asn: 65010, prefixes: ['10.20.0.0/16'],
+      vpnStaticRoutes: [{ id: 'static-destination', prefix: '10.80.0.0/16', connectionId: 'vpn-eu' }] },
+    { id: 'destination', name: 'Downstream site', asn: 65050, prefixes: ['10.80.0.0/16'] },
+  ]
+  topology.siteLinks = [{
+    id: 'last-hop', name: 'Downstream WAN', a: 'destination', b: 'dc', enabled: true,
+    aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] },
+  }]
+  await page.goto('/'); await importTopology(page, topology)
+  for (const layout of ['layered', 'constellation']) {
+    await page.getByLabel('Visualization mode').selectOption(layout)
+    await (await pathMenu(page, 'Select spoke Americas applications', 'to', 'Downstream site (site)'))
+      .getByRole('menuitem', { name: '10.80.0.0/16', exact: true }).click()
+    await expect(page.getByTestId('peer-link-last-hop')).toHaveClass(/preferred-link/)
+    const dots = page.locator('.path-flow-dots[data-link-id="last-hop"]')
+    await expect(dots).toHaveAttribute('data-from-id', 'dc')
+    await expect(dots).toHaveAttribute('data-to-id', 'destination')
+    await expect(dots).toHaveClass(/reverse/)
+    await groupPath(page, 'Select site Downstream site', 'from', 'All Azure VNets')
+    await expect(page.getByTestId('peer-link-last-hop')).toHaveClass(/preferred-link/)
+    await expect(dots).toHaveCount(1)
+  }
 })
 
 test('grouped paths deduplicate shared motion, show both directions and respect reduced motion', async ({ page }) => {

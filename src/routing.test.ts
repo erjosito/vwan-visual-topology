@@ -431,6 +431,52 @@ describe('route maps and on-premises transit', () => {
     t.connections[0].learnSiteRoutes = false
     expect(selected(t, 'a', '10.80.0.0/16')).toHaveLength(0)
   })
+  it('continues a static VPN prefix through the selected on-premises links without changing hub selection', () => {
+    const t = mesh()
+    t.hubs.push(hub('b', 'ASPath'))
+    t.connections[0].learnSiteRoutes = false
+    t.sites[0].prefixes = ['10.0.0.0/8']
+    t.sites[0].vpnStaticRoutes = [{ id: 'static-remote', prefix: '10.80.0.0/16', connectionId: 'vpn' }]
+    t.siteLinks.push({ ...structuredClone(t.siteLinks[0]), id: 'backup-wan', bToA: { prefixes: [], prepend: [65050, 65050] } })
+    const simulation = simulate(t)
+    expect(simulation.tables.a.find((route) => route.prefix === '10.80.0.0/16')!.selected[0])
+      .toMatchObject({ kind: 'vpn-static', asPath: [], sitePath: ['vpn-site'], siteLinkIds: [] })
+    expect(traceFlow(t, simulation, 'b', '10.80.0.5')).toMatchObject([{
+      hubs: ['b', 'a'], connectionId: 'vpn', siteId: 'remote-site',
+      siteHops: ['vpn-site', 'remote-site'], siteLinkIds: ['wan'], status: 'delivered',
+    }])
+    t.siteLinks[2].bToA.prepend = [65050]
+    expect(traceFlow(t, simulate(t), 'b', '10.80.0.5').map((path) => path.siteLinkIds)).toEqual([['wan'], ['backup-wan']])
+    t.siteLinks[0].enabled = false
+    expect(traceFlow(t, simulate(t), 'b', '10.80.0.5')[0].siteLinkIds).toEqual(['backup-wan'])
+  })
+  it.each(['disconnected', 'filtered'])('keeps gateway statics installed but does not claim delivery to a %s known site', (failure) => {
+    const t = mesh()
+    t.connections[0].learnSiteRoutes = false
+    t.sites[0].vpnStaticRoutes = [{ id: 'static-remote', prefix: '10.80.0.0/16', connectionId: 'vpn' }]
+    if (failure === 'disconnected') t.siteLinks[0].enabled = false
+    else t.siteLinks[0].bToA.prefixes = ['10.99.0.0/16']
+    const simulation = simulate(t)
+    expect(simulation.tables.a.find((route) => route.prefix === '10.80.0.0/16')!.selected[0].kind).toBe('vpn-static')
+    expect(traceFlow(t, simulation, 'a', '10.80.0.5')[0]).toMatchObject({
+      siteId: 'vpn-site', siteLinkIds: [], status: 'unreachable',
+    })
+  })
+  it('resolves on-premises summaries after static VPN egress without delivering into aggregate holes', () => {
+    const t = mesh()
+    t.connections[0].learnSiteRoutes = false
+    t.sites[0].vpnStaticRoutes = [{ id: 'static-summary', prefix: '10.0.0.0/8', connectionId: 'vpn' }]
+    t.routeMaps = [{ id: 'site-summary', name: 'Site summary', siteId: 'remote-site', rules: [{
+      id: 'summarize', prefixes: ['10.80.0.0/16'], match: 'equals', action: 'summarize',
+      summaryPrefixes: ['10.0.0.0/8'], prepend: [], nextStep: 'terminate',
+    }] }]
+    t.sites[1].routeMapAssignments = [{ connectionId: 'wan', outboundMapId: 'site-summary' }]
+    const simulation = simulate(t)
+    expect(traceFlow(t, simulation, 'a', '10.80.0.5')[0]).toMatchObject({
+      siteHops: ['vpn-site', 'remote-site'], siteLinkIds: ['wan'], status: 'delivered',
+    })
+    expect(traceFlow(t, simulation, 'a', '10.81.0.5')[0]).toMatchObject({ siteLinkIds: [], status: 'unreachable' })
+  })
   it('retains exact selected parallel link IDs through site, hub and summarized flow routes', () => {
     const t = mesh()
     t.siteLinks.push({
