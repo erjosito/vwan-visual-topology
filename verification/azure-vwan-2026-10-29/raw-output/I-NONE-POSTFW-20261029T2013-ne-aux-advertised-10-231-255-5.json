@@ -1,0 +1,12 @@
+{
+  "value": [
+    {
+      "asPath": "65515",
+      "localAddress": "10.231.255.13",
+      "network": "10.231.0.0/16",
+      "nextHop": "10.231.255.13",
+      "origin": "Igp",
+      "weight": 0
+    }
+  ]
+}

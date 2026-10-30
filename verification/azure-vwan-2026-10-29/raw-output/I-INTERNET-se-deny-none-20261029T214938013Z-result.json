@@ -1,0 +1,52 @@
+{
+  "source": "workload-se",
+  "scenario": "I-INTERNET",
+  "deniedFirewall": "none",
+  "matched": true,
+  "observations": [
+    {
+      "iteration": 0,
+      "observedAtUtc": "2026-10-29T22:49:52.231513+01:00",
+      "kind": "private",
+      "destination": "10.62.1.1",
+      "expectedDelivery": true,
+      "curlCode": 0,
+      "httpStatus": "200",
+      "hostname": "static-se",
+      "matched": true
+    },
+    {
+      "iteration": 0,
+      "observedAtUtc": "2026-10-29T22:49:52.264604+01:00",
+      "kind": "internet",
+      "destination": "4.165.97.27",
+      "expectedDelivery": true,
+      "curlCode": 0,
+      "httpStatus": "200",
+      "hostname": "bgp-se",
+      "matched": true
+    },
+    {
+      "iteration": 1,
+      "observedAtUtc": "2026-10-29T22:50:22.289794+01:00",
+      "kind": "private",
+      "destination": "10.62.1.1",
+      "expectedDelivery": true,
+      "curlCode": 0,
+      "httpStatus": "200",
+      "hostname": "static-se",
+      "matched": true
+    },
+    {
+      "iteration": 1,
+      "observedAtUtc": "2026-10-29T22:50:22.302134+01:00",
+      "kind": "internet",
+      "destination": "4.165.97.27",
+      "expectedDelivery": true,
+      "curlCode": 0,
+      "httpStatus": "200",
+      "hostname": "bgp-se",
+      "matched": true
+    }
+  ]
+}

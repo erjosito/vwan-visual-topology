@@ -1,0 +1,769 @@
+{
+  "scenario": "I-INTERNET",
+  "status": "post-lab-correction-matrix-matched-with-retained-initial-failures",
+  "checkedAtUtc": "2026-10-29T21:51:01.109Z",
+  "predictionSha256": "f9f041bb1713ee90855635398baaa12e2e25dbff28f0137e02af538a8d9b28b6",
+  "sourceEpochs": 8,
+  "observations": 32,
+  "checks": [
+    {
+      "source": "workload-se",
+      "phase": "initial-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:27:53.79054+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T212739870Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "initial-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:28:23.826872+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T212739870Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "initial-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:27:53.808787+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T212739870Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "initial-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:28:23.838151+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T212739870Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "se-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:34:53.231827+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-se-20261029T213438254Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "se-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:35:26.27978+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-se-20261029T213438254Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "se-deny",
+      "kind": "internet",
+      "expectedDelivery": false,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:34:56.237951+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": false,
+        "curlCode": 28,
+        "httpStatus": "000",
+        "hostname": "",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-se-20261029T213438254Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "se-deny",
+      "kind": "internet",
+      "expectedDelivery": false,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:35:29.286627+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": false,
+        "curlCode": 28,
+        "httpStatus": "000",
+        "hostname": "",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-se-20261029T213438254Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "ne-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:43:16.891641+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-ne-20261029T214300713Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "ne-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:43:46.945649+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-ne-20261029T214300713Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "ne-deny",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:43:16.90232+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-ne-20261029T214300713Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "ne-deny",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:43:46.961328+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-ne-20261029T214300713Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "restored-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:49:52.231513+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T214938013Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "restored-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:50:22.289794+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T214938013Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "restored-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:49:52.264604+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T214938013Z-result.json"
+    },
+    {
+      "source": "workload-se",
+      "phase": "restored-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:50:22.302134+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-se-deny-none-20261029T214938013Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "initial-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:27:53.917107+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T212740825Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "initial-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:28:24.079497+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T212740825Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "initial-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:27:53.987783+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T212740825Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "initial-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:28:24.155613+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T212740825Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "se-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:34:53.477481+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-se-20261029T213437267Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "se-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:35:23.640319+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-se-20261029T213437267Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "se-deny",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:34:53.55527+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-se-20261029T213437267Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "se-deny",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:35:23.721439+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-se-20261029T213437267Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "ne-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:43:17.218583+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-ne-20261029T214300249Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "ne-deny",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:43:50.319808+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-ne-20261029T214300249Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "ne-deny",
+      "kind": "internet",
+      "expectedDelivery": false,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:43:20.225397+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": false,
+        "curlCode": 28,
+        "httpStatus": "000",
+        "hostname": "",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-ne-20261029T214300249Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "ne-deny",
+      "kind": "internet",
+      "expectedDelivery": false,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:43:53.328046+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": false,
+        "curlCode": 28,
+        "httpStatus": "000",
+        "hostname": "",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-ne-20261029T214300249Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "restored-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:49:52.636613+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T214938316Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "restored-allow",
+      "kind": "private",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:50:22.799571+01:00",
+        "kind": "private",
+        "destination": "10.62.1.1",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "static-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T214938316Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "restored-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 0,
+        "observedAtUtc": "2026-10-29T22:49:52.711486+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T214938316Z-result.json"
+    },
+    {
+      "source": "workload-ne",
+      "phase": "restored-allow",
+      "kind": "internet",
+      "expectedDelivery": true,
+      "actual": {
+        "iteration": 1,
+        "observedAtUtc": "2026-10-29T22:50:22.872884+01:00",
+        "kind": "internet",
+        "destination": "4.165.97.27",
+        "expectedDelivery": true,
+        "curlCode": 0,
+        "httpStatus": "200",
+        "hostname": "bgp-se",
+        "matched": true
+      },
+      "file": "I-INTERNET-ne-deny-none-20261029T214938316Z-result.json"
+    }
+  ],
+  "allSourceResultFiles": [
+    "I-INTERNET-ne-deny-ne-20261029T214300249Z-result.json",
+    "I-INTERNET-ne-deny-none-20261029T211644685Z-result.json",
+    "I-INTERNET-ne-deny-none-20261029T212740825Z-result.json",
+    "I-INTERNET-ne-deny-none-20261029T214938316Z-result.json",
+    "I-INTERNET-ne-deny-se-20261029T213437267Z-result.json",
+    "I-INTERNET-se-deny-ne-20261029T214300713Z-result.json",
+    "I-INTERNET-se-deny-none-20261029T211642054Z-result.json",
+    "I-INTERNET-se-deny-none-20261029T212739870Z-result.json",
+    "I-INTERNET-se-deny-none-20261029T214938013Z-result.json",
+    "I-INTERNET-se-deny-se-20261029T213438254Z-result.json"
+  ],
+  "retainedInitialLabFailures": [
+    {
+      "file": "I-INTERNET-ne-deny-none-20261029T211644685Z-result.json",
+      "source": "workload-ne",
+      "scenario": "I-INTERNET",
+      "deniedFirewall": "none",
+      "matched": false,
+      "observations": [
+        {
+          "iteration": 0,
+          "observedAtUtc": "2026-10-29T22:17:05.678721+01:00",
+          "kind": "private",
+          "destination": "10.62.1.1",
+          "expectedDelivery": true,
+          "curlCode": 0,
+          "httpStatus": "200",
+          "hostname": "static-se",
+          "matched": true
+        },
+        {
+          "iteration": 0,
+          "observedAtUtc": "2026-10-29T22:17:08.684412+01:00",
+          "kind": "internet",
+          "destination": "4.165.97.27",
+          "expectedDelivery": true,
+          "curlCode": 28,
+          "httpStatus": "000",
+          "hostname": "",
+          "matched": false
+        },
+        {
+          "iteration": 1,
+          "observedAtUtc": "2026-10-29T22:17:38.779868+01:00",
+          "kind": "private",
+          "destination": "10.62.1.1",
+          "expectedDelivery": true,
+          "curlCode": 0,
+          "httpStatus": "200",
+          "hostname": "static-se",
+          "matched": true
+        },
+        {
+          "iteration": 1,
+          "observedAtUtc": "2026-10-29T22:17:41.787673+01:00",
+          "kind": "internet",
+          "destination": "4.165.97.27",
+          "expectedDelivery": true,
+          "curlCode": 28,
+          "httpStatus": "000",
+          "hostname": "",
+          "matched": false
+        }
+      ]
+    },
+    {
+      "file": "I-INTERNET-se-deny-none-20261029T211642054Z-result.json",
+      "source": "workload-se",
+      "scenario": "I-INTERNET",
+      "deniedFirewall": "none",
+      "matched": false,
+      "observations": [
+        {
+          "iteration": 0,
+          "observedAtUtc": "2026-10-29T22:17:05.686581+01:00",
+          "kind": "private",
+          "destination": "10.62.1.1",
+          "expectedDelivery": true,
+          "curlCode": 0,
+          "httpStatus": "200",
+          "hostname": "static-se",
+          "matched": true
+        },
+        {
+          "iteration": 0,
+          "observedAtUtc": "2026-10-29T22:17:08.693807+01:00",
+          "kind": "internet",
+          "destination": "4.165.97.27",
+          "expectedDelivery": true,
+          "curlCode": 28,
+          "httpStatus": "000",
+          "hostname": "",
+          "matched": false
+        },
+        {
+          "iteration": 1,
+          "observedAtUtc": "2026-10-29T22:17:38.736172+01:00",
+          "kind": "private",
+          "destination": "10.62.1.1",
+          "expectedDelivery": true,
+          "curlCode": 0,
+          "httpStatus": "200",
+          "hostname": "static-se",
+          "matched": true
+        },
+        {
+          "iteration": 1,
+          "observedAtUtc": "2026-10-29T22:17:41.74383+01:00",
+          "kind": "internet",
+          "destination": "4.165.97.27",
+          "expectedDelivery": true,
+          "curlCode": 28,
+          "httpStatus": "000",
+          "hostname": "",
+          "matched": false
+        }
+      ]
+    }
+  ],
+  "returnGuardFile": "public-probe-return-guard-20261029T212416233Z-result.json",
+  "returnGuard": {
+    "kind": "owned-public-probe-return-guard",
+    "observedAtUtc": "2026-10-29T22:24:27.085017+01:00",
+    "hostname": "bgp-se",
+    "routes": [
+      {
+        "address": "4.225.173.226",
+        "alreadyGuarded": false,
+        "beforeLookup": [
+          {
+            "dst": "4.225.173.226",
+            "gateway": "10.250.0.12",
+            "dev": "xfrm100",
+            "prefsrc": "10.220.0.4",
+            "flags": [],
+            "uid": 0,
+            "cache": []
+          }
+        ],
+        "afterLookup": [
+          {
+            "dst": "4.225.173.226",
+            "gateway": "10.220.0.1",
+            "dev": "eth0",
+            "prefsrc": "10.220.0.4",
+            "flags": [],
+            "uid": 0,
+            "cache": []
+          }
+        ]
+      },
+      {
+        "address": "20.166.50.193",
+        "alreadyGuarded": false,
+        "beforeLookup": [
+          {
+            "dst": "20.166.50.193",
+            "gateway": "10.250.0.13",
+            "dev": "xfrm101",
+            "prefsrc": "10.220.0.4",
+            "flags": [],
+            "uid": 0,
+            "cache": []
+          }
+        ],
+        "afterLookup": [
+          {
+            "dst": "20.166.50.193",
+            "gateway": "10.220.0.1",
+            "dev": "eth0",
+            "prefsrc": "10.220.0.4",
+            "flags": [],
+            "uid": 0,
+            "cache": []
+          }
+        ]
+      }
+    ],
+    "bgpExportsUnchanged": true,
+    "scope": "Only two owned-firewall public /32 response routes via the existing endpoint underlay. No BGP default withdrawal, advertisement edit, cloud route or firewall/NSG permission change."
+  },
+  "scope": "Both workload identities, private/public targets, two samples at least30seconds apart, ordered Allow/SE-deny/NE-deny/restored-Allow epochs against unchanged frozen counterfactuals. Causal firewall participation for these exact probes, not path ordering by denial alone or general enforcement/SNAT/return-symmetry certification. Any initial lab-return failures are retained explicitly and never relabeled as passes."
+}

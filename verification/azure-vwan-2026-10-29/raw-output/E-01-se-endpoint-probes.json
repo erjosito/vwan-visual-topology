@@ -1,0 +1,10 @@
+{
+  "value": [
+    {
+      "code": "ProvisioningState/succeeded",
+      "displayStatus": "Provisioning succeeded",
+      "level": "Info",
+      "message": "Enable succeeded: \n[stdout]\n{\"source\": \"workload-se\", \"target\": \"remote-spoke\", \"address\": \"10.211.0.4\", \"httpDelivered\": true, \"endpoint\": \"workload-ne\"}\n{\"source\": \"workload-se\", \"target\": \"local-bgp-branch\", \"address\": \"10.61.1.1\", \"httpDelivered\": true, \"endpoint\": \"bgp-se\"}\n{\"source\": \"workload-se\", \"target\": \"local-static-branch\", \"address\": \"10.62.1.1\", \"httpDelivered\": true, \"endpoint\": \"static-se\"}\n{\"source\": \"workload-se\", \"target\": \"local-er-endpoint\", \"address\": \"10.230.0.4\", \"httpDelivered\": true, \"endpoint\": \"er-se\"}\n{\"source\": \"workload-se\", \"target\": \"local-spoke-nva\", \"address\": \"10.70.1.1\", \"httpDelivered\": true, \"endpoint\": \"nva-se\"}\n\n[stderr]\n"
+    }
+  ]
+}

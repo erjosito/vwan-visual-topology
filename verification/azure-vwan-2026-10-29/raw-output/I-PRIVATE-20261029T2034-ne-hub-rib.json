@@ -1,0 +1,34 @@
+{
+  "value": [
+    {
+      "addressPrefixes": [
+        "10.0.0.0/8"
+      ],
+      "nextHopType": "Azure Firewall",
+      "nextHops": [
+        "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-ne"
+      ],
+      "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+    },
+    {
+      "addressPrefixes": [
+        "172.16.0.0/12"
+      ],
+      "nextHopType": "Azure Firewall",
+      "nextHops": [
+        "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-ne"
+      ],
+      "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+    },
+    {
+      "addressPrefixes": [
+        "192.168.0.0/16"
+      ],
+      "nextHopType": "Azure Firewall",
+      "nextHops": [
+        "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-ne"
+      ],
+      "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+    }
+  ]
+}

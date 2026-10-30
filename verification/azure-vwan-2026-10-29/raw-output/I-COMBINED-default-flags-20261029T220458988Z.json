@@ -1,0 +1,87 @@
+{
+  "scenario": "I-COMBINED",
+  "status": "observed-connection-flags-not-modeled",
+  "records": [
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se/vpnConnections/vpn-bgp-se",
+      "region": "se",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "VPN",
+      "observedAtUtc": "2026-10-29T22:03:57.8790984+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se/vpnConnections/vpn-static-se",
+      "region": "se",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "VPN",
+      "observedAtUtc": "2026-10-29T22:03:57.8862824+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se/expressRouteConnections/er-se",
+      "region": "se",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "ExpressRoute",
+      "observedAtUtc": "2026-10-29T22:04:05.7813048+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/attach-spoke-se",
+      "region": "se",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "VNet",
+      "observedAtUtc": "2026-10-29T22:04:16.2319426+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/bgpConnections/nva-se",
+      "region": "se",
+      "internetSecurityFieldPresent": false,
+      "enableInternetSecurity": null,
+      "type": "Direct-spoke BGP",
+      "observedAtUtc": "2026-10-29T22:04:28.2847796+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne/vpnConnections/vpn-bgp-ne",
+      "region": "ne",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "VPN",
+      "observedAtUtc": "2026-10-29T22:04:35.7481534+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne/vpnConnections/vpn-static-ne",
+      "region": "ne",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "VPN",
+      "observedAtUtc": "2026-10-29T22:04:35.7486885+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-ne/expressRouteConnections/er-ne",
+      "region": "ne",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "ExpressRoute",
+      "observedAtUtc": "2026-10-29T22:04:44.0886017+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/attach-spoke-ne",
+      "region": "ne",
+      "internetSecurityFieldPresent": true,
+      "enableInternetSecurity": true,
+      "type": "VNet",
+      "observedAtUtc": "2026-10-29T22:04:52.3964364+00:00"
+    },
+    {
+      "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/bgpConnections/nva-ne",
+      "region": "ne",
+      "internetSecurityFieldPresent": false,
+      "enableInternetSecurity": null,
+      "type": "Direct-spoke BGP",
+      "observedAtUtc": "2026-10-29T22:04:58.9866818+00:00"
+    }
+  ],
+  "scope": "Read-only projection only: no VPN keys or other connection properties persisted. Missing fields are unknown, not false. Per-connection default advertisement switches are outside the current app model and J positive-wire scope; flags alone do not prove an advertisement or its absence."
+}

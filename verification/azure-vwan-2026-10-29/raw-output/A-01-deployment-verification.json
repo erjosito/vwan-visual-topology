@@ -1,0 +1,33 @@
+{
+  "scope": "Actual unchanged app-generated WAN and hub configuration, not routing conformance",
+  "status": "pass",
+  "disableVpnEncryption": false,
+  "branchToBranch": true,
+  "wanType": "Standard",
+  "unreturnedProperty": "allowVnetToVnetTraffic is absent from ARM GET; do not score VNet transit from its absence. Real VNet forwarding requires endpoint probes.",
+  "hubs": [
+    {
+      "name": "hub-ne",
+      "location": "northeurope",
+      "addressPrefix": "10.250.4.0/22",
+      "hubRoutingPreference": "ExpressRoute",
+      "virtualRouterAutoScaleConfiguration": {
+        "minCapacity": 2
+      },
+      "provisioningState": "Succeeded",
+      "routingState": "Provisioned"
+    },
+    {
+      "name": "hub-se",
+      "location": "swedencentral",
+      "addressPrefix": "10.250.0.0/22",
+      "hubRoutingPreference": "ExpressRoute",
+      "virtualRouterAutoScaleConfiguration": {
+        "minCapacity": 2
+      },
+      "provisioningState": "Succeeded",
+      "routingState": "Provisioned"
+    }
+  ],
+  "verifiedUtc": "2026-10-29T14:35:08.3303652+00:00"
+}

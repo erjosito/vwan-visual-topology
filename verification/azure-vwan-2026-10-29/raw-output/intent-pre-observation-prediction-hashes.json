@@ -1,0 +1,18 @@
+[
+  {
+    "file": "I-NONE-prediction.json",
+    "sha256": "c95a0b4479a424a810d02ef5191b06fd70367e8eb5c692fe48e1175742247c2b"
+  },
+  {
+    "file": "I-PRIVATE-prediction.json",
+    "sha256": "1e5fb128f56c6d76ffe9dd57a953719485a033705928e4596f1f491cfa2bef44"
+  },
+  {
+    "file": "I-INTERNET-prediction.json",
+    "sha256": "f9f041bb1713ee90855635398baaa12e2e25dbff28f0137e02af538a8d9b28b6"
+  },
+  {
+    "file": "I-COMBINED-prediction.json",
+    "sha256": "2cf3bc4682993024773aa9a44d0e5a63eb0a9fbca836292e50bd608bbb43ed33"
+  }
+]

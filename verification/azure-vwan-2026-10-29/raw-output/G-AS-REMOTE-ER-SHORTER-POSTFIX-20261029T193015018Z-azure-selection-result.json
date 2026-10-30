@@ -1,0 +1,104 @@
+{
+  "status": "selected-route-match",
+  "routingModelCommit": "083d858ea34d568bf91b925744ce6180f3629b13",
+  "evidenceId": "G-AS-REMOTE-ER-SHORTER-POSTFIX-20261029T193015018Z",
+  "observedRegions": [
+    "se",
+    "ne"
+  ],
+  "observations": [
+    {
+      "allSelectedRoutesMatched": true,
+      "observedAt": "2026-10-29T19:31:46.4703106+00:00",
+      "comparisons": [
+        {
+          "region": "se",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "ExpressRouteGateway",
+            "ingress": "se-ExpressRoute",
+            "asPath": "12076-133937"
+          },
+          "actual": [
+            {
+              "nextHopType": "ExpressRouteGateway",
+              "asPath": "12076-133937",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+              ]
+            }
+          ]
+        },
+        {
+          "region": "ne",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "Remote Hub",
+            "ingress": "se-ExpressRoute",
+            "asPath": "65520-65520-12076-133937"
+          },
+          "actual": [
+            {
+              "nextHopType": "Remote Hub",
+              "asPath": "65520-65520-12076-133937",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+              ]
+            }
+          ]
+        }
+      ],
+      "attempt": 0
+    },
+    {
+      "allSelectedRoutesMatched": true,
+      "observedAt": "2026-10-29T19:33:00.3252261+00:00",
+      "comparisons": [
+        {
+          "region": "se",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "ExpressRouteGateway",
+            "ingress": "se-ExpressRoute",
+            "asPath": "12076-133937"
+          },
+          "actual": [
+            {
+              "nextHopType": "ExpressRouteGateway",
+              "asPath": "12076-133937",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+              ]
+            }
+          ]
+        },
+        {
+          "region": "ne",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "Remote Hub",
+            "ingress": "se-ExpressRoute",
+            "asPath": "65520-65520-12076-133937"
+          },
+          "actual": [
+            {
+              "nextHopType": "Remote Hub",
+              "asPath": "65520-65520-12076-133937",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+              ]
+            }
+          ]
+        }
+      ],
+      "attempt": 1
+    }
+  ],
+  "scenario": "G-AS-REMOTE-ER-SHORTER-POSTFIX",
+  "predictionSha256": "c92eca81769495950323f4284431fee69b90b58467cbbb68d233c832ff4a3f1c",
+  "scope": "Selected hub route, next-hop origin and measured AS path only. Advertisements, input health and delivery require separate evidence."
+}

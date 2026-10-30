@@ -1,0 +1,17 @@
+{
+  "scenario": "I-NONE-20261029T200740353Z",
+  "status": "pass",
+  "scope": "Structure-only import, not routing conformance",
+  "capturedAt": "2026-10-29T20:09:33.1032490Z",
+  "verifiedAt": "2026-10-29T20:09:50.334Z",
+  "hubs": 2,
+  "spokes": 2,
+  "captureComplete": true,
+  "omissionWarnings": 10,
+  "previewAndAcknowledgement": true,
+  "stableSourceIds": true,
+  "intentAndPreferencesMatched": true,
+  "persistedAfterReload": true,
+  "nativeJsonRoundtrip": true,
+  "externalRequests": 0
+}

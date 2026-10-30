@@ -1,0 +1,618 @@
+{
+  "scenario": "I-NONE",
+  "observedAtUtc": "2026-10-29T20:17:02.870Z",
+  "status": "positive-wire-subset-matched",
+  "predictionSha256": "4dc395dcd984298948852424cbdec195a5bbae4bc9d151506db5cd9d0d3bd812",
+  "customerFile": "J-I-NONE-WIRE-SUBSET-20261029T201455102Z-mcr-received.json",
+  "customerSha256": "1ec6b940595f07b3d8d011928daba957f0737c4355d01f2a96c6596d389c1363",
+  "checks": [
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure0",
+      "prefix": "10.61.2.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        65012
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure0",
+      "prefix": "10.210.0.0/16",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure0",
+      "prefix": "10.211.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure0",
+      "prefix": "10.230.0.0/16",
+      "expected": [
+        65515,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure0",
+      "prefix": "10.231.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure0",
+      "prefix": "10.62.1.0/24",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure0",
+      "prefix": "10.62.2.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure1",
+      "prefix": "10.61.2.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        65012
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure1",
+      "prefix": "10.210.0.0/16",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure1",
+      "prefix": "10.211.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure1",
+      "prefix": "10.230.0.0/16",
+      "expected": [
+        65515,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure1",
+      "prefix": "10.231.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure1",
+      "prefix": "10.62.1.0/24",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "se",
+      "peer": "azure1",
+      "prefix": "10.62.2.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure0",
+      "prefix": "10.61.1.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        65011
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          65011
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure0",
+      "prefix": "10.210.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure0",
+      "prefix": "10.211.0.0/16",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure0",
+      "prefix": "10.230.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure0",
+      "prefix": "10.231.0.0/16",
+      "expected": [
+        65515,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure0",
+      "prefix": "10.62.1.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure0",
+      "prefix": "10.62.2.0/24",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure1",
+      "prefix": "10.61.1.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        65011
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          65011
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure1",
+      "prefix": "10.210.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure1",
+      "prefix": "10.211.0.0/16",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure1",
+      "prefix": "10.230.0.0/16",
+      "expected": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure1",
+      "prefix": "10.231.0.0/16",
+      "expected": [
+        65515,
+        12076,
+        12076
+      ],
+      "actual": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure1",
+      "prefix": "10.62.1.0/24",
+      "expected": [
+        65515,
+        65520,
+        65520
+      ],
+      "actual": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "VPN receiver",
+      "region": "ne",
+      "peer": "azure1",
+      "prefix": "10.62.2.0/24",
+      "expected": [
+        65515
+      ],
+      "actual": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 0,
+      "prefix": "10.61.1.0/24",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 0,
+      "prefix": "10.61.2.0/24",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 0,
+      "prefix": "10.62.1.0/24",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 0,
+      "prefix": "10.62.2.0/24",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 0,
+      "prefix": "10.210.0.0/16",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 0,
+      "prefix": "10.211.0.0/16",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 1,
+      "prefix": "10.61.1.0/24",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 1,
+      "prefix": "10.62.1.0/24",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    },
+    {
+      "stage": "Actual customer Received",
+      "region": "se",
+      "peer": 1,
+      "prefix": "10.210.0.0/16",
+      "expected": "12076",
+      "actual": "12076",
+      "matched": true
+    }
+  ],
+  "missingCustomerPrefixes": [],
+  "scope": "Prospective post-fix positive wire subset under unchanged frozen I topology. ERP native inputs have already been independently verified; this is not a blind ranking case. Compare every positive observation in scope, require all expected VPN receiver prefixes and positive customer-prefix coverage, but do not use receiver omissions as suppression evidence. Defaults, ER-origin customer exports, NVA/hub-system routes and native-versus-wire path equivalence are excluded. Original I bytes and flow predictions remain immutable.",
+  "excludedClaims": "No NE customer peer, receiver-absence/suppression, default advertisement, MSEE-to-customer projection or universal native AS equivalence certificate."
+}

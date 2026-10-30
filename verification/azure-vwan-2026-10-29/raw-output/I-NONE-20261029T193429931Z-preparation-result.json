@@ -1,0 +1,7 @@
+{
+  "status": "configuration-ready",
+  "observedAtUtc": "2026-10-29T19:38:48.4606661+00:00",
+  "scope": "Frozen hub preferences completed only. No route-input, selection, advertisement, intent or delivery conformance pass.",
+  "scenario": "I-NONE",
+  "predictionSha256": "c95a0b4479a424a810d02ef5191b06fd70367e8eb5c692fe48e1175742247c2b"
+}

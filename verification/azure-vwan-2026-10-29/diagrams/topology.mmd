@@ -1,0 +1,16 @@
+flowchart TB
+  subgraph SE["Sweden Central"]
+    hub_se["Hub SE / AS65515 / Firewall for intent"]
+    spoke_se["Spoke 10.210/16 / workload and direct-BGP NVA"] --> hub_se
+    branch_se["Branch 10.220/16 / StrongSwan BGP + static VPN"] --> hub_se
+    aux_se["Aux ER VNet 10.230/16"] --> er_se["ER 50Mbps / SE MCR 2 established peers"]
+    er_se --> hub_se
+  end
+  subgraph NE["North Europe"]
+    hub_ne["Hub NE / AS65515 / Firewall for intent"]
+    spoke_ne["Spoke 10.211/16 / workload and direct-BGP NVA"] --> hub_ne
+    branch_ne["Branch 10.221/16 / StrongSwan BGP + static VPN"] --> hub_ne
+    aux_ne["Aux ER VNet 10.231/16"] --> er_ne["ER 50Mbps / NE customer BGP uncertified"]
+    er_ne --> hub_ne
+  end
+  hub_se <--> hub_ne

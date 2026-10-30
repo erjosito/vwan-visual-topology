@@ -62,22 +62,13 @@ test('tab icon resolves to a browser-decodable SVG rather than the app fallback'
   }, url)).toBe(true)
 })
 
-test('File issue opens the repository issue form in a new tab without changing or sharing the workspace', async ({ page }) => {
+test('the public workspace does not expose a feedback link to a private GitHub issue form', async ({ page }) => {
   await page.goto('/')
-  const topology = await readTopology(page)
-  const url = page.url()
-  const issueUrl = 'https://github.com/erjosito/vwan-visual-topology/issues/new'
-  await page.context().route(issueUrl, (route) => route.fulfill({ contentType: 'text/html', body: '<title>New issue</title>' }))
-  const link = page.getByRole('link', { name: 'File issue', exact: true })
-  await expect(link).toHaveAttribute('href', issueUrl)
-  await expect(link).toHaveAttribute('rel', 'noopener noreferrer')
-  const popup = page.waitForEvent('popup')
-  await link.click()
-  const issuePage = await popup
-  await expect(issuePage).toHaveURL(issueUrl)
-  await issuePage.close()
-  expect(page.url()).toBe(url)
-  expect(await readTopology(page)).toEqual(topology)
+  await expect(page.getByRole('link', { name: 'File issue', exact: true })).toHaveCount(0)
+  await expect(page.locator('a[href*="github.com"][href*="/issues"]')).toHaveCount(0)
+  for (const name of ['Export JSON', 'Import JSON', 'Azure files', 'Clear topology']) {
+    await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
+  }
 })
 
 test('canvas hubs and spokes render official Azure SVG icons in both layouts', async ({ page }) => {

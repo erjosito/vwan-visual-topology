@@ -1,0 +1,7 @@
+{
+  "observedAtUtc": "2026-10-29T19:57:09.6846794+00:00",
+  "scenario": "I-NONE",
+  "status": "configuration-ready",
+  "predictionSha256": "c95a0b4479a424a810d02ef5191b06fd70367e8eb5c692fe48e1175742247c2b",
+  "scope": "Both exact policy sets and parent hubs completed. Native forwarding routes, causal data-plane checks, controller safety and real import still require separate verification."
+}

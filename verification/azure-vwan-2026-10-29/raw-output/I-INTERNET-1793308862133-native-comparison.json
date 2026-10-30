@@ -1,0 +1,951 @@
+{
+  "scenario": "I-INTERNET",
+  "observedAtUtc": "2026-10-29T21:21:02.126Z",
+  "predictionSha256": "f9f041bb1713ee90855635398baaa12e2e25dbff28f0137e02af538a8d9b28b6",
+  "files": [
+    "I-INTERNET-native-20261029T211644374Z-result.json",
+    "I-INTERNET-native-20261029T211927970Z-result.json"
+  ],
+  "checks": [
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "0.0.0.0/0",
+      "expected": {
+        "type": "Azure Firewall",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-se",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "0.0.0.0/0"
+          ],
+          "nextHopType": "Azure Firewall",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.61.1.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se",
+        "asPath": [
+          65011
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.1.0/24"
+          ],
+          "asPath": "65011",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.61.2.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520,
+          65012
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.2.0/24"
+          ],
+          "asPath": "65520-65520-65012",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.62.1.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.1.0/24"
+          ],
+          "asPath": "",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.62.2.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.2.0/24"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.210.0.0/16",
+      "expected": {
+        "type": "Virtual Network Connection",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/attach-spoke-se",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.210.0.0/16"
+          ],
+          "nextHopType": "Virtual Network Connection",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/attach-spoke-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/attach-spoke-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.211.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.211.0.0/16"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.230.0.0/16",
+      "expected": {
+        "type": "ExpressRouteGateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+        "asPath": [
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.230.0.0/16"
+          ],
+          "asPath": "12076-12076",
+          "nextHopType": "ExpressRouteGateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.231.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.231.0.0/16"
+          ],
+          "asPath": "65520-65520-12076-12076",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "0.0.0.0/0",
+      "expected": {
+        "type": "Azure Firewall",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-ne",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "0.0.0.0/0"
+          ],
+          "nextHopType": "Azure Firewall",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.61.1.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520,
+          65011
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.1.0/24"
+          ],
+          "asPath": "65520-65520-65011",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.61.2.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+        "asPath": [
+          65012
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.2.0/24"
+          ],
+          "asPath": "65012",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.62.1.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.1.0/24"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.62.2.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.2.0/24"
+          ],
+          "asPath": "",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.210.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.210.0.0/16"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.211.0.0/16",
+      "expected": {
+        "type": "Virtual Network Connection",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/attach-spoke-ne",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.211.0.0/16"
+          ],
+          "nextHopType": "Virtual Network Connection",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/attach-spoke-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/attach-spoke-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.230.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.230.0.0/16"
+          ],
+          "asPath": "65520-65520-12076-12076",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.231.0.0/16",
+      "expected": {
+        "type": "ExpressRouteGateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-ne",
+        "asPath": [
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.231.0.0/16"
+          ],
+          "asPath": "12076-12076",
+          "nextHopType": "ExpressRouteGateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "0.0.0.0/0",
+      "expected": {
+        "type": "Azure Firewall",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-se",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "0.0.0.0/0"
+          ],
+          "nextHopType": "Azure Firewall",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.61.1.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se",
+        "asPath": [
+          65011
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.1.0/24"
+          ],
+          "asPath": "65011",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.61.2.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520,
+          65012
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.2.0/24"
+          ],
+          "asPath": "65520-65520-65012",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.62.1.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.1.0/24"
+          ],
+          "asPath": "",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.62.2.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.2.0/24"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.210.0.0/16",
+      "expected": {
+        "type": "Virtual Network Connection",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/attach-spoke-se",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.210.0.0/16"
+          ],
+          "nextHopType": "Virtual Network Connection",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/attach-spoke-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/attach-spoke-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.211.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.211.0.0/16"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.230.0.0/16",
+      "expected": {
+        "type": "ExpressRouteGateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+        "asPath": [
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.230.0.0/16"
+          ],
+          "asPath": "12076-12076",
+          "nextHopType": "ExpressRouteGateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "stage": "hub default table",
+      "prefix": "10.231.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "asPath": [
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.231.0.0/16"
+          ],
+          "asPath": "65520-65520-12076-12076",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "0.0.0.0/0",
+      "expected": {
+        "type": "Azure Firewall",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-ne",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "0.0.0.0/0"
+          ],
+          "nextHopType": "Azure Firewall",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/azureFirewalls/fw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.61.1.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520,
+          65011
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.1.0/24"
+          ],
+          "asPath": "65520-65520-65011",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.61.2.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+        "asPath": [
+          65012
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.61.2.0/24"
+          ],
+          "asPath": "65012",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.62.1.0/24",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.1.0/24"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.62.2.0/24",
+      "expected": {
+        "type": "VPN_S2S_Gateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.62.2.0/24"
+          ],
+          "asPath": "",
+          "nextHopType": "VPN_S2S_Gateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.210.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.210.0.0/16"
+          ],
+          "asPath": "65520-65520",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.211.0.0/16",
+      "expected": {
+        "type": "Virtual Network Connection",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/attach-spoke-ne",
+        "asPath": []
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.211.0.0/16"
+          ],
+          "nextHopType": "Virtual Network Connection",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/attach-spoke-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/attach-spoke-ne"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.230.0.0/16",
+      "expected": {
+        "type": "Remote Hub",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "asPath": [
+          65520,
+          65520,
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.230.0.0/16"
+          ],
+          "asPath": "65520-65520-12076-12076",
+          "nextHopType": "Remote Hub",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+        }
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "stage": "hub default table",
+      "prefix": "10.231.0.0/16",
+      "expected": {
+        "type": "ExpressRouteGateway",
+        "nextHop": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-ne",
+        "asPath": [
+          12076,
+          12076
+        ]
+      },
+      "actual": [
+        {
+          "addressPrefixes": [
+            "10.231.0.0/16"
+          ],
+          "asPath": "12076-12076",
+          "nextHopType": "ExpressRouteGateway",
+          "nextHops": [
+            "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-ne"
+          ],
+          "routeOrigin": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-ne"
+        }
+      ],
+      "matched": true
+    }
+  ],
+  "hubDefaultChecks": [],
+  "differences": [],
+  "status": "modeled-native-subset-matched",
+  "scope": "Two stable observations of positive modeled prefix/path/type/exact-owned-next-hop bindings and absent hub default where predicted. Extra native routes are not silently considered modeled. Default/fallback differences are recorded separately. Causal traversal, route omissions, endpoint delivery and advertisements require their separate experiments."
+}

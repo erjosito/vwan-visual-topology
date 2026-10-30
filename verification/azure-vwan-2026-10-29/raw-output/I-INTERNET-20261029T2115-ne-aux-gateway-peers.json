@@ -1,0 +1,24 @@
+{
+  "value": [
+    {
+      "asn": 12076,
+      "connectedDuration": "05:42:40.2838582",
+      "localAddress": "10.231.255.13",
+      "messagesReceived": 2524,
+      "messagesSent": 2363,
+      "neighbor": "10.231.255.4",
+      "routesReceived": 10,
+      "state": "Connected"
+    },
+    {
+      "asn": 12076,
+      "connectedDuration": "05:42:38.3617306",
+      "localAddress": "10.231.255.13",
+      "messagesReceived": 2507,
+      "messagesSent": 2381,
+      "neighbor": "10.231.255.5",
+      "routesReceived": 10,
+      "state": "Connected"
+    }
+  ]
+}

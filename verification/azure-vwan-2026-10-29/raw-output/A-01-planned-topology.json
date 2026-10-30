@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "name": "wan-verify-4cf83ab4",
+  "hubs": [
+    {
+      "id": "se",
+      "name": "hub-se",
+      "region": "Sweden Central",
+      "preference": "ExpressRoute",
+      "routingIntent": {
+        "private": false,
+        "internet": false,
+        "privatePrefixes": []
+      }
+    },
+    {
+      "id": "ne",
+      "name": "hub-ne",
+      "region": "North Europe",
+      "preference": "ExpressRoute",
+      "routingIntent": {
+        "private": false,
+        "internet": false,
+        "privatePrefixes": []
+      }
+    }
+  ],
+  "sites": [],
+  "spokes": [],
+  "siteLinks": [],
+  "connections": [],
+  "erLocations": [],
+  "erLinks": [],
+  "routeMaps": []
+}

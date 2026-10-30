@@ -2,7 +2,7 @@
 
 These practices come from the real two-hub Virtual WAN conformance exercise in
 [#5](https://github.com/erjosito/vwan-visual-topology/issues/5). The
-[scoped lab report](https://github.com/erjosito/vwan-routing-verification-20261029-4cf83ab4)
+[scoped lab report](verification/azure-vwan-2026-10-29/README.md)
 contains the measured outcomes, sanitized evidence and editable diagrams. This
 is a reusable testing guide, not a certificate that every routing scenario has
 passed. Keep limitations and final cleanup evidence in the report and issue.

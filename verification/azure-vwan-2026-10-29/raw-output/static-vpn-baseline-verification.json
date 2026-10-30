@@ -1,0 +1,319 @@
+{
+  "verifiedAtUtc": "2026-10-29T18:31:54.213Z",
+  "status": "pass",
+  "checks": [
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "se",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:26:52.5091677+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-se-rib-0.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "se",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:26:52.5091677+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-se-rib-0.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "ne",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:26:52.5091677+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-ne-rib-0.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "ne",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:26:52.5091677+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-ne-rib-0.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "se",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:28:03.6542024+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-se-rib-1.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "se",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:28:03.6542024+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-se-rib-1.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "ne",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:28:03.6542024+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-ne-rib-1.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ExpressRoute",
+      "region": "ne",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:28:03.6542024+00:00",
+      "ribFile": "C-LOCAL-ExpressRoute-20261029T162556914Z-ne-rib-1.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "se",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:37:45.4256123+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-se-rib-0.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "se",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:37:45.4256123+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-se-rib-0.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "ne",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:37:45.4256123+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-ne-rib-0.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "ne",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:37:45.4256123+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-ne-rib-0.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "se",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:38:51.5443826+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-se-rib-1.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "se",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:38:51.5443826+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-se-rib-1.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "ne",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:38:51.5443826+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-ne-rib-1.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-VPN",
+      "region": "ne",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:38:51.5443826+00:00",
+      "ribFile": "C-LOCAL-VPN-20261029T162923986Z-ne-rib-1.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "se",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:50:49.7032887+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-se-rib-0.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "se",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:50:49.7032887+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-se-rib-0.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "ne",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:50:49.7032887+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-ne-rib-0.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "ne",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:50:49.7032887+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-ne-rib-0.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "se",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:51:57.0492576+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-se-rib-1.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "se",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:51:57.0492576+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-se-rib-1.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-ne"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "ne",
+      "prefix": "10.62.1.0/24",
+      "observedAt": "2026-10-29T16:51:57.0492576+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-ne-rib-1.json",
+      "expected": {
+        "asPath": "65520-65520",
+        "nextHopType": "Remote Hub",
+        "nextHopSuffix": "/virtualHubs/hub-se"
+      },
+      "matched": true
+    },
+    {
+      "scenario": "C-LOCAL-ASPath",
+      "region": "ne",
+      "prefix": "10.62.2.0/24",
+      "observedAt": "2026-10-29T16:51:57.0492576+00:00",
+      "ribFile": "C-LOCAL-ASPath-20261029T164627224Z-ne-rib-1.json",
+      "expected": {
+        "asPath": "",
+        "nextHopType": "VPN_S2S_Gateway",
+        "nextHopSuffix": "/vpnGateways/vpngw-ne"
+      },
+      "matched": true
+    }
+  ],
+  "scope": "Explicitly retrospective verification against retained native captures: unique static-VPN prefixes, both hubs, three HRPs, two observations each. Not a new blind prediction, mixed overlapping static/BGP preference test, or packet-hop certificate. Existing endpoint-delivery evidence is separate."
+}

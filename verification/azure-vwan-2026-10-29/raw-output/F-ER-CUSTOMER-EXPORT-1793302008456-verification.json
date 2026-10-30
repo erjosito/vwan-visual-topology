@@ -1,0 +1,59 @@
+{
+  "status": "pass",
+  "checkedAtUtc": "2026-10-29T19:26:48.456Z",
+  "predictionSha256": "9733ce0e4613296e12c228c24132465ae32e5195b7f9da80c2c5a37566b97647",
+  "receiverEvidence": "F-ER-CUSTOMER-EXPORT-20261029T192435327Z-mcr-received.json",
+  "receiverSha256": "0df50b8549d19ea15fd30b13fc314a15baee35d89228c488656125b336e3cf61",
+  "actualPositiveCustomerPaths": [
+    {
+      "peer": 0,
+      "prefix": "10.61.1.0/24",
+      "asPath": "12076"
+    },
+    {
+      "peer": 0,
+      "prefix": "10.61.2.0/24",
+      "asPath": "12076"
+    },
+    {
+      "peer": 0,
+      "prefix": "10.62.1.0/24",
+      "asPath": "12076"
+    },
+    {
+      "peer": 0,
+      "prefix": "10.62.2.0/24",
+      "asPath": "12076"
+    },
+    {
+      "peer": 0,
+      "prefix": "10.210.0.0/16",
+      "asPath": "12076"
+    },
+    {
+      "peer": 0,
+      "prefix": "10.211.0.0/16",
+      "asPath": "12076"
+    },
+    {
+      "peer": 1,
+      "prefix": "10.61.1.0/24",
+      "asPath": "12076"
+    },
+    {
+      "peer": 1,
+      "prefix": "10.62.1.0/24",
+      "asPath": "12076"
+    },
+    {
+      "peer": 1,
+      "prefix": "10.210.0.0/16",
+      "asPath": "12076"
+    }
+  ],
+  "productionRowsCheckedPerLoad": 12,
+  "persistedAfterReload": true,
+  "externalRequests": 0,
+  "url": "https://black-sea-0b65eb803.4.azurestaticapps.net",
+  "scope": "Post-fix prospective repeat of the observed customer-export subset, not a blind new best-path case. Only six non-overlapping VPN/static/VNet prefixes are modeled. ER-origin/common/NVA/hub-system prefixes, receiver absence and native ER input representations are excluded. Compare exact AS strings, without a sender-stage projection."
+}

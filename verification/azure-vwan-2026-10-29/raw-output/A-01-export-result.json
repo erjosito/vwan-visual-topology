@@ -1,0 +1,11 @@
+{
+  "id": "A-01-export-download",
+  "status": "pass",
+  "observedAt": "2026-10-29T13:41:50.968Z",
+  "appUrl": "https://black-sea-0b65eb803.4.azurestaticapps.net/",
+  "baselineCommit": "02be0daa8e1e799d2d06084f8aedfb8f728ae921",
+  "bicepSha256": "b48447d8de129e7413fbdefe0a34b1e594e35a7c7bcc5d5ae93f110edd4de1c7",
+  "collectorMatchesSource": true,
+  "resourceCount": 3,
+  "deploymentStatus": "not yet deployed"
+}

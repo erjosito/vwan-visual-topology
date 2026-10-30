@@ -1,0 +1,10 @@
+[
+  {
+    "file": "E-AS-LOCAL-ER-SHORTER-prediction.json",
+    "sha256": "ed8d344cb82332c57ad7a99e6ce704b2cb940eb36dcf05e58fdf59b2cb7b2893"
+  },
+  {
+    "file": "E-AS-REMOTE-ER-LAST-prediction.json",
+    "sha256": "139a8444e110d5711f26275b50999a2ffe2a6588678caf02b49e0e191fc0d3d3"
+  }
+]

@@ -1,0 +1,8 @@
+flowchart LR
+  subgraph PRIVATE["Private policy example"]
+    ne["NE workload"] --> fwne["Hub NE + Firewall NE"]
+    fwne --> fwse["Hub SE + Firewall SE"] --> target["SE static branch"]
+  end
+  subgraph INTERNET["Internet policy example"]
+    workload["Either workload"] --> local["Local hub + firewall"] --> public["Owned public endpoint"]
+  end

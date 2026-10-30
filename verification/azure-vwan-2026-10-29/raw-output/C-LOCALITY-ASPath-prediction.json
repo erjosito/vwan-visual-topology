@@ -1,0 +1,352 @@
+{
+  "id": "C-LOCALITY-ASPath",
+  "predictedAt": "2026-10-29T16:19:37.852Z",
+  "baselineCommit": "adca96655aca62a9c61df91e731f1723e5d7a962",
+  "status": "prediction-only",
+  "azureVerified": false,
+  "supersedes": false,
+  "originalPrediction": {
+    "file": "B-LOCALITY-ASPath-prediction.json",
+    "sha256": "61c547c77bda4244198f5fd5b5516bc8f466facf866048ed8b13e6e81434fdee"
+  },
+  "assumptions": "Separate auxiliary-Azure-ER-gateway input set. Measured existing unique ER prefix path is 12076-12076; common-prefix inputs must be measured independently. Symbolic ER-site ASNs 64550/64551 are unused placeholders, not actual Azure gateway ASNs or a claim of physical-topology equivalence; only hub received paths/transport are compared. Original MCR predictions remain unchanged and unverified. Synthetic common-prefix ER delivery is not asserted. Advertised routes require receiver-layer normalization before comparison.",
+  "topology": {
+    "version": 1,
+    "name": "Auxiliary Azure ER gateway controlled conformance predictions",
+    "hubs": [
+      {
+        "id": "se",
+        "name": "hub-se",
+        "region": "Sweden Central",
+        "preference": "ASPath",
+        "routingIntent": {
+          "private": false,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      },
+      {
+        "id": "ne",
+        "name": "hub-ne",
+        "region": "North Europe",
+        "preference": "ASPath",
+        "routingIntent": {
+          "private": false,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      }
+    ],
+    "sites": [
+      {
+        "id": "site-se-ExpressRoute",
+        "name": "se symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64550,
+        "prefixes": []
+      },
+      {
+        "id": "site-se-VPN",
+        "name": "se VPN route source",
+        "asn": 65011,
+        "prefixes": []
+      },
+      {
+        "id": "site-ne-ExpressRoute",
+        "name": "ne symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64551,
+        "prefixes": []
+      },
+      {
+        "id": "site-ne-VPN",
+        "name": "ne VPN route source",
+        "asn": 65012,
+        "prefixes": []
+      }
+    ],
+    "spokes": [
+      {
+        "id": "spoke-se",
+        "name": "Sweden workload",
+        "hubId": "se",
+        "prefixes": [
+          "10.210.0.0/16"
+        ]
+      },
+      {
+        "id": "spoke-ne",
+        "name": "North Europe workload",
+        "hubId": "ne",
+        "prefixes": [
+          "10.211.0.0/16"
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "id": "se-ExpressRoute",
+        "name": "se ExpressRoute ingress",
+        "hubId": "se",
+        "siteId": "site-se-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": false,
+        "routes": [
+          {
+            "id": "se-ExpressRoute-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "se-VPN",
+        "name": "se VPN ingress",
+        "hubId": "se",
+        "siteId": "site-se-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "se-VPN-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              65011,
+              65011,
+              65011,
+              65011
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-ExpressRoute",
+        "name": "ne ExpressRoute ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": false,
+        "routes": [
+          {
+            "id": "ne-ExpressRoute-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-VPN",
+        "name": "ne VPN ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "ne-VPN-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              65012
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      }
+    ],
+    "siteLinks": [],
+    "routeMaps": [],
+    "erLocations": [],
+    "erLinks": []
+  },
+  "selected": {
+    "se": [
+      {
+        "prefix": "10.60.0.0/16",
+        "selected": [
+          {
+            "connectionId": "ne-VPN",
+            "originHubId": "ne",
+            "transport": "VPN",
+            "remote": true,
+            "asPath": [
+              65520,
+              65520,
+              65012
+            ]
+          }
+        ],
+        "explanation": [
+          "Shortest received AS path (3 ASNs, including inter-hub prepends)."
+        ]
+      }
+    ],
+    "ne": [
+      {
+        "prefix": "10.60.0.0/16",
+        "selected": [
+          {
+            "connectionId": "ne-VPN",
+            "originHubId": "ne",
+            "transport": "VPN",
+            "remote": false,
+            "asPath": [
+              65012
+            ]
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      }
+    ]
+  },
+  "advertised": {
+    "se-ExpressRoute": [],
+    "se-VPN": [
+      {
+        "key": "ne-VPN:ne-VPN-shared",
+        "prefix": "10.60.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          65012
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": false
+      },
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          65515
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": false
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": true,
+        "secureOrigin": false
+      }
+    ],
+    "ne-ExpressRoute": [],
+    "ne-VPN": [
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": true,
+        "secureOrigin": false
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          65515
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": false
+      }
+    ]
+  },
+  "predictedFlow": {
+    "se": [
+      {
+        "hubs": [
+          "se",
+          "ne"
+        ],
+        "firewalls": [],
+        "siteHops": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": [],
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "steps": [
+          "hub-se: longest prefix 10.60.0.0/16. Shortest received AS path (3 ASNs, including inter-hub prepends).",
+          "hub-ne: longest prefix 10.60.0.0/16. Only available path, or all paths have equal modeled preference.",
+          "Exit via ne VPN ingress."
+        ],
+        "status": "delivered"
+      }
+    ],
+    "ne": [
+      {
+        "hubs": [
+          "ne"
+        ],
+        "firewalls": [],
+        "siteHops": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": [],
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "steps": [
+          "hub-ne: longest prefix 10.60.0.0/16. Only available path, or all paths have equal modeled preference.",
+          "Exit via ne VPN ingress."
+        ],
+        "status": "delivered"
+      }
+    ]
+  },
+  "warnings": []
+}

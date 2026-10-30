@@ -1,0 +1,88 @@
+{
+  "status": "pass",
+  "checkedAtUtc": "2026-10-29T20:59:20.031Z",
+  "predictionSha256": "285ca71ccd270cc2a05d5bb065e51d71fce63c5c5977116dc5b3430ee91f2d38",
+  "files": [
+    "I-PRIVATE-native-20261029T205348873Z-result.json",
+    "I-PRIVATE-native-20261029T205702382Z-result.json"
+  ],
+  "checks": [
+    {
+      "region": "se",
+      "observedAtUtc": "2026-10-29T20:55:06.8260374+00:00",
+      "stage": "firewall default",
+      "actual": {
+        "addressPrefixes": [
+          "0.0.0.0/0"
+        ],
+        "nextHopType": "Internet",
+        "nextHops": []
+      },
+      "matched": true
+    },
+    {
+      "region": "se",
+      "observedAtUtc": "2026-10-29T20:55:06.8260374+00:00",
+      "stage": "no hub default",
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "observedAtUtc": "2026-10-29T20:56:24.8476019+00:00",
+      "stage": "firewall default",
+      "actual": {
+        "addressPrefixes": [
+          "0.0.0.0/0"
+        ],
+        "nextHopType": "Internet",
+        "nextHops": []
+      },
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "observedAtUtc": "2026-10-29T20:56:24.8476019+00:00",
+      "stage": "no hub default",
+      "matched": true
+    },
+    {
+      "region": "se",
+      "observedAtUtc": "2026-10-29T20:58:10.5525973+00:00",
+      "stage": "firewall default",
+      "actual": {
+        "addressPrefixes": [
+          "0.0.0.0/0"
+        ],
+        "nextHopType": "Internet",
+        "nextHops": []
+      },
+      "matched": true
+    },
+    {
+      "region": "se",
+      "observedAtUtc": "2026-10-29T20:58:10.5525973+00:00",
+      "stage": "no hub default",
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "observedAtUtc": "2026-10-29T20:59:19.7775222+00:00",
+      "stage": "firewall default",
+      "actual": {
+        "addressPrefixes": [
+          "0.0.0.0/0"
+        ],
+        "nextHopType": "Internet",
+        "nextHops": []
+      },
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "observedAtUtc": "2026-10-29T20:59:19.7775222+00:00",
+      "stage": "no hub default",
+      "matched": true
+    }
+  ],
+  "scope": "Separate post-fix default-only repeat on unchanged original private-intent inputs. Not blind ranking, full-table conformance, endpoint delivery, forced-tunnel validation or default advertisement certification. Original I/J predictions remain unchanged."
+}

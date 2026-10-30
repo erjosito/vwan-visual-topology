@@ -1,0 +1,104 @@
+{
+  "observations": [
+    {
+      "allSelectedRoutesMatched": false,
+      "comparisons": [
+        {
+          "region": "se",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "asPath": "12076-12076-12076",
+            "type": "ExpressRouteGateway",
+            "ingress": "se-ExpressRoute"
+          },
+          "actual": [
+            {
+              "nextHopType": "ExpressRouteGateway",
+              "asPath": "12076-12076-12076",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+              ]
+            }
+          ]
+        },
+        {
+          "region": "ne",
+          "prefix": "10.60.0.0/16",
+          "matched": false,
+          "expected": {
+            "asPath": "65012-65012-65012-65012-65012-65012-65012-65012-65012-65012",
+            "type": "VPN_S2S_Gateway",
+            "ingress": "ne-VPN"
+          },
+          "actual": [
+            {
+              "nextHopType": "Remote Hub",
+              "asPath": "65520-65520-12076-12076-12076",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+              ]
+            }
+          ]
+        }
+      ],
+      "attempt": 0,
+      "observedAt": "2026-10-29T18:33:09.5715241+00:00"
+    },
+    {
+      "allSelectedRoutesMatched": false,
+      "comparisons": [
+        {
+          "region": "se",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "asPath": "12076-12076-12076",
+            "type": "ExpressRouteGateway",
+            "ingress": "se-ExpressRoute"
+          },
+          "actual": [
+            {
+              "nextHopType": "ExpressRouteGateway",
+              "asPath": "12076-12076-12076",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+              ]
+            }
+          ]
+        },
+        {
+          "region": "ne",
+          "prefix": "10.60.0.0/16",
+          "matched": false,
+          "expected": {
+            "asPath": "65012-65012-65012-65012-65012-65012-65012-65012-65012-65012",
+            "type": "VPN_S2S_Gateway",
+            "ingress": "ne-VPN"
+          },
+          "actual": [
+            {
+              "nextHopType": "Remote Hub",
+              "asPath": "65520-65520-12076-12076-12076",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se"
+              ]
+            }
+          ]
+        }
+      ],
+      "attempt": 1,
+      "observedAt": "2026-10-29T18:34:30.1936982+00:00"
+    }
+  ],
+  "predictionSha256": "139a8444e110d5711f26275b50999a2ffe2a6588678caf02b49e0e191fc0d3d3",
+  "evidenceId": "E-AS-REMOTE-ER-LAST-20261029T182843871Z",
+  "observedRegions": [
+    "se",
+    "ne"
+  ],
+  "routingModelCommit": "c5be9e670e814ee109c4d48831380c61e55d7b63",
+  "scope": "Selected hub route, next-hop origin and measured AS path only. Advertisements, input health and delivery require separate evidence.",
+  "status": "awaiting-stable-match",
+  "scenario": "E-AS-REMOTE-ER-LAST"
+}

@@ -1,0 +1,65 @@
+{
+  "capturedAt": "2026-10-29T20:35:38.044062+00:00",
+  "hostname": "nva-ne",
+  "protocols": {
+    "exitCode": 0,
+    "stdout": "BIRD 2.0.8 ready.\nName       Proto      Table      State  Since         Info\ndevice1    Device     ---        up     15:44:46.928  \ndirect1    Direct     ---        up     15:44:46.928  \nhub_reachability Static     master4    up     15:44:46.928  \nlab_advertisements Static     master4    up     15:44:46.928  \nhub0       BGP        ---        up     15:44:48.315  Established   \nhub1       BGP        ---        up     15:44:51.303  Established",
+    "stderr": ""
+  },
+  "routes": {
+    "hub0": {
+      "received": {
+        "exitCode": 0,
+        "stdout": "BIRD 2.0.8 ready.\nTable master4:\n10.231.0.0/16        unicast [hub0 19:37:36.232 from 10.250.4.133] * (100/?) [AS12076i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515 12076 12076\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n\tBGP.community: (65515,20000)\n10.62.1.0/24         unicast [hub0 15:44:48.321 from 10.250.4.133] * (100/?) [AS65520e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.70.1.0/24         unicast [hub0 15:53:10.604 from 10.250.4.133] * (100/?) [AS65031e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520 65031\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.62.2.0/24         unicast [hub0 15:44:48.321 from 10.250.4.133] * (100/?) [AS65515i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n10.250.4.0/22        unicast [hub0 15:44:48.321 from 10.250.4.133] (100/?) [AS65515i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n10.210.0.0/16        unicast [hub0 15:44:48.321 from 10.250.4.133] * (100/?) [AS65520e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.61.1.0/24         unicast [hub0 17:03:29.954 from 10.250.4.133] * (100/?) [AS65011e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520 65011\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.61.2.0/24         unicast [hub0 17:11:22.993 from 10.250.4.133] * (100/?) [AS65012i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515 65012\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n10.230.0.0/16        unicast [hub0 20:23:08.018 from 10.250.4.133] * (100/?) [AS12076e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520 12076 12076\n\tBGP.next_hop: 10.250.4.133\n\tBGP.local_pref: 100\n\tBGP.community: (65515,20000) (0,12076) (0,51047)",
+        "stderr": ""
+      },
+      "receivedAdjRib": {
+        "exitCode": 0,
+        "stdout": "BIRD 2.0.8 ready.\nNo import table in channel hub0.ipv4",
+        "stderr": ""
+      },
+      "advertised": {
+        "exitCode": 0,
+        "stdout": "BIRD 2.0.8 ready.\nTable master4:\n10.70.2.0/24         blackhole [lab_advertisements 15:44:46.928] * (200)\n\tType: static univ",
+        "stderr": ""
+      }
+    },
+    "hub1": {
+      "received": {
+        "exitCode": 0,
+        "stdout": "BIRD 2.0.8 ready.\nTable master4:\n10.231.0.0/16        unicast [hub1 19:37:36.258 from 10.250.4.134] (100/?) [AS12076i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515 12076 12076\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n\tBGP.community: (65515,20000)\n10.62.1.0/24         unicast [hub1 15:44:51.310 from 10.250.4.134] (100/?) [AS65520e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.70.1.0/24         unicast [hub1 15:53:10.576 from 10.250.4.134] (100/?) [AS65031e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520 65031\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.62.2.0/24         unicast [hub1 15:44:51.311 from 10.250.4.134] (100/?) [AS65515i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n10.250.4.0/22        unicast [hub1 15:44:51.310 from 10.250.4.134] (100/?) [AS65515i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n10.210.0.0/16        unicast [hub1 15:44:51.310 from 10.250.4.134] (100/?) [AS65520e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.61.1.0/24         unicast [hub1 17:03:29.961 from 10.250.4.134] (100/?) [AS65011e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520 65011\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n\tBGP.community: (0,12076) (0,51047)\n10.61.2.0/24         unicast [hub1 17:11:23.005 from 10.250.4.134] (100/?) [AS65012i]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: IGP\n\tBGP.as_path: 65515 65012\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n10.230.0.0/16        unicast [hub1 20:23:08.020 from 10.250.4.134] (100/?) [AS12076e]\n\tvia 10.211.1.1 on eth0\n\tType: BGP univ\n\tBGP.origin: EGP\n\tBGP.as_path: 65515 65520 65520 12076 12076\n\tBGP.next_hop: 10.250.4.134\n\tBGP.local_pref: 100\n\tBGP.community: (65515,20000) (0,12076) (0,51047)",
+        "stderr": ""
+      },
+      "receivedAdjRib": {
+        "exitCode": 0,
+        "stdout": "BIRD 2.0.8 ready.\nNo import table in channel hub1.ipv4",
+        "stderr": ""
+      },
+      "advertised": {
+        "exitCode": 0,
+        "stdout": "BIRD 2.0.8 ready.\nTable master4:\n10.70.2.0/24         blackhole [lab_advertisements 15:44:46.928] * (200)\n\tType: static univ",
+        "stderr": ""
+      }
+    }
+  },
+  "commonPrefixTable": {
+    "exitCode": 0,
+    "stdout": "BIRD 2.0.8 ready.\nNetwork not found",
+    "stderr": ""
+  },
+  "tunnels": {
+    "exitCode": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  "kernelRoutes": {
+    "exitCode": 0,
+    "stdout": "[{\"dst\":\"default\",\"gateway\":\"10.211.1.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"prefsrc\":\"10.211.1.4\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.211.1.0/24\",\"dev\":\"eth0\",\"protocol\":\"kernel\",\"scope\":\"link\",\"prefsrc\":\"10.211.1.4\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.211.1.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"scope\":\"link\",\"prefsrc\":\"10.211.1.4\",\"metric\":100,\"flags\":[]},{\"dst\":\"168.63.129.16\",\"gateway\":\"10.211.1.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"prefsrc\":\"10.211.1.4\",\"metric\":100,\"flags\":[]},{\"dst\":\"169.254.169.254\",\"gateway\":\"10.211.1.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"prefsrc\":\"10.211.1.4\",\"metric\":100,\"flags\":[]}]",
+    "stderr": ""
+  },
+  "xfrmLinks": {
+    "exitCode": 0,
+    "stdout": "[{},{},{},{}]",
+    "stderr": ""
+  }
+}

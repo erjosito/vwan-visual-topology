@@ -1,0 +1,152 @@
+{
+  "error": null,
+  "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Resources/deployments/app-export-main.arm",
+  "name": "app-export-main.arm",
+  "properties": {
+    "correlationId": "redacted-guid-773884c750f6",
+    "debugSetting": null,
+    "dependencies": [
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualWans/wan-verify-4cf83ab4",
+            "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+            "resourceName": "wan-verify-4cf83ab4",
+            "resourceType": "Microsoft.Network/virtualWans"
+          }
+        ],
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "resourceName": "hub-ne",
+        "resourceType": "Microsoft.Network/virtualHubs"
+      },
+      {
+        "dependsOn": [
+          {
+            "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualWans/wan-verify-4cf83ab4",
+            "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+            "resourceName": "wan-verify-4cf83ab4",
+            "resourceType": "Microsoft.Network/virtualWans"
+          }
+        ],
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "resourceName": "hub-se",
+        "resourceType": "Microsoft.Network/virtualHubs"
+      }
+    ],
+    "diagnostics": null,
+    "duration": "PT0S",
+    "error": null,
+    "extensions": [],
+    "mode": "Incremental",
+    "onErrorDeployment": null,
+    "outputResources": null,
+    "outputs": null,
+    "parameters": {
+      "hubMinimumCapacity": {
+        "type": "Int",
+        "value": 2
+      },
+      "hubSettings": {
+        "type": "Array",
+        "value": [
+          {
+            "addressPrefix": "10.250.4.0/22",
+            "location": "northeurope",
+            "name": "hub-ne",
+            "routingPreference": "ExpressRoute"
+          },
+          {
+            "addressPrefix": "10.250.0.0/22",
+            "location": "swedencentral",
+            "name": "hub-se",
+            "routingPreference": "ExpressRoute"
+          }
+        ]
+      },
+      "wanLocation": {
+        "type": "String",
+        "value": "swedencentral"
+      },
+      "wanName": {
+        "type": "String",
+        "value": "wan-verify-4cf83ab4"
+      }
+    },
+    "parametersLink": null,
+    "providers": [
+      {
+        "id": null,
+        "namespace": "Microsoft.Network",
+        "providerAuthorizationConsentState": "[REDACTED]",
+        "registrationPolicy": null,
+        "registrationState": null,
+        "resourceTypes": [
+          {
+            "aliases": null,
+            "apiProfiles": null,
+            "apiVersions": null,
+            "capabilities": null,
+            "defaultApiVersion": null,
+            "locationMappings": null,
+            "locations": [
+              "swedencentral"
+            ],
+            "properties": null,
+            "resourceType": "virtualWans",
+            "zoneMappings": null
+          },
+          {
+            "aliases": null,
+            "apiProfiles": null,
+            "apiVersions": null,
+            "capabilities": null,
+            "defaultApiVersion": null,
+            "locationMappings": null,
+            "locations": [
+              "northeurope",
+              "swedencentral"
+            ],
+            "properties": null,
+            "resourceType": "virtualHubs",
+            "zoneMappings": null
+          }
+        ]
+      }
+    ],
+    "provisioningState": "Succeeded",
+    "templateHash": "11274674340693351984",
+    "templateLink": null,
+    "timestamp": "2026-10-29T13:43:32.925962+00:00",
+    "validatedResources": [
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "identifiers": null,
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "resourceType": null
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "identifiers": null,
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "resourceType": null
+      },
+      {
+        "apiVersion": null,
+        "extension": null,
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualWans/wan-verify-4cf83ab4",
+        "identifiers": null,
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "resourceType": null
+      }
+    ],
+    "validationLevel": null
+  },
+  "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+  "type": "Microsoft.Resources/deployments"
+}

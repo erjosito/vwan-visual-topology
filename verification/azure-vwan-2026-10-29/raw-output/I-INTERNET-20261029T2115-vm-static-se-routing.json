@@ -1,0 +1,30 @@
+{
+  "capturedAt": "2026-10-29T21:16:48.404571+00:00",
+  "hostname": "static-se",
+  "protocols": {
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": "Unable to connect to server control socket (/run/bird/bird.ctl): No such file or directory"
+  },
+  "routes": {},
+  "commonPrefixTable": {
+    "exitCode": 1,
+    "stdout": "",
+    "stderr": "Unable to connect to server control socket (/run/bird/bird.ctl): No such file or directory"
+  },
+  "tunnels": {
+    "exitCode": 0,
+    "stdout": "azure1: #2, ESTABLISHED, IKEv2, 8ebc95ae76e56d98_i* c61f90e79d92edd1_r\n  local  '4.165.97.28' @ 10.220.0.5[4500]\n  remote '74.158.124.86' @ 74.158.124.86[4500]\n  AES_CBC-256/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/MODP_2048\n  established 20399s ago, rekeying in 6310s\n  tunnel1: #16, reqid 2, INSTALLED, TUNNEL-in-UDP, ESP:AES_CBC-256/HMAC_SHA2_256_128\n    installed 1962s ago, rekeying in 599s, expires in 1638s\n    in  cb615f94 (-|0x00000065),   1038 bytes,    15 packets,   616s ago\n    out 2cc6bac0 (-|0x00000065),      0 bytes,     0 packets\n    local  0.0.0.0/0\n    remote 0.0.0.0/0\nazure0: #1, ESTABLISHED, IKEv2, 0c91c7401852cf8c_i* 2b477e87ec9868ba_r\n  local  '4.165.97.28' @ 10.220.0.5[4500]\n  remote '74.158.120.170' @ 74.158.120.170[4500]\n  AES_CBC-256/HMAC_SHA2_256_128/PRF_HMAC_SHA2_256/MODP_2048\n  established 20399s ago, rekeying in 6345s\n  tunnel0: #17, reqid 1, INSTALLED, TUNNEL-in-UDP, ESP:AES_CBC-256/HMAC_SHA2_256_128\n    installed 286s ago, rekeying in 2177s, expires in 3314s\n    in  c1b66b5b (-|0x00000064),      0 bytes,     0 packets\n    out c1fadf3c (-|0x00000064),      0 bytes,     0 packets\n    local  0.0.0.0/0\n    remote 0.0.0.0/0",
+    "stderr": ""
+  },
+  "kernelRoutes": {
+    "exitCode": 0,
+    "stdout": "[{\"dst\":\"default\",\"gateway\":\"10.220.0.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"prefsrc\":\"10.220.0.5\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.210.0.0/16\",\"dev\":\"xfrm100\",\"scope\":\"link\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.210.0.0/16\",\"dev\":\"xfrm101\",\"scope\":\"link\",\"metric\":101,\"flags\":[]},{\"dst\":\"10.211.0.0/16\",\"dev\":\"xfrm100\",\"scope\":\"link\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.211.0.0/16\",\"dev\":\"xfrm101\",\"scope\":\"link\",\"metric\":101,\"flags\":[]},{\"dst\":\"10.220.0.0/24\",\"dev\":\"eth0\",\"protocol\":\"kernel\",\"scope\":\"link\",\"prefsrc\":\"10.220.0.5\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.220.0.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"scope\":\"link\",\"prefsrc\":\"10.220.0.5\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.250.0.0/21\",\"dev\":\"xfrm100\",\"scope\":\"link\",\"metric\":100,\"flags\":[]},{\"dst\":\"10.250.0.0/21\",\"dev\":\"xfrm101\",\"scope\":\"link\",\"metric\":101,\"flags\":[]},{\"dst\":\"10.250.0.12\",\"dev\":\"xfrm100\",\"scope\":\"link\",\"flags\":[]},{\"dst\":\"10.250.0.13\",\"dev\":\"xfrm101\",\"scope\":\"link\",\"flags\":[]},{\"dst\":\"74.158.120.170\",\"gateway\":\"10.220.0.1\",\"dev\":\"eth0\",\"flags\":[]},{\"dst\":\"74.158.124.86\",\"gateway\":\"10.220.0.1\",\"dev\":\"eth0\",\"flags\":[]},{\"dst\":\"168.63.129.16\",\"gateway\":\"10.220.0.1\",\"dev\":\"eth0\",\"flags\":[]},{\"dst\":\"168.63.129.16\",\"gateway\":\"10.220.0.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"prefsrc\":\"10.220.0.5\",\"metric\":100,\"flags\":[]},{\"dst\":\"169.254.169.254\",\"gateway\":\"10.220.0.1\",\"dev\":\"eth0\",\"flags\":[]},{\"dst\":\"169.254.169.254\",\"gateway\":\"10.220.0.1\",\"dev\":\"eth0\",\"protocol\":\"dhcp\",\"prefsrc\":\"10.220.0.5\",\"metric\":100,\"flags\":[]}]",
+    "stderr": ""
+  },
+  "xfrmLinks": {
+    "exitCode": 0,
+    "stdout": "[{\"ifindex\":5,\"link\":\"eth0\",\"ifname\":\"xfrm100\",\"flags\":[\"NOARP\",\"UP\",\"LOWER_UP\"],\"mtu\":1500,\"qdisc\":\"noqueue\",\"operstate\":\"UNKNOWN\",\"linkmode\":\"DEFAULT\",\"group\":\"default\",\"txqlen\":1000,\"link_type\":\"none\"},{\"ifindex\":6,\"link\":\"eth0\",\"ifname\":\"xfrm101\",\"flags\":[\"NOARP\",\"UP\",\"LOWER_UP\"],\"mtu\":1500,\"qdisc\":\"noqueue\",\"operstate\":\"UNKNOWN\",\"linkmode\":\"DEFAULT\",\"group\":\"default\",\"txqlen\":1000,\"link_type\":\"none\"}]",
+    "stderr": ""
+  }
+}

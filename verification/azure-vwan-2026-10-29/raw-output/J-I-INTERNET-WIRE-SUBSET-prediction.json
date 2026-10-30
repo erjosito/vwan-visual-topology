@@ -1,0 +1,121 @@
+{
+  "id": "J-I-INTERNET-WIRE-SUBSET",
+  "predictedAtUtc": "2026-10-29T20:12:11.813Z",
+  "modelCommit": "e9818753837a8932bb48271d02d20d7f08255b5f",
+  "originalPredictionSha256": "f9f041bb1713ee90855635398baaa12e2e25dbff28f0137e02af538a8d9b28b6",
+  "expected": {
+    "se-VPN": {
+      "10.61.2.0/24": [
+        65515,
+        65520,
+        65520,
+        65012
+      ],
+      "10.210.0.0/16": [
+        65515
+      ],
+      "10.211.0.0/16": [
+        65515,
+        65520,
+        65520
+      ],
+      "10.230.0.0/16": [
+        65515,
+        12076,
+        12076
+      ],
+      "10.231.0.0/16": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "10.62.1.0/24": [
+        65515
+      ],
+      "10.62.2.0/24": [
+        65515,
+        65520,
+        65520
+      ]
+    },
+    "ne-VPN": {
+      "10.61.1.0/24": [
+        65515,
+        65520,
+        65520,
+        65011
+      ],
+      "10.210.0.0/16": [
+        65515,
+        65520,
+        65520
+      ],
+      "10.211.0.0/16": [
+        65515
+      ],
+      "10.230.0.0/16": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "10.231.0.0/16": [
+        65515,
+        12076,
+        12076
+      ],
+      "10.62.1.0/24": [
+        65515,
+        65520,
+        65520
+      ],
+      "10.62.2.0/24": [
+        65515
+      ]
+    },
+    "se-ExpressRoute": {
+      "10.61.1.0/24": [
+        12076
+      ],
+      "10.61.2.0/24": [
+        12076
+      ],
+      "10.210.0.0/16": [
+        12076
+      ],
+      "10.211.0.0/16": [
+        12076
+      ],
+      "10.62.1.0/24": [
+        12076
+      ],
+      "10.62.2.0/24": [
+        12076
+      ]
+    },
+    "ne-ExpressRoute": {
+      "10.61.1.0/24": [
+        12076
+      ],
+      "10.61.2.0/24": [
+        12076
+      ],
+      "10.210.0.0/16": [
+        12076
+      ],
+      "10.211.0.0/16": [
+        12076
+      ],
+      "10.62.1.0/24": [
+        12076
+      ],
+      "10.62.2.0/24": [
+        12076
+      ]
+    }
+  },
+  "scope": "Prospective post-fix positive wire subset under unchanged frozen I topology. ERP native inputs have already been independently verified; this is not a blind ranking case. Compare every positive observation in scope, require all expected VPN receiver prefixes and positive customer-prefix coverage, but do not use receiver omissions as suppression evidence. Defaults, ER-origin customer exports, NVA/hub-system routes and native-versus-wire path equivalence are excluded. Original I bytes and flow predictions remain immutable."
+}

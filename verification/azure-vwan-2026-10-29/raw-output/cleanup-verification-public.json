@@ -1,0 +1,52 @@
+{
+  "status": "testing-reporting-and-owned-cleanup-verified",
+  "verifiedAtUtc": "2026-10-30T00:26:31.0566786+00:00",
+  "azure": {
+    "status": "azure-cleanup-complete-verified",
+    "verifiedAtUtc": "2026-10-30T00:26:31.0566786+00:00",
+    "ownedResourceGroupAbsent": true,
+    "remainingRunTaggedAzureResources": 0,
+    "externalReadGrantsAbsent": 2,
+    "ownedExternalEndpointConnectionAbsent": true,
+    "ownedGroupContributorAssignmentAbsent": true,
+    "preExistingVaultPreserved": true,
+    "vaultPublicNetworkAccess": "Disabled",
+    "productionAppHttpStatus": 200
+  },
+  "provider": {
+    "status": "six-owned-products-removed-unrelated-inventory-preserved",
+    "capturedAtUtc": "2026-10-30T00:23:00.835026+01:00",
+    "unrelatedProductCount": 72,
+    "baselineUidSetSha256": "1c7492584daf1af5a221b0cc8410981e478f5b153ba4744d4c321ac35e106440",
+    "ownedProductsExcluded": 6,
+    "ownedProductsVerifiedRemoved": [
+      {
+        "type": "MCR2",
+        "state": "DECOMMISSIONED"
+      },
+      {
+        "type": "MCR2",
+        "state": "DECOMMISSIONED"
+      },
+      {
+        "type": "VXC",
+        "state": "DECOMMISSIONED"
+      },
+      {
+        "type": "VXC",
+        "state": "DECOMMISSIONED"
+      },
+      {
+        "type": "VXC",
+        "state": "DECOMMISSIONED"
+      },
+      {
+        "type": "VXC",
+        "state": "DECOMMISSIONED"
+      }
+    ],
+    "scope": "Only unrelated UID/state fingerprints retained privately; no names, account inventory, or credentials included."
+  },
+  "originalIntentPredictionFilesUnchanged": 8,
+  "costScope": "No active task-owned Azure/provider resources remain. Actual accrued invoices are not reconciled; prior cancellation quotes do not waive recurring usage."
+}

@@ -1,0 +1,34 @@
+[
+  {
+    "file": "C-AS-LOCAL-ER-SHORTER-prediction.json",
+    "sha256": "cf628658ffed105b801a7572dce09004e0a6cda07de91117ce6ef46d565ffb9a"
+  },
+  {
+    "file": "C-AS-REMOTE-ER-LAST-prediction.json",
+    "sha256": "f0ce605aa66c3afd92e3fcb37b208307ae4a37579dd3558b353586433dda118c"
+  },
+  {
+    "file": "C-LOCAL-ASPath-prediction.json",
+    "sha256": "335bebcd6c9f2b9ab29bcb26d9190c3927c2af9aa4f8d5af892e20201a4c779d"
+  },
+  {
+    "file": "C-LOCAL-ExpressRoute-prediction.json",
+    "sha256": "fad4fd071cc7fca12b0421d7b5a809b9be326b6ffd7678788254b36e474a59c4"
+  },
+  {
+    "file": "C-LOCAL-VPN-prediction.json",
+    "sha256": "d27a34c302e47606db6910779bfd12ed88e0db584400115d99a92f51a8a1d414"
+  },
+  {
+    "file": "C-LOCALITY-ASPath-prediction.json",
+    "sha256": "4d4f18e379e2d7adfef8357394a0481407840fe7e14da06d8cf0e74e91a70ef8"
+  },
+  {
+    "file": "C-LOCALITY-VPN-prediction.json",
+    "sha256": "2ba5cdd8122ca43cd56af254272483ad15c5f48d9a17a856425bcf0a6019af24"
+  },
+  {
+    "file": "C-LPM-prediction.json",
+    "sha256": "0a360643ceeea63e341167b0a629eb084723a93aac8bdb8e515e516a36ef2a19"
+  }
+]

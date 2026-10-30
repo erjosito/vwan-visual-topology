@@ -1,0 +1,8 @@
+{
+  "nonNullZeroCancellationTotals": 6,
+  "observedAtUtc": "2026-10-29T21:03:10.7631050+00:00",
+  "pendingProviderOrders": 0,
+  "products": 6,
+  "scope": "Read-only exact-owned cancellation quotes; not accrued invoices or a recurring-charge waiver.",
+  "nonNullZeroContractPayouts": 6
+}

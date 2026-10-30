@@ -1,0 +1,52 @@
+{
+  "source": "workload-se",
+  "scenario": "I-COMBINED",
+  "deniedFirewall": "se",
+  "matched": true,
+  "observations": [
+    {
+      "iteration": 0,
+      "observedAtUtc": "2026-10-29T23:15:44.222912+01:00",
+      "kind": "private",
+      "destination": "10.62.1.1",
+      "expectedDelivery": false,
+      "curlCode": 28,
+      "httpStatus": "000",
+      "hostname": "",
+      "matched": true
+    },
+    {
+      "iteration": 0,
+      "observedAtUtc": "2026-10-29T23:15:47.231225+01:00",
+      "kind": "internet",
+      "destination": "4.165.97.27",
+      "expectedDelivery": false,
+      "curlCode": 28,
+      "httpStatus": "000",
+      "hostname": "",
+      "matched": true
+    },
+    {
+      "iteration": 1,
+      "observedAtUtc": "2026-10-29T23:16:20.250855+01:00",
+      "kind": "private",
+      "destination": "10.62.1.1",
+      "expectedDelivery": false,
+      "curlCode": 28,
+      "httpStatus": "000",
+      "hostname": "",
+      "matched": true
+    },
+    {
+      "iteration": 1,
+      "observedAtUtc": "2026-10-29T23:16:23.259216+01:00",
+      "kind": "internet",
+      "destination": "4.165.97.27",
+      "expectedDelivery": false,
+      "curlCode": 28,
+      "httpStatus": "000",
+      "hostname": "",
+      "matched": true
+    }
+  ]
+}

@@ -17,7 +17,6 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **BGP table**, **Learned routes**, and **Advertised routes** open distinct movable, resizable canvas inspectors. The BGP table groups candidates and marks preferred paths with `*`; click a prefix to highlight its paths. Every table supports a prefix text filter. Learned/advertised views also filter by neighbor and default to **After** inbound/outbound route maps, with a **Before** stage showing policy inputs, including subsequently dropped or summarized routes.
 - Enable private and/or Internet routing intent. Inspect **hub policy routes and firewall forwarding routes separately**, and see firewall traversal in flow traces.
 - Routing intent changes the hub itself into a **Secured virtual hub** on the canvas, without an extra firewall node or attachment. Either policy enables the secured icon; disabling both restores the normal hub. Firewall traversal highlights the secured hub and remains explicit in path details.
-- **File issue** in the header opens this repository's new GitHub issue page in a separate tab, leaving the workspace unchanged. No topology data is attached automatically.
 - Connect on-premises sites with directional BGP export allowlists and AS-path prepends. Configure site ASNs and originated prefixes, then enable mesh route import on the desired hub connections.
 - Create named, reusable route maps owned by a **hub or on-premises site**. Each router assigns its own inbound/outbound policies to specific connections; the two ends are independent. Policies support ordered prefix matching, blocking, summarization and ASN prepending.
 - **IN / OUT filter marks** identify each mapped connection near its owning hub/site, with contrasting, white-outlined arrows showing advertisement direction. Hover or focus a mark to preview the applied rules; click to inspect that exact endpoint, connection and direction, or choose **Show route map rules** for the router's complete policy list.
@@ -188,7 +187,11 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 
 The AS Path treatment of remote ER follows the controlled two-hub customer-MCR observations in [#10](https://github.com/erjosito/vwan-visual-topology/issues/10): remote ER4 beat local VPN10 after both arrival orders, with each input independently verified. Microsoft's HRP page contains a conflicting "remote ER last" note and a shorter-remote-ER example. The model follows the reproduced received-path comparison, not that unconditional exclusion; this is not a guarantee of every Azure topology or convergence history.
 
-See [Azure testing lessons](AZURE-TESTING-LESSONS.md) for experiment design, evidence boundaries, verification pitfalls, cost controls and safe cleanup.
+The single-file [routing logic and critique](ROUTING-LOGIC.md) documents the actual route-production, HRP, policy, advertisement and forwarding pipeline, including reproduced internal inconsistencies and unverified Azure assumptions.
+
+The [complete Azure verification report](verification/azure-vwan-2026-10-29/README.md), its 212 sanitized evidence files, original hash manifest and editable diagrams are now included in this repository. [Import provenance](verification/azure-vwan-2026-10-29/IMPORT-PROVENANCE.md) identifies the exact unchanged upstream snapshot. These are historical scoped observations, not certification of every current feature.
+
+See [Azure testing lessons](AZURE-TESTING-LESSONS.md) for experiment design, evidence boundaries, verification pitfalls, cost controls and safe cleanup. The browser workspace has no GitHub issue link because the source repository is private; no replacement feedback backend or authentication was added.
 
 Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 BGP advertisements and 100 site static prefixes per hub connection, and 2 MB per JSON file.
 

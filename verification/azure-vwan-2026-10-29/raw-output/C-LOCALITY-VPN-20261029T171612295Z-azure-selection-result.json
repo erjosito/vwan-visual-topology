@@ -1,0 +1,104 @@
+{
+  "status": "selected-route-match",
+  "observations": [
+    {
+      "comparisons": [
+        {
+          "region": "se",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "VPN_S2S_Gateway",
+            "ingress": "se-VPN",
+            "asPath": "65011-65011-65011-65011"
+          },
+          "actual": [
+            {
+              "nextHopType": "VPN_S2S_Gateway",
+              "asPath": "65011-65011-65011-65011",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+              ]
+            }
+          ]
+        },
+        {
+          "region": "ne",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "VPN_S2S_Gateway",
+            "ingress": "ne-VPN",
+            "asPath": "65012"
+          },
+          "actual": [
+            {
+              "nextHopType": "VPN_S2S_Gateway",
+              "asPath": "65012",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+              ]
+            }
+          ]
+        }
+      ],
+      "allSelectedRoutesMatched": true,
+      "attempt": 0,
+      "observedAt": "2026-10-29T17:17:25.8481136+00:00"
+    },
+    {
+      "comparisons": [
+        {
+          "region": "se",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "VPN_S2S_Gateway",
+            "ingress": "se-VPN",
+            "asPath": "65011-65011-65011-65011"
+          },
+          "actual": [
+            {
+              "nextHopType": "VPN_S2S_Gateway",
+              "asPath": "65011-65011-65011-65011",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-se"
+              ]
+            }
+          ]
+        },
+        {
+          "region": "ne",
+          "prefix": "10.60.0.0/16",
+          "matched": true,
+          "expected": {
+            "type": "VPN_S2S_Gateway",
+            "ingress": "ne-VPN",
+            "asPath": "65012"
+          },
+          "actual": [
+            {
+              "nextHopType": "VPN_S2S_Gateway",
+              "asPath": "65012",
+              "nextHops": [
+                "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+              ]
+            }
+          ]
+        }
+      ],
+      "allSelectedRoutesMatched": true,
+      "attempt": 1,
+      "observedAt": "2026-10-29T17:18:36.1950430+00:00"
+    }
+  ],
+  "evidenceId": "C-LOCALITY-VPN-20261029T171612295Z",
+  "observedRegions": [
+    "se",
+    "ne"
+  ],
+  "scenario": "C-LOCALITY-VPN",
+  "scope": "Selected hub route, next-hop origin and measured AS path only. Advertisements, input health and delivery require separate evidence.",
+  "predictionSha256": "2ba5cdd8122ca43cd56af254272483ad15c5f48d9a17a856425bcf0a6019af24",
+  "routingModelCommit": "adca96655aca62a9c61df91e731f1723e5d7a962"
+}

@@ -1,0 +1,310 @@
+{
+  "capturedAtUtc": "2026-10-29T20:39:42.771803+00:00",
+  "scope": "Actual SE customer MCR per-neighbor Received routes using documented asynchronous operations. Empty results are not suppression proof.",
+  "observations": [
+    {
+      "ownedVxcIndex": 0,
+      "peerIp": "169.254.180.114",
+      "peerEstablished": true,
+      "completed": true,
+      "routes": [
+        {
+          "prefix": "10.61.1.0/24",
+          "best": true,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.61.2.0/24",
+          "best": true,
+          "external": true,
+          "origin": "EGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.62.1.0/24",
+          "best": true,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.62.2.0/24",
+          "best": true,
+          "external": true,
+          "origin": "EGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.70.1.0/24",
+          "best": true,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.70.2.0/24",
+          "best": true,
+          "external": true,
+          "origin": "EGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.210.0.0/16",
+          "best": true,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.211.0.0/16",
+          "best": true,
+          "external": true,
+          "origin": "EGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.230.0.0/16",
+          "best": true,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        },
+        {
+          "prefix": "10.250.0.0/22",
+          "best": true,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.114",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.114",
+            "vxc": {
+              "id": "redacted-guid-327006738b82",
+              "name": "owned-lab-vxc-se-0"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "ownedVxcIndex": 1,
+      "peerIp": "169.254.180.118",
+      "peerEstablished": true,
+      "completed": true,
+      "routes": [
+        {
+          "prefix": "10.61.1.0/24",
+          "best": false,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.118",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.118",
+            "vxc": {
+              "id": "redacted-guid-66a4e3025c1c",
+              "name": "owned-lab-vxc-se-1"
+            }
+          }
+        },
+        {
+          "prefix": "10.62.1.0/24",
+          "best": false,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.118",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.118",
+            "vxc": {
+              "id": "redacted-guid-66a4e3025c1c",
+              "name": "owned-lab-vxc-se-1"
+            }
+          }
+        },
+        {
+          "prefix": "10.70.1.0/24",
+          "best": false,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.118",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.118",
+            "vxc": {
+              "id": "redacted-guid-66a4e3025c1c",
+              "name": "owned-lab-vxc-se-1"
+            }
+          }
+        },
+        {
+          "prefix": "10.210.0.0/16",
+          "best": false,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.118",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.118",
+            "vxc": {
+              "id": "redacted-guid-66a4e3025c1c",
+              "name": "owned-lab-vxc-se-1"
+            }
+          }
+        },
+        {
+          "prefix": "10.230.0.0/16",
+          "best": false,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.118",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.118",
+            "vxc": {
+              "id": "redacted-guid-66a4e3025c1c",
+              "name": "owned-lab-vxc-se-1"
+            }
+          }
+        },
+        {
+          "prefix": "10.250.0.0/22",
+          "best": false,
+          "external": true,
+          "origin": "IGP",
+          "source": "169.254.180.118",
+          "valid": true,
+          "weight": 0,
+          "asPath": "12076",
+          "localPref": 100,
+          "nextHop": {
+            "ip": "169.254.180.118",
+            "vxc": {
+              "id": "redacted-guid-66a4e3025c1c",
+              "name": "owned-lab-vxc-se-1"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

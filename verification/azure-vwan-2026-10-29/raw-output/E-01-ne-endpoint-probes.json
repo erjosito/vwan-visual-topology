@@ -1,0 +1,10 @@
+{
+  "value": [
+    {
+      "code": "ProvisioningState/succeeded",
+      "displayStatus": "Provisioning succeeded",
+      "level": "Info",
+      "message": "Enable succeeded: \n[stdout]\n{\"source\": \"workload-ne\", \"target\": \"remote-spoke\", \"address\": \"10.210.0.4\", \"httpDelivered\": true, \"endpoint\": \"workload-se\"}\n{\"source\": \"workload-ne\", \"target\": \"local-bgp-branch\", \"address\": \"10.61.2.1\", \"httpDelivered\": true, \"endpoint\": \"bgp-ne\"}\n{\"source\": \"workload-ne\", \"target\": \"local-static-branch\", \"address\": \"10.62.2.1\", \"httpDelivered\": true, \"endpoint\": \"static-ne\"}\n{\"source\": \"workload-ne\", \"target\": \"local-er-endpoint\", \"address\": \"10.231.0.4\", \"httpDelivered\": true, \"endpoint\": \"er-ne\"}\n{\"source\": \"workload-ne\", \"target\": \"local-spoke-nva\", \"address\": \"10.70.2.1\", \"httpDelivered\": true, \"endpoint\": \"nva-ne\"}\n{\"source\": \"workload-ne\", \"target\": \"remote-bgp-branch\", \"address\": \"10.61.1.1\", \"httpDelivered\": true, \"endpoint\": \"bgp-se\"}\n{\"source\": \"workload-ne\", \"target\": \"remote-static-branch\", \"address\": \"10.62.1.1\", \"httpDelivered\": true, \"endpoint\": \"static-se\"}\n{\"source\": \"workload-ne\", \"target\": \"remote-er-endpoint\", \"address\": \"10.230.0.4\", \"httpDelivered\": true, \"endpoint\": \"er-se\"}\n{\"source\": \"workload-ne\", \"target\": \"remote-spoke-nva\", \"address\": \"10.70.1.1\", \"httpDelivered\": true, \"endpoint\": \"nva-se\"}\n\n[stderr]\n"
+    }
+  ]
+}

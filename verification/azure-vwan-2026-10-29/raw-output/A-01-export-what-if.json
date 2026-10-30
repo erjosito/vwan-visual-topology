@@ -1,0 +1,409 @@
+{
+  "changes": [
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/RG-VWAN-VERIFY-20261029-4CF83AB4/providers/Microsoft.Compute/disks/disk-nva-se",
+        "location": "swedencentral",
+        "managedBy": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Compute/virtualMachines/vm-nva-se",
+        "name": "disk-nva-se",
+        "resourceGroup": "RG-VWAN-VERIFY-20261029-4CF83AB4",
+        "sku": {
+          "name": "StandardSSD_LRS",
+          "tier": "Standard"
+        },
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Compute/disks"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/RG-VWAN-VERIFY-20261029-4CF83AB4/providers/Microsoft.Compute/disks/disk-nva-se",
+        "location": "swedencentral",
+        "managedBy": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Compute/virtualMachines/vm-nva-se",
+        "name": "disk-nva-se",
+        "resourceGroup": "RG-VWAN-VERIFY-20261029-4CF83AB4",
+        "sku": {
+          "name": "StandardSSD_LRS",
+          "tier": "Standard"
+        },
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Compute/disks"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/RG-VWAN-VERIFY-20261029-4CF83AB4/providers/Microsoft.Compute/disks/disk-nva-se",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Compute/virtualMachines/vm-nva-se",
+        "identity": {
+          "type": "SystemAssigned"
+        },
+        "location": "swedencentral",
+        "name": "vm-nva-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Compute/virtualMachines"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Compute/virtualMachines/vm-nva-se",
+        "identity": {
+          "type": "SystemAssigned"
+        },
+        "location": "swedencentral",
+        "name": "vm-nva-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Compute/virtualMachines"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Compute/virtualMachines/vm-nva-se",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkInterfaces/nic-nva-se",
+        "location": "swedencentral",
+        "name": "nic-nva-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/networkInterfaces"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkInterfaces/nic-nva-se",
+        "location": "swedencentral",
+        "name": "nic-nva-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/networkInterfaces"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkInterfaces/nic-nva-se",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkInterfaces/pe-lab-provider-vault.nic.redacted-guid-9b51f0a2fe67",
+        "kind": "Regular",
+        "location": "swedencentral",
+        "managedBy": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/privateEndpoints/pe-lab-provider-vault",
+        "name": "pe-lab-provider-vault.nic.redacted-guid-9b51f0a2fe67",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/networkInterfaces"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkInterfaces/pe-lab-provider-vault.nic.redacted-guid-9b51f0a2fe67",
+        "kind": "Regular",
+        "location": "swedencentral",
+        "managedBy": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/privateEndpoints/pe-lab-provider-vault",
+        "name": "pe-lab-provider-vault.nic.redacted-guid-9b51f0a2fe67",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/networkInterfaces"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkInterfaces/pe-lab-provider-vault.nic.redacted-guid-9b51f0a2fe67",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkSecurityGroups/nsg-spoke-se",
+        "location": "swedencentral",
+        "name": "nsg-spoke-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/networkSecurityGroups"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkSecurityGroups/nsg-spoke-se",
+        "location": "swedencentral",
+        "name": "nsg-spoke-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/networkSecurityGroups"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/networkSecurityGroups/nsg-spoke-se",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/privateEndpoints/pe-lab-provider-vault",
+        "location": "swedencentral",
+        "name": "pe-lab-provider-vault",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/privateEndpoints/pe-lab-provider-vault",
+        "location": "swedencentral",
+        "name": "pe-lab-provider-vault",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/privateEndpoints"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/privateEndpoints/pe-lab-provider-vault",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/publicIPAddresses/pip-nva-se",
+        "location": "swedencentral",
+        "name": "pip-nva-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "sku": {
+          "name": "Standard"
+        },
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/publicIPAddresses"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/publicIPAddresses/pip-nva-se",
+        "location": "swedencentral",
+        "name": "pip-nva-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "sku": {
+          "name": "Standard"
+        },
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/publicIPAddresses"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/publicIPAddresses/pip-nva-se",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "apiVersion": "2024-10-01",
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "location": "northeurope",
+        "name": "hub-ne",
+        "properties": {
+          "addressPrefix": "10.250.4.0/22",
+          "hubRoutingPreference": "ExpressRoute",
+          "sku": "Standard",
+          "virtualRouterAutoScaleConfiguration": {
+            "minCapacity": 2
+          },
+          "virtualWan": {
+            "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualWans/wan-verify-4cf83ab4",
+            "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4"
+          }
+        },
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "type": "Microsoft.Network/virtualHubs"
+      },
+      "before": null,
+      "changeType": "Create",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-ne",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "apiVersion": "2024-10-01",
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+        "location": "swedencentral",
+        "name": "hub-se",
+        "properties": {
+          "addressPrefix": "10.250.0.0/22",
+          "hubRoutingPreference": "ExpressRoute",
+          "sku": "Standard",
+          "virtualRouterAutoScaleConfiguration": {
+            "minCapacity": 2
+          },
+          "virtualWan": {
+            "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualWans/wan-verify-4cf83ab4",
+            "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4"
+          }
+        },
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "type": "Microsoft.Network/virtualHubs"
+      },
+      "before": null,
+      "changeType": "Create",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualHubs/hub-se",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualNetworks/vnet-spoke-se",
+        "location": "swedencentral",
+        "name": "vnet-spoke-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      "before": {
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualNetworks/vnet-spoke-se",
+        "location": "swedencentral",
+        "name": "vnet-spoke-se",
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "tags": {
+          "created_by": "copilot-lab",
+          "expires_utc": "2026-10-31T14:29:39.6515273+01:00",
+          "lab": "true",
+          "run_id": "vwan-verify-20261029-4cf83ab4"
+        },
+        "type": "Microsoft.Network/virtualNetworks"
+      },
+      "changeType": "Ignore",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualNetworks/vnet-spoke-se",
+      "symbolicName": null,
+      "unsupportedReason": null
+    },
+    {
+      "after": {
+        "apiVersion": "2024-10-01",
+        "id": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualWans/wan-verify-4cf83ab4",
+        "location": "swedencentral",
+        "name": "wan-verify-4cf83ab4",
+        "properties": {
+          "allowBranchToBranchTraffic": true,
+          "allowVnetToVnetTraffic": true,
+          "disableVpnEncryption": false,
+          "type": "Standard"
+        },
+        "resourceGroup": "rg-vwan-verify-20261029-4cf83ab4",
+        "type": "Microsoft.Network/virtualWans"
+      },
+      "before": null,
+      "changeType": "Create",
+      "delta": null,
+      "deploymentId": null,
+      "extension": null,
+      "identifiers": null,
+      "resourceId": "/subscriptions/redacted-guid-e6c28c6978a9/resourceGroups/rg-vwan-verify-20261029-4cf83ab4/providers/Microsoft.Network/virtualWans/wan-verify-4cf83ab4",
+      "symbolicName": null,
+      "unsupportedReason": null
+    }
+  ],
+  "diagnostics": null,
+  "error": null,
+  "potentialChanges": null,
+  "status": "Succeeded"
+}

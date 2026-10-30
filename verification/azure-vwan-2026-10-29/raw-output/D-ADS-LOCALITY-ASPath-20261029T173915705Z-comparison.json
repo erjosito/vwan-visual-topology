@@ -1,0 +1,648 @@
+{
+  "id": "D-ADS-LOCALITY-ASPath",
+  "observedAtUtc": "2026-10-29T17:39:15.703Z",
+  "status": "mismatch-investigate",
+  "predictionSha256": "690e4e646c0b9ca894e273b55754c0830a7a7775bccc3b6289de8e750629c3a6",
+  "positivePathChecks": 30,
+  "checks": [
+    {
+      "region": "se",
+      "receiver": "MSEE-primary",
+      "prefix": "10.60.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65520,
+        65520,
+        65012
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65520,
+        65520,
+        65012
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ],
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "MSEE-primary",
+      "prefix": "10.210.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076
+      ],
+      "expectedSenderStagePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ],
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "MSEE-primary",
+      "prefix": "10.211.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65520,
+        65520
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ],
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "MSEE-secondary",
+      "prefix": "10.60.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65520,
+        65520,
+        65012
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65520,
+        65520,
+        65012
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ],
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "MSEE-secondary",
+      "prefix": "10.210.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076
+      ],
+      "expectedSenderStagePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ],
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "MSEE-secondary",
+      "prefix": "10.211.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65520,
+        65520
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ],
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.60.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520,
+        65012
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.210.0.0/16",
+      "expectedWirePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.211.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.230.0.0/16",
+      "expectedWirePath": [
+        65515,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.231.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076,
+          12076
+        ]
+      ],
+      "matched": false
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.60.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520,
+        65012
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.210.0.0/16",
+      "expectedWirePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.211.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.230.0.0/16",
+      "expectedWirePath": [
+        65515,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "se",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.231.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076,
+          12076
+        ]
+      ],
+      "matched": false
+    },
+    {
+      "region": "ne",
+      "receiver": "MSEE-primary",
+      "prefix": "10.60.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65012
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65012
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65012
+        ],
+        [
+          65515,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "MSEE-primary",
+      "prefix": "10.210.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65520,
+        65520
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ],
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "MSEE-primary",
+      "prefix": "10.211.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076
+      ],
+      "expectedSenderStagePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ],
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "MSEE-secondary",
+      "prefix": "10.60.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65012
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65012
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65012
+        ],
+        [
+          65515,
+          65012
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "MSEE-secondary",
+      "prefix": "10.210.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076,
+        65520,
+        65520
+      ],
+      "expectedSenderStagePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ],
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "MSEE-secondary",
+      "prefix": "10.211.0.0/16",
+      "modelCustomerBoundaryPath": [
+        12076
+      ],
+      "expectedSenderStagePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ],
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.210.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.211.0.0/16",
+      "expectedWirePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.230.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076,
+          12076
+        ]
+      ],
+      "matched": false
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure0",
+      "prefix": "10.231.0.0/16",
+      "expectedWirePath": [
+        65515,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.210.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.211.0.0/16",
+      "expectedWirePath": [
+        65515
+      ],
+      "actualPaths": [
+        [
+          65515
+        ]
+      ],
+      "matched": true
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.230.0.0/16",
+      "expectedWirePath": [
+        65515,
+        65520,
+        65520,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076,
+          12076
+        ]
+      ],
+      "matched": false
+    },
+    {
+      "region": "ne",
+      "receiver": "BIRD-azure1",
+      "prefix": "10.231.0.0/16",
+      "expectedWirePath": [
+        65515,
+        12076,
+        12076
+      ],
+      "actualPaths": [
+        [
+          65515,
+          12076,
+          12076
+        ]
+      ],
+      "matched": true
+    }
+  ],
+  "normalizationClarification": "https://github.com/erjosito/vwan-visual-topology/issues/5#issuecomment-6503895588",
+  "scope": "Exact positive VPN receiver paths and projected MSEE sender-stage paths only. No absence/suppression certification, no other prefixes, and no claim that the ER model customer-boundary AS string equals the actual final customer wire string.",
+  "finalErCustomerWireAsPathVerified": false
+}

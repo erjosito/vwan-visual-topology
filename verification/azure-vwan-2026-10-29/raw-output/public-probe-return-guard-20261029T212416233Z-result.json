@@ -1,0 +1,61 @@
+{
+  "kind": "owned-public-probe-return-guard",
+  "observedAtUtc": "2026-10-29T22:24:27.085017+01:00",
+  "hostname": "bgp-se",
+  "routes": [
+    {
+      "address": "4.225.173.226",
+      "alreadyGuarded": false,
+      "beforeLookup": [
+        {
+          "dst": "4.225.173.226",
+          "gateway": "10.250.0.12",
+          "dev": "xfrm100",
+          "prefsrc": "10.220.0.4",
+          "flags": [],
+          "uid": 0,
+          "cache": []
+        }
+      ],
+      "afterLookup": [
+        {
+          "dst": "4.225.173.226",
+          "gateway": "10.220.0.1",
+          "dev": "eth0",
+          "prefsrc": "10.220.0.4",
+          "flags": [],
+          "uid": 0,
+          "cache": []
+        }
+      ]
+    },
+    {
+      "address": "20.166.50.193",
+      "alreadyGuarded": false,
+      "beforeLookup": [
+        {
+          "dst": "20.166.50.193",
+          "gateway": "10.250.0.13",
+          "dev": "xfrm101",
+          "prefsrc": "10.220.0.4",
+          "flags": [],
+          "uid": 0,
+          "cache": []
+        }
+      ],
+      "afterLookup": [
+        {
+          "dst": "20.166.50.193",
+          "gateway": "10.220.0.1",
+          "dev": "eth0",
+          "prefsrc": "10.220.0.4",
+          "flags": [],
+          "uid": 0,
+          "cache": []
+        }
+      ]
+    }
+  ],
+  "bgpExportsUnchanged": true,
+  "scope": "Only two owned-firewall public /32 response routes via the existing endpoint underlay. No BGP default withdrawal, advertisement edit, cloud route or firewall/NSG permission change."
+}

@@ -1,0 +1,235 @@
+{
+  "id": "E-AS-LOCAL-ER-SHORTER",
+  "predictedAtUtc": "2026-10-29T17:46:02.817Z",
+  "baselineCommit": "c5be9e670e814ee109c4d48831380c61e55d7b63",
+  "status": "prediction-only",
+  "azureVerified": false,
+  "supersedes": false,
+  "originalPrediction": {
+    "file": "C-AS-LOCAL-ER-SHORTER-prediction.json",
+    "sha256": "cf628658ffed105b801a7572dce09004e0a6cda07de91117ce6ef46d565ffb9a"
+  },
+  "assumptions": "Separate prospective receiver-RIB calibration, not a rewrite or pass for original C. Repeated native unique-ER observations under ASPath show12076-12076-12076, versus two provider ASNs in earlier ER/VPN-HRP captures. The same three-AS common input is a hypothesis to verify. E local-shorter uses actual VPN length4 so ER length3 is strictly shorter, not a tie. E remote-last compares local VPN10 against remote ER5 after a separate remote-input withdrawal control. Symbolic ER-site ASNs remain nonphysical. VPN receiver exports can have a different local-ER path representation; advertisements and final ER customer AS strings are not certified by these selection predictions.",
+  "topology": {
+    "version": 1,
+    "name": "Calibrated ASPath-mode native ER receiver inputs",
+    "hubs": [
+      {
+        "id": "se",
+        "name": "hub-se",
+        "region": "Sweden Central",
+        "preference": "ASPath",
+        "routingIntent": {
+          "private": false,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      },
+      {
+        "id": "ne",
+        "name": "hub-ne",
+        "region": "North Europe",
+        "preference": "ASPath",
+        "routingIntent": {
+          "private": false,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      }
+    ],
+    "sites": [
+      {
+        "id": "site-se-ExpressRoute",
+        "name": "se symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64550,
+        "prefixes": []
+      },
+      {
+        "id": "site-se-VPN",
+        "name": "se VPN route source",
+        "asn": 65011,
+        "prefixes": []
+      },
+      {
+        "id": "site-ne-ExpressRoute",
+        "name": "ne symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64551,
+        "prefixes": []
+      },
+      {
+        "id": "site-ne-VPN",
+        "name": "ne VPN route source",
+        "asn": 65012,
+        "prefixes": []
+      }
+    ],
+    "spokes": [
+      {
+        "id": "spoke-se",
+        "name": "Sweden workload",
+        "hubId": "se",
+        "prefixes": [
+          "10.210.0.0/16"
+        ]
+      },
+      {
+        "id": "spoke-ne",
+        "name": "North Europe workload",
+        "hubId": "ne",
+        "prefixes": [
+          "10.211.0.0/16"
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "id": "se-ExpressRoute",
+        "name": "se ExpressRoute ingress",
+        "hubId": "se",
+        "siteId": "site-se-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "se-ExpressRoute-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              12076,
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "se-VPN",
+        "name": "se VPN ingress",
+        "hubId": "se",
+        "siteId": "site-se-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "se-VPN-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              65011,
+              65011,
+              65011,
+              65011
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-ExpressRoute",
+        "name": "ne ExpressRoute ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "ne-ExpressRoute-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              12076,
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-VPN",
+        "name": "ne VPN ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "ne-VPN-shared",
+            "prefix": "10.60.0.0/16",
+            "asPath": [
+              65012,
+              65012,
+              65012,
+              65012
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      }
+    ],
+    "siteLinks": [],
+    "routeMaps": [],
+    "erLocations": [],
+    "erLinks": []
+  },
+  "selected": {
+    "se": [
+      {
+        "prefix": "10.60.0.0/16",
+        "selected": [
+          {
+            "connectionId": "se-ExpressRoute",
+            "originHubId": "se",
+            "transport": "ExpressRoute",
+            "remote": false,
+            "asPath": [
+              12076,
+              12076,
+              12076
+            ]
+          }
+        ],
+        "explanation": [
+          "Remote ExpressRoute routes are considered last under AS Path preference.",
+          "Shortest received AS path (3 ASNs, including inter-hub prepends)."
+        ]
+      }
+    ],
+    "ne": [
+      {
+        "prefix": "10.60.0.0/16",
+        "selected": [
+          {
+            "connectionId": "ne-ExpressRoute",
+            "originHubId": "ne",
+            "transport": "ExpressRoute",
+            "remote": false,
+            "asPath": [
+              12076,
+              12076,
+              12076
+            ]
+          }
+        ],
+        "explanation": [
+          "Remote ExpressRoute routes are considered last under AS Path preference.",
+          "Shortest received AS path (3 ASNs, including inter-hub prepends)."
+        ]
+      }
+    ]
+  },
+  "warnings": [
+    "hub-se: nominal converged HRP is modeled; dynamic failback timing and withdrawal/recovery history after an ExpressRoute recovery are not simulated.",
+    "hub-ne: nominal converged HRP is modeled; dynamic failback timing and withdrawal/recovery history after an ExpressRoute recovery are not simulated."
+  ]
+}

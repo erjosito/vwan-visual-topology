@@ -1,0 +1,2004 @@
+{
+  "id": "I-PRIVATE",
+  "predictedAtUtc": "2026-10-29T18:30:24.361Z",
+  "baselineCommit": "c5be9e670e814ee109c4d48831380c61e55d7b63",
+  "status": "prediction-only",
+  "azureVerified": false,
+  "scope": "Prospective routing-intent forwarding and per-firewall deny/permit differential, not a certificate of every native or final customer-wire AS string. Firewall allow/deny and SNAT are not simulator features; the deny matrix is an external causal traversal experiment.",
+  "inputPreconditions": [
+    "Both hubs ExpressRoute preference; all common10.60/16 and specific10.60.1/24 auxiliary/VPN/MCR origins absent.",
+    "Unique ER inputs12076-12076, unique BGP VPN inputs65011/65012 and static VPN inputs empty; verify actual baseline before policy tests.",
+    "Spoke connections Internet security enabled before any intent. No Global Reach or support-enabled ER-to-ER firewall transit.",
+    "Two Standard secured-hub firewalls with private forwarding and scoped owned-VM control-plane/public HTTP access.",
+    "Public branch endpoint NSG permits8080 only from the two recorded owned firewall public IPs, above its existing Internet deny.",
+    "A top-priority firewall deny affects only the two owned workload source IPs, TCP8080 and the two exact owned probe destinations.",
+    "Synthetic ER common-prefix delivery, direct-spoke NVA as hub-integrated SDWAN, and exact final ER customer AS strings are excluded."
+  ],
+  "topology": {
+    "version": 1,
+    "name": "Owned two-hub routing-intent differential: I-PRIVATE",
+    "hubs": [
+      {
+        "id": "se",
+        "name": "hub-se",
+        "region": "Sweden Central",
+        "preference": "ExpressRoute",
+        "routingIntent": {
+          "private": true,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      },
+      {
+        "id": "ne",
+        "name": "hub-ne",
+        "region": "North Europe",
+        "preference": "ExpressRoute",
+        "routingIntent": {
+          "private": true,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      }
+    ],
+    "sites": [
+      {
+        "id": "site-se-ExpressRoute",
+        "name": "se symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64550,
+        "prefixes": [
+          "10.230.0.0/16"
+        ]
+      },
+      {
+        "id": "site-se-VPN",
+        "name": "se VPN route source",
+        "asn": 65011,
+        "prefixes": []
+      },
+      {
+        "id": "site-ne-ExpressRoute",
+        "name": "ne symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64551,
+        "prefixes": [
+          "10.231.0.0/16"
+        ]
+      },
+      {
+        "id": "site-ne-VPN",
+        "name": "ne VPN route source",
+        "asn": 65012,
+        "prefixes": []
+      },
+      {
+        "id": "site-se-VPN-static",
+        "name": "Owned se static VPN endpoint",
+        "asn": 65021,
+        "prefixes": [],
+        "vpnStaticRoutes": [
+          {
+            "id": "se-static-prefix",
+            "prefix": "10.62.1.0/24",
+            "connectionId": "se-VPN-static"
+          }
+        ]
+      },
+      {
+        "id": "site-ne-VPN-static",
+        "name": "Owned ne static VPN endpoint",
+        "asn": 65022,
+        "prefixes": [],
+        "vpnStaticRoutes": [
+          {
+            "id": "ne-static-prefix",
+            "prefix": "10.62.2.0/24",
+            "connectionId": "ne-VPN-static"
+          }
+        ]
+      }
+    ],
+    "spokes": [
+      {
+        "id": "spoke-se",
+        "name": "Sweden workload",
+        "hubId": "se",
+        "prefixes": [
+          "10.210.0.0/16"
+        ]
+      },
+      {
+        "id": "spoke-ne",
+        "name": "North Europe workload",
+        "hubId": "ne",
+        "prefixes": [
+          "10.211.0.0/16"
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "id": "se-ExpressRoute",
+        "name": "se ExpressRoute ingress",
+        "hubId": "se",
+        "siteId": "site-se-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "se-er-unique",
+            "prefix": "10.230.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "se-VPN",
+        "name": "se VPN ingress",
+        "hubId": "se",
+        "siteId": "site-se-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "se-vpn-unique",
+            "prefix": "10.61.1.0/24",
+            "asPath": [
+              65011
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-ExpressRoute",
+        "name": "ne ExpressRoute ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "ne-er-unique",
+            "prefix": "10.231.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-VPN",
+        "name": "ne VPN ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "ne-vpn-unique",
+            "prefix": "10.61.2.0/24",
+            "asPath": [
+              65012
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "se-VPN-static",
+        "name": "se static VPN",
+        "hubId": "se",
+        "siteId": "site-se-VPN-static",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-VPN-static",
+        "name": "ne static VPN",
+        "hubId": "ne",
+        "siteId": "site-ne-VPN-static",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      }
+    ],
+    "siteLinks": [],
+    "routeMaps": [],
+    "erLocations": [],
+    "erLinks": []
+  },
+  "probes": [
+    {
+      "source": "workload-se",
+      "region": "se",
+      "kind": "private",
+      "destination": "10.62.1.1",
+      "expectedHostname": "static-se",
+      "paths": [
+        {
+          "hubs": [
+            "se"
+          ],
+          "firewalls": [
+            "se"
+          ],
+          "siteHops": [
+            "site-se-VPN-static"
+          ],
+          "siteLinkIds": [],
+          "connectionId": "se-VPN-static",
+          "siteId": "site-se-VPN-static",
+          "steps": [
+            "hub-se: longest prefix 10.0.0.0/8. Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table.",
+            "Azure Firewall in hub-se: longest prefix 10.62.1.0/24. Only available path, or all paths have equal modeled preference.",
+            "Exit via se static VPN."
+          ],
+          "status": "delivered"
+        }
+      ],
+      "counterfactuals": {
+        "none": true,
+        "se": false,
+        "ne": true
+      }
+    },
+    {
+      "source": "workload-se",
+      "region": "se",
+      "kind": "internet",
+      "destination": "4.165.97.27",
+      "expectedHostname": "bgp-se",
+      "paths": [
+        {
+          "hubs": [
+            "se"
+          ],
+          "firewalls": [],
+          "steps": [
+            "hub-se: no matching hub route for 4.165.97.27. Check routing-intent private prefixes if enabled."
+          ],
+          "status": "unreachable"
+        }
+      ],
+      "counterfactuals": {
+        "none": false,
+        "se": false,
+        "ne": false
+      }
+    },
+    {
+      "source": "workload-ne",
+      "region": "ne",
+      "kind": "private",
+      "destination": "10.62.1.1",
+      "expectedHostname": "static-se",
+      "paths": [
+        {
+          "hubs": [
+            "ne",
+            "se"
+          ],
+          "firewalls": [
+            "ne",
+            "se"
+          ],
+          "siteHops": [
+            "site-se-VPN-static"
+          ],
+          "siteLinkIds": [],
+          "connectionId": "se-VPN-static",
+          "siteId": "site-se-VPN-static",
+          "steps": [
+            "hub-ne: longest prefix 10.0.0.0/8. Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table.",
+            "Azure Firewall in hub-ne: longest prefix 10.62.1.0/24. Only available path, or all paths have equal modeled preference.",
+            "hub-se: longest prefix 10.0.0.0/8. Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table.",
+            "Azure Firewall in hub-se: longest prefix 10.62.1.0/24. Only available path, or all paths have equal modeled preference.",
+            "Exit via se static VPN."
+          ],
+          "status": "delivered"
+        }
+      ],
+      "counterfactuals": {
+        "none": true,
+        "se": false,
+        "ne": false
+      }
+    },
+    {
+      "source": "workload-ne",
+      "region": "ne",
+      "kind": "internet",
+      "destination": "4.165.97.27",
+      "expectedHostname": "bgp-se",
+      "paths": [
+        {
+          "hubs": [
+            "ne"
+          ],
+          "firewalls": [],
+          "steps": [
+            "hub-ne: no matching hub route for 4.165.97.27. Check routing-intent private prefixes if enabled."
+          ],
+          "status": "unreachable"
+        }
+      ],
+      "counterfactuals": {
+        "none": false,
+        "se": false,
+        "ne": false
+      }
+    }
+  ],
+  "tables": {
+    "se": [
+      {
+        "prefix": "10.0.0.0/8",
+        "candidates": [
+          {
+            "key": "se:policy:10.0.0.0/8",
+            "prefix": "10.0.0.0/8",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:se",
+            "siteId": "",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "se:policy:10.0.0.0/8",
+            "prefix": "10.0.0.0/8",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:se",
+            "siteId": "",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table."
+        ]
+      },
+      {
+        "prefix": "172.16.0.0/12",
+        "candidates": [
+          {
+            "key": "se:policy:172.16.0.0/12",
+            "prefix": "172.16.0.0/12",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:se",
+            "siteId": "",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "se:policy:172.16.0.0/12",
+            "prefix": "172.16.0.0/12",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:se",
+            "siteId": "",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table."
+        ]
+      },
+      {
+        "prefix": "192.168.0.0/16",
+        "candidates": [
+          {
+            "key": "se:policy:192.168.0.0/16",
+            "prefix": "192.168.0.0/16",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:se",
+            "siteId": "",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "se:policy:192.168.0.0/16",
+            "prefix": "192.168.0.0/16",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:se",
+            "siteId": "",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table."
+        ]
+      }
+    ],
+    "ne": [
+      {
+        "prefix": "10.0.0.0/8",
+        "candidates": [
+          {
+            "key": "ne:policy:10.0.0.0/8",
+            "prefix": "10.0.0.0/8",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:ne",
+            "siteId": "",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne:policy:10.0.0.0/8",
+            "prefix": "10.0.0.0/8",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:ne",
+            "siteId": "",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table."
+        ]
+      },
+      {
+        "prefix": "172.16.0.0/12",
+        "candidates": [
+          {
+            "key": "ne:policy:172.16.0.0/12",
+            "prefix": "172.16.0.0/12",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:ne",
+            "siteId": "",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne:policy:172.16.0.0/12",
+            "prefix": "172.16.0.0/12",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:ne",
+            "siteId": "",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table."
+        ]
+      },
+      {
+        "prefix": "192.168.0.0/16",
+        "candidates": [
+          {
+            "key": "ne:policy:192.168.0.0/16",
+            "prefix": "192.168.0.0/16",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:ne",
+            "siteId": "",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne:policy:192.168.0.0/16",
+            "prefix": "192.168.0.0/16",
+            "asPath": [],
+            "kind": "policy",
+            "transport": "Firewall",
+            "connectionId": "firewall:ne",
+            "siteId": "",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Routing intent redirects this prefix to Azure Firewall. The firewall uses its separate routing table."
+        ]
+      }
+    ]
+  },
+  "firewallTables": {
+    "se": [
+      {
+        "prefix": "10.61.1.0/24",
+        "candidates": [
+          {
+            "key": "se-VPN:se-vpn-unique",
+            "prefix": "10.61.1.0/24",
+            "asPath": [
+              65011
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "se-VPN",
+            "siteId": "site-se-VPN",
+            "originHubId": "se",
+            "remote": false,
+            "sitePath": [
+              "site-se-VPN"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "selected": [
+          {
+            "key": "se-VPN:se-vpn-unique",
+            "prefix": "10.61.1.0/24",
+            "asPath": [
+              65011
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "se-VPN",
+            "siteId": "site-se-VPN",
+            "originHubId": "se",
+            "remote": false,
+            "sitePath": [
+              "site-se-VPN"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.61.2.0/24",
+        "candidates": [
+          {
+            "key": "ne-VPN:ne-vpn-unique",
+            "prefix": "10.61.2.0/24",
+            "asPath": [
+              65520,
+              65520,
+              65012
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "ne-VPN",
+            "siteId": "site-ne-VPN",
+            "originHubId": "ne",
+            "remote": true,
+            "sitePath": [
+              "site-ne-VPN"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne-VPN:ne-vpn-unique",
+            "prefix": "10.61.2.0/24",
+            "asPath": [
+              65520,
+              65520,
+              65012
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "ne-VPN",
+            "siteId": "site-ne-VPN",
+            "originHubId": "ne",
+            "remote": true,
+            "sitePath": [
+              "site-ne-VPN"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.62.1.0/24",
+        "candidates": [
+          {
+            "key": "se-VPN-static:se-static-prefix",
+            "prefix": "10.62.1.0/24",
+            "asPath": [],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "se-VPN-static",
+            "siteId": "site-se-VPN-static",
+            "originHubId": "se",
+            "remote": false,
+            "sitePath": [
+              "site-se-VPN-static"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "selected": [
+          {
+            "key": "se-VPN-static:se-static-prefix",
+            "prefix": "10.62.1.0/24",
+            "asPath": [],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "se-VPN-static",
+            "siteId": "site-se-VPN-static",
+            "originHubId": "se",
+            "remote": false,
+            "sitePath": [
+              "site-se-VPN-static"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.62.2.0/24",
+        "candidates": [
+          {
+            "key": "ne-VPN-static:ne-static-prefix",
+            "prefix": "10.62.2.0/24",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "ne-VPN-static",
+            "siteId": "site-ne-VPN-static",
+            "originHubId": "ne",
+            "remote": true,
+            "sitePath": [
+              "site-ne-VPN-static"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne-VPN-static:ne-static-prefix",
+            "prefix": "10.62.2.0/24",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "ne-VPN-static",
+            "siteId": "site-ne-VPN-static",
+            "originHubId": "ne",
+            "remote": true,
+            "sitePath": [
+              "site-ne-VPN-static"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.210.0.0/16",
+        "candidates": [
+          {
+            "key": "spoke-se:10.210.0.0/16",
+            "prefix": "10.210.0.0/16",
+            "asPath": [],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-se",
+            "siteId": "spoke-se",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "spoke-se:10.210.0.0/16",
+            "prefix": "10.210.0.0/16",
+            "asPath": [],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-se",
+            "siteId": "spoke-se",
+            "originHubId": "se",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.211.0.0/16",
+        "candidates": [
+          {
+            "key": "spoke-ne:10.211.0.0/16",
+            "prefix": "10.211.0.0/16",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-ne",
+            "siteId": "spoke-ne",
+            "originHubId": "ne",
+            "remote": true,
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "spoke-ne:10.211.0.0/16",
+            "prefix": "10.211.0.0/16",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-ne",
+            "siteId": "spoke-ne",
+            "originHubId": "ne",
+            "remote": true,
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.230.0.0/16",
+        "candidates": [
+          {
+            "key": "se-ExpressRoute:se-er-unique",
+            "prefix": "10.230.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "se-ExpressRoute",
+            "siteId": "site-se-ExpressRoute",
+            "originHubId": "se",
+            "remote": false,
+            "sitePath": [
+              "site-se-ExpressRoute"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "selected": [
+          {
+            "key": "se-ExpressRoute:se-er-unique",
+            "prefix": "10.230.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "se-ExpressRoute",
+            "siteId": "site-se-ExpressRoute",
+            "originHubId": "se",
+            "remote": false,
+            "sitePath": [
+              "site-se-ExpressRoute"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.231.0.0/16",
+        "candidates": [
+          {
+            "key": "ne-ExpressRoute:ne-er-unique",
+            "prefix": "10.231.0.0/16",
+            "asPath": [
+              65520,
+              65520,
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "ne-ExpressRoute",
+            "siteId": "site-ne-ExpressRoute",
+            "originHubId": "ne",
+            "remote": true,
+            "sitePath": [
+              "site-ne-ExpressRoute"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne-ExpressRoute:ne-er-unique",
+            "prefix": "10.231.0.0/16",
+            "asPath": [
+              65520,
+              65520,
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "ne-ExpressRoute",
+            "siteId": "site-ne-ExpressRoute",
+            "originHubId": "ne",
+            "remote": true,
+            "sitePath": [
+              "site-ne-ExpressRoute"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      }
+    ],
+    "ne": [
+      {
+        "prefix": "10.61.1.0/24",
+        "candidates": [
+          {
+            "key": "se-VPN:se-vpn-unique",
+            "prefix": "10.61.1.0/24",
+            "asPath": [
+              65520,
+              65520,
+              65011
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "se-VPN",
+            "siteId": "site-se-VPN",
+            "originHubId": "se",
+            "remote": true,
+            "sitePath": [
+              "site-se-VPN"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "se-VPN:se-vpn-unique",
+            "prefix": "10.61.1.0/24",
+            "asPath": [
+              65520,
+              65520,
+              65011
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "se-VPN",
+            "siteId": "site-se-VPN",
+            "originHubId": "se",
+            "remote": true,
+            "sitePath": [
+              "site-se-VPN"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.61.2.0/24",
+        "candidates": [
+          {
+            "key": "ne-VPN:ne-vpn-unique",
+            "prefix": "10.61.2.0/24",
+            "asPath": [
+              65012
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "ne-VPN",
+            "siteId": "site-ne-VPN",
+            "originHubId": "ne",
+            "remote": false,
+            "sitePath": [
+              "site-ne-VPN"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne-VPN:ne-vpn-unique",
+            "prefix": "10.61.2.0/24",
+            "asPath": [
+              65012
+            ],
+            "kind": "bgp",
+            "transport": "VPN",
+            "connectionId": "ne-VPN",
+            "siteId": "site-ne-VPN",
+            "originHubId": "ne",
+            "remote": false,
+            "sitePath": [
+              "site-ne-VPN"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.62.1.0/24",
+        "candidates": [
+          {
+            "key": "se-VPN-static:se-static-prefix",
+            "prefix": "10.62.1.0/24",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "se-VPN-static",
+            "siteId": "site-se-VPN-static",
+            "originHubId": "se",
+            "remote": true,
+            "sitePath": [
+              "site-se-VPN-static"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "se-VPN-static:se-static-prefix",
+            "prefix": "10.62.1.0/24",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "se-VPN-static",
+            "siteId": "site-se-VPN-static",
+            "originHubId": "se",
+            "remote": true,
+            "sitePath": [
+              "site-se-VPN-static"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.62.2.0/24",
+        "candidates": [
+          {
+            "key": "ne-VPN-static:ne-static-prefix",
+            "prefix": "10.62.2.0/24",
+            "asPath": [],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "ne-VPN-static",
+            "siteId": "site-ne-VPN-static",
+            "originHubId": "ne",
+            "remote": false,
+            "sitePath": [
+              "site-ne-VPN-static"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne-VPN-static:ne-static-prefix",
+            "prefix": "10.62.2.0/24",
+            "asPath": [],
+            "kind": "vpn-static",
+            "transport": "VPN",
+            "connectionId": "ne-VPN-static",
+            "siteId": "site-ne-VPN-static",
+            "originHubId": "ne",
+            "remote": false,
+            "sitePath": [
+              "site-ne-VPN-static"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.210.0.0/16",
+        "candidates": [
+          {
+            "key": "spoke-se:10.210.0.0/16",
+            "prefix": "10.210.0.0/16",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-se",
+            "siteId": "spoke-se",
+            "originHubId": "se",
+            "remote": true,
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "spoke-se:10.210.0.0/16",
+            "prefix": "10.210.0.0/16",
+            "asPath": [
+              65520,
+              65520
+            ],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-se",
+            "siteId": "spoke-se",
+            "originHubId": "se",
+            "remote": true,
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.211.0.0/16",
+        "candidates": [
+          {
+            "key": "spoke-ne:10.211.0.0/16",
+            "prefix": "10.211.0.0/16",
+            "asPath": [],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-ne",
+            "siteId": "spoke-ne",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "selected": [
+          {
+            "key": "spoke-ne:10.211.0.0/16",
+            "prefix": "10.211.0.0/16",
+            "asPath": [],
+            "kind": "system",
+            "transport": "VNet",
+            "connectionId": "spoke-ne",
+            "siteId": "spoke-ne",
+            "originHubId": "ne",
+            "remote": false
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.230.0.0/16",
+        "candidates": [
+          {
+            "key": "se-ExpressRoute:se-er-unique",
+            "prefix": "10.230.0.0/16",
+            "asPath": [
+              65520,
+              65520,
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "se-ExpressRoute",
+            "siteId": "site-se-ExpressRoute",
+            "originHubId": "se",
+            "remote": true,
+            "sitePath": [
+              "site-se-ExpressRoute"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "selected": [
+          {
+            "key": "se-ExpressRoute:se-er-unique",
+            "prefix": "10.230.0.0/16",
+            "asPath": [
+              65520,
+              65520,
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "se-ExpressRoute",
+            "siteId": "site-se-ExpressRoute",
+            "originHubId": "se",
+            "remote": true,
+            "sitePath": [
+              "site-se-ExpressRoute"
+            ],
+            "siteLinkIds": [],
+            "secureOrigin": true
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      },
+      {
+        "prefix": "10.231.0.0/16",
+        "candidates": [
+          {
+            "key": "ne-ExpressRoute:ne-er-unique",
+            "prefix": "10.231.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "ne-ExpressRoute",
+            "siteId": "site-ne-ExpressRoute",
+            "originHubId": "ne",
+            "remote": false,
+            "sitePath": [
+              "site-ne-ExpressRoute"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "selected": [
+          {
+            "key": "ne-ExpressRoute:ne-er-unique",
+            "prefix": "10.231.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp",
+            "transport": "ExpressRoute",
+            "connectionId": "ne-ExpressRoute",
+            "siteId": "site-ne-ExpressRoute",
+            "originHubId": "ne",
+            "remote": false,
+            "sitePath": [
+              "site-ne-ExpressRoute"
+            ],
+            "siteLinkIds": []
+          }
+        ],
+        "explanation": [
+          "Only available path, or all paths have equal modeled preference."
+        ]
+      }
+    ]
+  },
+  "outbound": {
+    "se-ExpressRoute": [
+      {
+        "key": "se-VPN:se-vpn-unique",
+        "prefix": "10.61.1.0/24",
+        "asPath": [
+          12076,
+          65011
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "se-VPN",
+        "siteId": "site-se-VPN",
+        "originHubId": "se",
+        "remote": false,
+        "sitePath": [
+          "site-se-VPN"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "ne-VPN:ne-vpn-unique",
+        "prefix": "10.61.2.0/24",
+        "asPath": [
+          12076,
+          65520,
+          65520,
+          65012
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          12076
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": false
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          12076,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": true,
+        "secureOrigin": true
+      },
+      {
+        "key": "se-VPN-static:se-static-prefix",
+        "prefix": "10.62.1.0/24",
+        "asPath": [
+          12076
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "se-VPN-static",
+        "siteId": "site-se-VPN-static",
+        "originHubId": "se",
+        "remote": false,
+        "sitePath": [
+          "site-se-VPN-static"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "ne-VPN-static:ne-static-prefix",
+        "prefix": "10.62.2.0/24",
+        "asPath": [
+          12076,
+          65520,
+          65520
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "ne-VPN-static",
+        "siteId": "site-ne-VPN-static",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-VPN-static"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      }
+    ],
+    "se-VPN": [
+      {
+        "key": "ne-VPN:ne-vpn-unique",
+        "prefix": "10.61.2.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          65012
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          65515
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": false
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": true,
+        "secureOrigin": true
+      },
+      {
+        "key": "se-ExpressRoute:se-er-unique",
+        "prefix": "10.230.0.0/16",
+        "asPath": [
+          65515,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "se-ExpressRoute",
+        "siteId": "site-se-ExpressRoute",
+        "originHubId": "se",
+        "remote": false,
+        "sitePath": [
+          "site-se-ExpressRoute"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "ne-ExpressRoute:ne-er-unique",
+        "prefix": "10.231.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "ne-ExpressRoute",
+        "siteId": "site-ne-ExpressRoute",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-ExpressRoute"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "se-VPN-static:se-static-prefix",
+        "prefix": "10.62.1.0/24",
+        "asPath": [
+          65515
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "se-VPN-static",
+        "siteId": "site-se-VPN-static",
+        "originHubId": "se",
+        "remote": false,
+        "sitePath": [
+          "site-se-VPN-static"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "ne-VPN-static:ne-static-prefix",
+        "prefix": "10.62.2.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "ne-VPN-static",
+        "siteId": "site-ne-VPN-static",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-VPN-static"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      }
+    ],
+    "ne-ExpressRoute": [
+      {
+        "key": "se-VPN:se-vpn-unique",
+        "prefix": "10.61.1.0/24",
+        "asPath": [
+          12076,
+          65520,
+          65520,
+          65011
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "se-VPN",
+        "siteId": "site-se-VPN",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-VPN"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "ne-VPN:ne-vpn-unique",
+        "prefix": "10.61.2.0/24",
+        "asPath": [
+          12076,
+          65012
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "originHubId": "ne",
+        "remote": false,
+        "sitePath": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          12076,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": true,
+        "secureOrigin": true
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          12076
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": false
+      },
+      {
+        "key": "se-VPN-static:se-static-prefix",
+        "prefix": "10.62.1.0/24",
+        "asPath": [
+          12076,
+          65520,
+          65520
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "se-VPN-static",
+        "siteId": "site-se-VPN-static",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-VPN-static"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "ne-VPN-static:ne-static-prefix",
+        "prefix": "10.62.2.0/24",
+        "asPath": [
+          12076
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "ne-VPN-static",
+        "siteId": "site-ne-VPN-static",
+        "originHubId": "ne",
+        "remote": false,
+        "sitePath": [
+          "site-ne-VPN-static"
+        ],
+        "siteLinkIds": []
+      }
+    ],
+    "ne-VPN": [
+      {
+        "key": "se-VPN:se-vpn-unique",
+        "prefix": "10.61.1.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          65011
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "se-VPN",
+        "siteId": "site-se-VPN",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-VPN"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": true,
+        "secureOrigin": true
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          65515
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": false
+      },
+      {
+        "key": "se-ExpressRoute:se-er-unique",
+        "prefix": "10.230.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "se-ExpressRoute",
+        "siteId": "site-se-ExpressRoute",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-ExpressRoute"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "ne-ExpressRoute:ne-er-unique",
+        "prefix": "10.231.0.0/16",
+        "asPath": [
+          65515,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "ne-ExpressRoute",
+        "siteId": "site-ne-ExpressRoute",
+        "originHubId": "ne",
+        "remote": false,
+        "sitePath": [
+          "site-ne-ExpressRoute"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "se-VPN-static:se-static-prefix",
+        "prefix": "10.62.1.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "se-VPN-static",
+        "siteId": "site-se-VPN-static",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-VPN-static"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "ne-VPN-static:ne-static-prefix",
+        "prefix": "10.62.2.0/24",
+        "asPath": [
+          65515
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "ne-VPN-static",
+        "siteId": "site-ne-VPN-static",
+        "originHubId": "ne",
+        "remote": false,
+        "sitePath": [
+          "site-ne-VPN-static"
+        ],
+        "siteLinkIds": []
+      }
+    ],
+    "se-VPN-static": [
+      {
+        "key": "se-VPN:se-vpn-unique",
+        "prefix": "10.61.1.0/24",
+        "asPath": [
+          65515,
+          65011
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "se-VPN",
+        "siteId": "site-se-VPN",
+        "originHubId": "se",
+        "remote": false,
+        "sitePath": [
+          "site-se-VPN"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "ne-VPN:ne-vpn-unique",
+        "prefix": "10.61.2.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          65012
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          65515
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": false
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": true,
+        "secureOrigin": true
+      },
+      {
+        "key": "se-ExpressRoute:se-er-unique",
+        "prefix": "10.230.0.0/16",
+        "asPath": [
+          65515,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "se-ExpressRoute",
+        "siteId": "site-se-ExpressRoute",
+        "originHubId": "se",
+        "remote": false,
+        "sitePath": [
+          "site-se-ExpressRoute"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "ne-ExpressRoute:ne-er-unique",
+        "prefix": "10.231.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "ne-ExpressRoute",
+        "siteId": "site-ne-ExpressRoute",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-ExpressRoute"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "ne-VPN-static:ne-static-prefix",
+        "prefix": "10.62.2.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "ne-VPN-static",
+        "siteId": "site-ne-VPN-static",
+        "originHubId": "ne",
+        "remote": true,
+        "sitePath": [
+          "site-ne-VPN-static"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      }
+    ],
+    "ne-VPN-static": [
+      {
+        "key": "se-VPN:se-vpn-unique",
+        "prefix": "10.61.1.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          65011
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "se-VPN",
+        "siteId": "site-se-VPN",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-VPN"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "ne-VPN:ne-vpn-unique",
+        "prefix": "10.61.2.0/24",
+        "asPath": [
+          65515,
+          65012
+        ],
+        "kind": "bgp",
+        "transport": "VPN",
+        "connectionId": "ne-VPN",
+        "siteId": "site-ne-VPN",
+        "originHubId": "ne",
+        "remote": false,
+        "sitePath": [
+          "site-ne-VPN"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "spoke-se:10.210.0.0/16",
+        "prefix": "10.210.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-se",
+        "siteId": "spoke-se",
+        "originHubId": "se",
+        "remote": true,
+        "secureOrigin": true
+      },
+      {
+        "key": "spoke-ne:10.211.0.0/16",
+        "prefix": "10.211.0.0/16",
+        "asPath": [
+          65515
+        ],
+        "kind": "system",
+        "transport": "VNet",
+        "connectionId": "spoke-ne",
+        "siteId": "spoke-ne",
+        "originHubId": "ne",
+        "remote": false
+      },
+      {
+        "key": "se-ExpressRoute:se-er-unique",
+        "prefix": "10.230.0.0/16",
+        "asPath": [
+          65515,
+          65520,
+          65520,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "se-ExpressRoute",
+        "siteId": "site-se-ExpressRoute",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-ExpressRoute"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      },
+      {
+        "key": "ne-ExpressRoute:ne-er-unique",
+        "prefix": "10.231.0.0/16",
+        "asPath": [
+          65515,
+          12076,
+          12076
+        ],
+        "kind": "bgp",
+        "transport": "ExpressRoute",
+        "connectionId": "ne-ExpressRoute",
+        "siteId": "site-ne-ExpressRoute",
+        "originHubId": "ne",
+        "remote": false,
+        "sitePath": [
+          "site-ne-ExpressRoute"
+        ],
+        "siteLinkIds": []
+      },
+      {
+        "key": "se-VPN-static:se-static-prefix",
+        "prefix": "10.62.1.0/24",
+        "asPath": [
+          65515,
+          65520,
+          65520
+        ],
+        "kind": "vpn-static",
+        "transport": "VPN",
+        "connectionId": "se-VPN-static",
+        "siteId": "site-se-VPN-static",
+        "originHubId": "se",
+        "remote": true,
+        "sitePath": [
+          "site-se-VPN-static"
+        ],
+        "siteLinkIds": [],
+        "secureOrigin": true
+      }
+    ]
+  },
+  "warnings": []
+}

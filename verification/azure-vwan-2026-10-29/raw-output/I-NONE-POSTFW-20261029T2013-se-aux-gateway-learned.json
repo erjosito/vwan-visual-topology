@@ -1,0 +1,210 @@
+{
+  "value": [
+    {
+      "asPath": "",
+      "localAddress": "10.230.255.13",
+      "network": "10.230.0.0/16",
+      "origin": "Network",
+      "sourcePeer": "10.230.255.13",
+      "weight": 32768
+    },
+    {
+      "asPath": "12076-133937-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.61.2.0/24",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65031",
+      "localAddress": "10.230.255.13",
+      "network": "10.70.1.0/24",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65031",
+      "localAddress": "10.230.255.13",
+      "network": "10.70.1.0/24",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-133937",
+      "localAddress": "10.230.255.13",
+      "network": "169.254.180.116/30",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-133937",
+      "localAddress": "10.230.255.13",
+      "network": "169.254.180.116/30",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-133937-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.70.2.0/24",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.210.0.0/16",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.210.0.0/16",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.250.0.0/22",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.250.0.0/22",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-133937-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.211.0.0/16",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-133937-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.62.2.0/24",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.62.1.0/24",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076",
+      "localAddress": "10.230.255.13",
+      "network": "10.62.1.0/24",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65011",
+      "localAddress": "10.230.255.13",
+      "network": "10.61.1.0/24",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65011",
+      "localAddress": "10.230.255.13",
+      "network": "10.61.1.0/24",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-133937",
+      "localAddress": "10.230.255.13",
+      "network": "169.254.180.112/30",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-133937",
+      "localAddress": "10.230.255.13",
+      "network": "169.254.180.112/30",
+      "nextHop": "10.230.255.5",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.5",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65520-65520-65012",
+      "localAddress": "10.230.255.13",
+      "network": "10.61.2.0/24",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65520-65520-65032",
+      "localAddress": "10.230.255.13",
+      "network": "10.70.2.0/24",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65520-65520",
+      "localAddress": "10.230.255.13",
+      "network": "10.211.0.0/16",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    },
+    {
+      "asPath": "12076-12076-65520-65520",
+      "localAddress": "10.230.255.13",
+      "network": "10.62.2.0/24",
+      "nextHop": "10.230.255.4",
+      "origin": "EBgp",
+      "sourcePeer": "10.230.255.4",
+      "weight": 32769
+    }
+  ]
+}

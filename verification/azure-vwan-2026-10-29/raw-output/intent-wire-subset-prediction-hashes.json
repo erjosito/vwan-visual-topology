@@ -1,0 +1,22 @@
+[
+  {
+    "file": "J-I-NONE-WIRE-SUBSET-prediction.json",
+    "sha256": "4dc395dcd984298948852424cbdec195a5bbae4bc9d151506db5cd9d0d3bd812",
+    "predictedAtUtc": "2026-10-29T20:12:11.698Z"
+  },
+  {
+    "file": "J-I-PRIVATE-WIRE-SUBSET-prediction.json",
+    "sha256": "ea91eafc492c02b1a7d99b6fca9db0eeb7a8829f6f5c3e1a59736bd8015351cf",
+    "predictedAtUtc": "2026-10-29T20:12:11.768Z"
+  },
+  {
+    "file": "J-I-INTERNET-WIRE-SUBSET-prediction.json",
+    "sha256": "5b271fc9a54211853a2af5d4ffa2a4fad3dd5e5bb58e18c4dce25d85393e2db3",
+    "predictedAtUtc": "2026-10-29T20:12:11.813Z"
+  },
+  {
+    "file": "J-I-COMBINED-WIRE-SUBSET-prediction.json",
+    "sha256": "2f154d8e84a68aac4ad0451321f669d29d43365876b42fdc89c5167179248b0e",
+    "predictedAtUtc": "2026-10-29T20:12:11.849Z"
+  }
+]

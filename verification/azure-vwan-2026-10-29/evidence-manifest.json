@@ -1,0 +1,1489 @@
+{
+  "policy": "Whitelisted JSON only. No raw RunCommand envelopes, credentials, private ownership ledger, pre-existing provider inventory, or private vault identity. GUID aliases are consistent hashes. Original predictionSha256 fields remain private-original byte commitments; use publishedSanitizedSha256 to verify published files.",
+  "files": [
+    {
+      "sourceFilename": "A-01-deployment-verification.json",
+      "originalPrivateEvidenceSha256": "d182a27e40375304e4461e7ed14ddd711dbfb04d394de3e5d66979b89ec4f1e5",
+      "publishedFile": "raw-output/A-01-deployment-verification.json",
+      "publishedSanitizedSha256": "fa144d11d7ad6ee746b1b432a42c9f6947b4d6328e1b894e994b5b9fd3de4927",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "A-01-export-result.json",
+      "originalPrivateEvidenceSha256": "d848a68087ca346cfcee6ebed5c75936507c4856f78135e2c5447ea4c0fe89df",
+      "publishedFile": "raw-output/A-01-export-result.json",
+      "publishedSanitizedSha256": "095e2a39669adf82bcea606d047b272d750ad5d93040d7f07d2fe71561a232a9",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "A-01-export-validation.json",
+      "originalPrivateEvidenceSha256": "426c10d6b56daaa7999984783b7971057dbf6a3ca65ab29f21964fd1a8b4b107",
+      "publishedFile": "raw-output/A-01-export-validation.json",
+      "publishedSanitizedSha256": "b5f0f82da2b2055789bfde43b6385b3e989fab158c86cd7d57f7302ca2abe730",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "A-01-export-what-if.json",
+      "originalPrivateEvidenceSha256": "6a039cc3eed02567180bf0391348ba496560e6abe9f3630f8c5936126785c669",
+      "publishedFile": "raw-output/A-01-export-what-if.json",
+      "publishedSanitizedSha256": "53968e9f36086c6af37eb2c0b8bfa282548b0072e81d021e950eec5fc9a0a69b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "A-01-planned-topology.json",
+      "originalPrivateEvidenceSha256": "748a4fd5814aaee064838c17963f0fb621ad2c05a6152d282e5e55586595ea7b",
+      "publishedFile": "raw-output/A-01-planned-topology.json",
+      "publishedSanitizedSha256": "3189dd17de02e6022d889e5331a6b94fda5173823d03a02f35958374c9940574",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "aux-pre-observation-prediction-hashes.json",
+      "originalPrivateEvidenceSha256": "0dcc6931c7dfed127bc399aea5bea22eeaaeaa75af1c6d5a83a45fb4365ff59b",
+      "publishedFile": "raw-output/aux-pre-observation-prediction-hashes.json",
+      "publishedSanitizedSha256": "9258bdb63f9312b044322924b8368c3287200a82155f2b61492d8a8da19d0ea3",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-AS-LOCAL-ER-SHORTER-prediction.json",
+      "originalPrivateEvidenceSha256": "89e0aef65b53c075f4a932197d54ed6dee6e8f570db81867ea6480e792e3a7c8",
+      "publishedFile": "raw-output/B-AS-LOCAL-ER-SHORTER-prediction.json",
+      "publishedSanitizedSha256": "05a312a62a764237aecafe1611240aef27d49f4e51e015245e36f6bfbf61329b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-AS-REMOTE-ER-LAST-20261029T190739680Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "c8eb035aa34144eef7fd7079115409ea2a9951daeac498136e523c3d757fe29b",
+      "publishedFile": "raw-output/B-AS-REMOTE-ER-LAST-20261029T190739680Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "16d4d0bd5f82276d5ade4531f71016927d459fa0da24f31bec1361cc1bd924bd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-AS-REMOTE-ER-LAST-20261029T191916692Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "88f3e518dac4e54e4c85d5cca40f07b81918d999fb47055e52b50d07a010a80b",
+      "publishedFile": "raw-output/B-AS-REMOTE-ER-LAST-20261029T191916692Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "b160b17f15dc7b64dd5700655bcb405e2187aeb28cf60dce17e1b22c805ebf75",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-AS-REMOTE-ER-LAST-prediction.json",
+      "originalPrivateEvidenceSha256": "05c04a26d0b0674ef70808704210f60396581eade21e7e194144865685f708bc",
+      "publishedFile": "raw-output/B-AS-REMOTE-ER-LAST-prediction.json",
+      "publishedSanitizedSha256": "73c5bfad47fcf319e6fd50de3ceaac53087962ae290f26f30a872617c0c942a8",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-LOCAL-ASPath-prediction.json",
+      "originalPrivateEvidenceSha256": "1602518125ae709ea8fab81492486c7f1917a32da7b79967bd4f6e0dfa5cd8f1",
+      "publishedFile": "raw-output/B-LOCAL-ASPath-prediction.json",
+      "publishedSanitizedSha256": "90372ccfc3351ea5868acaea477c82b07dac913933d68370eea54d5102b228a8",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-LOCAL-ExpressRoute-prediction.json",
+      "originalPrivateEvidenceSha256": "d5b24cfc9f8d9d421f230086a8b202321a7d545d67d36069b806571f4842266b",
+      "publishedFile": "raw-output/B-LOCAL-ExpressRoute-prediction.json",
+      "publishedSanitizedSha256": "804f1fabfffe6c829f03fe630d9a1f3f9edcc61e0369c6471603bf79a497e5fd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-LOCAL-VPN-prediction.json",
+      "originalPrivateEvidenceSha256": "a7b543c2a76f2c147fcf595fd6277b96d745158c3d1261de361e661a23cf1e8a",
+      "publishedFile": "raw-output/B-LOCAL-VPN-prediction.json",
+      "publishedSanitizedSha256": "af3921f67e04e93bb88f28ba4d12d568ec6c3c7be708fd5675d692e2185c2863",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-LOCALITY-ASPath-prediction.json",
+      "originalPrivateEvidenceSha256": "61c547c77bda4244198f5fd5b5516bc8f466facf866048ed8b13e6e81434fdee",
+      "publishedFile": "raw-output/B-LOCALITY-ASPath-prediction.json",
+      "publishedSanitizedSha256": "7cda87af13567bf3d57d382c83349028654f222f2b442b12dc473f4a0bdc9073",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-LOCALITY-VPN-prediction.json",
+      "originalPrivateEvidenceSha256": "d484f731a8b1811db681f5b18d000b5a8259c780300f1ab5e911d87cbbba99cc",
+      "publishedFile": "raw-output/B-LOCALITY-VPN-prediction.json",
+      "publishedSanitizedSha256": "3d8b54c1ee6d57bde407f06059839f5547224bd5534b427ec5a5fe9e2c682a0e",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "B-LPM-prediction.json",
+      "originalPrivateEvidenceSha256": "da09be44731c8aea91bef21e7731dc9ae1a7eec54e0220b41872827d95838f33",
+      "publishedFile": "raw-output/B-LPM-prediction.json",
+      "publishedSanitizedSha256": "b44991453d55194e62fb75bd59087d9ca857d467e7c73a3c0040825325a95309",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-AS-LOCAL-ER-SHORTER-prediction.json",
+      "originalPrivateEvidenceSha256": "cf628658ffed105b801a7572dce09004e0a6cda07de91117ce6ef46d565ffb9a",
+      "publishedFile": "raw-output/C-AS-LOCAL-ER-SHORTER-prediction.json",
+      "publishedSanitizedSha256": "e23aba7297c963a5250650e36422488d7c0eb42af8798a796761c216b27a8bb6",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-AS-REMOTE-ER-LAST-prediction.json",
+      "originalPrivateEvidenceSha256": "f0ce605aa66c3afd92e3fcb37b208307ae4a37579dd3558b353586433dda118c",
+      "publishedFile": "raw-output/C-AS-REMOTE-ER-LAST-prediction.json",
+      "publishedSanitizedSha256": "d72db9a1acee571ceea6807cae9cca2451784665526f49071fda0714e8005ebd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCAL-ASPath-20261029T164627224Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "ddda4dfccc3090983080331c814007596ed6d92ba5f5b4b0e02aa9ddeb1ece56",
+      "publishedFile": "raw-output/C-LOCAL-ASPath-20261029T164627224Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "a58594ceaa1580128fd067a963c13242ff61611db11c9e5d3941526df4767c01",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCAL-ASPath-prediction.json",
+      "originalPrivateEvidenceSha256": "335bebcd6c9f2b9ab29bcb26d9190c3927c2af9aa4f8d5af892e20201a4c779d",
+      "publishedFile": "raw-output/C-LOCAL-ASPath-prediction.json",
+      "publishedSanitizedSha256": "179f5fd7b07f9ea63fdc4e2783bdde009e89d3a72d2ffef4085bbea1e1651d91",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCAL-ExpressRoute-20261029T162556914Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "60097157678fb15350ed4094c0ba6c01812dd252115a11493b1309ee60ca45e6",
+      "publishedFile": "raw-output/C-LOCAL-ExpressRoute-20261029T162556914Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "6b1c3fba6134ee8a32f0db9af8f79b57ca1a406811635be6a1d072888b90692f",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCAL-ExpressRoute-prediction.json",
+      "originalPrivateEvidenceSha256": "fad4fd071cc7fca12b0421d7b5a809b9be326b6ffd7678788254b36e474a59c4",
+      "publishedFile": "raw-output/C-LOCAL-ExpressRoute-prediction.json",
+      "publishedSanitizedSha256": "673e03f960fc70a986f6d0b37cf4c61796291ed54fe334aac443a727bcce0164",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCAL-VPN-20261029T162923986Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "16c5c7587ff9cdc56cb84df47d03d3c9dcb83b62dfac25fe0494976ab665333e",
+      "publishedFile": "raw-output/C-LOCAL-VPN-20261029T162923986Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "23f70524ac70c7f8dd0138635612beeddc6a27e7b81ee8f74f8664f4a02d1d2a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCAL-VPN-prediction.json",
+      "originalPrivateEvidenceSha256": "d27a34c302e47606db6910779bfd12ed88e0db584400115d99a92f51a8a1d414",
+      "publishedFile": "raw-output/C-LOCAL-VPN-prediction.json",
+      "publishedSanitizedSha256": "b80fd14dd438c76f637cfa639b552f84c3841f7f036d338db276721db6db441b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCALITY-ASPath-20261029T172409583Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "a837fad5ad273a59ab1025888c836f733384c29fb69ad7e08997e106acff2e80",
+      "publishedFile": "raw-output/C-LOCALITY-ASPath-20261029T172409583Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "78bf3be9b0e1ca7e9fad5afa37c6787538e317bbf3961c54c7636711959b1fbf",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCALITY-ASPath-prediction.json",
+      "originalPrivateEvidenceSha256": "4d4f18e379e2d7adfef8357394a0481407840fe7e14da06d8cf0e74e91a70ef8",
+      "publishedFile": "raw-output/C-LOCALITY-ASPath-prediction.json",
+      "publishedSanitizedSha256": "1fab5176948f09aa42e18b40070b200c2e775f397e02055a76265cf054272504",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCALITY-VPN-20261029T171612295Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "ae51c2c272741c32d4ecf348b6d98e34767cfffe577b5852fdddc571e02bc7c7",
+      "publishedFile": "raw-output/C-LOCALITY-VPN-20261029T171612295Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "1af17d7cbe8248694e6fff9f1b1d9997b6de50d6a8f831bdb9e75597c6f56001",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LOCALITY-VPN-prediction.json",
+      "originalPrivateEvidenceSha256": "2ba5cdd8122ca43cd56af254272483ad15c5f48d9a17a856425bcf0a6019af24",
+      "publishedFile": "raw-output/C-LOCALITY-VPN-prediction.json",
+      "publishedSanitizedSha256": "49c5472ed3da9256f479cd442594351e5110238a1875cc83a943891df351c4a5",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LPM-20261029T184038708Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "0aeba09652984edb1037df7c07562c7ebf5bdfcf42cfaa3fd712c97e2b721099",
+      "publishedFile": "raw-output/C-LPM-20261029T184038708Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "f7706b36d0b72d4cf5a0dc9f1f686f7fabfd97a16f13df28af886338c3479e15",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "C-LPM-prediction.json",
+      "originalPrivateEvidenceSha256": "0a360643ceeea63e341167b0a629eb084723a93aac8bdb8e515e516a36ef2a19",
+      "publishedFile": "raw-output/C-LPM-prediction.json",
+      "publishedSanitizedSha256": "b7f5a568da64b94fae94f1bd58ac85abf57de03570ec02554314c68e347ce689",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "calibrated-pre-observation-prediction-hashes.json",
+      "originalPrivateEvidenceSha256": "c74f818fdb53470f24f2e25cc4389b811b81049af5b0cbfed899228081a9a045",
+      "publishedFile": "raw-output/calibrated-pre-observation-prediction-hashes.json",
+      "publishedSanitizedSha256": "9355ff08f18a24cebe9806c15861bdd3ee7bf59f75f2f2bb42aebad8dfeabe26",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "cleanup-verification-public.json",
+      "originalPrivateEvidenceSha256": "667da2cad0b3ef9c522acef2a9a6d37c392d7c691a6b6724fe1648d9ba09c0d9",
+      "publishedFile": "raw-output/cleanup-verification-public.json",
+      "publishedSanitizedSha256": "667da2cad0b3ef9c522acef2a9a6d37c392d7c691a6b6724fe1648d9ba09c0d9",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "controller-safety-I-COMBINED-20261029T2203-result.json",
+      "originalPrivateEvidenceSha256": "a7dcb7aa0056e08ef8776f1d558a60da8e757207b26c98348af4c30521ab99bb",
+      "publishedFile": "raw-output/controller-safety-I-COMBINED-20261029T2203-result.json",
+      "publishedSanitizedSha256": "a78bebf635c0eeb4e21b65b99a1532a4dc68372470ddc42cf06320fbc063d4a4",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "controller-safety-I-INTERNET-20261029T2115-result.json",
+      "originalPrivateEvidenceSha256": "fa1ac2e7b7a62d93b914e70f426e150813d2f7ec489a9f4b9c405b72a408cb18",
+      "publishedFile": "raw-output/controller-safety-I-INTERNET-20261029T2115-result.json",
+      "publishedSanitizedSha256": "111714c04246e63bf3e630dd9690a7974a88776bea969e64afbb29f5450eef69",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "controller-safety-I-PRIVATE-20261029T2026-result.json",
+      "originalPrivateEvidenceSha256": "0aa562931031390e113b22f04a1f318929b16541b65ea21f582a6fc7eaa18e09",
+      "publishedFile": "raw-output/controller-safety-I-PRIVATE-20261029T2026-result.json",
+      "publishedSanitizedSha256": "b2687c660a38f8bf871b5c814396fa1d54119efecf489475f608b32c3f77722a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "controller-safety-I-PRIVATE-POSTFIX-20261029T2053-result.json",
+      "originalPrivateEvidenceSha256": "82fb13569332966a75d7c9debd2e20a8cc80f1bcc092aecb34853a56c4005e83",
+      "publishedFile": "raw-output/controller-safety-I-PRIVATE-POSTFIX-20261029T2053-result.json",
+      "publishedSanitizedSha256": "c98eec86dc21ca53360dc0cf20eb3b4b4652d314abbc03972fedd5f657d981a3",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "D-ADS-LOCALITY-ASPath-20261029T173915705Z-comparison.json",
+      "originalPrivateEvidenceSha256": "ebdf6e824855b72d42787691d964f95d1dab1d0e93f876712a62d4288454d6db",
+      "publishedFile": "raw-output/D-ADS-LOCALITY-ASPath-20261029T173915705Z-comparison.json",
+      "publishedSanitizedSha256": "50c4baabdaad07dc9baf141338c43c5a0424ab9bf27353af4f3557ad529f41bd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "D-ADS-LOCALITY-ASPath-20261029T174745765Z-comparison.json",
+      "originalPrivateEvidenceSha256": "cfe8ba594409e518cfca2cb9fb3e6cb6723fa6e8e24b7d22f07a535e396ae85f",
+      "publishedFile": "raw-output/D-ADS-LOCALITY-ASPath-20261029T174745765Z-comparison.json",
+      "publishedSanitizedSha256": "2fa475d7ff7997c85a049574d6590449bafad57dfa32240452b17f764a188761",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "D-ADS-LOCALITY-ASPath-prediction.json",
+      "originalPrivateEvidenceSha256": "690e4e646c0b9ca894e273b55754c0830a7a7775bccc3b6289de8e750629c3a6",
+      "publishedFile": "raw-output/D-ADS-LOCALITY-ASPath-prediction.json",
+      "publishedSanitizedSha256": "ec81c2d4e4d7c00fe55edafe28091845a07bb4083958ef875007ba13d71aae50",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "E-01-ne-endpoint-probes.json",
+      "originalPrivateEvidenceSha256": "33c8d51e1163791e1b5dc8d6bdafc51ed2c5543d11c117c6f3171d53cdf22cbd",
+      "publishedFile": "raw-output/E-01-ne-endpoint-probes.json",
+      "publishedSanitizedSha256": "b1fc27943e31de0b15f8d9623772ec7446918a4cee062ac0f2102ce850670c8b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "E-01-se-endpoint-probes.json",
+      "originalPrivateEvidenceSha256": "dde8966d64db910c7ca9f5d1ea13825f39861f30967ec46d875e822c686e08a5",
+      "publishedFile": "raw-output/E-01-se-endpoint-probes.json",
+      "publishedSanitizedSha256": "49ae2774eb3040b71070a62f0e82a589c2e0eef4fe60444be8de8f1191e37755",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "E-AS-LOCAL-ER-SHORTER-20261029T180218192Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "0b2b95a5c656fd9cc4c2c3d22496e71dd4cc1f507855c2143e11cd2451bf797d",
+      "publishedFile": "raw-output/E-AS-LOCAL-ER-SHORTER-20261029T180218192Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "970f176ef241a84d8b12cbade04ad750b2ef2049b8c00829e96226b79e31fdb0",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "E-AS-LOCAL-ER-SHORTER-prediction.json",
+      "originalPrivateEvidenceSha256": "ed8d344cb82332c57ad7a99e6ce704b2cb940eb36dcf05e58fdf59b2cb7b2893",
+      "publishedFile": "raw-output/E-AS-LOCAL-ER-SHORTER-prediction.json",
+      "publishedSanitizedSha256": "f0fb02c2ed3293ce5b91dba7e59248a05fb1a8b925e3ea7ca874e674bf62560f",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "E-AS-REMOTE-ER-LAST-20261029T181647664Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "8803c4c532f666d5a9ae06b9fa6fcad6609b94a045627d3ad297670b64edc408",
+      "publishedFile": "raw-output/E-AS-REMOTE-ER-LAST-20261029T181647664Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "eb41ca3c1986c5290ee846799d123b292a951c6697e89dc4d7b0d32f057e40dd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "E-AS-REMOTE-ER-LAST-20261029T182843871Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "f0f6ccb328c785da7f67739127f9e24c29c503ec8c7805216220b539acdd1677",
+      "publishedFile": "raw-output/E-AS-REMOTE-ER-LAST-20261029T182843871Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "fe8541d3610bfab4a9472b405df7abfb4f9cb59ce148dd5751e8496af7469fb0",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "E-AS-REMOTE-ER-LAST-prediction.json",
+      "originalPrivateEvidenceSha256": "139a8444e110d5711f26275b50999a2ffe2a6588678caf02b49e0e191fc0d3d3",
+      "publishedFile": "raw-output/E-AS-REMOTE-ER-LAST-prediction.json",
+      "publishedSanitizedSha256": "9626ff7f75d607f6a63ccbcf6246a06836c4080a4e06601750ed1143dbfc3b04",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "F-ER-CUSTOMER-EXPORT-1793302008456-verification.json",
+      "originalPrivateEvidenceSha256": "775bbbe478f6ae6e7ecd2c5c218dbd2e79713fae0eddc53ce3d0e52f04f55139",
+      "publishedFile": "raw-output/F-ER-CUSTOMER-EXPORT-1793302008456-verification.json",
+      "publishedSanitizedSha256": "cb86392484dbe09312ce42f81c26f6d4d08939dbdb7fe2919c4d003a4073bae6",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "F-ER-CUSTOMER-EXPORT-prediction.json",
+      "originalPrivateEvidenceSha256": "9733ce0e4613296e12c228c24132465ae32e5195b7f9da80c2c5a37566b97647",
+      "publishedFile": "raw-output/F-ER-CUSTOMER-EXPORT-prediction.json",
+      "publishedSanitizedSha256": "cbaf0b924664be48304e658e6b636e3513f453952388f786baaa0f263a586be3",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "G-AS-REMOTE-ER-SHORTER-POSTFIX-20261029T193015018Z-azure-selection-result.json",
+      "originalPrivateEvidenceSha256": "09c515c34124c9fa5421bbc84f16b200b26d52a17a052f48c977d66525e348da",
+      "publishedFile": "raw-output/G-AS-REMOTE-ER-SHORTER-POSTFIX-20261029T193015018Z-azure-selection-result.json",
+      "publishedSanitizedSha256": "d5d0a1fb99584da00435d9e58bb5453513bb635b6bedd82f615186b884eb9ddb",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "G-AS-REMOTE-ER-SHORTER-POSTFIX-prediction.json",
+      "originalPrivateEvidenceSha256": "c92eca81769495950323f4284431fee69b90b58467cbbb68d233c832ff4a3f1c",
+      "publishedFile": "raw-output/G-AS-REMOTE-ER-SHORTER-POSTFIX-prediction.json",
+      "publishedSanitizedSha256": "90746b92ba5676b45305b7a0b003582ee07c9926d94d0049f8b38f81c03feed0",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "G-AS-REMOTE-ER-SHORTER-POSTFIX-production-verification.json",
+      "originalPrivateEvidenceSha256": "95055d8b5a75c51b1e79d290ff15bcd2eb7a15aff6484634465cc6abc356d9dd",
+      "publishedFile": "raw-output/G-AS-REMOTE-ER-SHORTER-POSTFIX-production-verification.json",
+      "publishedSanitizedSha256": "14c70332e673d64a4255b1fefa32462003972f91f134de0adb728550aa9a03b2",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-1793311791478-native-comparison.json",
+      "originalPrivateEvidenceSha256": "372d7b12f54be199e5aea0094e0962df154f46f65331348a43171c74a819408c",
+      "publishedFile": "raw-output/I-COMBINED-1793311791478-native-comparison.json",
+      "publishedSanitizedSha256": "f85a777ebf1a1589e6be73cf9e2958d90a9dd3c387e2f08c41632d3ca1277efe",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-ne-aux-advertised-10-231-255-4.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-ne-aux-advertised-10-231-255-4.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-ne-aux-advertised-10-231-255-5.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-ne-aux-advertised-10-231-255-5.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-ne-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "11815917eaabe5374721d94d2b196dff9b49ce0d367bdc623a77ee8c43ca977c",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-ne-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "6bf242155f09a6a59cdfccac0bc4d6b6d9af018de64c7fc01bbc260a4b157fdd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-ne-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "584cc670c48bd68c96d6375abe5a81b30425ffa6237f8cbc4ce6d59b714ec4a9",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-ne-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "aea9f01f35ddbbc58d68063bb4bc93232915a2dd1605dc8c062db3028914a46f",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-ne-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "eabff9e6d2caa3ebf76fccc59359ebf61c7b79243d2edc6fb27a1df4228886ea",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-ne-circuit-primary.json",
+      "publishedSanitizedSha256": "fff0dbe78079b43af25061994036e8834cf91931d04126a336284b340b10448a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-ne-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "eabff9e6d2caa3ebf76fccc59359ebf61c7b79243d2edc6fb27a1df4228886ea",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-ne-circuit-secondary.json",
+      "publishedSanitizedSha256": "fff0dbe78079b43af25061994036e8834cf91931d04126a336284b340b10448a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-ne-hub-rib.json",
+      "originalPrivateEvidenceSha256": "d1af7c14fa03dd5a025a7ec5d8917f2ddeddbb05af2bec21dd66dfd4ea4e1a49",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-ne-hub-rib.json",
+      "publishedSanitizedSha256": "77eedc247406ae2a5125854a01de37a795c894152075e704f837949c5f98a038",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-se-aux-advertised-10-230-255-4.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-se-aux-advertised-10-230-255-4.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-se-aux-advertised-10-230-255-5.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-se-aux-advertised-10-230-255-5.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-se-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "48f001f114751746726f882ba18ae68d95c750190b65b40a5c70e9d322f1c615",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-se-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "4fa49d1e8876a19b8be6a731da52b9480bb0bc7f6456c6734dafe58b047e64ba",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-se-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "d20075138dc06c2d6faf0f4afdb8c1edda1d8fe95297d9298ebdf283b04a6fa4",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-se-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "2ca804c3bd7410b3e2a17526a6bb5e4e1d74d23dca2913e2846a0510aa15b33f",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-se-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "0811e4443c18e82453624c25021b5e7204aa449f17f0e642ebafa0733cff40f9",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-se-circuit-primary.json",
+      "publishedSanitizedSha256": "cbca1cd54c364994968c9c1734861d06451ca4348c3e3b0c833b55e5075f2a10",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-se-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "9b10fce386a7174b524c5bad93284be92d2fcf3555a73ba2e13f4205b36ee8a8",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-se-circuit-secondary.json",
+      "publishedSanitizedSha256": "875e4ae6826d1b98e4731d0cb46caca81356a0f0d17b4963d299d9f89e07305d",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-se-hub-rib.json",
+      "originalPrivateEvidenceSha256": "d316812b0e8d5559affddbeaea9cc7214a7559557a1aa5f9ae91e65f695e3872",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-se-hub-rib.json",
+      "publishedSanitizedSha256": "2d80e8de494a87a3e58e7fa57049bb78fec8c1c5431f266d392e0066cac609d4",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-vm-bgp-ne-routing.json",
+      "originalPrivateEvidenceSha256": "db776f26e47b4f95020c97c813696b2fa3845b3deb7694a85d25e282216ae22c",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-vm-bgp-ne-routing.json",
+      "publishedSanitizedSha256": "7cee9b942e628760447117f0825865042346a92c9c7b2b8c25ddd55620900a88",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-vm-bgp-se-routing.json",
+      "originalPrivateEvidenceSha256": "113f6eae0c8b49a4110006d0c173a155091b8c83d74b3b3696402fcc0b230964",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-vm-bgp-se-routing.json",
+      "publishedSanitizedSha256": "3d976c1e566b186a42739f2b24de368972b66687e02c312db537881b3cd7f779",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-vm-nva-ne-routing.json",
+      "originalPrivateEvidenceSha256": "7ece6c2cf5fe6d320cf8415d410fe6452e4bcf30507ffee8de071dcf7168a1b4",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-vm-nva-ne-routing.json",
+      "publishedSanitizedSha256": "4056db6a6672a45c10c2927bdffeb2613c44e90b705fcd6df9a24831e3551dbf",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-vm-nva-se-routing.json",
+      "originalPrivateEvidenceSha256": "29f12e95488f1150e45fe07d1c00fe0d3d6275c3ac5ac6a153a890459cc0799a",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-vm-nva-se-routing.json",
+      "publishedSanitizedSha256": "f3542f924965ef8c5092059c12815950e98285387eed601c2da50c0214547d5e",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-vm-static-ne-routing.json",
+      "originalPrivateEvidenceSha256": "7937ccecfca42949502f34ae8f1a9c6240c3bda681ad9bc68f1851be30819d3d",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-vm-static-ne-routing.json",
+      "publishedSanitizedSha256": "d420469812c1167dfded5f7828ca84c980ad96713fa97e6a0125a6860b61adad",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-20261029T2203-vm-static-se-routing.json",
+      "originalPrivateEvidenceSha256": "72466a45fbef7ef6b0f7154afb3751ce80bcb9bb19fe4339fa4ff690cd6f62a6",
+      "publishedFile": "raw-output/I-COMBINED-20261029T2203-vm-static-se-routing.json",
+      "publishedSanitizedSha256": "6c7e3a9fe2327c72ca7ebae86d807b2d0795df48ad32ef395ba60c768b80d396",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-causal-matrix-verification.json",
+      "originalPrivateEvidenceSha256": "01bed7c06b5713531e35d3a4305db18b5dc6fd204761a62b4b71ff075b19b21b",
+      "publishedFile": "raw-output/I-COMBINED-causal-matrix-verification.json",
+      "publishedSanitizedSha256": "2a86d2775ee02a017ed87892d32c01f951b0a3706c592881e0d1d15188a87055",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-default-flags-20261029T220458988Z.json",
+      "originalPrivateEvidenceSha256": "e48b8069e5574d1a398b2522fe243023e0c36229a411a44481d3d4cb5c041f68",
+      "publishedFile": "raw-output/I-COMBINED-default-flags-20261029T220458988Z.json",
+      "publishedSanitizedSha256": "3f726f6629768e1f46e2dee773503613b62386cf52239caf3f0f3c1634030fdb",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-native-20261029T220344313Z-result.json",
+      "originalPrivateEvidenceSha256": "0b1c57dc3f89075ed3d18b24379259a56adc294fbeca689bf8b5e7261c453478",
+      "publishedFile": "raw-output/I-COMBINED-native-20261029T220344313Z-result.json",
+      "publishedSanitizedSha256": "82b044b414e3fc325d4955dcdb0d1439e27c7fc800a6fb37f0b505cf429c99a2",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-native-20261029T220735024Z-result.json",
+      "originalPrivateEvidenceSha256": "0032760b6b0f95a4e8d888151883d821592e98bf0a1409fed25cc21743b6092c",
+      "publishedFile": "raw-output/I-COMBINED-native-20261029T220735024Z-result.json",
+      "publishedSanitizedSha256": "77f4913df1f07945261fe030a22f048a46490a961a040db4777e5e49ec09265d",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-ne-deny-ne-20261029T222312482Z-result.json",
+      "originalPrivateEvidenceSha256": "c59daddc72d4470881e2127a761e1d57fa7d120072972f8de6f4ee217ce0bf64",
+      "publishedFile": "raw-output/I-COMBINED-ne-deny-ne-20261029T222312482Z-result.json",
+      "publishedSanitizedSha256": "42f11c3edfd532e3b375fe8214105309ddbec4011db75b3e3e1968547cdf669a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-ne-deny-none-20261029T220344861Z-result.json",
+      "originalPrivateEvidenceSha256": "19346918e76e4be5f3177b954944ce64569f43fa81c8434edec8f6f9b1ef5571",
+      "publishedFile": "raw-output/I-COMBINED-ne-deny-none-20261029T220344861Z-result.json",
+      "publishedSanitizedSha256": "81f683d2ad071416c513d6eff6d507b13effe5a7a11de7439958ca009af7061a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-ne-deny-none-20261029T223121217Z-result.json",
+      "originalPrivateEvidenceSha256": "ab63d93c00d936315494094fa486f30212022fba6ac80191930274628e505a57",
+      "publishedFile": "raw-output/I-COMBINED-ne-deny-none-20261029T223121217Z-result.json",
+      "publishedSanitizedSha256": "d5f63b6f408ae8a36ccb475320a775d441e2927aa3fdc03f9c86737bc0d8c960",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-ne-deny-se-20261029T221525920Z-result.json",
+      "originalPrivateEvidenceSha256": "82ed791c64398970fcc7c33fd0ca4f35e89139bf1869194fe7b24aa0fbb1bc28",
+      "publishedFile": "raw-output/I-COMBINED-ne-deny-se-20261029T221525920Z-result.json",
+      "publishedSanitizedSha256": "ddbaeca8b27ee7e5de618b7cc274af4cf846ee77ed3e11deb1b7881cfbd9d562",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-prediction.json",
+      "originalPrivateEvidenceSha256": "2cf3bc4682993024773aa9a44d0e5a63eb0a9fbca836292e50bd608bbb43ed33",
+      "publishedFile": "raw-output/I-COMBINED-prediction.json",
+      "publishedSanitizedSha256": "1392a8cd5893dacbb50838209873951832a831d1dc7d8d68b9a4d1401a4d0566",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-se-deny-ne-20261029T222313050Z-result.json",
+      "originalPrivateEvidenceSha256": "5f9b99585395a5c133f6f62cf5db971d675933b17d2e8bfac169cd62d89e04b9",
+      "publishedFile": "raw-output/I-COMBINED-se-deny-ne-20261029T222313050Z-result.json",
+      "publishedSanitizedSha256": "7901a047f3d11ddb967047389b297ec510bfc97bfe0f7805ce5e1b7ada9b2b98",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-se-deny-none-20261029T220345520Z-result.json",
+      "originalPrivateEvidenceSha256": "77f7b579853deefefba76bf1751d82544df7ba340bb674d8d5d39600fc558929",
+      "publishedFile": "raw-output/I-COMBINED-se-deny-none-20261029T220345520Z-result.json",
+      "publishedSanitizedSha256": "f9ae46d252c4ed601a38f06b4874a2990d7cdebbc0877ea0ccc06564ce5fd5a0",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-se-deny-none-20261029T223120556Z-result.json",
+      "originalPrivateEvidenceSha256": "71953c3625f2bc0d22d28ebbf61155abb3102e4f871a333ca467c181ef868043",
+      "publishedFile": "raw-output/I-COMBINED-se-deny-none-20261029T223120556Z-result.json",
+      "publishedSanitizedSha256": "fedbdbb76cc44c451a99b6ea00b3dee4fd0cdda82c894cbccbc64fecce4b2217",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-COMBINED-se-deny-se-20261029T221526835Z-result.json",
+      "originalPrivateEvidenceSha256": "75558a6de72e3b26ae4e2ee8fb770af80aa673e93fba06ca39b5319be48efb7b",
+      "publishedFile": "raw-output/I-COMBINED-se-deny-se-20261029T221526835Z-result.json",
+      "publishedSanitizedSha256": "1df6f4cdbe30a8406b73c42761f7ad4edf2b8f5988a18454483a66495164cea1",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-1793308862133-native-comparison.json",
+      "originalPrivateEvidenceSha256": "608e187080872bcb9929ac33adab1d7a864a72ce9bafdb70dd5dcfd134c8c7fc",
+      "publishedFile": "raw-output/I-INTERNET-1793308862133-native-comparison.json",
+      "publishedSanitizedSha256": "67ed73a40ba3f76cb45abf6253a3144ea62b92bd8c97a8f298a8a72b057f648c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-ne-aux-advertised-10-231-255-4.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-ne-aux-advertised-10-231-255-4.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-ne-aux-advertised-10-231-255-5.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-ne-aux-advertised-10-231-255-5.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-ne-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "11815917eaabe5374721d94d2b196dff9b49ce0d367bdc623a77ee8c43ca977c",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-ne-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "6bf242155f09a6a59cdfccac0bc4d6b6d9af018de64c7fc01bbc260a4b157fdd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-ne-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "3b70ec7c76b25dab91a9cb2806144fb6051826344f6672389b9ecad978135d55",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-ne-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "5a58757e8fd961fc8772439ab8f73d7b27e8d79b3324a3b852e62a4a1a0c9a2a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-ne-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "eabff9e6d2caa3ebf76fccc59359ebf61c7b79243d2edc6fb27a1df4228886ea",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-ne-circuit-primary.json",
+      "publishedSanitizedSha256": "fff0dbe78079b43af25061994036e8834cf91931d04126a336284b340b10448a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-ne-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "eabff9e6d2caa3ebf76fccc59359ebf61c7b79243d2edc6fb27a1df4228886ea",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-ne-circuit-secondary.json",
+      "publishedSanitizedSha256": "fff0dbe78079b43af25061994036e8834cf91931d04126a336284b340b10448a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-ne-hub-rib.json",
+      "originalPrivateEvidenceSha256": "e80b592794afb8c9012a4167cd4a014b2ba8484fcc15b7926c31db76e92b439a",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-ne-hub-rib.json",
+      "publishedSanitizedSha256": "a75c18c9169a2c396cdd320a642c7f6beb92caea81d30b3eda9338be787f998c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-se-aux-advertised-10-230-255-4.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-se-aux-advertised-10-230-255-4.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-se-aux-advertised-10-230-255-5.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-se-aux-advertised-10-230-255-5.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-se-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "48f001f114751746726f882ba18ae68d95c750190b65b40a5c70e9d322f1c615",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-se-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "4fa49d1e8876a19b8be6a731da52b9480bb0bc7f6456c6734dafe58b047e64ba",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-se-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "5fd367992e4e97a8190b2668d38573a779e2058d4814b8685baf7be08b9614af",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-se-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "5e724eb4c67299d92930ac183de6ce535781658cb36669a0650204219e74bcae",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-se-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "c20c10d9a93c79cbe69638bf4151aaf853c479f939d6a78ee144e4d2976c39b0",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-se-circuit-primary.json",
+      "publishedSanitizedSha256": "a290f75fc9f0f3a78344723f1c466c82bd9feb8c333275ba6924ee684624bcfb",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-se-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "a6469b3f9b894feba38c9a44b190a713e435f6acca8b7b5031f7ff565a15e9b7",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-se-circuit-secondary.json",
+      "publishedSanitizedSha256": "e280004a42abb659d57ba0904cfa639c26371c64d4bb8b69720d8434bb596a26",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-se-hub-rib.json",
+      "originalPrivateEvidenceSha256": "a3ef387420c15dd509ee8f2a7a0da2d182c17f50a4fa5d005c6b7e9b440fc769",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-se-hub-rib.json",
+      "publishedSanitizedSha256": "d1c811ef877ba67ddcfdc75cf143b8cdbfba8404ee7a052390b0cd4f3f740505",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-vm-bgp-ne-routing.json",
+      "originalPrivateEvidenceSha256": "f23bce2c9bea48ad6ee4781e6bc55c53634420427d623c922b3c2830da892491",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-vm-bgp-ne-routing.json",
+      "publishedSanitizedSha256": "7e2703dd71b9e329d1a5d7490c35b7e5230e32e827bc154bc7cd751186d5463b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-vm-bgp-se-routing.json",
+      "originalPrivateEvidenceSha256": "a0668e39b5b09a913f05854993db84f91d88ac401e1fdcdbbfb3641eb8f18a4a",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-vm-bgp-se-routing.json",
+      "publishedSanitizedSha256": "69c7bc2253183c2e5977e4c54dccb7e3ea1fe1c099d2751dfd12436f14f83ad9",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-vm-nva-ne-routing.json",
+      "originalPrivateEvidenceSha256": "ff2e09c507596374cf77522a0d60b3a5b3c3fc9a5e3423286b370dd31cccae3e",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-vm-nva-ne-routing.json",
+      "publishedSanitizedSha256": "eebfebf3a55305bf7dbad639a60308723798797fc173c2894aa4ac1935df0aea",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-vm-nva-se-routing.json",
+      "originalPrivateEvidenceSha256": "6cf03ebf0da6339c42e9465a675872879339f0ad36eae79f417a6681745d5850",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-vm-nva-se-routing.json",
+      "publishedSanitizedSha256": "e0ac215b9d1895751cc5854e13466c2631899db546c4db506614a4822da7fc78",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-vm-static-ne-routing.json",
+      "originalPrivateEvidenceSha256": "753bf7dbe40b54fa386e39371c49bf457e15b97031378191aadb29d51c9e3570",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-vm-static-ne-routing.json",
+      "publishedSanitizedSha256": "942ed8d4bf79fcd27eaa058c974f794df6e0b7d12b30002d09357c8bd2ec2964",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-20261029T2115-vm-static-se-routing.json",
+      "originalPrivateEvidenceSha256": "e41c940428edf362789b2c3a80f77c858f4ad54ae4121c39990aa9a36c6f52ef",
+      "publishedFile": "raw-output/I-INTERNET-20261029T2115-vm-static-se-routing.json",
+      "publishedSanitizedSha256": "2aff6a8d605b1cee846ad0949d0224a56639f064c5133e2a2c9448de25a3bb23",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-causal-matrix-verification.json",
+      "originalPrivateEvidenceSha256": "bdf9f7991ed5b06f38af714812a405751082bacd53651dc4e95e84ff47043c63",
+      "publishedFile": "raw-output/I-INTERNET-causal-matrix-verification.json",
+      "publishedSanitizedSha256": "d0605da7ab228d889e2e68d175b640e2aff75e3914180990dad05bd685c8fdfb",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-default-flags-20261029T212013175Z.json",
+      "originalPrivateEvidenceSha256": "df26be7da3118bcb83df18bc62d76000c0aa4c94df350c702bfb35badff0f367",
+      "publishedFile": "raw-output/I-INTERNET-default-flags-20261029T212013175Z.json",
+      "publishedSanitizedSha256": "fc21e12f5e3d182aa3c9b2726b70c8a1de03a60ba9f8b8b546a7c41f4bc268b9",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-native-20261029T211644374Z-result.json",
+      "originalPrivateEvidenceSha256": "bbd720b988cdeb1bc424017c85cc47db201958eea59a1ed0d81779a9e53d6f6d",
+      "publishedFile": "raw-output/I-INTERNET-native-20261029T211644374Z-result.json",
+      "publishedSanitizedSha256": "d8e9e9920209b8b780b373ff1063554d19c30c1c0000424b3963ed37e2f65753",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-native-20261029T211927970Z-result.json",
+      "originalPrivateEvidenceSha256": "870efc0d928d9789dcaeb4d2a2a612b56bfa7a9bef7566c309fba4f62e2462ee",
+      "publishedFile": "raw-output/I-INTERNET-native-20261029T211927970Z-result.json",
+      "publishedSanitizedSha256": "5271f5adcd7511c4dd441031be9e856d7a2743c2a6cbb945fe950f4301ac40e3",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-ne-deny-ne-20261029T214300249Z-result.json",
+      "originalPrivateEvidenceSha256": "d607814b17438b304c16bff1fbdb797002344c52208675338e8d5347ba2e05c1",
+      "publishedFile": "raw-output/I-INTERNET-ne-deny-ne-20261029T214300249Z-result.json",
+      "publishedSanitizedSha256": "1f25ba02e95eea14b7d7a055f3dc41ade4cef3df633344761302e80f55b7b694",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-ne-deny-none-20261029T211644685Z-result.json",
+      "originalPrivateEvidenceSha256": "ced8d8433df985d1406e15cd84d371715ce419a6641535daab092d0ab61084de",
+      "publishedFile": "raw-output/I-INTERNET-ne-deny-none-20261029T211644685Z-result.json",
+      "publishedSanitizedSha256": "d09cb44632d9c76e5146048301bd00cfc076799c66fef477afe5292565ff5de4",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-ne-deny-none-20261029T212740825Z-result.json",
+      "originalPrivateEvidenceSha256": "2ca5a0566e817a2db2b7b85f39f28ff0c46419a6412388ed49c86d1bb19ea19b",
+      "publishedFile": "raw-output/I-INTERNET-ne-deny-none-20261029T212740825Z-result.json",
+      "publishedSanitizedSha256": "7f7d4ead4ce577acbb154b96c8033bd8590393fc6b9f7f79e3d7d42299ede2f5",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-ne-deny-none-20261029T214938316Z-result.json",
+      "originalPrivateEvidenceSha256": "85d7a57916bd6d687261afd046e539afe81a440e2ead228a2c82e11c04837b5a",
+      "publishedFile": "raw-output/I-INTERNET-ne-deny-none-20261029T214938316Z-result.json",
+      "publishedSanitizedSha256": "31318f8bd19f65f0126da5a39cf31ff75aced2c2ef0d8ed0f803cddae62d8967",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-ne-deny-se-20261029T213437267Z-result.json",
+      "originalPrivateEvidenceSha256": "11432fbc789ac95b16e80093a75a61a2c1594c5dab9b967a0991dbbd71c3baa0",
+      "publishedFile": "raw-output/I-INTERNET-ne-deny-se-20261029T213437267Z-result.json",
+      "publishedSanitizedSha256": "bdaf1da557f53cd7e244e9615a3e20aa9063a3481436e0d08fbcb65e80f93ede",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-prediction.json",
+      "originalPrivateEvidenceSha256": "f9f041bb1713ee90855635398baaa12e2e25dbff28f0137e02af538a8d9b28b6",
+      "publishedFile": "raw-output/I-INTERNET-prediction.json",
+      "publishedSanitizedSha256": "791e169969ec4a807a1dac789540a76bfd3db2b49c78bd37c216a3f925032013",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-se-deny-ne-20261029T214300713Z-result.json",
+      "originalPrivateEvidenceSha256": "ffa1b8f569f551dded87cb8fae2920c0385bc6f60d82a34521c105b1da299b3d",
+      "publishedFile": "raw-output/I-INTERNET-se-deny-ne-20261029T214300713Z-result.json",
+      "publishedSanitizedSha256": "8af8921900d65c8f8a3b7e4f7bc78c7efbc0de9ac3ef1e7f2455a3da42ff3b28",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-se-deny-none-20261029T211642054Z-result.json",
+      "originalPrivateEvidenceSha256": "e260b4d33698861a77870c1946416cad9cc7e47b532f6f21491bb01ae855e8c2",
+      "publishedFile": "raw-output/I-INTERNET-se-deny-none-20261029T211642054Z-result.json",
+      "publishedSanitizedSha256": "04e03259ec7ae94cc8c91efbc4fc705d7bbb25795d130b154beb5faa01f3b097",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-se-deny-none-20261029T212739870Z-result.json",
+      "originalPrivateEvidenceSha256": "fc2797efc5d40e35afbd39655b0fa75abb05a0bbcf94e950ce9fe5f787a94ae8",
+      "publishedFile": "raw-output/I-INTERNET-se-deny-none-20261029T212739870Z-result.json",
+      "publishedSanitizedSha256": "a472e2fc4384b9c53332ed2bd1ee87d12eab240eb370a319a45cae78b92db4fd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-se-deny-none-20261029T214938013Z-result.json",
+      "originalPrivateEvidenceSha256": "0239eea8c23df995ea908066967bec20f4f3c87bffbf3810dfbb93810c8b49eb",
+      "publishedFile": "raw-output/I-INTERNET-se-deny-none-20261029T214938013Z-result.json",
+      "publishedSanitizedSha256": "cb0e8c2dfe5b9b87e2b48527553531635e1220774d17e348298a1ef025e6cdfe",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-INTERNET-se-deny-se-20261029T213438254Z-result.json",
+      "originalPrivateEvidenceSha256": "df3e513ef78b675b00dd3ddf38ffe46dc3ea65e1a8551eac4446d8f3bb87c207",
+      "publishedFile": "raw-output/I-INTERNET-se-deny-se-20261029T213438254Z-result.json",
+      "publishedSanitizedSha256": "97e626bdb562c458ec73b4af17d02ce6065c913b186b1a55c34e570f08723e9f",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-LOCALITY-SE-FOUR-vm-bgp-se-routing.json",
+      "originalPrivateEvidenceSha256": "99c704995ff15260e6244737b076704da637dc0e40a6557d5965302cb138e66c",
+      "publishedFile": "raw-output/I-LOCALITY-SE-FOUR-vm-bgp-se-routing.json",
+      "publishedSanitizedSha256": "f3d62754a546d7181a717525c83e3c4aac44831f30ac781d85236ecbc6363f18",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-20261029T193429931Z-preparation-result.json",
+      "originalPrivateEvidenceSha256": "fbe1f4dd3eed7e9dc814f8ca9227889d4509ef570359844dc288d17c8e151bbe",
+      "publishedFile": "raw-output/I-NONE-20261029T193429931Z-preparation-result.json",
+      "publishedSanitizedSha256": "24d5134852a71bba0e64dcc6c324523f31b9870633aebcaf77a746cc753ef933",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-20261029T200740353Z-import-result.json",
+      "originalPrivateEvidenceSha256": "c01d6ecb2aef65de96fb6d118682e312d2a08350ed2815625f561ab23459fda0",
+      "publishedFile": "raw-output/I-NONE-20261029T200740353Z-import-result.json",
+      "publishedSanitizedSha256": "003b8884425da495ff515a52486b40504255b4b4c32bbc63b8de2b9f49bd5e4e",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-inputs-20261029T193949460Z-result.json",
+      "originalPrivateEvidenceSha256": "890fac6c7f81bbfbba9b009a3d9df4c20f5eabf6f57ce8654e254b2cc9c39b05",
+      "publishedFile": "raw-output/I-NONE-inputs-20261029T193949460Z-result.json",
+      "publishedSanitizedSha256": "8f73a43ad7d51eab28bf22a101085185a6ae10faf5169d464fb57908f0c8bf6c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-inputs-20261029T200346117Z-result.json",
+      "originalPrivateEvidenceSha256": "fcdf76efcaf80aff603e9e99045de4dd54c4757d169b62d79ae8e93b0e75ed47",
+      "publishedFile": "raw-output/I-NONE-inputs-20261029T200346117Z-result.json",
+      "publishedSanitizedSha256": "5b03f3920f4fcb78c0f95be6acaa66373197aa532a37180be4a8b22b6d5cf055",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-native-20261029T200805564Z-result.json",
+      "originalPrivateEvidenceSha256": "a360e8037efdf600f9d50e5acadcc2fabfd94871940bc6a43b2bc43bc3c4f1be",
+      "publishedFile": "raw-output/I-NONE-native-20261029T200805564Z-result.json",
+      "publishedSanitizedSha256": "097cbcb79c09ee3cd7ec9bd2fad756775398522857431f7c7b47f027f02d1405",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-ne-deny-none-20261029T200805282Z-result.json",
+      "originalPrivateEvidenceSha256": "98801bc651707203c2fc4ff451babb8d478eb2e53d4e5a3bb198db1ad25a617a",
+      "publishedFile": "raw-output/I-NONE-ne-deny-none-20261029T200805282Z-result.json",
+      "publishedSanitizedSha256": "61c0d2ddc55e025d6ddab78c1f3acdb69e5877b3143c015a427585455b40b648",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-policy-20261029T195552260Z-result.json",
+      "originalPrivateEvidenceSha256": "e81685fab5dd0bcc2f88397ec8d528ce07424882febaa962d8b6ef64e8c13980",
+      "publishedFile": "raw-output/I-NONE-policy-20261029T195552260Z-result.json",
+      "publishedSanitizedSha256": "6e1473c0b36287830062bb8436934c6b78a57f2d884b4e0b26c2f9d51f060d67",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-ne-aux-advertised-10-231-255-4.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-ne-aux-advertised-10-231-255-4.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-ne-aux-advertised-10-231-255-5.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-ne-aux-advertised-10-231-255-5.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-ne-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "61b7cd1b39d1d8b5a4979e074ba87db50f06a7c049c15d404cd4baaf237c700d",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-ne-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "2786929a93750abda3cc6966e8b22fa1ef93ed44788209f5a5552eaac7365ae7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-ne-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "d616a9976899f87d0405d082569e6aa3a6234fb55fdf7abe1a02141d6ecb5fa3",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-ne-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "b0d9f2fe199ea2d0616234d81c201e6c45a1d54e0eda7134b18bec321ea7e499",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-ne-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "28453ddfceedb3188b3c0546def6188615f145e9140573b31b792a5611e929c5",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-ne-circuit-primary.json",
+      "publishedSanitizedSha256": "83afb7f1574bee47c402656e8f5a2018b668c904c8e71e5d174759d31554bd4a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-ne-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "28453ddfceedb3188b3c0546def6188615f145e9140573b31b792a5611e929c5",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-ne-circuit-secondary.json",
+      "publishedSanitizedSha256": "83afb7f1574bee47c402656e8f5a2018b668c904c8e71e5d174759d31554bd4a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-ne-hub-rib.json",
+      "originalPrivateEvidenceSha256": "8edcfa984e5003762921a03ccbe9c4b6679ce8b39a0f7e2c07d9f8c973ce078e",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-ne-hub-rib.json",
+      "publishedSanitizedSha256": "25f1994c9c583b4b515b3a6061c6e165bf1297a76b0d6614573b761efebe38e0",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-se-aux-advertised-10-230-255-4.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-se-aux-advertised-10-230-255-4.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-se-aux-advertised-10-230-255-5.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-se-aux-advertised-10-230-255-5.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-se-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "e8f1b1a6390e22980a296a69292043be6a29c660781870e59ea543105ddc52e0",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-se-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "3823c804d96a99b03c44d6189fe21cb18fa24af2324f26aeddd2d34f1861028c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-se-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "cc811e7f0f8a62e447a63fab3a6d541724c291192d72afe99dfeb6d1988b24b8",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-se-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "bf9c5aa3a86f9c4490669906d6f486d84b2395035dfd4cc371cae4bab56cc943",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-se-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "7177c2c8b2ebfbcc720f06da83aff289e49e87349674e1399c701e7468827fed",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-se-circuit-primary.json",
+      "publishedSanitizedSha256": "27f25dab280a30509bc963d4abd82931acffadc28583c11b3df13eb7654ceefd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-se-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "22a489bc592d3130825596362cd2e8939b0d41df15e318acf8a1a842e562bb30",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-se-circuit-secondary.json",
+      "publishedSanitizedSha256": "76f36dddade31d8d1a5c4f5390453bea4c3e5d82d7baaabbcff9a9a93fcf8559",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-se-hub-rib.json",
+      "originalPrivateEvidenceSha256": "72ce8a49354a5775e345c1ed51df040f7233971b1f499735e7cb9274b693bbca",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-se-hub-rib.json",
+      "publishedSanitizedSha256": "64faee9647e85df85e463ceb1d4b01ffc1b41c6fec50949524927ccd473cd9d9",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-vm-bgp-ne-routing.json",
+      "originalPrivateEvidenceSha256": "d3e04b443d1dc9e464802993441f793e6f68fbc38ec805da8a2ec797a9645273",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-vm-bgp-ne-routing.json",
+      "publishedSanitizedSha256": "7f8629ee0dac5e5560c92316e07d5373565b67434424c8505705c32ee49862c8",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-vm-bgp-se-routing.json",
+      "originalPrivateEvidenceSha256": "9064b952ff925ddd5c899f38786c825de8b10a4a5b62dc6a1568dc45400b3457",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-vm-bgp-se-routing.json",
+      "publishedSanitizedSha256": "22cc34d92c054c708d63fff7d175af7e526cd014f80cab618323b1d36540e847",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-vm-nva-ne-routing.json",
+      "originalPrivateEvidenceSha256": "ec0bfaa2de9b02765f803d2bdf146cea699e44ee1287216fbbc25cb72dbed2fb",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-vm-nva-ne-routing.json",
+      "publishedSanitizedSha256": "d1177a4429f5fa26929d8ddc83560d6f542b1b4f0dc634ea4605d3aea34f78b1",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-vm-nva-se-routing.json",
+      "originalPrivateEvidenceSha256": "ab5cf1cdd7b3107fb6d9cf627e0c80d1673a705d9aae20427029f2aebd7ebc38",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-vm-nva-se-routing.json",
+      "publishedSanitizedSha256": "21044d2371859918edb39a00032052cb4b010c182754e369a5d143572e7b091b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-vm-static-ne-routing.json",
+      "originalPrivateEvidenceSha256": "8b30389cb14daa3732de8a4209e50d752c2dc22606e1b8981a1c9d005087ea86",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-vm-static-ne-routing.json",
+      "publishedSanitizedSha256": "346d259b25c6b74553664de01a59ec10a49cbd8a74c7d470809d434517a8c6c2",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-POSTFW-20261029T2013-vm-static-se-routing.json",
+      "originalPrivateEvidenceSha256": "a15e6b9841c43525bee7a12f7c1210be7aafd941ac602396b267f37c207b5213",
+      "publishedFile": "raw-output/I-NONE-POSTFW-20261029T2013-vm-static-se-routing.json",
+      "publishedSanitizedSha256": "3d14dd0ad01eabc2b2c6ce8f320eaa97e20baf80243d5203cca47dc7faa0b3fd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-prediction.json",
+      "originalPrivateEvidenceSha256": "c95a0b4479a424a810d02ef5191b06fd70367e8eb5c692fe48e1175742247c2b",
+      "publishedFile": "raw-output/I-NONE-prediction.json",
+      "publishedSanitizedSha256": "703c33bc9dc8358b944493be545e2c314db63e4eb84b0485f659430fb0eadb32",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-NONE-se-deny-none-20261029T200803293Z-result.json",
+      "originalPrivateEvidenceSha256": "c88776a8d59e77f3e52796e45a240415972a59fffbe9a5c7762c203a3e1f0dd3",
+      "publishedFile": "raw-output/I-NONE-se-deny-none-20261029T200803293Z-result.json",
+      "publishedSanitizedSha256": "f83007eccc4dfdf74282df47c3fc8371075c211f99be0f65b4c9a2340e8dd968",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-1793306313764-native-comparison.json",
+      "originalPrivateEvidenceSha256": "6f4a5d0cc3d4f54aede6c645b37fc8e99909e009e6831034438d57c204c08471",
+      "publishedFile": "raw-output/I-PRIVATE-1793306313764-native-comparison.json",
+      "publishedSanitizedSha256": "3f6c254c940fa7d68411218375c6878a1234307764212adad127850d6215f4c0",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-ne-aux-advertised-10-231-255-4.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-ne-aux-advertised-10-231-255-4.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-ne-aux-advertised-10-231-255-5.json",
+      "originalPrivateEvidenceSha256": "cf4cf0091ac66a008ad8fd5dca9d5383d72d42e2a194713842ee25a4adb1bf49",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-ne-aux-advertised-10-231-255-5.json",
+      "publishedSanitizedSha256": "5b76b65e62db9fa409d7c55d3ff94164575d2b3fbc3b1f956d3fb2e91b7f6746",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-ne-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "61b7cd1b39d1d8b5a4979e074ba87db50f06a7c049c15d404cd4baaf237c700d",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-ne-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "2786929a93750abda3cc6966e8b22fa1ef93ed44788209f5a5552eaac7365ae7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-ne-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "3c5781b12d87f70fa63ae036668f5828bf281a6e3ab881cc53570e981ff16cfc",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-ne-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "ccbe1babef82bc8ca57e3780609bed02bedcfce6f2e558a88524e4da5c9d999d",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-ne-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "28453ddfceedb3188b3c0546def6188615f145e9140573b31b792a5611e929c5",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-ne-circuit-primary.json",
+      "publishedSanitizedSha256": "83afb7f1574bee47c402656e8f5a2018b668c904c8e71e5d174759d31554bd4a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-ne-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "28453ddfceedb3188b3c0546def6188615f145e9140573b31b792a5611e929c5",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-ne-circuit-secondary.json",
+      "publishedSanitizedSha256": "83afb7f1574bee47c402656e8f5a2018b668c904c8e71e5d174759d31554bd4a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-ne-hub-rib.json",
+      "originalPrivateEvidenceSha256": "7867778e1cf559e2eceea8dcb851201fba686ea72dc8efad8c4c41253c261ec2",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-ne-hub-rib.json",
+      "publishedSanitizedSha256": "625bfba7fc20bdbd66996a5010941e422641554d9685c337eb274835fceb9614",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-se-aux-advertised-10-230-255-4.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-se-aux-advertised-10-230-255-4.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-se-aux-advertised-10-230-255-5.json",
+      "originalPrivateEvidenceSha256": "ccf89e3792c7bdd43fa95a8599c60f5881e226135479821369d7c460fd2d612b",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-se-aux-advertised-10-230-255-5.json",
+      "publishedSanitizedSha256": "afdbe5baadad661378b5fe09789065786a3af212fe077c0be8a4aeb31595d8d7",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-se-aux-gateway-learned.json",
+      "originalPrivateEvidenceSha256": "e8f1b1a6390e22980a296a69292043be6a29c660781870e59ea543105ddc52e0",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-se-aux-gateway-learned.json",
+      "publishedSanitizedSha256": "3823c804d96a99b03c44d6189fe21cb18fa24af2324f26aeddd2d34f1861028c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-se-aux-gateway-peers.json",
+      "originalPrivateEvidenceSha256": "6eb717f1c2ed0a8e1043011298eaf25713d063eec54118aea678ce58653c57e7",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-se-aux-gateway-peers.json",
+      "publishedSanitizedSha256": "b12ace176c4ebb6add81057956b2a6d0785057163e663eb64d5a1478beff0e3d",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-se-circuit-primary.json",
+      "originalPrivateEvidenceSha256": "7177c2c8b2ebfbcc720f06da83aff289e49e87349674e1399c701e7468827fed",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-se-circuit-primary.json",
+      "publishedSanitizedSha256": "27f25dab280a30509bc963d4abd82931acffadc28583c11b3df13eb7654ceefd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-se-circuit-secondary.json",
+      "originalPrivateEvidenceSha256": "22a489bc592d3130825596362cd2e8939b0d41df15e318acf8a1a842e562bb30",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-se-circuit-secondary.json",
+      "publishedSanitizedSha256": "76f36dddade31d8d1a5c4f5390453bea4c3e5d82d7baaabbcff9a9a93fcf8559",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-se-hub-rib.json",
+      "originalPrivateEvidenceSha256": "7bc3ff4ce105b1bef10dbeb341ec92fc113f26fd303896223f15b124136264c2",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-se-hub-rib.json",
+      "publishedSanitizedSha256": "0b9306e095a0075cec2b09fb216d950e3dfdd37effc224353eb6602276fcfa1b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-vm-bgp-ne-routing.json",
+      "originalPrivateEvidenceSha256": "2748fdd4e527514b93ad9b1c6bbdb0a0818c24a6e1230fb64e1c0f208cd4c169",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-vm-bgp-ne-routing.json",
+      "publishedSanitizedSha256": "f16a27e69b474d8a2113e7c2ac395a97adbcba213c68d36ea0833c9aef728437",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-vm-bgp-se-routing.json",
+      "originalPrivateEvidenceSha256": "95cee645cb89abb844f2d64bc2ee68d23662d02c998c24a8cf804dba02833f28",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-vm-bgp-se-routing.json",
+      "publishedSanitizedSha256": "12ed7d0499aae8cc08445f316704a344e3a8271be81a2df9bbdb1c7152e7c344",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-vm-nva-ne-routing.json",
+      "originalPrivateEvidenceSha256": "109268df2972bf59c96bca057b8f20a2fdb168c9472c4264255555b6abf9fe9a",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-vm-nva-ne-routing.json",
+      "publishedSanitizedSha256": "04934e50de22e9558a081fba23221f44faa6b4d2aff7a77074a8a1e6e8b0affa",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-vm-nva-se-routing.json",
+      "originalPrivateEvidenceSha256": "3b871d7a8eeaf3b79187f95975f610319f7845b4a58adc66abbc377f6a1a6825",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-vm-nva-se-routing.json",
+      "publishedSanitizedSha256": "f7a4f436f5d2da652c67400a117f08da4a1d9d1c316b4fbb3a28f9520ae70e73",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-vm-static-ne-routing.json",
+      "originalPrivateEvidenceSha256": "d24ee4fcd34f0d083864a5c9aa8e9bfba8f87ddd7f8b4f0fe65e1e31f3b49873",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-vm-static-ne-routing.json",
+      "publishedSanitizedSha256": "dc9d2ca95f4481656f163cae290abde2ce4174f34eb2269327c3a2ccdd38ad9d",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-20261029T2034-vm-static-se-routing.json",
+      "originalPrivateEvidenceSha256": "2a750adaa6b5035b95065bd3c42a2fe54636c4eb60e4d4bef7b24818ef7de925",
+      "publishedFile": "raw-output/I-PRIVATE-20261029T2034-vm-static-se-routing.json",
+      "publishedSanitizedSha256": "ca160a298cad9a346294b38641208a11237ec75bc31b522537b89fdc9269d30b",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-causal-matrix-verification.json",
+      "originalPrivateEvidenceSha256": "f39620267a918b0cea2a7af5f58215159415e09f49de30c5dc5beb49d6c951d0",
+      "publishedFile": "raw-output/I-PRIVATE-causal-matrix-verification.json",
+      "publishedSanitizedSha256": "083a4aa23f04a158de3b3d04f243a1f9a4454b699abd58ed2a8b8c9e4d82bb90",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-native-20261029T202958437Z-result.json",
+      "originalPrivateEvidenceSha256": "2920c06dceb0db70dcfe60a76692a418604a6e83610d559881a1f96640a2766c",
+      "publishedFile": "raw-output/I-PRIVATE-native-20261029T202958437Z-result.json",
+      "publishedSanitizedSha256": "9e10139baedd7564924955f8a62af2302c39f24484a904c06910bc094282624c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-native-20261029T203534638Z-result.json",
+      "originalPrivateEvidenceSha256": "a891ef4d81e7702388ce0bc8c6b223746a2aa0a1225753cd30a543d7bade2f39",
+      "publishedFile": "raw-output/I-PRIVATE-native-20261029T203534638Z-result.json",
+      "publishedSanitizedSha256": "2928d238ae9457c0123a942af8bade5ee3e5dc33a2f0e44b31a2f071aa811cc4",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-native-20261029T205348873Z-result.json",
+      "originalPrivateEvidenceSha256": "cee2665ec35d8ab2538bdc99e0b872683d218ff1e22749f149b708787ac8ab2b",
+      "publishedFile": "raw-output/I-PRIVATE-native-20261029T205348873Z-result.json",
+      "publishedSanitizedSha256": "c4c4557cda523b23626ac8d6171aedcacb76c24555d96fbe6deb4ac4d7f564ae",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-native-20261029T205702382Z-result.json",
+      "originalPrivateEvidenceSha256": "ea163ad3fd74cf4da40a55b9f825ce9cbf11b2924c98b8e4c764c31c920649f3",
+      "publishedFile": "raw-output/I-PRIVATE-native-20261029T205702382Z-result.json",
+      "publishedSanitizedSha256": "734cb98b1521f8dc5705fdfeea52abf4196c2923a9ca3e941638b7975f11e450",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-ne-deny-ne-20261029T205309708Z-result.json",
+      "originalPrivateEvidenceSha256": "0fd5f7ec0355045d991f298bf0cbcc1f86efd6879f408f3f2990ef5e68f2e3e6",
+      "publishedFile": "raw-output/I-PRIVATE-ne-deny-ne-20261029T205309708Z-result.json",
+      "publishedSanitizedSha256": "8599f5bc21a5e758f54eda2ac5bce45c314bf16c341b859cbfc427d0711df433",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-ne-deny-none-20261029T202656639Z-result.json",
+      "originalPrivateEvidenceSha256": "f668f3a70c5e32d73ca7f9688b5fcff80005a58e5289f820751ccb7c0c444ffb",
+      "publishedFile": "raw-output/I-PRIVATE-ne-deny-none-20261029T202656639Z-result.json",
+      "publishedSanitizedSha256": "e96a5ee70ce22bc3a9e58a65e63bbeb5d497e87f335b464ff22d1cf185929c57",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-ne-deny-none-20261029T210546162Z-result.json",
+      "originalPrivateEvidenceSha256": "3ba17f1da343c0d7b0793641ea6ed298bdfab016fc0d8ba5c6a051de27f193a1",
+      "publishedFile": "raw-output/I-PRIVATE-ne-deny-none-20261029T210546162Z-result.json",
+      "publishedSanitizedSha256": "199a5a4be7a82c334dc637c92063dfb5aae40e094952bb228f0e547166600007",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-ne-deny-se-20261029T204344449Z-result.json",
+      "originalPrivateEvidenceSha256": "fb3186706f1bc1c9a1d63ee646fe89bfb14f7c1021ca9af2add0cc9843b6c0eb",
+      "publishedFile": "raw-output/I-PRIVATE-ne-deny-se-20261029T204344449Z-result.json",
+      "publishedSanitizedSha256": "4ebb9e989e74ef0c4d12b4635a9ccdcf483f93c75994593fa27b37d3514969ff",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-prediction.json",
+      "originalPrivateEvidenceSha256": "1e5fb128f56c6d76ffe9dd57a953719485a033705928e4596f1f491cfa2bef44",
+      "publishedFile": "raw-output/I-PRIVATE-prediction.json",
+      "publishedSanitizedSha256": "2aadab8949f3b43addb5c337a7f8ae5d8779e074418bf92f85bbdb5ef75b2668",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-se-deny-ne-20261029T205310224Z-result.json",
+      "originalPrivateEvidenceSha256": "7cf9ff7295516af19fed150b36ebe5ad1c315b8f6d640d4b9b51861d641d336a",
+      "publishedFile": "raw-output/I-PRIVATE-se-deny-ne-20261029T205310224Z-result.json",
+      "publishedSanitizedSha256": "33b9d2ec4215ea4c0c44e266c668335b70f441947e8706a2a3c8cdb427ff9599",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-se-deny-none-20261029T202656850Z-result.json",
+      "originalPrivateEvidenceSha256": "50cf865cbef45c3bfd3bec01fa97e7ba589b3b7958ce8dd1cd151da0f71be917",
+      "publishedFile": "raw-output/I-PRIVATE-se-deny-none-20261029T202656850Z-result.json",
+      "publishedSanitizedSha256": "5665ad0e78b0931d84dd3f06e05c9c2fb0cae6d2d31bce8cf3d686f7ae6a315e",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-se-deny-none-20261029T210545612Z-result.json",
+      "originalPrivateEvidenceSha256": "860f6d68d36838e14815352051fb1fa4a00c59155886a674e19804ca3a3f8de1",
+      "publishedFile": "raw-output/I-PRIVATE-se-deny-none-20261029T210545612Z-result.json",
+      "publishedSanitizedSha256": "ed88da6cae6846038dbed4298c35ae98a7ad953f498d21b34b28a9fc4c895806",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "I-PRIVATE-se-deny-se-20261029T204344449Z-result.json",
+      "originalPrivateEvidenceSha256": "fef515aeda7022eb7f39552a6facbd01f8528fb001ee390298639e5ccfa31fbe",
+      "publishedFile": "raw-output/I-PRIVATE-se-deny-se-20261029T204344449Z-result.json",
+      "publishedSanitizedSha256": "982eb2407a0b8d6a9c0bbfe57f9ce7d02ee38cb5811b781e3c095e4381d5470e",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "intent-pre-observation-prediction-hashes.json",
+      "originalPrivateEvidenceSha256": "719f6a91feca1bbea1c96e6851388e5886726042175615c63afe37749af6ba33",
+      "publishedFile": "raw-output/intent-pre-observation-prediction-hashes.json",
+      "publishedSanitizedSha256": "a43d51ba6e1bfbee1bf3b30bbdc6082a5fb10f1f25206a90712e9633655c259c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "intent-wire-subset-prediction-hashes.json",
+      "originalPrivateEvidenceSha256": "e1ba3a569bf3c46bad6969b54e9db210a264ef9b60e8997c9a0cf18f8793e7d1",
+      "publishedFile": "raw-output/intent-wire-subset-prediction-hashes.json",
+      "publishedSanitizedSha256": "f14272d14f8f78019033edc64a739cd308763d204063736a642318443400c340",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-COMBINED-1793311636361-wire-comparison.json",
+      "originalPrivateEvidenceSha256": "411e5e1e4f07e908ab0e92af05223baca42c9cfa4618943e1e8291fe2b079417",
+      "publishedFile": "raw-output/J-I-COMBINED-1793311636361-wire-comparison.json",
+      "publishedSanitizedSha256": "495d56c5ba63febb6df10b0321a0d17eddec1768529bf2de6ac1d9e537b04b1c",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-COMBINED-WIRE-SUBSET-20261029T2203-20261029T220516953Z-mcr-received.json",
+      "originalPrivateEvidenceSha256": "d5fbf25bb50526f7a3bc3f217c5a7f92bf48df5b35a9558b837512f296060afe",
+      "publishedFile": "raw-output/J-I-COMBINED-WIRE-SUBSET-20261029T2203-20261029T220516953Z-mcr-received.json",
+      "publishedSanitizedSha256": "0eecf9c6c1058d96822304de489d8a61cf1c777f8fd699f02577ac36ee8ab027",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-COMBINED-WIRE-SUBSET-prediction.json",
+      "originalPrivateEvidenceSha256": "2f154d8e84a68aac4ad0451321f669d29d43365876b42fdc89c5167179248b0e",
+      "publishedFile": "raw-output/J-I-COMBINED-WIRE-SUBSET-prediction.json",
+      "publishedSanitizedSha256": "55bb7e82836690204053796d5f0767f57402a59a44fa1b86028f11209cc53cfe",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-INTERNET-1793309031045-wire-comparison.json",
+      "originalPrivateEvidenceSha256": "2e1fcde1821daf27a31b4d7e87bacac44947f7955b3a99a3a0aed65ef634063a",
+      "publishedFile": "raw-output/J-I-INTERNET-1793309031045-wire-comparison.json",
+      "publishedSanitizedSha256": "13ded325fd4bd963b24d8b2db80035af7039cca4228ef2e326ad21590efe74d2",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-INTERNET-WIRE-SUBSET-20261029T2115-20261029T211813276Z-mcr-received.json",
+      "originalPrivateEvidenceSha256": "f7632a858f6cc11c9aae57feb79efc27a393ed9c68e70fae6d8c6743e1435af0",
+      "publishedFile": "raw-output/J-I-INTERNET-WIRE-SUBSET-20261029T2115-20261029T211813276Z-mcr-received.json",
+      "publishedSanitizedSha256": "032e1e8f39c5dfccfe0cda9daaf6deb493396d9aa36940a9c8d6286514115c42",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-INTERNET-WIRE-SUBSET-prediction.json",
+      "originalPrivateEvidenceSha256": "5b271fc9a54211853a2af5d4ffa2a4fad3dd5e5bb58e18c4dce25d85393e2db3",
+      "publishedFile": "raw-output/J-I-INTERNET-WIRE-SUBSET-prediction.json",
+      "publishedSanitizedSha256": "e2a872e20d3a800aef9a830867abcbd20f2aaa24bcbe3559aa52361e1b495181",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-NONE-1793305022873-wire-comparison.json",
+      "originalPrivateEvidenceSha256": "af61f4528293be55d77731e2477db15d34138795adb8a83801c24f215901e6f0",
+      "publishedFile": "raw-output/J-I-NONE-1793305022873-wire-comparison.json",
+      "publishedSanitizedSha256": "11dff4d3dc79cd66d9489274e2a62fb9a442d97786fb5f7de3cb737d8ba93254",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-NONE-WIRE-SUBSET-20261029T201455102Z-mcr-received.json",
+      "originalPrivateEvidenceSha256": "1ec6b940595f07b3d8d011928daba957f0737c4355d01f2a96c6596d389c1363",
+      "publishedFile": "raw-output/J-I-NONE-WIRE-SUBSET-20261029T201455102Z-mcr-received.json",
+      "publishedSanitizedSha256": "a9b8d020d760d34f38ca96e39339ba4928c3d9301abc9336e753f924e1d272d8",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-NONE-WIRE-SUBSET-prediction.json",
+      "originalPrivateEvidenceSha256": "4dc395dcd984298948852424cbdec195a5bbae4bc9d151506db5cd9d0d3bd812",
+      "publishedFile": "raw-output/J-I-NONE-WIRE-SUBSET-prediction.json",
+      "publishedSanitizedSha256": "26f0b25d3a8f9f84e6f9dbba80c137011718be55b9cde609825c3f322c6d5d81",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-PRIVATE-1793306461388-wire-comparison.json",
+      "originalPrivateEvidenceSha256": "d7de45db260bb70718226ef77d437de7aac5aab1d850dfcb312d9b10b5c612f1",
+      "publishedFile": "raw-output/J-I-PRIVATE-1793306461388-wire-comparison.json",
+      "publishedSanitizedSha256": "e9ef17f08deb31f96e99fe68694269d5821a82b67747f3314adae34ca7e8e661",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-PRIVATE-WIRE-SUBSET-20261029T203840783Z-mcr-received.json",
+      "originalPrivateEvidenceSha256": "b47c24ebfe6706f4dbceec06b939cd14cdb662d58d82a866d36e9c3a2bc5b95a",
+      "publishedFile": "raw-output/J-I-PRIVATE-WIRE-SUBSET-20261029T203840783Z-mcr-received.json",
+      "publishedSanitizedSha256": "e4ae8e7d80a1582a2145d02a4f972be31b568977c49a9e955bae13fe0e68018d",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "J-I-PRIVATE-WIRE-SUBSET-prediction.json",
+      "originalPrivateEvidenceSha256": "ea91eafc492c02b1a7d99b6fca9db0eeb7a8829f6f5c3e1a59736bd8015351cf",
+      "publishedFile": "raw-output/J-I-PRIVATE-WIRE-SUBSET-prediction.json",
+      "publishedSanitizedSha256": "bf72bff340c01a67b06d2f8d31e156794432715bd2f788ac3212131cb27e5b05",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "K-PRIVATE-FIREWALL-FALLBACK-native-verification.json",
+      "originalPrivateEvidenceSha256": "5b70939e3dffae7362763b740ff276240e72bf400151766eddf176210c92a11c",
+      "publishedFile": "raw-output/K-PRIVATE-FIREWALL-FALLBACK-native-verification.json",
+      "publishedSanitizedSha256": "bdabd64f677edb163f295b5034ee068c4aac9e32493bd01c0c1dbefb20e45ca6",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "K-PRIVATE-FIREWALL-FALLBACK-prediction.json",
+      "originalPrivateEvidenceSha256": "285ca71ccd270cc2a05d5bb065e51d71fce63c5c5977116dc5b3430ee91f2d38",
+      "publishedFile": "raw-output/K-PRIVATE-FIREWALL-FALLBACK-prediction.json",
+      "publishedSanitizedSha256": "38b85db09234a9e9f14625974ff67249090c1325c0207c41976065b5d1cdf10a",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "K-PRIVATE-FIREWALL-FALLBACK-production-verification.json",
+      "originalPrivateEvidenceSha256": "0b95abab0f4984307d703b807c01814d5d0b8a8b94266858bf3795ec05db1729",
+      "publishedFile": "raw-output/K-PRIVATE-FIREWALL-FALLBACK-production-verification.json",
+      "publishedSanitizedSha256": "fc009d97194ff36202872b654dab0eaa497c33195818c1e96bcda8ceea701622",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "post-fix-pre-observation-prediction-hashes.json",
+      "originalPrivateEvidenceSha256": "ad283531138020bdc6ab4d9340040c6c3ceec05f87a4e41f16892e6d590fa3f1",
+      "publishedFile": "raw-output/post-fix-pre-observation-prediction-hashes.json",
+      "publishedSanitizedSha256": "756328222825b75a2fe44e951ecd4265b604c822474582dc01bc481020186895",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "pre-observation-prediction-hashes.json",
+      "originalPrivateEvidenceSha256": "6209b8989ccc62c9c7d66eaf7d0c297a4204527a8b2b0ff200a24f288294c2c9",
+      "publishedFile": "raw-output/pre-observation-prediction-hashes.json",
+      "publishedSanitizedSha256": "e67a45353812d504d2c367aa6bcdb76dd6f8fc0403229678303722e14def1a38",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "private-firewall-fallback-prediction-hash.json",
+      "originalPrivateEvidenceSha256": "2c35bfda971cc6cbce26c6778589c8755a08a772a4b12c17a70147f70e09aaa9",
+      "publishedFile": "raw-output/private-firewall-fallback-prediction-hash.json",
+      "publishedSanitizedSha256": "3adc25a77348ef471c3a01cabe46913c3ab8946b0d5a7f05c3957da06322d0bd",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "provider-cancellation-refresh-20261029T2101-summary.json",
+      "originalPrivateEvidenceSha256": "63d2a9ef5938c6e1b71f4ea8682e975071fe935ba99d8c84867d4b9be06e4882",
+      "publishedFile": "raw-output/provider-cancellation-refresh-20261029T2101-summary.json",
+      "publishedSanitizedSha256": "dd3906b49b5804a039c2b15544de49c883535dce69fcae5d589aad385d36a02e",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "provider-cancellation-refresh-20261029T221026979Z-summary.json",
+      "originalPrivateEvidenceSha256": "24e29c247725701d777a2a3e72763cd7190e5d52e776df409cea7c2aca946a8b",
+      "publishedFile": "raw-output/provider-cancellation-refresh-20261029T221026979Z-summary.json",
+      "publishedSanitizedSha256": "b688830b4cefc5ef2b05d201b95910df2bbba74422dbc2e7cea4452a82a5b093",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "provider-preservation-capture-20261029T222204120Z-result.json",
+      "originalPrivateEvidenceSha256": "4c30af3963f54555dd5d8c388820c99e966c601fae478ee9fb69af82c67cca5f",
+      "publishedFile": "raw-output/provider-preservation-capture-20261029T222204120Z-result.json",
+      "publishedSanitizedSha256": "4004634d58878a996003304a8475a6a55cf3ea14678ed3ce64ddbb47e38acc28",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "provider-preservation-verify-20261029T232234473Z-result.json",
+      "originalPrivateEvidenceSha256": "7abb4b0f8b0de9b6baa7d7bb8d9799e1777b8a670cba0dd402ed8bcafd816695",
+      "publishedFile": "raw-output/provider-preservation-verify-20261029T232234473Z-result.json",
+      "publishedSanitizedSha256": "c35d5ff8e1ea8c427a960c4a628f42a7f888962653600101128ff719504d27af",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "public-probe-return-guard-20261029T212416233Z-result.json",
+      "originalPrivateEvidenceSha256": "55b22ef85e5558173a221b73b63d70b7ac145be054360187c06585de50a86c0b",
+      "publishedFile": "raw-output/public-probe-return-guard-20261029T212416233Z-result.json",
+      "publishedSanitizedSha256": "2e00cc0e4694c09087e8a62de953e2bbfea2c791d06ae447c742c24ffbe0ac21",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    },
+    {
+      "sourceFilename": "static-vpn-baseline-verification.json",
+      "originalPrivateEvidenceSha256": "49e4e147837576fc4e09c7b7af82173bbb0ab16a5ed38e877f7d7086ff4fb343",
+      "publishedFile": "raw-output/static-vpn-baseline-verification.json",
+      "publishedSanitizedSha256": "8aeb5bb36236ae511a2f7ef1a427e2c19f1cc6a176dbd28b4af0e92bafda4856",
+      "scope": "Sanitized derivative, not byte-identical to the private original."
+    }
+  ]
+}

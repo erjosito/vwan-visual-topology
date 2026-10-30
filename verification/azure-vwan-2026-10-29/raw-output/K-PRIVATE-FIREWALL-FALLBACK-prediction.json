@@ -1,0 +1,240 @@
+{
+  "case": "K-PRIVATE-FIREWALL-FALLBACK",
+  "predictedAtUtc": "2026-10-29T20:50:38.644Z",
+  "commit": "7ff490f71906a51a737ce10894cf58a850edd6d0",
+  "sourceFile": "I-PRIVATE-prediction.json",
+  "sourceSha256": "1e5fb128f56c6d76ffe9dd57a953719485a033705928e4596f1f491cfa2bef44",
+  "topology": {
+    "version": 1,
+    "name": "Owned two-hub routing-intent differential: I-PRIVATE",
+    "hubs": [
+      {
+        "id": "se",
+        "name": "hub-se",
+        "region": "Sweden Central",
+        "preference": "ExpressRoute",
+        "routingIntent": {
+          "private": true,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      },
+      {
+        "id": "ne",
+        "name": "hub-ne",
+        "region": "North Europe",
+        "preference": "ExpressRoute",
+        "routingIntent": {
+          "private": true,
+          "internet": false,
+          "privatePrefixes": []
+        }
+      }
+    ],
+    "sites": [
+      {
+        "id": "site-se-ExpressRoute",
+        "name": "se symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64550,
+        "prefixes": [
+          "10.230.0.0/16"
+        ]
+      },
+      {
+        "id": "site-se-VPN",
+        "name": "se VPN route source",
+        "asn": 65011,
+        "prefixes": []
+      },
+      {
+        "id": "site-ne-ExpressRoute",
+        "name": "ne symbolic ER ingress (auxiliary Azure source)",
+        "asn": 64551,
+        "prefixes": [
+          "10.231.0.0/16"
+        ]
+      },
+      {
+        "id": "site-ne-VPN",
+        "name": "ne VPN route source",
+        "asn": 65012,
+        "prefixes": []
+      },
+      {
+        "id": "site-se-VPN-static",
+        "name": "Owned se static VPN endpoint",
+        "asn": 65021,
+        "prefixes": [],
+        "vpnStaticRoutes": [
+          {
+            "id": "se-static-prefix",
+            "prefix": "10.62.1.0/24",
+            "connectionId": "se-VPN-static"
+          }
+        ]
+      },
+      {
+        "id": "site-ne-VPN-static",
+        "name": "Owned ne static VPN endpoint",
+        "asn": 65022,
+        "prefixes": [],
+        "vpnStaticRoutes": [
+          {
+            "id": "ne-static-prefix",
+            "prefix": "10.62.2.0/24",
+            "connectionId": "ne-VPN-static"
+          }
+        ]
+      }
+    ],
+    "spokes": [
+      {
+        "id": "spoke-se",
+        "name": "Sweden workload",
+        "hubId": "se",
+        "prefixes": [
+          "10.210.0.0/16"
+        ]
+      },
+      {
+        "id": "spoke-ne",
+        "name": "North Europe workload",
+        "hubId": "ne",
+        "prefixes": [
+          "10.211.0.0/16"
+        ]
+      }
+    ],
+    "connections": [
+      {
+        "id": "se-ExpressRoute",
+        "name": "se ExpressRoute ingress",
+        "hubId": "se",
+        "siteId": "site-se-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "se-er-unique",
+            "prefix": "10.230.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "se-VPN",
+        "name": "se VPN ingress",
+        "hubId": "se",
+        "siteId": "site-se-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "se-vpn-unique",
+            "prefix": "10.61.1.0/24",
+            "asPath": [
+              65011
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-ExpressRoute",
+        "name": "ne ExpressRoute ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-ExpressRoute",
+        "transport": "ExpressRoute",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "ne-er-unique",
+            "prefix": "10.231.0.0/16",
+            "asPath": [
+              12076,
+              12076
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-VPN",
+        "name": "ne VPN ingress",
+        "hubId": "ne",
+        "siteId": "site-ne-VPN",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [
+          {
+            "id": "ne-vpn-unique",
+            "prefix": "10.61.2.0/24",
+            "asPath": [
+              65012
+            ],
+            "kind": "bgp"
+          }
+        ],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "se-VPN-static",
+        "name": "se static VPN",
+        "hubId": "se",
+        "siteId": "site-se-VPN-static",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      },
+      {
+        "id": "ne-VPN-static",
+        "name": "ne static VPN",
+        "hubId": "ne",
+        "siteId": "site-ne-VPN-static",
+        "transport": "VPN",
+        "enabled": true,
+        "routes": [],
+        "inbound": [],
+        "outbound": [],
+        "learnSiteRoutes": false
+      }
+    ],
+    "siteLinks": [],
+    "routeMaps": [],
+    "erLocations": [],
+    "erLinks": []
+  },
+  "defaults": [
+    {
+      "region": "se",
+      "firewallDefaultType": "Internet",
+      "firewallDefaultAsPath": [],
+      "hubDefault": false
+    },
+    {
+      "region": "ne",
+      "firewallDefaultType": "Internet",
+      "firewallDefaultAsPath": [],
+      "hubDefault": false
+    }
+  ],
+  "scope": "Separate post-fix default-only repeat on unchanged original private-intent inputs. Not blind ranking, full-table conformance, endpoint delivery, forced-tunnel validation or default advertisement certification. Original I/J predictions remain unchanged."
+}

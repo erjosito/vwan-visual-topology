@@ -1,0 +1,9 @@
+{
+  "status": "pass",
+  "checkedAtUtc": "2026-10-29T19:32:42.995Z",
+  "predictionSha256": "c92eca81769495950323f4284431fee69b90b58467cbbb68d233c832ff4a3f1c",
+  "selectedHubs": 2,
+  "persistedAfterReload": true,
+  "externalRequests": 0,
+  "scope": "Actual production UI preferred paths for immutable physical-source post-fix inputs; independent native comparison required. Synthetic ER endpoint delivery excluded."
+}

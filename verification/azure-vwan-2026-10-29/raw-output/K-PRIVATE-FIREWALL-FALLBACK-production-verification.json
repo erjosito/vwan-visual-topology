@@ -1,0 +1,10 @@
+{
+  "status": "pass",
+  "checkedAtUtc": "2026-10-29T20:53:52.734Z",
+  "predictionSha256": "285ca71ccd270cc2a05d5bb065e51d71fce63c5c5977116dc5b3430ee91f2d38",
+  "hubs": 2,
+  "bothTableViewsVerified": true,
+  "persistedAfterReload": true,
+  "externalRequests": 0,
+  "scope": "Actual production UI shows firewall-only Internet defaults and no hub default on both unchanged private-intent hubs, before and after reload. Independent native verification required."
+}
