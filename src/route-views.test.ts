@@ -3,10 +3,72 @@ import { example } from './model'
 import type { RouteMapRule, RouterSelection, Topology } from './model'
 import { simulate } from './routing'
 import { azureRoutesAtSites } from './paths'
-import { neighborRoutes } from './route-views'
+import { erLocationBgpTable, neighborRoutes } from './route-views'
 
 const rule = (prefix: string, action: RouteMapRule['action']): RouteMapRule => ({
   id: prefix, prefixes: [prefix], match: 'equals', action, summaryPrefixes: ['10.0.0.0/8'], prepend: [64496], nextStep: 'terminate',
+})
+
+describe('ER location BGP tables', () => {
+  const network = () => {
+    const t = structuredClone(example)
+    t.connections = []
+    t.sites[0].prefixes = ['10.80.0.0/16']
+    t.erLocations = [{ id: 'er', name: 'ER location' }]
+    t.erLinks = [
+      { id: 'hub-er', name: 'Hub attachment', locationId: 'er', hubId: 'eu', enabled: true, routes: [], learnSiteRoutes: false },
+      { id: 'parallel-hub-er', name: 'Parallel hub attachment', locationId: 'er', hubId: 'eu', enabled: true, routes: [], learnSiteRoutes: false },
+      { id: 'primary-er', name: 'Primary circuit', locationId: 'er', siteId: 'dc', enabled: true, routes: [], learnSiteRoutes: true },
+      { id: 'backup-er', name: 'Backup circuit', locationId: 'er', siteId: 'ny', enabled: true, learnSiteRoutes: false,
+        routes: [{ id: 'backup-prefix', prefix: '10.80.0.0/16', kind: 'bgp' as const, asPath: [65020, 65020] }] },
+      { id: 'equal-er', name: 'Equal circuit', locationId: 'er', siteId: 'branch', enabled: true, learnSiteRoutes: false,
+        routes: [{ id: 'equal-prefix', prefix: '10.80.0.0/16', kind: 'bgp' as const, asPath: [65030] }] },
+    ]
+    return t
+  }
+  it('groups actual learned candidates with preferred paths, alternatives and distinct parallel neighbors', () => {
+    const t = network(), simulation = simulate(t)
+    const original = JSON.stringify({ t, simulation })
+    const table = erLocationBgpTable(t, simulation, 'er')
+    const onprem = table.find((decision) => decision.prefix === '10.80.0.0/16')!
+    expect(onprem.candidates.map((route) => route.connectionId)).toEqual(['primary-er', 'backup-er', 'equal-er'])
+    expect(onprem.selected.map((route) => route.connectionId)).toEqual(['primary-er', 'equal-er'])
+    expect(onprem.selected.map((route) => route.asPath)).toEqual([[65010], [65030]])
+    expect(onprem.explanation.join(' ')).toContain('2 equal-cost paths')
+    const azure = table.find((decision) => decision.prefix === '10.1.0.0/16')!
+    expect(azure.selected.map((route) => route.connectionId)).toEqual(['hub-er', 'parallel-hub-er'])
+    expect(new Set(azure.candidates.map((route) => route.key)).size).toBe(2)
+    expect(azure.candidates.every((route) => route.erHubLinkId === route.connectionId && !route.erSiteLinkId)).toBe(true)
+    expect(JSON.stringify({ t, simulation })).toBe(original)
+    expect(erLocationBgpTable(t, simulation, 'missing-location')).toEqual([])
+  })
+  it('respects neighbor outbound filters and promotes surviving paths after link withdrawals', () => {
+    const t = network()
+    assign(t, { kind: 'site', id: 'dc' }, 'primary-er', 'outbound', [rule('10.80.0.0/16', 'drop')])
+    t.erLinks!.find((link) => link.id === 'equal-er')!.enabled = false
+    const table = erLocationBgpTable(t, simulate(t), 'er')
+    expect(table.find((decision) => decision.prefix === '10.80.0.0/16')!.selected.map((route) => route.connectionId)).toEqual(['backup-er'])
+    t.erLinks!.find((link) => link.id === 'backup-er')!.enabled = false
+    expect(erLocationBgpTable(t, simulate(t), 'er').some((decision) => decision.prefix === '10.80.0.0/16')).toBe(false)
+    t.erLinks!.forEach((link) => { link.enabled = false })
+    expect(erLocationBgpTable(t, simulate(t), 'er')).toEqual([])
+  })
+  it('compares hub and site advertisements by AS path without applying a hub system-route override', () => {
+    const t = network()
+    t.erLinks!.find((link) => link.id === 'primary-er')!.routes.push({
+      id: 'competing-prefix', prefix: '10.1.0.0/16', kind: 'bgp', asPath: [65010],
+    })
+    for (const id of ['hub-er', 'parallel-hub-er']) {
+      assign(t, { kind: 'hub', id: 'eu' }, id, 'outbound', [
+        { ...rule('10.1.0.0/16', 'prepend'), prepend: [64496, 64496, 64496] },
+      ])
+    }
+    const simulation = simulate(t)
+    const decision = erLocationBgpTable(t, simulation, 'er').find((decision) => decision.prefix === '10.1.0.0/16')!
+    expect(decision.candidates).toHaveLength(3)
+    expect(decision.selected.map((route) => route.connectionId)).toEqual(['primary-er'])
+    expect(simulation.bgpTables.eu.find((decision) => decision.prefix === '10.1.0.0/16')!.selected[0].kind).toBe('system')
+  })
 })
 function assign(t: Topology, owner: RouterSelection, connectionId: string, direction: 'inbound' | 'outbound', rules: RouteMapRule[]) {
   const id = `${owner.id}-${connectionId}-${direction}`

@@ -14,7 +14,7 @@ import { RouteMapPreview } from './RouteMapPreview'
 
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
 interface Props {
-  topology: Topology; hubId: string; selected: Candidate[]; selectedSiteRoutes?: SiteRoute[]
+  topology: Topology; hubId: string; erLocationId?: string; selected: Candidate[]; selectedSiteRoutes?: SiteRoute[]
   sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; layout?: LayoutMode; zoom?: number
   paths: NodePath[]; tracing: boolean; sourceSpokeIds?: string[]; selection?: ObjectSelection
   onObjectClick: (selection: ObjectSelection) => void; onObjectContextMenu: (menu: DiagramContextMenu) => void
@@ -29,7 +29,7 @@ function NodeIcon({ kind, secured = false }: { kind: 'hub' | 'spoke' | 'site' | 
   </g>
 }
 
-export function TopologyDiagram({ topology, hubId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
+export function TopologyDiagram({ topology, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
   const svg = useRef<SVGSVGElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -120,6 +120,12 @@ export function TopologyDiagram({ topology, hubId, selected, selectedSiteRoutes,
     }
   } else {
     for (const route of selected) {
+      if (erLocationId) {
+        const link = topology.erLinks?.find((link) => link.id === route.connectionId)
+        attachmentTravel(route.connectionId, !!link?.hubId)
+        siteTravel(route.siteLinkIds, route.sitePath)
+        continue
+      }
       if (route.remote) direct(`interhub:${edgeKey(hubId, route.originHubId)}`, hubId)
       if (route.erHubLinkId && route.erSiteLinkId) {
         attachmentTravel(route.erHubLinkId); attachmentTravel(route.erSiteLinkId)

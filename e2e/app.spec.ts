@@ -262,9 +262,9 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   await expect(page.locator('.effective-routes tr[data-prefix="10.1.0.0/16"]')).toHaveCount(0)
   await page.keyboard.press('Escape')
   await action(page, 'Select ER location Frankfurt ER', 'BGP table')
-  await expect(dialog(page, 'BGP table · Frankfurt ER')).toContainText('location-wide MSEE BGP best-path table')
-  await page.getByRole('button', { name: 'BGP table · Europe hub · Frankfurt to Europe', exact: true }).click()
-  await expect(dialog(page, 'BGP table · Europe hub')).toBeVisible()
+  await expect(dialog(page, 'BGP table · Frankfurt ER').getByRole('table')).toBeVisible()
+  await expect(page.locator('.effective-routes tr[data-prefix="10.88.0.0/16"][data-preferred="true"]')).toContainText('London datacenter')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.88.0.0/16"] .as-path')).toHaveText('65010 65010')
   await page.keyboard.press('Escape')
   await (await pathMenu(page, 'Select site London datacenter', 'to', 'Americas applications (spoke)')).getByRole('menuitem', { name: '10.2.0.0/16', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Reachable')
@@ -305,6 +305,63 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   expect((await readTopology(page)).sites).toHaveLength(3)
   expect((await readTopology(page)).sites[0].routeMapAssignments).toEqual([])
   expect((await readTopology(page)).hubs[0].routeMapAssignments).toEqual([])
+})
+
+test('ER BGP table shows best paths, alternatives and ties, filters prefixes and withdraws disabled neighbors', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.connections = []
+  topology.sites[0].prefixes = ['10.80.0.0/16']
+  topology.erLocations = [{ id: 'er', name: 'Test ER location' }]
+  topology.erLinks = [
+    { id: 'er-hub', name: 'Azure attachment', locationId: 'er', hubId: 'eu', enabled: true, routes: [], learnSiteRoutes: false },
+    { id: 'er-primary', name: 'Primary circuit', locationId: 'er', siteId: 'dc', enabled: true, routes: [], learnSiteRoutes: true },
+    { id: 'er-backup', name: 'Backup circuit', locationId: 'er', siteId: 'ny', enabled: true, learnSiteRoutes: false,
+      routes: [{ id: 'backup-prefix', prefix: '10.80.0.0/16', kind: 'bgp', asPath: [65020, 65020] }] },
+    { id: 'er-equal', name: 'Equal circuit', locationId: 'er', siteId: 'branch', enabled: true, learnSiteRoutes: false,
+      routes: [{ id: 'equal-prefix', prefix: '10.80.0.0/16', kind: 'bgp', asPath: [65030] }] },
+  ]
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto('/'); await importTopology(page, topology)
+  const original = await readTopology(page)
+  await action(page, 'Select ER location Test ER location', 'BGP table')
+  const table = dialog(page, 'BGP table · Test ER location')
+  await expect(table.getByRole('table')).toBeVisible()
+  await expect(page.getByLabel('Inspect router', { exact: true })).toHaveValue('erLocation:er')
+  await expect(table.locator('tr[data-prefix="10.80.0.0/16"]')).toHaveCount(3)
+  await expect(table.locator('tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toHaveCount(2)
+  await expect(table.locator('tr[data-prefix="10.80.0.0/16"][data-preferred="false"]')).toContainText('Backup circuit')
+  await expect(table.locator('tr[data-prefix="10.1.0.0/16"]')).toContainText('Europe hub')
+  await table.getByLabel('Filter by prefix', { exact: true }).fill('10.80')
+  await expect(table.locator('tr[data-prefix]')).toHaveCount(3)
+  await table.locator('.prefix-button').click()
+  await expect(page.getByTestId('er-link-er-primary')).toHaveClass(/preferred-link/)
+  await expect(page.getByTestId('er-link-er-equal')).toHaveClass(/preferred-link/)
+  await expect(page.getByTestId('er-link-er-backup')).not.toHaveClass(/preferred-link/)
+  await expect(page.getByTestId('er-link-er-hub')).not.toHaveClass(/preferred-link/)
+  await expect(page.locator('.path-flow-dots[data-link-id="er-primary"]')).toHaveAttribute('data-from-id', 'er')
+  await table.getByLabel('Filter by prefix', { exact: true }).fill('10.1.')
+  await table.locator('.prefix-button').click()
+  await expect(page.getByTestId('er-link-er-hub')).toHaveClass(/preferred-link/)
+  await expect(page.locator('.path-flow-dots[data-link-id="er-hub"]')).toHaveAttribute('data-from-id', 'er')
+  await table.getByLabel('Filter by prefix', { exact: true }).fill('203.0.113')
+  await expect(table.locator('tr[data-prefix]')).toHaveCount(0)
+  await expect(table).toContainText('No routes match the current filters.')
+  await table.getByLabel('Filter by prefix', { exact: true }).fill('10.80')
+  await table.locator('.prefix-button').click()
+  await page.screenshot({ path: 'test-results/er-location-bgp-table.png', fullPage: true })
+  expect(await readTopology(page)).toEqual(original)
+  await action(page, 'Edit ER connection Primary circuit', 'Disable connection')
+  await action(page, 'Edit ER connection Equal circuit', 'Disable connection')
+  await action(page, 'Select ER location Test ER location', 'BGP table')
+  await expect(table.locator('tr[data-prefix="10.80.0.0/16"]')).toHaveCount(1)
+  await expect(table.locator('tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toContainText('Backup circuit')
+  await action(page, 'Edit ER connection Backup circuit', 'Disable connection')
+  await action(page, 'Edit ER connection Azure attachment', 'Disable connection')
+  await action(page, 'Select ER location Test ER location', 'BGP table')
+  await table.getByLabel('Filter by prefix', { exact: true }).fill('')
+  await expect(table.getByRole('table')).toBeVisible()
+  await expect(table.locator('tr[data-prefix]')).toHaveCount(0)
+  await expect(table).toContainText('No routes available on this router.')
 })
 
 test('nested Everywhere paths retain per-prefix reachability and replace the standalone bulk action', async ({ page }) => {

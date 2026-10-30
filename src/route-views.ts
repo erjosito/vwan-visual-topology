@@ -1,8 +1,9 @@
 import type { ObjectSelection, RouterSelection, Topology } from './model'
-import type { Candidate, Simulation } from './routing'
+import type { Candidate, Decision, Simulation } from './routing'
 import type { SiteRoute } from './bgp'
 import { advertiseSiteRoutes, applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
 import { azureRoutesAtSites } from './paths'
+import { cidr } from './validation'
 
 export type RouteMode = 'bgp' | 'learned' | 'advertised'
 export type RouteStage = 'before' | 'after'
@@ -11,6 +12,30 @@ export interface NeighborRoutes {
   name: string
   before: (Candidate | SiteRoute)[]
   after: (Candidate | SiteRoute)[]
+}
+
+export function erLocationBgpTable(topology: Topology, simulation: Simulation, locationId: string): Decision[] {
+  const candidates = neighborRoutes(topology, simulation, { kind: 'erLocation', id: locationId }, 'learned')
+    .flatMap((peer) => {
+      const link = topology.erLinks!.find((link) => link.id === peer.id)!
+      return peer.after.filter((route): route is Candidate => 'transport' in route).map((route): Candidate => ({
+        ...route, key: `${link.id}:${route.key}`, connectionId: link.id,
+        kind: 'bgp', transport: 'ExpressRoute', remote: false, erLocationId: locationId,
+        erHubLinkId: link.hubId ? link.id : undefined, erSiteLinkId: link.siteId ? link.id : undefined,
+        sitePath: link.siteId ? route.sitePath : undefined, siteLinkIds: link.siteId ? route.siteLinkIds : undefined,
+      }))
+    })
+  return [...new Set(candidates.map((route) => route.prefix))]
+    .sort((a, b) => cidr(a)!.network - cidr(b)!.network || cidr(a)!.length - cidr(b)!.length)
+    .map((prefix) => {
+      const routes = candidates.filter((route) => route.prefix === prefix)
+      const shortest = Math.min(...routes.map((route) => route.asPath.length))
+      const selected = routes.filter((route) => route.asPath.length === shortest)
+      return { prefix, candidates: routes, selected, explanation: [
+        routes.length === 1 ? 'Only available path.' : `Shortest ER AS path (${shortest} ASNs).`,
+        ...(selected.length > 1 ? [`${selected.length} equal-cost paths remain; no single traffic hash is predicted.`] : []),
+      ] }
+    })
 }
 
 export function neighborRoutes(topology: Topology, simulation: Simulation, router: ObjectSelection,
