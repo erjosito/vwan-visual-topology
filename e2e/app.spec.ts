@@ -126,6 +126,66 @@ test('zoom buttons stay synchronized and nodes can use both canvas sides in eith
   }
 })
 
+test('highlighted paths move subtle dots in the actual traffic direction in either layout', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto('/')
+  await expect(page.locator('.path-flow-dots')).toHaveCount(0)
+  for (const layout of ['layered', 'constellation']) {
+    await page.getByLabel('Visualization mode').selectOption(layout)
+    for (const reverse of [false, true]) {
+      await (await pathMenu(page, reverse ? 'Select spoke Americas applications' : 'Select spoke Europe applications', 'to',
+        reverse ? 'Europe applications (spoke)' : 'Americas applications (spoke)'))
+        .getByRole('menuitem', { name: reverse ? '10.1.0.0/16' : '10.2.0.0/16', exact: true }).click()
+      await expect(page.locator('.path-flow-dots')).toHaveCount(3)
+      const source = reverse ? 'us' : 'eu', destination = reverse ? 'eu' : 'us'
+      for (const [id, from, to, backwards] of [
+        [`${source}-apps`, `${source}-apps`, source, false],
+        ['interhub:eu:us', source, destination, reverse],
+        [`${destination}-apps`, destination, `${destination}-apps`, true],
+      ] as const) {
+        const dots = page.locator(`.path-flow-dots[data-link-id="${id}"]`)
+        await expect(dots).toHaveAttribute('data-from-id', from)
+        await expect(dots).toHaveAttribute('data-to-id', to)
+        const movement = await dots.evaluate((element) => {
+          const animation = element.getAnimations()[0]
+          animation.pause()
+          animation.currentTime = 240
+          const before = parseFloat(getComputedStyle(element).strokeDashoffset)
+          animation.currentTime = 960
+          const after = parseFloat(getComputedStyle(element).strokeDashoffset)
+          animation.play()
+          return { change: after - before, pointerEvents: getComputedStyle(element).pointerEvents }
+        })
+        expect(backwards ? movement.change : -movement.change).toBeGreaterThan(0)
+        expect(movement.pointerEvents).toBe('none')
+      }
+    }
+  }
+  await page.screenshot({ path: 'test-results/subtle-directional-paths.png', fullPage: true })
+  await page.getByRole('button', { name: 'Clear highlighting', exact: true }).click()
+  await expect(page.locator('.path-flow-dots')).toHaveCount(0)
+})
+
+test('grouped paths deduplicate shared motion, show both directions and respect reduced motion', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.connections[2].siteId = 'dc'
+  topology.connections[2].routes = [{ id: 'second-destination', prefix: '10.50.0.0/16', asPath: [65010], kind: 'bgp' }]
+  await page.goto('/'); await importTopology(page, topology)
+  await expect.poll(async () => (await readTopology(page)).connections[2].routes[0].prefix).toBe('10.50.0.0/16')
+  await groupPath(page, 'Select site London datacenter', 'from', 'All Azure VNets')
+  const backbone = page.locator('.path-flow-dots[data-link-id="interhub:eu:us"]')
+  await expect(backbone).toHaveCount(2)
+  expect(await backbone.evaluateAll((elements) => elements.map((element) => element.getAttribute('data-from-id')).sort())).toEqual(['eu', 'us'])
+  await expect(page.locator('.path-flow-dots[data-link-id="eu-apps"]')).toHaveCount(1)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await expect(backbone.first()).toBeHidden()
+  expect(await backbone.first().evaluate((element) => element.getAnimations().length)).toBe(0)
+  await expect(page.getByTestId('interhub-eu-us')).toHaveClass(/preferred-link/)
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await expect(backbone.first()).toBeVisible()
+  expect(await backbone.first().evaluate((element) => element.getAnimations().length)).toBe(1)
+})
+
 test('ER locations connect hubs and sites, expose filtered advertisements, trace both legs and persist safely', async ({ page }) => {
   const topology = structuredClone(example)
   topology.sites[0].prefixes = ['10.20.0.0/16']
@@ -157,6 +217,8 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   await page.locator('.effective-routes button.prefix-button').filter({ hasText: /^10\.20\.0\.0\/16$/ }).click()
   await expect(page.getByTestId(`er-link-${hubLink.id}`)).toHaveClass(/preferred-link/)
   await expect(page.getByTestId(`er-link-${siteLink.id}`)).toHaveClass(/preferred-link/)
+  await expect(page.locator(`.path-flow-dots[data-link-id="${hubLink.id}"]`)).toHaveAttribute('data-from-id', 'eu')
+  await expect(page.locator(`.path-flow-dots[data-link-id="${siteLink.id}"]`)).toHaveAttribute('data-from-id', saved.erLocations![0].id)
   await page.keyboard.press('Escape')
   await action(page, 'Select ER location Frankfurt ER', 'Show BGP routes')
   const attachment = page.getByRole('region', { name: 'ER advertisements on London circuit', exact: true })
@@ -168,6 +230,8 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   await expect(page.getByRole('status')).toContainText('Reachable')
   await expect(page.getByTestId(`er-link-${hubLink.id}`)).toHaveClass(/preferred-link/)
   await expect(page.getByTestId(`er-link-${siteLink.id}`)).toHaveClass(/preferred-link/)
+  await expect(page.locator(`.path-flow-dots[data-link-id="${siteLink.id}"]`)).toHaveAttribute('data-from-id', 'dc')
+  await expect(page.locator(`.path-flow-dots[data-link-id="${hubLink.id}"]`)).toHaveAttribute('data-from-id', saved.erLocations![0].id)
   await page.getByRole('button', { name: 'Clear highlighting', exact: true }).click()
   const exported = await downloadTopology(page)
   await page.reload()
@@ -1023,6 +1087,8 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"][data-preferred="true"]')).toContainText('Site B')
   await expect(page.getByTestId('peer-link-ab')).toHaveClass(/preferred-link/)
   await expect(page.getByTestId('peer-link-ac')).not.toHaveClass(/preferred-link/)
+  await expect(page.locator('.path-flow-dots[data-link-id="ab"]')).toHaveAttribute('data-from-id', 'a')
+  await expect(page.locator('.path-flow-dots[data-link-id="ac"]')).toHaveCount(0)
   await expect(page.getByLabel('Select site Site B', { exact: true }).locator('.node-prefixes')).toHaveText('10.80.0.0/16')
 })
 
