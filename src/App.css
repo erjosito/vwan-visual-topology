@@ -163,3 +163,8 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .feedback-dialog .dialog-heading { flex-wrap: wrap; }
 :lang(ja) .diagram-caption { letter-spacing: .03em; }
 :lang(ja) .node-kind { font-size: 9px; letter-spacing: 0; }
+.comparison-finding { border: 1px solid #dde5ef; border-left: 4px solid #8794a2; border-radius: 8px; padding: 12px; margin: 12px 0; overflow-wrap: anywhere; }
+.comparison-finding.match { border-left-color: #319b8e; }
+.comparison-finding.design-only, .comparison-finding.azure-only { border-left-color: #657fc7; }
+.comparison-finding.changed, .comparison-finding.next-hop, .comparison-finding.attribute { border-left-color: #b98535; }
+.azure-comparison textarea { width: 100%; max-width: 100%; resize: vertical; }

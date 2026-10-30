@@ -27,6 +27,7 @@ function stableId(kind: string, armId: string): string {
   for (const char of armId.toLowerCase()) hash = BigInt.asUintN(64, (hash ^ BigInt(char.charCodeAt(0))) * 1099511628211n)
   return `az-${kind}-${hash.toString(16)}`
 }
+export { stableId as azureObjectId }
 
 export function importAzureCapture(input: unknown): Topology {
   const root = object(input, 'Azure capture')

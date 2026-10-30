@@ -25,6 +25,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Streams of larger circles show traffic direction at a constant 200 screen pixels per second, following the actual curved links in order. Circles are evenly spaced, with a new departure at most every 0.65 seconds rather than waiting for delivery. Each destination receives the next color in a fixed 20-color palette (teal, blue, amber, purple, and rose first), shared by its circles and a pale node-background tint. Multiple prefixes, sources, and equal-cost paths to the same destination share its color; the palette repeats after 20 destinations. Identical paths share one stream. Movement, layout, and zoom recalculate travel time; reduced-motion preferences retain static highlights and destination colors without animation.
 - Save automatically in browser storage, and import/export validated, versioned JSON.
 - **Azure files** imports a local, read-only Azure CLI capture after review and exports an offline Bicep starter for a new Standard WAN and selected unsecured hubs. No Azure authentication, SDK or deployment service is added to the app.
+- **Compare with Azure capture** attaches optional effective-route observations without replacing the design. Explicit resource mappings, route scope and coverage distinguish extra/missing routes, changed selected next hops, optional AS-path differences and unassessed cases.
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 - **Check routing** opens an offline, intent-aware diagnostics inspector. Declare bidirectional or forbidden flows, source/destination IPv4 addresses or prefixes, optional firewall waypoints, and neighbor route requirements. Analysis runs in a cancellable local worker, with explicit coverage/limitations and separate forward/return evidence; no Azure credentials or packet probes are used.
@@ -151,13 +152,80 @@ Open **Azure files** in the header. All application processing stays in the brow
   -OutputFile .\vwan-capture.json
 ```
 
-The collector supports **one Standard Virtual WAN in public Azure**. It discovers hubs across resource groups in that WAN's subscription and reads their VNet references/address spaces, routing preferences, routing-intent policies and indicators of unsupported routing. It uses only bounded `az rest` GET requests, with a 60-second timeout per attempt, at most three attempts, pagination/resource/request limits and a 2 MB output cap. Existing output files require explicit `-Force`.
+The configuration-only collector supports **one Standard Virtual WAN in public Azure**. It discovers hubs across resource groups in that WAN's subscription and reads their VNet references/address spaces, routing preferences, routing-intent policies and indicators of unsupported routing. Without `-IncludeEffectiveRoutes`, it uses only bounded `az rest` GET requests, with a 60-second timeout per attempt, at most three attempts, pagination/resource/request limits and a 2 MB v1 output cap. Existing output files require explicit `-Force`.
 
-Reads require subscription-wide hub-list access plus read access to the selected WAN, its hubs/child resources and referenced VNets. Cross-subscription VNet reads are **off by default**; `-AllowCrossSubscriptionVnets` opts into reading only directly referenced VNets, never subscription enumeration. Denied child/VNet reads produce an explicitly incomplete capture; failed WAN/discovery reads abort rather than inventing an empty environment. The collector does not request tokens, keys, tunnel secrets or effective routes, and only allowlisted configuration fields are written.
+Reads require subscription-wide hub-list access plus read access to the selected WAN, its hubs/child resources and referenced VNets. Cross-subscription VNet reads are **off by default**; `-AllowCrossSubscriptionVnets` opts into reading only directly referenced VNets, never subscription enumeration. Denied child/VNet reads produce an explicitly incomplete capture; failed WAN/discovery reads abort rather than inventing an empty environment. Configuration-only collection does not request effective routes; neither mode exports tokens, keys, tunnel secrets or account user details.
 
 Import the result with **Import Azure capture** or **Import JSON**. The app shows counts and omissions **before** replacement; acknowledgement and confirmation are required. Cancel/Escape, malformed captures and unsupported versions leave the workspace intact. Export its native JSON first if you need a backup. The versioned `azure-vwan-capture` format is intentionally **not** arbitrary ARM-template or Azure CLI JSON.
 
 Imports create hubs and IPv4 spoke attachments with stable IDs derived from ARM IDs, and map `VpnGateway` to the simulator's `VPN` preference. Azure Firewall private/Internet routing intent is shown where recognized; no separate firewall site is fabricated. Sites, circuits, BGP advertisements/ASNs, subnet UDRs, firewall enforcement, route maps, custom propagation and observed effective routes are **not reconstructed**. Unsupported policies, custom routing, missing VNets and IPv6 omissions stay visible as **structure-only** limitations, not a promise of Azure-equivalent routing. Unknown hub preferences, Basic WANs, duplicate/ambiguous references, malformed prefixes and app-limit violations are rejected.
+
+### Compare an existing design with Azure observations
+
+Choose **Azure files → Compare with Azure capture**. Download the same collector,
+review it, and opt into observational route queries:
+
+```powershell
+.\collect-azure-vwan.ps1 `
+  -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' `
+  -IncludeEffectiveRoutes -OutputFile .\vwan-observation.json
+```
+
+The collector uses the existing local Azure CLI login, explicitly selects the
+WAN subscription, and records its public-cloud/tenant/subscription context and
+actual CLI version without account names or credentials. Route retrieval uses
+`az network vhub get-effective-routes` for each discovered hub's Default table.
+The CLI handles the underlying asynchronous diagnostic POST/polling operation;
+the captured `apiVersion` field identifies this CLI operation, not a claimed
+fixed REST API version. Metadata reads and
+`Microsoft.Network/virtualHubs/effectiveRoutes/action` are required; Reader alone
+may not suffice. No role assignments or Azure resources are changed.
+
+Load the **v2 observation** in the comparison panel (8 MB maximum), not the
+structure-replacement importer. The current design remains untouched. Hubs
+auto-bind only through retained ARM IDs, and spokes through retained
+ARM-derived IDs; manually designed objects require explicit mappings. Names
+and regions never silently establish identity. Unknown objects stay in the
+review list; they are not added as fictional sites or circuits.
+
+Select one observed hub. Supported structural comparisons cover HRP,
+recognized routing intent, spoke attachments and IPv4 address spaces. Route
+comparison starts with **unsecured Default tables on both sides**, compares
+selected forwarding routes rather than losing BGP candidates, and preserves
+associated multiprefix/ECMP rows. Explicitly map gateway next hops to the
+appropriate hub and VPN/ER class: these snapshots cannot distinguish individual
+branch connections, circuits or gateway instances. Route origins are retained
+as evidence, not certified against a different BGP boundary.
+
+An Azure-only prefix is an observation, not automatically a fault. To identify
+a missing expected route, enter its exact IPv4 prefix and confirm complete
+expected design coverage; a structure-only import is not a full route baseline.
+A covering aggregate is not an identical more-specific route. Optional AS-path
+comparison preserves repeated, provider and inter-hub ASNs and normalizes only
+formatting. Unsupported intent/custom routing, unknown next hops, denied/failed/
+truncated observations, incomplete model selection and captures older than
+24 hours or more than five minutes in the future remain unassessed.
+
+**Differences / Designed and compared fields / Azure snapshot** views provide
+prefix/status filters and source evidence. Selecting a result selects its known
+affected node or connection without starting a flow animation. Editing routing
+or mappings invalidates results; layout and language changes do not.
+
+Observations/mappings stay **in page memory only**, separate from native topology
+JSON and browser persistence; reload or **Remove comparison capture** discards
+them. Keep the original local capture if needed. The optional report download
+contains resource IDs, addresses, mappings and associated observed rows and must
+be handled under your organization's data policies. It is not sent to Azure,
+feedback or another backend. Native snapshot persistence and the optional
+loopback refresh companion remain follow-ons; #3 is not fully completed.
+
+Bounds are 10,000 rows/table, 20,000 captured rows and 8 MB v2 output; the
+collector has finite per-action/overall/request budgets. The browser additionally
+limits expanded prefix/next-hop work to 100,000 tuples, reports to 10,000 rows,
+display to the first 200 filtered rows and report downloads to 16 MB. Exhausted
+coverage is not a healthy result. This feature was validated with mocked CLI
+responses, selected frozen lab response shapes, unit/browser regressions and
+Chrome CDP, not new live Azure reads or packet tests.
 
 Capture time, source WAN/hub IDs, imported infrastructure prefixes and limitations persist in a small validated `azureImport` field through browser reload and native JSON exchange. The persistent workspace banner identifies imported routes as simulations, not observed Azure effective routes. Captures/JSON contain resource names, IDs and network configuration: handle them according to your organization's data policies.
 
@@ -267,7 +335,7 @@ The [complete Azure verification report](verification/azure-vwan-2026-10-29/READ
 
 See [Azure testing lessons](AZURE-TESTING-LESSONS.md) for experiment design, evidence boundaries, verification pitfalls, cost controls and safe cleanup. The browser workspace has no GitHub issue link because the source repository is private; no replacement feedback backend or authentication was added.
 
-Supported import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 BGP advertisements and 100 site static prefixes per hub connection, and 2 MB per JSON file.
+Supported topology import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 BGP advertisements and 100 site static prefixes per hub connection, and 2 MB per native/configuration-only JSON file. Separate v2 observation files have the explicit 8 MB limit described above.
 
 ## Authoritative references
 

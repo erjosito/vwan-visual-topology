@@ -13,9 +13,9 @@ function download(text: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function AzureFilesPanel({ topology, pendingImport, onImportFile, onConfirmImport, onCancelImport, onClose }: {
+export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompare, onConfirmImport, onCancelImport, onClose }: {
   topology: Topology; pendingImport?: Topology; onImportFile: () => void
-  onConfirmImport: () => void; onCancelImport: () => void; onClose: () => void
+  onCompare: () => void; onConfirmImport: () => void; onCancelImport: () => void; onClose: () => void
 }) {
   const [settings, setSettings] = useState(() => bicepDefaults(topology))
   const [acknowledged, setAcknowledged] = useState(false)
@@ -26,6 +26,7 @@ export function AzureFilesPanel({ topology, pendingImport, onImportFile, onConfi
   const report = pendingImport?.azureImport ?? topology.azureImport
   return <CanvasOverlay title={t("Azure files")} className="azure-files" onClose={onClose}>
     <p className="muted">{t("Offline files only. No Azure sign-in, credentials, API calls or deployment from this app.")}</p>
+    <p><button onClick={onCompare}>{t('Compare with Azure capture')}</button></p>
     {pendingImport ? <>
       <h3>{t("Review Azure capture")}</h3>
       <p><strong>{pendingImport.name}</strong> · {t('{0} hubs · {1} IPv4 spokes. Confirming replaces the current workspace. Export its JSON first if needed.', pendingImport.hubs.length, pendingImport.spokes.length)}</p>
