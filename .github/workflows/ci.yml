@@ -18,6 +18,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: npm ci --prefix api
       - run: npm run lint
       - run: npm test
       - run: npm run test:collector
@@ -27,12 +28,21 @@ jobs:
           az bicep build --file test-artifacts/azure-files/bicep/main.bicep --stdout > test-artifacts/azure-files/bicep/main.json
           az bicep build --file test-artifacts/azure-files/bicep/single-hub.bicep --stdout > test-artifacts/azure-files/bicep/single-hub.json
       - run: npm run build
+        env:
+          VITE_APP_REVISION: ${{ github.sha }}
+      - run: npm run build:api
+      - run: npm run package:api
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e
+      - run: npm run test:e2e -- --workers=2
       - uses: actions/upload-artifact@v4
         with:
           name: static-site
           path: dist/
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: managed-api
+          path: test-artifacts/feedback-api/
           retention-days: 1
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -54,12 +64,17 @@ jobs:
         with:
           name: static-site
           path: dist
-      - name: Deploy validated static assets
+      - uses: actions/download-artifact@v4
+        with:
+          name: managed-api
+          path: test-artifacts/feedback-api
+      - name: Deploy validated static assets and managed API
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
           action: upload
           app_location: dist
-          api_location: ''
+          api_location: test-artifacts/feedback-api
           output_location: ''
           skip_app_build: true
+          skip_api_build: true

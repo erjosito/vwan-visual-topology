@@ -2,9 +2,17 @@
   "mimeTypes": { ".ps1": "text/plain" },
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/*.{css,js,json,png,jpg,svg,ico,txt}"]
+    "exclude": ["/api/*", "/.auth/*", "/assets/*", "/*.{css,js,json,png,jpg,svg,ico,txt}"]
   },
   "routes": [
+    {
+      "route": "/api/feedback/status",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/api/*",
+      "allowedRoles": ["authenticated"]
+    },
     {
       "route": "/assets/*",
       "headers": {
@@ -12,6 +20,7 @@
       }
     }
   ],
+  "platform": { "apiRuntime": "node:22" },
   "globalHeaders": {
     "Cache-Control": "no-cache",
     "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",

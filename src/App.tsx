@@ -19,6 +19,7 @@ import type { RouteMode } from './route-views'
 import { erLocationBgpTable } from './route-views'
 import { VpnRoutingWizard } from './VpnRoutingWizard'
 import { AzureFilesPanel } from './AzureFilesPanel'
+import { FeedbackDialog } from './FeedbackDialog'
 import { importAzureCapture } from './azure-import'
 import { vpnRoutingMode } from './vpn-routing'
 import type { VpnRoutingMode } from './vpn-routing'
@@ -56,6 +57,7 @@ function App() {
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [clearRequested, setClearRequested] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(() => new URLSearchParams(location.search).get('feedback') === '1')
   const [panel, setPanel] = useState<'routes' | 'ads' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure'>()
   const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
@@ -270,8 +272,9 @@ function App() {
 
   return <div className="app canvas-app">
     <header className="topbar"><div className="brand"><div className="brand-icon" aria-hidden="true">W</div><div><h1>Virtual WAN <span>Topology Lab</span></h1><p>Design the network. Understand the path.</p></div></div>
-      <div className="actions"><span className="local-badge">Local-first · no Azure credentials</span><button onClick={() => exportTopology()}>Export JSON</button><button onClick={() => importer.current?.click()}>Import JSON</button><button onClick={() => setPanel('azure')}>Azure files</button><button onClick={() => setClearRequested(true)}>Clear topology</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label="Import topology file" onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+      <div className="actions"><span className="local-badge">Local-first · no Azure credentials</span><button onClick={() => exportTopology()}>Export JSON</button><button onClick={() => importer.current?.click()}>Import JSON</button><button onClick={() => setPanel('azure')}>Azure files</button><button onClick={() => setClearRequested(true)}>Clear topology</button><button onClick={() => setFeedbackOpen(true)}>Feedback</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label="Import topology file" onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
+    {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
     <main>
       <section className="workspace-heading"><div><p className="eyebrow">NETWORK WORKSPACE</p><input className="topology-name" aria-label="Topology name" maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong> hubs</span><span><strong>{topology.spokes.length}</strong> spokes</span><span><strong>{topology.sites.length}</strong> sites</span>{!!topology.erLocations?.length && <span><strong>{topology.erLocations.length}</strong> ER locations</span>}</div></section>
       {error && <div role="alert" className="notice error">{error}<button aria-label="Dismiss error" onClick={() => setError('')}>Dismiss</button></div>}

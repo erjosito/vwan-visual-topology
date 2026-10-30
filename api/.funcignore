@@ -1,0 +1,7 @@
+local.settings.json
+*.pem
+src/
+tests/
+tsconfig.json
+node_modules/
+.git/

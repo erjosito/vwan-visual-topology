@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:api": "npm --prefix api run build",
+    "package:api": "node scripts/package-feedback-api.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
