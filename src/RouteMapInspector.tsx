@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import type { RouteMapDirection, RouterSelection, Topology } from './model'
 import { CanvasOverlay } from './CanvasOverlay'
 import { RouteMapRules } from './RouteMapRules'
@@ -28,20 +29,20 @@ export function RouteMapInspector({ topology, router, direction, connectionId, o
     })
     return link && maps.length ? [{ link, other, maps }] : []
   })
-  return <CanvasOverlay title={`Route map rules · ${node?.name ?? 'Router'}`} className="policy-inspector" onClose={onClose}>
-    <p className="muted">Inbound means learned by {node?.name}; outbound means advertised by it. Rules run in order; unmatched routes pass unchanged. Static VPN routes bypass BGP policies.</p>
+  return <CanvasOverlay title={t("Route map rules · {0}", node?.name ?? t('Router'))} className="policy-inspector" onClose={onClose}>
+    <p className="muted">{t("Inbound means learned by")} {node?.name}{t("; outbound means advertised by it. Rules run in order; unmatched routes pass unchanged. Static VPN routes bypass BGP policies.")}</p>
     <div className="inspector-controls">
-      <label className="field"><span>Connection</span><select aria-label="Policy connection" value={selectedConnection ?? ''} onChange={(e) => onConnection(e.target.value || undefined)}><option value="">All connections</option>{links.map((link) => <option key={link.id} value={link.id}>{link.name}</option>)}</select></label>
-      <label className="field"><span>Policy direction</span><select aria-label="Policy direction" value={direction ?? 'all'} onChange={(e) => onDirection(e.target.value === 'all' ? undefined : e.target.value as RouteMapDirection)}><option value="all">Inbound and outbound</option><option value="inbound">Inbound only</option><option value="outbound">Outbound only</option></select></label>
-      <button onClick={() => onConfigure(router, selectedConnection)}>Configure route maps</button>
+      <label className="field"><span>{t("Connection")}</span><select aria-label={t("Policy connection")} value={selectedConnection ?? ''} onChange={(e) => onConnection(e.target.value || undefined)}><option value="">{t("All connections")}</option>{links.map((link) => <option key={link.id} value={link.id}>{link.name}</option>)}</select></label>
+      <label className="field"><span>{t("Policy direction")}</span><select aria-label={t("Policy direction")} value={direction ?? 'all'} onChange={(e) => onDirection(e.target.value === 'all' ? undefined : e.target.value as RouteMapDirection)}><option value="all">{t("Inbound and outbound")}</option><option value="inbound">{t("Inbound only")}</option><option value="outbound">{t("Outbound only")}</option></select></label>
+      <button onClick={() => onConfigure(router, selectedConnection)}>{t("Configure route maps")}</button>
     </div>
-    {assignments.map(({ link, other, maps }) => <section key={link.id} className="policy-connection" aria-label={`Policies on ${link.name}`}>
-      <h3>{link.name}</h3><p className="muted">To {other?.name}{!link.enabled && ' · Connection down; policies are configured but inactive'}</p>
-      {maps.map(({ direction, map }) => <section key={direction} className="policy-assignment" data-direction={direction} aria-label={`${direction === 'inbound' ? 'Inbound' : 'Outbound'} policy on ${link.name}`}>
-        <h4><span className={`policy-tag ${direction}`}>{direction === 'inbound' ? 'IN' : 'OUT'}</span>{map.name}</h4>
-        <RouteMapRules map={map} label={`Rules for ${map.name} on ${link.name}, ${direction}`} />
+    {assignments.map(({ link, other, maps }) => <section key={link.id} className="policy-connection" aria-label={t("Policies on {0}", link.name)}>
+      <h3>{link.name}</h3><p className="muted">{t("To")} {other?.name}{!link.enabled && t(" · Connection down; policies are configured but inactive")}</p>
+      {maps.map(({ direction, map }) => <section key={direction} className="policy-assignment" data-direction={direction} aria-label={t("{0} policy on {1}", t(direction === 'inbound' ? 'Inbound' : 'Outbound'), link.name)}>
+        <h4><span className={`policy-tag ${direction}`}>{t(direction === 'inbound' ? 'IN' : 'OUT')}</span>{map.name}</h4>
+        <RouteMapRules map={map} label={t("Rules for {0} on {1}, {2}", map.name, link.name, t(direction))} />
       </section>)}
     </section>)}
-    {!assignments.length && <p className="empty">No {direction ? `${direction} ` : ''}route maps assigned to {selectedConnection ? 'this connection' : 'this router'}.</p>}
+    {!assignments.length && <p className="empty">{t('No {0}route maps assigned to {1}.', direction ? `${t(direction)} ` : '', selectedConnection ? t("this connection") : t("this router"))}</p>}
   </CanvasOverlay>
 }

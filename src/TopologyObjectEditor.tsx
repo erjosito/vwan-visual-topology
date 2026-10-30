@@ -1,3 +1,4 @@
+import { t, localizeDiagnostic } from './i18n'
 import { cloneElement, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, topologyObject, transportLabels } from './model'
@@ -26,9 +27,9 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const [erEndpoint, setErEndpoint] = useState<'hub' | 'site'>(erLink?.siteId || request.siteId ? 'site' : 'hub')
   const [transportValue, setTransportValue] = useState<Transport>(connection?.transport ?? 'ExpressRoute')
   const link = topology.siteLinks.find((l) => l.id === request.id)
-  const label = objectLabels[request.kind]
+  const label = t(objectLabels[request.kind])
   const connectedSite = request.kind === 'site' && !item && !!request.hubId
-  const title = request.deleting ? `Delete ${label}` : `${item ? 'Edit' : 'Add'} ${connectedSite ? 'connected site' : label}`
+  const title = request.deleting ? t("Delete {0}", label) : t(item ? 'Edit {0}' : 'Add {0}', connectedSite ? t('connected site') : label)
 
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -126,7 +127,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   }
   const hubOptions = topology.hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)
   const siteOptions = topology.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
-  const transport = <Field title="Transport"><select name="transport" value={transportValue} onChange={(event) => setTransportValue(event.target.value as Transport)}>{Object.entries(transportLabels).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>
+  const transport = <Field title={t("Transport")}><select name="transport" value={transportValue} onChange={(event) => setTransportValue(event.target.value as Transport)}>{Object.entries(transportLabels).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>
   const removedSpokes = topology.spokes.filter((s) => s.hubId === request.id).length
   const removedConnections = topology.connections.filter((c) => request.kind === 'hub' ? c.hubId === request.id : c.siteId === request.id).length
   const removedPeers = topology.siteLinks.filter((l) => l.a === request.id || l.b === request.id).length
@@ -134,76 +135,76 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   return <CanvasOverlay title={title} className="object-editor" onClose={onClose}>
     <form onSubmit={save}>
       {request.deleting ? <>
-        <p>Delete <strong>{item?.name}</strong>? This cannot be undone. Export JSON first if you need a backup.</p>
-        {request.kind === 'hub' && <p>This also removes {removedSpokes} attached spoke{removedSpokes === 1 ? '' : 's'} and {removedConnections} connection{removedConnections === 1 ? '' : 's'}. On-premises sites are kept.</p>}
-        {request.kind === 'site' && <p>This also removes {removedConnections} hub connection{removedConnections === 1 ? '' : 's'} and {removedPeers} on-premises link{removedPeers === 1 ? '' : 's'}.</p>}
-        {(request.kind === 'hub' || request.kind === 'site' || request.kind === 'erLocation') && <p>Attached ER connections are also removed; the other endpoints are kept.</p>}
+        <p>{t("Delete")} <strong>{item?.name}</strong>{t("? This cannot be undone. Export JSON first if you need a backup.")}</p>
+        {request.kind === 'hub' && <p>{t('This also removes {0} attached spoke{1} and {2} connection{3}. On-premises sites are kept.', removedSpokes, removedSpokes === 1 ? '' : 's', removedConnections, removedConnections === 1 ? '' : 's')}</p>}
+        {request.kind === 'site' && <p>{t('This also removes {0} hub connection{1} and {2} on-premises link{3}.', removedConnections, removedConnections === 1 ? '' : 's', removedPeers, removedPeers === 1 ? '' : 's')}</p>}
+        {(request.kind === 'hub' || request.kind === 'site' || request.kind === 'erLocation') && <p>{t("Attached ER connections are also removed; the other endpoints are kept.")}</p>}
       </> : <>
-        <Field title="Name"><input name="name" required maxLength={120} defaultValue={item?.name ?? ''} autoFocus /></Field>
-        {request.kind === 'erLocation' && <p className="muted">An ExpressRoute peering location groups site circuit attachments and their hub connections. Connect sites and hubs after creating it. ER-to-ER transit and Global Reach are not enabled.</p>}
+        <Field title={t("Name")}><input name="name" required maxLength={120} defaultValue={item?.name ?? ''} autoFocus /></Field>
+        {request.kind === 'erLocation' && <p className="muted">{t("An ExpressRoute peering location groups site circuit attachments and their hub connections. Connect sites and hubs after creating it. ER-to-ER transit and Global Reach are not enabled.")}</p>}
         {request.kind === 'erLink' && <>
-          <Field title="ER location"><select name="location" required defaultValue={erLink?.locationId ?? request.locationId ?? topology.erLocations?.[0]?.id}>{topology.erLocations?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
-          <Field title="Endpoint type"><select value={erEndpoint} onChange={(event) => setErEndpoint(event.target.value as 'hub' | 'site')}><option value="hub">Virtual WAN hub</option><option value="site">On-premises site</option></select></Field>
-          <Field title={erEndpoint === 'hub' ? 'Hub' : 'On-premises site'}><select key={erEndpoint} name="endpoint" required defaultValue={erEndpoint === 'hub' ? erLink?.hubId ?? request.hubId ?? topology.hubs[0]?.id : erLink?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{erEndpoint === 'hub' ? hubOptions : siteOptions}</select></Field>
-          <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={erLink?.enabled ?? true} />Connection enabled</label>
+          <Field title={t("ER location")}><select name="location" required defaultValue={erLink?.locationId ?? request.locationId ?? topology.erLocations?.[0]?.id}>{topology.erLocations?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
+          <Field title={t("Endpoint type")}><select value={erEndpoint} onChange={(event) => setErEndpoint(event.target.value as 'hub' | 'site')}><option value="hub">{t("Virtual WAN hub")}</option><option value="site">{t("On-premises site")}</option></select></Field>
+          <Field title={erEndpoint === 'hub' ? t("Hub") : t("On-premises site")}><select key={erEndpoint} name="endpoint" required defaultValue={erEndpoint === 'hub' ? erLink?.hubId ?? request.hubId ?? topology.hubs[0]?.id : erLink?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{erEndpoint === 'hub' ? hubOptions : siteOptions}</select></Field>
+          <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={erLink?.enabled ?? true} />{t("Connection enabled")}</label>
           {erEndpoint === 'site' ? <>
-            <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={erLink?.learnSiteRoutes ?? true} />Advertise site-originated and learned routes</label>
-            <Field title="ER BGP advertisements"><textarea name="advertisements" rows={4} defaultValue={erLink?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
-            <p className="muted">Optional explicit advertisements: one prefix and site-side AS path per line. Provider ASN 12076 is added automatically. Each site attachment represents an independent private-peering circuit; other ER circuits are not advertised to it.</p>
-          </> : <p className="muted">This attachment imports site advertisements from the location and exports selected Azure, VPN and NVA routes. ER-learned routes and default routes are not exported. Configure advertisements on site attachments and route maps on the hub/site.</p>}
+            <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={erLink?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
+            <Field title={t("ER BGP advertisements")}><textarea name="advertisements" rows={4} defaultValue={erLink?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
+            <p className="muted">{t("Optional explicit advertisements: one prefix and site-side AS path per line. Provider ASN 12076 is added automatically. Each site attachment represents an independent private-peering circuit; other ER circuits are not advertised to it.")}</p>
+          </> : <p className="muted">{t("This attachment imports site advertisements from the location and exports selected Azure, VPN and NVA routes. ER-learned routes and default routes are not exported. Configure advertisements on site attachments and route maps on the hub/site.")}</p>}
         </>}
         {request.kind === 'hub' && <>
-          <Field title="Region"><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
-          <Field title="Routing preference"><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>
-          <fieldset><legend>Routing intent</legend>
-            <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label="Private traffic routing intent" defaultChecked={hub?.routingIntent.private ?? false} />Private traffic via Azure Firewall</label>
-            <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label="Internet traffic routing intent" defaultChecked={hub?.routingIntent.internet ?? false} />Internet traffic via Azure Firewall</label>
-            <Field title="Additional private traffic prefixes"><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
-            <p className="muted">RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.</p>
+          <Field title={t("Region")}><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
+          <Field title={t("Routing preference")}><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{t(name)}</option>)}</select></Field>
+          <fieldset><legend>{t("Routing intent")}</legend>
+            <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label={t("Private traffic routing intent")} defaultChecked={hub?.routingIntent.private ?? false} />{t("Private traffic via Azure Firewall")}</label>
+            <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label={t("Internet traffic routing intent")} defaultChecked={hub?.routingIntent.internet ?? false} />{t("Internet traffic via Azure Firewall")}</label>
+            <Field title={t("Additional private traffic prefixes")}><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
+            <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
         </>}
-        {(request.kind === 'spoke' || request.kind === 'connection') && <Field title="Hub"><select name="hub" required defaultValue={spoke?.hubId ?? connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
-        {request.kind === 'spoke' && <Field title="Prefixes"><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>}
+        {(request.kind === 'spoke' || request.kind === 'connection') && <Field title={t("Hub")}><select name="hub" required defaultValue={spoke?.hubId ?? connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
+        {request.kind === 'spoke' && <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>}
         {request.kind === 'site' && <>
-          <Field title="Site ASN"><input name="asn" type="number" required min={1} max={4294967294} defaultValue={site?.asn ?? 65001} /></Field>
-          <Field title="Originated prefix"><input name="prefix" defaultValue={site?.prefixes[0] ?? ''} placeholder="10.80.0.0/16" /></Field>
-          <p className="muted">One optional IPv4 network for this site. Leave blank for a transit-only site or explicit connection advertisements.</p>
+          <Field title={t("Site ASN")}><input name="asn" type="number" required min={1} max={4294967294} defaultValue={site?.asn ?? 65001} /></Field>
+          <Field title={t("Originated prefix")}><input name="prefix" defaultValue={site?.prefixes[0] ?? ''} placeholder="10.80.0.0/16" /></Field>
+          <p className="muted">{t("One optional IPv4 network for this site. Leave blank for a transit-only site or explicit connection advertisements.")}</p>
           {connectedSite && <>
-            <p className="muted">A connection to {topology.hubs.find((h) => h.id === request.hubId)?.name} is created with site-prefix advertisements enabled.</p>
-            <Field title="Connection name"><input name="connectionName" maxLength={120} placeholder="Defaults to site name + connection" /></Field>{transport}
+            <p className="muted">{t("A connection to")} {topology.hubs.find((h) => h.id === request.hubId)?.name}  {t("is created with site-prefix advertisements enabled.")}</p>
+            <Field title={t("Connection name")}><input name="connectionName" maxLength={120} placeholder={t("Defaults to site name + connection")} /></Field>{transport}
           </>}
         </>}
         {request.kind === 'connection' && <>
           <div className="connection-configuration">
-          <Field title="On-premises site"><select name="site" required defaultValue={connection?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>{transport}
-          <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={connection?.enabled ?? true} />Connection enabled</label>
-          <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={connection?.learnSiteRoutes ?? true} />Advertise site-originated and learned routes</label>
-          <p className="muted">Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.</p>
+          <Field title={t("On-premises site")}><select name="site" required defaultValue={connection?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>{transport}
+          <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={connection?.enabled ?? true} />{t("Connection enabled")}</label>
+          <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={connection?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
+          <p className="muted">{t("Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.")}</p>
           </div>
-          <p className="muted">Use Route maps on either endpoint to configure inbound/outbound policies for this connection.</p>
-          <p className="muted">Configure VPN static prefixes through Static routing on the site or hub. Remove or reassign site static routes before changing this VPN connection's site or transport.</p>
+          <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>
+          <p className="muted">{t("Configure VPN static prefixes through Static routing on the site or hub. Remove or reassign site static routes before changing this VPN connection's site or transport.")}</p>
         </>}
-        {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>Connection route maps</legend>
-          <p>Inbound/outbound policies belong to this router and are assigned per connection. Save any configuration changes before opening its policies.</p>
-          <button type="button" onClick={() => onRouteMaps({ kind: request.kind as RouterSelection['kind'], id: item.id })}>Configure route maps</button>
+        {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>{t("Connection route maps")}</legend>
+          <p>{t("Inbound/outbound policies belong to this router and are assigned per connection. Save any configuration changes before opening its policies.")}</p>
+          <button type="button" onClick={() => onRouteMaps({ kind: request.kind as RouterSelection['kind'], id: item.id })}>{t("Configure route maps")}</button>
         </fieldset>}
-        {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>S2S VPN static routing</legend>
-          <p>VPN static prefixes belong to the site and are associated with its VPN connections. Save configuration changes before opening static routing.</p>
-          <button type="button" onClick={() => onStaticRouting({ kind: request.kind as RouterSelection['kind'], id: item.id })}>Configure static routing</button>
+        {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>{t("S2S VPN static routing")}</legend>
+          <p>{t("VPN static prefixes belong to the site and are associated with its VPN connections. Save configuration changes before opening static routing.")}</p>
+          <button type="button" onClick={() => onStaticRouting({ kind: request.kind as RouterSelection['kind'], id: item.id })}>{t("Configure static routing")}</button>
         </fieldset>}
         {request.kind === 'siteLink' && <>
-          <Field title="Site A"><select name="a" required defaultValue={link?.a ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>
-          <Field title="Site B"><select name="b" required defaultValue={link?.b ?? topology.sites.find((s) => s.id !== (request.siteId ?? topology.sites[0]?.id))?.id}>{siteOptions}</select></Field>
-          <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={link?.enabled ?? true} />Link enabled</label>
-          {(['aToB', 'bToA'] as const).map((direction) => <fieldset key={direction}><legend>{direction === 'aToB' ? 'Site A to Site B' : 'Site B to Site A'}</legend>
-            <Field title={`${direction} export prefixes`}><input name={`${direction}Prefixes`} defaultValue={link?.[direction].prefixes.join(', ') || '*'} /></Field>
-            <Field title={`${direction} outbound prepend ASNs`}><input name={`${direction}Prepend`} defaultValue={link?.[direction].prepend.join(' ') ?? ''} /></Field>
-            <Field title={`${direction} inbound prepend ASNs`}><input name={`${direction}Receive`} defaultValue={link?.[direction].receivePrepend?.join(' ') ?? ''} /></Field>
+          <Field title={t("Site A")}><select name="a" required defaultValue={link?.a ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>
+          <Field title={t("Site B")}><select name="b" required defaultValue={link?.b ?? topology.sites.find((s) => s.id !== (request.siteId ?? topology.sites[0]?.id))?.id}>{siteOptions}</select></Field>
+          <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={link?.enabled ?? true} />{t("Link enabled")}</label>
+          {(['aToB', 'bToA'] as const).map((direction) => <fieldset key={direction}><legend>{direction === 'aToB' ? t("Site A to Site B") : t("Site B to Site A")}</legend>
+            <Field title={t("{0} export prefixes", t(direction))}><input name={`${direction}Prefixes`} defaultValue={link?.[direction].prefixes.join(', ') || '*'} /></Field>
+            <Field title={t("{0} outbound prepend ASNs", t(direction))}><input name={`${direction}Prepend`} defaultValue={link?.[direction].prepend.join(' ') ?? ''} /></Field>
+            <Field title={t("{0} inbound prepend ASNs", t(direction))}><input name={`${direction}Receive`} defaultValue={link?.[direction].receivePrepend?.join(' ') ?? ''} /></Field>
           </fieldset>)}
         </>}
       </>}
-      {error && <p role="alert" className="notice error">{error}</p>}
-      <div className="row dialog-actions"><button type="button" onClick={onClose}>Cancel</button><button className={request.deleting ? 'danger' : 'primary'}>{request.deleting ? 'Confirm deletion' : item ? 'Save changes' : 'Create object'}</button></div>
+      {error && <p role="alert" className="notice error">{localizeDiagnostic(error)}</p>}
+      <div className="row dialog-actions"><button type="button" onClick={onClose}>{t("Cancel")}</button><button className={request.deleting ? 'danger' : 'primary'}>{request.deleting ? t("Confirm deletion") : item ? t("Save changes") : t("Create object")}</button></div>
     </form>
   </CanvasOverlay>
 }

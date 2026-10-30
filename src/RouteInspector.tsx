@@ -1,3 +1,4 @@
+import { t, localizeDiagnostic } from './i18n'
 import { useMemo, useState } from 'react'
 import type { ObjectSelection, Preference, Topology } from './model'
 import { preferenceLabels, routeLabels, transportLabels } from './model'
@@ -27,7 +28,14 @@ export function RouteInspector({ topology, simulation, router, view, mode, onRou
     [topology, simulation, location, mode])
   const peers = useMemo(() => mode === 'bgp' ? [] : neighborRoutes(topology, simulation, router, mode, siteRouting),
     [topology, simulation, router, mode, siteRouting])
-  const label = (route: Candidate) => `${route.remote ? 'Remote hub · ' : ''}${route.transport === 'VNet' ? 'VNet connection' : route.transport === 'Firewall' ? 'Azure Firewall' : route.transport === 'Internet' ? 'Internet' : transportLabels[route.transport]} · ${route.kind === 'system' ? 'System' : route.kind === 'policy' ? 'Routing intent' : routeLabels[route.kind]}`
+  const peerName = (peer: typeof peers[number]) => {
+    if (peer.id.startsWith('interhub:')) {
+      return `${topology.hubs.find((hub) => hub.id === peer.id.slice(9))?.name} · ${t('Inter-hub')}`
+    }
+    const link = [...topology.connections, ...topology.siteLinks, ...(topology.erLinks ?? [])].find((link) => link.id === peer.id)
+    return link && !link.enabled ? peer.name.slice(0, -7) + t(' (down)') : peer.name
+  }
+  const label = (route: Candidate) => `${route.remote ? t("Remote hub · ") : ''}${route.transport === 'VNet' ? t("VNet connection") : route.transport === 'Firewall' ? 'Azure Firewall' : route.transport === 'Internet' ? t('Internet') : transportLabels[route.transport]} · ${route.kind === 'system' ? t("System") : route.kind === 'policy' ? t("Routing intent") : t(routeLabels[route.kind])}`
   const bgpGroups: Group[] = site ? [...new Set((siteRouting?.candidates[site.id] ?? []).map((r) => r.prefix))]
     .sort((a, b) => cidr(a)!.network - cidr(b)!.network || cidr(a)!.length - cidr(b)!.length)
     .map((prefix) => {
@@ -45,15 +53,15 @@ export function RouteInspector({ topology, simulation, router, view, mode, onRou
           const azure = connection ? topology.hubs.find((hub) => hub.id === connection.hubId)?.name
             : erLink ? topology.erLocations?.find((location) => location.id === erLink.locationId)?.name : undefined
           return {
-            key, asPath: r.asPath, preferred: keys.has(key), nextHop: hops[0] ?? azure ?? 'Local origin',
+            key, asPath: r.asPath, preferred: keys.has(key), nextHop: hops[0] ?? azure ?? t("Local origin"),
             via: hops.length > 1 ? hops.join(' → ') : connection?.name ?? erLink?.name
               ?? topology.connections.find((connection) => r.key.startsWith(`${connection.id}:`))?.name,
-            source: hops.length ? 'On-premises BGP' : azure ? 'Azure BGP' : 'Originated at site',
+            source: hops.length ? t("On-premises BGP") : azure ? t("Azure BGP") : t("Originated at site"),
           }
         }),
-        explanation: candidates.length === 1 ? ['Only available path.'] : [
-          `Shortest site AS path (${shortest} ASN${shortest === 1 ? '' : 's'}).`,
-          ...(preferred.length > 1 ? [`${preferred.length} equal-cost paths remain (maximum 32).`] : []),
+        explanation: candidates.length === 1 ? [t("Only available path.")] : [
+          t("Shortest site AS path ({0} ASN{1}).", shortest, shortest === 1 ? '' : 's'),
+          ...(preferred.length > 1 ? [t("{0} equal-cost paths remain (maximum 32).", preferred.length)] : []),
         ],
       }
     }) : (location ? erRouting : (view === 'bgp' ? simulation.bgpTables : view === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []).map((d) => ({
@@ -65,50 +73,50 @@ export function RouteInspector({ topology, simulation, router, view, mode, onRou
           : attachment?.siteId ? topology.sites.find((site) => site.id === attachment.siteId) : undefined
         return {
           key: r.key, asPath: r.asPath, preferred: d.selected.some((s) => s.key === r.key), source: label(r),
-          nextHop: location ? peer?.name : r.remote ? topology.hubs.find((h) => h.id === r.originHubId)?.name : r.transport === 'Firewall' ? 'Azure Firewall' : r.transport === 'Internet' ? 'Internet egress' : exit,
+          nextHop: location ? peer?.name : r.remote ? topology.hubs.find((h) => h.id === r.originHubId)?.name : r.transport === 'Firewall' ? 'Azure Firewall' : r.transport === 'Internet' ? t("Internet egress") : exit,
           via: location || r.remote ? exit : r.erLocationId ? topology.erLocations?.find((location) => location.id === r.erLocationId)?.name : undefined,
         }
       }),
     }))
   const rows = peers.filter((peer) => !neighbor || peer.id === neighbor).flatMap((peer) => peer[stage].map((route, index) => ({
     prefix: route.prefix, key: `${peer.id}:${route.key}:${index}`, asPath: route.asPath, preferred: false,
-    nextHop: peer.name, source: 'transport' in route ? label(route) : 'On-premises BGP',
+    nextHop: peerName(peer), source: 'transport' in route ? label(route) : t("On-premises BGP"),
   })))
   const groups: Group[] = (mode === 'bgp' ? bgpGroups : [...new Set(rows.map((row) => row.prefix))]
     .sort((a, b) => cidr(a)!.network - cidr(b)!.network || cidr(a)!.length - cidr(b)!.length)
     .map((prefix) => ({ prefix, explanation: [], candidates: rows.filter((row) => row.prefix === prefix) })))
     .filter((group) => group.prefix.includes(filter.trim()))
-  const title = mode !== 'bgp' ? mode === 'learned' ? 'Learned routes' : 'Advertised routes'
-    : hub && view === 'hub' ? 'Hub forwarding table' : hub && view === 'firewall' ? 'Firewall forwarding table' : 'BGP table'
-  return <CanvasOverlay title={`${title} · ${site?.name ?? hub?.name ?? location?.name ?? 'Router'}`} className="effective-routes" onClose={onClose}>
+  const title = mode !== 'bgp' ? mode === 'learned' ? t("Learned routes") : t("Advertised routes")
+    : hub && view === 'hub' ? t("Hub forwarding table") : hub && view === 'firewall' ? t("Firewall forwarding table") : t("BGP table")
+  return <CanvasOverlay title={`${title} · ${site?.name ?? hub?.name ?? location?.name ?? t("Router")}`} className="effective-routes" onClose={onClose}>
     <div className="inspector-controls">
-      <label className="field"><span>Inspect router</span><select aria-label="Inspect router" value={`${router.kind}:${router.id}`} onChange={(e) => {
+      <label className="field"><span>{t("Inspect router")}</span><select aria-label={t("Inspect router")} value={`${router.kind}:${router.id}`} onChange={(e) => {
         const kind = e.target.value.split(':')[0] as ObjectSelection['kind']
         onRouter({ kind, id: e.target.value.slice(kind.length + 1) })
-      }}><optgroup label="Virtual hubs">{topology.hubs.map((h) => <option key={h.id} value={`hub:${h.id}`}>{h.name}</option>)}</optgroup><optgroup label="On-premises sites">{topology.sites.map((s) => <option key={s.id} value={`site:${s.id}`}>{s.name}</option>)}</optgroup><optgroup label="ER locations">{topology.erLocations?.map((node) => <option key={node.id} value={`erLocation:${node.id}`}>{node.name}</option>)}</optgroup></select></label>
-      <label className="field"><span>Filter by prefix</span><input type="search" aria-label="Filter by prefix" placeholder="e.g. 10.80 or /24" value={filter} onChange={(e) => setFilter(e.target.value)} /></label>
+      }}><optgroup label={t("Virtual hubs")}>{topology.hubs.map((h) => <option key={h.id} value={`hub:${h.id}`}>{h.name}</option>)}</optgroup><optgroup label={t("On-premises sites")}>{topology.sites.map((s) => <option key={s.id} value={`site:${s.id}`}>{s.name}</option>)}</optgroup><optgroup label={t("ER locations")}>{topology.erLocations?.map((node) => <option key={node.id} value={`erLocation:${node.id}`}>{node.name}</option>)}</optgroup></select></label>
+      <label className="field"><span>{t("Filter by prefix")}</span><input type="search" aria-label={t("Filter by prefix")} placeholder={t("e.g. 10.80 or /24")} value={filter} onChange={(e) => setFilter(e.target.value)} /></label>
       {mode !== 'bgp' && <>
-        <label className="field"><span>Neighbor</span><select aria-label="Neighbor" value={neighbor} onChange={(e) => setNeighbor(e.target.value)}><option value="">All neighbors</option>{peers.map((peer) => <option key={peer.id} value={peer.id}>{peer.name}</option>)}</select></label>
-        {!location && <label className="field"><span>Route-map stage</span><select aria-label="Route-map stage" value={stage} onChange={(e) => setStage(e.target.value as RouteStage)}><option value="after">After {mode === 'learned' ? 'inbound' : 'outbound'} route maps</option><option value="before">Before {mode === 'learned' ? 'inbound' : 'outbound'} route maps</option></select></label>}
+        <label className="field"><span>{t("Neighbor")}</span><select aria-label={t("Neighbor")} value={neighbor} onChange={(e) => setNeighbor(e.target.value)}><option value="">{t("All neighbors")}</option>{peers.map((peer) => <option key={peer.id} value={peer.id}>{peerName(peer)}</option>)}</select></label>
+        {!location && <label className="field"><span>{t("Route-map stage")}</span><select aria-label={t("Route-map stage")} value={stage} onChange={(e) => setStage(e.target.value as RouteStage)}><option value="after">{t('After {0} route maps', t(mode === 'learned' ? 'inbound' : 'outbound'))}</option><option value="before">{t('Before {0} route maps', t(mode === 'learned' ? 'inbound' : 'outbound'))}</option></select></label>}
       </>}
-      {hub && mode === 'bgp' && <><label className="field"><span>Hub routing preference</span><select aria-label="Hub routing preference" value={hub.preference} onChange={(e) => onPreference(e.target.value as Preference)}>{Object.entries(preferenceLabels).map(([v, name]) => <option key={v} value={v}>{name}</option>)}</select></label>
-        <label className="field"><span>Route view</span><select aria-label="Route view" value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">BGP table (before routing intent)</option><option value="hub">Hub forwarding table</option><option value="firewall" disabled={!hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label></>}
+      {hub && mode === 'bgp' && <><label className="field"><span>{t("Hub routing preference")}</span><select aria-label={t("Hub routing preference")} value={hub.preference} onChange={(e) => onPreference(e.target.value as Preference)}>{Object.entries(preferenceLabels).map(([v, name]) => <option key={v} value={v}>{t(name)}</option>)}</select></label>
+        <label className="field"><span>{t("Route view")}</span><select aria-label={t("Route view")} value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">{t("BGP table (before routing intent)")}</option><option value="hub">{t("Hub forwarding table")}</option><option value="firewall" disabled={!hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label></>}
     </div>
-    {mode === 'bgp' && <p className="route-legend"><strong>* Preferred</strong> · Click a prefix to highlight its paths.</p>}
-    {hub && mode === 'bgp' && <p className="muted inspector-note">Post-inbound candidates and preferred routes, including labeled system and VPN-static entries. Routing-intent redirection is separate in the hub forwarding table.</p>}
-    {site && <p className="muted inspector-note">Shortest-AS-path site routing includes Azure advertisements. Azure-originated routes are not re-exported to Azure; SD-WAN outbound learning is not modeled.</p>}
-    {mode !== 'bgp' && !location && <p className="muted inspector-note">{stage === 'after' ? 'After' : 'Before'} {mode === 'learned' ? 'inbound' : 'outbound'} route maps; not best-path selection. VPN-static entries bypass BGP route maps. ER provider AS-path processing and inter-hub prepends occur in transit, outside the router's route maps.</p>}
-    {location && mode === 'bgp' && <p className="muted inspector-note">Candidates learned from enabled attachments after neighbor outbound maps. Shortest AS paths are preferred; equal-cost paths are retained. Click a prefix to highlight its preferred next hops.</p>}
-    {location && <p className="muted inspector-note">Circuit export rules still apply. Global Reach and shared-circuit hub reflection are not modeled.{mode !== 'bgp' && " Routes are shown from the ER location's perspective; it has no configurable route maps."}</p>}
-    <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label="Preferred route">*</th>}<th>{mode === 'bgp' ? 'Next hop / source' : 'Neighbor / source'}</th><th>AS path</th></tr></thead>
+    {mode === 'bgp' && <p className="route-legend"><strong>{t("* Preferred")}</strong>  {t("· Click a prefix to highlight its paths.")}</p>}
+    {hub && mode === 'bgp' && <p className="muted inspector-note">{t("Post-inbound candidates and preferred routes, including labeled system and VPN-static entries. Routing-intent redirection is separate in the hub forwarding table.")}</p>}
+    {site && <p className="muted inspector-note">{t("Shortest-AS-path site routing includes Azure advertisements. Azure-originated routes are not re-exported to Azure; SD-WAN outbound learning is not modeled.")}</p>}
+    {mode !== 'bgp' && !location && <p className="muted inspector-note">{t("{0} {1} route maps; not best-path selection. VPN-static entries bypass BGP route maps. ER provider AS-path processing and inter-hub prepends occur in transit, outside the router's route maps.", t(stage === 'after' ? 'After' : 'Before'), t(mode === 'learned' ? 'inbound' : 'outbound'))}</p>}
+    {location && mode === 'bgp' && <p className="muted inspector-note">{t("Candidates learned from enabled attachments after neighbor outbound maps. Shortest AS paths are preferred; equal-cost paths are retained. Click a prefix to highlight its preferred next hops.")}</p>}
+    {location && <p className="muted inspector-note">{t("Circuit export rules still apply. Global Reach and shared-circuit hub reflection are not modeled.")}{mode !== 'bgp' && t(" Routes are shown from the ER location's perspective; it has no configurable route maps.")}</p>}
+    <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th></tr></thead>
       {groups.map((d) => <tbody key={d.prefix}>
-        <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={mode === 'bgp' ? 3 : 2} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" onClick={() => onPrefix(d.prefix)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.join(' ')}</span></th></tr>
+        <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={mode === 'bgp' ? 3 : 2} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" onClick={() => onPrefix(d.prefix)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span></th></tr>
         {[...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((r) => <tr key={r.key} data-prefix={d.prefix} data-preferred={mode === 'bgp' ? r.preferred : undefined} className={mode === 'bgp' ? r.preferred ? 'preferred-route' : 'alternative-route' : undefined}>
-        {mode === 'bgp' && <td className="route-state" aria-label={r.preferred ? 'Preferred' : 'Alternative'}>{r.preferred ? '*' : ''}</td>}
-        <td>{r.nextHop}{r.via && <small>Via {r.via}</small>}<small>{r.source}</small></td>
+        {mode === 'bgp' && <td className="route-state" aria-label={r.preferred ? t("Preferred") : t("Alternative")}>{r.preferred ? '*' : ''}</td>}
+        <td>{r.nextHop}{r.via && <small>{t("Via")} {r.via}</small>}<small>{r.source}</small></td>
         <td className="as-path">{r.asPath.join(' ') || '—'}</td>
       </tr>)}</tbody>)}
     </table></div>
-    {!groups.length && <p className="empty">{filter || neighbor ? 'No routes match the current filters.' : 'No routes available on this router.'}</p>}
+    {!groups.length && <p className="empty">{filter || neighbor ? t("No routes match the current filters.") : t("No routes available on this router.")}</p>}
   </CanvasOverlay>
 }

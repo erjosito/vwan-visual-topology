@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { RouteMap, RouteMapDirection } from './model'
@@ -41,10 +42,10 @@ export function RouteMapPreview({ id, anchor, map, owner, connection, direction,
     }
   }, [anchor, map, onClose])
   return createPortal(<div ref={preview} id={id} role="tooltip" className={`route-map-preview ${direction}`} onPointerEnter={onEnter} onPointerLeave={onLeave}>
-    <h3><span className={`policy-tag ${direction}`}>{direction === 'inbound' ? 'IN' : 'OUT'}</span>{map.name}</h3>
+    <h3><span className={`policy-tag ${direction}`}>{t(direction === 'inbound' ? 'IN' : 'OUT')}</span>{map.name}</h3>
     <p>{owner} · {connection}</p>
-    {!enabled && <p className="notice">Connection down; configured but inactive.</p>}
-    <RouteMapRules map={map} label={`Preview rules for ${map.name}`} />
-    <p className="muted">Rules run in order; unmatched routes pass unchanged. Click the marker to inspect or configure. Escape dismisses this preview.</p>
+    {!enabled && <p className="notice">{t("Connection down; configured but inactive.")}</p>}
+    <RouteMapRules map={map} label={t("Preview rules for {0}", map.name)} />
+    <p className="muted">{t("Rules run in order; unmatched routes pass unchanged. Click the marker to inspect or configure. Escape dismisses this preview.")}</p>
   </div>, document.body)
 }

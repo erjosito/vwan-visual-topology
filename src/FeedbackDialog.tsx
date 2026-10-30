@@ -1,3 +1,5 @@
+import { t, localizeDiagnostic } from './i18n'
+import { LanguageSelector } from './LanguageSelector'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 
@@ -120,22 +122,22 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
   }
   return <dialog ref={dialog} className="object-dialog feedback-dialog" aria-labelledby="feedback-title"
     aria-describedby="feedback-privacy" onCancel={(event) => { if (inFlight.current) event.preventDefault() }} onClose={onClose}>
-    <div className="row dialog-heading"><h2 id="feedback-title">Send feedback</h2><button type="button" disabled={pending} aria-label="Close feedback" onClick={onClose}>Close</button></div>
-    <p id="feedback-privacy">Feedback is optional and online. Only the text you enter, your GitHub reporter name and app revision are sent to a private GitHub issue visible to this app&apos;s maintainers. No topology, network configuration, screenshots or browser logs are attached. Do not include secrets or confidential information.</p>
-    {reference ? <div role="status"><p>Feedback received. Reference: <strong>{reference}</strong></p><p>The private issue is not publicly accessible. No automatic status notifications are provided.</p></div> : <form onSubmit={(event) => { void submit(event) }}>
-      {availability !== 'ready' && <p role="status">{availability === 'loading' ? 'Checking feedback availability...' : 'Feedback is not configured or is temporarily unavailable. The simulator still works offline.'}</p>}
-      <label className="field"><span>Category</span><select disabled={pending} value={draft.category} onChange={(event) => change('category', event.target.value)}><option value="bug">Bug</option><option value="feature">Feature request</option><option value="other">Other</option></select></label>
-      <label className="field"><span>Summary</span><input required minLength={5} maxLength={120} disabled={pending} value={draft.title} onChange={(event) => change('title', event.target.value)} /></label>
-      <label className="field"><span>Description</span><textarea required minLength={20} maxLength={8000} rows={6} disabled={pending} value={draft.description} onChange={(event) => change('description', event.target.value)} placeholder="What happened, what did you expect, and how can we reproduce it?" /></label>
-      <label className="field"><span>Contact email (optional)</span><input type="email" maxLength={254} disabled={pending} value={draft.contact} onChange={(event) => change('contact', event.target.value)} /></label>
-      <details><summary>Review what will be sent</summary><dl><dt>Category</dt><dd>{draft.category}</dd><dt>Summary</dt><dd>{draft.title}</dd><dt>Description</dt><dd className="feedback-preview">{draft.description}</dd><dt>Optional contact</dt><dd>{draft.contact || 'None'}</dd><dt>Reporter</dt><dd>{identity || 'Your GitHub name after sign-in'}</dd><dt>App revision</dt><dd>{appRevision}</dd><dt>Report reference</dt><dd>{draft.requestId}</dd></dl></details>
-      <label className="checkbox-field"><input type="checkbox" checked={consent} disabled={pending} onChange={(event) => setConsent(event.target.checked)} />I agree to send this text and my GitHub reporter identity to the maintainers.</label>
-      <p className="muted">Drafts stay in this tab across sign-in and are removed after success or Discard. Signing in is only for feedback; the simulator needs no account.</p>
-      {storageError && <p role="alert" className="notice">{storageError}</p>}
-      {error && <p role="alert" className="notice error">{error}</p>}
-      <div className="row dialog-actions"><button type="button" disabled={pending} onClick={discard}>Discard draft</button>{!identity
-        ? <button type="button" className="primary" disabled={availability !== 'ready'} onClick={signIn}>Sign in with GitHub</button>
-        : <button type="submit" className="primary" disabled={pending || !consent || availability !== 'ready'}>{pending ? 'Sending...' : 'Send feedback'}</button>}</div>
+    <div className="row dialog-heading"><h2 id="feedback-title">{t("Send feedback")}</h2><LanguageSelector /><button type="button" disabled={pending} aria-label={t("Close feedback")} onClick={onClose}>{t("Close")}</button></div>
+    <p id="feedback-privacy">{t("Feedback is optional and online. Only the text you enter, your GitHub reporter name and app revision are sent to a private GitHub issue visible to this app's maintainers. No topology, network configuration, screenshots or browser logs are attached. Do not include secrets or confidential information.")}</p>
+    {reference ? <div role="status"><p>{t("Feedback received. Reference:")} <strong>{reference}</strong></p><p>{t("The private issue is not publicly accessible. No automatic status notifications are provided.")}</p></div> : <form onSubmit={(event) => { void submit(event) }}>
+      {availability !== 'ready' && <p role="status">{availability === 'loading' ? t("Checking feedback availability...") : t("Feedback is not configured or is temporarily unavailable. The simulator still works offline.")}</p>}
+      <label className="field"><span>{t("Category")}</span><select disabled={pending} value={draft.category} onChange={(event) => change('category', event.target.value)}><option value="bug">{t("Bug")}</option><option value="feature">{t("Feature request")}</option><option value="other">{t("Other")}</option></select></label>
+      <label className="field"><span>{t("Summary")}</span><input required minLength={5} maxLength={120} disabled={pending} value={draft.title} onChange={(event) => change('title', event.target.value)} /></label>
+      <label className="field"><span>{t("Description")}</span><textarea aria-label={t('Description')} required minLength={20} maxLength={8000} rows={6} disabled={pending} value={draft.description} onChange={(event) => change('description', event.target.value)} placeholder={t("What happened, what did you expect, and how can we reproduce it?")} /></label>
+      <label className="field"><span>{t("Contact email (optional)")}</span><input type="email" maxLength={254} disabled={pending} value={draft.contact} onChange={(event) => change('contact', event.target.value)} /></label>
+      <details><summary>{t("Review what will be sent")}</summary><dl><dt>{t("Category")}</dt><dd>{t(draft.category)}</dd><dt>{t("Summary")}</dt><dd>{draft.title}</dd><dt>{t("Description")}</dt><dd className="feedback-preview">{draft.description}</dd><dt>{t("Optional contact")}</dt><dd>{draft.contact || t("None")}</dd><dt>{t("Reporter")}</dt><dd>{identity || t("Your GitHub name after sign-in")}</dd><dt>{t("App revision")}</dt><dd>{appRevision}</dd><dt>{t("Report reference")}</dt><dd>{draft.requestId}</dd></dl></details>
+      <label className="checkbox-field"><input type="checkbox" checked={consent} disabled={pending} onChange={(event) => setConsent(event.target.checked)} />{t("I agree to send this text and my GitHub reporter identity to the maintainers.")}</label>
+      <p className="muted">{t("Drafts stay in this tab across sign-in and are removed after success or Discard. Signing in is only for feedback; the simulator needs no account.")}</p>
+      {storageError && <p role="alert" className="notice">{localizeDiagnostic(storageError)}</p>}
+      {error && <p role="alert" className="notice error">{localizeDiagnostic(error)}</p>}
+      <div className="row dialog-actions"><button type="button" disabled={pending} onClick={discard}>{t("Discard draft")}</button>{!identity
+        ? <button type="button" className="primary" disabled={availability !== 'ready'} onClick={signIn}>{t("Sign in with GitHub")}</button>
+        : <button type="submit" className="primary" disabled={pending || !consent || availability !== 'ready'}>{pending ? t("Sending...") : t("Send feedback")}</button>}</div>
     </form>}
   </dialog>
 }

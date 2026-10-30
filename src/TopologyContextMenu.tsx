@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 export interface ContextAction { label: string; run?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean }
@@ -64,8 +65,8 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
         items[index]?.focus({ preventScroll: true })
       }
     }}>
-      <div role="presentation" className="context-menu-title">{onBack && <button role="menuitem" className="submenu-back" aria-label={`Back from ${title}`} onClick={onBack}><span aria-hidden="true" className="menu-chevron back" /></button>}<span>{title}</span></div>
-      {actions.map((action, index) => <button key={`${action.label}:${index}`} ref={(element) => { buttons.current[index] = element }} data-action role="menuitem" className={`${action.danger ? 'danger' : ''} ${opened?.index === index ? 'submenu-active' : ''}`} disabled={action.disabled}
+      <div role="presentation" className="context-menu-title">{onBack && <button role="menuitem" className="submenu-back" aria-label={t("Back from {0}", title)} onClick={onBack}><span aria-hidden="true" className="menu-chevron back" /></button>}<span>{title}</span></div>
+      {actions.map((action, index) => <button key={index} ref={(element) => { buttons.current[index] = element }} data-action role="menuitem" className={`${action.danger ? 'danger' : ''} ${opened?.index === index ? 'submenu-active' : ''}`} disabled={action.disabled}
         aria-haspopup={action.children?.length ? 'menu' : undefined} aria-expanded={action.children?.length ? opened?.index === index : undefined}
         onPointerEnter={(event) => {
           if (event.pointerType === 'touch' || action.disabled) return

@@ -1,3 +1,4 @@
+import { t } from './i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
@@ -38,8 +39,8 @@ export function CanvasOverlay({ title, children, onClose, className = '' }: {
         y: Math.max(0, Math.min(parent.clientHeight - 48, drag.current.top + event.clientY - drag.current.y)),
       })
     }} onPointerUp={() => { drag.current = undefined }} onLostPointerCapture={() => { drag.current = undefined }}>
-      <div><p className="eyebrow">CANVAS INSPECTOR · DRAG TO MOVE</p><h2>{title}</h2></div>
-      <div className="row"><button aria-label={`Move ${title} to left`} onClick={() => setPosition({ x: 12, y: 12 })}>Left</button><button aria-label={`Move ${title} to right`} onClick={() => setPosition(undefined)}>Right</button><button aria-label={`Close ${title}`} onClick={onClose}>Close</button></div>
+      <div><p className="eyebrow">{t("CANVAS INSPECTOR · DRAG TO MOVE")}</p><h2>{title}</h2></div>
+      <div className="row"><button aria-label={t("Move {0} to left", title)} onClick={() => setPosition({ x: 12, y: 12 })}>{t("Left")}</button><button aria-label={t("Move {0} to right", title)} onClick={() => setPosition(undefined)}>{t("Right")}</button><button aria-label={t("Close {0}", title)} onClick={onClose}>{t("Close")}</button></div>
     </div>
     <div className="overlay-content">{children}</div>
   </div>

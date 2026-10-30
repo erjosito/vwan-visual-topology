@@ -28,6 +28,29 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 
+## Languages and networking terminology
+
+The interface supports **English** and **日本語 (Japanese)**. The header language selector changes the interface without changing topology names, addresses, configuration, selected routes or exported JSON. The choice is saved locally, independently of the topology; English remains the default. Translations are bundled with the app and do not call an external translation service.
+
+Japanese terminology follows Microsoft's Japanese Virtual WAN documentation, cross-checked against Cisco's Japanese BGP documentation:
+
+| English | Japanese |
+|---|---|
+| Route / route table | ルート / ルート テーブル |
+| BGP table | BGP テーブル |
+| Learned routes | 学習したルート |
+| Advertised routes | アドバタイズしたルート |
+| Effective routes | 有効なルート |
+| AS path / prefix | AS パス / プレフィックス |
+| Next hop / neighbor | 次ホップ / ネイバー |
+| Route map | ルート マップ |
+| Longest-prefix match | 最長プレフィックス一致 (LPM) |
+| Hub routing preference | ハブのルーティングの優先順位 |
+
+Established product/protocol names and acronyms such as Azure, Virtual WAN, ExpressRoute, BGP, VPN, SD-WAN, ASN and ECMP stay unchanged. User-defined/imported/example names and regions, numeric data, schema keys and executable code are data, not translated interface text. Unknown externally supplied warnings stay as supplied rather than being machine-translated; browser-native validation follows the browser's own language.
+
+Sources checked before implementation: [Microsoft hub routing preference](https://learn.microsoft.com/ja-jp/azure/virtual-wan/about-virtual-hub-routing-preference), [effective routes](https://learn.microsoft.com/ja-jp/azure/virtual-wan/effective-routes-virtual-hub), [route maps](https://learn.microsoft.com/ja-jp/azure/virtual-wan/route-maps-about), and [Cisco BGP best-path selection](https://www.cisco.com/c/ja_jp/support/docs/ip/border-gateway-protocol-bgp/13753-25.html).
+
 ## Run locally
 
 Requires Node.js 22.12+.

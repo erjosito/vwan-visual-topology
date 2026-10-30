@@ -156,3 +156,8 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .azure-files fieldset { border: 1px solid var(--border, #dce4ef); border-radius: 8px; margin: 16px 0; padding: 12px; }
 .azure-code { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; background: #f3f6fa; padding: 12px; border-radius: 8px; }
 .azure-resource-id { overflow-wrap: anywhere; font-size: 12px; }
+.language-selector { display: flex; align-items: center; gap: .4rem; font-size: .8rem; white-space: nowrap; }
+.language-selector select { min-width: 6rem; padding: .45rem; }
+.feedback-dialog .dialog-heading { flex-wrap: wrap; }
+:lang(ja) .diagram-caption { letter-spacing: .03em; }
+:lang(ja) .node-kind { font-size: 9px; letter-spacing: 0; }
