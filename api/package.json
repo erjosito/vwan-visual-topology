@@ -14,8 +14,7 @@
   "dependencies": {
     "@azure/functions": "^4.17.0",
     "@octokit/auth-app": "^8.3.1",
-    "@octokit/request": "^10.0.16",
-    "vwan-visual-topology": "file:.."
+    "@octokit/request": "^10.0.16"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
