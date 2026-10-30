@@ -48,6 +48,7 @@ export function diagramCurve(a: NodePosition, b: NodePosition, aSize: NodePositi
   }
   const start = boundary(a, aSize), end = boundary(b, bSize)
   return {
+    start, control, end,
     d: `M ${start.x} ${start.y} Q ${control.x} ${control.y} ${end.x} ${end.y}`,
     label: { x: (start.x + 2 * control.x + end.x) / 4, y: (start.y + 2 * control.y + end.y) / 4 },
     at: (t: number) => ({

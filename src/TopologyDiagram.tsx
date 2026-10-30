@@ -11,6 +11,8 @@ import securedHubIcon from './assets/azure/secured-virtual-hub.png'
 import virtualNetworkIcon from './assets/azure/virtual-network.svg'
 import expressRouteIcon from './assets/azure/expressroute.svg'
 import { RouteMapPreview } from './RouteMapPreview'
+import { PathMotion } from './PathMotion'
+import type { MotionSegment } from './PathMotion'
 
 export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
 interface Props {
@@ -92,11 +94,27 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
   if (tracing) paths.forEach((p) => p.hubs.slice(1).forEach((id, i) => activeHubEdges.add(edgeKey(p.hubs[i], id))))
   else selected.filter((r) => r.remote).forEach((r) => activeHubEdges.add(edgeKey(hubId, r.originHubId)))
   const exactSiteLinks = new Set(tracing ? [...paths.flatMap((p) => p.siteLinkIds ?? []), ...sourceSiteLinkIds] : (selectedSiteRoutes ?? selected).flatMap((r) => r.siteLinkIds ?? []))
-  const travel = new Map<string, Set<string>>()
+  const motionEdges = new Map<string, { a: string; b: string; curve: ReturnType<typeof diagramCurve> }>()
+  topology.connections.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.hubId, b: link.siteId, curve: curves.get(link.id)! }))
+  topology.siteLinks.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.a, b: link.b, curve: curves.get(link.id)! }))
+  topology.erLinks?.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.hubId ?? link.siteId!, b: link.locationId, curve: curves.get(link.id)! }))
+  topology.spokes.forEach((spoke) => motionEdges.set(spoke.id, { a: spoke.id, b: spoke.hubId, curve: diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12) }))
+  topology.hubs.forEach((hub, i) => topology.hubs.slice(i + 1).forEach((other) => motionEdges.set(`interhub:${edgeKey(hub.id, other.id)}`, {
+    a: hub.id, b: other.id, curve: diagramCurve(point(hub.id), point(other.id), hubSize, hubSize, -35),
+  })))
+  const flows: MotionSegment[][] = []
+  let flow: MotionSegment[] = []
+  const finishFlow = () => { if (flow.length) flows.push(flow); flow = [] }
   const direct = (id: string | undefined, from: string | undefined) => {
     if (!id || !from) return
-    if (!travel.has(id)) travel.set(id, new Set())
-    travel.get(id)!.add(from)
+    const edge = motionEdges.get(id)
+    if (!edge || (from !== edge.a && from !== edge.b)) return
+    if (flow.length && flow.at(-1)!.to !== from) finishFlow()
+    flow.push({
+      id, from, to: from === edge.a ? edge.b : edge.a, control: edge.curve.control,
+      start: from === edge.a ? edge.curve.start : edge.curve.end,
+      end: from === edge.a ? edge.curve.end : edge.curve.start,
+    })
   }
   const siteTravel = (links: string[] = [], hops: string[] = []) => links.forEach((id, i) => direct(id, hops[i]))
   const attachmentTravel = (id: string | undefined, inward = false) => {
@@ -117,6 +135,7 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
       if (path.erLinkIds?.length) path.erLinkIds.forEach((id) => attachmentTravel(id))
       else attachmentTravel(path.connectionId)
       siteTravel(path.siteLinkIds, path.siteHops)
+      finishFlow()
     }
   } else {
     for (const route of selected) {
@@ -124,20 +143,22 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
         const link = topology.erLinks?.find((link) => link.id === route.connectionId)
         attachmentTravel(route.connectionId, !!link?.hubId)
         siteTravel(route.siteLinkIds, route.sitePath)
+        finishFlow()
         continue
       }
-      if (route.remote) direct(`interhub:${edgeKey(hubId, route.originHubId)}`, hubId)
-      if (route.erHubLinkId && route.erSiteLinkId) {
-        attachmentTravel(route.erHubLinkId); attachmentTravel(route.erSiteLinkId)
-      } else attachmentTravel(route.connectionId)
-      siteTravel(route.siteLinkIds, route.sitePath)
+      const sources = topology.spokes.filter((spoke) => spoke.hubId === hubId && !activeConnections.has(spoke.id))
+      for (const source of sources.length ? sources : [undefined]) {
+        attachmentTravel(source?.id, true)
+        if (route.remote) direct(`interhub:${edgeKey(hubId, route.originHubId)}`, hubId)
+        if (route.erHubLinkId && route.erSiteLinkId) {
+          attachmentTravel(route.erHubLinkId); attachmentTravel(route.erSiteLinkId)
+        } else attachmentTravel(route.connectionId)
+        siteTravel(route.siteLinkIds, route.sitePath)
+        finishFlow()
+      }
     }
-    selectedSiteRoutes?.forEach((route) => siteTravel(route.siteLinkIds, route.sitePath))
-    topology.spokes.filter((spoke) => spoke.hubId === hubId && !activeConnections.has(spoke.id))
-      .forEach((spoke) => { if (selected.length) attachmentTravel(spoke.id, true) })
+    selectedSiteRoutes?.forEach((route) => { siteTravel(route.siteLinkIds, route.sitePath); finishFlow() })
   }
-  const motion = (id: string, d: string, a: string, b: string) => [...(travel.get(id) ?? [])].map((from) =>
-    <path key={from} className={`path-flow-dots${from === a ? '' : ' reverse'}`} d={d} aria-hidden="true" data-link-id={id} data-from-id={from} data-to-id={from === a ? b : a} />)
   const coordinates = (event: PointerEvent<SVGGElement>) => new DOMPoint(event.clientX, event.clientY).matrixTransform(svg.current!.getScreenCTM()!.inverse())
   const bound = (position: NodePosition, kind: ObjectSelection['kind']) => ({
     x: Math.round(Math.max(120, Math.min(20000, width - 130, position.x))),
@@ -241,28 +262,29 @@ export function TopologyDiagram({ topology, hubId, erLocationId, selected, selec
       : <g className="constellation-orbits" aria-hidden="true"><ellipse cx={width / 2} cy={height / 2} rx={width / 2 - 130} ry={height / 2 - 80} /><ellipse cx={width / 2} cy={height / 2} rx={Math.max(180, topology.hubs.length * 130)} ry="145" /><text x="24" y="30" className="diagram-caption">VIRTUAL WAN · NETWORK CONSTELLATION</text></g>}
     {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).map((other) => {
       const edge = diagramCurve(point(h.id), point(other.id), hubSize, hubSize, -35)
-      return <g key={edgeKey(h.id, other.id)}><path data-testid={`interhub-${h.id}-${other.id}`} className={`network-link backbone ${activeHubEdges.has(edgeKey(h.id, other.id)) ? 'preferred-link' : ''}`} d={edge.d} />{activeHubEdges.has(edgeKey(h.id, other.id)) && motion(`interhub:${edgeKey(h.id, other.id)}`, edge.d, h.id, other.id)}{badge('Inter-hub', edge.label)}</g>
+      return <g key={edgeKey(h.id, other.id)}><path data-testid={`interhub-${h.id}-${other.id}`} className={`network-link backbone ${activeHubEdges.has(edgeKey(h.id, other.id)) ? 'preferred-link' : ''}`} d={edge.d} />{badge('Inter-hub', edge.label)}</g>
     }))}
     {topology.spokes.map((spoke) => {
       const active = activeConnections.has(spoke.id) || sourceSpokeIds.includes(spoke.id) || (!tracing && spoke.hubId === hubId)
       const edge = diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12)
-      return <g key={spoke.id} className="clickable" {...selectable('spoke', spoke.id, `Edit spoke connection ${spoke.name}`)}><path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${active ? 'preferred-link' : ''}`} d={edge.d} />{active && motion(spoke.id, edge.d, spoke.id, spoke.hubId)}</g>
+      return <g key={spoke.id} className="clickable" {...selectable('spoke', spoke.id, `Edit spoke connection ${spoke.name}`)}><path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${active ? 'preferred-link' : ''}`} d={edge.d} /></g>
     })}
     {topology.connections.map((connection) => {
       const edge = curves.get(connection.id)!
       const active = connection.enabled && activeConnections.has(connection.id)
       const name = connection.transport === 'ExpressRoute' ? 'ER' : connection.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'
-      return <g key={connection.id} className="clickable" {...selectable('connection', connection.id, `Edit connection ${connection.name}`)}><title>{connection.name} · {transportLabels[connection.transport]} · {connection.enabled ? active ? 'Preferred' : 'Alternative' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`link-${connection.id}`} data-preferred={active} className={`network-link ${connection.transport} ${active ? 'preferred-link' : ''} ${connection.enabled ? '' : 'disabled-link'}`} d={edge.d} />{active && motion(connection.id, edge.d, connection.hubId, connection.siteId)}{badge(`${name}${connection.enabled ? '' : ' (down)'}`, edge.label)}</g>
+      return <g key={connection.id} className="clickable" {...selectable('connection', connection.id, `Edit connection ${connection.name}`)}><title>{connection.name} · {transportLabels[connection.transport]} · {connection.enabled ? active ? 'Preferred' : 'Alternative' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`link-${connection.id}`} data-preferred={active} className={`network-link ${connection.transport} ${active ? 'preferred-link' : ''} ${connection.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`${name}${connection.enabled ? '' : ' (down)'}`, edge.label)}</g>
     })}
     {topology.siteLinks.map((link) => {
       const edge = curves.get(link.id)!
-      return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, `Select on-premises link ${link.name}`)}><title>{link.name}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${link.enabled && exactSiteLinks.has(link.id) ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{link.enabled && exactSiteLinks.has(link.id) && motion(link.id, edge.d, link.a, link.b)}{badge(link.name.length > 30 ? `${link.name.slice(0, 28)}…` : link.name, edge.label)}</g>
+      return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, `Select on-premises link ${link.name}`)}><title>{link.name}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${link.enabled && exactSiteLinks.has(link.id) ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(link.name.length > 30 ? `${link.name.slice(0, 28)}…` : link.name, edge.label)}</g>
     })}
     {(topology.erLinks ?? []).map((link) => {
       const edge = curves.get(link.id)!
       const active = link.enabled && activeErLinks.has(link.id)
-      return <g key={link.id} className="clickable" {...selectable('erLink', link.id, `Edit ER connection ${link.name}`)}><title>{link.name} · ExpressRoute · {link.enabled ? 'Enabled' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{active && motion(link.id, edge.d, link.hubId ?? link.siteId!, link.locationId)}{badge(`ER${link.enabled ? '' : ' (down)'}`, edge.label)}</g>
+      return <g key={link.id} className="clickable" {...selectable('erLink', link.id, `Edit ER connection ${link.name}`)}><title>{link.name} · ExpressRoute · {link.enabled ? 'Enabled' : 'Down'}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : ' (down)'}`, edge.label)}</g>
     })}
+    <PathMotion flows={flows} pixelsPerUnit={scale * zoom} />
     {topology.hubs.map((hub) => {
       const p = point(hub.id)
       const secured = hub.routingIntent.private || hub.routingIntent.internet
