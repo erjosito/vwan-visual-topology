@@ -154,6 +154,7 @@ export async function submit(
     const body = [
       'Submitted through the Virtual WAN Topology Lab feedback form.',
       `Category: ${data.category}\n\nReporter: ${literal(reporter.name)}`,
+      `Summary:\n${literal(data.title)}`,
       `Description:\n${literal(data.description)}`,
       data.contact ? `Optional contact:\n${literal(data.contact)}` : 'No contact email provided.',
       `Client-reported app revision: ${literal(data.appRevision)}\n\nSubmitted at: ${now.toISOString()}`,

@@ -95,6 +95,7 @@ describe('managed feedback API', () => {
     expect(JSON.stringify(result)).not.toContain('github.com')
     const [title, body] = github.create.mock.calls[0]
     expect(title).not.toContain('@')
+    expect(body).toContain('Summary:\n```text\nHello @everyone test\n```')
     expect(body).toContain('````text\n```text\n@everyone')
     expect(body).not.toContain(principal.userId)
     expect(body).toMatch(/<!-- vwan-feedback \{"requestId":.*\} -->$/)
