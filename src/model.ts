@@ -22,6 +22,7 @@ export interface Site {
   name: string
   asn: number
   prefixes: string[]
+  role?: 'spoke-nva'
   routeMapAssignments?: RouteMapAssignment[]
   vpnStaticRoutes?: VpnStaticRoute[]
 }

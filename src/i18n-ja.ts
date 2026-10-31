@@ -906,5 +906,10 @@ export const ja: Record<string, string> = {
   'Azure VNet:': 'Azure VNet:',
   'On-premises site:': 'オンプレミス サイト:',
   'Link this on-premises site to one or more spoke BGP NVAs so they exchange BGP routes with it.': 'このオンプレミス サイトを 1 つ以上のスポーク BGP NVA にリンクし、BGP ルートを交換します。',
+  'One or more optional comma-separated IPv4 networks for this site. Leave blank for a transit-only site or explicit connection advertisements.': 'このサイトの 1 つ以上の IPv4 ネットワーク (カンマ区切り、省略可能)。トランジット専用サイトまたは明示的な接続アドバタイズのみの場合は空欄にします。',
+  'Assign {0} to {1}': '{0} を {1} に割り当て',
+  'Assign all ({0}) to {1}': 'すべて ({0} 件) を {1} に割り当て',
+  'Spoke BGP NVAs': 'スポーク BGP NVA',
+  'spoke NVAs': 'スポーク NVA',
   'empty': '空',
 }

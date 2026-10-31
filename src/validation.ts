@@ -134,15 +134,15 @@ export function validateTopology(input: unknown): Topology {
     const site = record(value)
     const asn = asns([site.asn ?? 65001])[0]
     if (asn === 65520 || asn === 65515 || asn === 12076) fail('Use a non-Azure site ASN.')
-    const originated = array(site.prefixes ?? [], 100, 'Site originated prefixes')
-    if (originated.length > 1) fail(`Site "${text(site.name, 'Site name')}" supports only one originated prefix. Reduce its prefixes to one before importing; no networks have been discarded.`)
+    const originated = array(site.prefixes ?? [], 30, 'Site originated prefixes')
     const vpnStaticRoutes = array(site.vpnStaticRoutes ?? [], 12000, 'Site VPN static routes').map((value) => {
       const route = record(value)
       const prefix = text(route.prefix, 'Static prefix')
       if (!cidr(prefix)) fail(`Invalid static IPv4 network CIDR: ${prefix}`)
       return { id: id(route.id), prefix, connectionId: text(route.connectionId, 'Static route VPN connection') }
     })
-    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: prefixes(originated, 'Site originated prefix'),
+    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: [...new Set(prefixes(originated, 'Site originated prefix'))],
+      ...(site.role === 'spoke-nva' ? { role: 'spoke-nva' as const } : {}),
       ...(site.vpnStaticRoutes === undefined ? {} : { vpnStaticRoutes }),
       ...(site.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(site.routeMapAssignments) }) }
   })

@@ -5,11 +5,12 @@ import { t } from './i18n'
 import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 
-export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEditObject, onEditAdvertisements, onOpenStaticRouting }: {
+export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEditObject, onEditAdvertisements, onOpenStaticRouting, onAssignPrefixToSite }: {
   report: DiagnosticsReport; topology: Topology; initiallyOpen?: boolean
   onEditObject?: (node: ObjectSelection) => void
   onEditAdvertisements?: (connectionId: string) => void
   onOpenStaticRouting?: (router: RouterSelection) => void
+  onAssignPrefixToSite?: (siteId: string, prefixes: string[]) => void
 }) {
   const [visibleCount, setVisibleCount] = useState(50)
   const coverage = summarizeCoverage(report)
@@ -50,9 +51,16 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
           .filter((item): item is NonNullable<typeof item> => !!item))]
         const hasStaticRoutes = !!site && finding.evidence.some((evidence) =>
           site.vpnStaticRoutes?.some((route) => route.connectionId === evidence.connectionId && route.prefix === evidence.prefix))
+        const unassignedSitePrefixes = site ? [...new Set(finding.evidence.map((e) => e.prefix).filter((p): p is string => typeof p === 'string' && !site.prefixes.includes(p)))] : []
         return <article className="coverage-note" key={finding.id}>
           <div className="row">
             <strong>{t(finding.title)}</strong>
+            {site && onAssignPrefixToSite && unassignedSitePrefixes.map((prefix) => (
+              <button key={`assign:${prefix}`} type="button" className="ghost" onClick={() => onAssignPrefixToSite(site.id, [prefix])}>{t('Assign {0} to {1}', prefix, site.name)}</button>
+            ))}
+            {site && onAssignPrefixToSite && unassignedSitePrefixes.length > 1 && (
+              <button type="button" className="ghost" onClick={() => onAssignPrefixToSite(site.id, unassignedSitePrefixes)}>{t('Assign all ({0}) to {1}', unassignedSitePrefixes.length, site.name)}</button>
+            )}
             {owner && onEditObject && <button type="button" className="ghost" onClick={() => onEditObject(owner)}>{t('Edit {0}', name(owner))}</button>}
             {onEditAdvertisements && connectionAds.map((connection) => (
               <button key={connection.id} type="button" className="ghost" onClick={() => onEditAdvertisements(connection.id)}>{t('Edit advertisements: {0}', connection.name)}</button>

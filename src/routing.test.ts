@@ -629,16 +629,20 @@ describe('route maps and on-premises transit', () => {
 })
 
 describe('topology and input validation', () => {
-  it('accepts zero or one site prefix and multiple connection routes, but rejects multiple originated prefixes without mutating input', () => {
+  it('accepts zero, one, or multiple site prefixes up to 30 and preserves role without mutating input', () => {
     const topology = structuredClone(example)
     topology.sites[0].prefixes = ['10.90.0.0/16']
     expect(validateTopology(topology).sites[0].prefixes).toEqual(['10.90.0.0/16'])
     expect(validateTopology(topology).connections[0].routes).toHaveLength(2)
-    topology.sites[0].prefixes.push('10.91.0.0/16')
-    expect(() => validateTopology(topology)).toThrow('only one originated prefix')
-    expect(topology.sites[0].prefixes).toEqual(['10.90.0.0/16', '10.91.0.0/16'])
+    topology.sites[0].prefixes.push('10.91.0.0/16', '10.90.0.0/16')
+    expect(validateTopology(topology).sites[0].prefixes).toEqual(['10.90.0.0/16', '10.91.0.0/16'])
+    expect(topology.sites[0].prefixes).toEqual(['10.90.0.0/16', '10.91.0.0/16', '10.90.0.0/16'])
+    const siteTables = propagateSites(validateTopology(topology)).tables
+    expect(siteTables[topology.sites[0].id].some((r) => r.prefix === '10.91.0.0/16' && r.sitePath.includes(topology.sites[0].id))).toBe(true)
     topology.sites[0].prefixes = []
     expect(validateTopology(topology).sites[0].prefixes).toEqual([])
+    topology.sites[0].prefixes = Array.from({ length: 31 }, (_, i) => `10.${i}.0.0/16`)
+    expect(() => validateTopology(topology)).toThrow('Site originated prefixes must be an array with at most 30 entries.')
   })
   it('round-trips the example through the versioned schema', () => {
     expect(validateTopology(JSON.parse(JSON.stringify(example)))).toEqual({ ...example, routeMaps: [] })

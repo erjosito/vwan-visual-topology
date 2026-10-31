@@ -78,7 +78,7 @@ function App() {
   const [routingCheck, setRoutingCheck] = useState<{ revision: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; report?: DiagnosticsReport }>()
   const [routingIssueId, setRoutingIssueId] = useState<string>()
   const [reviewCoverage, setReviewCoverage] = useState(false)
-  const checkWorker = useRef<Worker | undefined>(undefined)
+  const checkWorker = useRef<{ worker: Worker; revision: string } | undefined>(undefined)
   const routingKey = useMemo(() => routingRevision(topology), [topology])
   const currentCheck = routingCheck?.revision === routingKey ? routingCheck : undefined
   const routingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity === 'error' || finding.severity === 'warning') ?? []
@@ -89,46 +89,52 @@ function App() {
     setEditorRequest(node)
   }
   useEffect(() => {
-    checkWorker.current?.terminate(); checkWorker.current = undefined
-    return () => { checkWorker.current?.terminate(); checkWorker.current = undefined }
+    if (checkWorker.current && checkWorker.current.revision !== routingKey) {
+      checkWorker.current.worker.terminate()
+      checkWorker.current = undefined
+    }
   }, [routingKey])
+  useEffect(() => () => { checkWorker.current?.worker.terminate(); checkWorker.current = undefined }, [])
   const cancelRoutingCheck = () => {
-    checkWorker.current?.terminate(); checkWorker.current = undefined
+    checkWorker.current?.worker.terminate(); checkWorker.current = undefined
     setRoutingCheck(undefined)
   }
-  const checkRouting = () => {
-    cancelRoutingCheck()
-    setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPanel(undefined)
+  const runRoutingCheck = (targetTopology = topology, preservePanel = false) => {
+    checkWorker.current?.worker.terminate(); checkWorker.current = undefined
+    setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false)
+    if (!preservePanel) setPanel(undefined)
     let profile = { version: 1 as const, intents: [], failureAnalysis: false } as ReturnType<typeof validateDiagnosticsProfile>
     let requirementsUnavailable = false
     try {
       const saved = localStorage.getItem('vwan-visual-topology:diagnostics:v1')
       if (saved) profile = validateDiagnosticsProfile(JSON.parse(saved))
     } catch { requirementsUnavailable = true }
+    const targetRevision = routingRevision(targetTopology)
     try {
       const next = new Worker(new URL('./diagnostics-worker.ts', import.meta.url), { type: 'module' })
-      checkWorker.current = next
-      setRoutingCheck({ revision: routingKey, status: 'running' })
+      checkWorker.current = { worker: next, revision: targetRevision }
+      setRoutingCheck({ revision: targetRevision, status: 'running', report: preservePanel ? currentCheck?.report : undefined })
       next.onmessage = ({ data }: MessageEvent<{ report?: DiagnosticsReport }>) => {
-        if (checkWorker.current !== next) return
+        if (checkWorker.current?.worker !== next) return
         if (data.report && requirementsUnavailable) {
           data.report.complete = false
           data.report.limitations.push('Saved requirements could not be read. Automatic checks ran without them.')
         }
-        setRoutingCheck({ revision: routingKey, status: data.report ? 'complete' : 'failed', report: data.report })
+        setRoutingCheck({ revision: targetRevision, status: data.report ? 'complete' : 'failed', report: data.report })
         next.terminate(); checkWorker.current = undefined
       }
       next.onerror = () => {
-        if (checkWorker.current !== next) return
-        setRoutingCheck({ revision: routingKey, status: 'failed' })
+        if (checkWorker.current?.worker !== next) return
+        setRoutingCheck({ revision: targetRevision, status: 'failed' })
         next.terminate(); checkWorker.current = undefined
       }
-      next.postMessage({ topology, profile, automatic: true })
+      next.postMessage({ topology: targetTopology, profile, automatic: true })
     } catch {
-      checkWorker.current?.terminate(); checkWorker.current = undefined
-      setRoutingCheck({ revision: routingKey, status: 'failed' })
+      checkWorker.current?.worker.terminate(); checkWorker.current = undefined
+      setRoutingCheck({ revision: targetRevision, status: 'failed' })
     }
   }
+  const checkRouting = () => runRoutingCheck(topology, false)
   const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
   const [router, setRouter] = useState<ObjectSelection>({ kind: 'hub', id: topology.hubs[0]?.id ?? '' })
@@ -151,7 +157,7 @@ function App() {
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
   const simulation = useMemo(() => simulate(topology), [topology])
-  const nvaSiteIds = useMemo(() => new Set(topology.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId).map((c) => c.siteId)), [topology])
+  const nvaSiteIds = useMemo(() => new Set(topology.sites.filter((s) => s.role === 'spoke-nva' || topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)).map((s) => s.id)), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
     ...topology.spokes.map((n) => ({ kind: 'spoke' as const, id: n.id, name: n.name })),
@@ -201,6 +207,17 @@ function App() {
   const update = (mutate: (next: Topology) => void) => {
     try { const next = structuredClone(topology); mutate(next); save(validateTopology(next)) }
     catch (error) { setError(message(error)) }
+  }
+  const assignPrefixToSite = (siteId: string, prefixesToAdd: string[]) => {
+    try {
+      const next = structuredClone(topology)
+      const site = next.sites.find((s) => s.id === siteId)
+      if (!site) return
+      site.prefixes = [...new Set([...site.prefixes, ...prefixesToAdd])]
+      const validated = validateTopology(next)
+      save(validated)
+      if (routingCheck) runRoutingCheck(validated, panel === 'issues')
+    } catch (error) { setError(message(error)) }
   }
   const reset = (next: Topology) => {
     importRequest.current++
@@ -399,7 +416,7 @@ function App() {
     </header>
     {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
     <main>
-      <section className="workspace-heading"><div><p className="eyebrow">{t("NETWORK WORKSPACE")}</p><input className="topology-name" aria-label={t("Topology name")} maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong>  {t("hubs")}</span><span><strong>{topology.spokes.length}</strong>  {t("spokes")}</span><span><strong>{topology.sites.length}</strong>  {t("sites")}</span>{!!topology.erLocations?.length && <span><strong>{topology.erLocations.length}</strong>  {t("ER locations")}</span>}</div></section>
+      <section className="workspace-heading"><div><p className="eyebrow">{t("NETWORK WORKSPACE")}</p><input className="topology-name" aria-label={t("Topology name")} maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong>  {t("hubs")}</span><span><strong>{topology.spokes.length}</strong>  {t("spokes")}</span><span><strong>{topology.sites.length - nvaSiteIds.size}</strong>  {t("sites")}</span>{nvaSiteIds.size > 0 && <span><strong>{nvaSiteIds.size}</strong>  {t("spoke NVAs")}</span>}{!!topology.erLocations?.length && <span><strong>{topology.erLocations.length}</strong>  {t("ER locations")}</span>}</div></section>
       {error && <div role="alert" className="notice error">{localizeDiagnostic(error)}<button aria-label={t("Dismiss error")} onClick={() => setError('')}>{t("Dismiss")}</button></div>}
       {initial.backup && <div className="notice">{t("The example is displayed because the saved workspace could not be loaded. Download the original before editing or closing this page.")} <button onClick={() => exportTopology(initial.backup)}>{t("Download original saved topology")}</button></div>}
       {saveError && <p role="alert" className="notice error">{localizeDiagnostic(saveError)}</p>}
@@ -426,12 +443,12 @@ function App() {
           ].join(' · ')}</span>
             <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(false); setPanel('issues') }}>{t('Review routing issues')}</button>
             {checkCoverage.hasNotes && <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(true); setPanel('issues') }}>{t('Review analysis coverage')}</button>}</>}
-          {currentCheck?.status === 'running' && <button onClick={() => { checkWorker.current?.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
+          {currentCheck?.status === 'running' && <button onClick={() => { checkWorker.current?.worker.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
           <button onClick={openDiagnostics}>{t('Advanced checks')}</button>
         </div>}
         <div className="canvas-stage">
-          {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onEditAdvertisements={(id) => { setConnectionId(id); setEditorRequest(undefined); setPanel('ads') }} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
-          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onEditAdvertisements={(id) => { setConnectionId(id); setEditorRequest(undefined); setPanel('ads') }} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onClose={closePanel} />}
+          {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onEditAdvertisements={(id) => { setConnectionId(id); setEditorRequest(undefined); setPanel('ads') }} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
+          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onEditAdvertisements={(id) => { setConnectionId(id); setEditorRequest(undefined); setPanel('ads') }} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
           {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
           <TopologyDiagram topology={topology} issues={routingIssues} onShowIssues={(finding) => { setRoutingIssueId(finding.id); setReviewCoverage(false); setPanel('issues'); showDiagnostic(finding) }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />

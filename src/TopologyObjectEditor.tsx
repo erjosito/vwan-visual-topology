@@ -110,7 +110,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             const targetSpoke = next.spokes.find((s) => s.id === targetSpokeId)
             if (!targetSpoke?.hubId) throw new Error('Spoke BGP NVA requires a hub-attached hosting spoke.')
             const peerIp = text('peerIp') || defaultSpokeNvaPeerIp(targetSpoke.prefixes) || ''
-            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: site?.prefixes ?? [] }
+            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: site?.prefixes ?? [], role: 'spoke-nva' as const }
             if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
             else next.sites.push(value)
             const connValue = {
@@ -151,7 +151,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
               }
             }
           } else {
-            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: text('prefix') ? [text('prefix')] : [] }
+            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: prefixes(text('prefix')) }
             if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
             else next.sites.push(value)
             if (connectedSite) next.connections.push({
@@ -287,13 +287,13 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <fieldset><legend>{t("Attached downstream networks")}</legend>
             <p className="muted">{t("This NVA automatically advertises any attached downstream Azure VNets and on-premises sites over BGP to the Virtual WAN hub.")}</p>
             {topology.spokes.filter((s) => s.id !== selectedHostSpokeId).map((s) => <label key={s.id} className="checkbox-field"><input type="checkbox" name="downstreamVnets" value={s.id} defaultChecked={Boolean(selectedHostSpokeId && s.nvaSpokeIds?.includes(selectedHostSpokeId))} />{t("Azure VNet:")} {s.name} ({s.prefixes.join(', ')})</label>)}
-            {topology.sites.filter((s) => s.id !== request.id && !topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)).map((s) => <label key={s.id} className="checkbox-field"><input type="checkbox" name="downstreamSites" value={s.id} defaultChecked={Boolean(site && topology.siteLinks.some((l) => (l.a === site.id && l.b === s.id) || (l.b === site.id && l.a === s.id)))} />{t("On-premises site:")} {s.name} (AS{s.asn}{s.prefixes[0] ? ` · ${s.prefixes[0]}` : ''})</label>)}
+            {topology.sites.filter((s) => s.id !== request.id && !topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)).map((s) => <label key={s.id} className="checkbox-field"><input type="checkbox" name="downstreamSites" value={s.id} defaultChecked={Boolean(site && topology.siteLinks.some((l) => (l.a === site.id && l.b === s.id) || (l.b === site.id && l.a === s.id)))} />{t("On-premises site:")} {s.name} (AS{s.asn}{s.prefixes.length ? ` · ${s.prefixes.join(', ')}` : ''})</label>)}
           </fieldset>
         </>}
         {request.kind === 'site' && !isSpokeNva && <>
           <Field title={t("Site ASN")}><input name="asn" type="number" required min={1} max={4294967294} defaultValue={site?.asn ?? 65001} /></Field>
-          <Field title={t("Originated prefix")}><input name="prefix" defaultValue={site?.prefixes[0] ?? ''} placeholder="10.80.0.0/16" /></Field>
-          <p className="muted">{t("One optional IPv4 network for this site. Leave blank for a transit-only site or explicit connection advertisements.")}</p>
+          <Field title={t("Originated prefix")}><input name="prefix" defaultValue={site?.prefixes.join(', ') ?? ''} placeholder="10.80.0.0/16, 10.81.0.0/16" /></Field>
+          <p className="muted">{t("One or more optional comma-separated IPv4 networks for this site. Leave blank for a transit-only site or explicit connection advertisements.")}</p>
           {connectedSite && <>
             <p className="muted">{t("A connection to")} {topology.hubs.find((h) => h.id === request.hubId)?.name}  {t("is created with site-prefix advertisements enabled.")}</p>
             <Field title={t("Connection name")}><input name="connectionName" maxLength={120} placeholder={t("Defaults to site name + connection")} /></Field>{transport}

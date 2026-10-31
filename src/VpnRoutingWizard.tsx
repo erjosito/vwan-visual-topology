@@ -46,7 +46,7 @@ export function VpnRoutingWizard({ topology, connectionId, mode, onSave, onClose
     </> : <form onSubmit={submit} className="static-routes-form">
       <p><strong>{review ? t("2. Review changes") : t("1. Configure destinations")}</strong>  {t("· Current routing:")} {vpnRoutingMode(topology, connection) === 'mixed' ? t("mixed BGP/static") : vpnRoutingMode(topology, connection) === 'bgp' ? 'BGP' : t('static')}</p>
       <p>{t("Azure side:")} <strong>{hub.name}</strong>  {t("· Source prefixes:")} {topology.spokes.filter((spoke) => spoke.hubId === hub.id).flatMap((spoke) => spoke.prefixes).join(', ') || t("No attached-spoke prefixes configured")}</p>
-      <p>{t("On-premises side:")} <strong>{site.name}</strong>  {t("· Site prefix:")} {site.prefixes[0] ?? t("Not assigned")}{!connection.enabled && t(" · VPN connection is down and will remain down")}</p>
+      <p>{t("On-premises side:")} <strong>{site.name}</strong>  {t("· Site prefix:")} {site.prefixes.length ? site.prefixes.join(', ') : t("Not assigned")}{!connection.enabled && t(" · VPN connection is down and will remain down")}</p>
       {!review ? <>
         <p className="muted">{t("Destinations are seeded from this site's prefix, this VPN's existing advertisements/static routes, and learned site routes when enabled. Edit them before continuing. Azure-side prefixes are source context, not on-premises destinations.")}</p>
         {mode === 'static' ? <label className="field"><span>{t("Static destination prefixes")}</span><textarea aria-label={t("Static destination prefixes")} rows={6} value={prefixes} onChange={(event) => setPrefixes(event.target.value)} placeholder="10.80.0.0/16" /></label> : <>
