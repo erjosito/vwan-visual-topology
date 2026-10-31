@@ -6,21 +6,12 @@
   },
   "routes": [
     {
-      "route": "/api/feedback/status",
-      "allowedRoles": ["anonymous"]
-    },
-    {
-      "route": "/api/*",
-      "allowedRoles": ["authenticated"]
-    },
-    {
       "route": "/assets/*",
       "headers": {
         "Cache-Control": "public, max-age=31536000, immutable"
       }
     }
   ],
-  "platform": { "apiRuntime": "node:22" },
   "globalHeaders": {
     "Cache-Control": "no-cache",
     "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",

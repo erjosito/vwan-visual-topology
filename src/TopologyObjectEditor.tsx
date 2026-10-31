@@ -3,6 +3,8 @@ import { cloneElement, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
+import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topology-graph'
+import { deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 
@@ -26,7 +28,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const erLink = topology.erLinks?.find((link) => link.id === request.id)
   const [erEndpoint, setErEndpoint] = useState<'hub' | 'site'>(erLink?.siteId || request.siteId ? 'site' : 'hub')
   const existingNvaConn = request.kind === 'site'
-    ? topology.connections.find((c) => c.transport === 'SpokeNVA' && (request.id ? c.siteId === request.id : c.spokeId === request.spokeId))
+    ? (request.id ? spokeNvaConnectionForSite(topology, request.id) : request.spokeId ? spokeNvaConnectionForSpoke(topology, request.spokeId) : undefined)
     : undefined
   const isSpokeNva = request.kind === 'site' && (Boolean(request.spokeId) || Boolean(existingNvaConn))
   const [selectedHostSpokeId, setSelectedHostSpokeId] = useState(existingNvaConn?.spokeId ?? request.spokeId ?? topology.spokes.find((s) => Boolean(s.hubId))?.id ?? '')
@@ -37,60 +39,19 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const link = topology.siteLinks.find((l) => l.id === request.id)
   const label = t(request.kind === 'site' ? isSpokeNva ? 'Spoke BGP NVA' : siteLabel(topology, request.id ?? '') : objectLabels[request.kind])
   const connectedSite = request.kind === 'site' && !item && !!request.hubId && !isSpokeNva
-  const nvaSpokes = topology.spokes.filter((s) => s.id !== request.id && Boolean(s.hubId) && topology.connections.some((c) => c.transport === 'SpokeNVA' && c.spokeId === s.id))
+  const nvaSpokes = topology.spokes.filter((s) => s.id !== request.id && Boolean(s.hubId) && Boolean(spokeNvaConnectionForSpoke(topology, s.id)))
   const title = request.deleting ? t("Delete {0}", label) : t(item ? 'Edit {0}' : 'Add {0}', connectedSite ? t('connected site') : label)
 
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     try {
-      const next = structuredClone(topology)
       const id = request.id ?? crypto.randomUUID()
       if (request.id && !item) throw new Error('This object no longer exists.')
+      let next: Topology
       if (request.deleting) {
-        if (request.kind === 'hub') {
-          next.hubs = next.hubs.filter((h) => h.id !== id)
-          next.spokes = next.spokes.filter((s) => s.hubId !== id)
-          next.connections = next.connections.filter((c) => c.hubId !== id)
-          next.erLinks = next.erLinks?.filter((link) => link.hubId !== id)
-          next.routeMaps = next.routeMaps?.filter((m) => m.hubId !== id)
-        } else if (request.kind === 'site') {
-          next.sites = next.sites.filter((s) => s.id !== id)
-          next.connections = next.connections.filter((c) => c.siteId !== id)
-          next.siteLinks = next.siteLinks.filter((l) => l.a !== id && l.b !== id)
-          next.erLinks = next.erLinks?.filter((link) => link.siteId !== id)
-          next.routeMaps = next.routeMaps?.filter((map) => map.siteId !== id)
-          if (existingNvaConn?.spokeId) {
-            next.spokes = next.spokes.map((s) => s.nvaSpokeIds ? { ...s, nvaSpokeIds: s.nvaSpokeIds.filter((nvaId) => nvaId !== existingNvaConn.spokeId) } : s)
-          }
-        } else if (request.kind === 'spoke') {
-          next.spokes = next.spokes.filter((s) => s.id !== id).map((s) => s.nvaSpokeIds ? { ...s, nvaSpokeIds: s.nvaSpokeIds.filter((nvaId) => nvaId !== id) } : s)
-          next.connections = next.connections.filter((connection) => connection.spokeId !== id)
-        }
-        else if (request.kind === 'connection') next.connections = next.connections.filter((c) => c.id !== id)
-        else if (request.kind === 'erLocation') {
-          next.erLocations = next.erLocations?.filter((location) => location.id !== id)
-          next.erLinks = next.erLinks?.filter((link) => link.locationId !== id)
-        } else if (request.kind === 'erLink') next.erLinks = next.erLinks?.filter((link) => link.id !== id)
-        else next.siteLinks = next.siteLinks.filter((l) => l.id !== id)
-        const activeSpokeIds = new Set(next.spokes.filter((s) => Boolean(s.hubId)).map((s) => s.id))
-        const activeNvaSiteIds = new Set(next.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId && activeSpokeIds.has(c.spokeId)).map((c) => c.siteId))
-        const orphanedNvaSiteIds = new Set(next.sites.filter((s) => s.role === 'spoke-nva' && !activeNvaSiteIds.has(s.id)).map((s) => s.id))
-        if (orphanedNvaSiteIds.size) {
-          next.sites = next.sites.filter((s) => !orphanedNvaSiteIds.has(s.id))
-          next.connections = next.connections.filter((c) => !orphanedNvaSiteIds.has(c.siteId))
-          next.siteLinks = next.siteLinks.filter((l) => !orphanedNvaSiteIds.has(l.a) && !orphanedNvaSiteIds.has(l.b))
-          next.erLinks = next.erLinks?.filter((link) => !link.siteId || !orphanedNvaSiteIds.has(link.siteId))
-          next.routeMaps = next.routeMaps?.filter((map) => !map.siteId || !orphanedNvaSiteIds.has(map.siteId))
-        }
-        next.spokes = next.spokes.map((s) => s.nvaSpokeIds ? { ...s, nvaSpokeIds: s.nvaSpokeIds.filter((nvaId) => activeSpokeIds.has(nvaId)) } : s)
-        const remaining = new Set([...next.connections, ...next.siteLinks, ...next.spokes, ...(next.erLinks ?? [])].map((link) => link.id))
-        for (const router of [...next.hubs, ...next.sites]) {
-          if (router.routeMapAssignments) router.routeMapAssignments = router.routeMapAssignments.filter((a) => remaining.has(a.connectionId))
-        }
-        for (const site of next.sites) {
-          if (site.vpnStaticRoutes) site.vpnStaticRoutes = site.vpnStaticRoutes.filter((r) => remaining.has(r.connectionId))
-        }
+        next = deleteTopologyObject(topology, { kind: request.kind, id })
       } else {
+        next = structuredClone(topology)
         const data = new FormData(event.currentTarget)
         const text = (name: string) => String(data.get(name) ?? '').trim()
         const name = text('name')
@@ -138,32 +99,14 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             }
             if (existingNvaConn) next.connections[next.connections.findIndex((c) => c.id === existingNvaConn.id)] = connValue
             else next.connections.push(connValue)
-            const checkedVnets = new Set(data.getAll('downstreamVnets').map(String))
-            next.spokes = next.spokes.map((s) => {
-              if (s.id === targetSpoke.id) return s
-              const current = new Set(s.nvaSpokeIds ?? [])
-              if (checkedVnets.has(s.id)) current.add(targetSpoke.id)
-              else current.delete(targetSpoke.id)
-              return { ...s, nvaSpokeIds: current.size ? [...current] : undefined }
-            })
-            const checkedSites = new Set(data.getAll('downstreamSites').map(String))
-            for (const otherSite of next.sites) {
-              if (otherSite.id === id || next.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === otherSite.id)) continue
-              const existingLink = next.siteLinks.find((l) => (l.a === id && l.b === otherSite.id) || (l.b === id && l.a === otherSite.id))
-              if (checkedSites.has(otherSite.id) && !existingLink) {
-                next.siteLinks.push({
-                  id: crypto.randomUUID(),
-                  name: `${name} - ${otherSite.name}`,
-                  a: id,
-                  b: otherSite.id,
-                  enabled: true,
-                  aToB: { prefixes: [], prepend: [], receivePrepend: [] },
-                  bToA: { prefixes: [], prepend: [], receivePrepend: [] },
-                })
-              } else if (!checkedSites.has(otherSite.id) && existingLink) {
-                next.siteLinks = next.siteLinks.filter((l) => l.id !== existingLink.id)
-              }
-            }
+            syncNvaDownstreamLinks(
+              next,
+              id,
+              name,
+              targetSpoke.id,
+              data.getAll('downstreamVnets').map(String),
+              data.getAll('downstreamSites').map(String),
+            )
           } else {
             const value = { ...site, id, name, asn: Number(text('asn')), prefixes: prefixes(text('prefix')) }
             if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
@@ -172,25 +115,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
               id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
               transport: transportValue, enabled: true, inbound: [], outbound: [], learnSiteRoutes: true,
             })
-            const checkedNvaSpokes = new Set(data.getAll('nvaSpokeIds').map(String))
-            for (const nvaSpoke of nvaSpokes) {
-              const peerSiteId = next.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === nvaSpoke.id)?.siteId
-              if (!peerSiteId) continue
-              const existingLink = next.siteLinks.find((l) => (l.a === id && l.b === peerSiteId) || (l.b === id && l.a === peerSiteId))
-              if (checkedNvaSpokes.has(nvaSpoke.id) && !existingLink) {
-                next.siteLinks.push({
-                  id: crypto.randomUUID(),
-                  name: `${nvaSpoke.name} - ${name}`,
-                  a: peerSiteId,
-                  b: id,
-                  enabled: true,
-                  aToB: { prefixes: [], prepend: [], receivePrepend: [] },
-                  bToA: { prefixes: [], prepend: [], receivePrepend: [] },
-                })
-              } else if (!checkedNvaSpokes.has(nvaSpoke.id) && existingLink) {
-                next.siteLinks = next.siteLinks.filter((l) => l.id !== existingLink.id)
-              }
-            }
+            syncSiteNvaSpokeLinks(next, id, name, data.getAll('nvaSpokeIds').map(String))
           }
         } else if (request.kind === 'connection') {
           const value = {

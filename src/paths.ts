@@ -2,8 +2,9 @@ import type { ObjectSelection, Topology } from './model'
 import { topologyObject } from './model'
 import type { FlowPath, Simulation } from './routing'
 import { traceFlow } from './routing'
-import { applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
-import type { SiteRoute } from './bgp'
+import { applyRouteMapRules, propagateSites, routerMapRules } from './bgp'
+import type { SiteRoute, SiteRouting } from './bgp'
+import { downstreamVnetForAddress, resolveAttachment, standaloneSites } from './topology-graph'
 import { cidr, contains, ipv4 } from './validation'
 
 export type PathNode = ObjectSelection & { kind: 'hub' | 'spoke' | 'site' }
@@ -24,57 +25,62 @@ export function nodePrefixes(topology: Topology, node: PathNode): string[] {
 
 export interface SiteAdvertisement extends SiteRoute { connectionId: string; erHubLinkId?: string }
 
-export function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
-  let selectionComplete = simulation.siteSelectionComplete !== false
+const siteRibCache = new WeakMap<Simulation, Map<string, SiteRouting<SiteAdvertisement>>>()
+
+function sitePlaneCacheKey(topology: Topology): string {
+  return JSON.stringify({
+    sites: topology.sites.map((s) => [s.id, s.asn, s.prefixes, s.vpnStaticRoutes, s.routeMapAssignments]),
+    siteLinks: topology.siteLinks,
+    connections: topology.connections.map((c) => [c.id, c.enabled, c.siteId, c.spokeId, c.transport]),
+    erLinks: (topology.erLinks ?? []).map((l) => [l.id, l.enabled, l.siteId, l.hubId, l.locationId]),
+    routeMaps: (topology.routeMaps ?? []).filter((m) => Boolean(m.siteId)),
+  })
+}
+
+export function azureRoutesAtSites(topology: Topology, simulation: Simulation): SiteRouting<SiteAdvertisement> {
+  const key = sitePlaneCacheKey(topology)
+  let byTopology = siteRibCache.get(simulation)
+  if (!byTopology) {
+    byTopology = new Map()
+    siteRibCache.set(simulation, byTopology)
+  }
+  const cached = byTopology.get(key)
+  if (cached) return cached
+
   const advertisement = (route: SiteRoute, connectionId: string): SiteAdvertisement => ({
     ...route, connectionId,
     ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => advertisement(child, connectionId)) } : {}),
   })
-  const best = (routes: SiteAdvertisement[]) => [...new Set(routes.map((r) => r.prefix))].flatMap((prefix) => {
-    const matches = routes.filter((r) => r.prefix === prefix)
-    const shortest = Math.min(...matches.map((r) => r.asPath.length))
-    if (matches.filter((r) => r.asPath.length === shortest).length > 32) selectionComplete = false
-    return matches.filter((r) => r.asPath.length === shortest).sort((a, b) => a.key.localeCompare(b.key)).slice(0, 32)
+  const propagated = propagateSites<SiteAdvertisement>(topology, {
+    sortByKey: true,
+    seed: (site) => [
+      ...(simulation.siteCandidates[site.id] ?? []).filter((r) => r.sitePath.length === 1).map((r) => advertisement(r, '')),
+      ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.enabled && c.siteId === site.id)
+        .flatMap((c) => {
+          const routes = simulation.outbound[c.id] ?? []
+          const received = [...applyRouteMapRules(routes.filter((r) => r.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'site', id: site.id }, c.id, 'inbound')), ...routes.filter((r) => r.kind === 'vpn-static')]
+          const origin = (r: typeof routes[number], erHubLinkId = r.erHubLinkId): SiteAdvertisement => ({
+            key: `${c.id}:${erHubLinkId ?? ''}:${r.key}`, prefix: r.prefix, asPath: r.asPath, sitePath: [site.id], siteLinkIds: [], connectionId: c.id, erHubLinkId,
+            ...(r.forwardingRoutes ? { forwardingRoutes: r.forwardingRoutes.map((child) => origin(child, child.erHubLinkId ?? erHubLinkId)) } : {}),
+          })
+          return received.filter((r) => !r.asPath.includes(site.asn)).map((route) => origin(route))
+        }),
+    ],
   })
-  const origins = Object.fromEntries(topology.sites.map((site) => [site.id, [
-    ...(simulation.siteCandidates[site.id] ?? []).filter((r) => r.sitePath.length === 1).map((r) => advertisement(r, '')),
-    ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.enabled && c.siteId === site.id)
-      .flatMap((c) => {
-        const routes = simulation.outbound[c.id] ?? []
-        const received = [...applyRouteMapRules(routes.filter((r) => r.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'site', id: site.id }, c.id, 'inbound')), ...routes.filter((r) => r.kind === 'vpn-static')]
-        const origin = (r: typeof routes[number], erHubLinkId = r.erHubLinkId): SiteAdvertisement => ({
-          key: `${c.id}:${erHubLinkId ?? ''}:${r.key}`, prefix: r.prefix, asPath: r.asPath, sitePath: [site.id], siteLinkIds: [], connectionId: c.id, erHubLinkId,
-          ...(r.forwardingRoutes ? { forwardingRoutes: r.forwardingRoutes.map((child) => origin(child, child.erHubLinkId ?? erHubLinkId)) } : {}),
-        })
-        return received.filter((r) => !r.asPath.includes(site.asn)).map((route) => origin(route))
-      }),
-  ]]))
-  let tables = Object.fromEntries(topology.sites.map((s) => [s.id, best(origins[s.id])]))
-  let candidates = origins
-  let converged = topology.siteLinks.length === 0
-  for (let round = 0; round < 64 && !converged; round++) {
-    const next = Object.fromEntries(topology.sites.map((receiver) => {
-      const received = topology.siteLinks.filter((l) => l.enabled && (l.a === receiver.id || l.b === receiver.id)).flatMap((link) => {
-        const senderId = link.a === receiver.id ? link.b : link.a
-        return receiveSiteRoutes(topology, receiver, link, tables[senderId])
-      })
-      return [receiver.id, [...origins[receiver.id], ...received]]
-    }))
-    const selected = Object.fromEntries(topology.sites.map((site) => [site.id, best(next[site.id])]))
-    converged = JSON.stringify(selected) === JSON.stringify(tables)
-    tables = selected
-    candidates = next
+  const result: SiteRouting<SiteAdvertisement> = {
+    ...propagated,
+    selectionComplete: simulation.siteSelectionComplete !== false && propagated.selectionComplete,
   }
-  return { tables, candidates, converged, selectionComplete }
+  byTopology.set(key, result)
+  return result
 }
 
 export function traceGroupedPaths(topology: Topology, simulation: Simulation, anchor: PathNode, direction: PathDirection, group: PathGroup): GroupPath[] {
   const object = topologyObject(topology, anchor)
   if (!simulation.converged || !object) return []
-  const nvaSiteIds = new Set(topology.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId).map((c) => c.siteId))
   const nodes = [
     ...(group !== 'sites' ? topology.spokes.map((spoke) => ({ ...spoke, kind: 'spoke' as const })) : []),
-    ...(group !== 'vnets' ? topology.sites.filter((site) => !nvaSiteIds.has(site.id)).map((site) => ({ ...site, kind: 'site' as const })) : []),
+    ...(group !== 'vnets' ? standaloneSites(topology).map((site) => ({ ...site, kind: 'site' as const })) : []),
   ].filter((node) => node.kind !== anchor.kind || node.id !== anchor.id)
   const needsSiteRoutes = (node: PathNode) => node.kind === 'site' || (node.kind === 'spoke' && !topology.spokes.find((s) => s.id === node.id)?.hubId)
   const siteRoutes = (direction === 'to' ? needsSiteRoutes(anchor) : nodes.some(needsSiteRoutes))
@@ -159,10 +165,9 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
       const steps = [`Source site: longest prefix ${selected.prefix}, shortest AS path ${selected.asPath.join(' ') || 'local'}.`]
       if (!route.connectionId) {
         const terminalSiteId = route.sitePath.at(-1)
-        const terminalNvaSpokeId = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.siteId === terminalSiteId && c.spokeId)?.spokeId
-        const downstreamVnet = terminalNvaSpokeId
-          ? topology.spokes.find((s) => s.nvaSpokeIds?.includes(terminalNvaSpokeId) && s.prefixes.some((p) => contains(p, address)))
-          : undefined
+        const downstreamHit = downstreamVnetForAddress(topology, terminalSiteId, address)
+        const downstreamVnet = downstreamHit?.spoke
+        const terminalNvaSpokeId = downstreamHit?.nvaSpokeId
         return [{
           hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds,
           siteId: downstreamVnet?.id ?? terminalSiteId,
@@ -172,7 +177,7 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
           terminalKind: downstreamVnet ? 'spoke' : 'site', lookupPrefix: selected.prefix,
         }]
       }
-      const connection = topology.connections.find((c) => c.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId)
+      const connection = resolveAttachment(topology, route.connectionId)
       const erHub = topology.erLinks?.find((link) => link.id === route.erHubLinkId)
       const hubId = connection?.hubId ?? erHub?.hubId
       if (!connection || !hubId) return [{ hubs: [], steps: [...steps, 'The Azure attachment is unavailable.'], status: 'unreachable', termination: 'attachment-unavailable', lookupPrefix: selected.prefix }]
@@ -180,7 +185,7 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
         const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
         return {
           ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,
-          ...('spokeId' in connection && connection.spokeId ? { sourceNvaSpokeId: connection.spokeId } : {}),
+          ...(connection.kind === 'connection' && connection.spokeId ? { sourceNvaSpokeId: connection.spokeId } : {}),
           ...(erHub ? { sourceErLinkIds: [connection.id, erHub.id] } : {}),
           status: loop ? 'loop' : path.status,
           termination: loop ? 'loop' : path.termination,

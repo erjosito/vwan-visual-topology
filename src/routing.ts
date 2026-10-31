@@ -2,6 +2,7 @@ import type { Connection, Hub, RouteKind, RouteMapDirection, RouterSelection, To
 import { cidr, contains, ipv4 } from './validation'
 import { applyRouteMapRules, connectionMapRules, propagateSites, routerMapRules, siteExports } from './bgp'
 import type { SiteRoute } from './bgp'
+import { downstreamSpokesForNvaSpoke, downstreamVnetForAddress, resolveAttachment } from './topology-graph'
 
 const RFC1918_PREFIXES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
 
@@ -207,7 +208,7 @@ export function simulate(topology: Topology): Simulation {
               ...localRoutes(connection, topology),
               ...siteRouting.tables[connection.siteId]
                 .filter((route) => !route.key.startsWith(`${connection.id}:`) && (connection.learnSiteRoutes
-                  || topology.spokes.some((s) => s.nvaSpokeIds?.includes(spoke.id) && route.key.startsWith(`${s.id}:`))))
+                  || downstreamSpokesForNvaSpoke(topology, spoke.id).some((s) => route.key.startsWith(`${s.id}:`))))
                 .map((route) => learnedRoute(connection, route)),
             ]))
             .filter((route) => !hasHubOwnAsn(route.asPath) && !topology.spokes.some((owner) => owner.hubId === hub.id
@@ -442,15 +443,13 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
         for (const tail of onward.length ? onward : [route]) {
           if (paths.length >= 128) { traceComplete = false; return }
           const terminalSiteId = tail.sitePath?.[tail.sitePath.length - 1] ?? route.siteId
-          const terminalNvaSpokeId = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.siteId === terminalSiteId && c.spokeId)?.spokeId
-          const downstreamVnet = terminalNvaSpokeId
-            ? topology.spokes.find((s) => s.nvaSpokeIds?.includes(terminalNvaSpokeId) && s.prefixes.some((p) => contains(p, address)))
-            : undefined
+          const downstreamHit = downstreamVnetForAddress(topology, terminalSiteId, address)
+          const downstreamVnet = downstreamHit?.spoke
           paths.push({ hubs, firewalls: inspected, siteHops: tail.sitePath, siteLinkIds: tail.siteLinkIds,
             connectionId: route.connectionId, siteId: downstreamVnet?.id ?? terminalSiteId,
             ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
             ...(route.nvaSpokeId ? { nvaSpokeId: route.nvaSpokeId } : {}),
-            steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId))?.name ?? route.connectionId}.`,
+            steps: [...details, `Exit via ${resolveAttachment(topology, route.connectionId)?.name ?? route.connectionId}.`,
               ...(route.erLocationId ? [`ExpressRoute location: ${topology.erLocations?.find((location) => location.id === route.erLocationId)?.name}.`] : []),
               ...(route.nvaSpokeId ? [`BGP next hop is NVA interface ${topology.connections.find((connection) => connection.id === route.connectionId)?.peerIp} in spoke ${topology.spokes.find((spoke) => spoke.id === route.nvaSpokeId)?.name}.`] : []),
               ...(tail.sitePath && tail.sitePath.length > 1 ? [`On-premises transit: ${tail.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : []),

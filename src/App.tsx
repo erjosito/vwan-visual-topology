@@ -33,6 +33,9 @@ import { vpnRoutingMode } from './vpn-routing'
 import type { VpnRoutingMode } from './vpn-routing'
 import { azureRoutesAtSites, nodePrefixes, traceGroupedPaths, traceNodePath } from './paths'
 import type { GroupPath, NodePath, PathDirection, PathGroup, PathNode } from './paths'
+import { embeddedSpokeNvaSiteIds } from './topology-graph'
+import { assignSitePrefixes } from './topology-mutations'
+import { useTopologyHistory } from './useTopologyHistory'
 import './App.css'
 
 const storageKey = 'vwan-visual-topology:v1'
@@ -55,21 +58,8 @@ function App() {
     document.documentElement.lang = language
     document.title = documentTitles[language]
   }, [language])
-  const [initial] = useState(() => {
-    let saved: string | null = null
-    try {
-      saved = localStorage.getItem(storageKey)
-      return { topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(example)), error: '', backup: '' }
-    } catch (error) {
-      return { topology: validateTopology(structuredClone(example)), error: `Saved topology could not be loaded: ${message(error)}. The saved data has not been overwritten.`, backup: saved ?? '' }
-    }
-  })
-  const [topology, setTopology] = useState(initial.topology)
-  const [history, setHistory] = useState<{ past: Topology[]; future: Topology[] }>({ past: [], future: [] })
-  const maxHistory = 40
-  const [error, setError] = useState(initial.error)
-  const [saveError, setSaveError] = useState('')
   const [selection, setSelection] = useState<ObjectSelection>()
+  const [routerState, setRouter] = useState<ObjectSelection>()
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [clearRequested, setClearRequested] = useState(false)
@@ -81,6 +71,32 @@ function App() {
   const [routingIssueId, setRoutingIssueId] = useState<string>()
   const [reviewCoverage, setReviewCoverage] = useState(false)
   const checkWorker = useRef<{ worker: Worker; revision: string } | undefined>(undefined)
+  const {
+    topology,
+    backup: initialBackup,
+    error,
+    setError,
+    saveError,
+    save,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    clearHistory,
+  } = useTopologyHistory({
+    storageKey,
+    onBeforeUndoRedo: () => {
+      setEditorRequest(undefined)
+      setContextMenu(undefined)
+    },
+    onAfterChange: (next) => {
+      if (selection && !topologyObject(next, selection)) setSelection(undefined)
+    },
+  })
+  const router = useMemo<ObjectSelection>(
+    () => (routerState && topologyObject(topology, routerState) ? routerState : { kind: 'hub', id: topology.hubs[0]?.id ?? '' }),
+    [routerState, topology],
+  )
   const routingKey = useMemo(() => routingRevision(topology), [topology])
   const currentCheck = routingCheck?.revision === routingKey ? routingCheck : undefined
   const routingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity === 'error' || finding.severity === 'warning') ?? []
@@ -139,7 +155,6 @@ function App() {
   const checkRouting = () => runRoutingCheck(topology, false)
   const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
-  const [router, setRouter] = useState<ObjectSelection>({ kind: 'hub', id: topology.hubs[0]?.id ?? '' })
   const [routeView, setRouteView] = useState<'bgp' | 'hub' | 'firewall'>('bgp')
   const [routeMode, setRouteMode] = useState<RouteMode>('bgp')
   const [mapRouter, setMapRouter] = useState<RouterSelection>()
@@ -158,7 +173,7 @@ function App() {
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
   const simulation = useMemo(() => simulate(topology), [topology])
-  const nvaSiteIds = useMemo(() => new Set(topology.sites.filter((s) => s.role === 'spoke-nva' || topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)).map((s) => s.id)), [topology])
+  const nvaSiteIds = useMemo(() => embeddedSpokeNvaSiteIds(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
     ...topology.spokes.map((n) => ({ kind: 'spoke' as const, id: n.id, name: n.name })),
@@ -175,7 +190,7 @@ function App() {
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
   const activeView = routeView === 'firewall' && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView
   const erRouting = useMemo(() => router.kind === 'erLocation' ? erLocationBgpTable(topology, simulation, router.id) : [],
-    [topology, simulation, router])
+    [topology, simulation, router.kind, router.id])
   const decisions = router.kind === 'erLocation' ? erRouting
     : (activeView === 'bgp' ? simulation.bgpTables : activeView === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []
   const selectedRoutes = highlighting && (router.kind === 'hub' || router.kind === 'erLocation') ? [
@@ -187,7 +202,7 @@ function App() {
     const routing = azureRoutesAtSites(topology, simulation)
     const prefixes = [...new Set((routing.tables[router.id] ?? []).filter((route) => !prefix || route.prefix === prefix).map((route) => route.prefix))]
     return prefixes.flatMap((prefix) => traceNodePath(topology, simulation, { kind: 'site', id: router.id }, prefix.split('/')[0], routing))
-  }, [highlighting, router, topology, simulation, prefix])
+  }, [highlighting, router.kind, router.id, topology, simulation, prefix])
   const diagnosticPaths = (panel === 'diagnostics' || panel === 'issues') && diagnosticHighlight?.revision === routingKey ? diagnosticHighlight.paths : undefined
   const diagramPaths = diagnosticPaths ?? (tracing ? paths : siteHighlight)
   const showDiagnostic = (finding: DiagnosticsFinding) => {
@@ -199,60 +214,13 @@ function App() {
     setTracing(false); setHighlighting(false); setSelection(finding.related[0])
   }
   const openDiagnostics = () => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPanel('diagnostics') }
-  const persist = (next: Topology) => {
-    try { localStorage.setItem(storageKey, JSON.stringify(next)); setSaveError('') }
-    catch { setSaveError('Browser storage is unavailable or full. Export JSON to preserve your topology.') }
-  }
-  const syncSelectionAfterTopologyChange = (next: Topology) => {
-    if (!topologyObject(next, router)) setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
-    if (selection && !topologyObject(next, selection)) setSelection(undefined)
-  }
-  const save = (next: Topology, recordHistory = true) => {
-    if (recordHistory && JSON.stringify(next) !== JSON.stringify(topology)) {
-      const snapshot = structuredClone(topology)
-      setHistory((current) => ({ past: [...current.past.slice(-(maxHistory - 1)), snapshot], future: [] }))
-    }
-    setTopology(next)
-    syncSelectionAfterTopologyChange(next)
-    persist(next)
-    setError('')
-  }
-  const canUndo = history.past.length > 0
-  const canRedo = history.future.length > 0
-  const undo = () => {
-    const previous = history.past.at(-1)
-    if (!previous) return
-    const currentSnapshot = structuredClone(topology)
-    setHistory((current) => ({ past: current.past.slice(0, -1), future: [currentSnapshot, ...current.future].slice(0, maxHistory) }))
-    setTopology(previous)
-    setError('')
-    setEditorRequest(undefined)
-    setContextMenu(undefined)
-    syncSelectionAfterTopologyChange(previous)
-    persist(previous)
-  }
-  const redo = () => {
-    const [next, ...rest] = history.future
-    if (!next) return
-    const currentSnapshot = structuredClone(topology)
-    setHistory((current) => ({ past: [...current.past.slice(-(maxHistory - 1)), currentSnapshot], future: rest }))
-    setTopology(next)
-    setError('')
-    setEditorRequest(undefined)
-    setContextMenu(undefined)
-    syncSelectionAfterTopologyChange(next)
-    persist(next)
-  }
   const update = (mutate: (next: Topology) => void) => {
     try { const next = structuredClone(topology); mutate(next); save(validateTopology(next)) }
     catch (error) { setError(message(error)) }
   }
   const assignPrefixToSite = (siteId: string, prefixesToAdd: string[]) => {
     try {
-      const next = structuredClone(topology)
-      const site = next.sites.find((s) => s.id === siteId)
-      if (!site) return
-      site.prefixes = [...new Set([...site.prefixes, ...prefixesToAdd])]
+      const next = assignSitePrefixes(topology, siteId, prefixesToAdd)
       const validated = validateTopology(next)
       save(validated)
       if (routingCheck) runRoutingCheck(validated, panel === 'issues')
@@ -262,32 +230,11 @@ function App() {
     importRequest.current++
     cancelRoutingCheck()
     setPendingAzureImport(undefined)
-    setHistory({ past: [], future: [] })
+    clearHistory()
     save(next, false); setSelection(undefined); setPanel(undefined); setEditorRequest(undefined); setContextMenu(undefined); setClearRequested(false)
     setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
-  useEffect(() => {
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.defaultPrevented || (!event.ctrlKey && !event.metaKey) || event.altKey) return
-      const target = event.target as HTMLElement | null
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable || target.closest('dialog'))) return
-      const key = event.key.toLowerCase()
-      if (key === 'z' && !event.shiftKey) {
-        if (history.past.length) {
-          event.preventDefault()
-          undo()
-        }
-      } else if ((key === 'y' && !event.shiftKey) || (key === 'z' && event.shiftKey)) {
-        if (history.future.length) {
-          event.preventDefault()
-          redo()
-        }
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  })
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlighting(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
@@ -470,7 +417,7 @@ function App() {
   const submitPath = (event: FormEvent) => { event.preventDefault(); setGroupTrace(undefined); setHighlighting(false); setTracing(true) }
   const closePanel = () => setPanel(undefined)
 
-  return <div className="app canvas-app">
+  return <div className="app canvas-app" data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
     <header className="topbar"><div className="brand"><div className="brand-icon" aria-hidden="true">W</div><div><h1>Virtual WAN <span>{t("Topology Lab")}</span></h1><p>{t("Design the network. Understand the path.")}</p></div></div>
       <div className="actions"><LanguageSelector /><span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
@@ -478,7 +425,7 @@ function App() {
     <main>
       <section className="workspace-heading"><div><p className="eyebrow">{t("NETWORK WORKSPACE")}</p><input className="topology-name" aria-label={t("Topology name")} maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong>  {t("hubs")}</span><span><strong>{topology.spokes.length}</strong>  {t("spokes")}</span><span><strong>{topology.sites.length - nvaSiteIds.size}</strong>  {t("sites")}</span>{nvaSiteIds.size > 0 && <span><strong>{nvaSiteIds.size}</strong>  {t("spoke NVAs")}</span>}{!!topology.erLocations?.length && <span><strong>{topology.erLocations.length}</strong>  {t("ER locations")}</span>}</div></section>
       {error && <div role="alert" className="notice error">{localizeDiagnostic(error)}<button aria-label={t("Dismiss error")} onClick={() => setError('')}>{t("Dismiss")}</button></div>}
-      {initial.backup && <div className="notice">{t("The example is displayed because the saved workspace could not be loaded. Download the original before editing or closing this page.")} <button onClick={() => exportTopology(initial.backup)}>{t("Download original saved topology")}</button></div>}
+      {initialBackup && <div className="notice">{t("The example is displayed because the saved workspace could not be loaded. Download the original before editing or closing this page.")} <button onClick={() => exportTopology(initialBackup)}>{t("Download original saved topology")}</button></div>}
       {saveError && <p role="alert" className="notice error">{localizeDiagnostic(saveError)}</p>}
       {topology.azureImport && <div className="notice" role="status">{t("Azure structure-only import · simulated routes are not verified Azure effective routes.")} <button onClick={() => setPanel('azure')}>{t("Review import limitations")}</button></div>}
       <section className="canvas-workspace panel" aria-label={t("Topology workspace")}>

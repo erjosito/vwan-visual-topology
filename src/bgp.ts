@@ -1,4 +1,5 @@
 import type { Connection, PrependRule, RouteMapRule, RouterSelection, Site, SiteLink, Topology } from './model'
+import { downstreamSpokesForNvaSite } from './topology-graph'
 import { cidr, contains } from './validation'
 
 export function applyRouteMap(prefix: string, asPath: number[], rules: PrependRule[]): number[] {
@@ -87,9 +88,9 @@ export interface SiteRoute {
   forwardingRoutes?: SiteRoute[]
 }
 
-export interface SiteRouting {
-  tables: Record<string, SiteRoute[]>
-  candidates: Record<string, SiteRoute[]>
+export interface SiteRouting<T extends SiteRoute = SiteRoute> {
+  tables: Record<string, T[]>
+  candidates: Record<string, T[]>
   converged: boolean
   selectionComplete: boolean
 }
@@ -127,30 +128,48 @@ export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, recei
     .filter((route) => !route.asPath.includes(receiver.asn))
 }
 
-export function propagateSites(topology: Topology): SiteRouting {
+export function propagateSites<T extends SiteRoute = SiteRoute>(
+  topology: Topology,
+  options?: {
+    seed?: (site: Site) => T[]
+    rank?: (route: T) => number
+    sortByKey?: boolean
+  },
+): SiteRouting<T> {
   let selectionComplete = true
-  const origins: Record<string, SiteRoute[]> = Object.fromEntries(topology.sites.map((site) => {
-    const nvaSpokeIds = topology.connections
-      .filter((c) => c.transport === 'SpokeNVA' && c.siteId === site.id && c.spokeId)
-      .map((c) => c.spokeId!)
-    const downstreamVnetRoutes = topology.spokes
-      .filter((s) => s.nvaSpokeIds?.some((id) => nvaSpokeIds.includes(id)))
-      .flatMap((s) => s.prefixes.map((prefix) => ({
-        key: `${s.id}:${prefix}`,
+  const defaultSeed = (site: Site): T[] => {
+    const downstreamVnetRoutes = downstreamSpokesForNvaSite(topology, site.id).flatMap((spoke) =>
+      spoke.prefixes.map((prefix) => ({
+        key: `${spoke.id}:${prefix}`,
         prefix,
         asPath: [] as number[],
         sitePath: [site.id],
         siteLinkIds: [] as string[],
-      })))
-    return [site.id, [
-      ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [], sitePath: [site.id], siteLinkIds: [] as string[] })),
+      })),
+    )
+    return [
+      ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [] as number[], sitePath: [site.id], siteLinkIds: [] as string[] })),
       ...downstreamVnetRoutes,
-    ]]
-  }))
-  const best = (routes: SiteRoute[]) => [...new Set(routes.map((r) => r.prefix))].flatMap((prefix) => {
+    ] as T[]
+  }
+  const seed = options?.seed ?? defaultSeed
+  const rank = options?.rank
+  const origins: Record<string, T[]> = Object.fromEntries(topology.sites.map((site) => [site.id, seed(site)]))
+  const best = (routes: T[]) => [...new Set(routes.map((r) => r.prefix))].flatMap((prefix) => {
     const matching = routes.filter((r) => r.prefix === prefix)
-    const shortest = Math.min(...matching.map((r) => r.asPath.length))
-    const unique = new Map(matching.filter((r) => r.asPath.length === shortest).map((r) => [r.key + r.sitePath.join(':'), r]))
+    const preferred = rank
+      ? (() => {
+          const minRank = Math.min(...matching.map(rank))
+          return matching.filter((r) => rank(r) === minRank)
+        })()
+      : matching
+    const shortest = Math.min(...preferred.map((r) => r.asPath.length))
+    const shortestMatches = preferred.filter((r) => r.asPath.length === shortest)
+    if (options?.sortByKey) {
+      if (shortestMatches.length > 32) selectionComplete = false
+      return [...shortestMatches].sort((a, b) => a.key.localeCompare(b.key)).slice(0, 32)
+    }
+    const unique = new Map(shortestMatches.map((r) => [r.key + r.sitePath.join(':'), r]))
     if (unique.size > 32) selectionComplete = false
     return [...unique.values()].slice(0, 32)
   })

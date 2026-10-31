@@ -3,6 +3,7 @@ import type { Candidate, Decision, Simulation } from './routing'
 import type { SiteRoute } from './bgp'
 import { advertiseSiteRoutes, applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
 import { azureRoutesAtSites } from './paths'
+import { hubInboundPolicyConnectionId } from './topology-graph'
 import { cidr } from './validation'
 
 export type RouteMode = 'bgp' | 'learned' | 'advertised'
@@ -70,7 +71,7 @@ export function neighborRoutes(topology: Topology, simulation: Simulation, route
         const neighbor = router.kind === 'hub' ? topology.sites.find((site) => site.id === connection.siteId)
           : topology.hubs.find((hub) => hub.id === connection.hubId)
         const routes = !connection.enabled ? { before: [], after: [] } : router.kind === 'site' && mode === 'learned'
-          ? incoming(connection.id) : snapshot(owner, router.kind === 'hub' ? connection.spokeId ?? connection.id : connection.id, direction) ?? { before: [], after: [] }
+          ? incoming(connection.id) : snapshot(owner, router.kind === 'hub' ? hubInboundPolicyConnectionId(connection) : connection.id, direction) ?? { before: [], after: [] }
         const scoped = (routes: (Candidate | SiteRoute)[]) => router.kind === 'hub' && connection.spokeId && mode === 'learned'
           ? routes.filter((route) => 'connectionId' in route && route.connectionId === connection.id) : routes
         return { id: connection.id, name: `${neighbor?.name} · ${connection.name}${connection.enabled ? '' : ' (down)'}`,

@@ -1,6 +1,6 @@
 # Virtual WAN Topology Lab
 
-A browser-based Azure Virtual WAN topology designer and **explainable planning simulator**. No Azure credentials, backend, database, or telemetry are needed for simulation. Optional online feedback uses a small managed API; no topology is uploaded.
+A browser-based Azure Virtual WAN topology designer and **explainable planning simulator**. No Azure credentials, backend, database, or telemetry are needed for simulation. Optional online feedback opens a pre-filled issue in the public feedback repository without OAuth consent or topology uploads.
 
 **Live app:** https://black-sea-0b65eb803.4.azurestaticapps.net
 
@@ -31,7 +31,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **Azure files** imports a local, read-only Azure CLI capture (v1 structural or v2 with observed effective-route snapshots) after review, persists observed snapshots on the imported topology (`azureImport.tables` and `azureImport.spokes`), and exports an offline Bicep starter for a new Standard WAN, selected hubs, optional `AZFW_Hub` Azure Firewalls with `routingIntent`, and optional existing-VNet `hubVirtualNetworkConnections`. No Azure authentication, SDK or deployment service is added to the app.
 - **Hub BGP table inspector** includes a **Simulated / Azure snapshot** source switch whenever imported observed route snapshots are present on the topology, displaying observed prefixes, next-hop types, resolved resource names, and route origins alongside simulated routes.
 - **Compare with Azure capture** attaches optional effective-route observations without replacing the design. Explicit resource mappings, route scope and coverage distinguish extra/missing routes, changed selected next hops, optional AS-path differences and unassessed cases.
-- **Send feedback** opens a zero-consent pre-filled GitHub issue in the public feedback repository (`erjosito/vwan-visual-topology-feedback`) with no OAuth consent required, while retaining the optional managed API submission flow when configured.
+- **Send feedback** opens a zero-consent pre-filled GitHub issue in the public feedback repository (`erjosito/vwan-visual-topology-feedback`) with no OAuth consent required.
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 - **Check routing** immediately scans modeled connectivity between all assigned endpoint networks and saved requirements. Each finding has one red-bordered triangular warning sign; click it for explanations and independent forward/return paths. Unassessed coverage is shown separately in neutral coverage notes, not danger signs. Optional **Advanced checks** retain explicit flow, firewall and neighbor requirements. No Azure credentials or packet probes are used.
@@ -93,7 +93,6 @@ Requires Node.js 22.12+.
 
 ```shell
 npm ci
-npm ci --prefix api
 npm run dev
 ```
 
@@ -102,8 +101,6 @@ npm run lint
 npm test
 npm run test:collector
 npm run build
-npm run build:api
-npm run package:api
 npx playwright install chromium
 npm run test:e2e
 ```
@@ -136,35 +133,6 @@ The existing [controlled Azure lab](verification/azure-vwan-2026-10-29/README.md
 The form previews exactly what is included in the pre-filled GitHub issue URL: category (`Bug`, `Feature request`, or `Other`), summary, description, target repository (`erjosito/vwan-visual-topology-feedback`), app revision, and a report reference (`FB-<uuid>`). No topology, network configuration, screenshots, browser logs, or storage contents are attached. Because the feedback repository is public, users must not include secrets, credentials, or confidential/customer data.
 
 Drafts are stored only in the current tab's `sessionStorage` until the user opens the GitHub issue form or clicks **Discard draft**. Clicking **Open issue on GitHub** opens the pre-filled issue creation page (`https://github.com/erjosito/vwan-visual-topology-feedback/issues/new`) in a new tab and also provides a direct **Continue to GitHub issue form** link and a **Browse public feedback** link.
-
-#### Legacy managed API compatibility
-
-The existing **Free SWA with managed Node.js 22 Functions** continues to host the compiled `api` package so `/api/feedback/status` and `/api/feedback` gateway rules remain compatible with release verification, while the front-end UI uses the zero-OAuth public feedback repository workflow directly.
-
-Register a **private GitHub App**, disable webhooks, request only **Issues read/write** (plus mandatory Metadata read), and install it on **only `erjosito/vwan-visual-topology`**. Ensure this repository has the `feedback` label before enabling submissions. Do not use a personal access token or the broad `gh` login token. Generate its private key using the owner's GitHub session; configure the following in SWA's **backend application settings**, never `VITE_*`, source, command-line literals, logs or chat:
-
-| Backend setting | Value |
-|---|---|
-| `FEEDBACK_ENABLED` | `false` until hosting, auth and installation checks pass; `true` enables submission |
-| `FEEDBACK_GITHUB_APP_ID` | GitHub App ID |
-| `FEEDBACK_GITHUB_INSTALLATION_ID` | Installation ID restricted to this repository |
-| `FEEDBACK_GITHUB_PRIVATE_KEY` | PEM private key; rotate in GitHub and replace this setting |
-| `FEEDBACK_GITHUB_BOT` | Exact App bot login, e.g. `your-app-slug[bot]` |
-| `FEEDBACK_PRODUCTION_DEPLOYMENT_ID` | `deploymentId` from the production `/api/feedback/status` response |
-
-Use the Azure portal or authenticated ARM tooling that keeps the key out of output and process arguments. Local Functions settings/private keys are gitignored. The API defaults off and requires a platform-derived site/hostname fingerprint matching the production pin. Missing runtime identity, a different preview identity, missing credentials or an incomplete quota scan fail closed. Managed host identity was observed to change on redeployment: refresh this pin from the current production status **after every API deployment**, following gateway checks and before enabling submissions. CI does not automatically update backend settings; an old pin intentionally disables feedback until an operator refreshes it. Updating the pin itself was verified to leave the host identity stable. Do not deploy production credentials to untrusted preview code: a runtime pin is not a security boundary against malicious code that can read its own settings. CI deploys only validated main-branch artifacts, never pull-request APIs.
-
-Run unit/browser tests against mocked GitHub, then build/package with `npm run build:api` and `npm run package:api`. The package allowlists compiled output, host/manifest/lock files and **production-only** dependencies. Deploy `dist` and `test-artifacts/feedback-api` together, skipping both builds in the SWA deploy action. When Actions is unavailable, after the same checks use the official CLI with a transient deployment-token environment variable:
-
-```powershell
-npx --yes --package @azure/static-web-apps-cli@2.1.0 swa deploy .\dist --api-location .\test-artifacts\feedback-api --api-language node --api-version 22 --env production --no-use-keychain
-```
-
-Keep CLI verbosity at its normal level, not debug/silly, and clear the token afterward. Roll out disabled first; verify the gateway rejects anonymous and forged-principal submissions, and confirm the simulator and custom-domain HTTPS still work. Enable only after configuring the least-privilege App, and verify/close one explicitly labelled smoke report in the private repository. Roll back by setting `FEEDBACK_ENABLED=false`; revoke the App installation/key if required. Maintain key rotation with the App owner.
-
-Inputs are strictly validated, capped at **16 KiB while streaming**, and bounded by field length. The target repository and `feedback` label are server-fixed. Submitted text is fenced literally and the server appends authoritative receipt metadata. No report bodies, contact details or credentials are logged by application code. Recent App-authored, fixed-label issues (open **and closed**) provide best-effort cooldown/quota checks: one report per reporter/minute, ten per reporter/UTC day, fifty overall/UTC day. Pagination is bounded and fails closed if incomplete. Checks and same-day receipt deduplication are **not atomic cross-instance quotas or exactly-once delivery**; races, issue edits/deletions and day boundaries can produce duplicates or affect counts. Stronger guarantees require a separately approved coordination service.
-
-Managed API hosting is included in Free SWA, subject to its quotas and governance; this is not unlimited usage or a promise of zero total Azure/domain costs. Built-in GitHub authentication and the two automatic custom-domain certificates do not require Standard.
 
 ### Topology workflow
 

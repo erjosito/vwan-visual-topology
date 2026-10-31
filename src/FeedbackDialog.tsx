@@ -3,8 +3,8 @@ import { LanguageSelector } from './LanguageSelector'
 import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 
-const draftKey = 'vwan-feedback-draft:v1'
 const appRevision = import.meta.env.VITE_APP_REVISION || 'development'
+const draftKey = 'vwan-feedback-draft:v1'
 const publicFeedbackRepo = 'erjosito/vwan-visual-topology-feedback'
 const publicFeedbackRepoUrl = `https://github.com/${publicFeedbackRepo}`
 
