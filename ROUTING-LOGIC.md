@@ -326,7 +326,7 @@ States below are the review-time GitHub states, not implied certification.
 | [#20](https://github.com/erjosito/vwan-visual-topology/issues/20) | Open | Hub own-AS and input/wire-boundary semantics remain broader work. The corrected prepend wizard and scoped spoke-NVA gate do not resolve all VPN/ER/integrated-NVA admission. |
 | [#21](https://github.com/erjosito/vwan-visual-topology/issues/21) | Open | Deterministic resumable analysis and explicit overflow scope remain. Keep cancellation, limits, routing-revision invalidation and stale-worker protection. |
 | [#22](https://github.com/erjosito/vwan-visual-topology/issues/22) | Open | Custom table/association/propagation contexts require explicit configuration and observation provenance. Do not reconstruct them from effective-route snapshots alone. |
-| [#23](https://github.com/erjosito/vwan-visual-topology/issues/23) | Open | Separate product gaps, actionable missing ownership and genuinely incomplete scans. This is the first recommended UX change; issue creation is complete, implementation is not. |
+| [#23](https://github.com/erjosito/vwan-visual-topology/issues/23) | Closed | Delivered: routing-check status and coverage drawer now separate unassigned advertised prefixes (with every unassigned prefix listed per site and a direct Edit button), grouped model scope boundaries (such as SD-WAN flow pairs), and genuinely incomplete/truncated scans. |
 
 ### Prioritized implementation recommendations
 

@@ -3,7 +3,7 @@ import type { FormEvent } from 'react'
 import { CanvasOverlay } from './CanvasOverlay'
 import { AnalysisCoverage } from './AnalysisCoverage'
 import { localizeDiagnostic, t } from './i18n'
-import { routingRevision, validateDiagnosticsProfile } from './diagnostics'
+import { routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsFinding, DiagnosticsProfile, DiagnosticsReport, ExportConstraint } from './diagnostics'
 import type { PathNode } from './paths'
 import { nodePrefixes } from './paths'
@@ -21,9 +21,9 @@ function download(value: unknown, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighlight, onProfileChange, onClose }: {
+export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject, onClearHighlight, onProfileChange, onClose }: {
   topology: Topology; onFinding: (finding: DiagnosticsFinding) => void
-  onInspect: (node: ObjectSelection) => void; onClearHighlight: () => void; onClose: () => void
+  onInspect: (node: ObjectSelection) => void; onEditObject?: (node: ObjectSelection) => void; onClearHighlight: () => void; onClose: () => void
   onProfileChange?: () => void
 }) {
   const nodes = [
@@ -179,36 +179,49 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onClearHighli
     {error && <p className="notice error" role="alert">{t(error)}</p>}
     {running && <p role="status">{t('Analyzing routing in a local worker. You can cancel or continue editing the topology.')}</p>}
     {report && !currentReport && <p className="notice" role="status">{t('The routing configuration changed. Run diagnostics again; previous results are stale.')}</p>}
-    {currentReport && <section aria-label={t('Diagnostic results')}>
-      <p className={currentReport.complete ? 'notice analysis-complete' : 'notice'} role="status">{t(currentReport.complete ? 'Analysis completed within the requested model scope.' : 'Analysis is partial or some cases could not be assessed.')}
-        {' '}{t('{0} probes · {1} address cells · {2} failure cases', currentReport.probes, currentReport.cells, currentReport.failureCases)}
-        {' '}{Object.entries(severities).map(([value, label]) => `${t(label)}: ${currentReport.findings.filter((finding) => finding.severity === value).length}`).join(' · ')}</p>
-      <AnalysisCoverage report={currentReport} topology={topology} />
-      <div className="form-grid">
-        <label className="field"><span>{t('Severity')}</span><select aria-label={t('Diagnostic severity')} value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">{t('All severities')}</option>{Object.entries(severities).filter(([value]) => value !== 'unknown').map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
-        <label className="field"><span>{t('Diagnostic category')}</span><select aria-label={t('Diagnostic category')} value={category} onChange={(event) => setCategory(event.target.value)}><option value="">{t('All categories')}</option>{categories.map(([rule, title]) => <option key={rule} value={rule}>{t(title)}</option>)}</select></label>
-        <label className="field"><span>{t('Node')}</span><select aria-label={t('Diagnostic node filter')} value={nodeFilter} onChange={(event) => setNodeFilter(event.target.value)}><option value="">{t('All nodes')}</option>{nodes.map((node) => <option key={key(node)} value={key(node)}>{node.name}</option>)}</select></label>
-        <label className="field"><span>{t('Filter by prefix or endpoint')}</span><input aria-label={t('Filter by prefix or endpoint')} value={filter} onChange={(event) => setFilter(event.target.value)} /></label>
-      </div>
-      <p className="muted">{t('Forward and return paths use different destination colors. Symmetric ECMP candidates do not prove symmetric traffic hashing.')}</p>
-      <div className="flow-results">{visible.map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
-        <div className="row"><span className="diagnostic-severity">{t(severities[finding.severity])}</span><button className="finding-title" onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
-        <p>{t(finding.detail)}</p>
-        {!finding.source && <p>{t('Affected objects: {0}', finding.related.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', '))}</p>}
-        {finding.isolation && <div className="isolation-groups"><p>{t('Link: {0}', isolationLinkName(topology, finding.isolation))}</p>
-          {finding.isolation.groups.map((group, index) => <p key={index}><strong>{t('Separated group {0} ({1} nodes)', index + 1, group.length)}</strong>: {group.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', ')}</p>)}
-        </div>}
-        {finding.source && <p>{name(finding.source)} · {finding.sourceAddress ?? finding.prefix} → {name(finding.target)} · {finding.destinationAddress ?? finding.prefix}</p>}
-        <small>{t(finding.confidence === 'modeled' ? 'Modeled result' : finding.confidence === 'risk' ? 'Potential risk' : 'Unknown')}</small>
-        <details><summary>{t('Evidence and investigation')}</summary>
-          <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{evidence.code}</code> · {evidence.nodeId ? topologyObject(topology, finding.related.find((node) => node.id === evidence.nodeId) ?? { kind: 'hub', id: evidence.nodeId })?.name ?? evidence.nodeId : ''} {evidence.prefix} {evidence.connectionId}</li>)}</ul>
-          <div className="row">{finding.related.filter((node) => ['hub', 'site', 'erLocation'].includes(node.kind) && topologyObject(topology, node)).slice(0, 4).map((node) => <button key={key(node)} onClick={() => onInspect(node)}>{t('Inspect routes: {0}', topologyObject(topology, node)?.name)}</button>)}</div>
-          {([['Forward', finding.forward], ['Return', finding.reverse]] as const).map(([direction, paths]) => <div key={direction}><h4>{t(direction)}</h4>{paths.map((path, index) => <details key={index}><summary>{t(path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route')} · {index + 1}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details>)}</div>)}
-        </details>
-      </article>)}</div>
-      {!visible.length && <p className="empty">{t('No findings match these filters. Review the assessed scope and limitations before drawing conclusions.')}</p>}
-      <button onClick={() => download({ kind: 'vwan-routing-diagnostics', version: 1, profile, report: currentReport }, 'vwan-diagnostics-report.json')}>{t('Export diagnostic report')}</button>
-    </section>}
+    {currentReport && (() => {
+      const coverage = summarizeCoverage(currentReport)
+      const countTokens = [
+        ...Object.entries(severities).filter(([value]) => value !== 'unknown').map(([value, label]) => `${t(label)}: ${currentReport.findings.filter((finding) => finding.severity === value).length}`),
+        ...(coverage.unassignedPrefixes.length ? [coverage.unassignedPrefixes.length === 1 ? t('1 unassigned advertised prefix') : t('{0} unassigned advertised prefixes', coverage.unassignedPrefixes.length)] : []),
+        ...(coverage.unsupportedFlowCount ? [coverage.unsupportedFlowCount === 1 ? t('1 model-limited flow pair') : t('{0} model-limited flow pairs', coverage.unsupportedFlowCount)] : []),
+        ...(coverage.otherUnknownFindings.length ? [coverage.otherUnknownFindings.length === 1 ? t('1 incomplete check') : t('{0} incomplete checks', coverage.otherUnknownFindings.length)] : []),
+      ]
+      return <section aria-label={t('Diagnostic results')}>
+        <p className={!coverage.scanIncomplete && currentReport.complete ? 'notice analysis-complete' : 'notice'} role="status">{t(coverage.scanIncomplete
+          ? 'Analysis is partial or some cases could not be assessed.'
+          : coverage.hasNotes
+            ? 'Supported checks completed; review coverage notes for unassigned prefixes or model boundaries.'
+            : 'Analysis completed within the requested model scope.')}
+          {' '}{t('{0} probes · {1} address cells · {2} failure cases', currentReport.probes, currentReport.cells, currentReport.failureCases)}
+          {' '}{countTokens.join(' · ')}</p>
+        <AnalysisCoverage report={currentReport} topology={topology} onEditObject={onEditObject} />
+        <div className="form-grid">
+          <label className="field"><span>{t('Severity')}</span><select aria-label={t('Diagnostic severity')} value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">{t('All severities')}</option>{Object.entries(severities).filter(([value]) => value !== 'unknown').map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
+          <label className="field"><span>{t('Diagnostic category')}</span><select aria-label={t('Diagnostic category')} value={category} onChange={(event) => setCategory(event.target.value)}><option value="">{t('All categories')}</option>{categories.map(([rule, title]) => <option key={rule} value={rule}>{t(title)}</option>)}</select></label>
+          <label className="field"><span>{t('Node')}</span><select aria-label={t('Diagnostic node filter')} value={nodeFilter} onChange={(event) => setNodeFilter(event.target.value)}><option value="">{t('All nodes')}</option>{nodes.map((node) => <option key={key(node)} value={key(node)}>{node.name}</option>)}</select></label>
+          <label className="field"><span>{t('Filter by prefix or endpoint')}</span><input aria-label={t('Filter by prefix or endpoint')} value={filter} onChange={(event) => setFilter(event.target.value)} /></label>
+        </div>
+        <p className="muted">{t('Forward and return paths use different destination colors. Symmetric ECMP candidates do not prove symmetric traffic hashing.')}</p>
+        <div className="flow-results">{visible.map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
+          <div className="row"><span className="diagnostic-severity">{t(severities[finding.severity])}</span><button className="finding-title" onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
+          <p>{t(finding.detail)}</p>
+          {!finding.source && <p>{t('Affected objects: {0}', finding.related.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', '))}</p>}
+          {finding.isolation && <div className="isolation-groups"><p>{t('Link: {0}', isolationLinkName(topology, finding.isolation))}</p>
+            {finding.isolation.groups.map((group, index) => <p key={index}><strong>{t('Separated group {0} ({1} nodes)', index + 1, group.length)}</strong>: {group.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', ')}</p>)}
+          </div>}
+          {finding.source && <p>{name(finding.source)} · {finding.sourceAddress ?? finding.prefix} → {name(finding.target)} · {finding.destinationAddress ?? finding.prefix}</p>}
+          <small>{t(finding.confidence === 'modeled' ? 'Modeled result' : finding.confidence === 'risk' ? 'Potential risk' : 'Unknown')}</small>
+          <details><summary>{t('Evidence and investigation')}</summary>
+            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{evidence.code}</code> · {evidence.nodeId ? topologyObject(topology, finding.related.find((node) => node.id === evidence.nodeId) ?? { kind: 'hub', id: evidence.nodeId })?.name ?? evidence.nodeId : ''} {evidence.prefix} {evidence.connectionId}</li>)}</ul>
+            <div className="row">{finding.related.filter((node) => ['hub', 'site', 'erLocation'].includes(node.kind) && topologyObject(topology, node)).slice(0, 4).map((node) => <button key={key(node)} onClick={() => onInspect(node)}>{t('Inspect routes: {0}', topologyObject(topology, node)?.name)}</button>)}</div>
+            {([['Forward', finding.forward], ['Return', finding.reverse]] as const).map(([direction, paths]) => <div key={direction}><h4>{t(direction)}</h4>{paths.map((path, index) => <details key={index}><summary>{t(path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route')} · {index + 1}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details>)}</div>)}
+          </details>
+        </article>)}</div>
+        {!visible.length && <p className="empty">{t('No findings match these filters. Review the assessed scope and limitations before drawing conclusions.')}</p>}
+        <button onClick={() => download({ kind: 'vwan-routing-diagnostics', version: 1, profile, report: currentReport }, 'vwan-diagnostics-report.json')}>{t('Export diagnostic report')}</button>
+      </section>
+    })()}
     <p className="muted">{t('Profiles and reports are local downloads containing addresses, object IDs and modeled route details. Nothing is sent to Azure or feedback.')}</p>
   </CanvasOverlay>
 }

@@ -26,7 +26,7 @@ import type { ComparisonSession } from './AzureComparisonPanel'
 import { FeedbackDialog } from './FeedbackDialog'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { RoutingIssuesPanel } from './RoutingIssuesPanel'
-import { routingRevision, validateDiagnosticsProfile } from './diagnostics'
+import { routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticsFinding, DiagnosticsReport } from './diagnostics'
 import { importAzureCapture } from './azure-import'
 import { vpnRoutingMode } from './vpn-routing'
@@ -82,7 +82,12 @@ function App() {
   const routingKey = useMemo(() => routingRevision(topology), [topology])
   const currentCheck = routingCheck?.revision === routingKey ? routingCheck : undefined
   const routingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity === 'error' || finding.severity === 'warning') ?? []
-  const unassessedCases = currentCheck?.report?.findings.filter((finding) => finding.severity === 'unknown').length ?? 0
+  const checkCoverage = currentCheck?.report ? summarizeCoverage(currentCheck.report) : undefined
+  const editCoveredObject = (node: ObjectSelection) => {
+    closePanel()
+    setSelection(node)
+    setEditorRequest(node)
+  }
   useEffect(() => {
     checkWorker.current?.terminate(); checkWorker.current = undefined
     return () => { checkWorker.current?.terminate(); checkWorker.current = undefined }
@@ -389,17 +394,25 @@ function App() {
           <span>{t(!currentCheck ? 'Routing changed. Check routing again.' : currentCheck.status === 'running' ? 'Checking all modeled networks…'
             : currentCheck.status === 'cancelled' ? 'Routing check cancelled. No complete result is available.'
             : currentCheck.status === 'failed' ? 'Routing check failed. No complete result is available.'
-            : !currentCheck.report?.complete ? 'Analysis coverage is incomplete.'
-            : routingIssues.length ? 'Routing check completed.' : 'No routing issues found within the checked model scope.')}</span>
-          {currentCheck?.report && <><span>{t('{0} routing issues · {1} unassessed cases', routingIssues.length, unassessedCases)}</span>
+            : checkCoverage?.scanIncomplete ? 'Routing check is incomplete. Some networks or scenarios could not be assessed.'
+            : routingIssues.length ? 'Routing check completed.'
+            : checkCoverage?.noCheckablePairs || checkCoverage?.unassignedPrefixes.length
+              ? 'Advertised networks have no declared owner. Assign site or VNet prefixes to verify end-to-end reachability.'
+              : 'No routing issues found within the checked model scope.')}</span>
+          {currentCheck?.report && checkCoverage && <><span>{[
+            t('{0} routing issues', routingIssues.length),
+            ...(checkCoverage.unassignedPrefixes.length ? [checkCoverage.unassignedPrefixes.length === 1 ? t('1 unassigned advertised prefix') : t('{0} unassigned advertised prefixes', checkCoverage.unassignedPrefixes.length)] : []),
+            ...(checkCoverage.unsupportedFlowCount ? [checkCoverage.unsupportedFlowCount === 1 ? t('1 model-limited flow pair') : t('{0} model-limited flow pairs', checkCoverage.unsupportedFlowCount)] : []),
+            ...(checkCoverage.otherUnknownFindings.length ? [checkCoverage.otherUnknownFindings.length === 1 ? t('1 incomplete check') : t('{0} incomplete checks', checkCoverage.otherUnknownFindings.length)] : []),
+          ].join(' · ')}</span>
             <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(false); setPanel('issues') }}>{t('Review routing issues')}</button>
-            {(!currentCheck.report.complete || currentCheck.report.limitations.length > 0) && <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(true); setPanel('issues') }}>{t('Review analysis coverage')}</button>}</>}
+            {checkCoverage.hasNotes && <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(true); setPanel('issues') }}>{t('Review analysis coverage')}</button>}</>}
           {currentCheck?.status === 'running' && <button onClick={() => { checkWorker.current?.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
           <button onClick={openDiagnostics}>{t('Advanced checks')}</button>
         </div>}
         <div className="canvas-stage">
-          {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
-          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onClose={closePanel} />}
+          {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
+          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
           {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
           <TopologyDiagram topology={topology} issues={routingIssues} onShowIssues={(finding) => { setRoutingIssueId(finding.id); setReviewCoverage(false); setPanel('issues'); showDiagnostic(finding) }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />

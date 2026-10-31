@@ -100,6 +100,7 @@ test('one click shows one sign per issue and selecting a sign explains and anima
   await marker.click()
   const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
   await expect(issues.getByRole('button', { name: 'Unreachable network', exact: true })).toHaveCount(1)
+  await expect(issues).toContainText('Showing selected issue (1 of')
   await expect(issues).toContainText('No selected path reaches this network')
   await expect(page.locator('.network-link.preferred-link').first()).toBeVisible()
   await issues.getByRole('button', { name: 'Show all routing issues', exact: true }).click()
@@ -137,28 +138,45 @@ test('automatic checks keep markers across display changes but remove them when 
   await expect(markers.first()).toBeVisible()
 })
 
-test('automatic checks report unknown ownership instead of a healthy topology and explanations fit mobile', async ({ page }) => {
+test('automatic checks separate unassigned advertised prefixes and model scope boundaries from incomplete scans and fit mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')
   const unknown = structuredClone(topology)
   unknown.sites[0].prefixes = []
-  unknown.connections.push({
-    id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-    routes: [{ id: 'unowned', prefix: '10.9.0.0/24', asPath: [65001], kind: 'bgp' }],
-  })
+  unknown.sites.push({ id: 'sdwan-site', name: 'SDWAN Branch', asn: 65002, prefixes: ['10.3.0.0/24'] })
+  unknown.connections.push(
+    {
+      id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
+      routes: [
+        { id: 'unowned-1', prefix: '10.9.0.0/24', asPath: [65001], kind: 'bgp' },
+        { id: 'unowned-2', prefix: '10.9.1.0/24', asPath: [65001], kind: 'bgp' },
+      ],
+    },
+    {
+      id: 'sdwan', name: 'SDWAN', hubId: 'h', siteId: 'sdwan-site', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
+      routes: [],
+    },
+  )
   await page.getByLabel('Import topology file').setInputFiles({ name: 'unknown.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(unknown)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
-  await expect(page.locator('.routing-check-status')).toContainText('Analysis coverage is incomplete')
+  await expect(page.locator('.routing-check-status')).toContainText('Routing check completed.')
+  await expect(page.locator('.routing-check-status')).not.toContainText('incomplete')
+  await expect(page.locator('.routing-check-status')).toContainText('2 unassigned advertised prefixes · 2 model-limited flow pairs')
   await expect(page.locator('.routing-issue-marker[data-issue-id^="unowned-advertisement:"]')).toHaveCount(0)
   await page.getByRole('button', { name: 'Review analysis coverage', exact: true }).click()
   const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
-  await expect(issues).toContainText('Advertised networks have no declared owner')
+  await expect(issues).toContainText('Unassigned advertised prefixes')
+  await expect(issues).toContainText('10.9.0.0/24, 10.9.1.0/24')
+  await expect(issues).toContainText('Model scope boundaries')
+  await expect(issues).toContainText('SD-WAN outbound learning and vendor-specific NVA ranking are not validated.')
   await expect(issues.locator('.diagnostic-finding.unknown')).toHaveCount(0)
   await expect(issues.locator('.analysis-coverage')).toHaveAttribute('open', '')
   const bounds = await issues.boundingBox()
   expect(bounds!.x).toBeGreaterThanOrEqual(0)
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(391)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+  await issues.getByRole('button', { name: 'Edit Isolated site', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Edit site', exact: true })).toBeVisible()
 })
 
 test('cancelling an automatic scan or replacing the topology prevents late worker results from adding signs', async ({ page }) => {

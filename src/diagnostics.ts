@@ -110,6 +110,77 @@ const profileError = 'Invalid diagnostics profile.'
 const budgetError = 'Invalid diagnostics budget.'
 export const diagnosticMessages: string[] = [...new Set([...Object.values(messages).flat(), ...Object.values(limits), profileError, budgetError])]
 
+export interface UnsupportedCapabilityGroup {
+  code: string
+  limitation: string
+  findings: DiagnosticsFinding[]
+}
+
+export interface CoverageSummary {
+  scanIncomplete: boolean
+  scanLimitations: string[]
+  noCheckablePairs: boolean
+  unassignedFindings: DiagnosticsFinding[]
+  unassignedPrefixes: string[]
+  unsupportedGroups: UnsupportedCapabilityGroup[]
+  unsupportedFlowCount: number
+  otherUnknownFindings: DiagnosticsFinding[]
+  hasNotes: boolean
+}
+
+export function summarizeCoverage(report: DiagnosticsReport): CoverageSummary {
+  const modelLimitKeys = new Set(['sdwan', 'erDefault', 'ownAs', 'imported'])
+  const scanLimitMessages = new Set<string>([
+    limits.budget,
+    limits.convergence,
+    limits.selection,
+    limits.trace,
+    limits.inspection,
+    limits.policy,
+    'Saved requirements could not be read. Automatic checks ran without them.',
+  ])
+  const unassignedFindings = report.findings.filter((finding) => finding.rule === 'unowned-advertisement')
+  const unassignedPrefixes = [...new Set(unassignedFindings.flatMap((finding) =>
+    finding.evidence.flatMap((item) => item.code === 'unowned-advertisement' && item.prefix ? [item.prefix] : []),
+  ))]
+  const groups = new Map<string, UnsupportedCapabilityGroup>()
+  const unsupportedFindingIds = new Set<string>()
+  for (const finding of report.findings) {
+    if (finding.rule !== 'unknown' && finding.rule !== 'failure-unknown') continue
+    const codes = finding.evidence
+      .filter((item) => item.code.startsWith('limitation:'))
+      .map((item) => item.code.slice('limitation:'.length))
+      .filter((code) => modelLimitKeys.has(code))
+    if (!codes.length) continue
+    unsupportedFindingIds.add(finding.id)
+    for (const code of codes) {
+      const limitation = limits[code as keyof typeof limits] ?? finding.detail
+      const existing = groups.get(code)
+      if (existing) existing.findings.push(finding)
+      else groups.set(code, { code, limitation, findings: [finding] })
+    }
+  }
+  const unsupportedGroups = [...groups.values()]
+  const otherUnknownFindings = report.findings.filter((finding) =>
+    finding.severity === 'unknown' && finding.rule !== 'unowned-advertisement' && !unsupportedFindingIds.has(finding.id),
+  )
+  const noCheckablePairs = report.limitations.includes(limits.endpoints)
+  const scanLimitations = report.limitations.filter((limitation) => scanLimitMessages.has(limitation))
+  const scanIncomplete = (report.limitsReached?.length ?? 0) > 0 || scanLimitations.length > 0 || otherUnknownFindings.length > 0
+  const hasNotes = scanIncomplete || noCheckablePairs || unassignedFindings.length > 0 || unsupportedGroups.length > 0 || report.limitations.length > 0
+  return {
+    scanIncomplete,
+    scanLimitations,
+    noCheckablePairs,
+    unassignedFindings,
+    unassignedPrefixes,
+    unsupportedGroups,
+    unsupportedFlowCount: unsupportedFindingIds.size,
+    otherUnknownFindings,
+    hasNotes,
+  }
+}
+
 /** Profiles are a separate, bounded input contract, never a topology mutation. */
 export function validateDiagnosticsProfile(input: unknown): DiagnosticsProfile {
   const fail = (): never => { throw new Error(profileError) }
@@ -416,7 +487,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       if (prefixes.length) {
         limited(limits.ownership)
         add('unowned-advertisement', 'unknown', site.id, {
-          related: [{ kind: 'site', id: site.id }], prefix: prefixes[0],
+          related: [{ kind: 'site', id: site.id }], prefix: prefixes.join(', '),
           evidence: prefixes.map((prefix) => ({ code: 'unowned-advertisement', prefix })),
         })
       }
@@ -627,7 +698,13 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
         if (!result.success || result.reasons.length) add(result.reasons.length ? 'failure-unknown' : 'failure', result.reasons.length ? 'unknown' : 'warning', stable([kind, link.id, intent, source.prefix, target.prefix]), {
           source: intent.source, target: intent.target, sourceAddress: source.address, destinationAddress: target.address, prefix: target.prefix,
           related: [{ kind, id: link.id }, intent.source, intent.target, ...pathObjects([...result.forward, ...result.reverse])],
-          forward: result.forward, reverse: result.reverse, evidence: [{ code: 'disabled-link', connectionId: link.id }, { code: 'intent', nodeId: intent.id }, { code: 'source-cell', prefix: source.prefix }, { code: 'destination-cell', prefix: target.prefix }],
+          forward: result.forward, reverse: result.reverse, evidence: [
+            { code: 'disabled-link', connectionId: link.id },
+            { code: 'intent', nodeId: intent.id },
+            { code: 'source-cell', prefix: source.prefix },
+            { code: 'destination-cell', prefix: target.prefix },
+            ...result.reasons.map((reason) => ({ code: `limitation:${Object.entries(limits).find(([, text]) => text === reason)?.[0] ?? 'unknown'}` })),
+          ],
         })
       }
     }

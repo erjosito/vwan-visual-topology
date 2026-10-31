@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Topology } from './model'
-import { analyzeRouting, diagnosticMessages, routingRevision, validateDiagnosticsProfile } from './diagnostics'
+import { analyzeRouting, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsProfile } from './diagnostics'
 import { azureRoutesAtSites, traceNodePath } from './paths'
 import { propagateSites } from './bgp'
@@ -407,5 +407,39 @@ describe('typed engine coverage and shared site-plane behavior', () => {
     expect(paths.every((path) => path.status === 'delivered' && path.traceComplete === false)).toBe(true)
     expect(traceNodePath(t, simulation, { kind: 'site', id: 'b' }, '10.1.0.1').every((path) => path.traceComplete === false)).toBe(true)
     expect(propagateSites(t).selectionComplete).toBe(true)
+  })
+
+  it('separates unassigned advertised prefixes, grouped model scope boundaries and incomplete scans', () => {
+    const t = fixture()
+    t.sites.push({ id: 'sdwan-site', name: 'SDWAN branch', asn: 65003, prefixes: ['10.3.0.0/24'] })
+    t.connections[0].routes = [
+      { id: 'unowned-1', prefix: '10.20.0.0/16', asPath: [65002], kind: 'bgp' },
+      { id: 'unowned-2', prefix: '10.20.10.0/24', asPath: [65002], kind: 'bgp' },
+    ]
+    t.connections.push({
+      id: 'sdwan-conn', name: 'SDWAN conn', hubId: 'h', siteId: 'sdwan-site',
+      transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [],
+    })
+    const empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
+    const report = analyzeRouting(t, empty, { automatic: true })
+    const unowned = report.findings.find((finding) => finding.rule === 'unowned-advertisement')
+    expect(unowned?.prefix).toBe('10.20.0.0/16, 10.20.10.0/24')
+    const coverage = summarizeCoverage(report)
+    expect(coverage.scanIncomplete).toBe(false)
+    expect(coverage.unassignedFindings).toHaveLength(1)
+    expect(coverage.unassignedPrefixes).toEqual(['10.20.0.0/16', '10.20.10.0/24'])
+    expect(coverage.unsupportedFlowCount).toBe(2)
+    expect(coverage.unsupportedGroups).toHaveLength(1)
+    expect(coverage.unsupportedGroups[0]).toMatchObject({
+      code: 'sdwan',
+      limitation: 'SD-WAN outbound learning and vendor-specific NVA ranking are not validated.',
+    })
+    expect(coverage.unsupportedGroups[0].findings).toHaveLength(2)
+    expect(coverage.otherUnknownFindings).toHaveLength(0)
+
+    const truncated = analyzeRouting(t, empty, { automatic: true, maxProbes: 1 })
+    const truncatedCoverage = summarizeCoverage(truncated)
+    expect(truncatedCoverage.scanIncomplete).toBe(true)
+    expect(truncatedCoverage.scanLimitations).toContain('Analysis budget reached; some declared cases were not assessed.')
   })
 })
