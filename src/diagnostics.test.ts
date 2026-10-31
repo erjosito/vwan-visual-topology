@@ -35,7 +35,7 @@ describe('routing diagnostic intent and evidence', () => {
     const healthy = analyzeRouting(t, empty, { automatic: true })
     expect(healthy).toMatchObject({ complete: true, probes: 2, cells: 1 })
     expect(healthy.findings.filter((finding) => finding.rule !== 'link-isolation')).toEqual([])
-    expect(healthy.findings.filter((finding) => finding.rule === 'link-isolation')).toHaveLength(2)
+    expect(healthy.findings.filter((finding) => finding.rule === 'link-isolation')).toHaveLength(1)
     expect(JSON.stringify(t)).toBe(original)
     t.connections[0].enabled = false
     const failed = analyzeRouting(t, empty, { automatic: true })
@@ -76,7 +76,7 @@ describe('routing diagnostic intent and evidence', () => {
     const report = analyzeRouting(t, empty, { automatic: true, maxCells: 50000, maxProbes: 20000, maxMillis: 15000 })
     expect(report).toMatchObject({ complete: true, cells: 18000 })
     expect(report.findings.filter((finding) => finding.rule !== 'link-isolation')).toEqual([])
-    expect(report.findings).toHaveLength(10)
+    expect(report.findings).toEqual([])
     expect(report.probes).toBeLessThan(report.cells)
     t.spokes = Array.from({ length: 40 }, (_, i) => ({
       id: `spoke-${i}`, name: `Spoke ${i}`, hubId: 'h',

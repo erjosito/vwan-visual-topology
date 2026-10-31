@@ -259,8 +259,31 @@ test('overlapping IP ranges identify both endpoints while coverage stays separat
   await expect(issues).toContainText('Source VNet, Destination VNet')
   await expect(issues).toContainText('10.1.0.0/25')
   await page.getByRole('button', { name: 'Show all routing issues', exact: true }).click()
-  await expect(issues.getByRole('button', { name: 'Single point of failure', exact: true })).toHaveCount(2)
-  await expect(issues).toContainText('Separated group')
+  await expect(issues.getByRole('button', { name: 'Single point of failure', exact: true })).toHaveCount(0)
+  await expect(page.locator('.routing-issue-marker[data-issue-id^="link-isolation:"]')).toHaveCount(0)
+})
+
+test('spoke attachments do not produce single-point-of-failure warnings but affected spokes remain in other failure groups', async ({ page }) => {
+  const connected = structuredClone(topology)
+  connected.sites = []
+  await page.goto('/')
+  await page.getByLabel('Import topology file').setInputFiles({ name: 'spokes.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(connected)) })
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await expect(page.locator('.routing-check-status')).toContainText('No routing issues found within the checked model scope.')
+  await expect(page.locator('.routing-issue-marker')).toHaveCount(0)
+  connected.sites = structuredClone(topology.sites)
+  connected.connections = [{ id: 'vpn', name: 'Critical VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [] }]
+  await page.getByLabel('Import topology file').setInputFiles({ name: 'critical-vpn.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(connected)) })
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  const marker = page.locator('.routing-issue-marker[data-issue-id^="link-isolation:"]')
+  await expect(marker).toHaveCount(1)
+  await expect(marker).toHaveAttribute('data-object-key', 'link:vpn')
+  await marker.click()
+  const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
+  await expect(issues).toContainText('Link: Critical VPN')
+  await expect(issues.locator('.isolation-groups')).toContainText('Source VNet')
+  await expect(issues.locator('.isolation-groups')).toContainText('Destination VNet')
+  await expect(issues.locator('.isolation-groups')).toContainText('Isolated site')
 })
 
 test('unsupported SD-WAN checks stay in neutral coverage notes in automatic and advanced reports', async ({ page }) => {

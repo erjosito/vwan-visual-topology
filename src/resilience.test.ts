@@ -16,7 +16,7 @@ describe('structural single-link isolation', () => {
   it('identifies separated groups without attributing already isolated nodes to a failure', () => {
     const topology = fixture(), original = JSON.stringify(topology)
     const risks = singleLinkIsolation(topology)
-    expect(risks.map((risk) => risk.linkId).sort()).toEqual(['v', 'vpn', 'wan'])
+    expect(risks.map((risk) => risk.linkId).sort()).toEqual(['vpn', 'wan'])
     expect(risks.find((risk) => risk.linkId === 'vpn')?.groups.map((group) => group.map((node) => node.id))).toEqual([['h', 'v'], ['a', 'b']])
     expect(risks.flatMap((risk) => risk.groups.flat()).some((node) => node.id === 'already-isolated')).toBe(false)
     expect(JSON.stringify(topology)).toBe(original)
@@ -24,11 +24,17 @@ describe('structural single-link isolation', () => {
   it('handles parallel links, disabled backups and cycles rather than treating every attachment as a bridge', () => {
     const topology = fixture()
     topology.connections.push({ ...topology.connections[0], id: 'backup' })
-    expect(singleLinkIsolation(topology).map((risk) => risk.linkId).sort()).toEqual(['v', 'wan'])
+    expect(singleLinkIsolation(topology).map((risk) => risk.linkId).sort()).toEqual(['wan'])
     topology.connections[1].enabled = false
     expect(singleLinkIsolation(topology).some((risk) => risk.linkId === 'vpn')).toBe(true)
     topology.connections[1] = { ...topology.connections[0], id: 'other-site', siteId: 'b' }
-    expect(singleLinkIsolation(topology).map((risk) => risk.linkId)).toEqual(['v'])
+    expect(singleLinkIsolation(topology)).toEqual([])
+  })
+  it('does not flag non-configurable spoke attachments in an otherwise healthy hub topology', () => {
+    const topology = fixture()
+    topology.connections = []; topology.siteLinks = []; topology.sites = []
+    topology.spokes.push({ ...topology.spokes[0], id: 'other-spoke' })
+    expect(singleLinkIsolation(topology)).toEqual([])
   })
   it('checks individual ER legs and implicit inter-hub links', () => {
     const topology = fixture()

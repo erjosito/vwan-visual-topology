@@ -56,7 +56,7 @@ export function singleLinkIsolation(topology: Topology): LinkIsolation[] {
     }
     return [...found].sort().map((id) => nodes.get(id)!)
   }
-  return bridges.map((index): LinkIsolation => {
+  return bridges.filter((index) => edges[index].object?.kind !== 'spoke').map((index): LinkIsolation => {
     const { linkId, linkName, object, a, b } = edges[index]
     return { linkId, linkName, object, endpoints: [nodes.get(a)!, nodes.get(b)!], groups: [component(a, index), component(b, index)] }
   })
