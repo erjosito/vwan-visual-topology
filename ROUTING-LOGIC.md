@@ -1,4 +1,11 @@
-# Routing logic, route selection, and critique
+# Routing logic, route selection, and application critique
+
+**Current application review:** section 9 was updated on **2026-10-31** against
+deployed feature revision `8c5f0a6498a8`, covering every open and closed issue
+through #23. Sections 1-8 retain the earlier, revision-specific engine review
+and its follow-up; they are not a current feature inventory. In particular,
+spoke BGP NVAs and hosting-VNet route maps are now implemented, and the
+documentation-ASN wizard restriction has been corrected.
 
 Reviewed on **2026-10-30**, against application revision `3cd26971b7b141135c6eb0f9c8ba3cd4d65f1d40`. This describes the implementation, not an idealized Azure algorithm. The accompanying consolidation/feedback change does not change routing behavior.
 
@@ -239,3 +246,299 @@ References (the HRP, deep-dive, and route-map pages were rechecked on the review
 - [Route maps](https://learn.microsoft.com/azure/virtual-wan/route-maps-about): default permit, ordered processing, summary AS-path removal, prepend limitations and inbound/outbound placement.
 - [Routing intent and policies](https://learn.microsoft.com/azure/virtual-wan/how-to-routing-policies): deployment-specific intent behavior; use the frozen report for this lab's actual observations.
 - [Azure testing lessons](AZURE-TESTING-LESSONS.md): independent predictions, correct measurement layers, evidence boundaries and ownership-safe cleanup.
+
+## 9. Application critique and prioritized recommendations
+
+### Review scope and conclusion
+
+Reviewed the current implementation, README, existing engine critique, scoped
+Azure lab report, and all **23 GitHub issues: 12 closed and 11 open**, including
+their latest implementation/evidence comments. An issue's original planning
+body is not necessarily its current delivery status: #16 and #17, for example,
+still contain historical proposal wording although their features are shipped.
+This section updates the existing recommendations rather than creating a
+second competing roadmap.
+
+**The strongest part of the application is explainability:** separate routing
+planes, neighbor-specific before/after policies, exact link provenance,
+independent return paths and preserved failed Azure predictions make it more
+useful than a diagram-only designer. Local-first operation and the existing
+Free hosting are appropriate; a cloud backend or infrastructure-platform
+rewrite is not needed for the next improvements.
+
+**The biggest remaining weakness is confidence communication.** The interface
+still combines different coverage units, and realistic configurations can be
+drawn more completely than they can be assessed or reconstructed from Azure.
+Prioritize making those boundaries understandable, then extend the specific
+routing contracts that block common workflows. Do not solve uncertainty by
+hiding it, declaring all unknowns healthy, or adding more danger signs.
+
+This is a product and implementation critique, not a new security audit, live
+Azure experiment, accessibility certification or performance benchmark.
+Recommendations below are proposals, not additional implemented features.
+
+### Delivered capabilities to preserve
+
+Structural capture/import and bare-hub Bicep export are delivered, not future
+MVPs. Azure comparison, intent-aware diagnostics, explicit-only highlighting,
+duplicate/overlapping declared IP-range detection, and one danger sign per
+finding are also delivered. Logical SPOF detection intentionally excludes
+spoke-to-hub attachments while retaining spokes in affected components.
+
+The latest feature release includes blank-canvas panning/reset, explicit spoke BGP
+NVAs, hosting-VNet policies and contextual IN/OUT association removal. Removing
+an association preserves the opposite direction, other users of the map and
+the reusable definition. The new NVA transport is not integrated SD-WAN.
+These are regression invariants, not recommendations to implement again.
+
+Route-map prepending now permits documentation ASNs `64496-64511` for lab
+simulation with an Azure-acceptance caveat. Microsoft does not explicitly ban
+that range in its route-map limitations; IANA documentation reservation alone
+does not prove rejection. Production guidance remains owned public two-byte
+ASNs. The separate NVA peer-identity contract does exclude documentation ASNs.
+Keep those two contracts distinct.
+
+### Complete issue reconciliation
+
+States below are the review-time GitHub states, not implied certification.
+
+| Issue | State | Current outcome and recommendation |
+|---|---|---|
+| [#1](https://github.com/erjosito/vwan-visual-topology/issues/1) | Closed | Offline WAN/bare-hub Bicep starter delivered. Keep omissions/refusals; it is not lossless topology deployment. Extension belongs to #4. |
+| [#2](https://github.com/erjosito/vwan-visual-topology/issues/2) | Closed | Locally authenticated structural capture/import delivered. Preserve preview/cancel and explicit unsupported configuration. Do not rebuild browser authentication. |
+| [#3](https://github.com/erjosito/vwan-visual-topology/issues/3) | Open, partial | #16 supplies collection, bounded observations and comparison. Remaining work is snapshot/mapping persistence and existing-inspector integration, not another collector. |
+| [#4](https://github.com/erjosito/vwan-visual-topology/issues/4) | Open | Existing-VNet attachment and secured-hub export plan. Implement in slices only after explicit target/default-control contracts; never infer target resources from names. |
+| [#5](https://github.com/erjosito/vwan-visual-topology/issues/5) | Closed | Scoped real-Azure experiment and owned-resource cleanup complete. Preserve original failed predictions and scope; this does not certify later features or all routing cases. |
+| [#6](https://github.com/erjosito/vwan-visual-topology/issues/6) | Open, core shipped | Explicit spoke-NVA modeling is live. Remaining controlled competition/session/failover evidence must not be conflated with the implemented offline feature or integrated SD-WAN. |
+| [#7](https://github.com/erjosito/vwan-visual-topology/issues/7) | Closed | Empty-static Azure materialization classification corrected and live-retested. Preserve the distinction from genuine custom routing. |
+| [#8](https://github.com/erjosito/vwan-visual-topology/issues/8) | Closed | Inter-hub ASN double-counting in the locality warning corrected. Arrival history remains a limitation, not an outstanding nominal-selector bug. |
+| [#9](https://github.com/erjosito/vwan-visual-topology/issues/9) | Open | Native/MSEE/customer AS-path representation requires controlled evidence. Keep raw paths and measurement boundaries; do not normalize discrepancies away. |
+| [#10](https://github.com/erjosito/vwan-visual-topology/issues/10) | Closed | Remote-ER ASPath exclusion corrected after independent physical evidence. Retain local tie-breaking and the documented rule/example conflict. |
+| [#11](https://github.com/erjosito/vwan-visual-topology/issues/11) | Closed | Private-AS removal at the ER customer boundary fixed and live-retested. Preserve public order and unaffected hub/VPN paths. |
+| [#12](https://github.com/erjosito/vwan-visual-topology/issues/12) | Closed | Private-only firewall Internet fallback corrected separately from hub defaults. Do not reintroduce green delivery for unknown private destinations. |
+| [#13](https://github.com/erjosito/vwan-visual-topology/issues/13) | Open | Explicit per-attachment default-advertisement controls and legacy/expanded ER parity remain high-value fidelity work. Firewall fallback is not the same feature. |
+| [#14](https://github.com/erjosito/vwan-visual-topology/issues/14) | Closed | Separate candidate/learned/advertised views and filters delivered, including ER-location inspection. Improve scale and NVA categorization without merging the planes again. |
+| [#15](https://github.com/erjosito/vwan-visual-topology/issues/15) | Open, owner-blocked | Managed API and readiness/sign-in fixes delivered. GitHub App registration/installation and real authenticated submission remain; do not substitute a CLI token or claim feedback works. |
+| [#16](https://github.com/erjosito/vwan-visual-topology/issues/16) | Closed | Non-destructive local-capture comparison delivered. Persistence is #3; custom contexts are #22. Match means compared fields match, not network certification. |
+| [#17](https://github.com/erjosito/vwan-visual-topology/issues/17) | Closed | Diagnostics delivered, including later ownership/SPOF/marker corrections. Coverage semantics and unsupported contracts are #19-#23, not a need to rebuild diagnostics. |
+| [#18](https://github.com/erjosito/vwan-visual-topology/issues/18) | Closed | Selection no longer starts or retargets highlighting. Preserve explicit requests, independent traces and the documented table-highlight clearing exception. |
+| [#19](https://github.com/erjosito/vwan-visual-topology/issues/19) | Open | Integrated SD-WAN outbound learning/ranking remains unsupported. Define a bounded evidence-backed contract; spoke-NVA delivery does not close this issue. |
+| [#20](https://github.com/erjosito/vwan-visual-topology/issues/20) | Open | Hub own-AS and input/wire-boundary semantics remain broader work. The corrected prepend wizard and scoped spoke-NVA gate do not resolve all VPN/ER/integrated-NVA admission. |
+| [#21](https://github.com/erjosito/vwan-visual-topology/issues/21) | Open | Deterministic resumable analysis and explicit overflow scope remain. Keep cancellation, limits, routing-revision invalidation and stale-worker protection. |
+| [#22](https://github.com/erjosito/vwan-visual-topology/issues/22) | Open | Custom table/association/propagation contexts require explicit configuration and observation provenance. Do not reconstruct them from effective-route snapshots alone. |
+| [#23](https://github.com/erjosito/vwan-visual-topology/issues/23) | Open | Separate product gaps, actionable missing ownership and genuinely incomplete scans. This is the first recommended UX change; issue creation is complete, implementation is not. |
+
+### Prioritized implementation recommendations
+
+#### P1 - Separate routing findings, configuration omissions and scan coverage (#23)
+
+**Evidence:** `src/App.tsx:85` counts unknown findings, and
+`src/App.tsx:388-396` combines them with routing issues in the headline. In the
+reported example, "14 unassessed cases" means **11 unsupported SD-WAN flow
+assessments plus three router-level notices covering four unassigned advertised
+prefixes**. The run visited 21 cells and 42 probes without exhausting a budget.
+Neither fourteen network faults nor fourteen missing implementations follows.
+
+Use consistent units and distinct categories: detected routing findings,
+unassigned/overlapping owned ranges, unsupported model capabilities, and
+unfinished requested analysis. Put implementation-gap details and issue links
+in optional model/coverage documentation, not repeated primary warnings for
+each unsupported flow. The primary result must still state its assessed scope.
+Keep a real incomplete-run indication for exhausted budgets, nonconvergence,
+unreadable requested requirements and trace overflow.
+
+**Acceptance:** the mixed example reports actual issue count without a summed
+"14 cases" label; missing ownership identifies the affected prefixes and an
+editing action; a budget-limited run names its actual budget and unfinished
+scope. Unsupported flows are neither danger icons nor silently healthy.
+English/Japanese, automatic/advanced views and downloaded reports agree.
+Preserve one topology sign per finding and distinguish duplicate declared
+ranges from repeated BGP advertisements or live-host duplicate-IP discovery.
+
+#### P1 - Establish explicit advertisement and confidence contracts (#9, #13, #20)
+
+**Evidence:** historic R2/R3 and the open issues identify representation/default
+and admission gaps. The lab's positive advertisement subset deliberately did
+not certify defaults or receiver absence. Current explicit spoke-NVA validation
+does not establish equivalent behavior for every legacy transport.
+
+Define the stage of every configured/observed AS path: source advertisement,
+hub-learned candidate, inter-hub route, map snapshot or customer wire export.
+Add explicit supported per-connection default controls with unknown distinct
+from false; use one export contract for equivalent legacy/expanded ER models.
+Apply scoped own-AS admission only where evidence supports it. Keep observed,
+documented nominal and unvalidated behavior separate rather than inventing a
+total transport ranking.
+
+**Acceptance:** independently controlled prefix/default/own-AS fixtures cover
+both ER representations and unaffected VPN/NVA behavior, with raw paths
+preserved. Any new live test freezes predictions first and records arrival
+order, exact receiver boundary and both competing inputs. Documentation-ASN
+advice must not claim unperformed Azure acceptance/rejection.
+
+#### P1 - Target the integrated-SD-WAN gap, not a generic NVA abstraction (#19)
+
+**Evidence:** eleven unsupported flows in the reported topology depend on
+integrated-NVA learning/ranking. The new spoke-NVA feature and the physical lab
+use a different attachment category.
+
+Select a small supported integrated-NVA scenario and establish inbound,
+outbound, return-path and ranking capabilities from first-party/vendor evidence.
+Replace unknown gates only for those supported configurations. Keep optional
+vendor-specific behavior explicit; do not map every appliance to VPN or to a
+spoke BGP peer merely to reduce the coverage count.
+
+**Acceptance:** supported forward/return and competing-prefix fixtures have
+reproducible evidence, asymmetric/missing-return regressions, and narrowly
+removed coverage notices. Unsupported variants remain scoped model exclusions.
+
+#### P2 - Make endpoint ownership practical for multi-prefix networks
+
+**Evidence:** connections support many advertisements, including 4,000 explicit
+spoke-NVA advertisements, but the site editor exposes one optional owned IPv4
+prefix (`src/TopologyObjectEditor.tsx:194-197`). Advertisements correctly do not
+establish ownership. This makes legitimate multi-network ownership harder to
+declare and can encourage artificial extra site nodes.
+
+Introduce a bounded multi-prefix ownership editor using the existing site
+prefix representation where feasible. Clearly distinguish originated/owned
+networks from transit advertisements and aggregates; retain empty ownership for
+a transit-only NVA. Show unresolved advertised ranges with direct ownership
+actions, without automatically assigning an aggregate to an advertising router.
+
+**Acceptance:** one router can own several disjoint networks, native legacy
+files round-trip, duplicate/overlap findings remain accurate, and summary holes
+or repeated transit advertisements do not invent endpoints or ownership.
+This is a new recommendation, not an already tracked implementation issue.
+
+#### P2 - Integrate NVA identity into the whole workspace
+
+**Evidence:** explicit NVA nodes and hosting-spoke paths are delivered, but
+`src/App.tsx:378` still counts all router records as "sites", and
+`src/RouteInspector.tsx:96` groups them under "On-premises sites". Automatic
+positions reuse the router/site layout rather than a hosting-spoke grouping.
+
+Categorize spoke NVAs consistently in counts, router selectors and path menus.
+Place new NVA nodes near their hosting spoke, preserving user-saved positions
+and both layouts. Distinguish logical peer availability from the actual two
+Azure hub BGP sessions; do not imply physical redundancy was simulated.
+Make hosting-VNet versus NVA-side policy ownership visible.
+
+**Acceptance:** creation, deletion/rehosting, route selection, both-direction
+paths and downstream links preserve existing semantics. Keyboard users can
+discover creation and policy removal without a pointer; mobile native scrolling,
+blank-canvas panning and explicit-only highlighting stay intact. Large diagrams
+should have a deliberate fit/reset affordance, not silently move saved nodes.
+This is a follow-on UX recommendation, not a claim that core NVA support is absent.
+
+#### P2 - Add bounded undo and a small change-impact preview
+
+**Evidence:** `src/App.tsx:190-199` validates and immediately persists edits;
+the deletion editor explicitly says the action cannot be undone. JSON backup
+and confirmation help, but changing a shared map or deleting an attachment can
+affect many prefixes before the user understands the result.
+
+Add bounded local undo/redo for topology edits, grouping a node drag as one
+operation. Before destructive edits or shared-map changes, show affected
+references and optionally changed selected routes for a bounded scope.
+Do not introduce a backend, full version-control UI or hidden automatic repairs.
+
+**Acceptance:** undo restores exact references, policies, advertisements and
+layouts; redo is invalidated after a divergent edit; routing changes invalidate
+old diagnostics and comparisons. Storage failure retains export recovery.
+Shared-map unassignment remains distinct from deleting the definition.
+This is a new recommendation and needs a separate scoped issue before implementation.
+
+#### P2 - Persist reviewed observations and reuse the existing inspector (#3)
+
+**Evidence:** #16 is delivered, but observations/mappings remain in page memory
+(`src/App.tsx:76` and #3's delivery comment). A reload can lose a carefully
+reviewed comparison even while the topology remains saved.
+
+Add bounded, explicitly reviewed snapshot/mapping persistence and a small
+Simulated/Azure snapshot switch in the existing inspector. Preserve timestamps,
+selectors, associated next-hop/AS-path tuples and unavailable/partial/stale
+statuses. Offer removal/export; avoid treating captured evidence as simulation
+advertisements or deployment configuration.
+
+**Acceptance:** reload/native exchange retains consented provenance and stable
+mappings, old topology files remain compatible, edits cannot publish stale
+matches, and failed/empty/partial observations never prove suppression.
+Keep collection locally authenticated and manual, with no cloud credential store.
+
+#### P2 - Measure scale before expanding limits or splitting code (#21)
+
+**Evidence:** the production feature build has a **614.90 kB minified main
+JavaScript chunk, 180.69 kB gzip**, and emits Vite's existing size warning.
+`src/RouteInspector.tsx:39-85,111-119` groups/filter-scans route arrays and renders all
+matching candidates; `src/App.tsx:148` recomputes simulation on topology changes,
+including persisted layout changes. These identify measurement targets, not
+proof of unacceptable latency.
+
+Benchmark 500-1,000 prefixes, parallel routes and dense diagrams: load time,
+edit/drag responsiveness, table opening/filtering, diagnostic time and peak
+memory. Then consider lazy optional inspectors, reusable grouping, bounded
+table rendering and separating layout-only work from routing computation while
+retaining current labels/provenance. Keep the existing cancellable worker.
+
+**Acceptance:** published before/after measurements justify each optimization;
+small-topology semantics and accessibility remain unchanged. Resumable batches
+visit every requested case without duplicates/omissions, and disclose 128-branch
+or 32-site-path overflow instead of merely increasing/removing safety limits.
+
+#### P2 - Turn the evidence and documentation into a maintained capability matrix
+
+Maintain one concise matrix: modeled capability, Azure evidence scope,
+observation/import support, export support, known limitation and tracking issue.
+Separate supported nominal behavior from verified physical experiments and
+configuration not represented at all. Cover #6, #9, #13, #19, #20 and #22 first.
+Reuse the existing report and lessons rather than duplicating raw source/evidence.
+
+Correct stale current-facing documentation and issue status summaries while
+preserving dated proposals and immutable lab records. The README's obsolete
+amber-unknown-marker description is corrected with this review. The earlier
+engine snapshot's VNet-map exclusion is historical, not the latest capability.
+Keep an explicit peer-ASN versus route-map-prepend FAQ and source dates.
+
+**Acceptance:** README, current issue status and matrix agree on shipped
+features; each fidelity claim identifies documentation versus actual measured
+evidence. A planning body on a closed issue is not presented as an open roadmap.
+For future validation, use small independently controlled experiments and only
+clean up resources created for that experiment, never existing production assets.
+
+### Blockers, sequencing and non-goals
+
+Recommended sequence: #23 first; then scoped #13/#20 boundary/default work and
+#19 evidence discovery; then ownership/NVA workflow improvements, #3 persistence
+and measured #21 scaling. Custom routing contexts (#22) and broader export (#4)
+need explicit model/target contracts before implementation, not inferred defaults.
+
+Feedback #15 awaits owner GitHub App setup and a real authenticated submission.
+Sign-in itself is enabled; submission intentionally remains unavailable.
+This is a configuration blocker, not a reason to hold unrelated offline work.
+Separately, hosted Actions run
+[41184949161](https://github.com/erjosito/vwan-visual-topology/actions/runs/41184949161)
+was blocked before steps by account payment/spending limits. Restore hosted CI
+when the owner can resolve that; do not portray local validation as passing CI.
+Keep the documented revision-stamped local validation/official SWA CLI fallback.
+
+Do not add browser Azure authentication, continuous monitoring, automatic
+remediation, a generic vendor BGP platform, packet/firewall/NAT certification or
+paid hosting merely to address these recommendations. Preserve the existing
+Free SWA, domains, local-first simulator and explicit import/export omissions.
+
+### Verification supporting this review
+
+Feature revision `8c5f0a6498a8` passed build/lint and **243 unit tests**.
+All **95 distinct browser cases** passed across runs: 94 passed on the full run;
+one old assertion required the corrected ASN wording, then all seven targeted
+feature/map cases passed locally. This is not a claimed single final 95/95 run.
+Those seven workflows also passed on production, including NVA creation/native
+roundtrip, both layouts/directions, hosting-VNet policy filtering and contextual
+association preservation.
+
+All built assets matched SHA256 on the default SWA host and both custom domains;
+all nine forged-principal gateway probes returned 401. Feedback remained
+disabled and the managed deployment identity pin was refreshed without an
+identity change. No new Azure lab resources were created or live NVA acceptance,
+performance, failure or vendor certification experiments run for this release.

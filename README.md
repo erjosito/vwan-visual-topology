@@ -4,6 +4,8 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 
 **Live app:** https://black-sea-0b65eb803.4.azurestaticapps.net
 
+**Routing behavior and prioritized application recommendations:** [ROUTING-LOGIC.md](ROUTING-LOGIC.md).
+
 ## Features
 
 - Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites with editable ASNs and **one optional originated prefix** each. The site's ASN and prefix are visible on its node. Connections can still advertise multiple routes.
@@ -30,7 +32,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **Compare with Azure capture** attaches optional effective-route observations without replacing the design. Explicit resource mappings, route scope and coverage distinguish extra/missing routes, changed selected next hops, optional AS-path differences and unassessed cases.
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
-- **Check routing** immediately scans modeled connectivity between all assigned endpoint networks and saved requirements. Click the red-bordered triangular warning signs on affected nodes/connections for explanations; amber question-mark signs identify unassessed cases. Optional **Advanced checks** retain explicit flow, firewall and neighbor requirements. No Azure credentials or packet probes are used.
+- **Check routing** immediately scans modeled connectivity between all assigned endpoint networks and saved requirements. Each finding has one red-bordered triangular warning sign; click it for explanations and independent forward/return paths. Unassessed coverage is shown separately in neutral coverage notes, not danger signs. Optional **Advanced checks** retain explicit flow, firewall and neighbor requirements. No Azure credentials or packet probes are used.
 
 ## Languages and networking terminology
 
