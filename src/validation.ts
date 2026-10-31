@@ -232,18 +232,10 @@ export function validateTopology(input: unknown): Topology {
     if (link.learnSiteRoutes !== undefined && typeof link.learnSiteRoutes !== 'boolean') fail('ER learn site routes must be boolean.')
     if (link.propagateDefaultRoute !== undefined && typeof link.propagateDefaultRoute !== 'boolean') fail('ER default-route propagation must be boolean.')
     if (link.propagateDefaultRoute === true && link.hubId === undefined) fail('Configure ER default-route propagation on the hub attachment, not the site attachment.')
-    const routes = array(link.routes ?? [], 100, 'ER advertisements').map((value) => {
-      const route = record(value)
-      const prefix = text(route.prefix, 'ER advertised prefix')
-      if (!cidr(prefix)) fail(`Invalid IPv4 network CIDR: ${prefix}`)
-      const asPath = asns(route.asPath)
-      if (route.kind !== 'bgp' || !asPath.length || asPath.some((asn) => [12076, 65515, 65520].includes(asn))) fail('ER site advertisements require a BGP AS path without Azure/provider ASNs; 12076 is added automatically.')
-      return { id: id(route.id), prefix, asPath, kind: 'bgp' as const }
-    })
-    if (link.hubId !== undefined && (routes.length || link.learnSiteRoutes)) fail('Configure ER advertisements on the site attachment, not the hub attachment.')
+    if (link.hubId !== undefined && link.learnSiteRoutes) fail('Configure ER advertisements on the site attachment, not the hub attachment.')
     return { id: id(link.id), name: text(link.name, 'ER connection name'), locationId: link.locationId as string,
       ...(link.hubId === undefined ? { siteId: link.siteId as string } : { hubId: link.hubId as string }),
-      enabled: link.enabled as boolean, routes, learnSiteRoutes: link.learnSiteRoutes === true,
+      enabled: link.enabled as boolean, learnSiteRoutes: link.learnSiteRoutes === true,
       ...(link.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}) }
   })
   const usedHubNvaPeerIps = new Map<string, string[]>()
@@ -294,22 +286,8 @@ export function validateTopology(input: unknown): Topology {
     const outboundMapId = reference('outbound')
     if (connection.transport === 'SDWAN' && (inbound.length || outbound.length || inboundMapId || outboundMapId)) fail('Azure route maps are not supported on integrated SD-WAN NVA branch connections.')
     if (connection.transport === 'SpokeNVA' && (inbound.length || outbound.length || inboundMapId || outboundMapId)) fail('Assign hub route maps to the hosting VNet connection, not the spoke NVA BGP peer.')
-    const routes = array(connection.routes, connection.transport === 'SpokeNVA' ? 4000 : 100, 'Routes per connection').map((value) => {
-      const route = record(value)
-      const prefix = text(route.prefix, 'Prefix')
-      if (!cidr(prefix)) fail(`Invalid IPv4 network CIDR: ${prefix}. Use the network address, not a host address.`)
-      if (!['bgp', 'vpn-static'].includes(route.kind as string)) fail('Invalid route kind.')
-      if (route.kind !== 'bgp' && connection.transport !== 'VPN') fail('Static routes are supported only on VPN connections.')
-      const path = array(route.asPath, 64, 'AS path')
-      if (path.some((n) => typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 4294967294)) fail('Invalid ASN.')
-      if (route.kind === 'bgp' && path.length === 0) fail('BGP routes need an AS path as learned by the hub.')
-      if (route.kind === 'bgp' && path.includes(65520)) fail('65520 is reserved for inter-hub propagation in this simulator.')
-      if (connection.transport === 'SpokeNVA' && (path[0] !== sites.find((site) => site.id === connection.siteId)!.asn || path.includes(65515))) fail('Spoke NVA advertisements must start with the NVA ASN and must not contain the hub ASN 65515.')
-      if (route.kind !== 'bgp' && path.length !== 0) fail('Static routes must have an empty AS path.')
-      return { id: id(route.id), prefix, asPath: path, kind: route.kind } as Topology['connections'][number]['routes'][number]
-    })
     return { id: connectionId, name: text(connection.name, 'Connection name'), hubId: connection.hubId,
-      siteId: connection.siteId, transport: connection.transport, enabled: connection.enabled, routes,
+      siteId: connection.siteId, transport: connection.transport, enabled: connection.enabled,
       inbound, outbound,
       ...(inboundMapId !== undefined ? { inboundMapId } : {}),
       ...(outboundMapId !== undefined ? { outboundMapId } : {}),
@@ -334,13 +312,6 @@ export function validateTopology(input: unknown): Topology {
     return result
   }
   for (const connection of connections) {
-    const staticRoutes = connection.routes.filter((route) => route.kind === 'vpn-static')
-    if (staticRoutes.length) {
-      const site = sites.find((s) => s.id === connection.siteId)!
-      site.vpnStaticRoutes ??= []
-      site.vpnStaticRoutes.push(...staticRoutes.map((route) => ({ id: route.id, prefix: route.prefix, connectionId: connection.id })))
-      connection.routes = connection.routes.filter((route) => route.kind !== 'vpn-static')
-    }
     for (const direction of ['inbound', 'outbound'] as const) {
       const legacy = connection[direction]
       if (!legacy.length) continue

@@ -34,7 +34,7 @@ function spokeNvaTopology(): Topology {
       { id: 'branch', name: 'Downstream branch', asn: 65002, prefixes: ['10.80.0.0/16'] },
     ],
     connections: [{ id: 'peer', name: 'NVA peering', hubId: 'eu', siteId: 'nva', transport: 'SpokeNVA',
-      spokeId: 'host', peerIp: '10.200.0.4', enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [] }],
+      spokeId: 'host', peerIp: '10.200.0.4', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }],
     siteLinks: [{ id: 'downstream', name: 'NVA to branch', a: 'nva', b: 'branch', enabled: true,
       aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }],
   }
@@ -231,8 +231,7 @@ test('highlighted paths stream larger circles end to end at constant speed in ei
 
 test('static VPN traces highlight the final downstream site link and its traffic direction', async ({ page }) => {
   const topology = structuredClone(example)
-  topology.connections = [topology.connections[1]]
-  topology.connections[0].routes = []
+  topology.connections = [{ ...topology.connections[1], learnSiteRoutes: false }]
   topology.sites = [
     { id: 'dc', name: 'VPN transit site', asn: 65010, prefixes: ['10.20.0.0/16'],
       vpnStaticRoutes: [{ id: 'static-destination', prefix: '10.80.0.0/16', connectionId: 'vpn-eu' }] },
@@ -260,9 +259,24 @@ test('static VPN traces highlight the final downstream site link and its traffic
 test('grouped paths deduplicate complete routes, show both directions and respect reduced motion', async ({ page }) => {
   const topology = structuredClone(example)
   topology.connections[2].siteId = 'dc'
-  topology.connections[2].routes = [{ id: 'second-destination', prefix: '10.50.0.0/16', asPath: [65010], kind: 'bgp' }]
+  topology.sites[0].prefixes.push('10.50.0.0/16')
+  topology.routeMaps = [
+    {
+      id: 'drop-50-eu', name: 'Drop 10.50 in EU', siteId: 'dc',
+      rules: [{ id: 'r1', prefixes: ['10.50.0.0/16'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }],
+    },
+    {
+      id: 'drop-20-us', name: 'Drop 10.20 in US', siteId: 'dc',
+      rules: [{ id: 'r2', prefixes: ['10.20.0.0/16', '10.20.10.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }],
+    },
+  ]
+  topology.sites[0].routeMapAssignments = [
+    { connectionId: 'er-eu', outboundMapId: 'drop-50-eu' },
+    { connectionId: 'vpn-eu', outboundMapId: 'drop-50-eu' },
+    { connectionId: 'vpn-us', outboundMapId: 'drop-20-us' },
+  ]
   await page.goto('/'); await importTopology(page, topology)
-  await expect.poll(async () => (await readTopology(page)).connections[2].routes[0].prefix).toBe('10.50.0.0/16')
+  await expect.poll(async () => (await readTopology(page)).sites[0].prefixes).toContain('10.50.0.0/16')
   await groupPath(page, 'Select site London datacenter', 'from', 'All Azure VNets')
   await expect.poll(async () => (await motionDirections(page, 'interhub:eu:us')).map((edge) => edge.from).sort()).toEqual(['eu', 'us'])
   const flows = await motionFlows(page)
@@ -295,7 +309,7 @@ test('destination streams share sequential palette colors with node backgrounds,
   }))
   topology.connections = topology.sites.map((site, i) => ({
     id: `vpn-${i}`, name: `VPN to ${site.name}`, hubId: 'eu', siteId: site.id, transport: 'VPN',
-    enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [],
+    enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
   }))
   topology.connections.push({ ...topology.connections[0], id: 'alternate-vpn', name: 'Alternate VPN to Destination 1' })
   await page.setViewportSize({ width: 1440, height: 1100 })
@@ -347,11 +361,11 @@ test('destination streams share sequential palette colors with node backgrounds,
 
 test('ER locations connect hubs and sites, expose filtered advertisements, trace both legs and persist safely', async ({ page }) => {
   const topology = structuredClone(example)
-  topology.sites[0].prefixes = ['10.20.0.0/16']
+  topology.sites[0].prefixes = ['10.20.0.0/16', '10.88.0.0/16']
   topology.hubs[1].preference = 'ExpressRoute'
   topology.connections[0].hubId = 'us'
   topology.connections[0].siteId = 'ny'
-  topology.connections[0].routes = [{ id: 'remote-er-ad', prefix: '10.30.0.0/16', asPath: [12076, 65020], kind: 'bgp' }]
+  topology.connections[1].learnSiteRoutes = false
   await page.goto('/'); await importTopology(page, topology)
   await page.getByRole('button', { name: '+ ER location', exact: true }).click()
   await page.getByLabel('Name', { exact: true }).fill('Frankfurt ER')
@@ -365,14 +379,13 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   await action(page, 'Select ER location Frankfurt ER', 'Connect to site')
   await page.getByLabel('Name', { exact: true }).fill('London circuit')
   await page.getByLabel('On-premises site', { exact: true }).selectOption('dc')
-  await page.getByLabel('ER BGP advertisements').fill('10.88.0.0/16 65010 65010')
   await page.getByRole('button', { name: 'Create object', exact: true }).click()
   await expect(page.locator('.er-location-node')).toHaveCount(1)
   const saved = await readTopology(page)
   expect(saved.erLinks).toHaveLength(2)
   const hubLink = saved.erLinks!.find((link) => link.hubId)!, siteLink = saved.erLinks!.find((link) => link.siteId)!
   await showRoutes(page)
-  await expect(page.locator('tr[data-prefix="10.88.0.0/16"] .as-path').first()).toHaveText('12076 65010 65010')
+  await expect(page.locator('tr[data-prefix="10.88.0.0/16"] .as-path').first()).toHaveText('12076 65010')
   await page.locator('.effective-routes button.prefix-button').filter({ hasText: /^10\.20\.0\.0\/16$/ }).click()
   await expect(page.getByTestId(`er-link-${hubLink.id}`)).toHaveClass(/preferred-link/)
   await expect(page.getByTestId(`er-link-${siteLink.id}`)).toHaveClass(/preferred-link/)
@@ -395,7 +408,7 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   await action(page, 'Select ER location Frankfurt ER', 'BGP table')
   await expect(dialog(page, 'BGP table · Frankfurt ER').getByRole('table')).toBeVisible()
   await expect(page.locator('.effective-routes tr[data-prefix="10.88.0.0/16"][data-preferred="true"]')).toContainText('London datacenter')
-  await expect(page.locator('.effective-routes tr[data-prefix="10.88.0.0/16"] .as-path')).toHaveText('65010 65010')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.88.0.0/16"] .as-path')).toHaveText('65010')
   await page.keyboard.press('Escape')
   await (await pathMenu(page, 'Select site London datacenter', 'to', 'Americas applications (spoke)')).getByRole('menuitem', { name: '10.2.0.0/16', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Reachable')
@@ -443,14 +456,19 @@ test('ER BGP table shows best paths, alternatives and ties, filters prefixes and
   const topology = structuredClone(example)
   topology.connections = []
   topology.sites[0].prefixes = ['10.80.0.0/16']
+  topology.sites[1].prefixes = ['10.80.0.0/16']
+  topology.sites[2].prefixes = ['10.80.0.0/16']
+  topology.routeMaps = [{
+    id: 'ny-prepend', name: 'NY Prepend', siteId: 'ny',
+    rules: [{ id: 'r1', prefixes: ['10.80.0.0/16'], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [65020], nextStep: 'terminate' }],
+  }]
+  topology.sites[1].routeMapAssignments = [{ connectionId: 'er-backup', outboundMapId: 'ny-prepend' }]
   topology.erLocations = [{ id: 'er', name: 'Test ER location' }]
   topology.erLinks = [
-    { id: 'er-hub', name: 'Azure attachment', locationId: 'er', hubId: 'eu', enabled: true, routes: [], learnSiteRoutes: false },
-    { id: 'er-primary', name: 'Primary circuit', locationId: 'er', siteId: 'dc', enabled: true, routes: [], learnSiteRoutes: true },
-    { id: 'er-backup', name: 'Backup circuit', locationId: 'er', siteId: 'ny', enabled: true, learnSiteRoutes: false,
-      routes: [{ id: 'backup-prefix', prefix: '10.80.0.0/16', kind: 'bgp', asPath: [65020, 65020] }] },
-    { id: 'er-equal', name: 'Equal circuit', locationId: 'er', siteId: 'branch', enabled: true, learnSiteRoutes: false,
-      routes: [{ id: 'equal-prefix', prefix: '10.80.0.0/16', kind: 'bgp', asPath: [65030] }] },
+    { id: 'er-hub', name: 'Azure attachment', locationId: 'er', hubId: 'eu', enabled: true, learnSiteRoutes: false },
+    { id: 'er-primary', name: 'Primary circuit', locationId: 'er', siteId: 'dc', enabled: true, learnSiteRoutes: true },
+    { id: 'er-backup', name: 'Backup circuit', locationId: 'er', siteId: 'ny', enabled: true, learnSiteRoutes: true },
+    { id: 'er-equal', name: 'Equal circuit', locationId: 'er', siteId: 'branch', enabled: true, learnSiteRoutes: true },
   ]
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto('/'); await importTopology(page, topology)
@@ -500,6 +518,7 @@ test('ER BGP table shows best paths, alternatives and ties, filters prefixes and
 test('nested Everywhere paths retain per-prefix reachability and replace the standalone bulk action', async ({ page }) => {
   const topology = structuredClone(example)
   topology.sites[1].prefixes = ['203.0.113.0/24']
+  topology.connections.find(c => c.id === 'vpn-us')!.learnSiteRoutes = false
   await page.goto('/'); await importTopology(page, topology)
   await page.getByLabel('Select spoke Europe applications', { exact: true }).focus()
   await page.keyboard.press('Shift+F10')
@@ -859,7 +878,7 @@ test('dragging updates links live, saves per-view positions and round-trips the 
   await expect(page.locator('[data-node-id="eu-apps"]')).toHaveAttribute('transform', spokePosition!)
   await page.screenshot({ path: 'test-results/network-constellation.png', fullPage: true })
   await action(page, 'Select hub Europe hub', 'BGP table')
-  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(3)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(2)
 })
 
 for (const mode of ['layered', 'constellation'] as const) {
@@ -948,7 +967,12 @@ for (const mode of ['layered', 'constellation'] as const) {
 test('prefix-only paths work without an IP field and custom addresses remain available for exceptions', async ({ page }) => {
   const topology = structuredClone(example)
   topology.hubs[0].preference = 'VPN'
-  topology.connections[0].routes.push({ id: 'same-base-prefix', prefix: '10.20.0.0/24', asPath: [12076, 65010], kind: 'bgp' })
+  topology.sites[0].prefixes.push('10.20.0.0/24')
+  topology.routeMaps = [{
+    id: 'vpn-drop-specifics', name: 'Drop /24 on VPN', siteId: 'dc',
+    rules: [{ id: 'drop-24', prefixes: ['10.20.0.0/24', '10.20.10.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }],
+  }]
+  topology.sites[0].routeMapAssignments = [{ connectionId: 'vpn-eu', outboundMapId: 'vpn-drop-specifics' }]
   await page.goto('/'); await importTopology(page, topology)
   await action(page, 'Select spoke Europe applications', 'Open path explorer')
   await page.getByLabel('Destination node', { exact: true }).selectOption('site:dc')
@@ -996,12 +1020,12 @@ test('BGP overlay preserves all candidates, colors, preference changes and topol
   const inspector = dialog(page, 'BGP table · Europe hub')
   const rows = inspector.locator('tr[data-prefix="10.20.0.0/16"]')
   const preferred = inspector.locator('tr[data-prefix="10.20.0.0/16"][data-preferred="true"]')
-  await expect(rows).toHaveCount(3)
+  await expect(rows).toHaveCount(2)
   await expect(preferred).toContainText('London primary')
   await expect(preferred.locator('.as-path')).toHaveText('12076 65010')
-  await expect(inspector.locator('tr[data-prefix="10.20.0.0/16"][data-preferred="false"]')).toHaveCount(2)
+  await expect(inspector.locator('tr[data-prefix="10.20.0.0/16"][data-preferred="false"]')).toHaveCount(1)
   await expect(inspector.locator('thead th')).toHaveCount(3)
-  await expect(rows.locator('.route-state')).toHaveText(['*', '', ''])
+  await expect(rows.locator('.route-state')).toHaveText(['*', ''])
   await expect(inspector).not.toContainText(/\d+ candidates? · \d+ preferred/)
   await expect(inspector.locator('tr[data-reason-prefix="10.20.0.0/16"]')).toContainText('ExpressRoute wins')
   const before = await inspector.boundingBox()
@@ -1026,10 +1050,15 @@ test('ECMP alternatives remain visible and connection failure withdraws only the
   const t = structuredClone(example)
   t.hubs = [t.hubs[0]]; t.hubs[0].preference = 'ASPath'
   t.spokes = t.spokes.filter((s) => s.hubId === 'eu')
+  t.sites[0].prefixes = ['10.20.0.0/16']
   t.connections = [0, 1, 2].map((i) => ({
-    ...structuredClone(example.connections[1]), id: `vpn-${i}`, name: `VPN ${i + 1}`,
-    routes: [{ id: `r-${i}`, prefix: '10.20.0.0/16', kind: 'bgp', asPath: i === 2 ? [65010, 65010] : [65010] }],
+    ...structuredClone(example.connections[1]), id: `vpn-${i}`, name: `VPN ${i + 1}`, learnSiteRoutes: true,
   }))
+  t.routeMaps = [{
+    id: 'vpn-2-prepend', name: 'Prepend VPN 3', siteId: 'dc',
+    rules: [{ id: 'r1', prefixes: ['10.20.0.0/16'], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [65010], nextStep: 'terminate' }],
+  }]
+  t.sites[0].routeMapAssignments = [{ connectionId: 'vpn-2', outboundMapId: 'vpn-2-prepend' }]
   await page.goto('/'); await importTopology(page, t); await showRoutes(page)
   const rows = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')
   await expect(rows).toHaveCount(3)
@@ -1103,7 +1132,7 @@ test('routing intent stays on hubs, with separate overlay tables and firewall pa
   await expect(page.locator('.effective-routes table')).not.toContainText('10.20.0.0/16')
   await action(page, 'Select hub Europe hub', 'Show firewall routes')
   await expect(page.getByLabel('Route view', { exact: true })).toHaveValue('firewall')
-  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(3)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')).toHaveCount(2)
   await action(page, 'Select spoke Europe applications', 'Open path explorer')
   await page.getByLabel('Destination node', { exact: true }).selectOption('site:dc')
   await page.getByLabel('Destination prefix', { exact: true }).selectOption('10.20.0.0/16')
@@ -1215,8 +1244,6 @@ test('on-premises links and directional policies feed hub routes and transit pat
   await editor.getByLabel('Site B', { exact: true }).selectOption('ny')
   await editor.getByLabel('bToA inbound prepend ASNs', { exact: true }).fill('65020')
   await editor.getByRole('button', { name: 'Create object', exact: true }).click()
-  await action(page, 'Edit connection London backup', 'Edit advertisements')
-  await page.getByLabel('Import site mesh routes', { exact: true }).check()
   await showRoutes(page)
   await expect(page.locator('.effective-routes table')).toContainText('10.80.0.0/16')
   await action(page, 'Select spoke Europe applications', 'Open path explorer')
@@ -1229,10 +1256,7 @@ test('on-premises links and directional policies feed hub routes and transit pat
 
 test('reusable maps summarize, prepend, share, preserve metadata and delete safely', async ({ page }) => {
   const t = structuredClone(example)
-  t.connections[0].routes.push(
-    { id: 'summary-a', prefix: '10.90.1.0/24', asPath: [12076, 65010], kind: 'bgp' },
-    { id: 'summary-b', prefix: '10.90.2.0/24', asPath: [12076, 65010], kind: 'bgp' },
-  )
+  t.sites[0].prefixes.push('10.90.1.0/24', '10.90.2.0/24')
   await page.goto('/'); await importTopology(page, t)
   await action(page, 'Select hub Europe hub', 'Route maps')
   await createMap(page, 'Branch policy')
@@ -1252,12 +1276,12 @@ test('reusable maps summarize, prepend, share, preserve metadata and delete safe
   await page.getByRole('button', { name: 'Save route map', exact: true }).click()
   const mapId = (await readTopology(page)).routeMaps![0].id
   await page.getByLabel('Inbound route map', { exact: true }).selectOption(mapId)
+  await page.getByLabel('Route map connection', { exact: true }).selectOption('vpn-eu')
+  await page.getByLabel('Inbound route map', { exact: true }).selectOption(mapId)
   await showRoutes(page)
   await expect(page.locator('.effective-routes tr[data-prefix="10.90.0.0/16"][data-preferred="true"] .as-path')).toHaveText('12345')
   await expect(page.locator('.effective-routes table')).not.toContainText('10.90.1.0/24')
   await action(page, 'Select hub Europe hub', 'Route maps')
-  await page.getByLabel('Route map connection', { exact: true }).selectOption('vpn-eu')
-  await page.getByLabel('Inbound route map', { exact: true }).selectOption(mapId)
   expect((await readTopology(page)).hubs[0].routeMapAssignments!.filter((a) => ['er-eu', 'vpn-eu'].includes(a.connectionId)).every((a) => a.inboundMapId === mapId)).toBe(true)
   await page.getByRole('button', { name: /^Branch policy/ }).click()
   await page.getByLabel('Route map name', { exact: true }).fill('Shared branch policy')
@@ -1267,7 +1291,7 @@ test('reusable maps summarize, prepend, share, preserve metadata and delete safe
   await page.getByRole('button', { name: 'Confirm route map deletion', exact: true }).click()
   expect((await readTopology(page)).routeMaps).toHaveLength(0)
   expect((await readTopology(page)).hubs[0].routeMapAssignments).toEqual([])
-  expect((await readTopology(page)).connections[0].routes).toEqual(t.connections[0].routes)
+  expect((await readTopology(page)).sites[0].prefixes).toEqual(t.sites[0].prefixes)
 })
 
 test('hub route-map wizard rejects restricted prepend ASNs and explains public ASN requirements with Microsoft documentation', async ({ page }) => {
@@ -1351,17 +1375,27 @@ test('spoke NVA creation auto-infers peer IP, embeds the NVA icon on the spoke, 
   await expect(page.getByLabel('NVA ASN', { exact: true })).toHaveValue('65040')
 })
 
-test('unowned-advertisement diagnostics show exact connection source, assign prefix to site in one click, and open Edit advertisements directly', async ({ page }) => {
-  await page.goto('/'); await importTopology(page, structuredClone(example))
+test('unowned-advertisement diagnostics show exact connection source, assign prefix to site in one click, and open Edit static routes directly', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.sites[0].prefixes = []
+  topology.sites[0].vpnStaticRoutes = [
+    { id: 's1', prefix: '10.20.0.0/16', connectionId: 'vpn-eu' },
+    { id: 's2', prefix: '10.20.10.0/24', connectionId: 'vpn-eu' },
+  ]
+  topology.sites[1].prefixes = []
+  topology.sites[1].vpnStaticRoutes = [
+    { id: 's3', prefix: '10.30.0.0/16', connectionId: 'vpn-us' },
+  ]
+  await page.goto('/'); await importTopology(page, topology)
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
   await page.getByRole('button', { name: 'Review analysis coverage', exact: true }).click()
   const dialogEl = dialog(page, 'Routing issues')
-  await expect(dialogEl).toContainText('Defined in BGP advertisements on connection "London primary" (ExpressRoute → Europe hub, AS path 12076 65010)')
+  await expect(dialogEl).toContainText('Defined in VPN static routes on site "London datacenter" via connection "London backup"')
   await dialogEl.getByRole('button', { name: 'Assign all (2) to London datacenter', exact: true }).click()
   await expect(dialogEl.getByRole('button', { name: 'Assign all (2) to London datacenter', exact: true })).toHaveCount(0)
   expect((await readTopology(page)).sites.find((s) => s.id === 'dc')!.prefixes).toEqual(['10.20.0.0/16', '10.20.10.0/24'])
-  await dialogEl.getByRole('button', { name: 'Edit advertisements: New York VPN', exact: true }).first().click()
-  await expect(dialog(page, 'Advertisements · New York VPN')).toBeVisible()
+  await dialogEl.getByRole('button', { name: 'Static routing: New York office', exact: true }).first().click()
+  await expect(dialog(page, 'Static routing · New York office')).toBeVisible()
 })
 
 for (const mode of ['layered', 'constellation'] as const) {
@@ -1572,8 +1606,8 @@ test('site BGP view retains alternatives, with route commands restricted to rout
 test('learned and advertised route views default after maps and retain neighbor and prefix filters before maps', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   const t = structuredClone(example)
-  t.connections[1].routes = ['10.60.0.0/16', '10.61.0.0/16', '10.62.0.0/16']
-    .map((prefix) => ({ id: prefix, prefix, asPath: [65010], kind: 'bgp' }))
+  t.connections[0].enabled = false
+  t.sites[0].prefixes = ['10.60.0.0/16', '10.61.0.0/16', '10.62.0.0/16']
   t.routeMaps = [{
     id: 'in', name: 'Inbound test', hubId: 'eu', rules: [
       { id: 'drop', prefixes: ['10.60.0.0/16'], match: 'equals', action: 'drop', prepend: [], summaryPrefixes: [], nextStep: 'terminate' },
@@ -1627,7 +1661,7 @@ test('learned and advertised route views default after maps and retain neighbor 
 test('site route views inspect Azure policies and highlight Azure-learned BGP paths', async ({ page }) => {
   const t = structuredClone(example)
   t.connections = [t.connections[1]]
-  t.connections[0].routes = [{ id: 'site-origin', prefix: '10.20.0.0/16', kind: 'bgp', asPath: [65010] }]
+  t.sites[0].prefixes = ['10.20.0.0/16']
   t.routeMaps = [
     { id: 'site-in', name: 'Site inbound', siteId: 'dc', rules: [{
       id: 'site-drop', prefixes: ['10.1.0.0/16'], match: 'equals', action: 'drop', prepend: [], summaryPrefixes: [], nextStep: 'terminate',
@@ -1696,9 +1730,8 @@ test('VPN static prefixes are site attributes, editable from either endpoint and
   })
   await page.mouse.click(point.x, point.y, { button: 'right' })
   await expect(page.getByRole('menuitem', { name: 'Static routing', exact: true })).toHaveCount(0)
-  await page.getByRole('menuitem', { name: 'Edit advertisements', exact: true }).click()
-  await expect(page.getByLabel('Route type', { exact: true })).toHaveCount(0)
-  await expect(dialog(page, 'Advertisements · London backup')).toContainText('Configure non-BGP VPN prefixes through Static routing on the site or hub')
+  await expect(page.getByRole('menuitem', { name: 'Edit advertisements', exact: true })).toHaveCount(0)
+  await page.keyboard.press('Escape')
   await action(page, 'Select site London datacenter', 'Edit configuration')
   await dialog(page, 'Edit site').getByRole('button', { name: 'Configure static routing', exact: true }).click()
   await expect(page.getByLabel('Static routing VPN connection', { exact: true })).toHaveValue('vpn-eu')
@@ -1709,7 +1742,7 @@ test('VPN static prefixes are site attributes, editable from either endpoint and
   expect(saved.sites[0].vpnStaticRoutes).toMatchObject([
     { prefix: '10.90.0.0/16', connectionId: 'vpn-eu' }, { prefix: '10.91.0.0/16', connectionId: 'vpn-eu' },
   ])
-  expect(saved.connections[1].routes).toEqual([])
+  expect(saved.connections[1]).not.toHaveProperty('routes')
   expect(saved.connections[1].learnSiteRoutes).toBe(false)
   await page.getByLabel('Site VPN static prefixes', { exact: true }).fill('10.90.0.1/16')
   await page.getByRole('button', { name: 'Save static routing', exact: true }).click()
@@ -1738,7 +1771,7 @@ test('VPN static prefixes are site attributes, editable from either endpoint and
 
 test('VPN conversion wizard reviews, cancels and converts static/BGP settings together with editable route seeds', async ({ page }) => {
   const topology = structuredClone(example)
-  topology.sites[0].prefixes = ['10.90.0.0/16']
+  topology.sites[0].prefixes = ['10.20.0.0/16', '10.90.0.0/16']
   await page.goto('/'); await importTopology(page, topology)
   const original = await readTopology(page)
   await page.getByLabel('Edit connection London backup', { exact: true }).focus()
@@ -1768,7 +1801,7 @@ test('VPN conversion wizard reviews, cancels and converts static/BGP settings to
   await expect(wizard.getByRole('status')).toContainText('updated together')
   await wizard.getByRole('button', { name: 'Done', exact: true }).click()
   const staticTopology = await readTopology(page)
-  expect(staticTopology.connections[1].routes).toEqual([])
+  expect(staticTopology.connections[1]).not.toHaveProperty('routes')
   expect(staticTopology.connections[1].learnSiteRoutes).toBe(false)
   expect(staticTopology.sites[0].vpnStaticRoutes!.map((route) => route.prefix)).toEqual(['10.90.0.0/16', '10.91.0.0/16'])
   expect(staticTopology.sites[0].prefixes).toEqual(original.sites[0].prefixes)
@@ -1783,21 +1816,17 @@ test('VPN conversion wizard reviews, cancels and converts static/BGP settings to
   await page.getByRole('menuitem', { name: 'Change to BGP routing', exact: true }).click()
   const bgpWizard = dialog(page, 'Change VPN to BGP · London backup')
   await expect(bgpWizard.getByLabel('BGP destination prefix 1', { exact: true })).toHaveValue('10.90.0.0/16')
-  await expect(bgpWizard.getByLabel('BGP AS path 1', { exact: true })).toHaveValue('65010')
-  await bgpWizard.getByLabel('BGP AS path 1', { exact: true }).fill('65010 65010')
   await bgpWizard.getByRole('button', { name: 'Review routing changes', exact: true }).click()
-  await expect(bgpWizard.getByRole('table', { name: 'Reviewed BGP destinations' })).toContainText('65010 65010')
+  await expect(bgpWizard.getByRole('table', { name: 'Reviewed BGP destinations' })).toContainText('65010')
   await page.screenshot({ path: 'test-results/vpn-conversion-review.png', fullPage: true })
   await bgpWizard.getByRole('button', { name: 'Apply BGP routing', exact: true }).click()
   await bgpWizard.getByRole('button', { name: 'Done', exact: true }).click()
   const bgpTopology = await readTopology(page)
   expect(bgpTopology.sites[0].vpnStaticRoutes).toEqual([])
-  expect(bgpTopology.connections[1].routes).toMatchObject([
-    { id: staticTopology.sites[0].vpnStaticRoutes![0].id, prefix: '10.90.0.0/16', kind: 'bgp', asPath: [65010, 65010] },
-    { prefix: '10.91.0.0/16', kind: 'bgp', asPath: [65010] },
-  ])
+  expect(bgpTopology.sites[0].prefixes).toEqual(['10.20.0.0/16', '10.90.0.0/16', '10.91.0.0/16'])
+  expect(bgpTopology.connections[1].learnSiteRoutes).toBe(true)
   await showRoutes(page)
-  await expect(page.locator('.effective-routes tr[data-prefix="10.90.0.0/16"] .as-path')).toHaveText('65010 65010')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.90.0.0/16"] .as-path').last()).toHaveText('65010')
   const exported = await downloadTopology(page)
   await page.reload()
   expect(await readTopology(page)).toEqual(exported)
@@ -1805,7 +1834,7 @@ test('VPN conversion wizard reviews, cancels and converts static/BGP settings to
 
 test('VPN wizard never invents destination networks and is not offered for ER connections', async ({ page }) => {
   const topology = structuredClone(example)
-  topology.connections[1].routes = []
+  topology.sites[0].prefixes = []
   await page.goto('/'); await importTopology(page, topology)
   const original = await readTopology(page)
   await action(page, 'Edit connection London backup', 'Change to static routing')

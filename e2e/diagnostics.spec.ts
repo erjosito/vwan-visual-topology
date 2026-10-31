@@ -143,18 +143,17 @@ test('automatic checks separate unassigned advertised prefixes and model scope b
   await page.goto('/')
   const unknown = structuredClone(topology)
   unknown.sites[0].prefixes = []
+  unknown.sites[0].vpnStaticRoutes = [
+    { id: 'unowned-1', prefix: '10.9.0.0/24', connectionId: 'vpn' },
+    { id: 'unowned-2', prefix: '10.9.1.0/24', connectionId: 'vpn' },
+  ]
   unknown.sites.push({ id: 'sdwan-site', name: 'SDWAN Branch', asn: 65002, prefixes: ['10.3.0.0/24'] })
   unknown.connections.push(
     {
       id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-      routes: [
-        { id: 'unowned-1', prefix: '10.9.0.0/24', asPath: [65001], kind: 'bgp' },
-        { id: 'unowned-2', prefix: '10.9.1.0/24', asPath: [65001], kind: 'bgp' },
-      ],
     },
     {
       id: 'sdwan', name: 'SDWAN', hubId: 'h', siteId: 'sdwan-site', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
-      routes: [],
     },
   )
   await page.getByLabel('Import topology file').setInputFiles({ name: 'unknown.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(unknown)) })
@@ -207,14 +206,17 @@ test('selecting an asymmetric issue animates independently selected forward and 
   asymmetric.spokes = []
   asymmetric.sites = [
     { id: 'one', name: 'First site', asn: 65001, prefixes: ['10.1.0.0/24'] },
-    { id: 'two', name: 'Second site', asn: 65002, prefixes: ['10.2.0.0/24'] },
+    { id: 'two', name: 'Second site', asn: 65002, prefixes: ['10.2.0.0/24'], routeMapAssignments: [{ connectionId: 'return', outboundMapId: 'prepend-return' }] },
   ]
   asymmetric.connections = [
-    { id: 'first', name: 'First VPN', hubId: 'h', siteId: 'one', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [] },
-    { id: 'outward', name: 'Outbound VPN', hubId: 'h', siteId: 'two', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [], routes: [{ id: 'r', prefix: '10.2.0.0/24', asPath: [65002], kind: 'bgp' }], outboundMapId: 'drop' },
-    { id: 'return', name: 'Return VPN', hubId: 'h', siteId: 'two', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [], routes: [{ id: 'r2', prefix: '10.2.0.0/24', asPath: [65002, 65002], kind: 'bgp' }] },
+    { id: 'first', name: 'First VPN', hubId: 'h', siteId: 'one', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+    { id: 'outward', name: 'Outbound VPN', hubId: 'h', siteId: 'two', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], outboundMapId: 'drop' },
+    { id: 'return', name: 'Return VPN', hubId: 'h', siteId: 'two', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
   ]
-  asymmetric.routeMaps = [{ id: 'drop', name: 'Return filter', hubId: 'h', rules: [{ id: 'rule', prefixes: ['10.1.0.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }] }]
+  asymmetric.routeMaps = [
+    { id: 'drop', name: 'Return filter', hubId: 'h', rules: [{ id: 'rule', prefixes: ['10.1.0.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }] },
+    { id: 'prepend-return', name: 'Prepend return', siteId: 'two', rules: [{ id: 'rule-p', prefixes: ['10.2.0.0/24'], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [65002], nextStep: 'terminate' }] },
+  ]
   await page.goto('/')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'asymmetric.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(asymmetric)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
@@ -239,7 +241,7 @@ for (const failure of ['hub', 'aggregate', 'downstream'] as const) {
     broken.spokes = [broken.spokes[0]]
     if (failure !== 'hub') {
       broken.sites.push({ id: 'transit', name: 'Transit site', asn: 65002, prefixes: ['10.9.1.0/24'] })
-      broken.connections = [{ id: 'vpn', name: 'Transit VPN', hubId: 'h', siteId: 'transit', transport: 'VPN', enabled: true, learnSiteRoutes: failure === 'aggregate', inbound: [], outbound: [], routes: [] }]
+      broken.connections = [{ id: 'vpn', name: 'Transit VPN', hubId: 'h', siteId: 'transit', transport: 'VPN', enabled: true, learnSiteRoutes: failure === 'aggregate', inbound: [], outbound: [] }]
       if (failure === 'aggregate') {
         broken.routeMaps = [{ id: 'summary', name: 'Summary', hubId: 'h', rules: [{ id: 's', match: 'contains', prefixes: ['10.9.0.0/16'], action: 'summarize', summaryPrefixes: ['10.9.0.0/16'], prepend: [], nextStep: 'terminate' }] }]
         broken.connections[0].inboundMapId = 'summary'
@@ -290,7 +292,7 @@ test('spoke attachments do not produce single-point-of-failure warnings but affe
   await expect(page.locator('.routing-check-status')).toContainText('No routing issues found within the checked model scope.')
   await expect(page.locator('.routing-issue-marker')).toHaveCount(0)
   connected.sites = structuredClone(topology.sites)
-  connected.connections = [{ id: 'vpn', name: 'Critical VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [] }]
+  connected.connections = [{ id: 'vpn', name: 'Critical VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }]
   await page.getByLabel('Import topology file').setInputFiles({ name: 'critical-vpn.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(connected)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
   const marker = page.locator('.routing-issue-marker[data-issue-id^="link-isolation:"]')
@@ -306,7 +308,7 @@ test('spoke attachments do not produce single-point-of-failure warnings but affe
 
 test('unsupported SD-WAN checks stay in neutral coverage notes in automatic and advanced reports', async ({ page }) => {
   const unsupported = structuredClone(topology)
-  unsupported.connections = [{ id: 'sdwan', name: 'SD-WAN', hubId: 'h', siteId: 'isolated', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [] }]
+  unsupported.connections = [{ id: 'sdwan', name: 'SD-WAN', hubId: 'h', siteId: 'isolated', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }]
   await page.goto('/')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'unsupported.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(unsupported)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()

@@ -5,10 +5,9 @@ import { t } from './i18n'
 import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 
-export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEditObject, onEditAdvertisements, onOpenStaticRouting, onAssignPrefixToSite }: {
+export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEditObject, onOpenStaticRouting, onAssignPrefixToSite }: {
   report: DiagnosticsReport; topology: Topology; initiallyOpen?: boolean
   onEditObject?: (node: ObjectSelection) => void
-  onEditAdvertisements?: (connectionId: string) => void
   onOpenStaticRouting?: (router: RouterSelection) => void
   onAssignPrefixToSite?: (siteId: string, prefixes: string[]) => void
 }) {
@@ -43,12 +42,6 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
       {coverage.unassignedFindings.map((finding) => {
         const owner = finding.related[0]
         const site = owner?.kind === 'site' ? topology.sites.find((item) => item.id === owner.id) : undefined
-        const connectionAds = [...new Set(finding.evidence
-          .map((evidence) => topology.connections.find((item) => item.id === evidence.connectionId && item.routes.some((route) => route.prefix === evidence.prefix)))
-          .filter((item): item is NonNullable<typeof item> => !!item))]
-        const erLinkAds = [...new Set(finding.evidence
-          .map((evidence) => topology.erLinks?.find((item) => item.id === evidence.connectionId && item.routes.some((route) => route.prefix === evidence.prefix)))
-          .filter((item): item is NonNullable<typeof item> => !!item))]
         const hasStaticRoutes = !!site && finding.evidence.some((evidence) =>
           site.vpnStaticRoutes?.some((route) => route.connectionId === evidence.connectionId && route.prefix === evidence.prefix))
         const unassignedSitePrefixes = site ? [...new Set(finding.evidence.map((e) => e.prefix).filter((p): p is string => typeof p === 'string' && !site.prefixes.includes(p)))] : []
@@ -62,12 +55,6 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
               <button type="button" className="ghost" onClick={() => onAssignPrefixToSite(site.id, unassignedSitePrefixes)}>{t('Assign all ({0}) to {1}', unassignedSitePrefixes.length, site.name)}</button>
             )}
             {owner && onEditObject && <button type="button" className="ghost" onClick={() => onEditObject(owner)}>{t('Edit {0}', name(owner))}</button>}
-            {onEditAdvertisements && connectionAds.map((connection) => (
-              <button key={connection.id} type="button" className="ghost" onClick={() => onEditAdvertisements(connection.id)}>{t('Edit advertisements: {0}', connection.name)}</button>
-            ))}
-            {onEditObject && erLinkAds.map((erLink) => (
-              <button key={erLink.id} type="button" className="ghost" onClick={() => onEditObject({ kind: 'erLink', id: erLink.id })}>{t('Edit {0}', erLink.name)}</button>
-            ))}
             {site && hasStaticRoutes && onOpenStaticRouting && (
               <button type="button" className="ghost" onClick={() => onOpenStaticRouting({ kind: 'site', id: site.id })}>{t('Static routing: {0}', site.name)}</button>
             )}

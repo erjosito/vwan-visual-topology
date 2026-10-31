@@ -19,10 +19,7 @@ export function nodePrefixes(topology: Topology, node: PathNode): string[] {
   if (node.kind === 'spoke') return topology.spokes.find((s) => s.id === node.id)?.prefixes ?? []
   if (node.kind === 'hub') return topology.spokes.filter((s) => s.hubId === node.id).flatMap((s) => s.prefixes)
   const site = topology.sites.find((s) => s.id === node.id)
-  return site?.prefixes.length ? site.prefixes : [...new Set([
-    ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.siteId === node.id).flatMap((c) => c.routes.map((r) => r.prefix)),
-    ...(site?.vpnStaticRoutes?.map((r) => r.prefix) ?? []),
-  ])]
+  return site?.prefixes.length ? site.prefixes : [...new Set(site?.vpnStaticRoutes?.map((r) => r.prefix) ?? [])]
 }
 
 export interface SiteAdvertisement extends SiteRoute { connectionId: string; erHubLinkId?: string }

@@ -15,6 +15,8 @@ const network = (): Topology => {
   const topology = structuredClone(example)
   topology.hubs = [topology.hubs[0]]
   topology.spokes = [topology.spokes[0]]
+  topology.sites[0].prefixes = ['10.20.0.0/16']
+  topology.sites[1].prefixes = ['10.20.0.0/16']
   topology.connections = topology.connections.filter((connection) => connection.hubId === 'eu' && connection.transport !== 'SDWAN')
   topology.connections[1].siteId = 'ny'
   return topology
@@ -102,7 +104,7 @@ describe('route-map resources and migration', () => {
       const normalized = validateTopology(t)
       const rows = simulate(normalized).firewallTables.eu.find((d) => d.prefix === '10.20.0.0/16')!.candidates
       expect(rows.find((r) => r.connectionId === 'er-eu')!.asPath).toEqual([64496, 12076, 65010, 65010, 65010])
-      expect(rows.find((r) => r.connectionId === 'vpn-eu')!.asPath).toEqual([65010, 65010, 65010])
+      expect(rows.find((r) => r.connectionId === 'vpn-eu')!.asPath).toEqual([65020])
       expect(validateTopology(normalized)).toEqual(normalized)
     })
 
@@ -151,7 +153,7 @@ describe('route-map resources and migration', () => {
 
     it('keeps site summaries reachable only through known contributors and never applies BGP maps to VPN static entries', () => {
       const t = network()
-      t.connections[0].routes = [{ id: 'component', prefix: '10.20.1.0/24', asPath: [12076, 65010], kind: 'bgp' }]
+      t.sites[0].prefixes = ['10.20.1.0/24']
       t.routeMaps = [{ id: 'export', name: 'Export', siteId: 'dc', rules: [rule({ action: 'summarize', prefixes: ['10.20.0.0/16'], match: 'contains', summaryPrefixes: ['10.20.0.0/16'] })] }]
       t.sites[0].routeMapAssignments = [{ connectionId: 'er-eu', outboundMapId: 'export' }]
       t.connections[1].enabled = false
@@ -160,7 +162,8 @@ describe('route-map resources and migration', () => {
       expect(traceFlow(t, result, 'eu', '10.20.2.1')[0].status).toBe('unreachable')
       t.routeMaps[0].rules = [rule({ action: 'drop' })]
       t.connections[0].transport = 'VPN'
-      t.connections[0].routes[0].kind = 'vpn-static'; t.connections[0].routes[0].asPath = []
+      t.connections[0].learnSiteRoutes = false
+      t.sites[0].vpnStaticRoutes = [{ id: 'component', prefix: '10.20.1.0/24', connectionId: 'er-eu' }]
       expect(traceFlow(t, simulate(validateTopology(t)), 'eu', '10.20.1.1')[0].status).toBe('delivered')
     })
 
@@ -251,6 +254,7 @@ describe('route-map selection and actual forwarding', () => {
   it('uses reusable inbound prepending for ASPath selection and leaves empty maps unchanged', () => {
     const t = network()
     t.hubs[0].preference = 'ASPath'
+    t.connections[1].inbound = [{ id: 'pad', prefixes: [], match: 'equals', prepend: [64497] }]
     t.routeMaps = [map([])]
     t.connections[0].inboundMapId = 'map'
     expect(simulate(t).firewallTables.eu.find((d) => d.prefix === '10.20.0.0/16')!.selected[0].connectionId).toBe('er-eu')
@@ -270,7 +274,8 @@ describe('route-map selection and actual forwarding', () => {
   })
   it('does not process VPN site static routes with BGP maps in either direction', () => {
     const t = network()
-    t.connections[1].routes[0] = { id: 'static', prefix: '10.90.0.0/16', asPath: [], kind: 'vpn-static' }
+    t.connections[1].learnSiteRoutes = false
+    t.sites[1].vpnStaticRoutes = [{ id: 'static', prefix: '10.90.0.0/16', connectionId: 'vpn-eu' }]
     t.routeMaps = [map([rule({ action: 'drop' })])]
     t.connections[1].inboundMapId = 'map'
     t.connections[0].outboundMapId = 'map'
@@ -290,7 +295,6 @@ describe('route-map selection and actual forwarding', () => {
   it('retains actual destinations and site-mesh provenance under inbound summaries across hubs', () => {
     const t = structuredClone(example)
     t.connections = [t.connections[0]]
-    t.connections[0].routes = []
     t.connections[0].learnSiteRoutes = true
     t.sites = [
       { id: 'dc', name: 'Datacenter', asn: 65001, prefixes: [] },
@@ -315,8 +319,8 @@ describe('route-map selection and actual forwarding', () => {
   it('retains unreachable ECMP summary branches rather than claiming delivery on every selected path', () => {
     const t = network()
     t.connections[0].transport = 'VPN'
-    t.connections[0].routes = [{ id: 'first', prefix: '10.20.1.0/24', asPath: [65001], kind: 'bgp' }]
-    t.connections[1].routes = [{ id: 'second', prefix: '10.20.2.0/24', asPath: [65002], kind: 'bgp' }]
+    t.sites[0].prefixes = ['10.20.1.0/24']
+    t.sites[1].prefixes = ['10.20.2.0/24']
     t.routeMaps = [map([rule({ prefixes: ['10.20.0.0/16'], match: 'contains', action: 'summarize', summaryPrefixes: ['10.20.0.0/16'] })])]
     t.connections.forEach((connection) => { connection.inboundMapId = 'map' })
     const result = simulate(t)

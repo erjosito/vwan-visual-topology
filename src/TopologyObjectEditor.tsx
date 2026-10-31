@@ -14,8 +14,8 @@ function Field({ title, children }: { title: string; children: ReactElement<{ 'a
 
 const prefixes = (value: string) => value.trim() === '*' ? [] : value.split(/[,\s]+/).filter(Boolean)
 
-export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting, onEditAdvertisements, onAddNva }: {
-  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onEditAdvertisements?: (connectionId: string) => void; onAddNva: (spokeId: string) => void
+export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting, onAddNva }: {
+  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onAddNva: (spokeId: string) => void
 }) {
   const [error, setError] = useState('')
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
@@ -127,7 +127,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
             else next.sites.push(value)
             const connValue = {
-              ...(existingNvaConn ?? { id: crypto.randomUUID(), routes: [], inbound: [], outbound: [], enabled: true, learnSiteRoutes: true }),
+              ...(existingNvaConn ?? { id: crypto.randomUUID(), inbound: [], outbound: [], enabled: true, learnSiteRoutes: true }),
               name: existingNvaConn?.name || `${name} peering`,
               hubId: targetSpoke.hubId,
               siteId: id,
@@ -170,7 +170,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             else next.sites.push(value)
             if (connectedSite) next.connections.push({
               id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
-              transport: transportValue, enabled: true, routes: [], inbound: [], outbound: [], learnSiteRoutes: true,
+              transport: transportValue, enabled: true, inbound: [], outbound: [], learnSiteRoutes: true,
             })
             const checkedNvaSpokes = new Set(data.getAll('nvaSpokeIds').map(String))
             for (const nvaSpoke of nvaSpokes) {
@@ -194,17 +194,13 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           }
         } else if (request.kind === 'connection') {
           const value = {
-            ...(connection ?? { id, routes: [], inbound: [], outbound: [] }),
+            ...(connection ?? { id, inbound: [], outbound: [] }),
             name, hubId: text('hub'), siteId: text('site'), transport: text('transport') as Transport,
             enabled: data.has('enabled'), learnSiteRoutes: data.has('learnSiteRoutes'),
             propagateDefaultRoute: data.has('propagateDefaultRoute') ? true : undefined,
             spokeId: undefined, peerIp: undefined,
             ...(transportValue === 'SpokeNVA' ? {
               spokeId: text('spoke'), peerIp: text('peerIp'), hubId: topology.spokes.find((spoke) => spoke.id === text('spoke'))!.hubId,
-              routes: text('advertisements').split(/\r?\n/).filter((line) => line.trim()).map((line, index) => {
-                const [prefix, ...path] = line.trim().split(/\s+/)
-                return { id: connection?.routes[index]?.id ?? crypto.randomUUID(), prefix, asPath: parseAsPath(path.join(' ')), kind: 'bgp' as const }
-              }),
             } : {}),
           }
           if (connection) next.connections[next.connections.findIndex((c) => c.id === id)] = value
@@ -215,13 +211,9 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           if (index < 0) next.erLocations.push({ id, name })
           else next.erLocations[index] = { id, name }
         } else if (request.kind === 'erLink') {
-          const routes = erEndpoint === 'site' ? text('advertisements').split(/\r?\n/).filter((line) => line.trim()).map((line, index) => {
-            const [prefix, ...path] = line.trim().split(/\s+/)
-            return { id: erLink?.routes[index]?.id ?? crypto.randomUUID(), prefix, asPath: parseAsPath(path.join(' ')), kind: 'bgp' as const }
-          }) : []
           const value = { id, name, locationId: text('location'), enabled: data.has('enabled'),
             ...(erEndpoint === 'hub' ? { hubId: text('endpoint'), ...(data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}) } : { siteId: text('endpoint') }),
-            routes, learnSiteRoutes: erEndpoint === 'site' && data.has('learnSiteRoutes') }
+            learnSiteRoutes: erEndpoint === 'site' && data.has('learnSiteRoutes') }
           next.erLinks ??= []
           const index = next.erLinks.findIndex((link) => link.id === id)
           if (index < 0) next.erLinks.push(value)
@@ -263,8 +255,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={erLink?.enabled ?? true} />{t("Connection enabled")}</label>
           {erEndpoint === 'site' ? <>
             <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={erLink?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
-            <Field title={t("ER BGP advertisements")}><textarea name="advertisements" rows={4} defaultValue={erLink?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
-            <p className="muted">{t("Optional explicit advertisements: one prefix and site-side AS path per line. Provider ASN 12076 is added automatically. Each site attachment represents an independent private-peering circuit; other ER circuits are not advertised to it.")}</p>
+            <p className="muted">{t("Provider ASN 12076 is added automatically. Each site attachment represents an independent private-peering circuit; other ER circuits are not advertised to it.")}</p>
           </> : <>
             <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={erLink?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>
             <p className="muted">{t("This attachment imports site advertisements from the location and exports selected Azure, VPN and NVA routes. ER-learned routes and default routes are not exported unless default-route propagation is enabled. Configure advertisements on site attachments and route maps on the hub/site.")}</p>
@@ -337,24 +328,12 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           </div>
           <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>
           <p className="muted">{t("Configure VPN static prefixes through Static routing on the site or hub. Remove or reassign site static routes before changing this VPN connection's site or transport.")}</p>
-          {item && connection && transportValue !== 'SpokeNVA' && onEditAdvertisements && (
-            <fieldset>
-              <legend>{t("Explicit BGP advertisements")}</legend>
-              <p className="muted">
-                {connection.routes.length > 0
-                  ? t("Advertised on this connection: {0}", connection.routes.map((route) => route.prefix).join(', '))
-                  : t("No explicit per-connection BGP advertisements configured.")}
-              </p>
-              <button type="button" onClick={() => onEditAdvertisements(connection.id)}>{t("Edit advertisements ({0})", connection.routes.length)}</button>
-            </fieldset>
-          )}
         </>}
         {transportValue === 'SpokeNVA' && request.kind === 'connection' && <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
           <Field title={t("Hosting spoke")}><select name="spoke" required defaultValue={connection?.spokeId ?? request.spokeId ?? topology.spokes[0]?.id}>{topology.spokes.filter((s) => Boolean(s.hubId)).map((spoke) => <option key={spoke.id} value={spoke.id}>{spoke.name}</option>)}</select></Field>
           <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" defaultValue={connection?.peerIp ?? ''} placeholder="10.50.0.4" /></Field>
-          <Field title={t("NVA BGP advertisements")}><textarea name="advertisements" rows={5} defaultValue={connection?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
           <p className="muted">{t("Use a public or private 2-byte NVA ASN, excluding Azure/IANA reserved ASNs. The peer must be an actual NVA NIC IP in this directly attached spoke, not a loopback. One logical peer represents identical advertisements to both hub router IPs (AS65515); the app does not configure live BGP sessions.")}</p>
-          <p className="muted">{t("NVA advertisements start with the NVA ASN. To model downstream networks and return routing, add sites with owned prefixes and link them to this NVA. Advertisements alone do not prove delivery. Default association/propagation and branch-to-branch enabled are assumed. Apply hub route maps to the hosting VNet connection.")}</p>
+          <p className="muted">{t("NVA advertisements start with the NVA ASN. To model downstream networks and return routing, add sites or VNets with owned prefixes and link them to this NVA. Default association/propagation and branch-to-branch enabled are assumed. Apply hub route maps to the hosting VNet connection.")}</p>
           <a href="https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub#benefits-and-considerations" target="_blank" rel="noreferrer">{t("Microsoft spoke NVA BGP requirements")}</a>
         </fieldset>}
         {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>{t("Connection route maps")}</legend>

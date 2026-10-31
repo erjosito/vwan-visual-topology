@@ -183,7 +183,7 @@ describe('offline Bicep export', () => {
     expect(result.resourceCount).toBe(2)
     expect(result.warnings.join(' ')).toContain('Excluded hubs: Secured')
     topology.sites.push({ id: 'site', name: 'Site', asn: 65001, prefixes: ['10.30.0.0/16'] })
-    topology.connections.push({ id: 'vpn', name: 'VPN', hubId: topology.hubs[0].id, siteId: 'site', transport: 'VPN', enabled: true, routes: [], learnSiteRoutes: true, inbound: [], outbound: [] })
+    topology.connections.push({ id: 'vpn', name: 'VPN', hubId: topology.hubs[0].id, siteId: 'site', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] })
     topology.routeMaps = [{ id: 'map', name: 'Map', hubId: topology.hubs[0].id, rules: [] }]
     topology.hubs[0].routeMapAssignments = [{ connectionId: 'vpn', inboundMapId: 'map' }]
     expect(() => generateBicep(topology, settings)).toThrow(/Assigned hub route maps/)

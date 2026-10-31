@@ -145,9 +145,6 @@ export function propagateSites(topology: Topology): SiteRouting {
     return [site.id, [
       ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [], sitePath: [site.id], siteLinkIds: [] as string[] })),
       ...downstreamVnetRoutes,
-      ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.siteId === site.id).flatMap((c) => c.routes.filter((r) => r.kind === 'bgp').map((r) => ({
-        key: `${c.id}:${r.id}`, prefix: r.prefix, asPath: r.asPath[0] === 12076 ? r.asPath.slice(1) : r.asPath, sitePath: [site.id], siteLinkIds: [] as string[],
-      }))),
     ]]
   }))
   const best = (routes: SiteRoute[]) => [...new Set(routes.map((r) => r.prefix))].flatMap((prefix) => {

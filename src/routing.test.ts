@@ -8,17 +8,58 @@ import { nodePrefixes, traceNodePath } from './paths'
 import { analyzeRouting } from './diagnostics'
 import { neighborRoutes } from './route-views'
 
+type TestLink = Connection & { testAsPath?: number[]; testPrefix?: string }
 const hub = (id: string, preference: Hub['preference'] = 'ExpressRoute'): Hub => ({
   id, name: id, region: 'West Europe', preference, routingIntent: { private: false, internet: false, privatePrefixes: [] },
 })
-const link = (id: string, hubId: string, transport: Transport, asPath: number[], prefix = '10.20.0.0/16'): Connection => ({
-  id, name: id, hubId, siteId: id + '-site', enabled: true, transport, learnSiteRoutes: false, inbound: [], outbound: [],
-  routes: [{ id: id + '-route', prefix, asPath, kind: 'bgp' }],
+const link = (id: string, hubId: string, transport: Transport, asPath: number[], prefix = '10.20.0.0/16'): TestLink => ({
+  id, name: id, hubId, siteId: id + '-site', enabled: true, transport, learnSiteRoutes: asPath.length > 0, inbound: [], outbound: [],
+  testAsPath: asPath, testPrefix: prefix,
 })
-const topology = (hubs: Hub[], connections: Connection[]): Topology => ({
-  version: 1, name: 'Test network', hubs, connections, spokes: [], siteLinks: [],
-  sites: connections.map((c, i) => ({ id: c.siteId, name: c.siteId, asn: 65001 + i, prefixes: [] })),
-})
+const topology = (hubs: Hub[], connections: TestLink[]): Topology => {
+  const routeMaps: NonNullable<Topology['routeMaps']> = []
+  const sites = connections.map((c, i) => {
+    const rawPath = c.testAsPath ?? [65001 + i]
+    const prefix = c.testPrefix ?? '10.20.0.0/16'
+    if (rawPath.length === 0) {
+      return {
+        id: c.siteId,
+        name: c.siteId,
+        asn: 65001 + i,
+        prefixes: [],
+        vpnStaticRoutes: [{ id: `${c.id}-static`, prefix, connectionId: c.id }],
+      }
+    }
+    const effective = c.transport === 'ExpressRoute' && rawPath[0] === 12076 ? rawPath.slice(1) : rawPath
+    const asn = effective[effective.length - 1]
+    const prepend = effective.slice(0, -1)
+    if (prepend.length > 0) {
+      routeMaps.push({
+        id: `${c.id}-out`,
+        name: `${c.id}-out`,
+        siteId: c.siteId,
+        rules: [{ id: `${c.id}-rule`, prefixes: [], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend, nextStep: 'terminate' }],
+      })
+    }
+    return {
+      id: c.siteId,
+      name: c.siteId,
+      asn,
+      prefixes: [prefix],
+      ...(prepend.length > 0 ? { routeMapAssignments: [{ connectionId: c.id, outboundMapId: `${c.id}-out` }] } : {}),
+    }
+  })
+  const cleanConnections: Connection[] = connections.map((c) => {
+    const clone = { ...c }
+    delete clone.testAsPath
+    delete clone.testPrefix
+    return clone
+  })
+  return {
+    version: 1, name: 'Test network', hubs, connections: cleanConnections, spokes: [], siteLinks: [], sites,
+    ...(routeMaps.length > 0 ? { routeMaps } : {}),
+  }
+}
 const selected = (t: Topology, hubId = 'a', prefix = '10.20.0.0/16') =>
   simulate(t).firewallTables[hubId].find((d) => d.prefix === prefix)?.selected ?? []
 
@@ -35,7 +76,7 @@ describe('spoke NVA BGP peering', () => {
     ],
     connections: [{
       id: 'peer', name: 'NVA peering', hubId: 'a', siteId: 'nva', transport: 'SpokeNVA',
-      spokeId: 'host', peerIp: '10.200.0.4', enabled: true, routes: [], learnSiteRoutes: true, inbound: [], outbound: [],
+      spokeId: 'host', peerIp: '10.200.0.4', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
     }],
     siteLinks: [{ id: 'downstream', name: 'NVA to branch', a: 'nva', b: 'branch', enabled: true,
       aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }],
@@ -69,10 +110,6 @@ describe('spoke NVA BGP peering', () => {
       const invalid = network(); Object.assign(invalid.connections[0], changes)
       expect(() => validateTopology(invalid)).toThrow(/hosting spoke|hosting spoke address space/)
     }
-    for (const path of [[65002], [65001, 65515]]) {
-      const invalid = network(); invalid.connections[0].routes = [{ id: 'advertisement', prefix: '10.81.0.0/16', kind: 'bgp', asPath: path }]
-      expect(() => validateTopology(invalid)).toThrow(/NVA ASN/)
-    }
     const duplicate = network(); duplicate.connections.push({ ...duplicate.connections[0], id: 'second-peer' })
     expect(() => validateTopology(duplicate)).toThrow(/unique within a hub/)
     const tooMany = network()
@@ -82,7 +119,7 @@ describe('spoke NVA BGP peering', () => {
 
   it('keeps directly attached VNet ranges as system routes, rejects reflected own-AS routes and withdraws a disabled peer', () => {
     const t = network()
-    t.connections[0].routes = [{ id: 'more-specific', prefix: '10.200.1.0/24', asPath: [65001], kind: 'bgp' }]
+    t.sites[0].prefixes = ['10.200.1.0/24']
     expect(selected(t, 'a', '10.200.0.0/16')[0].transport).toBe('VNet')
     expect(selected(t, 'a', '10.200.1.0/24')).toEqual([])
     t.siteLinks[0].bToA.prepend = [65515]
@@ -113,8 +150,11 @@ describe('spoke NVA BGP peering', () => {
     for (const preference of ['ExpressRoute', 'VPN', 'ASPath'] as const) {
       const t = network()
       t.hubs[0].preference = preference
-      const vpn = link('vpn', 'a', 'VPN', [65003, 65003, 65003], '10.80.0.0/16')
-      t.connections.push(vpn); t.sites.push({ id: vpn.siteId, name: 'VPN backup', asn: 65003, prefixes: [] })
+      t.connections.push({
+        id: 'vpn', name: 'vpn', hubId: 'a', siteId: 'vpn-site', enabled: true, transport: 'VPN', learnSiteRoutes: true,
+        inbound: [{ id: 'vpn-prepend', prefixes: [], match: 'equals', prepend: [64496, 64496] }], outbound: [],
+      })
+      t.sites.push({ id: 'vpn-site', name: 'VPN backup', asn: 65003, prefixes: ['10.80.0.0/16'] })
       expect(selected(t, 'a', '10.80.0.0/16')[0].transport).toBe('SpokeNVA')
       t.hubs.forEach((hub) => { hub.routingIntent.private = true })
       expect(traceNodePath(t, simulate(t), { kind: 'spoke', id: 'workload' }, '10.80.0.1')[0]).toMatchObject({
@@ -125,8 +165,11 @@ describe('spoke NVA BGP peering', () => {
 
   it('uses known downstream contributions for explicit aggregates and stops in aggregate holes without inventing ownership', () => {
     const t = network()
-    t.connections[0].learnSiteRoutes = false
-    t.connections[0].routes = [{ id: 'aggregate', prefix: '10.80.0.0/15', asPath: [65001, 65002], kind: 'bgp' }]
+    t.routeMaps = [{
+      id: 'nva-summary', name: 'NVA summary', siteId: 'nva',
+      rules: [{ id: 'sum', prefixes: ['10.80.0.0/16'], match: 'equals', action: 'summarize', summaryPrefixes: ['10.80.0.0/15'], prepend: [], nextStep: 'terminate' }],
+    }]
+    t.sites[0].routeMapAssignments = [{ connectionId: 'peer', outboundMapId: 'nva-summary' }]
     const simulation = simulate(validateTopology(t))
     expect(traceFlow(t, simulation, 'b', '10.80.0.1')[0]).toMatchObject({ status: 'delivered', siteId: 'branch', nvaSpokeId: 'host' })
     expect(traceFlow(t, simulation, 'b', '10.81.0.1')[0]).toMatchObject({ status: 'unreachable', termination: 'summary-hole', hubs: ['b', 'a'] })
@@ -140,15 +183,15 @@ describe('ExpressRoute locations and private-peering attachments', () => {
     sites: [
       { id: 'er-site-a', name: 'ER site A', asn: 65010, prefixes: ['10.20.0.0/16'] },
       { id: 'er-site-b', name: 'ER site B', asn: 65020, prefixes: ['10.21.0.0/16'] },
-      { id: 'vpn-site', name: 'VPN site', asn: 65001, prefixes: [] },
+      { id: 'vpn-site', name: 'VPN site', asn: 65001, prefixes: ['10.30.0.0/16'] },
     ],
     spokes: [{ id: 'spoke-a', name: 'Spoke A', hubId: 'a', prefixes: ['10.1.0.0/16'] }, { id: 'spoke-b', name: 'Spoke B', hubId: 'b', prefixes: ['10.2.0.0/16'] }],
     erLocations: [{ id: 'london', name: 'London' }, { id: 'paris', name: 'Paris' }],
     erLinks: [
-      { id: 'hub-a-er', name: 'Hub A ER', locationId: 'london', hubId: 'a', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'site-a-er', name: 'Site A ER', locationId: 'london', siteId: 'er-site-a', enabled: true, routes: [], learnSiteRoutes: true },
-      { id: 'hub-b-er', name: 'Hub B ER', locationId: 'paris', hubId: 'b', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'site-b-er', name: 'Site B ER', locationId: 'paris', siteId: 'er-site-b', enabled: true, routes: [], learnSiteRoutes: true },
+      { id: 'hub-a-er', name: 'Hub A ER', locationId: 'london', hubId: 'a', enabled: true, learnSiteRoutes: false },
+      { id: 'site-a-er', name: 'Site A ER', locationId: 'london', siteId: 'er-site-a', enabled: true, learnSiteRoutes: true },
+      { id: 'hub-b-er', name: 'Hub B ER', locationId: 'paris', hubId: 'b', enabled: true, learnSiteRoutes: false },
+      { id: 'site-b-er', name: 'Site B ER', locationId: 'paris', siteId: 'er-site-b', enabled: true, learnSiteRoutes: true },
     ],
   })
 
@@ -172,8 +215,14 @@ describe('ExpressRoute locations and private-peering attachments', () => {
 
   it('removes both private-AS ranges from ER customer exports without changing hub inputs or VPN exports', () => {
     const t = network()
-    const path = [64512, 64511, 65534, 65536, 4200000000, 4199999999, 4294967294]
-    t.connections[0].routes[0].asPath = path
+    const prepend = [64512, 64511, 65534, 65536, 4200000000, 4199999999]
+    t.sites[2].asn = 4294967294
+    t.routeMaps = [{
+      id: 'vpn-site-out', name: 'VPN site out', siteId: 'vpn-site',
+      rules: [{ id: 'p', prefixes: [], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend, nextStep: 'terminate' }],
+    }]
+    t.sites[2].routeMapAssignments = [{ connectionId: 'vpn', outboundMapId: 'vpn-site-out' }]
+    const path = [...prepend, 4294967294]
     const simulation = simulate(t)
     for (const id of ['hub-a-er', 'site-a-er', 'hub-b-er', 'site-b-er']) {
       expect(simulation.outbound[id].find((route) => route.prefix === '10.30.0.0/16')!.asPath)
@@ -222,7 +271,7 @@ describe('ExpressRoute locations and private-peering attachments', () => {
   it('honors HRP and endpoint route maps on ER attachments', () => {
     const t = network()
     t.connections[0].hubId = 'a'
-    t.connections[0].routes[0].prefix = '10.20.0.0/16'
+    t.sites[2].prefixes = ['10.20.0.0/16']
     expect(selected(t)[0].connectionId).toBe('hub-a-er')
     t.hubs[0].preference = 'VPN'
     expect(selected(t)[0].connectionId).toBe('vpn')
@@ -233,13 +282,14 @@ describe('ExpressRoute locations and private-peering attachments', () => {
     expect(simulation.outbound['site-a-er']).toEqual([])
   })
 
-  it('supports explicit ads without leaking the provider ASN into site advertisements', () => {
+  it('prepends provider ASN automatically on site advertisements over ER attachments', () => {
     const t = network()
-    t.erLinks![1].learnSiteRoutes = false
-    t.erLinks![1].routes = [{ id: 'er-ad', prefix: '10.80.0.0/16', asPath: [65010, 65010], kind: 'bgp' }]
-    expect(selected(validateTopology(t), 'a', '10.80.0.0/16')[0].asPath).toEqual([12076, 65010, 65010])
-    t.erLinks![1].routes[0].asPath.unshift(12076)
-    expect(() => validateTopology(t)).toThrow('added automatically')
+    t.routeMaps = [{
+      id: 'site-a-prepend', name: 'Site A prepend', siteId: 'er-site-a',
+      rules: [{ id: 'p', prefixes: [], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [65010], nextStep: 'terminate' }],
+    }]
+    t.sites[0].routeMapAssignments = [{ connectionId: 'site-a-er', outboundMapId: 'site-a-prepend' }]
+    expect(selected(validateTopology(t), 'a', '10.20.0.0/16')[0].asPath).toEqual([12076, 65010, 65010])
   })
 
   it('applies site export and import policies independently without hiding summary holes', () => {
@@ -269,13 +319,12 @@ describe('ExpressRoute locations and private-peering attachments', () => {
     expect(traceNodePath(t, simulation, { kind: 'site', id: 'er-site-b' }, '10.31.0.1')[0]).toMatchObject({ status: 'delivered', connectionId: 'vpn' })
   })
 
-  it('rejects dangling, ambiguous and duplicate ER resources without accepting statics', () => {
+  it('rejects dangling, ambiguous and duplicate ER resources', () => {
     for (const mutate of [
       (t: Topology) => { t.erLinks![0].locationId = 'missing' },
       (t: Topology) => { t.erLinks![0].siteId = 'er-site-a' },
       (t: Topology) => { t.erLinks![0].hubId = 'missing' },
       (t: Topology) => { t.erLocations![0].id = 'a' },
-      (t: Topology) => { t.erLinks![1].routes = [{ id: 'invalid-static', prefix: '10.80.0.0/16', asPath: [], kind: 'vpn-static' }] },
     ]) {
       const t = network(); mutate(t)
       expect(() => validateTopology(t)).toThrow()
@@ -284,21 +333,23 @@ describe('ExpressRoute locations and private-peering attachments', () => {
 })
 
 describe('site-owned VPN static prefixes', () => {
-  it('migrates connection static entries without changing IDs, paths or round-trip behavior', () => {
-    const t = structuredClone(example)
-    t.connections[1].routes = [
-      { id: 'legacy-static-a', prefix: '10.90.0.0/16', kind: 'vpn-static', asPath: [] },
-      { id: 'legacy-static-b', prefix: '10.91.0.0/16', kind: 'vpn-static', asPath: [] },
-    ]
-    const normalized = validateTopology(t)
-    expect(normalized.connections[1].routes).toEqual([])
-    expect(normalized.sites[0].vpnStaticRoutes).toEqual([
-      { id: 'legacy-static-a', prefix: '10.90.0.0/16', connectionId: 'vpn-eu' },
-      { id: 'legacy-static-b', prefix: '10.91.0.0/16', connectionId: 'vpn-eu' },
-    ])
-    expect(validateTopology(JSON.parse(JSON.stringify(normalized)))).toEqual(normalized)
-    expect(traceFlow(normalized, simulate(normalized), 'eu', '10.90.0.1')).toEqual(traceFlow(t, simulate(t), 'eu', '10.90.0.1'))
-    expect(nodePrefixes(normalized, { kind: 'site', id: 'dc' })).toContain('10.91.0.0/16')
+  it('ignores legacy connection and ER link routes in imported JSON and omits them when validated', () => {
+    const raw = JSON.parse(JSON.stringify(example)) as Record<string, unknown>
+    const connections = raw.connections as Array<Record<string, unknown>>
+    connections[0].routes = [{ id: 'legacy-er-route', prefix: '10.90.0.0/16', kind: 'bgp', asPath: [12076, 65010] }]
+    connections[1].routes = [{ id: 'legacy-vpn-static', prefix: '10.91.0.0/16', kind: 'vpn-static', asPath: [] }]
+    raw.erLocations = [{ id: 'loc-1', name: 'Location 1' }]
+    raw.erLinks = [{
+      id: 'er-link-1', name: 'ER Link 1', locationId: 'loc-1', siteId: 'dc', enabled: true, learnSiteRoutes: true,
+      routes: [{ id: 'legacy-er-link-route', prefix: '10.92.0.0/16', kind: 'bgp', asPath: [65010] }],
+    }]
+    const normalized = validateTopology(raw)
+    expect('routes' in normalized.connections[0]).toBe(false)
+    expect('routes' in normalized.connections[1]).toBe(false)
+    expect('routes' in normalized.erLinks![0]).toBe(false)
+    expect(JSON.stringify(normalized)).not.toContain('legacy-er-route')
+    expect(JSON.stringify(normalized)).not.toContain('legacy-vpn-static')
+    expect(JSON.stringify(normalized)).not.toContain('legacy-er-link-route')
   })
 
   it('imports site static prefixes only on their associated VPN and withdraws them on failure', () => {
@@ -329,7 +380,7 @@ describe('site-owned VPN static prefixes', () => {
     t.sites[0].vpnStaticRoutes[0].prefix = '10.80.0.1/16'
     expect(() => validateTopology(t)).toThrow('Invalid static IPv4')
     t.sites[0].vpnStaticRoutes[0].prefix = '10.80.0.0/16'
-    t.sites[0].vpnStaticRoutes[0].id = t.connections[0].routes[0].id
+    t.sites[0].vpnStaticRoutes[0].id = t.connections[0].id
     expect(() => validateTopology(t)).toThrow('Duplicate ID')
   })
 })
@@ -346,7 +397,7 @@ describe('hub best path and inter-hub propagation', () => {
   it('chooses shortest first with ASPath HRP and ER for a local tie', () => {
     const t = topology([hub('a', 'ASPath')], [link('er', 'a', 'ExpressRoute', [12076, 65001]), link('vpn', 'a', 'VPN', [65002])])
     expect(selected(t)[0].connectionId).toBe('vpn')
-    t.connections[1].routes[0].asPath.push(65002)
+    t.connections[1].inbound = [{ id: 'p', prefixes: [], match: 'equals', prepend: [64496] }]
     expect(selected(t)[0].connectionId).toBe('er')
   })
   it.each(['ExpressRoute', 'VPN'] as const)('keeps nominal local preference but warns for the measured four-versus-one origin paths in %s mode', (preference) => {
@@ -355,12 +406,11 @@ describe('hub best path and inter-hub propagation', () => {
     expect(simulate(t).warnings.join(' ')).toContain('arrival-order')
   })
   it.each(['ExpressRoute', 'VPN'] as const)('compares the two-AS warning threshold before inter-hub prepends in %s mode', (preference) => {
-    const t = topology([hub('a', preference), hub('b')], [link('local', 'a', 'VPN', Array(3).fill(65001)), link('remote', 'b', 'VPN', [65002, 65002])])
     for (const length of [2, 3]) {
-      t.connections[0].routes[0].asPath = Array(length).fill(65001)
+      const t = topology([hub('a', preference), hub('b')], [link('local', 'a', 'VPN', Array(length).fill(65001)), link('remote', 'b', 'VPN', [65002, 65002])])
       expect(simulate(t).warnings.join(' ')).not.toContain('arrival-order')
     }
-    t.connections[0].routes[0].asPath.push(65001)
+    const t = topology([hub('a', preference), hub('b')], [link('local', 'a', 'VPN', Array(4).fill(65001)), link('remote', 'b', 'VPN', [65002, 65002])])
     expect(simulate(t).warnings.join(' ')).toContain('arrival-order')
     expect(selected(t)[0].connectionId).toBe('local')
   })
@@ -411,10 +461,11 @@ describe('hub best path and inter-hub propagation', () => {
     expect(selected(t, 'b')[0].asPath).toEqual([65520, 65520])
   })
   it('propagates VPN site static imports without granting them hub-table static priority', () => {
-    const t = topology([hub('a'), hub('b')], [link('vpn', 'a', 'VPN', [])])
-    t.connections[0].routes[0].kind = 'vpn-static'
+    const t = topology([hub('a'), hub('b')], [link('vpn', 'a', 'VPN', []), link('er', 'a', 'ExpressRoute', [12076, 65010])])
+    t.connections[1].enabled = false
     expect(selected(t, 'b')).toHaveLength(1)
-    t.connections.push(link('er', 'a', 'ExpressRoute', [12076, 65010]))
+    expect(nodePrefixes(t, { kind: 'site', id: 'vpn-site' })).toContain('10.20.0.0/16')
+    t.connections[1].enabled = true
     expect(selected(t)[0].connectionId).toBe('er')
   })
   it('does not propagate default routes between hubs', () => {
@@ -633,7 +684,6 @@ describe('topology and input validation', () => {
     const topology = structuredClone(example)
     topology.sites[0].prefixes = ['10.90.0.0/16']
     expect(validateTopology(topology).sites[0].prefixes).toEqual(['10.90.0.0/16'])
-    expect(validateTopology(topology).connections[0].routes).toHaveLength(2)
     topology.sites[0].prefixes.push('10.91.0.0/16', '10.90.0.0/16')
     expect(validateTopology(topology).sites[0].prefixes).toEqual(['10.90.0.0/16', '10.91.0.0/16'])
     expect(topology.sites[0].prefixes).toEqual(['10.90.0.0/16', '10.91.0.0/16', '10.90.0.0/16'])
@@ -679,9 +729,8 @@ describe('topology and input validation', () => {
     expect(() => parseAsPath('65001 evil')).toThrow()
     expect(parseAsPath('65001 65001,4200000000')).toEqual([65001, 65001, 4200000000])
     const t = structuredClone(example)
-    t.connections[0].routes[0].kind = 'vpn-static'
-    t.connections[0].routes[0].asPath = []
-    expect(() => validateTopology(t)).toThrow('only on VPN')
+    t.sites[0].vpnStaticRoutes = [{ id: 'bad-static', prefix: '10.80.0.0/16', connectionId: 'er-eu' }]
+    expect(() => validateTopology(t)).toThrow('attached S2S VPN')
   })
   it('auto-infers SpokeNVA peerIp from the hosting spoke prefix and validates standalone VNets behind NVA spokes', () => {
     const t = structuredClone(example)
@@ -695,7 +744,6 @@ describe('topology and input validation', () => {
       transport: 'SpokeNVA',
       enabled: true,
       learnSiteRoutes: true,
-      routes: [],
       inbound: [],
       outbound: [],
     })
@@ -733,8 +781,8 @@ describe('topology and input validation', () => {
     t.hubs[0].routingIntent.internet = true
     t.erLocations = [{ id: 'loc-eu', name: 'EU MSEE' }]
     t.erLinks = [
-      { id: 'er-hub-eu', name: 'EU Hub ER', locationId: 'loc-eu', hubId: 'eu', enabled: true, learnSiteRoutes: false, routes: [] },
-      { id: 'er-site-dc', name: 'DC ER', locationId: 'loc-eu', siteId: 'dc', enabled: true, learnSiteRoutes: true, routes: [] },
+      { id: 'er-hub-eu', name: 'EU Hub ER', locationId: 'loc-eu', hubId: 'eu', enabled: true, learnSiteRoutes: false },
+      { id: 'er-site-dc', name: 'DC ER', locationId: 'loc-eu', siteId: 'dc', enabled: true, learnSiteRoutes: true },
     ]
     const defaultSim = simulate(validateTopology(t))
     expect(defaultSim.outbound['er-eu'].some((r) => r.prefix === '0.0.0.0/0')).toBe(false)

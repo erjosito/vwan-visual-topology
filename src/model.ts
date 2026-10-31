@@ -36,7 +36,6 @@ export interface ErLink {
   hubId?: string
   siteId?: string
   enabled: boolean
-  routes: Advertisement[]
   learnSiteRoutes: boolean
   propagateDefaultRoute?: boolean
 }
@@ -93,13 +92,6 @@ export interface Spoke {
   propagateDefaultRoute?: boolean
 }
 
-export interface Advertisement {
-  id: string
-  prefix: string
-  asPath: number[]
-  kind: RouteKind
-}
-
 export interface Connection {
   id: string
   name: string
@@ -107,7 +99,6 @@ export interface Connection {
   siteId: string
   transport: Transport
   enabled: boolean
-  routes: Advertisement[]
   learnSiteRoutes: boolean
   propagateDefaultRoute?: boolean
   inbound: PrependRule[]
@@ -183,9 +174,9 @@ export const example: Topology = {
     { id: 'us', name: 'Americas hub', region: 'East US', preference: 'ASPath', routingIntent: { private: false, internet: false, privatePrefixes: [] } },
   ],
   sites: [
-    { id: 'dc', name: 'London datacenter', asn: 65010, prefixes: [] },
-    { id: 'ny', name: 'New York office', asn: 65020, prefixes: [] },
-    { id: 'branch', name: 'Berlin branch', asn: 65030, prefixes: [] },
+    { id: 'dc', name: 'London datacenter', asn: 65010, prefixes: ['10.20.0.0/16', '10.20.10.0/24'] },
+    { id: 'ny', name: 'New York office', asn: 65020, prefixes: ['10.30.0.0/16'] },
+    { id: 'branch', name: 'Berlin branch', asn: 65030, prefixes: ['10.40.0.0/16'] },
   ],
   spokes: [
     { id: 'eu-apps', name: 'Europe applications', hubId: 'eu', prefixes: ['10.1.0.0/16'] },
@@ -193,19 +184,9 @@ export const example: Topology = {
   ],
   siteLinks: [],
   connections: [
-    { id: 'er-eu', name: 'London primary', hubId: 'eu', siteId: 'dc', transport: 'ExpressRoute', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-      routes: [
-        { id: 'r1', prefix: '10.20.0.0/16', asPath: [12076, 65010], kind: 'bgp' },
-        { id: 'r2', prefix: '10.20.10.0/24', asPath: [12076, 65010], kind: 'bgp' },
-      ] },
-    { id: 'vpn-eu', name: 'London backup', hubId: 'eu', siteId: 'dc', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-      routes: [{ id: 'r3', prefix: '10.20.0.0/16', asPath: [65010, 65010, 65010], kind: 'bgp' }] },
-    { id: 'vpn-us', name: 'New York VPN', hubId: 'us', siteId: 'ny', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-      routes: [
-        { id: 'r4', prefix: '10.30.0.0/16', asPath: [65020], kind: 'bgp' },
-        { id: 'r5', prefix: '10.20.0.0/16', asPath: [65020, 65010], kind: 'bgp' },
-      ] },
-    { id: 'sdwan-eu', name: 'Berlin SD-WAN', hubId: 'eu', siteId: 'branch', transport: 'SDWAN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-      routes: [{ id: 'r6', prefix: '10.40.0.0/16', asPath: [65100, 65030], kind: 'bgp' }] },
+    { id: 'er-eu', name: 'London primary', hubId: 'eu', siteId: 'dc', transport: 'ExpressRoute', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+    { id: 'vpn-eu', name: 'London backup', hubId: 'eu', siteId: 'dc', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+    { id: 'vpn-us', name: 'New York VPN', hubId: 'us', siteId: 'ny', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+    { id: 'sdwan-eu', name: 'Berlin SD-WAN', hubId: 'eu', siteId: 'branch', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
   ],
 }

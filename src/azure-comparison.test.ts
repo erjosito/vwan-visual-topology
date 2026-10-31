@@ -113,12 +113,12 @@ describe('scoped selected-route comparison', () => {
   })
   it('compares selected paths only and retains repeated ASNs when AS-path comparison is requested', () => {
     const { design, observation, profile } = setup()
-    design.sites.push({ id: 's', name: 'Branch', asn: 65001, prefixes: [] })
+    design.sites.push({ id: 's', name: 'Branch', asn: 65001, prefixes: ['10.9.0.0/24'] })
     design.connections = [
-      { id: 'primary', name: 'Primary', siteId: 's', hubId: 'h', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-        routes: [{ id: 'p', prefix: '10.9.0.0/24', kind: 'bgp', asPath: [65001, 65001] }] },
-      { id: 'backup', name: 'Backup', siteId: 's', hubId: 'h', transport: 'VPN', enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
-        routes: [{ id: 'b', prefix: '10.9.0.0/24', kind: 'bgp', asPath: [65001, 65001, 65001] }] },
+      { id: 'primary', name: 'Primary', siteId: 's', hubId: 'h', transport: 'VPN', enabled: true, learnSiteRoutes: true,
+        inbound: [{ id: 'p', prefixes: [], match: 'equals', prepend: [65001] }], outbound: [] },
+      { id: 'backup', name: 'Backup', siteId: 's', hubId: 'h', transport: 'VPN', enabled: true, learnSiteRoutes: true,
+        inbound: [{ id: 'b', prefixes: [], match: 'equals', prepend: [65001, 65001] }], outbound: [] },
     ]
     profile.nextHops[armKey(gatewayArm)] = { kind: 'gateway', id: 'h', transport: 'VPN' }
     profile.compareAsPaths = true
@@ -145,9 +145,8 @@ describe('scoped selected-route comparison', () => {
     const { design, observation, profile } = setup()
     for (const [id, asn] of [['east', 65001], ['north', 65002]] as const) {
       design.hubs.push({ ...structuredClone(design.hubs[0]), id, name: id })
-      design.sites.push({ id, name: id, asn, prefixes: [] })
-      design.connections.push({ id, name: id, siteId: id, hubId: id, enabled: true, transport: 'VPN', learnSiteRoutes: false, inbound: [], outbound: [],
-        routes: [{ id, prefix: '10.9.0.0/24', asPath: [asn], kind: 'bgp' }] })
+      design.sites.push({ id, name: id, asn, prefixes: ['10.9.0.0/24'] })
+      design.connections.push({ id, name: id, siteId: id, hubId: id, enabled: true, transport: 'VPN', learnSiteRoutes: true, inbound: [], outbound: [] })
       const remote = `${azureBase}/virtualHubs/${id}`
       profile.hubs[armKey(remote)] = id
       observation.tables[0].routes.push({ addressPrefixes: ['10.9.0.0/24'], nextHopType: 'Remote Hub', nextHops: [remote], routeOrigin: remote, asPath: `65520-65520-${asn}` })

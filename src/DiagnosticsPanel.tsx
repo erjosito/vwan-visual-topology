@@ -21,11 +21,10 @@ function download(value: unknown, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject, onEditAdvertisements, onOpenStaticRouting, onAssignPrefixToSite, onClearHighlight, onProfileChange, onClose }: {
+export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, onClearHighlight, onProfileChange, onClose }: {
   topology: Topology; onFinding: (finding: DiagnosticsFinding) => void
   onInspect: (node: ObjectSelection) => void
   onEditObject?: (node: ObjectSelection) => void
-  onEditAdvertisements?: (connectionId: string) => void
   onOpenStaticRouting?: (router: RouterSelection) => void
   onAssignPrefixToSite?: (siteId: string, prefixes: string[]) => void
   onClearHighlight: () => void; onClose: () => void
@@ -200,7 +199,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
             : 'Analysis completed within the requested model scope.')}
           {' '}{t('{0} probes · {1} address cells · {2} failure cases', currentReport.probes, currentReport.cells, currentReport.failureCases)}
           {' '}{countTokens.join(' · ')}</p>
-        <AnalysisCoverage report={currentReport} topology={topology} onEditObject={onEditObject} onEditAdvertisements={onEditAdvertisements} onOpenStaticRouting={onOpenStaticRouting} onAssignPrefixToSite={onAssignPrefixToSite} />
+        <AnalysisCoverage report={currentReport} topology={topology} onEditObject={onEditObject} onOpenStaticRouting={onOpenStaticRouting} onAssignPrefixToSite={onAssignPrefixToSite} />
         <div className="form-grid">
           <label className="field"><span>{t('Severity')}</span><select aria-label={t('Diagnostic severity')} value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">{t('All severities')}</option>{Object.entries(severities).filter(([value]) => value !== 'unknown').map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
           <label className="field"><span>{t('Diagnostic category')}</span><select aria-label={t('Diagnostic category')} value={category} onChange={(event) => setCategory(event.target.value)}><option value="">{t('All categories')}</option>{categories.map(([rule, title]) => <option key={rule} value={rule}>{t(title)}</option>)}</select></label>

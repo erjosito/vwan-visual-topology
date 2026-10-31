@@ -13,7 +13,7 @@ function fixture(): Topology {
     hubs: [{ id: 'h', name: 'Hub', region: '', preference: 'ASPath', routingIntent: { private: false, internet: false, privatePrefixes: [] } }],
     spokes: [{ id: 'a', name: 'Source', hubId: 'h', prefixes: ['10.1.0.0/16'] }],
     sites: [{ id: 'b', name: 'Destination', asn: 65002, prefixes: ['10.2.0.0/16'] }],
-    connections: [{ id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'b', transport: 'VPN', enabled: true, routes: [], learnSiteRoutes: true, inbound: [], outbound: [] }],
+    connections: [{ id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'b', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }],
     siteLinks: [],
   }
 }
@@ -59,7 +59,8 @@ describe('routing diagnostic intent and evidence', () => {
   it('does not present unowned advertisements or exhausted automatic coverage as a healthy result', () => {
     const t = fixture(), empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
     t.sites[0].prefixes = []
-    t.connections[0].routes = [{ id: 'advertisement', prefix: '10.2.0.0/16', asPath: [65002], kind: 'bgp' }]
+    t.connections[0].learnSiteRoutes = false
+    t.sites[0].vpnStaticRoutes = [{ id: 'advertisement', prefix: '10.2.0.0/16', connectionId: 'vpn' }]
     const report = analyzeRouting(t, empty, { automatic: true })
     expect(report.complete).toBe(false)
     expect(report.findings.find((finding) => finding.rule === 'unowned-advertisement')).toMatchObject({ severity: 'unknown', related: [{ kind: 'site', id: 'b' }] })
@@ -142,19 +143,19 @@ describe('routing diagnostic intent and evidence', () => {
 
   it('partitions destination /16 at nested /24 boundaries instead of just testing its base', () => {
     const t = fixture()
-    t.sites.push({ id: 'c', name: 'Wrong exit', asn: 65003, prefixes: ['10.3.0.0/16'] })
-    t.connections.push({ ...structuredClone(t.connections[0]), id: 'wrong', siteId: 'c', learnSiteRoutes: false, routes: [{ id: 'specific', prefix: '10.2.7.0/24', asPath: [65003], kind: 'bgp' }] })
-    const report = analyzeRouting(t, profile(flow({ destinationPrefix: '10.2.0.0/16' })))
+    t.sites.push({ id: 'c', name: 'Wrong exit', asn: 65003, prefixes: ['10.3.0.0/16'], vpnStaticRoutes: [{ id: 'specific', prefix: '10.1.7.0/24', connectionId: 'wrong' }] })
+    t.connections.push({ ...structuredClone(t.connections[0]), id: 'wrong', siteId: 'c', learnSiteRoutes: false })
+    const report = analyzeRouting(t, profile(flow({ source: { kind: 'site', id: 'b' }, target: { kind: 'spoke', id: 'a' }, sourcePrefix: '10.2.0.0/24', destinationPrefix: '10.1.0.0/16' })))
     expect(report.complete).toBe(true)
     expect(report.cells).toBeGreaterThan(1)
-    expect(report.findings.find((f) => f.rule === 'wrong-exit')).toMatchObject({ prefix: '10.2.7.0/24', destinationAddress: '10.2.7.0' })
+    expect(report.findings.find((f) => f.rule === 'wrong-exit')).toMatchObject({ prefix: '10.1.7.0/24', destinationAddress: '10.1.7.0' })
     expect(report.probes).toBeLessThan(report.cells * 2)
   })
 
   it('partitions source addresses to detect only a subprefix taking a wrong return exit', () => {
     const t = fixture()
-    t.sites.push({ id: 'c', name: 'Wrong return', asn: 65003, prefixes: ['10.3.0.0/16'] })
-    t.connections.push({ ...structuredClone(t.connections[0]), id: 'wrong', siteId: 'c', learnSiteRoutes: false, routes: [{ id: 'return', prefix: '10.1.9.0/24', asPath: [65003], kind: 'bgp' }] })
+    t.sites.push({ id: 'c', name: 'Wrong return', asn: 65003, prefixes: ['10.3.0.0/16'], vpnStaticRoutes: [{ id: 'return', prefix: '10.1.9.0/24', connectionId: 'wrong' }] })
+    t.connections.push({ ...structuredClone(t.connections[0]), id: 'wrong', siteId: 'c', learnSiteRoutes: false })
     const report = analyzeRouting(t, profile(flow({ sourcePrefix: '10.1.0.0/16' })))
     const wrong = report.findings.find((f) => f.rule === 'wrong-exit')
     expect(wrong?.sourceAddress).toBe('10.1.9.0')
@@ -164,9 +165,20 @@ describe('routing diagnostic intent and evidence', () => {
 
   it('checks nested summary contributors and partial ECMP rather than counting any delivery as success', () => {
     const t = fixture()
-    t.connections.push({ ...structuredClone(t.connections[0]), id: 'summary', learnSiteRoutes: false, routes: [{ id: 'contributor', prefix: '10.2.1.0/24', asPath: [65002], kind: 'bgp' }] })
-    t.routeMaps = [{ id: 'summary-map', name: 'Summary', siteId: 'b', rules: [{ id: 's', match: 'contains', prefixes: ['10.2.0.0/16'], action: 'summarize', summaryPrefixes: ['10.2.0.0/16'], prepend: [], nextStep: 'terminate' }] }]
-    t.sites[0].routeMapAssignments = [{ connectionId: 'summary', outboundMapId: 'summary-map' }]
+    t.sites[0].prefixes = ['10.2.0.0/16', '10.2.1.0/24']
+    t.connections.push({ ...structuredClone(t.connections[0]), id: 'summary' })
+    t.routeMaps = [
+      { id: 'vpn-map', name: 'VPN', siteId: 'b', rules: [{ id: 'drop-sub', match: 'equals', prefixes: ['10.2.1.0/24'], action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }] },
+      { id: 'summary-map', name: 'Summary', siteId: 'b', rules: [
+        { id: 'drop-super', match: 'equals', prefixes: ['10.2.0.0/16'], action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' },
+        { id: 's', match: 'contains', prefixes: ['10.2.0.0/16'], action: 'summarize', summaryPrefixes: ['10.2.0.0/16'], prepend: [], nextStep: 'continue' },
+        { id: 'p', match: 'equals', prefixes: ['10.2.0.0/16'], action: 'prepend', summaryPrefixes: [], prepend: [65002], nextStep: 'terminate' },
+      ] },
+    ]
+    t.sites[0].routeMapAssignments = [
+      { connectionId: 'vpn', outboundMapId: 'vpn-map' },
+      { connectionId: 'summary', outboundMapId: 'summary-map' },
+    ]
     const report = analyzeRouting(t, profile(flow({ destinationPrefix: '10.2.0.0/16' })))
     expect(report.complete).toBe(true)
     const mixed = report.findings.find((f) => f.rule === 'partial-ecmp')
@@ -192,9 +204,9 @@ describe('routing diagnostic intent and evidence', () => {
     t.connections = []
     t.erLocations = [{ id: 'location', name: 'ER' }]
     t.erLinks = [
-      { id: 'hub-leg', name: 'Hub leg', locationId: 'location', hubId: 'h', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'parallel-hub-leg', name: 'Parallel hub leg', locationId: 'location', hubId: 'h', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'site-leg', name: 'Site leg', locationId: 'location', siteId: 'b', enabled: true, routes: [], learnSiteRoutes: true },
+      { id: 'hub-leg', name: 'Hub leg', locationId: 'location', hubId: 'h', enabled: true, learnSiteRoutes: false },
+      { id: 'parallel-hub-leg', name: 'Parallel hub leg', locationId: 'location', hubId: 'h', enabled: true, learnSiteRoutes: false },
+      { id: 'site-leg', name: 'Site leg', locationId: 'location', siteId: 'b', enabled: true, learnSiteRoutes: true },
     ]
     const report = analyzeRouting(t, profile())
     expect(report.complete).toBe(true)
@@ -239,7 +251,8 @@ describe('routing diagnostic intent and evidence', () => {
   it('does not infer site ownership from advertisements or hub-owned host addresses', () => {
     const t = fixture()
     t.sites[0].prefixes = []
-    t.connections[0].routes = [{ id: 'advertisement', prefix: '10.2.0.0/16', asPath: [65002], kind: 'bgp' }]
+    t.connections[0].learnSiteRoutes = false
+    t.sites[0].vpnStaticRoutes = [{ id: 'advertisement', prefix: '10.2.0.0/16', connectionId: 'vpn' }]
     expect(rules(t)).toEqual(['unknown'])
     expect(rules(fixture(), profile(flow({ source: { kind: 'hub', id: 'h' } })))).toEqual(['unknown'])
   })
@@ -268,12 +281,14 @@ describe('routing diagnostic intent and evidence', () => {
     expect(report.complete).toBe(false)
     expect(report.findings.map((f) => f.rule)).toEqual(['unknown'])
     t.connections[0].transport = 'ExpressRoute'
-    t.connections[0].learnSiteRoutes = false
-    t.connections[0].routes = [{ id: 'default', prefix: '0.0.0.0/0', asPath: [12076, 65002], kind: 'bgp' }]
+    t.routeMaps = [{ id: 'er-default', name: 'ER default', siteId: 'b', rules: [{ id: 'r1', prefixes: ['10.2.0.0/16'], match: 'contains', action: 'summarize', summaryPrefixes: ['0.0.0.0/0'], prepend: [], nextStep: 'terminate' }] }]
+    t.sites[0].routeMapAssignments = [{ connectionId: 'vpn', outboundMapId: 'er-default' }]
     report = analyzeRouting(t, profile())
     expect(report.findings.map((f) => f.rule)).toEqual(['unknown'])
     t.connections[0].transport = 'VPN'
-    t.connections[0].routes[0] = { id: 'own-as', prefix: '10.2.0.0/16', asPath: [65515, 65002], kind: 'bgp' }
+    t.routeMaps = []
+    t.sites[0].routeMapAssignments = []
+    t.sites[0].asn = 65515
     expect(rules(t)).toEqual(['unknown'])
   })
 
@@ -375,7 +390,7 @@ describe('typed engine coverage and shared site-plane behavior', () => {
     const t = fixture()
     t.sites.push({ id: 'c', name: 'Peer', asn: 65003, prefixes: ['10.3.0.0/16'] })
     t.siteLinks.push({ id: 'peer', name: 'Peer', a: 'b', b: 'c', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } })
-    t.connections[0].routes = [{ id: 'origin', prefix: '192.0.2.0/24', asPath: [65002], kind: 'bgp' }]
+    t.sites[0].prefixes.push('192.0.2.0/24')
     const simulation = simulate(t)
     const combined = azureRoutesAtSites(t, simulation)
     expect(combined.tables.c.find((r) => r.prefix === '192.0.2.0/24')?.asPath).toEqual(simulation.siteTables.c.find((r) => r.prefix === '192.0.2.0/24')?.asPath)
@@ -412,13 +427,13 @@ describe('typed engine coverage and shared site-plane behavior', () => {
   it('separates unassigned advertised prefixes, grouped model scope boundaries and incomplete scans', () => {
     const t = fixture()
     t.sites.push({ id: 'sdwan-site', name: 'SDWAN branch', asn: 65003, prefixes: ['10.3.0.0/24'] })
-    t.connections[0].routes = [
-      { id: 'unowned-1', prefix: '10.20.0.0/16', asPath: [65002], kind: 'bgp' },
-      { id: 'unowned-2', prefix: '10.20.10.0/24', asPath: [65002], kind: 'bgp' },
+    t.sites[0].vpnStaticRoutes = [
+      { id: 'unowned-1', prefix: '10.20.0.0/16', connectionId: 'vpn' },
+      { id: 'unowned-2', prefix: '10.20.10.0/24', connectionId: 'vpn' },
     ]
     t.connections.push({
       id: 'sdwan-conn', name: 'SDWAN conn', hubId: 'h', siteId: 'sdwan-site',
-      transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [], routes: [],
+      transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
     })
     const empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
     const report = analyzeRouting(t, empty, { automatic: true })
@@ -429,7 +444,7 @@ describe('typed engine coverage and shared site-plane behavior', () => {
       { code: 'unowned-advertisement', nodeId: 'b', prefix: '10.20.10.0/24', connectionId: 'vpn' },
     ])
     expect(describeEvidenceSource(t, unowned!.evidence[0])).toBe(
-      'Defined in BGP advertisements on connection "VPN" (S2S VPN → Hub, AS path 65002)',
+      'Defined in VPN static routes on site "Destination" via connection "VPN"',
     )
     const coverage = summarizeCoverage(report)
     expect(coverage.scanIncomplete).toBe(false)

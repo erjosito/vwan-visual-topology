@@ -91,11 +91,11 @@ function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
 function localRoutes(connection: Connection, topology: Topology): Candidate[] {
   if (!connection.enabled) return []
   const staticRoutes = topology.sites.find((site) => site.id === connection.siteId)?.vpnStaticRoutes?.filter((route) => route.connectionId === connection.id) ?? []
-  return [...connection.routes, ...staticRoutes.map((route) => ({ ...route, asPath: [], kind: 'vpn-static' as const }))].map((route) => ({
+  return staticRoutes.map((route) => ({
     key: `${connection.id}:${route.id}`,
     prefix: route.prefix,
-    asPath: [...route.asPath],
-    kind: route.kind,
+    asPath: [],
+    kind: 'vpn-static' as const,
     transport: connection.transport,
     connectionId: connection.id,
     siteId: connection.siteId,
@@ -167,10 +167,7 @@ export function simulate(topology: Topology): Simulation {
       erLocationId: link.locationId, erSiteLinkId: link.id,
       ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map(candidate) } : {}),
     })
-    const routes = [
-      ...link.routes.map((route) => candidate({ ...route, key: route.id, sitePath: [site.id], siteLinkIds: [] })),
-      ...(link.learnSiteRoutes ? siteRouting.tables[site.id].filter((route) => !route.key.startsWith(`${link.id}:`)).map(candidate) : []),
-    ]
+    const routes = link.learnSiteRoutes ? siteRouting.tables[site.id].filter((route) => !route.key.startsWith(`${link.id}:`)).map(candidate) : []
     erAdvertisements[link.id] = policy({ kind: 'site', id: site.id }, link.id, 'outbound', routes,
       siteExports(topology, site.id, link.id, routes))
   }
@@ -200,13 +197,7 @@ export function simulate(topology: Topology): Simulation {
           })),
           ...topology.connections.filter((connection) => connection.enabled && connection.transport === 'SpokeNVA' && connection.spokeId === spoke.id)
             .flatMap((connection) => fromSite(connection, [
-              ...localRoutes(connection, topology).map((route) => {
-                const contributions = siteRouting.tables[connection.siteId]
-                  .filter((child) => child.sitePath.length > 1 && cidr(route.prefix)!.length <= cidr(child.prefix)!.length
-                    && contains(route.prefix, cidr(child.prefix)!.network))
-                  .map((child) => learnedRoute(connection, child))
-                return contributions.length ? { ...route, forwardingRoutes: contributions } : route
-              }),
+              ...localRoutes(connection, topology),
               ...siteRouting.tables[connection.siteId]
                 .filter((route) => !route.key.startsWith(`${connection.id}:`) && (connection.learnSiteRoutes
                   || topology.spokes.some((s) => s.nvaSpokeIds?.includes(spoke.id) && route.key.startsWith(`${s.id}:`))))
@@ -253,7 +244,7 @@ export function simulate(topology: Topology): Simulation {
   if (topology.connections.some((c) => c.enabled && c.transport === 'SDWAN')) {
     warnings.push('SD-WAN is modeled as an independent NVA BGP source, not a VPN gateway. After the documented ER/VPN comparison, NVA candidates compete on AS path. Vendor-specific and undocumented NVA tie-breaks are not predicted.')
   }
-  if (topology.connections.some((c) => c.enabled && c.routes.some((r) => r.kind === 'vpn-static'))) {
+  if (topology.connections.some((c) => c.enabled && c.transport === 'VPN' && topology.sites.find((s) => s.id === c.siteId)?.vpnStaticRoutes?.some((r) => r.connectionId === c.id))) {
     warnings.push('VPN site static routes use a simplified gateway import: empty local AS path, VPN transport, and inter-hub propagation. They do not receive hub-table static priority. Validate gateway redistribution and BGP/static coexistence in Azure.')
   }
   for (const hub of topology.hubs) {

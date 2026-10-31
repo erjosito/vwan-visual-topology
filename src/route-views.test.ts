@@ -14,16 +14,19 @@ describe('ER location BGP tables', () => {
     const t = structuredClone(example)
     t.connections = []
     t.sites[0].prefixes = ['10.80.0.0/16']
+    t.sites[1].prefixes = ['10.80.0.0/16']
+    t.sites[2].prefixes = ['10.80.0.0/16']
     t.erLocations = [{ id: 'er', name: 'ER location' }]
     t.erLinks = [
-      { id: 'hub-er', name: 'Hub attachment', locationId: 'er', hubId: 'eu', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'parallel-hub-er', name: 'Parallel hub attachment', locationId: 'er', hubId: 'eu', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'primary-er', name: 'Primary circuit', locationId: 'er', siteId: 'dc', enabled: true, routes: [], learnSiteRoutes: true },
-      { id: 'backup-er', name: 'Backup circuit', locationId: 'er', siteId: 'ny', enabled: true, learnSiteRoutes: false,
-        routes: [{ id: 'backup-prefix', prefix: '10.80.0.0/16', kind: 'bgp' as const, asPath: [65020, 65020] }] },
-      { id: 'equal-er', name: 'Equal circuit', locationId: 'er', siteId: 'branch', enabled: true, learnSiteRoutes: false,
-        routes: [{ id: 'equal-prefix', prefix: '10.80.0.0/16', kind: 'bgp' as const, asPath: [65030] }] },
+      { id: 'hub-er', name: 'Hub attachment', locationId: 'er', hubId: 'eu', enabled: true, learnSiteRoutes: false },
+      { id: 'parallel-hub-er', name: 'Parallel hub attachment', locationId: 'er', hubId: 'eu', enabled: true, learnSiteRoutes: false },
+      { id: 'primary-er', name: 'Primary circuit', locationId: 'er', siteId: 'dc', enabled: true, learnSiteRoutes: true },
+      { id: 'backup-er', name: 'Backup circuit', locationId: 'er', siteId: 'ny', enabled: true, learnSiteRoutes: true },
+      { id: 'equal-er', name: 'Equal circuit', locationId: 'er', siteId: 'branch', enabled: true, learnSiteRoutes: true },
     ]
+    assign(t, { kind: 'site', id: 'ny' }, 'backup-er', 'outbound', [
+      { ...rule('10.80.0.0/16', 'prepend'), prepend: [65020] },
+    ])
     return t
   }
   it('groups actual learned candidates with preferred paths, alternatives and distinct parallel neighbors', () => {
@@ -55,9 +58,7 @@ describe('ER location BGP tables', () => {
   })
   it('compares hub and site advertisements by AS path without applying a hub system-route override', () => {
     const t = network()
-    t.erLinks!.find((link) => link.id === 'primary-er')!.routes.push({
-      id: 'competing-prefix', prefix: '10.1.0.0/16', kind: 'bgp', asPath: [65010],
-    })
+    t.sites[0].prefixes.push('10.1.0.0/16')
     for (const id of ['hub-er', 'parallel-hub-er']) {
       assign(t, { kind: 'hub', id: 'eu' }, id, 'outbound', [
         { ...rule('10.1.0.0/16', 'prepend'), prepend: [64496, 64496, 64496] },
@@ -94,8 +95,8 @@ describe('route inspection stages', () => {
   })
   it('retains dropped, prepended and summarized inbound inputs without changing hub decisions or topology', () => {
     const t = structuredClone(example)
-    t.connections[1].routes = ['10.60.0.0/16', '10.61.0.0/16', '10.62.0.0/16']
-      .map((prefix) => ({ id: prefix, prefix, asPath: [65010], kind: 'bgp' }))
+    t.connections[0].enabled = false
+    t.sites[0].prefixes = ['10.60.0.0/16', '10.61.0.0/16', '10.62.0.0/16']
     assign(t, { kind: 'hub', id: 'eu' }, 'vpn-eu', 'inbound', [
       rule('10.60.0.0/16', 'drop'), rule('10.61.0.0/16', 'prepend'), rule('10.62.0.0/16', 'summarize'),
     ])
@@ -162,8 +163,8 @@ describe('route inspection stages', () => {
     t.sites[0].prefixes = ['10.80.0.0/16']
     t.erLocations = [{ id: 'er', name: 'ER location' }]
     t.erLinks = [
-      { id: 'hub-er', name: 'Hub attachment', locationId: 'er', hubId: 'eu', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'site-er', name: 'Site circuit', locationId: 'er', siteId: 'dc', enabled: true, routes: [], learnSiteRoutes: true },
+      { id: 'hub-er', name: 'Hub attachment', locationId: 'er', hubId: 'eu', enabled: true, learnSiteRoutes: false },
+      { id: 'site-er', name: 'Site circuit', locationId: 'er', siteId: 'dc', enabled: true, learnSiteRoutes: true },
     ]
     assign(t, { kind: 'hub', id: 'eu' }, 'hub-er', 'inbound', [rule('10.80.0.0/16', 'drop')])
     const simulation = simulate(t), router = { kind: 'erLocation' as const, id: 'er' }

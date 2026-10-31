@@ -112,7 +112,6 @@ test('Japanese on-premises path steps translate outer lookups and nested transpo
   await page.getByText('このパスが選ばれた理由', { exact: true }).click()
   const firstStep = page.locator('.flow-results ol li').first()
   await expect(firstStep).toContainText('Europe hub: 最長プレフィックス一致 (LPM) 10.20.0.0/16')
-  await expect(firstStep).toContainText('ローカル接続はリモート ハブ接続より優先されます。')
   await expect(firstStep).toContainText('ExpressRoute と S2S VPN の比較では ExpressRoute が優先されます。')
   await expect(firstStep).not.toContainText('longest prefix')
   await expect(firstStep).not.toContainText('Local connections')

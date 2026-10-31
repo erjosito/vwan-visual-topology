@@ -1,5 +1,4 @@
 import type { ObjectSelection, Topology } from './model'
-import { transportLabels } from './model'
 import { t } from './i18n'
 import type { Simulation } from './routing'
 import { advertiseSiteRoutes, applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
@@ -415,8 +414,8 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
     }
   }
   const ownAs = (asPath: number[]) => asPath.includes(65515) || asPath.includes(65520)
-  if ([...topology.connections, ...(topology.erLinks ?? [])].some((c) => c.enabled && c.routes.some((r) => contains(r.prefix, address) && ownAs(r.asPath))) ||
-    topology.sites.some((site) => [65515, 65520].includes(site.asn) && (site.id === source.id || paths.some((path) => path.siteHops?.includes(site.id) || path.sourceSiteHops?.includes(site.id))))) reasons.push(limits.ownAs)
+  if (Object.values(simulation.bgpTables).some((table) => table.some((d) => contains(d.prefix, address) && d.candidates.some((r) => !r.remote && ownAs(r.asPath)))) ||
+    topology.sites.some((site) => [65515, 65520].includes(site.asn) && (site.id === source.id || paths.some((path) => path.siteHops?.includes(site.id) || path.sourceSiteHops?.includes(site.id)) || site.prefixes.some((p) => contains(p, address))))) reasons.push(limits.ownAs)
   state.limitsCache.set(key, reasons)
   return reasons
 }
@@ -483,29 +482,14 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     }))
     for (const site of topology.sites) {
       if (!room()) break
-      const unownedSources = [
-        ...topology.connections.filter((link) => link.siteId === site.id && link.enabled)
-          .flatMap((link) => link.routes.filter((route) => !isOwnedPrefix(route.prefix)).map((route) => ({
-            code: 'unowned-advertisement' as const,
-            nodeId: site.id,
-            prefix: route.prefix,
-            connectionId: link.id,
-          }))),
-        ...(topology.erLinks ?? []).filter((link) => link.siteId === site.id && link.enabled)
-          .flatMap((link) => link.routes.filter((route) => !isOwnedPrefix(route.prefix)).map((route) => ({
-            code: 'unowned-advertisement' as const,
-            nodeId: site.id,
-            prefix: route.prefix,
-            connectionId: link.id,
-          }))),
-        ...(site.vpnStaticRoutes ?? []).filter((route) => topology.connections.some((link) => link.id === route.connectionId && link.enabled) && !isOwnedPrefix(route.prefix))
-          .map((route) => ({
-            code: 'unowned-advertisement' as const,
-            nodeId: site.id,
-            prefix: route.prefix,
-            connectionId: route.connectionId,
-          })),
-      ]
+      const unownedSources = (site.vpnStaticRoutes ?? [])
+        .filter((route) => topology.connections.some((link) => link.id === route.connectionId && link.enabled) && !isOwnedPrefix(route.prefix))
+        .map((route) => ({
+          code: 'unowned-advertisement' as const,
+          nodeId: site.id,
+          prefix: route.prefix,
+          connectionId: route.connectionId,
+        }))
       const prefixes = [...new Set(unownedSources.map((entry) => entry.prefix))]
       if (prefixes.length) {
         limited(limits.ownership)
@@ -744,33 +728,13 @@ export function describeEvidenceSource(topology: Topology, evidence: Diagnostics
   if (evidence.connectionId) {
     const connection = topology.connections.find((item) => item.id === evidence.connectionId)
     if (connection) {
-      const bgpRoute = connection.routes.find((route) => route.prefix === evidence.prefix)
-      if (bgpRoute) {
-        const hub = topology.hubs.find((item) => item.id === connection.hubId)
-        return t(
-          'Defined in BGP advertisements on connection "{0}" ({1} → {2}, AS path {3})',
-          connection.name,
-          t(transportLabels[connection.transport]),
-          hub?.name ?? connection.hubId,
-          bgpRoute.asPath.join(' ') || t('empty'),
-        )
-      }
       if (site?.vpnStaticRoutes?.some((route) => route.connectionId === connection.id && route.prefix === evidence.prefix)) {
         return t('Defined in VPN static routes on site "{0}" via connection "{1}"', site.name, connection.name)
       }
       return connection.name
     }
     const erLink = topology.erLinks?.find((item) => item.id === evidence.connectionId)
-    if (erLink) {
-      const bgpRoute = erLink.routes.find((route) => route.prefix === evidence.prefix)
-      const location = topology.erLocations?.find((item) => item.id === erLink.locationId)
-      return t(
-        'Defined in ER BGP advertisements on "{0}" ({1}, AS path {2})',
-        erLink.name,
-        location?.name ?? erLink.locationId,
-        bgpRoute?.asPath.join(' ') || t('empty'),
-      )
-    }
+    if (erLink) return erLink.name
   }
   return evidence.connectionId ?? ''
 }

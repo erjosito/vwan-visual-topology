@@ -8,7 +8,7 @@ function fixture(): Topology {
     hubs: [{ id: 'h', name: 'Hub', region: '', preference: 'ASPath', routingIntent: { private: false, internet: false, privatePrefixes: [] } }],
     spokes: [{ id: 'v', name: 'Spoke', hubId: 'h', prefixes: ['10.1.0.0/24'] }],
     sites: ['a', 'b', 'already-isolated'].map((id, i) => ({ id, name: id, asn: 65001 + i, prefixes: [] })),
-    connections: [{ id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'a', transport: 'VPN', enabled: true, routes: [], learnSiteRoutes: true, inbound: [], outbound: [] }],
+    connections: [{ id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'a', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }],
     siteLinks: [{ id: 'wan', name: 'WAN', a: 'a', b: 'b', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }],
   }
 }
@@ -42,8 +42,8 @@ describe('structural single-link isolation', () => {
     topology.hubs.push({ ...topology.hubs[0], id: 'h2', name: 'Second hub' })
     topology.erLocations = [{ id: 'er', name: 'Peering location' }]
     topology.erLinks = [
-      { id: 'hub-leg', name: 'Hub circuit', locationId: 'er', hubId: 'h', enabled: true, routes: [], learnSiteRoutes: false },
-      { id: 'site-leg', name: 'Site circuit', locationId: 'er', siteId: 'a', enabled: true, routes: [], learnSiteRoutes: true },
+      { id: 'hub-leg', name: 'Hub circuit', locationId: 'er', hubId: 'h', enabled: true, learnSiteRoutes: false },
+      { id: 'site-leg', name: 'Site circuit', locationId: 'er', siteId: 'a', enabled: true, learnSiteRoutes: true },
     ]
     expect(singleLinkIsolation(topology).map((risk) => risk.linkId).sort()).toEqual(['hub-leg', 'interhub:h:h2', 'site-leg'])
     topology.hubs.push({ ...topology.hubs[0], id: 'h3', name: 'Third hub' })

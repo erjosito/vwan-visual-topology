@@ -11,7 +11,7 @@ function StaticRoutesForm({ topology, connection, onSave }: {
   const site = topology.sites.find((s) => s.id === connection.siteId)!
   const current = site.vpnStaticRoutes?.filter((r) => r.connectionId === connection.id) ?? []
   const [prefixes, setPrefixes] = useState(current.map((r) => r.prefix).join('\n'))
-  const [staticOnly, setStaticOnly] = useState(!connection.routes.length && !connection.learnSiteRoutes)
+  const [staticOnly, setStaticOnly] = useState(!connection.learnSiteRoutes)
   const [error, setError] = useState('')
   const [saved, setSaved] = useState(false)
   const save = (event: FormEvent) => {
@@ -25,7 +25,7 @@ function StaticRoutesForm({ topology, connection, onSave }: {
       owner.vpnStaticRoutes = [...(owner.vpnStaticRoutes ?? []).filter((r) => r.connectionId !== connection.id), ...routes]
       if (staticOnly) {
         const link = next.connections.find((c) => c.id === connection.id)!
-        link.routes = []; link.learnSiteRoutes = false
+        link.learnSiteRoutes = false
       }
       onSave(validateTopology(next)); setError(''); setSaved(true)
     } catch (error) { setSaved(false); setError(error instanceof Error ? error.message : 'Invalid static routes.') }
@@ -35,7 +35,7 @@ function StaticRoutesForm({ topology, connection, onSave }: {
     <label className="field"><span>{t("Site VPN static prefixes")}</span><textarea aria-label={t("Site VPN static prefixes")} rows={5} value={prefixes} onChange={(e) => setPrefixes(e.target.value)} placeholder={site.prefixes[0] ?? '10.80.0.0/16'} /></label>
     {site.prefixes.length > 0 && <button type="button" onClick={() => { setPrefixes(site.prefixes.join('\n')); setSaved(false) }}>{t("Use site's originated prefix")}</button>}
     <label className="checkbox-field"><input type="checkbox" aria-label={t("Static-only VPN")} checked={staticOnly} onChange={(e) => setStaticOnly(e.target.checked)} />{t("Static-only VPN (remove BGP advertisements)")}</label>
-    <p className="muted">{staticOnly ? t("Saving removes {0} explicit BGP advertisement(s) and disables site-originated/learned BGP import on this connection.", connection.routes.length) : t("This connection also has {0} explicit BGP advertisement(s); site-mesh BGP import is {1}. Select static-only to disable both.", connection.routes.length, t(connection.learnSiteRoutes ? 'enabled' : 'disabled'))}  {t("Static prefixes have no AS path and bypass BGP route maps.")}</p>
+    <p className="muted">{staticOnly ? t("Saving disables site-originated and learned BGP route import on this connection.") : t("Site-mesh BGP import is {0}. Select static-only to disable it.", t(connection.learnSiteRoutes ? 'enabled' : 'disabled'))}  {t("Static prefixes have no AS path and bypass BGP route maps.")}</p>
     <p className="muted">{t("One network CIDR per line or comma-separated, up to 100. Leave empty and save to remove this connection's static prefixes. These may include transit destinations; they do not add originated networks to the site.")}</p>
     <button className="primary">{t("Save static routing")}</button>
     {saved && <p role="status" className="muted">{t("Static routing saved.")}</p>}

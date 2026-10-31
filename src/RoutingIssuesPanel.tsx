@@ -8,11 +8,10 @@ import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
 
-export function RoutingIssuesPanel({ topology, report, findingId, selectedFindingId, coverageOpen, onFinding, onShowAll, onInspect, onEditObject, onEditAdvertisements, onOpenStaticRouting, onAssignPrefixToSite, onClose }: {
+export function RoutingIssuesPanel({ topology, report, findingId, selectedFindingId, coverageOpen, onFinding, onShowAll, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, onClose }: {
   topology: Topology; report: DiagnosticsReport; findingId?: string; selectedFindingId?: string; coverageOpen?: boolean
   onFinding: (finding: DiagnosticsFinding) => void; onInspect: (object: ObjectSelection) => void
   onEditObject?: (object: ObjectSelection) => void
-  onEditAdvertisements?: (connectionId: string) => void
   onOpenStaticRouting?: (router: RouterSelection) => void
   onAssignPrefixToSite?: (siteId: string, prefixes: string[]) => void
   onClose: () => void
@@ -30,7 +29,7 @@ export function RoutingIssuesPanel({ topology, report, findingId, selectedFindin
   return <CanvasOverlay title={t('Routing issues')} className="routing-issues-panel" onClose={onClose}>
     {findingId && <div className="row"><span className="muted">{t('Showing selected issue ({0} of {1})', findings.length, allActionable.length)}</span><button onClick={onShowAll}>{t('Show all routing issues')}</button></div>}
     <p className="muted">{t('Checks cover modeled connectivity between assigned networks and saved requirements. Intentional isolation may need an explicit requirement. Actual hosts, firewall rules and NAT are not verified.')}</p>
-    <AnalysisCoverage report={report} topology={topology} initiallyOpen={coverageOpen} onEditObject={onEditObject} onEditAdvertisements={onEditAdvertisements} onOpenStaticRouting={onOpenStaticRouting} onAssignPrefixToSite={onAssignPrefixToSite} />
+    <AnalysisCoverage report={report} topology={topology} initiallyOpen={coverageOpen} onEditObject={onEditObject} onOpenStaticRouting={onOpenStaticRouting} onAssignPrefixToSite={onAssignPrefixToSite} />
     <label className="field"><span>{t('Filter by prefix or endpoint')}</span><input aria-label={t('Filter routing issues')} value={filter} onChange={(event) => { setFilter(event.target.value); setVisibleCount(50) }} /></label>
     <div className="flow-results">{findings.slice(0, visibleCount).map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
       <div className="row"><span className="diagnostic-severity">{t(severity[finding.severity])}</span><button className="finding-title" aria-pressed={selectedFindingId === finding.id} onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>

@@ -8,8 +8,8 @@ describe('contextual node paths', () => {
     const t = structuredClone(example)
     t.sites[0].prefixes = ['10.20.0.0/16']
     t.sites[1].prefixes = ['203.0.113.0/24']
-    t.connections.push({ ...structuredClone(t.connections[0]), id: 'parallel-er', name: 'Parallel ER',
-      routes: t.connections[0].routes.map((route) => ({ ...route, id: `parallel-${route.id}` })) })
+    t.connections[2].learnSiteRoutes = false
+    t.connections.push({ ...structuredClone(t.connections[0]), id: 'parallel-er', name: 'Parallel ER' })
     const paths = traceGroupedPaths(t, simulate(t), { kind: 'spoke', id: 'eu-apps' }, 'to', 'everywhere')
     expect(new Set(paths.map((path) => path.destinationPrefix))).toEqual(new Set(['10.2.0.0/16', '10.20.0.0/16', '203.0.113.0/24', '10.40.0.0/16']))
     expect(paths.filter((path) => path.destinationPrefix === '10.20.0.0/16').every((path) => path.status === 'delivered')).toBe(true)
@@ -95,6 +95,7 @@ describe('contextual node paths', () => {
   it('uses on-premises best paths and withdraws a failed peer link', () => {
     const t = structuredClone(example)
     t.sites[1].prefixes = ['10.90.0.0/16']
+    t.connections[2].learnSiteRoutes = false
     t.siteLinks.push({ id: 'wan', name: 'WAN', a: 'dc', b: 'ny', enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } })
     expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'dc' }, '10.90.0.1')[0]).toMatchObject({ siteHops: ['dc', 'ny'], status: 'delivered' })
     t.siteLinks[0].enabled = false
@@ -129,8 +130,8 @@ describe('contextual node paths', () => {
       { id: 'nva-2', name: 'NVA 2', asn: 65052, prefixes: [] },
     )
     t.connections.push(
-      { id: 'peer-1', name: 'Peer 1', hubId: 'eu', siteId: 'nva-1', spokeId: 'eu-apps', peerIp: '10.1.0.4', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [] },
-      { id: 'peer-2', name: 'Peer 2', hubId: 'eu', siteId: 'nva-2', spokeId: 'eu-nva-2', peerIp: '10.11.0.4', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [] },
+      { id: 'peer-1', name: 'Peer 1', hubId: 'eu', siteId: 'nva-1', spokeId: 'eu-apps', peerIp: '10.1.0.4', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+      { id: 'peer-2', name: 'Peer 2', hubId: 'eu', siteId: 'nva-2', spokeId: 'eu-nva-2', peerIp: '10.11.0.4', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
     )
     t.spokes.push({ id: 'shared-downstream', name: 'Shared downstream VNet', prefixes: ['10.220.0.0/16'], nvaSpokeIds: ['eu-apps', 'eu-nva-2'] })
     const sim = simulate(t)
