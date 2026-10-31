@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "name": "Global 3-Hub Enterprise showcase (with asymmetric ER/VPN routing)",
+  "notes": "Demonstrates 3 Virtual WAN hubs (ExpressRoute, VPN, and ASPath preferences), Secured Virtual Hubs with Azure Firewall Routing Intent (private + internet), an ExpressRoute peering location (Equinix AM5), BGP VPN, static VPN with opt-in default-route propagation, SD-WAN inbound/outbound learning, a Spoke BGP NVA advertising both a downstream standalone Azure VNet and a downstream on-premises partner site, on-premises site-to-site WAN links, hub and site route maps, and an intentional asymmetric routing path between Azure and Amsterdam Core DC (Forward: ExpressRoute via Equinix AM5; Return: BGP VPN due to outbound AS-path prepending 64496 64496 on the West Europe Hub ExpressRoute link).",
+  "hubs": [
+    {
+      "id": "hub-weu",
+      "name": "West Europe Hub",
+      "region": "West Europe",
+      "preference": "ExpressRoute",
+      "routingIntent": {
+        "private": true,
+        "internet": true,
+        "privatePrefixes": [
+          "10.0.0.0/8",
+          "172.16.0.0/12"
+        ]
+      },
+      "routeMapAssignments": [
+        {
+          "connectionId": "er-hub-weu",
+          "outboundMapId": "rm-weu-er-out-prepend"
+        }
+      ]
+    },
+    {
+      "id": "hub-eus",
+      "name": "East US Hub",
+      "region": "East US 2",
+      "preference": "VPN",
+      "routingIntent": {
+        "private": false,
+        "internet": false,
+        "privatePrefixes": []
+      },
+      "routeMapAssignments": [
+        {
+          "connectionId": "conn-vpn-nyc-eus",
+          "inboundMapId": "rm-eus-vpn-in-prepend"
+        }
+      ]
+    },
+    {
+      "id": "hub-jpe",
+      "name": "Japan East Hub",
+      "region": "Japan East",
+      "preference": "ASPath",
+      "routingIntent": {
+        "private": true,
+        "internet": false,
+        "privatePrefixes": [
+          "10.0.0.0/8"
+        ]
+      }
+    }
+  ],
+  "spokes": [
+    {
+      "id": "spoke-weu-erp",
+      "name": "EMEA ERP Spoke",
+      "hubId": "hub-weu",
+      "prefixes": [
+        "10.10.0.0/16"
+      ]
+    },
+    {
+      "id": "spoke-weu-nva",
+      "name": "EMEA Transit NVA Spoke",
+      "hubId": "hub-weu",
+      "prefixes": [
+        "10.11.0.0/16"
+      ]
+    },
+    {
+      "id": "spoke-shared-ai",
+      "name": "Downstream AI Landing Zone VNet",
+      "prefixes": [
+        "10.90.0.0/16"
+      ],
+      "nvaSpokeIds": [
+        "spoke-weu-nva"
+      ]
+    },
+    {
+      "id": "spoke-eus-payments",
+      "name": "Americas Payments Spoke",
+      "hubId": "hub-eus",
+      "prefixes": [
+        "10.20.0.0/16"
+      ]
+    },
+    {
+      "id": "spoke-jpe-manufacturing",
+      "name": "APAC Manufacturing Spoke",
+      "hubId": "hub-jpe",
+      "prefixes": [
+        "10.30.0.0/16"
+      ]
+    }
+  ],
+  "erLocations": [
+    {
+      "id": "erloc-ams",
+      "name": "Equinix AM5 Amsterdam"
+    }
+  ],
+  "erLinks": [
+    {
+      "id": "er-site-ams",
+      "name": "AMS DC to Equinix AM5",
+      "locationId": "erloc-ams",
+      "siteId": "site-ams-dc",
+      "enabled": true,
+      "learnSiteRoutes": true
+    },
+    {
+      "id": "er-hub-weu",
+      "name": "Equinix AM5 to West Europe Hub",
+      "locationId": "erloc-ams",
+      "hubId": "hub-weu",
+      "enabled": true,
+      "learnSiteRoutes": false
+    },
+    {
+      "id": "er-hub-eus",
+      "name": "Equinix AM5 to East US Hub",
+      "locationId": "erloc-ams",
+      "hubId": "hub-eus",
+      "enabled": true,
+      "learnSiteRoutes": false
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-ams-dc",
+      "name": "Amsterdam Core DC",
+      "asn": 65010,
+      "prefixes": [
+        "10.110.0.0/16",
+        "10.110.10.0/24"
+      ],
+      "routeMapAssignments": [
+        {
+          "connectionId": "conn-vpn-ams-weu",
+          "outboundMapId": "rm-ams-vpn-out-prepend"
+        }
+      ]
+    },
+    {
+      "id": "site-nyc-hq",
+      "name": "New York Campus",
+      "asn": 65020,
+      "prefixes": [
+        "10.120.0.0/16"
+      ]
+    },
+    {
+      "id": "site-madrid-branch",
+      "name": "Madrid Retail Branch",
+      "asn": 65030,
+      "prefixes": [
+        "10.130.0.0/24"
+      ],
+      "vpnStaticRoutes": [
+        {
+          "id": "sr-madrid-1",
+          "prefix": "10.130.0.0/24",
+          "connectionId": "conn-vpn-madrid-weu"
+        }
+      ]
+    },
+    {
+      "id": "site-tokyo-sdwan",
+      "name": "Tokyo SD-WAN Branch",
+      "asn": 65040,
+      "prefixes": [
+        "10.140.0.0/16"
+      ]
+    },
+    {
+      "id": "site-zurich-partner",
+      "name": "Zurich B2B Partner Enclave",
+      "asn": 65050,
+      "prefixes": [
+        "172.20.0.0/16"
+      ]
+    },
+    {
+      "id": "site-nva-weu",
+      "name": "EMEA Transit NVA Spoke",
+      "asn": 65110,
+      "role": "spoke-nva",
+      "prefixes": []
+    }
+  ],
+  "siteLinks": [
+    {
+      "id": "sitelink-ams-nyc",
+      "name": "Transatlantic MPLS Backhaul",
+      "a": "site-ams-dc",
+      "b": "site-nyc-hq",
+      "enabled": true,
+      "aToB": {
+        "prefixes": [
+          "10.110.0.0/16"
+        ],
+        "prepend": [
+          65010
+        ],
+        "receivePrepend": []
+      },
+      "bToA": {
+        "prefixes": [
+          "10.120.0.0/16"
+        ],
+        "prepend": [
+          65020
+        ],
+        "receivePrepend": []
+      }
+    },
+    {
+      "id": "sitelink-nva-weu-site-zurich-partner",
+      "name": "EMEA Transit NVA Spoke ↔ Zurich B2B Partner Enclave",
+      "a": "site-nva-weu",
+      "b": "site-zurich-partner",
+      "enabled": true,
+      "aToB": {
+        "prefixes": [],
+        "prepend": [],
+        "receivePrepend": []
+      },
+      "bToA": {
+        "prefixes": [],
+        "prepend": [],
+        "receivePrepend": []
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn-vpn-ams-weu",
+      "name": "Amsterdam Backup S2S VPN",
+      "hubId": "hub-weu",
+      "siteId": "site-ams-dc",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    },
+    {
+      "id": "conn-vpn-madrid-weu",
+      "name": "Madrid Static S2S VPN",
+      "hubId": "hub-weu",
+      "siteId": "site-madrid-branch",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": false,
+      "propagateDefaultRoute": true,
+      "inbound": [],
+      "outbound": []
+    },
+    {
+      "id": "conn-nva-weu",
+      "name": "EMEA Transit NVA BGP Peering",
+      "hubId": "hub-weu",
+      "siteId": "site-nva-weu",
+      "spokeId": "spoke-weu-nva",
+      "peerIp": "10.11.0.4",
+      "transport": "SpokeNVA",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    },
+    {
+      "id": "conn-vpn-nyc-eus",
+      "name": "New York Primary S2S VPN",
+      "hubId": "hub-eus",
+      "siteId": "site-nyc-hq",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    },
+    {
+      "id": "conn-sdwan-tokyo-jpe",
+      "name": "Tokyo SD-WAN Overlay",
+      "hubId": "hub-jpe",
+      "siteId": "site-tokyo-sdwan",
+      "transport": "SDWAN",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    }
+  ],
+  "routeMaps": [
+    {
+      "id": "rm-weu-er-out-prepend",
+      "name": "WEU-ER-Out-Prepend-64496",
+      "hubId": "hub-weu",
+      "rules": [
+        {
+          "id": "rule-weu-er-out-1",
+          "prefixes": [
+            "10.0.0.0/8"
+          ],
+          "match": "contains",
+          "action": "prepend",
+          "summaryPrefixes": [],
+          "prepend": [
+            64496,
+            64496
+          ],
+          "nextStep": "continue"
+        }
+      ]
+    },
+    {
+      "id": "rm-eus-vpn-in-prepend",
+      "name": "EUS-VPN-In-Summarize-NYC",
+      "hubId": "hub-eus",
+      "rules": [
+        {
+          "id": "rule-eus-vpn-in-1",
+          "prefixes": [
+            "10.120.0.0/16"
+          ],
+          "match": "equals",
+          "action": "permit",
+          "summaryPrefixes": [],
+          "prepend": [],
+          "nextStep": "continue"
+        }
+      ]
+    },
+    {
+      "id": "rm-ams-vpn-out-prepend",
+      "name": "AMS-VPN-Out-Prepend",
+      "siteId": "site-ams-dc",
+      "rules": [
+        {
+          "id": "rule-ams-vpn-out-1",
+          "prefixes": [
+            "10.110.0.0/16"
+          ],
+          "match": "contains",
+          "action": "prepend",
+          "summaryPrefixes": [],
+          "prepend": [
+            65010
+          ],
+          "nextStep": "continue"
+        }
+      ]
+    }
+  ]
+}

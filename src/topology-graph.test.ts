@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { analyzeRouting } from './diagnostics'
 import { example } from './model'
+import { validateTopology } from './validation'
 import { simulate } from './routing'
 import { azureRoutesAtSites } from './paths'
 import {
@@ -134,5 +137,18 @@ describe('topology-graph connectivity and SpokeNVA helpers', () => {
     expect(afterSpokeDelete.connections.some((c) => c.id === 'nva-peer-eu')).toBe(false)
     expect(afterSpokeDelete.siteLinks.some((l) => l.id === 'link-dc-nva')).toBe(false)
     expect(afterSpokeDelete.spokes.find((s) => s.id === 'downstream-vnet')?.nvaSpokeIds).toEqual([])
+  })
+
+  it('validates the 3-hub all-features sample topology and detects its asymmetric routing path', () => {
+    const raw = JSON.parse(readFileSync('samples/three-hub-all-features-asymmetric.json', 'utf8'))
+    const topology = validateTopology(raw)
+    expect(topology.hubs).toHaveLength(3)
+    const simulation = simulate(topology)
+    expect(simulation.converged).toBe(true)
+
+    const report = analyzeRouting(topology, { version: 1, intents: [], failureAnalysis: false }, { automatic: true })
+    expect(report.findings.some((f) => f.rule === 'asymmetric')).toBe(true)
+    expect(report.findings.some((f) => f.rule === 'unowned-advertisement')).toBe(false)
+    expect(report.findings.some((f) => f.rule === 'ownership')).toBe(false)
   })
 })
