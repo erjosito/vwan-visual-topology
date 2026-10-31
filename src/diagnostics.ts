@@ -224,11 +224,13 @@ function physical(path: NodePath, source: PathNode): string[] {
   siteWalk(path.sourceSiteHops, path.sourceSiteLinkIds)
   if (path.sourceErLinkIds?.length) tokens.push(...path.sourceErLinkIds.map((id) => `erLink:${id}`))
   else if (path.sourceConnectionId) tokens.push(`connection:${path.sourceConnectionId}`)
+  if (path.sourceNvaSpokeId) tokens.push(`spoke:${path.sourceNvaSpokeId}`)
   path.hubs.forEach((id) => {
     const token = path.firewalls?.includes(id) ? `hub-firewall:${id}` : `hub:${id}`
     if (tokens.at(-1) === `hub:${id}` && token !== `hub:${id}`) tokens.pop()
     if (tokens.at(-1) !== token) tokens.push(token)
   })
+  if (path.nvaSpokeId) tokens.push(`spoke:${path.nvaSpokeId}`)
   if (path.erLinkIds?.length) tokens.push(...path.erLinkIds.map((id) => `erLink:${id}`))
   else if (path.connectionId && path.terminalKind !== 'spoke') tokens.push(`connection:${path.connectionId}`)
   siteWalk(path.siteHops, path.siteLinkIds)
@@ -245,6 +247,7 @@ function pathObjects(paths: NodePath[]): ObjectSelection[] {
     ...[...(path.sourceSiteLinkIds ?? []), ...(path.siteLinkIds ?? [])].map((id) => ({ kind: 'siteLink' as const, id })),
     ...[...(path.sourceErLinkIds ?? []), ...(path.erLinkIds ?? [])].map((id) => ({ kind: 'erLink' as const, id })),
     ...(path.sourceSpokeId ? [{ kind: 'spoke' as const, id: path.sourceSpokeId }] : []),
+    ...[path.sourceNvaSpokeId, path.nvaSpokeId].filter((id): id is string => !!id).map((id) => ({ kind: 'spoke' as const, id })),
     ...(path.sourceConnectionId && !path.sourceErLinkIds ? [{ kind: 'connection' as const, id: path.sourceConnectionId }] : []),
     ...(path.connectionId && !path.erLinkIds ? [{ kind: path.terminalKind === 'spoke' ? 'spoke' as const : 'connection' as const, id: path.connectionId }] : []),
   ])

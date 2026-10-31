@@ -8,6 +8,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 
 - Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites with editable ASNs and **one optional originated prefix** each. The site's ASN and prefix are visible on its node. Connections can still advertise multiple routes.
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs.
+- Add **spoke BGP NVAs** to existing VNet spokes, with explicit NIC peer IPs, ASNs, advertisements and downstream BGP links. These are distinct from hub-integrated SD-WAN.
 - Add **ER location** nodes with the official ExpressRoute icon and connect them to hubs and sites. Inspect per-attachment BGP advertisements and trace both physical links. Default ER-to-ER transit is blocked, including ER routes from remote hubs.
 - Define per-connection BGP advertisements and learned AS paths. Configure non-BGP VPN static prefixes as **site attributes**, associated with the relevant VPN connection and accessible from either endpoint. Disable connections to explore failures.
 - Right-click a VPN connection for **Change to static routing** / **Change to BGP routing**. A configure/review wizard seeds editable site-side destinations and changes connection advertisements, site statics and learning settings together. Mixed routing offers both conversions.
@@ -72,7 +73,7 @@ Unsupported analysis is tracked separately from detected network problems:
 
 | Coverage gap | Implementation tracking |
 |---|---|
-| SD-WAN outbound learning and integrated-NVA ranking | #19; spoke-NVA modeling remains #6 |
+| SD-WAN outbound learning and integrated-NVA ranking | #19; distinct spoke BGP NVA modeling is implemented under #6 |
 | Hub own-AS rejection and advertised AS-path boundaries | #20; ER customer/native path fidelity remains #9 |
 | ER Internet/default advertisement controls and parity | #13 |
 | Resumable large analyses, trace/ECMP overflow and bounded failure scenarios | #21 |
@@ -110,6 +111,19 @@ The collector integration tests require PowerShell 7 but use a mocked Azure CLI,
 ## Working with the app
 
 Drag a blank canvas area with the left mouse button to pan the topology in either direction, at any zoom. Panning changes only the current view, not saved node coordinates or routing. **Reset canvas view** (or Home while the canvas is focused) restores the original view. Dragging nodes still arranges their saved positions; link actions, right-click menus and mobile scrolling remain separate.
+
+### BGP NVAs in existing spokes
+
+1. Right-click an existing spoke and select **Add BGP NVA**, or use that button in **Edit configuration** after saving spoke changes.
+2. Name the NVA, enter its **NVA ASN** and **NVA BGP interface IPv4** address within the hosting spoke. Use a non-reserved public/private 2-byte ASN; Azure/IANA-reserved values and the hub ASN `65515` are rejected.
+3. Optionally enter **NVA BGP advertisements**, one `prefix ASN ASN ...` per line, beginning with the NVA ASN. Leave **Originated prefix** empty for a transit-only NVA. Spoke VNet address spaces remain system routes; advertisements do not establish IP ownership.
+4. For end-to-end paths, add downstream sites with their actual owned prefixes. Right-click the NVA and use **Link to another site** to model downstream BGP/forwarding. Its hub peer advertises originated/learned routes by default. Explicit aggregates retain known downstream contributions and report aggregate holes.
+5. Right-click the NVA for **BGP table**, **Learned routes**, **Advertised routes** or path commands. Hubs show a distinct **Spoke BGP NVA** origin. Animated paths traverse the hosting spoke, NVA and downstream links, including the independent return path. Edit or disable its **NVA BGP** connection to change/withdraw the peering.
+6. On the hosting spoke, **Spoke connection route maps** edits hub-side VNet policies. These apply to its system routes and the advertisements of all NVAs in that spoke, not to an integrated SD-WAN connection. NVA-side router policies remain independent.
+
+**Azure requirements and model boundary:** a peer must reside in a directly attached VNet and use an actual NIC IP, not a loopback. Azure requires identical advertisements to **both** hub router IPs; the app models these as **one logical peering**, not two independent failures. It assumes Default association/propagation, branch-to-branch enabled and reachable sessions. Secured hubs require Routing Intent. Azure supports at most eight BGP peers per hub and 4,000 advertised routes per NVA; native JSON remains bounded at 2 MB and routing analyses retain their existing budgets. The app does not configure or verify live sessions, UDRs, appliance/vendor forwarding, subnet membership, load-balancer next-hop overrides, dynamic convergence or shared failure domains. Advertisements contained in directly attached local VNet address spaces are suppressed in favor of their system routes.
+
+The existing [controlled Azure lab](verification/azure-vwan-2026-10-29/README.md) includes real local/remote direct-spoke NVA endpoint deliveries, but is not certification of every new configuration or NVA ranking/failover case. See [Microsoft's BGP peering requirements and examples](https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub) and [routing deep dive](https://learn.microsoft.com/azure/virtual-wan/routing-deep-dive). Structural Azure import still **does not reconstruct BGP NVAs**; configure them manually after import. Bicep export still omits appliances, peers and downstream routing, with an explicit warning; it does not enable BGP in Azure.
 
 ### Optional private feedback
 
@@ -304,7 +318,9 @@ Purple **IN** and blue **OUT** filter marks appear separately for every assigned
 
 **Show route map rules** in a hub/site menu shows all its assignments, including exact/containing prefix matches, actions, summary prefixes, prepend ASNs and continue/stop processing. The inspector can filter by connection and direction; **Configure route maps** carries the selected connection into the editor. Unassigned resources and legacy peer-link prepend settings do not produce route-map marks.
 
-Azure-side policies target ER/VPN BGP connections and require public 2-byte prepend ASNs. The hub route-map wizard enforces your own public ASN in `1-64495`, excluding Azure-reserved `8074`, `8075`, `12076` and AS_TRANS `23456`. Private ASNs (`64512-65534`), documentation ASNs (`64496-64511`), `65535` and 4-byte ASNs cannot be saved in the hub wizard; valid ASNs may be repeated. Help beside each prepend input links to [Microsoft's hub route-map restrictions](https://learn.microsoft.com/azure/virtual-wan/route-maps-about#considerations-and-limitations). Existing imports using documentation ASNs remain simulation-only and must be corrected before wizard saves; they are not certified Azure configurations. Site policies can use private/32-bit ASNs, including site-side SD-WAN policies. Azure-side integrated SD-WAN maps, spoke/inter-hub/P2S assignments, community/AS-path conditions and NAT are not modeled. Static VPN entries bypass BGP maps. Changing a connection's endpoints requires unassigning incompatible endpoint policies first.
+Azure-side policies target ER/VPN BGP connections and VNet connections (including their spoke BGP NVA advertisements). The wizard rejects private ASNs (`64512-65534`), Azure-reserved `8074`, `8075`, `12076`, `65535` and 4-byte ASNs; the app also excludes the IANA AS_TRANS placeholder `23456`. Use your own public 2-byte ASN in production. Documentation ASNs **`64496-64511` are accepted for lab simulation**, including editing existing imports: they are [IANA-reserved for documentation](https://www.iana.org/assignments/iana-as-numbers-special-registry/), not production ASN guidance. [Microsoft's route-map limitations](https://learn.microsoft.com/azure/virtual-wan/route-maps-about#considerations-and-limitations) do **not explicitly ban that documentation range**; Azure acceptance has not been independently verified. This corrects the earlier wizard restriction, which was a conservative app policy rather than a proven Azure rejection. Valid ASNs may be repeated. Site policies can use private/32-bit ASNs, including site-side SD-WAN policies. The stricter **NVA peer ASN** restriction is different: Microsoft's BGP peering page explicitly excludes the IANA documentation range there. Azure-side integrated SD-WAN maps, inter-hub/P2S assignments, community/AS-path conditions and NAT are not modeled. Static VPN entries bypass BGP maps. Changing a connection's endpoints requires unassigning incompatible endpoint policies first.
+
+Right-click an **IN/OUT route-map marker** and choose **Remove route map association** to unassign only that router, connection and direction. The other direction, associations on other connections, and the reusable map definition remain intact. Shift+F10 on a focused marker provides the same action.
 
 Version-1 imports with legacy connection map references or embedded prepend rules are migrated into the hub's assignments, preserving IDs, directions and route behavior. New exports store references on routers, not connections. Legacy empty prepend lists remain compatible. The single-originated-prefix restriction described above still applies.
 
@@ -343,7 +359,8 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 | Private routing intent | Hub policy table contains RFC1918 aggregates plus configured private prefixes to Azure Firewall. Firewall table contains selected exact routes and an Internet fallback when no default is learned; that fallback does not install a hub default. Unknown RFC1918 destinations without a private forwarding route remain unreachable. Non-RFC1918 destinations require explicit private prefixes on each secured hub. |
 | Internet routing intent | Hub default route to Azure Firewall, with direct Internet egress from the firewall. Forced tunneling and per-connection default-route advertisement switches are not modeled. |
 | Firewalls | Forwarding only, assuming permissive policies. No allow/deny, DNAT, SNAT, threat inspection, or health simulation. |
-| Route maps | Hub/site-owned, reusable policies assigned per endpoint and connection. Prefix matching, permit/drop, summarize/prepend and continue/terminate. Independent site-peer policies; hub and site policies compose in advertisement order. No Azure-side SD-WAN, spoke/inter-hub/P2S, community/AS-path conditions or NAT. |
+| Spoke BGP NVA | Explicit hosting spoke, NIC peer IP, 2-byte ASN and advertisements. Bidirectional modeled BGP through the NVA and downstream site links; Default propagation, identical dual hub sessions and branch-to-branch enabled are assumed. Distinct from integrated SD-WAN; live sessions/UDRs/physical failover are not verified. |
+| Route maps | Hub/site-owned, reusable policies assigned per endpoint and connection, including hosting-VNet maps for NVA advertisements/system routes. Prefix matching, permit/drop, summarize/prepend and continue/terminate. Independent site-peer policies; hub and site policies compose in advertisement order. No Azure-side SD-WAN, inter-hub/P2S, community/AS-path conditions or NAT. |
 | Prepend ASNs | Hub wizard saves require valid public 2-byte ASNs and reject Azure-reserved, private, documentation, AS_TRANS and 4-byte ASNs. Legacy documentation ASNs `64496-64511` remain importable **for simulation only**. Site maps and on-premises peer policies can use private/32-bit ASNs. |
 | On-premises BGP | Shortest AS path, exact-prefix directional export allowlists, ASN/path loop prevention, up to 32 equal paths per prefix. Explicit connection BGP routes and configured site prefixes are available to the mesh. |
 | Azure outbound routes | Preview includes post-map advertisements. Azure-originated routes are **not reimported into Azure through the site mesh**. Azure community suppression, route reflection through shared ER circuits, and Global Reach are not simulated. |
@@ -358,7 +375,7 @@ The [complete Azure verification report](verification/azure-vwan-2026-10-29/READ
 
 See [Azure testing lessons](AZURE-TESTING-LESSONS.md) for experiment design, evidence boundaries, verification pitfalls, cost controls and safe cleanup. The browser workspace has no GitHub issue link because the source repository is private; no replacement feedback backend or authentication was added.
 
-Supported topology import limits: 20 hubs, 60 spokes, 60 sites, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 BGP advertisements and 100 site static prefixes per hub connection, and 2 MB per native/configuration-only JSON file. Separate v2 observation files have the explicit 8 MB limit described above.
+Supported topology import limits: 20 hubs, 60 spokes, 60 site/NVA routers, 120 hub connections, 120 on-premises links, 240 route maps, 20 rules per map, 100 BGP advertisements and 100 site static prefixes per ordinary hub connection, up to 4,000 explicit advertisements per spoke NVA peer (eight peers per hub), and 2 MB per native/configuration-only JSON file. Separate v2 observation files have the explicit 8 MB limit described above.
 
 ## Authoritative references
 

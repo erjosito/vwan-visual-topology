@@ -22,7 +22,7 @@ export function singleLinkIsolation(topology: Topology): LinkIsolation[] {
     ...(topology.erLocations ?? []).map(({ id }) => [id, { kind: 'erLocation', id }] as const),
   ])
   const edges = [
-    ...topology.connections.filter((link) => link.enabled).map((link) => ({ a: link.hubId, b: link.siteId, linkId: link.id, linkName: link.name, object: { kind: 'connection' as const, id: link.id } })),
+    ...topology.connections.filter((link) => link.enabled).map((link) => ({ a: link.spokeId ?? link.hubId, b: link.siteId, linkId: link.id, linkName: link.name, object: { kind: 'connection' as const, id: link.id } })),
     ...topology.siteLinks.filter((link) => link.enabled).map((link) => ({ a: link.a, b: link.b, linkId: link.id, linkName: link.name, object: { kind: 'siteLink' as const, id: link.id } })),
     ...(topology.erLinks ?? []).filter((link) => link.enabled).map((link) => ({ a: link.hubId ?? link.siteId!, b: link.locationId, linkId: link.id, linkName: link.name, object: { kind: 'erLink' as const, id: link.id } })),
     ...topology.spokes.map((spoke) => ({ a: spoke.id, b: spoke.hubId, linkId: spoke.id, linkName: spoke.name, object: { kind: 'spoke' as const, id: spoke.id } })),

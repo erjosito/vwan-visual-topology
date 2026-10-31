@@ -9,19 +9,21 @@ export function RouteMapInspector({ topology, router, direction, connectionId, o
 }) {
   const node = (router.kind === 'hub' ? topology.hubs : topology.sites).find((n) => n.id === router.id)
   const links = [
-    ...topology.connections.filter((c) => (router.kind === 'hub' ? c.hubId : c.siteId) === router.id),
+    ...topology.connections.filter((c) => router.kind === 'hub' ? c.hubId === router.id && c.transport !== 'SpokeNVA' : c.siteId === router.id),
     ...(topology.erLinks ?? []).filter((link) => (router.kind === 'hub' ? link.hubId : link.siteId) === router.id),
     ...(router.kind === 'site' ? topology.siteLinks.filter((l) => l.a === router.id || l.b === router.id) : []),
+    ...(router.kind === 'hub' ? topology.spokes.filter((spoke) => spoke.hubId === router.id).map((spoke) => ({ ...spoke, enabled: true })) : []),
   ]
   const selectedConnection = links.some((link) => link.id === connectionId) ? connectionId : undefined
   const assignments = (node?.routeMapAssignments ?? []).filter((a) => !selectedConnection || a.connectionId === selectedConnection).flatMap((binding) => {
     const connection = topology.connections.find((c) => c.id === binding.connectionId)
     const peer = topology.siteLinks.find((l) => l.id === binding.connectionId)
     const er = topology.erLinks?.find((link) => link.id === binding.connectionId)
-    const link = connection ?? peer ?? er
+    const spoke = topology.spokes.find((spoke) => spoke.id === binding.connectionId)
+    const link = connection ?? peer ?? er ?? (spoke && { ...spoke, enabled: true })
     const other = connection
       ? (router.kind === 'hub' ? topology.sites.find((s) => s.id === connection.siteId) : topology.hubs.find((h) => h.id === connection.hubId))
-      : er ? topology.erLocations?.find((location) => location.id === er.locationId) : topology.sites.find((s) => s.id === (peer?.a === router.id ? peer.b : peer?.a))
+      : spoke ?? (er ? topology.erLocations?.find((location) => location.id === er.locationId) : topology.sites.find((s) => s.id === (peer?.a === router.id ? peer.b : peer?.a)))
     const maps = (['inbound', 'outbound'] as const).flatMap((value) => {
       if (direction && direction !== value) return []
       const map = topology.routeMaps?.find((m) => m.id === binding[`${value}MapId`])

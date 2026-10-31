@@ -5,6 +5,8 @@ import { simulate, traceFlow } from './routing'
 import { applyRouteMap, propagateSites } from './bgp'
 import { cidr, contains, ipv4, parseAsPath, validateTopology } from './validation'
 import { nodePrefixes, traceNodePath } from './paths'
+import { analyzeRouting } from './diagnostics'
+import { neighborRoutes } from './route-views'
 
 const hub = (id: string, preference: Hub['preference'] = 'ExpressRoute'): Hub => ({
   id, name: id, region: 'West Europe', preference, routingIntent: { private: false, internet: false, privatePrefixes: [] },
@@ -19,6 +21,118 @@ const topology = (hubs: Hub[], connections: Connection[]): Topology => ({
 })
 const selected = (t: Topology, hubId = 'a', prefix = '10.20.0.0/16') =>
   simulate(t).firewallTables[hubId].find((d) => d.prefix === prefix)?.selected ?? []
+
+describe('spoke NVA BGP peering', () => {
+  const network = (): Topology => ({
+    version: 1, name: 'Spoke NVA network', hubs: [hub('a', 'ASPath'), hub('b', 'ASPath')],
+    spokes: [
+      { id: 'host', name: 'NVA VNet', hubId: 'a', prefixes: ['10.200.0.0/16'] },
+      { id: 'workload', name: 'Remote workload', hubId: 'b', prefixes: ['10.201.0.0/16'] },
+    ],
+    sites: [
+      { id: 'nva', name: 'Spoke appliance', asn: 65001, prefixes: [] },
+      { id: 'branch', name: 'Downstream branch', asn: 65002, prefixes: ['10.80.0.0/16'] },
+    ],
+    connections: [{
+      id: 'peer', name: 'NVA peering', hubId: 'a', siteId: 'nva', transport: 'SpokeNVA',
+      spokeId: 'host', peerIp: '10.200.0.4', enabled: true, routes: [], learnSiteRoutes: true, inbound: [], outbound: [],
+    }],
+    siteLinks: [{ id: 'downstream', name: 'NVA to branch', a: 'nva', b: 'branch', enabled: true,
+      aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }],
+  })
+
+  it('imports a distinct NVA origin and traces both directions through its hosting spoke and downstream router', () => {
+    const t = validateTopology(network()), simulation = simulate(t)
+    expect(selected(t, 'a', '10.80.0.0/16')[0]).toMatchObject({ transport: 'SpokeNVA', nvaSpokeId: 'host', asPath: [65001, 65002] })
+    expect(selected(t, 'b', '10.80.0.0/16')[0].asPath).toEqual([65520, 65520, 65001, 65002])
+    expect(traceNodePath(t, simulation, { kind: 'spoke', id: 'workload' }, '10.80.0.1')[0]).toMatchObject({
+      hubs: ['b', 'a'], nvaSpokeId: 'host', siteHops: ['nva', 'branch'], siteId: 'branch', status: 'delivered',
+    })
+    expect(traceNodePath(t, simulation, { kind: 'site', id: 'branch' }, '10.201.0.1')[0]).toMatchObject({
+      hubs: ['a', 'b'], sourceNvaSpokeId: 'host', sourceSiteHops: ['branch', 'nva'], siteId: 'workload', status: 'delivered',
+    })
+    expect(neighborRoutes(t, simulation, { kind: 'hub', id: 'a' }, 'learned').find((peer) => peer.id === 'peer')!.after)
+      .toEqual(expect.arrayContaining([expect.objectContaining({ prefix: '10.80.0.0/16', transport: 'SpokeNVA' })]))
+    const report = analyzeRouting(t, { version: 1, intents: [], failureAnalysis: false }, { automatic: true })
+    expect(report.complete).toBe(true)
+    expect(report.findings.filter((finding) => ['wrong-exit', 'asymmetric', 'network-unreachable', 'network-return', 'unknown'].includes(finding.rule))).toEqual([])
+  })
+
+  it('preserves native JSON and rejects invalid attachment, reserved ASN, duplicate peers and peer AS paths', () => {
+    const t = network()
+    expect(validateTopology(JSON.parse(JSON.stringify(validateTopology(t))))).toEqual(validateTopology(t))
+    for (const asn of [8074, 8075, 12076, 23456, 64496, 64511, 65515, 65517, 65520, 65535, 65536]) {
+      const invalid = network(); invalid.sites[0].asn = asn
+      expect(() => validateTopology(invalid)).toThrow(/2-byte ASN|non-Azure site ASN/)
+    }
+    for (const changes of [{ hubId: 'b' }, { spokeId: 'missing' }, { peerIp: '10.202.0.4' }]) {
+      const invalid = network(); Object.assign(invalid.connections[0], changes)
+      expect(() => validateTopology(invalid)).toThrow(/hosting spoke|hosting spoke address space/)
+    }
+    for (const path of [[65002], [65001, 65515]]) {
+      const invalid = network(); invalid.connections[0].routes = [{ id: 'advertisement', prefix: '10.81.0.0/16', kind: 'bgp', asPath: path }]
+      expect(() => validateTopology(invalid)).toThrow(/NVA ASN/)
+    }
+    const duplicate = network(); duplicate.connections.push({ ...duplicate.connections[0], id: 'second-peer' })
+    expect(() => validateTopology(duplicate)).toThrow(/unique within a hub/)
+    const tooMany = network()
+    tooMany.connections = Array.from({ length: 9 }, (_, index) => ({ ...tooMany.connections[0], id: `peer-${index}`, peerIp: `10.200.0.${index + 4}` }))
+    expect(() => validateTopology(tooMany)).toThrow(/at most 8/)
+  })
+
+  it('keeps directly attached VNet ranges as system routes, rejects reflected own-AS routes and withdraws a disabled peer', () => {
+    const t = network()
+    t.connections[0].routes = [{ id: 'more-specific', prefix: '10.200.1.0/24', asPath: [65001], kind: 'bgp' }]
+    expect(selected(t, 'a', '10.200.0.0/16')[0].transport).toBe('VNet')
+    expect(selected(t, 'a', '10.200.1.0/24')).toEqual([])
+    t.siteLinks[0].bToA.prepend = [65515]
+    expect(selected(t, 'a', '10.80.0.0/16')).toEqual([])
+    t.siteLinks[0].bToA.prepend = []
+    t.connections[0].enabled = false
+    expect(selected(t, 'a', '10.80.0.0/16')).toEqual([])
+    expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'branch' }, '10.201.0.1')[0].status).toBe('unreachable')
+  })
+
+  it('applies shared hosting-VNet maps to system and NVA routes, not integrated SD-WAN restrictions, including return filtering', () => {
+    const t = network()
+    t.routeMaps = [{ id: 'filter', name: 'Filter branch', hubId: 'a', rules: [{ id: 'drop', prefixes: ['10.80.0.0/16'], match: 'equals',
+      action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }] }]
+    t.hubs[0].routeMapAssignments = [{ connectionId: 'host', inboundMapId: 'filter' }]
+    const simulation = simulate(validateTopology(t))
+    expect(selected(t, 'a', '10.80.0.0/16')).toEqual([])
+    expect(neighborRoutes(t, simulation, { kind: 'hub', id: 'a' }, 'learned').find((peer) => peer.id === 'peer')!.before).toHaveLength(1)
+    expect(neighborRoutes(t, simulation, { kind: 'hub', id: 'a' }, 'learned').find((peer) => peer.id === 'peer')!.after).toEqual([])
+    t.routeMaps[0].rules[0].prefixes = ['10.201.0.0/16']
+    t.hubs[0].routeMapAssignments = [{ connectionId: 'host', outboundMapId: 'filter' }]
+    expect(traceNodePath(t, simulate(validateTopology(t)), { kind: 'site', id: 'branch' }, '10.201.0.1')[0].status).toBe('unreachable')
+    t.hubs[0].routeMapAssignments = [{ connectionId: 'peer', inboundMapId: 'filter' }]
+    expect(() => validateTopology(t)).toThrow(/hosting VNet connection/)
+  })
+
+  it('keeps NVA selection separate from VPN preference and applies private routing intent on both hubs', () => {
+    for (const preference of ['ExpressRoute', 'VPN', 'ASPath'] as const) {
+      const t = network()
+      t.hubs[0].preference = preference
+      const vpn = link('vpn', 'a', 'VPN', [65003, 65003, 65003], '10.80.0.0/16')
+      t.connections.push(vpn); t.sites.push({ id: vpn.siteId, name: 'VPN backup', asn: 65003, prefixes: [] })
+      expect(selected(t, 'a', '10.80.0.0/16')[0].transport).toBe('SpokeNVA')
+      t.hubs.forEach((hub) => { hub.routingIntent.private = true })
+      expect(traceNodePath(t, simulate(t), { kind: 'spoke', id: 'workload' }, '10.80.0.1')[0]).toMatchObject({
+        status: 'delivered', firewalls: ['b', 'a'], nvaSpokeId: 'host', siteId: 'branch',
+      })
+    }
+  })
+
+  it('uses known downstream contributions for explicit aggregates and stops in aggregate holes without inventing ownership', () => {
+    const t = network()
+    t.connections[0].learnSiteRoutes = false
+    t.connections[0].routes = [{ id: 'aggregate', prefix: '10.80.0.0/15', asPath: [65001, 65002], kind: 'bgp' }]
+    const simulation = simulate(validateTopology(t))
+    expect(traceFlow(t, simulation, 'b', '10.80.0.1')[0]).toMatchObject({ status: 'delivered', siteId: 'branch', nvaSpokeId: 'host' })
+    expect(traceFlow(t, simulation, 'b', '10.81.0.1')[0]).toMatchObject({ status: 'unreachable', termination: 'summary-hole', hubs: ['b', 'a'] })
+    expect(t.sites[0].prefixes).toEqual([])
+  })
+})
 
 describe('ExpressRoute locations and private-peering attachments', () => {
   const network = (): Topology => ({

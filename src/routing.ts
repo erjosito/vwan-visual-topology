@@ -22,6 +22,7 @@ export interface Candidate {
   erLocationId?: string
   erSiteLinkId?: string
   erHubLinkId?: string
+  nvaSpokeId?: string
 }
 
 export interface Decision {
@@ -102,6 +103,7 @@ function localRoutes(connection: Connection, topology: Topology): Candidate[] {
     remote: false,
     sitePath: [connection.siteId],
     siteLinkIds: [],
+    ...(connection.spokeId ? { nvaSpokeId: connection.spokeId } : {}),
   }))
 }
 
@@ -136,7 +138,9 @@ export function simulate(topology: Topology): Simulation {
     const after = policy({ kind: 'site', id: connection.siteId }, connection.id, 'outbound', before,
       siteExports(topology, connection.siteId, connection.id, before))
     return [
-      ...after.map((route) => ({ ...route, asPath: provider.get(route.key) ? [12076, ...route.asPath] : route.asPath })),
+      ...after.map((route) => ({ ...route, asPath: provider.get(route.key) ? [12076, ...route.asPath]
+        : connection.transport === 'SpokeNVA' && route.asPath[0] !== topology.sites.find((site) => site.id === connection.siteId)!.asn
+          ? [topology.sites.find((site) => site.id === connection.siteId)!.asn, ...route.asPath] : route.asPath })),
       ...routes.filter((route) => route.kind === 'vpn-static'),
     ]
   }
@@ -149,6 +153,7 @@ export function simulate(topology: Topology): Simulation {
       kind: 'bgp', transport: connection.transport, connectionId: connection.id,
       siteId: route.sitePath.at(-1)!, sitePath: route.sitePath, siteLinkIds: route.siteLinkIds, originHubId: connection.hubId, remote: false,
       ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => learnedRoute(connection, child)) } : {}),
+      ...(connection.spokeId ? { nvaSpokeId: connection.spokeId } : {}),
     }
   }
   const erLinks = (topology.erLinks ?? []).filter((link) => link.enabled)
@@ -183,14 +188,34 @@ export function simulate(topology: Topology): Simulation {
   const local = Object.fromEntries(topology.hubs.map((hub) => [
     hub.id, [
       ...erImports(hub.id),
-      ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id).flatMap((connection) => mapRoutes(connection, fromSite(connection, [
+      ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id && c.transport !== 'SpokeNVA').flatMap((connection) => mapRoutes(connection, fromSite(connection, [
         ...localRoutes(connection, topology),
         ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId].map((route) => learnedRoute(connection, route)) : []),
       ]), 'inbound')),
-      ...topology.spokes.filter((s) => s.hubId === hub.id).flatMap((spoke) => spoke.prefixes.map((prefix): Candidate => ({
-        key: `${spoke.id}:${prefix}`, prefix, asPath: [], kind: 'system', transport: 'VNet',
-        connectionId: spoke.id, siteId: spoke.id, originHubId: hub.id, remote: false,
-      }))),
+      ...topology.spokes.filter((s) => s.hubId === hub.id).flatMap((spoke) => {
+        const routes: Candidate[] = [
+          ...spoke.prefixes.map((prefix): Candidate => ({
+            key: `${spoke.id}:${prefix}`, prefix, asPath: [], kind: 'system', transport: 'VNet',
+            connectionId: spoke.id, siteId: spoke.id, originHubId: hub.id, remote: false,
+          })),
+          ...topology.connections.filter((connection) => connection.enabled && connection.transport === 'SpokeNVA' && connection.spokeId === spoke.id)
+            .flatMap((connection) => fromSite(connection, [
+              ...localRoutes(connection, topology).map((route) => {
+                const contributions = siteRouting.tables[connection.siteId]
+                  .filter((child) => child.sitePath.length > 1 && cidr(route.prefix)!.length <= cidr(child.prefix)!.length
+                    && contains(route.prefix, cidr(child.prefix)!.network))
+                  .map((child) => learnedRoute(connection, child))
+                return contributions.length ? { ...route, forwardingRoutes: contributions } : route
+              }),
+              ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId]
+                .filter((route) => !route.key.startsWith(`${connection.id}:`)).map((route) => learnedRoute(connection, route)) : []),
+            ]))
+            .filter((route) => !route.asPath.includes(65515) && !topology.spokes.some((owner) => owner.hubId === hub.id
+              && owner.prefixes.some((prefix) => cidr(prefix)!.length <= cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))),
+        ]
+        return policy({ kind: 'hub', id: hub.id }, spoke.id, 'inbound', routes,
+          applyRouteMapRules(routes, routerMapRules(topology, { kind: 'hub', id: hub.id }, spoke.id, 'inbound')))
+      }),
     ],
   ]))
   let tables = Object.fromEntries(topology.hubs.map((hub) => [hub.id, decide(hub, local[hub.id])]))
@@ -274,17 +299,33 @@ export function simulate(topology: Topology): Simulation {
     }
     return [hub.id, effective.length || intent.private ? effective : tables[hub.id]]
   }))
+  const branchExportEligible = (route: Candidate) => route.transport !== 'SpokeNVA' || !topology.spokes.some((spoke) =>
+    spoke.prefixes.some((prefix) => cidr(prefix)!.length < cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))
   const outbound: Record<string, Candidate[]> = Object.fromEntries(topology.connections.map((connection) => {
     if (!connection.enabled || connection.transport === 'SDWAN') return [connection.id, []]
-    const routes = mapRoutes(connection, tables[connection.hubId].flatMap((d) => d.selected)
-      .filter((r) => r.connectionId !== connection.id && !r.sitePath?.includes(connection.siteId)
+    const before = tables[connection.hubId].flatMap((d) => d.selected)
+      .filter((r) => branchExportEligible(r) && r.connectionId !== connection.id && !r.sitePath?.includes(connection.siteId)
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
-      .map((r) => ({ ...r, asPath: connection.transport === 'ExpressRoute' ? r.asPath : [65515, ...r.asPath] })), 'outbound')
+      .map((r) => ({ ...r, asPath: connection.transport === 'ExpressRoute' ? r.asPath : [65515, ...r.asPath] }))
+    const routes = connection.transport === 'SpokeNVA'
+      ? applyRouteMapRules(before, routerMapRules(topology, { kind: 'hub', id: connection.hubId }, connection.spokeId!, 'outbound'))
+      : mapRoutes(connection, before, 'outbound')
     return [connection.id, connection.transport === 'ExpressRoute' ? routes.map(erCustomerExport) : routes]
   }))
+  for (const spoke of topology.spokes) {
+    const before = tables[spoke.hubId].flatMap((decision) => decision.selected)
+      .filter((route) => route.connectionId !== spoke.id)
+      .map((route) => ({ ...route, asPath: [65515, ...route.asPath] }))
+    const after = policy({ kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound', before,
+      applyRouteMapRules(before, routerMapRules(topology, { kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound')))
+    outbound[spoke.id] = after
+  }
+  if (topology.connections.some((connection) => connection.transport === 'SpokeNVA')) {
+    warnings.push('Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515), Default association/propagation and branch-to-branch enabled. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.')
+  }
   for (const link of erLinks.filter((link) => link.hubId)) {
     const routes = tables[link.hubId!].flatMap((decision) => decision.selected)
-      .filter((route) => route.transport !== 'ExpressRoute' && route.prefix !== '0.0.0.0/0')
+      .filter((route) => branchExportEligible(route) && route.transport !== 'ExpressRoute' && route.prefix !== '0.0.0.0/0')
     const mapped = policy({ kind: 'hub', id: link.hubId! }, link.id, 'outbound', routes, [
       ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'hub', id: link.hubId! }, link.id, 'outbound')),
       ...routes.filter((route) => route.kind === 'vpn-static'),
@@ -316,6 +357,7 @@ export interface FlowPath {
   terminalKind?: 'spoke' | 'site'
   traceComplete?: boolean
   lookupPrefix?: string
+  nvaSpokeId?: string
 }
 
 export function traceFlow(topology: Topology, simulation: Simulation, hubId: string, destination: string): FlowPath[] {
@@ -387,8 +429,10 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
           paths.push({ hubs, firewalls: inspected, siteHops: tail.sitePath, siteLinkIds: tail.siteLinkIds,
             connectionId: route.connectionId, siteId: tail.sitePath?.[tail.sitePath.length - 1] ?? route.siteId,
             ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
+            ...(route.nvaSpokeId ? { nvaSpokeId: route.nvaSpokeId } : {}),
             steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId))?.name ?? route.connectionId}.`,
               ...(route.erLocationId ? [`ExpressRoute location: ${topology.erLocations?.find((location) => location.id === route.erLocationId)?.name}.`] : []),
+              ...(route.nvaSpokeId ? [`BGP next hop is NVA interface ${topology.connections.find((connection) => connection.id === route.connectionId)?.peerIp} in spoke ${topology.spokes.find((spoke) => spoke.id === route.nvaSpokeId)?.name}.`] : []),
               ...(tail.sitePath && tail.sitePath.length > 1 ? [`On-premises transit: ${tail.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : []),
               ...(missing ? ['No known on-premises forwarding route to the destination site.'] : [])],
             status: missing ? 'unreachable' : 'delivered', termination: missing ? 'downstream-no-route' : 'owner',

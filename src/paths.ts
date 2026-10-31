@@ -7,7 +7,7 @@ import type { SiteRoute } from './bgp'
 import { cidr, contains, ipv4 } from './validation'
 
 export type PathNode = ObjectSelection & { kind: 'hub' | 'spoke' | 'site' }
-export interface NodePath extends FlowPath { sourceConnectionId?: string; sourceSiteHops?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; sourceSpokeId?: string }
+export interface NodePath extends FlowPath { sourceConnectionId?: string; sourceSiteHops?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; sourceSpokeId?: string; sourceNvaSpokeId?: string }
 export interface GroupPath extends NodePath {
   sourceName: string; destinationPrefix: string; destinationName: string
   sourceNode?: PathNode; targetNode?: PathNode; direction?: 'forward' | 'return'
@@ -137,6 +137,7 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
         const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
         return {
           ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,
+          ...('spokeId' in connection && connection.spokeId ? { sourceNvaSpokeId: connection.spokeId } : {}),
           ...(erHub ? { sourceErLinkIds: [connection.id, erHub.id] } : {}),
           status: loop ? 'loop' : path.status,
           termination: loop ? 'loop' : path.termination,

@@ -41,6 +41,7 @@ export function importAzureCapture(input: unknown): Topology {
   if (wan.allowBranchToBranchTraffic !== true || wan.allowVnetToVnetTraffic !== true) globalLimitations.push('WAN transit flags differ from, or cannot confirm, the simulator full-mesh defaults.')
   const warnings = new Set([
     'Structural Azure import, not a production routing replica. ER/on-premises connectivity, gateway advertisements, route maps, custom propagation and firewall enforcement are not reconstructed.',
+    'Spoke NVA BGP peers, interface IPs and downstream routing are not reconstructed. Configure them manually after structural import.',
     ...messages(root.warnings), ...globalLimitations,
   ])
   const topology: Topology = { version: 1, name: text(wan.name, 'WAN name'), hubs: [], spokes: [], sites: [], connections: [], siteLinks: [] }

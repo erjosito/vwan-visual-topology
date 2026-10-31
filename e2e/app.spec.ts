@@ -22,6 +22,23 @@ async function action(page: Page, object: string, command: string) {
 }
 const dialog = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true })
 async function showRoutes(page: Page, hub = 'Europe hub') { await action(page, `Select hub ${hub}`, 'BGP table') }
+function spokeNvaTopology(): Topology {
+  return {
+    ...structuredClone(example),
+    spokes: [
+      { id: 'host', name: 'NVA VNet', hubId: 'eu', prefixes: ['10.200.0.0/16'] },
+      { id: 'workload', name: 'Remote workload', hubId: 'us', prefixes: ['10.201.0.0/16'] },
+    ],
+    sites: [
+      { id: 'nva', name: 'Spoke appliance', asn: 65001, prefixes: [] },
+      { id: 'branch', name: 'Downstream branch', asn: 65002, prefixes: ['10.80.0.0/16'] },
+    ],
+    connections: [{ id: 'peer', name: 'NVA peering', hubId: 'eu', siteId: 'nva', transport: 'SpokeNVA',
+      spokeId: 'host', peerIp: '10.200.0.4', enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [] }],
+    siteLinks: [{ id: 'downstream', name: 'NVA to branch', a: 'nva', b: 'branch', enabled: true,
+      aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }],
+  }
+}
 async function createMap(page: Page, name: string) {
   await page.getByRole('button', { name: 'Create route map', exact: true }).click()
   await page.getByLabel('Route map name', { exact: true }).fill(name)
@@ -1226,7 +1243,7 @@ test('reusable maps summarize, prepend, share, preserve metadata and delete safe
   await page.getByLabel('Rule 2 action', { exact: true }).selectOption('prepend')
   await page.getByLabel('Rule 2 prepend ASNs', { exact: true }).fill('65001')
   await page.getByRole('button', { name: 'Save route map', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('public')
+  await expect(page.getByRole('alert')).toContainText('non-private 2-byte ASNs')
   await page.getByLabel('Rule 2 prepend ASNs', { exact: true }).fill('12345')
   await page.getByRole('button', { name: 'Save route map', exact: true }).click()
   const mapId = (await readTopology(page)).routeMaps![0].id
@@ -1258,20 +1275,21 @@ test('hub route-map wizard rejects restricted prepend ASNs and explains public A
   const input = page.getByLabel('Rule 1 prepend ASNs', { exact: true })
   await expect(input).toHaveAttribute('aria-describedby', /asn-help/)
   await expect(page.getByRole('link', { name: 'Microsoft hub route-map ASN restrictions', exact: true })).toHaveAttribute('href', 'https://learn.microsoft.com/azure/virtual-wan/route-maps-about#considerations-and-limitations')
-  for (const value of ['65001', '65515', '8074', '8075', '12076', '23456', '65536', '64496', '12345 65001']) {
+  for (const value of ['65001', '65515', '8074', '8075', '12076', '23456', '65536', '12345 65001']) {
     await input.fill(value)
     await page.getByRole('button', { name: 'Save route map', exact: true }).click()
-    await expect(page.getByRole('alert')).toContainText('your own public 2-byte ASNs')
+    await expect(page.getByRole('alert')).toContainText('non-private 2-byte ASNs')
     expect((await readTopology(page)).routeMaps ?? []).toHaveLength(0)
     await expect(input).toHaveValue(value)
   }
   await page.locator('header [data-language-selector]').selectOption('ja')
-  await expect(page.getByRole('alert')).toContainText('パブリックの 2 バイト ASN')
+  await expect(page.getByRole('alert')).toContainText('プライベート以外の 2 バイト ASN')
   await expect(page.getByRole('link', { name: 'Microsoft のハブ ルート マップの ASN 制限', exact: true })).toBeVisible()
   await page.locator('header [data-language-selector]').selectOption('en')
-  await input.fill('12345 12345')
+  await expect(page.getByRole('link', { name: 'IANA special-purpose ASN registry', exact: true })).toBeVisible()
+  await input.fill('12345 64496 64511 12345')
   await page.getByRole('button', { name: 'Save route map', exact: true }).click()
-  expect((await readTopology(page)).routeMaps![0].rules[0].prepend).toEqual([12345, 12345])
+  expect((await readTopology(page)).routeMaps![0].rules[0].prepend).toEqual([12345, 64496, 64511, 12345])
   await page.getByLabel('Route map router', { exact: true }).selectOption('site:dc')
   await createMap(page, 'Site prepend')
   await page.getByRole('button', { name: 'Add rule', exact: true }).click()
@@ -1279,6 +1297,124 @@ test('hub route-map wizard rejects restricted prepend ASNs and explains public A
   await page.getByLabel('Rule 1 prepend ASNs', { exact: true }).fill('65001 4200000000')
   await page.getByRole('button', { name: 'Save route map', exact: true }).click()
   expect((await readTopology(page)).routeMaps!.find((map) => map.siteId === 'dc')!.rules[0].prepend).toEqual([65001, 4200000000])
+})
+
+test('spoke NVA creation validates the NIC and ASN, supports bulk advertisements and preserves native roundtrip', async ({ page }) => {
+  await page.goto('/'); await importTopology(page, structuredClone(example))
+  await action(page, 'Select spoke Europe applications', 'Edit configuration')
+  await page.getByRole('button', { name: 'Add BGP NVA', exact: true }).click()
+  await page.getByLabel('Name', { exact: true }).fill('Example NVA')
+  await page.getByLabel('NVA ASN', { exact: true }).fill('65040')
+  await page.getByLabel('NVA BGP interface IPv4', { exact: true }).fill('10.9.0.4')
+  await page.getByRole('button', { name: 'Create object', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('hosting spoke address space')
+  await page.getByLabel('NVA BGP interface IPv4', { exact: true }).fill('10.1.0.4')
+  await page.getByLabel('NVA ASN', { exact: true }).fill('64496')
+  await page.getByRole('button', { name: 'Create object', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('non-reserved public or private 2-byte ASN')
+  await page.getByLabel('NVA ASN', { exact: true }).fill('65040')
+  const advertisements = Array.from({ length: 120 }, (_, index) => `10.64.${index}.0/24 65040`).join('\n')
+  await page.getByLabel('NVA BGP advertisements', { exact: true }).fill(advertisements)
+  await expect(page.getByRole('link', { name: 'Microsoft spoke NVA BGP requirements', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Create object', exact: true }).click()
+  await expect(page.locator('.object-editor')).toHaveCount(0)
+  const saved = await readTopology(page), peer = saved.connections.find((connection) => connection.transport === 'SpokeNVA')!
+  expect(peer).toMatchObject({ spokeId: 'eu-apps', hubId: 'eu', peerIp: '10.1.0.4' })
+  expect(peer.routes).toHaveLength(120)
+  expect(saved.sites.find((site) => site.id === peer.siteId)!.prefixes).toEqual([])
+  await expect(page.locator(`[data-node-id="${peer.siteId}"]`)).toHaveAttribute('data-spoke-nva', 'true')
+  await showRoutes(page)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.64.0.0/24"]')).toContainText('Spoke BGP NVA')
+  await page.keyboard.press('Escape')
+  await action(page, `Edit connection ${peer.name}`, 'Edit configuration')
+  await expect(page.getByLabel('NVA BGP advertisements', { exact: true })).toHaveValue(advertisements)
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+  expect((await readTopology(page)).connections.find((connection) => connection.id === peer.id)!.routes).toEqual(peer.routes)
+  await importTopology(page, await downloadTopology(page))
+  expect((await readTopology(page)).connections.find((connection) => connection.id === peer.id)).toEqual(peer)
+  await page.locator('header [data-language-selector]').selectOption('ja')
+  await page.locator(`[data-node-id="${peer.siteId}"]`).focus(); await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: '構成を編集', exact: true }).click()
+  await expect(page.getByLabel('NVA ASN', { exact: true })).toHaveValue('65040')
+})
+
+for (const mode of ['layered', 'constellation'] as const) {
+  test(`spoke NVA paths animate through the hosting spoke in both directions in ${mode}`, async ({ page }) => {
+    await page.goto('/'); await importTopology(page, spokeNvaTopology())
+    await page.getByLabel('Visualization mode').selectOption(mode)
+    const menu = await pathMenu(page, 'Select spoke Remote workload', 'to', 'Downstream branch (site)')
+    await menu.getByRole('menuitem', { name: '10.80.0.0/16', exact: true }).click()
+    const forward = (await motionFlows(page)).flat()
+    expect(forward).toEqual(expect.arrayContaining([
+      { id: 'host', from: 'eu', to: 'host' }, { id: 'peer', from: 'host', to: 'nva' },
+      { id: 'downstream', from: 'nva', to: 'branch' },
+    ]))
+    await page.getByRole('button', { name: 'Path details', exact: true }).click()
+    await expect(page.locator('.flow-result')).toContainText('NVA VNet')
+    await expect(page.locator('.flow-result')).toContainText('Reachable')
+    await page.keyboard.press('Escape')
+    const reverse = await pathMenu(page, 'Select site Downstream branch', 'to', 'Remote workload (spoke)')
+    await reverse.getByRole('menuitem', { name: '10.201.0.0/16', exact: true }).click()
+    expect((await motionFlows(page)).flat()).toEqual(expect.arrayContaining([
+      { id: 'downstream', from: 'branch', to: 'nva' }, { id: 'peer', from: 'nva', to: 'host' },
+      { id: 'host', from: 'host', to: 'eu' },
+    ]))
+    await action(page, 'Edit connection NVA peering', 'Disable connection')
+    await showRoutes(page)
+    await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"]')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await action(page, 'Select spoke NVA VNet', 'Delete spoke')
+    await page.getByRole('button', { name: 'Confirm deletion', exact: true }).click()
+    const saved = await readTopology(page)
+    expect(saved.connections).toHaveLength(0)
+    expect(saved.sites.some((site) => site.id === 'nva')).toBe(true)
+  })
+}
+
+test('hosting-VNet route maps filter NVA routes and their IN marker supports contextual unassignment', async ({ page }) => {
+  const topology = spokeNvaTopology()
+  topology.routeMaps = [{ id: 'filter', name: 'Filter downstream', hubId: 'eu', rules: [{ id: 'drop', prefixes: ['10.80.0.0/16'],
+    match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }] }]
+  await page.goto('/'); await importTopology(page, topology)
+  await action(page, 'Select spoke NVA VNet', 'Spoke connection route maps')
+  await expect(page.getByLabel('Route map connection', { exact: true })).toHaveValue('host')
+  await page.getByLabel('Inbound route map', { exact: true }).selectOption('filter')
+  await page.keyboard.press('Escape')
+  await showRoutes(page)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"]')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  const marker = page.locator('.policy-marker[data-connection-id="host"][data-direction="inbound"]')
+  await marker.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Remove route map association', exact: true }).click()
+  await expect(marker).toHaveCount(0)
+  expect((await readTopology(page)).routeMaps).toHaveLength(1)
+  await showRoutes(page)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"]')).toContainText('Spoke BGP NVA')
+})
+
+test('contextual route-map removal preserves the other direction, shared bindings and the definition', async ({ page }) => {
+  const topology = structuredClone(example)
+  topology.routeMaps = [{ id: 'shared', name: 'Shared prepend', hubId: 'eu', rules: [{ id: 'prepend', prefixes: [],
+    match: 'equals', action: 'prepend', prepend: [64496], summaryPrefixes: [], nextStep: 'terminate' }] }]
+  topology.hubs[0].routeMapAssignments = [
+    { connectionId: 'er-eu', inboundMapId: 'shared', outboundMapId: 'shared' },
+    { connectionId: 'vpn-eu', inboundMapId: 'shared' },
+  ]
+  await page.goto('/'); await importTopology(page, topology)
+  const inbound = page.locator('.policy-marker[data-router-id="eu"][data-connection-id="er-eu"][data-direction="inbound"]')
+  await inbound.click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Remove route map association', exact: true }).click()
+  await expect(inbound).toHaveCount(0)
+  expect((await readTopology(page)).hubs[0].routeMapAssignments).toEqual([
+    { connectionId: 'er-eu', outboundMapId: 'shared' }, { connectionId: 'vpn-eu', inboundMapId: 'shared' },
+  ])
+  const outbound = page.locator('.policy-marker[data-router-id="eu"][data-connection-id="er-eu"][data-direction="outbound"]')
+  await outbound.focus(); await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Remove route map association', exact: true }).click()
+  expect((await readTopology(page)).hubs[0].routeMapAssignments).toEqual([{ connectionId: 'vpn-eu', inboundMapId: 'shared' }])
+  expect((await readTopology(page)).routeMaps).toEqual(topology.routeMaps)
+  await page.reload()
+  await expect(page.locator('.policy-marker[data-router-id="eu"][data-connection-id="vpn-eu"]')).toHaveCount(1)
 })
 
 test('outbound block maps affect advertisements and site ingress, not Azure best routes', async ({ page }) => {

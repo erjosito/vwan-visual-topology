@@ -73,6 +73,7 @@ export function generateBicep(input: Topology, settings: BicepSettings): BicepEx
     `Excluded hubs: ${topology.hubs.filter((hub) => !selected.some((entry) => entry.hubId === hub.id)).map((hub) => hub.name).join(', ') || 'none'}.`,
     'Hub router minimum capacity defaults to 2 routing infrastructure units. Deployed resources incur Azure charges; quotas, regions, target resources and address ownership are not verified offline.',
     ...(topology.azureImport ? ['Imported source resource IDs are not used in the template. Capture limitations remain in the native JSON, not in Azure deployment configuration.'] : []),
+    ...(topology.connections.some((connection) => connection.transport === 'SpokeNVA') ? ['Spoke NVA BGP peers, interface addresses, advertisements, appliance routing and downstream connections are omitted. This template does not enable BGP on a spoke.'] : []),
   ]
   const quote = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('${', '\\${').replaceAll('\r', '\\r').replaceAll('\n', '\\n')}'`
   const comment = (value: string) => value.replace(/[\r\n\u2028\u2029]/g, ' ')

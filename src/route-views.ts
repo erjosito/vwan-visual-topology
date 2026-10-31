@@ -70,10 +70,12 @@ export function neighborRoutes(topology: Topology, simulation: Simulation, route
         const neighbor = router.kind === 'hub' ? topology.sites.find((site) => site.id === connection.siteId)
           : topology.hubs.find((hub) => hub.id === connection.hubId)
         const routes = !connection.enabled ? { before: [], after: [] } : router.kind === 'site' && mode === 'learned'
-          ? incoming(connection.id) : snapshot(owner, connection.id, direction) ?? { before: [], after: [] }
+          ? incoming(connection.id) : snapshot(owner, router.kind === 'hub' ? connection.spokeId ?? connection.id : connection.id, direction) ?? { before: [], after: [] }
+        const scoped = (routes: (Candidate | SiteRoute)[]) => router.kind === 'hub' && connection.spokeId && mode === 'learned'
+          ? routes.filter((route) => 'connectionId' in route && route.connectionId === connection.id) : routes
         return { id: connection.id, name: `${neighbor?.name} · ${connection.name}${connection.enabled ? '' : ' (down)'}`,
-          before: routes.before.filter((route) => !(router.kind === 'hub' && mode === 'learned' && 'kind' in route && route.kind === 'vpn-static')),
-          after: routes.after.filter((route) => !(router.kind === 'hub' && mode === 'learned' && 'kind' in route && route.kind === 'vpn-static')) }
+          before: scoped(routes.before).filter((route) => !(router.kind === 'hub' && mode === 'learned' && 'kind' in route && route.kind === 'vpn-static')),
+          after: scoped(routes.after).filter((route) => !(router.kind === 'hub' && mode === 'learned' && 'kind' in route && route.kind === 'vpn-static')) }
       }),
     ...(topology.erLinks ?? []).filter((link) => router.kind === 'hub' ? link.hubId === router.id : link.siteId === router.id)
       .map((link) => {
@@ -84,6 +86,10 @@ export function neighborRoutes(topology: Topology, simulation: Simulation, route
       }),
   ]
   if (router.kind === 'hub') {
+    for (const spoke of topology.spokes.filter((spoke) => spoke.hubId === router.id)) {
+      const routes = snapshot(owner, spoke.id, direction) ?? { before: [], after: [] }
+      peers.push({ id: spoke.id, name: spoke.name, before: routes.before, after: routes.after })
+    }
     for (const neighbor of topology.hubs.filter((hub) => hub.id !== router.id)) {
       const routes = mode === 'learned'
         ? (simulation.bgpTables[router.id] ?? []).flatMap((decision) => decision.candidates)

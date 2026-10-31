@@ -24,7 +24,10 @@ const destinationPalette = [
   '#8a6c45', '#738c37', '#a36593', '#3b6b99', '#708391',
 ] as const
 
-export interface DiagramContextMenu { selection?: ObjectSelection; x: number; y: number; invoker: SVGElement }
+export interface DiagramContextMenu {
+  selection?: ObjectSelection; x: number; y: number; invoker: SVGElement
+  routeMap?: { router: RouterSelection; connectionId: string; direction: RouteMapDirection }
+}
 interface Props {
   issues?: DiagnosticsFinding[]; onShowIssues?: (finding: DiagnosticsFinding) => void
   topology: Topology; hubId: string; erLocationId?: string; selected: Candidate[]; selectedSiteRoutes?: SiteRoute[]
@@ -84,9 +87,13 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     ...topology.connections.map((connection) => {
       const siblings = topology.connections.filter((c) => c.hubId === connection.hubId && c.siteId === connection.siteId)
       const bend = siblings.length === 1 ? 18 : (siblings.findIndex((c) => c.id === connection.id) - (siblings.length - 1) / 2) * 85
-      return { ...connection, curve: diagramCurve(point(connection.hubId), point(connection.siteId), hubSize, nodeSize, bend), side: bend < 0 ? -1 : 1,
-        endpoints: [{ kind: 'hub', id: connection.hubId }, { kind: 'site', id: connection.siteId }] as RouterSelection[] }
+      return { ...connection, curve: diagramCurve(point(connection.spokeId ?? connection.hubId), point(connection.siteId), connection.spokeId ? nodeSize : hubSize, nodeSize, bend), side: bend < 0 ? -1 : 1,
+        endpoints: [...(connection.spokeId ? [] : [{ kind: 'hub', id: connection.hubId }]), { kind: 'site', id: connection.siteId }] as RouterSelection[] }
     }),
+    ...topology.spokes.map((spoke) => ({
+      id: spoke.id, name: spoke.name, enabled: true, curve: diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12), side: 1,
+      endpoints: [{ kind: 'hub', id: spoke.hubId }] as RouterSelection[],
+    })),
     ...topology.siteLinks.map((link) => {
       const siblings = topology.siteLinks.filter((l) => edgeKey(l.a, l.b) === edgeKey(link.a, link.b))
       const bend = 65 + siblings.findIndex((l) => l.id === link.id) * 60
@@ -111,7 +118,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
   else selected.filter((r) => r.remote).forEach((r) => activeHubEdges.add(edgeKey(hubId, r.originHubId)))
   const exactSiteLinks = new Set(tracing ? [...paths.filter(exitsHub).flatMap((p) => p.siteLinkIds ?? []), ...sourceSiteLinkIds] : (selectedSiteRoutes ?? selected).flatMap((r) => r.siteLinkIds ?? []))
   const motionEdges = new Map<string, { a: string; b: string; curve: ReturnType<typeof diagramCurve> }>()
-  topology.connections.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.hubId, b: link.siteId, curve: curves.get(link.id)! }))
+  topology.connections.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.spokeId ?? link.hubId, b: link.siteId, curve: curves.get(link.id)! }))
   topology.siteLinks.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.a, b: link.b, curve: curves.get(link.id)! }))
   topology.erLinks?.filter((link) => link.enabled).forEach((link) => motionEdges.set(link.id, { a: link.hubId ?? link.siteId!, b: link.locationId, curve: curves.get(link.id)! }))
   topology.spokes.forEach((spoke) => motionEdges.set(spoke.id, { a: spoke.id, b: spoke.hubId, curve: diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12) }))
@@ -142,7 +149,10 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     const connection = topology.connections.find((link) => link.id === id)
     const spoke = topology.spokes.find((node) => node.id === id)
     const er = topology.erLinks?.find((link) => link.id === id)
-    if (connection) direct(id, inward ? connection.siteId : connection.hubId)
+    if (connection?.spokeId) {
+      if (inward) { direct(id, connection.siteId); attachmentTravel(connection.spokeId, true) }
+      else { attachmentTravel(connection.spokeId); direct(id, connection.spokeId) }
+    } else if (connection) direct(id, inward ? connection.siteId : connection.hubId)
     else if (spoke) direct(id, inward ? spoke.id : spoke.hubId)
     else if (er) direct(id, er.hubId ? inward ? er.locationId : er.hubId : inward ? er.siteId : er.locationId)
   }
@@ -201,14 +211,14 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     x: Math.round(Math.max(120, Math.min(20000, width - 130, position.x))),
     y: Math.round(Math.max(65, Math.min(20000, height - (kind === 'hub' ? 115 : 65), position.y))),
   })
-  const selectable = (kind: ObjectSelection['kind'], id: string, label: string, activate = () => onObjectClick({ kind, id })) => ({
+  const selectable = (kind: ObjectSelection['kind'], id: string, label: string, activate = () => onObjectClick({ kind, id }), routeMap?: DiagramContextMenu['routeMap']) => ({
     role: 'button', tabIndex: 0, 'aria-label': label,
     'aria-pressed': selection?.kind === kind && selection.id === id,
     onClick: () => { if (suppressClick.current) { suppressClick.current = false; return }; activate() },
     onContextMenu: (event: MouseEvent<SVGGElement>) => {
       event.preventDefault()
       event.currentTarget.focus({ preventScroll: true })
-      onObjectContextMenu({ selection: { kind, id }, x: event.clientX, y: event.clientY, invoker: event.currentTarget })
+      onObjectContextMenu({ selection: { kind, id }, x: event.clientX, y: event.clientY, invoker: event.currentTarget, routeMap })
     },
     onKeyDown: (event: KeyboardEvent<SVGGElement>) => {
       if (event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && positions.has(id)) {
@@ -218,7 +228,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       } else if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
         event.preventDefault()
         const bounds = event.currentTarget.getBoundingClientRect()
-        onObjectContextMenu({ selection: { kind, id }, x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, invoker: event.currentTarget })
+        onObjectContextMenu({ selection: { kind, id }, x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, invoker: event.currentTarget, routeMap })
       } else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate() }
     },
   })
@@ -256,11 +266,13 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     const binding = node.routeMapAssignments?.find((a) => a.connectionId === link.id)
     const directions = (['inbound', 'outbound'] as const).filter((direction) => binding?.[`${direction}MapId`])
     return directions.map((direction, index) => {
-      const p = link.curve.at(endpoint ? 0.8 - index * 0.18 : 0.2 + index * 0.18)
+      const nearEnd = !!endpoint || topology.spokes.some((spoke) => spoke.id === link.id)
+        || topology.connections.some((connection) => connection.id === link.id && connection.transport === 'SpokeNVA')
+      const p = link.curve.at(nearEnd ? 0.8 - index * 0.18 : 0.2 + index * 0.18)
       const length = Math.hypot(p.dx, p.dy)
       const normal = length ? { x: -p.dy / length * link.side, y: p.dx / length * link.side } : { x: 0, y: link.side }
       const position = { x: p.x + normal.x * 28, y: p.y + normal.y * 28 }
-      const angle = Math.atan2(p.dy, p.dx) * 180 / Math.PI + ((direction === 'inbound') === !!endpoint ? 0 : 180)
+      const angle = Math.atan2(p.dy, p.dx) * 180 / Math.PI + ((direction === 'inbound') === nearEnd ? 0 : 180)
       const label = t("{0} route map rules for {1} on {2}", t(direction === 'inbound' ? 'Inbound' : 'Outbound'), node.name, link.name)
       return <Fragment key={`${owner.id}:${link.id}:${direction}`}>
         <g className={`policy-guide ${direction} ${link.enabled ? '' : 'is-down'}`} aria-hidden="true">
@@ -268,7 +280,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
           <path transform={`translate(${p.x},${p.y}) rotate(${angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow-halo" />
           <path transform={`translate(${p.x},${p.y}) rotate(${angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow" />
         </g>
-        <g className={`policy-marker ${direction} ${link.enabled ? '' : 'is-down'} clickable`} data-connection-id={link.id} data-router-id={owner.id} data-direction={direction} transform={`translate(${position.x},${position.y})`} {...selectable(owner.kind, owner.id, label, () => onShowRouteMapRules(owner, direction, link.id))} aria-pressed={undefined}
+        <g className={`policy-marker ${direction} ${link.enabled ? '' : 'is-down'} clickable`} data-connection-id={link.id} data-router-id={owner.id} data-direction={direction} transform={`translate(${position.x},${position.y})`} {...selectable(owner.kind, owner.id, label, () => onShowRouteMapRules(owner, direction, link.id), { router: owner, connectionId: link.id, direction })} aria-pressed={undefined}
           aria-describedby={preview && preview.owner.id === owner.id && preview.connectionId === link.id && preview.direction === direction && previewMap ? previewId : undefined}
           onPointerEnter={(event) => { cancelPreviewClose(); setPreview({ owner, connectionId: link.id, direction, anchor: event.currentTarget }) }}
           onPointerLeave={leavePreview}
@@ -328,14 +340,17 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       return <g key={edgeKey(h.id, other.id)}><path data-testid={`interhub-${h.id}-${other.id}`} className={`network-link backbone ${activeHubEdges.has(edgeKey(h.id, other.id)) ? 'preferred-link' : ''}`} d={edge.d} />{badge(t("Inter-hub"), edge.label)}</g>
     }))}
     {topology.spokes.map((spoke) => {
-      const active = activeConnections.has(spoke.id) || sourceSpokeIds.includes(spoke.id) || (!tracing && spoke.hubId === hubId)
+      const active = activeConnections.has(spoke.id) || sourceSpokeIds.includes(spoke.id)
+        || topology.connections.some((connection) => connection.spokeId === spoke.id && activeConnections.has(connection.id))
+        || paths.some((path) => path.nvaSpokeId === spoke.id || path.sourceNvaSpokeId === spoke.id)
+        || (!tracing && spoke.hubId === hubId)
       const edge = diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12)
       return <g key={spoke.id} className="clickable" {...selectable('spoke', spoke.id, t("Edit spoke connection {0}", spoke.name))}><path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${active ? 'preferred-link' : ''}`} d={edge.d} /></g>
     })}
     {topology.connections.map((connection) => {
       const edge = curves.get(connection.id)!
       const active = connection.enabled && activeConnections.has(connection.id)
-      const name = connection.transport === 'ExpressRoute' ? 'ER' : connection.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'
+      const name = connection.transport === 'ExpressRoute' ? 'ER' : connection.transport === 'SDWAN' ? 'SD-WAN' : connection.transport === 'SpokeNVA' ? 'NVA BGP' : 'VPN'
       return <g key={connection.id} className="clickable" {...selectable('connection', connection.id, t("Edit connection {0}", connection.name))}><title>{connection.name} · {transportLabels[connection.transport]} · {connection.enabled ? active ? t("Preferred") : t("Alternative") : t("Down")}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`link-${connection.id}`} data-preferred={active} className={`network-link ${connection.transport} ${active ? 'preferred-link' : ''} ${connection.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`${name}${connection.enabled ? '' : t(' (down)')}`, edge.label)}</g>
     })}
     {topology.siteLinks.map((link) => {
@@ -360,7 +375,9 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     })}
     {topology.sites.map((site) => {
       const p = point(site.id)
-      return <g key={site.id} data-node-id={site.id} {...destinationProps(site.id)} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, t("Select site {0}", site.name))} {...movable('site', site.id)}><title>{site.name}  {t("· ASN")} {site.asn}  {t("· Originated prefix:")} {site.prefixes[0] || t('none')}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="site" /><text x="10" y="-24" className="node-kind">{t("ON-PREMISES")}</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{site.prefixes[0] ?? t("No assigned prefix")}</text></g>
+      const nva = topology.connections.find((connection) => connection.transport === 'SpokeNVA' && connection.siteId === site.id)
+      const host = topology.spokes.find((spoke) => spoke.id === nva?.spokeId)
+      return <g key={site.id} data-node-id={site.id} data-spoke-nva={!!nva} {...destinationProps(site.id)} transform={`translate(${p.x}, ${p.y})`} className={`site-node draggable-node ${nva ? 'spoke-nva-node' : ''}`} {...selectable('site', site.id, t("Select site {0}", site.name))} {...movable('site', site.id)}><title>{site.name}  {t("· ASN")} {site.asn}  {t("· Originated prefix:")} {site.prefixes[0] || t('none')}{nva && ` · ${t('Spoke BGP NVA')} · ${host?.name} · ${nva.peerIp}`}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind={nva ? 'spoke' : 'site'} /><text x="10" y="-24" className="node-kind">{nva ? t("SPOKE BGP NVA") : t("ON-PREMISES")}</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{nva ? nva.peerIp : site.prefixes[0] ?? t("No assigned prefix")}</text></g>
     })}
     {(topology.erLocations ?? []).map((location) => {
       const p = point(location.id)

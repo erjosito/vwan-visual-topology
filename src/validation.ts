@@ -34,13 +34,13 @@ export function parseAsPath(value: string): number[] {
   return path
 }
 
-const validHubPrependAsn = (asn: number, allowDocumentation = false) =>
-  asn >= 1 && asn <= (allowDocumentation ? 64511 : 64495) && ![8074, 8075, 12076, 23456].includes(asn)
+const validHubPrependAsn = (asn: number) =>
+  asn >= 1 && asn <= 64511 && ![8074, 8075, 12076, 23456].includes(asn)
 
 export function parseHubPrependAsPath(value: string): number[] {
   const path = parseAsPath(value)
   if (!path.length || path.some((asn) => !validHubPrependAsn(asn))) {
-    throw new Error('Hub AS-path prepending requires your own public 2-byte ASNs (1-64495), excluding 8074, 8075, 12076 and 23456. Private, documentation and 4-byte ASNs are not allowed.')
+    throw new Error('Hub AS-path prepending requires non-private 2-byte ASNs (1-64511), excluding 8074, 8075, 12076 and AS_TRANS 23456. Documentation ASNs 64496-64511 are accepted for lab simulation, not as production ASN guidance.')
   }
   return path
 }
@@ -79,7 +79,7 @@ export function validateTopology(input: unknown): Topology {
   })
   const prependAsns = (value: unknown) => {
     const prepend = asns(value)
-    if (prepend.some((n) => !validHubPrependAsn(n, true))) fail('Azure prepend rules require public 2-byte ASNs, excluding Azure-reserved ASNs. Use your own public ASN; documentation ASNs 64496-64511 are also accepted for simulation.')
+    if (prepend.some((n) => !validHubPrependAsn(n))) fail('Azure prepend rules require public 2-byte ASNs, excluding Azure-reserved ASNs. Use your own public ASN; documentation ASNs 64496-64511 are also accepted for simulation.')
     return prepend
   }
   const maps = (value: unknown): PrependRule[] => array(value ?? [], 20, 'Route-map rules').map((value) => {
@@ -205,7 +205,16 @@ export function validateTopology(input: unknown): Topology {
   const connections = array(root.connections, 120, 'Connections').map((value) => {
     const connection = record(value)
     if (!hubs.some((h) => h.id === connection.hubId) || !sites.some((s) => s.id === connection.siteId)) fail('Connection references a missing hub or site.')
-    if (!['ExpressRoute', 'VPN', 'SDWAN'].includes(connection.transport as string)) fail('Invalid transport.')
+    if (!['ExpressRoute', 'VPN', 'SDWAN', 'SpokeNVA'].includes(connection.transport as string)) fail('Invalid transport.')
+    if (connection.transport === 'SpokeNVA') {
+      const spoke = spokes.find((spoke) => spoke.id === connection.spokeId)
+      const site = sites.find((site) => site.id === connection.siteId)!
+      if (!spoke || spoke.hubId !== connection.hubId) fail('A spoke BGP NVA must peer with the hub directly connected to its hosting spoke.')
+      const address = ipv4(text(connection.peerIp, 'NVA BGP interface IPv4'))
+      if (address === undefined || !spoke!.prefixes.some((prefix) => contains(prefix, address))) fail('The NVA BGP interface IPv4 address must be inside its hosting spoke address space.')
+      if (site.asn > 65534 || [8074, 8075, 12076, 23456, 65515, 65517, 65518, 65519, 65520].includes(site.asn)
+        || site.asn >= 64496 && site.asn <= 64511) fail('Spoke NVA peering requires a non-reserved public or private 2-byte ASN, different from the Azure hub ASN.')
+    } else if (connection.spokeId !== undefined || connection.peerIp !== undefined) fail('Spoke and NVA peer IP fields are supported only on spoke BGP NVA connections.')
     if (typeof connection.enabled !== 'boolean') fail('Connection enabled must be boolean.')
     if (connection.learnSiteRoutes !== undefined && typeof connection.learnSiteRoutes !== 'boolean') fail('Learn site routes must be boolean.')
     const connectionId = id(connection.id)
@@ -223,7 +232,8 @@ export function validateTopology(input: unknown): Topology {
     const inboundMapId = reference('inbound')
     const outboundMapId = reference('outbound')
     if (connection.transport === 'SDWAN' && (inbound.length || outbound.length || inboundMapId || outboundMapId)) fail('Azure route maps are not supported on integrated SD-WAN NVA branch connections.')
-    const routes = array(connection.routes, 100, 'Routes per connection').map((value) => {
+    if (connection.transport === 'SpokeNVA' && (inbound.length || outbound.length || inboundMapId || outboundMapId)) fail('Assign hub route maps to the hosting VNet connection, not the spoke NVA BGP peer.')
+    const routes = array(connection.routes, connection.transport === 'SpokeNVA' ? 4000 : 100, 'Routes per connection').map((value) => {
       const route = record(value)
       const prefix = text(route.prefix, 'Prefix')
       if (!cidr(prefix)) fail(`Invalid IPv4 network CIDR: ${prefix}. Use the network address, not a host address.`)
@@ -233,6 +243,7 @@ export function validateTopology(input: unknown): Topology {
       if (path.some((n) => typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 4294967294)) fail('Invalid ASN.')
       if (route.kind === 'bgp' && path.length === 0) fail('BGP routes need an AS path as learned by the hub.')
       if (route.kind === 'bgp' && path.includes(65520)) fail('65520 is reserved for inter-hub propagation in this simulator.')
+      if (connection.transport === 'SpokeNVA' && (path[0] !== sites.find((site) => site.id === connection.siteId)!.asn || path.includes(65515))) fail('Spoke NVA advertisements must start with the NVA ASN and must not contain the hub ASN 65515.')
       if (route.kind !== 'bgp' && path.length !== 0) fail('Static routes must have an empty AS path.')
       return { id: id(route.id), prefix, asPath: path, kind: route.kind } as Topology['connections'][number]['routes'][number]
     })
@@ -241,8 +252,18 @@ export function validateTopology(input: unknown): Topology {
       inbound, outbound,
       ...(inboundMapId !== undefined ? { inboundMapId } : {}),
       ...(outboundMapId !== undefined ? { outboundMapId } : {}),
+      ...(connection.transport === 'SpokeNVA' ? { spokeId: connection.spokeId, peerIp: connection.peerIp } : {}),
       learnSiteRoutes: connection.learnSiteRoutes ?? false } as Topology['connections'][number]
   })
+  for (const hub of hubs) {
+    const peers = connections.filter((connection) => connection.hubId === hub.id && connection.transport === 'SpokeNVA')
+    if (peers.length > 8) fail('A Virtual WAN hub supports at most 8 spoke NVA BGP peers.')
+    if (new Set(peers.map((peer) => peer.peerIp)).size !== peers.length) fail('NVA BGP peer interface addresses must be unique within a hub.')
+  }
+  for (const site of sites) {
+    const peers = connections.filter((connection) => connection.siteId === site.id && connection.transport === 'SpokeNVA')
+    if (new Set(peers.map((peer) => peer.spokeId)).size > 1) fail('An NVA router must belong to one hosting spoke.')
+  }
   const uniqueId = (base: string) => {
     base = base.slice(0, 110)
     let result = base
@@ -297,10 +318,12 @@ export function validateTopology(input: unknown): Topology {
       const connection = connections.find((c) => c.id === assignment.connectionId)
       const peer = siteLinks.find((link) => link.id === assignment.connectionId)
       const er = erLinks.find((link) => link.id === assignment.connectionId)
-      if (isHub ? connection?.hubId !== router.id && er?.hubId !== router.id : connection?.siteId !== router.id && er?.siteId !== router.id && peer?.a !== router.id && peer?.b !== router.id) {
+      const spoke = spokes.find((spoke) => spoke.id === assignment.connectionId)
+      if (isHub ? connection?.hubId !== router.id && er?.hubId !== router.id && spoke?.hubId !== router.id : connection?.siteId !== router.id && er?.siteId !== router.id && peer?.a !== router.id && peer?.b !== router.id) {
         fail('Route-map assignment references a connection not attached to this router.')
       }
       if (isHub && connection?.transport === 'SDWAN' && (assignment.inboundMapId || assignment.outboundMapId)) fail('Azure route maps are not supported on integrated SD-WAN NVA branch connections.')
+      if (isHub && connection?.transport === 'SpokeNVA' && (assignment.inboundMapId || assignment.outboundMapId)) fail('Assign hub route maps to the hosting VNet connection, not the spoke NVA BGP peer.')
       for (const reference of [assignment.inboundMapId, assignment.outboundMapId]) {
         if (reference === undefined) continue
         const map = routeMaps.find((m) => m.id === reference)

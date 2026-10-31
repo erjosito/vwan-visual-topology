@@ -278,6 +278,19 @@ function App() {
     { label: t("Model notes and warnings"), run: () => setPanel('notes') },
   ]
   const contextActions: ContextAction[] = contextSelection ? [
+    ...(contextMenu?.routeMap ? [{
+      label: t("Remove route map association"),
+      run: () => {
+        const association = contextMenu.routeMap!
+        update((next) => {
+          const router = (association.router.kind === 'hub' ? next.hubs : next.sites).find((router) => router.id === association.router.id)
+          const binding = router?.routeMapAssignments?.find((binding) => binding.connectionId === association.connectionId)
+          if (!router || !binding) return
+          delete binding[`${association.direction}MapId`]
+          router.routeMapAssignments = router.routeMapAssignments?.filter((binding) => binding.inboundMapId || binding.outboundMapId)
+        })
+      },
+    }] : []),
     { label: t("Edit configuration"), run: () => setEditorRequest(contextSelection) },
     ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
       { label: t("BGP table"), run: () => showRoutes(contextSelection) },
@@ -304,6 +317,10 @@ function App() {
       { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'connection', siteId: contextSelection.id }) },
       { label: t("Link to another site"), disabled: topology.sites.length < 2, run: () => setEditorRequest({ kind: 'siteLink', siteId: contextSelection.id }) },
       { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', siteId: contextSelection.id }) },
+    ] : []),
+    ...(contextSelection.kind === 'spoke' ? [
+      { label: t("Add BGP NVA"), run: () => setEditorRequest({ kind: 'site', spokeId: contextSelection.id }) },
+      { label: t("Spoke connection route maps"), run: () => { openRouteMaps({ kind: 'hub', id: topology.spokes.find((spoke) => spoke.id === contextSelection.id)!.hubId }, contextSelection.id) } },
     ] : []),
     ...(contextSelection.kind === 'erLocation' ? [
       { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id }) },
@@ -341,8 +358,10 @@ function App() {
   const pathTitle = (path: NodePath) => [
     'sourceName' in path ? path.sourceName : sourceNode?.name, ...(path.sourceSiteHops?.slice(1).map((id) => topology.sites.find((s) => s.id === id)?.name) ?? []),
     topology.connections.find((c) => c.id === path.sourceConnectionId)?.name,
+    topology.spokes.find((spoke) => spoke.id === path.sourceNvaSpokeId)?.name,
     ...(path.sourceErLinkIds?.map((id) => topology.erLinks?.find((link) => link.id === id)?.name) ?? []),
     ...path.hubs.flatMap((id) => [topology.hubs.find((h) => h.id === id)?.name, ...(path.firewalls?.includes(id) ? ['Azure Firewall'] : [])]),
+    topology.spokes.find((spoke) => spoke.id === path.nvaSpokeId)?.name,
     topology.connections.find((c) => c.id === path.connectionId)?.name,
     ...(path.erLinkIds?.map((id) => topology.erLinks?.find((link) => link.id === id)?.name) ?? []),
     ...(path.siteHops?.map((id) => topology.sites.find((s) => s.id === id)?.name) ?? [topology.spokes.find((s) => s.id === path.siteId)?.name]),
@@ -397,7 +416,7 @@ function App() {
               <label className="field"><span>{t("Advertised prefix")}</span><input aria-label={t("Advertised prefix")} key={route.prefix} defaultValue={route.prefix} onBlur={(e) => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.find((r) => r.id === route.id)!.prefix = e.target.value })} /></label>
               <label className="field"><span>{t("Learned AS path")}</span><input aria-label={t("Learned AS path")} key={route.asPath.join(' ')} disabled={route.kind !== 'bgp'} defaultValue={route.asPath.join(' ')} onBlur={(e) => { try { const asPath = parseAsPath(e.target.value); update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.find((r) => r.id === route.id)!.asPath = asPath }) } catch (error) { setError(message(error)) } }} /></label>
               <button className="danger" aria-label={t("Remove route {0}", route.prefix)} onClick={() => update((next) => { const c = next.connections.find((c) => c.id === connection.id)!; c.routes = c.routes.filter((r) => r.id !== route.id) })}>{t("Remove")}</button>
-            </div>)}<button onClick={() => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.push({ id: crypto.randomUUID(), prefix: '10.99.0.0/16', kind: 'bgp', asPath: [65001] }) })}>{t("Add advertised route")}</button></div>
+            </div>)}<button disabled={connection.routes.length >= (connection.transport === 'SpokeNVA' ? 4000 : 100)} onClick={() => update((next) => { next.connections.find((c) => c.id === connection.id)!.routes.push({ id: crypto.randomUUID(), prefix: '10.99.0.0/16', kind: 'bgp', asPath: [connection.transport === 'SpokeNVA' ? topology.sites.find((site) => site.id === connection.siteId)!.asn : 65001] }) })}>{t("Add advertised route")}</button></div>
           </CanvasOverlay>}
           {panel === 'paths' && <CanvasOverlay title={t("Path explorer")} className="path-panel" onClose={closePanel}>
             {tracing && groupTrace && <p><strong>{groupSummary}</strong>{t(". Each source is traced independently to the destination prefixes; reverse-path symmetry is not assumed.")}</p>}
@@ -415,7 +434,7 @@ function App() {
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">{t("Microsoft hub routing preference")}</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">{t("Microsoft route-map behavior and limitations")}</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>{t("Load example (replaces workspace)")}</button>
           </CanvasOverlay>}
-          {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onSave={(next, value) => {
+          {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onAddNva={(spokeId) => setEditorRequest({ kind: 'site', spokeId })} onSave={(next, value) => {
             save(next); setSelection(editorRequest.deleting ? undefined : value); setEditorRequest(undefined)
             if (editorRequest.deleting && nodeKey(value) === nodeKey(router)) { setPanel(undefined); setHighlighting(false) }
             else if (editorRequest.deleting && mapRouter && nodeKey(value) === nodeKey(mapRouter) && (panel === 'maps' || panel === 'rules' || panel === 'static')) setPanel(undefined)

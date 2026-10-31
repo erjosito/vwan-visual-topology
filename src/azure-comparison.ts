@@ -89,7 +89,7 @@ export function comparisonHopChoices(topology: Topology): { value: ComparisonHop
     ...topology.hubs.flatMap((hub) => (['VPN', 'ExpressRoute'] as const).map((transport) => ({
       value: { kind: 'gateway' as const, id: hub.id, transport }, name: `${hub.name} · ${transport}`,
     }))),
-    ...topology.connections.filter((connection) => connection.transport === 'SDWAN').map((connection) => ({
+    ...topology.connections.filter((connection) => connection.transport === 'SDWAN' || connection.transport === 'SpokeNVA').map((connection) => ({
       value: { kind: 'connection' as const, id: connection.id }, name: connection.name,
     })),
   ]
@@ -111,7 +111,7 @@ function modeledHop(hubId: string, route: Candidate): ComparisonHop | undefined 
   if (route.remote) return { kind: 'hub', id: route.originHubId }
   if (route.transport === 'VNet') return { kind: 'spoke', id: route.connectionId }
   if (route.transport === 'VPN' || route.transport === 'ExpressRoute') return { kind: 'gateway', id: hubId, transport: route.transport }
-  if (route.transport === 'SDWAN') return { kind: 'connection', id: route.connectionId }
+  if (route.transport === 'SDWAN' || route.transport === 'SpokeNVA') return { kind: 'connection', id: route.connectionId }
 }
 
 export function compareAzure(topology: Topology, observation: AzureObservation, profile: ComparisonProfile, now = Date.now()): ComparisonReport {

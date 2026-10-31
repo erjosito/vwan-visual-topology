@@ -1,5 +1,5 @@
 export type Preference = 'ExpressRoute' | 'VPN' | 'ASPath'
-export type Transport = 'ExpressRoute' | 'VPN' | 'SDWAN'
+export type Transport = 'ExpressRoute' | 'VPN' | 'SDWAN' | 'SpokeNVA'
 export type RouteKind = 'bgp' | 'vpn-static'
 export type LayoutMode = 'layered' | 'constellation'
 export interface NodePosition { x: number; y: number }
@@ -109,6 +109,8 @@ export interface Connection {
   outbound: PrependRule[]
   inboundMapId?: string
   outboundMapId?: string
+  spokeId?: string
+  peerIp?: string
 }
 
 export interface AzureImportInfo {
@@ -150,6 +152,11 @@ export const transportLabels: Record<Transport, string> = {
   ExpressRoute: 'ExpressRoute',
   VPN: 'S2S VPN',
   SDWAN: 'SD-WAN NVA',
+  SpokeNVA: 'Spoke BGP NVA',
+}
+
+export function siteLabel(topology: Topology, id: string): string {
+  return topology.connections.some((connection) => connection.transport === 'SpokeNVA' && connection.siteId === id) ? 'Spoke BGP NVA' : 'site'
 }
 
 export const preferenceLabels: Record<Preference, string> = {

@@ -1,12 +1,12 @@
 import { t, localizeDiagnostic } from './i18n'
 import { cloneElement, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
-import { objectLabels, preferenceLabels, topologyObject, transportLabels } from './model'
+import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
 import { parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 
-export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; deleting?: boolean }
+export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; deleting?: boolean }
 
 function Field({ title, children }: { title: string; children: ReactElement<{ 'aria-label'?: string }> }) {
   return <label className="field"><span>{title}</span>{cloneElement(children, { 'aria-label': title })}</label>
@@ -14,8 +14,8 @@ function Field({ title, children }: { title: string; children: ReactElement<{ 'a
 
 const prefixes = (value: string) => value.trim() === '*' ? [] : value.split(/[,\s]+/).filter(Boolean)
 
-export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting }: {
-  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void
+export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting, onAddNva }: {
+  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onAddNva: (spokeId: string) => void
 }) {
   const [error, setError] = useState('')
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
@@ -25,10 +25,11 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const connection = topology.connections.find((c) => c.id === request.id)
   const erLink = topology.erLinks?.find((link) => link.id === request.id)
   const [erEndpoint, setErEndpoint] = useState<'hub' | 'site'>(erLink?.siteId || request.siteId ? 'site' : 'hub')
-  const [transportValue, setTransportValue] = useState<Transport>(connection?.transport ?? 'ExpressRoute')
+  const [transportValue, setTransportValue] = useState<Transport>(connection?.transport ?? (request.spokeId ? 'SpokeNVA' : 'ExpressRoute'))
   const link = topology.siteLinks.find((l) => l.id === request.id)
-  const label = t(objectLabels[request.kind])
-  const connectedSite = request.kind === 'site' && !item && !!request.hubId
+  const label = t(request.kind === 'site' ? request.spokeId ? 'Spoke BGP NVA' : siteLabel(topology, request.id ?? '') : objectLabels[request.kind])
+  const connectedSite = request.kind === 'site' && !item && !!request.hubId && !request.spokeId
+  const connectedNva = request.kind === 'site' && !item && !!request.spokeId
   const title = request.deleting ? t("Delete {0}", label) : t(item ? 'Edit {0}' : 'Add {0}', connectedSite ? t('connected site') : label)
 
   const save = (event: FormEvent<HTMLFormElement>) => {
@@ -50,14 +51,17 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           next.siteLinks = next.siteLinks.filter((l) => l.a !== id && l.b !== id)
           next.erLinks = next.erLinks?.filter((link) => link.siteId !== id)
           next.routeMaps = next.routeMaps?.filter((map) => map.siteId !== id)
-        } else if (request.kind === 'spoke') next.spokes = next.spokes.filter((s) => s.id !== id)
+        } else if (request.kind === 'spoke') {
+          next.spokes = next.spokes.filter((s) => s.id !== id)
+          next.connections = next.connections.filter((connection) => connection.spokeId !== id)
+        }
         else if (request.kind === 'connection') next.connections = next.connections.filter((c) => c.id !== id)
         else if (request.kind === 'erLocation') {
           next.erLocations = next.erLocations?.filter((location) => location.id !== id)
           next.erLinks = next.erLinks?.filter((link) => link.locationId !== id)
         } else if (request.kind === 'erLink') next.erLinks = next.erLinks?.filter((link) => link.id !== id)
         else next.siteLinks = next.siteLinks.filter((l) => l.id !== id)
-        const remaining = new Set([...next.connections, ...next.siteLinks, ...(next.erLinks ?? [])].map((link) => link.id))
+        const remaining = new Set([...next.connections, ...next.siteLinks, ...next.spokes, ...(next.erLinks ?? [])].map((link) => link.id))
         for (const router of [...next.hubs, ...next.sites]) {
           if (router.routeMapAssignments) router.routeMapAssignments = router.routeMapAssignments.filter((a) => remaining.has(a.connectionId))
         }
@@ -77,21 +81,37 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           else next.hubs.push(value)
         } else if (request.kind === 'spoke') {
           const value = { id, name, hubId: text('hub'), prefixes: prefixes(text('prefixes')) }
+          for (const connection of next.connections.filter((connection) => connection.spokeId === id)) connection.hubId = value.hubId
           if (spoke) next.spokes[next.spokes.findIndex((s) => s.id === id)] = value
           else next.spokes.push(value)
         } else if (request.kind === 'site') {
           const value = { ...site, id, name, asn: Number(text('asn')), prefixes: text('prefix') ? [text('prefix')] : [] }
           if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
           else next.sites.push(value)
-          if (connectedSite) next.connections.push({
+          if (connectedSite || connectedNva) next.connections.push({
             id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
-            transport: text('transport') as Transport, enabled: true, routes: [], inbound: [], outbound: [], learnSiteRoutes: true,
+            transport: transportValue, enabled: true, routes: [], inbound: [], outbound: [], learnSiteRoutes: true,
+            ...(transportValue === 'SpokeNVA' ? {
+              spokeId: text('spoke'), peerIp: text('peerIp'), hubId: topology.spokes.find((spoke) => spoke.id === text('spoke'))!.hubId,
+              routes: text('advertisements').split(/\r?\n/).filter((line) => line.trim()).map((line) => {
+                const [prefix, ...path] = line.trim().split(/\s+/)
+                return { id: crypto.randomUUID(), prefix, asPath: parseAsPath(path.join(' ')), kind: 'bgp' as const }
+              }),
+            } : {}),
           })
         } else if (request.kind === 'connection') {
           const value = {
             ...(connection ?? { id, routes: [], inbound: [], outbound: [] }),
             name, hubId: text('hub'), siteId: text('site'), transport: text('transport') as Transport,
             enabled: data.has('enabled'), learnSiteRoutes: data.has('learnSiteRoutes'),
+            spokeId: undefined, peerIp: undefined,
+            ...(transportValue === 'SpokeNVA' ? {
+              spokeId: text('spoke'), peerIp: text('peerIp'), hubId: topology.spokes.find((spoke) => spoke.id === text('spoke'))!.hubId,
+              routes: text('advertisements').split(/\r?\n/).filter((line) => line.trim()).map((line, index) => {
+                const [prefix, ...path] = line.trim().split(/\s+/)
+                return { id: connection?.routes[index]?.id ?? crypto.randomUUID(), prefix, asPath: parseAsPath(path.join(' ')), kind: 'bgp' as const }
+              }),
+            } : {}),
           }
           if (connection) next.connections[next.connections.findIndex((c) => c.id === id)] = value
           else next.connections.push(value)
@@ -163,15 +183,21 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
         </>}
-        {(request.kind === 'spoke' || request.kind === 'connection') && <Field title={t("Hub")}><select name="hub" required defaultValue={spoke?.hubId ?? connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
-        {request.kind === 'spoke' && <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>}
+        {(request.kind === 'spoke' || request.kind === 'connection' && transportValue !== 'SpokeNVA') && <Field title={t("Hub")}><select name="hub" required defaultValue={spoke?.hubId ?? connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
+        {request.kind === 'spoke' && <>
+          <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
+          <fieldset><legend>{t("BGP NVAs in this spoke")}</legend><p className="muted">{t("VNet address spaces remain system routes. Add an NVA to exchange transit prefixes with the hub over BGP; this is separate from integrated SD-WAN.")}</p>
+            {spoke && <><p>{t("{0} configured BGP peers", topology.connections.filter((connection) => connection.spokeId === spoke.id).length)}</p><button type="button" onClick={() => onAddNva(spoke.id)}>{t("Add BGP NVA")}</button><p className="muted">{t("Save spoke changes before adding an NVA.")}</p></>}
+            {!spoke && <p className="muted">{t("Create the spoke first, then use Add BGP NVA from its menu or editor.")}</p>}
+          </fieldset>
+        </>}
         {request.kind === 'site' && <>
-          <Field title={t("Site ASN")}><input name="asn" type="number" required min={1} max={4294967294} defaultValue={site?.asn ?? 65001} /></Field>
+          <Field title={t(connectedNva || siteLabel(topology, site?.id ?? '') === 'Spoke BGP NVA' ? "NVA ASN" : "Site ASN")}><input name="asn" type="number" required min={1} max={connectedNva ? 65534 : 4294967294} defaultValue={site?.asn ?? 65001} /></Field>
           <Field title={t("Originated prefix")}><input name="prefix" defaultValue={site?.prefixes[0] ?? ''} placeholder="10.80.0.0/16" /></Field>
           <p className="muted">{t("One optional IPv4 network for this site. Leave blank for a transit-only site or explicit connection advertisements.")}</p>
-          {connectedSite && <>
-            <p className="muted">{t("A connection to")} {topology.hubs.find((h) => h.id === request.hubId)?.name}  {t("is created with site-prefix advertisements enabled.")}</p>
-            <Field title={t("Connection name")}><input name="connectionName" maxLength={120} placeholder={t("Defaults to site name + connection")} /></Field>{transport}
+          {(connectedSite || connectedNva) && <>
+            {connectedSite && <p className="muted">{t("A connection to")} {topology.hubs.find((h) => h.id === request.hubId)?.name}  {t("is created with site-prefix advertisements enabled.")}</p>}
+            <Field title={t("Connection name")}><input name="connectionName" maxLength={120} placeholder={t("Defaults to site name + connection")} /></Field>{!connectedNva && transport}
           </>}
         </>}
         {request.kind === 'connection' && <>
@@ -184,6 +210,14 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>
           <p className="muted">{t("Configure VPN static prefixes through Static routing on the site or hub. Remove or reassign site static routes before changing this VPN connection's site or transport.")}</p>
         </>}
+        {transportValue === 'SpokeNVA' && (connectedNva || connectedSite || request.kind === 'connection') && <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
+          <Field title={t("Hosting spoke")}><select name="spoke" required defaultValue={connection?.spokeId ?? request.spokeId ?? topology.spokes[0]?.id}>{topology.spokes.map((spoke) => <option key={spoke.id} value={spoke.id}>{spoke.name}</option>)}</select></Field>
+          <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" required defaultValue={connection?.peerIp ?? ''} placeholder="10.50.0.4" /></Field>
+          <Field title={t("NVA BGP advertisements")}><textarea name="advertisements" rows={5} defaultValue={connection?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
+          <p className="muted">{t("Use a public or private 2-byte NVA ASN, excluding Azure/IANA reserved ASNs. The peer must be an actual NVA NIC IP in this directly attached spoke, not a loopback. One logical peer represents identical advertisements to both hub router IPs (AS65515); the app does not configure live BGP sessions.")}</p>
+          <p className="muted">{t("NVA advertisements start with the NVA ASN. To model downstream networks and return routing, add sites with owned prefixes and link them to this NVA. Advertisements alone do not prove delivery. Default association/propagation and branch-to-branch enabled are assumed. Apply hub route maps to the hosting VNet connection.")}</p>
+          <a href="https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub#benefits-and-considerations" target="_blank" rel="noreferrer">{t("Microsoft spoke NVA BGP requirements")}</a>
+        </fieldset>}
         {item && (request.kind === 'hub' || request.kind === 'site') && <fieldset><legend>{t("Connection route maps")}</legend>
           <p>{t("Inbound/outbound policies belong to this router and are assigned per connection. Save any configuration changes before opening its policies.")}</p>
           <button type="button" onClick={() => onRouteMaps({ kind: request.kind as RouterSelection['kind'], id: item.id })}>{t("Configure route maps")}</button>

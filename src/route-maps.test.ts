@@ -216,8 +216,8 @@ describe('route-map resources and migration', () => {
     expect(() => validateTopology(t)).toThrow()
   })
   it('enforces strict hub wizard ASN rules without changing site parsing or legacy simulation imports', () => {
-    expect(parseHubPrependAsPath('1, 12345 12345 64495')).toEqual([1, 12345, 12345, 64495])
-    for (const value of ['', '0', '8074', '8075', '12076', '23456', '64496', '64511', '64512', '65514', '65515', '65516', '65517', '65518', '65519', '65520', '65534', '65535', '65536', '4200000000', '12345 65001']) {
+    expect(parseHubPrependAsPath('1, 12345 12345 64495 64496 64511')).toEqual([1, 12345, 12345, 64495, 64496, 64511])
+    for (const value of ['', '0', '8074', '8075', '12076', '23456', '64512', '65514', '65515', '65516', '65517', '65518', '65519', '65520', '65534', '65535', '65536', '4200000000', '12345 65001']) {
       expect(() => parseHubPrependAsPath(value)).toThrow()
     }
     expect(parseAsPath('65001 4200000000')).toEqual([65001, 4200000000])
