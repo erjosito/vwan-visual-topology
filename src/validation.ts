@@ -34,6 +34,17 @@ export function parseAsPath(value: string): number[] {
   return path
 }
 
+const validHubPrependAsn = (asn: number, allowDocumentation = false) =>
+  asn >= 1 && asn <= (allowDocumentation ? 64511 : 64495) && ![8074, 8075, 12076, 23456].includes(asn)
+
+export function parseHubPrependAsPath(value: string): number[] {
+  const path = parseAsPath(value)
+  if (!path.length || path.some((asn) => !validHubPrependAsn(asn))) {
+    throw new Error('Hub AS-path prepending requires your own public 2-byte ASNs (1-64495), excluding 8074, 8075, 12076 and 23456. Private, documentation and 4-byte ASNs are not allowed.')
+  }
+  return path
+}
+
 export function validateTopology(input: unknown): Topology {
   const fail = (message: string): never => { throw new Error(message) }
   const record = (value: unknown): Record<string, unknown> => {
@@ -68,7 +79,7 @@ export function validateTopology(input: unknown): Topology {
   })
   const prependAsns = (value: unknown) => {
     const prepend = asns(value)
-    if (prepend.some((n) => n > 64511 || [8074, 8075, 12076, 23456].includes(n))) fail('Azure prepend rules require public 2-byte ASNs, excluding Azure-reserved ASNs. Use your own public ASN; documentation ASNs 64496-64511 are also accepted for simulation.')
+    if (prepend.some((n) => !validHubPrependAsn(n, true))) fail('Azure prepend rules require public 2-byte ASNs, excluding Azure-reserved ASNs. Use your own public ASN; documentation ASNs 64496-64511 are also accepted for simulation.')
     return prepend
   }
   const maps = (value: unknown): PrependRule[] => array(value ?? [], 20, 'Route-map rules').map((value) => {

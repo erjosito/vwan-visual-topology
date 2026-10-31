@@ -1,5 +1,10 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Your public ASN, repeated as needed': '所有するパブリック ASN（必要に応じて繰り返し）',
+  'Hub AS-path prepending requires your own public 2-byte ASNs (1-64495), excluding 8074, 8075, 12076 and 23456. Private, documentation and 4-byte ASNs are not allowed.': 'ハブの AS パス プリペンドには、所有するパブリックの 2 バイト ASN（1～64495）が必要です。8074、8075、12076、23456 は使用できません。プライベート ASN、文書用 ASN、4 バイト ASN は使用できません。',
+  'Use your own public 2-byte ASN (1-64495). Exclude Azure-reserved 8074, 8075 and 12076, and AS_TRANS 23456. Private ASNs (64512-65534), documentation ASNs (64496-64511), 65535 and 4-byte ASNs are not allowed. Repeating a valid ASN is allowed.': '所有するパブリックの 2 バイト ASN（1～64495）を使用してください。Azure 予約済みの 8074、8075、12076、および AS_TRANS の 23456 は使用できません。プライベート ASN（64512～65534）、文書用 ASN（64496～64511）、65535、4 バイト ASN は使用できません。有効な ASN を繰り返すことは可能です。',
+  'Microsoft hub route-map ASN restrictions': 'Microsoft のハブ ルート マップの ASN 制限',
+  'Hub prepend rules require your own public 2-byte ASNs. Existing imported documentation ASNs remain simulation-only; replace them with valid public ASNs before saving in this wizard. Spoke/inter-hub policies are not simulated.': 'ハブのプリペンド規則には、所有するパブリックの 2 バイト ASN が必要です。既存のインポート済み文書用 ASN はシミュレーション専用です。このウィザードで保存する前に有効なパブリック ASN に置き換えてください。スポーク/ハブ間のポリシーはシミュレーションされません。',
   'Optional route-recomputation limit: {0} failure scenarios': 'オプションのルート再計算の上限: 障害シナリオ {0} 件',
   'Limits: {0} address cells · {1} uncached path traces · {2} findings · {3} seconds': '上限: アドレス区間 {0} 個 · 未キャッシュのパス トレース {1} 回 · 検出結果 {2} 件 · {3} 秒',
   'Reached limit: {0}': '到達した上限: {0}',

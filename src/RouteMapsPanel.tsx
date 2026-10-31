@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import type { RouteMap, RouteMapRule, RouterSelection, Topology, Transport } from './model'
 import type { Simulation } from './routing'
-import { parseAsPath, validateTopology } from './validation'
+import { parseAsPath, parseHubPrependAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 
 const prefixes = (text: string) => text.trim() === '*' ? [] : text.split(/[,\s]+/).filter(Boolean)
@@ -21,7 +21,7 @@ function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: RouteMap)
         rules: rules.map((r) => ({
           id: r.id, prefixes: prefixes(text(`${r.id}-prefixes`)), match: text(`${r.id}-match`) as RouteMapRule['match'],
           action: r.action, summaryPrefixes: r.action === 'summarize' ? prefixes(text(`${r.id}-summary`)) : [],
-          prepend: r.action === 'prepend' ? parseAsPath(text(`${r.id}-prepend`)) : [],
+          prepend: r.action === 'prepend' ? (map.hubId ? parseHubPrependAsPath : parseAsPath)(text(`${r.id}-prepend`)) : [],
           nextStep: text(`${r.id}-next`) as RouteMapRule['nextStep'],
         })),
       })
@@ -35,7 +35,10 @@ function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: RouteMap)
       <div className="form-grid"><label className="field"><span>{t("Match mode")}</span><select aria-label={t("Rule {0} match", index + 1)} name={`${r.id}-match`} defaultValue={r.match}><option value="equals">{t("Equals")}</option><option value="contains">{t("Contains")}</option></select></label>
         <label className="field"><span>{t("Action")}</span><select aria-label={t("Rule {0} action", index + 1)} value={r.action} onChange={(e) => setRules(rules.map((rule) => rule.id === r.id ? { ...rule, action: e.target.value as RouteMapRule['action'] } : rule))}><option value="permit">{t("Permit unchanged")}</option><option value="drop">{t("Block / drop")}</option><option value="summarize">{t("Summarize")}</option><option value="prepend">{t("Prepend ASNs")}</option></select></label></div>
       {r.action === 'summarize' && <label className="field"><span>{t("Summary prefixes")}</span><textarea aria-label={t("Rule {0} summary prefixes", index + 1)} name={`${r.id}-summary`} rows={2} defaultValue={r.summaryPrefixes.join('\n')} placeholder="10.0.0.0/8" /></label>}
-      {r.action === 'prepend' && <label className="field"><span>{t("Prepend ASNs")}</span><input aria-label={t("Rule {0} prepend ASNs", index + 1)} name={`${r.id}-prepend`} defaultValue={r.prepend.join(' ')} placeholder="64496 64496" /></label>}
+      {r.action === 'prepend' && <><label className="field"><span>{t("Prepend ASNs")}</span><input aria-label={t("Rule {0} prepend ASNs", index + 1)} aria-describedby={map.hubId ? `${r.id}-asn-help` : undefined} name={`${r.id}-prepend`} required={!!map.hubId} defaultValue={r.prepend.join(' ')} placeholder={map.hubId ? t('Your public ASN, repeated as needed') : '65001 65001'} /></label>
+        {map.hubId && <p id={`${r.id}-asn-help`} className="muted">{t('Use your own public 2-byte ASN (1-64495). Exclude Azure-reserved 8074, 8075 and 12076, and AS_TRANS 23456. Private ASNs (64512-65534), documentation ASNs (64496-64511), 65535 and 4-byte ASNs are not allowed. Repeating a valid ASN is allowed.')}
+          {' '}<a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about#considerations-and-limitations" target="_blank" rel="noreferrer">{t('Microsoft hub route-map ASN restrictions')}</a></p>}
+      </>}
       <label className="field"><span>{t("After a match")}</span><select aria-label={t("Rule {0} next step", index + 1)} name={`${r.id}-next`} defaultValue={r.nextStep}><option value="terminate">{t("Terminate")}</option><option value="continue">{t("Continue to next rule")}</option></select></label>
       <div className="row"><button type="button" disabled={index === 0} onClick={() => setRules((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next })}>{t("Move rule")} {index + 1}  {t("up")}</button><button type="button" className="danger" onClick={() => setRules(rules.filter((rule) => rule.id !== r.id))}>{t("Remove rule")} {index + 1}</button></div>
     </fieldset>)}
@@ -108,6 +111,6 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
     </>}
     {!map && <p className="empty">{t("Select a route map or create a reusable policy.")}</p>}
     {error && <p role="alert" className="notice error">{localizeDiagnostic(error)}</p>}
-    <p className="muted">{owner.kind === 'hub' ? t("Hub policies require public 2-byte prepend ASNs, excluding Azure-reserved ASNs. 64496–64511 are accepted only for simulation. Spoke/inter-hub policies are not simulated.") : t("Site policies accept private and 32-bit ASNs, and apply to hub connections and on-premises links. They are independent of Azure-side policies.")}  {t("Summaries retain known forwarding destinations; aggregate holes are not treated as reachable. Static VPN entries bypass BGP policies.")}</p>
+    <p className="muted">{owner.kind === 'hub' ? t("Hub prepend rules require your own public 2-byte ASNs. Existing imported documentation ASNs remain simulation-only; replace them with valid public ASNs before saving in this wizard. Spoke/inter-hub policies are not simulated.") : t("Site policies accept private and 32-bit ASNs, and apply to hub connections and on-premises links. They are independent of Azure-side policies.")}  {t("Summaries retain known forwarding destinations; aggregate holes are not treated as reachable. Static VPN entries bypass BGP policies.")}</p>
   </CanvasOverlay>
 }

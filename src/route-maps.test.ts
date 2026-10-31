@@ -3,7 +3,7 @@ import { applyRouteMapRules } from './bgp'
 import { example } from './model'
 import type { RouteMap, RouteMapRule, Topology } from './model'
 import { simulate, traceFlow } from './routing'
-import { validateTopology } from './validation'
+import { parseHubPrependAsPath, parseAsPath, validateTopology } from './validation'
 import { traceNodePath } from './paths'
 
 const rule = (overrides: Partial<RouteMapRule> = {}): RouteMapRule => ({
@@ -214,6 +214,16 @@ describe('route-map resources and migration', () => {
     const t = network()
     t.routeMaps = [map([rule({ action: 'prepend', prepend: [asn] })])]
     expect(() => validateTopology(t)).toThrow()
+  })
+  it('enforces strict hub wizard ASN rules without changing site parsing or legacy simulation imports', () => {
+    expect(parseHubPrependAsPath('1, 12345 12345 64495')).toEqual([1, 12345, 12345, 64495])
+    for (const value of ['', '0', '8074', '8075', '12076', '23456', '64496', '64511', '64512', '65514', '65515', '65516', '65517', '65518', '65519', '65520', '65534', '65535', '65536', '4200000000', '12345 65001']) {
+      expect(() => parseHubPrependAsPath(value)).toThrow()
+    }
+    expect(parseAsPath('65001 4200000000')).toEqual([65001, 4200000000])
+    const t = network()
+    t.routeMaps = [map([rule({ action: 'prepend', prepend: [64496] })])]
+    expect(validateTopology(t).routeMaps![0].rules[0].prepend).toEqual([64496])
   })
   it('validates CIDRs, summary containment, enums and resource limits', () => {
     const t = network()
