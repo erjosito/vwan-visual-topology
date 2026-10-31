@@ -1,5 +1,8 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Reset canvas view': 'キャンバス表示をリセット',
+  'Drag blank canvas to pan; drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.': 'キャンバスの空白部分をドラッグして表示を移動し、ノードをドラッグして配置します。右クリックで操作メニューを表示します。Alt+矢印キーでフォーカスしたノードを移動できます。',
+  'Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.': '操作可能な Virtual WAN トポロジ。キャンバスの空白部分をドラッグして表示を移動し、ノードをドラッグして配置します。右クリックで操作メニューを表示します。Home キーで表示をリセットし、Alt+矢印キーでフォーカスしたノードを移動できます。',
   'Your public ASN, repeated as needed': '所有するパブリック ASN（必要に応じて繰り返し）',
   'Hub AS-path prepending requires your own public 2-byte ASNs (1-64495), excluding 8074, 8075, 12076 and 23456. Private, documentation and 4-byte ASNs are not allowed.': 'ハブの AS パス プリペンドには、所有するパブリックの 2 バイト ASN（1～64495）が必要です。8074、8075、12076、23456 は使用できません。プライベート ASN、文書用 ASN、4 バイト ASN は使用できません。',
   'Use your own public 2-byte ASN (1-64495). Exclude Azure-reserved 8074, 8075 and 12076, and AS_TRANS 23456. Private ASNs (64512-65534), documentation ASNs (64496-64511), 65535 and 4-byte ASNs are not allowed. Repeating a valid ASN is allowed.': '所有するパブリックの 2 バイト ASN（1～64495）を使用してください。Azure 予約済みの 8074、8075、12076、および AS_TRANS の 23456 は使用できません。プライベート ASN（64512～65534）、文書用 ASN（64496～64511）、65535、4 バイト ASN は使用できません。有効な ASN を繰り返すことは可能です。',

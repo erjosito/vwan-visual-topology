@@ -843,6 +843,62 @@ test('dragging updates links live, saves per-view positions and round-trips the 
 })
 
 for (const mode of ['layered', 'constellation'] as const) {
+  test(`blank-canvas dragging pans ${mode} without changing saved nodes and preserves node dragging at zoom`, async ({ page }) => {
+    await page.goto('/')
+    await page.getByLabel('Visualization mode').selectOption(mode)
+    await page.getByLabel('Canvas zoom').selectOption('1.5')
+    await page.locator('.diagram-scroll').evaluate((element) => element.scrollTo(70, 40))
+    const saved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
+    const canvas = page.locator('.diagram')
+    const node = page.locator('[data-node-id="us"]')
+    const originalTransform = await node.getAttribute('transform')
+    const before = await node.boundingBox()
+    const blank = await canvas.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      const container = element.parentElement!.getBoundingClientRect()
+      for (let y = container.top + 60; y < Math.min(container.bottom, innerHeight) - 80; y += 30) {
+        for (let x = container.left + 50; x < Math.min(container.right, innerWidth) - 100; x += 30) {
+          const target = document.elementFromPoint(x, y)
+          if (target && element.contains(target) && !target.closest('g, button') && x >= bounds.left && y >= bounds.top) return { x, y }
+        }
+      }
+      throw new Error('No blank canvas point found')
+    })
+    await page.mouse.move(blank.x, blank.y)
+    await page.mouse.down()
+    await page.mouse.move(blank.x + 65, blank.y + 45, { steps: 6 })
+    await expect(page.locator('.diagram-scroll')).toHaveClass(/is-panning/)
+    await page.mouse.up()
+    await expect(page.locator('.diagram-scroll')).not.toHaveClass(/is-panning/)
+    const after = await node.boundingBox()
+    expect(after!.x - before!.x).toBeCloseTo(65, 0)
+    expect(after!.y - before!.y).toBeCloseTo(45, 0)
+    await expect(node).toHaveAttribute('transform', originalTransform!)
+    expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
+    await expect(page.locator('.network-link.preferred-link')).toHaveCount(0)
+    const pannedView = await canvas.getAttribute('viewBox')
+    const [x, y] = originalTransform!.match(/[\d.]+/g)!.map(Number)
+    await dragNode(page, 'us', -20, 15); await page.mouse.up()
+    expect((await readTopology(page)).layout!.positions[mode]!.us).toEqual({ x: Math.round(x - 20), y: Math.round(y + 15) })
+    await expect(canvas).toHaveAttribute('viewBox', pannedView!)
+    await node.click({ button: 'right' })
+    await expect(page.getByRole('menuitem', { name: 'Edit configuration', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.locator('header [data-language-selector]').selectOption('ja')
+    await page.getByRole('button', { name: 'キャンバス表示をリセット', exact: true }).click()
+    await expect(canvas).toHaveAttribute('viewBox', /^0 0 /)
+    await expect(page.getByRole('button', { name: 'キャンバス表示をリセット', exact: true })).toHaveCount(0)
+    await page.locator('header [data-language-selector]').selectOption('en')
+    await page.getByLabel('Canvas zoom', { exact: true }).selectOption('1')
+    await page.mouse.move(blank.x, blank.y)
+    await page.mouse.down()
+    await page.mouse.move(blank.x - 30, blank.y - 20, { steps: 3 })
+    await page.mouse.up()
+    await expect(canvas).not.toHaveAttribute('viewBox', /^0 0 /)
+    await canvas.focus(); await page.keyboard.press('Home')
+    await expect(canvas).toHaveAttribute('viewBox', /^0 0 /)
+  })
+
   test(`dragging remains accurate after zooming and scrolling in ${mode}`, async ({ page }) => {
     await page.goto('/')
     await page.getByLabel('Visualization mode').selectOption(mode)

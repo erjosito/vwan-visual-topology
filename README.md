@@ -109,6 +109,8 @@ The collector integration tests require PowerShell 7 but use a mocked Azure CLI,
 
 ## Working with the app
 
+Drag a blank canvas area with the left mouse button to pan the topology in either direction, at any zoom. Panning changes only the current view, not saved node coordinates or routing. **Reset canvas view** (or Home while the canvas is focused) restores the original view. Dragging nodes still arranges their saved positions; link actions, right-click menus and mobile scrolling remain separate.
+
 ### Optional private feedback
 
 **Feedback** opens an accessible, optional form. GitHub sign-in is required only to submit; the simulator remains anonymous and local-first. The form previews exactly what is sent: category, summary, description, optional contact email, app revision, report UUID and the authenticated GitHub reporter name. No topology, screenshots, browser logs or storage contents are attached. Do not enter secrets or confidential/customer data.

@@ -82,6 +82,7 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .er-location-node > rect { fill: #faf7ff; stroke: #bcacd6; }
 .er-location-node .node-kind { fill: #80649e; }
 .draggable-node { cursor: grab; touch-action: none; user-select: none; }
+.diagram { cursor: grab; }.diagram-scroll.is-panning .diagram { cursor: grabbing; user-select: none; }.canvas-pan-reset { position: absolute; top: 12px; left: 12px; z-index: 2; font-size: 11px; }
 .is-repositioning, .is-repositioning .draggable-node { cursor: grabbing; }
 .draggable-node > rect { filter: drop-shadow(0 5px 9px #203f6b13); transition: stroke .15s, filter .15s; }
 .hub-node > rect { fill: url(#hub-card); stroke: #9fbce7; }

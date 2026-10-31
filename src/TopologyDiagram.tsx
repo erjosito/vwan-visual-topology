@@ -65,6 +65,9 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
   const drag = useRef<{ id: string; kind: ObjectSelection['kind']; start: NodePosition; origin: NodePosition; moved: boolean } | undefined>(undefined)
   const suppressClick = useRef(false)
   const [moving, setMoving] = useState<{ id: string; position: NodePosition }>()
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [panning, setPanning] = useState(false)
+  const panDrag = useRef<{ pointerId: number; start: NodePosition; origin: NodePosition; unitsPerPixel: number } | undefined>(undefined)
   const { positions, width: layoutWidth, height: layoutHeight } = diagramLayout(topology, layout)
   const pixelWidth = Math.max(viewport.width, Math.min(layoutWidth, 1200))
   const pixelHeight = Math.max(viewport.height, 560)
@@ -276,11 +279,37 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       </Fragment>
     })
   }))
-  return <div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`0 0 ${width} ${height}`} style={{ width: pixelWidth * zoom, height: pixelHeight * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag nodes to arrange; right-click for actions. Alt+Arrow keys move a focused node.")} onPointerDownCapture={closePreview} onContextMenu={(event) => {
+  const endPan = (event: PointerEvent<SVGSVGElement>) => {
+    if (panDrag.current?.pointerId !== event.pointerId) return
+    panDrag.current = undefined; setPanning(false)
+  }
+  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x} ${pan.y} ${width} ${height}`} style={{ width: pixelWidth * zoom, height: pixelHeight * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} onPointerDownCapture={closePreview}
+    onPointerDown={(event) => {
+      if (event.pointerType !== 'mouse' || event.button !== 0 || !event.isPrimary
+        || (event.target as Element).closest('g[role="button"], .network-link, .edge-badge, .policy-guide, .routing-path-stop')) return
+      event.preventDefault()
+      const matrix = event.currentTarget.getScreenCTM()
+      if (!matrix) return
+      panDrag.current = { pointerId: event.pointerId, start: { x: event.clientX, y: event.clientY }, origin: pan, unitsPerPixel: 1 / matrix.a }
+      setPanning(true)
+      event.currentTarget.setPointerCapture(event.pointerId)
+      event.currentTarget.focus({ preventScroll: true })
+    }}
+    onPointerMove={(event) => {
+      const drag = panDrag.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      setPan({ x: drag.origin.x - (event.clientX - drag.start.x) * drag.unitsPerPixel,
+        y: drag.origin.y - (event.clientY - drag.start.y) * drag.unitsPerPixel })
+    }}
+    onPointerUp={endPan} onPointerCancel={endPan} onLostPointerCapture={endPan}
+    onContextMenu={(event) => {
     if ((event.target as Element).closest('g[role="button"]')) return
     event.preventDefault()
     onObjectContextMenu({ x: event.clientX, y: event.clientY, invoker: event.currentTarget })
   }} onKeyDown={(event) => {
+    if (event.target === event.currentTarget && event.key === 'Home') {
+      event.preventDefault(); setPan({ x: 0, y: 0 }); return
+    }
     if (event.target !== event.currentTarget || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return
     event.preventDefault()
     const bounds = event.currentTarget.getBoundingClientRect()
@@ -291,7 +320,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       <radialGradient id="constellation-glow"><stop offset="0" stopColor="#e9f1ff" /><stop offset="1" stopColor="#f8fbff" /></radialGradient>
       <linearGradient id="hub-card" x2="0" y2="1"><stop stopColor="#fff" /><stop offset="1" stopColor="#eef4ff" /></linearGradient>
     </defs>
-    <rect width={width} height={height} fill={layout === 'constellation' ? 'url(#constellation-glow)' : 'url(#grid)'} />
+    <rect x={pan.x} y={pan.y} width={width} height={height} fill={layout === 'constellation' ? 'url(#constellation-glow)' : 'url(#grid)'} />
     {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">{t("AZURE SPOKE NETWORKS")}</text><text x="24" y="225" className="diagram-caption">{t("MICROSOFT GLOBAL BACKBONE")}</text><text x="24" y="465" className="diagram-caption">{topology.erLocations?.length ? t("EXPRESSROUTE LOCATIONS") : t("ON-PREMISES SITES")}</text>{!!topology.erLocations?.length && <text x="24" y="700" className="diagram-caption">{t("ON-PREMISES SITES")}</text>}</g>
       : <g className="constellation-orbits" aria-hidden="true"><ellipse cx={width / 2} cy={height / 2} rx={width / 2 - 130} ry={height / 2 - 80} /><ellipse cx={width / 2} cy={height / 2} rx={Math.max(180, topology.hubs.length * 130)} ry="145" /><text x="24" y="30" className="diagram-caption">{t("VIRTUAL WAN · NETWORK CONSTELLATION")}</text></g>}
     {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).map((other) => {
@@ -373,4 +402,6 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     })}
     {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">{t("Right-click the canvas to add your first hub or site.")}</text>}
   </svg>{preview && previewNode && previewLink && previewMap && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
+    {(pan.x !== 0 || pan.y !== 0) && <button className="canvas-pan-reset" onClick={() => setPan({ x: 0, y: 0 })}>{t('Reset canvas view')}</button>}
+  </>
 }
