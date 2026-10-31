@@ -160,33 +160,28 @@ test('Azure file validation and model warnings are localized while Bicep code re
 })
 
 test('feedback switches inside its modal without losing consent, text, failure or success states', async ({ page }) => {
-  await page.route('**/api/feedback/status', (route) => route.fulfill({ json: { available: true } }))
-  await page.route('**/.auth/me', (route) => route.fulfill({ json: { clientPrincipal: {
-    identityProvider: 'github', userDetails: 'BGP table reporter', userRoles: ['authenticated'],
-  } } }))
-  let success = false
-  await page.route('**/api/feedback', (route) => success
-    ? route.fulfill({ status: 201, json: { reference: `FB-${route.request().postDataJSON().requestId}` } })
-    : route.fulfill({ status: 429, json: {} }))
+  await page.addInitScript(() => {
+    window.open = (() => null) as typeof window.open
+  })
   await page.goto('/')
   await page.getByRole('button', { name: 'Feedback', exact: true }).click()
   await page.getByLabel('Summary', { exact: true }).fill('BGP table 日本語 draft')
-  await page.getByLabel('Description', { exact: true }).fill('Keep the user-provided English description and 日本語 unchanged.')
-  await page.getByLabel('I agree to send').check()
+  await page.getByLabel('Description', { exact: true }).fill('日本語'.repeat(1200))
+  await page.getByLabel('I agree to open this report in the public GitHub feedback repository without confidential data.').check()
   const modal = page.getByRole('dialog')
   await modal.locator('[data-language-selector]').selectOption('ja')
   await expect(page.getByLabel('概要', { exact: true })).toHaveValue('BGP table 日本語 draft')
-  await expect(page.getByLabel('このテキストと報告者の GitHub ID')).toBeChecked()
+  await expect(page.getByLabel('機密データを含めずに、この報告を公開の GitHub フィードバック リポジトリで開くことに同意します。')).toBeChecked()
   await expect(page.locator('#feedback-privacy')).toContainText('機密情報を含めないでください')
-  await page.getByRole('button', { name: 'フィードバックを送信', exact: true }).click()
-  await expect(page.getByRole('alert')).toContainText('送信回数が制限されています')
+  await page.getByRole('button', { name: 'GitHub で Issue を開く', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('事前入力された GitHub Issue URL にはフィードバックが長すぎます。')
   await modal.locator('[data-language-selector]').selectOption('en')
-  await expect(page.getByRole('alert')).toContainText('Feedback is rate limited.')
-  await expect(page.getByLabel('Description', { exact: true })).toHaveValue('Keep the user-provided English description and 日本語 unchanged.')
+  await expect(page.getByRole('alert')).toContainText('Feedback is too long for a pre-filled GitHub issue URL.')
+  await page.getByLabel('Description', { exact: true }).fill('Keep the user-provided English description and 日本語 unchanged.')
   await modal.locator('[data-language-selector]').selectOption('ja')
-  success = true
-  await page.getByRole('button', { name: 'フィードバックを送信', exact: true }).click()
-  await expect(page.getByRole('status')).toContainText('フィードバックを受信しました。受付番号:')
+  await expect(page.getByLabel('説明', { exact: true })).toHaveValue('Keep the user-provided English description and 日本語 unchanged.')
+  await page.getByRole('button', { name: 'GitHub で Issue を開く', exact: true }).click()
+  await expect(page.getByRole('status')).toContainText('GitHub 用のフィードバックを準備しました。受付番号:')
 })
 
 test('unsupported or unavailable browser storage safely falls back and still allows switching', async ({ page }) => {
@@ -261,8 +256,6 @@ test('Japanese Azure import review keeps names and source warnings intact in JSO
 
 test('Japanese parser errors and offline feedback remain accessible on mobile', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.route('**/api/feedback/status', (route) => route.fulfill({ json: { available: false } }))
-  await page.route('**/.auth/me', (route) => route.fulfill({ json: { clientPrincipal: null } }))
   await page.goto('/')
   await switchLanguage(page, 'ja')
   const saved = await savedTopology(page)
@@ -273,10 +266,9 @@ test('Japanese parser errors and offline feedback remain accessible on mobile', 
   expect(await savedTopology(page)).toBe(saved)
   await page.getByRole('button', { name: 'フィードバック', exact: true }).click()
   const modal = page.getByRole('dialog', { name: 'フィードバックを送信', exact: true })
-  await expect(modal.getByRole('status')).toContainText('フィードバック サービスに接続できませんでした。')
-  await expect(modal.getByRole('button', { name: 'GitHub でサインイン', exact: true })).toBeEnabled()
+  await expect(modal.getByRole('link', { name: '公開フィードバックを参照', exact: true })).toBeVisible()
   expect(await modal.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
   await expect(modal.locator('[data-language-selector]')).toBeVisible()
   await modal.locator('[data-language-selector]').selectOption('en')
-  await expect(page.getByRole('dialog', { name: 'Send feedback', exact: true }).getByRole('button', { name: 'Sign in with GitHub', exact: true })).toBeEnabled()
+  await expect(page.getByRole('dialog', { name: 'Send feedback', exact: true }).getByRole('link', { name: 'Browse public feedback', exact: true })).toBeVisible()
 })
