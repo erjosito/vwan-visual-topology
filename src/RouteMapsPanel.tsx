@@ -69,6 +69,16 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const map = draft ?? topology.routeMaps?.find((m) => m.id === mapId)
+  const mapAttachments = !draft && map
+    ? (node?.routeMapAssignments ?? []).flatMap((a) => {
+        const linkName = links.find((l) => l.id === a.connectionId)?.name ?? a.connectionId
+        const directions = [
+          ...(a.inboundMapId === map.id ? [t('Inbound')] : []),
+          ...(a.outboundMapId === map.id ? [t('Outbound')] : []),
+        ]
+        return directions.length ? [`${linkName} (${directions.join(', ')})`] : []
+      })
+    : []
   const commit = (next: Topology) => onSave(validateTopology(next))
   const assign = (direction: 'inboundMapId' | 'outboundMapId', id: string) => {
     try {
@@ -94,7 +104,15 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
       {owner.kind === 'hub' && <details><summary>{t("Outbound advertisement preview (")}{simulation.outbound[link.id]?.length ?? 0})</summary><div className="table-scroll"><table><thead><tr><th>{t("Prefix")}</th><th>{t("AS path")}</th></tr></thead><tbody>{simulation.outbound[link.id]?.map((r, i) => <tr key={`${r.key}:${i}`}><td>{r.prefix}</td><td>{r.asPath.join(' ') || '—'}</td></tr>)}</tbody></table></div></details>}
     </section>}
     <div className="resource-list">{topology.routeMaps?.filter(owned).map((m) => <button key={m.id} aria-pressed={map?.id === m.id} onClick={() => { setMapId(m.id); setDraft(undefined); setConfirmDelete(false) }}>{m.name}<small>{m.rules.length}  {t("rules ·")} {node?.routeMapAssignments?.filter((a) => a.inboundMapId === m.id || a.outboundMapId === m.id).length ?? 0}  {t("connections")}</small></button>)}</div>
-    {map && <><MapDefinition key={map.id} map={map} onSave={(value) => {
+    {map && <>
+      {!draft && (
+        <p className="muted" data-route-map-attachments>
+          {mapAttachments.length
+            ? `${t("Applied to:")} ${mapAttachments.join(' · ')}`
+            : t("Not applied to any connection on this router.")}
+        </p>
+      )}
+      <MapDefinition key={map.id} map={map} onSave={(value) => {
       const next = structuredClone(topology)
       next.routeMaps ??= []
       const index = next.routeMaps.findIndex((m) => m.id === value.id)
@@ -102,7 +120,7 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
       else next.routeMaps[index] = value
       commit(next); setDraft(undefined); setMapId(value.id)
     }} />
-      {!draft && <div className="delete-resource">{confirmDelete ? <><p>{t("Delete this route map and remove all of its connection assignments?")}</p><div className="row"><button onClick={() => setConfirmDelete(false)}>{t("Cancel deletion")}</button><button className="danger" onClick={() => {
+      {!draft && <div className="delete-resource">{confirmDelete ? <><p>{mapAttachments.length ? t("Delete route map {0} and remove it from {1}?", map.name, mapAttachments.join(', ')) : t("Delete this route map and remove all of its connection assignments?")}</p><div className="row"><button onClick={() => setConfirmDelete(false)}>{t("Cancel deletion")}</button><button className="danger" onClick={() => {
         const next = structuredClone(topology)
         next.routeMaps = next.routeMaps?.filter((m) => m.id !== map.id)
         for (const router of [...next.hubs, ...next.sites]) {

@@ -71,6 +71,17 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           next.erLinks = next.erLinks?.filter((link) => link.locationId !== id)
         } else if (request.kind === 'erLink') next.erLinks = next.erLinks?.filter((link) => link.id !== id)
         else next.siteLinks = next.siteLinks.filter((l) => l.id !== id)
+        const activeSpokeIds = new Set(next.spokes.filter((s) => Boolean(s.hubId)).map((s) => s.id))
+        const activeNvaSiteIds = new Set(next.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId && activeSpokeIds.has(c.spokeId)).map((c) => c.siteId))
+        const orphanedNvaSiteIds = new Set(next.sites.filter((s) => s.role === 'spoke-nva' && !activeNvaSiteIds.has(s.id)).map((s) => s.id))
+        if (orphanedNvaSiteIds.size) {
+          next.sites = next.sites.filter((s) => !orphanedNvaSiteIds.has(s.id))
+          next.connections = next.connections.filter((c) => !orphanedNvaSiteIds.has(c.siteId))
+          next.siteLinks = next.siteLinks.filter((l) => !orphanedNvaSiteIds.has(l.a) && !orphanedNvaSiteIds.has(l.b))
+          next.erLinks = next.erLinks?.filter((link) => !link.siteId || !orphanedNvaSiteIds.has(link.siteId))
+          next.routeMaps = next.routeMaps?.filter((map) => !map.siteId || !orphanedNvaSiteIds.has(map.siteId))
+        }
+        next.spokes = next.spokes.map((s) => s.nvaSpokeIds ? { ...s, nvaSpokeIds: s.nvaSpokeIds.filter((nvaId) => activeSpokeIds.has(nvaId)) } : s)
         const remaining = new Set([...next.connections, ...next.siteLinks, ...next.spokes, ...(next.erLinks ?? [])].map((link) => link.id))
         for (const router of [...next.hubs, ...next.sites]) {
           if (router.routeMapAssignments) router.routeMapAssignments = router.routeMapAssignments.filter((a) => remaining.has(a.connectionId))

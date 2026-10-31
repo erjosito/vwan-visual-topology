@@ -1872,3 +1872,41 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   await importTopology(page, original)
   expect(await readTopology(page)).toEqual(original)
 })
+
+test('supports undo/redo across topology edits and surfaces shared route-map attachments before deletion', async ({ page }) => {
+  await page.goto('/'); await importTopology(page, structuredClone(example))
+  const undoButton = page.getByRole('button', { name: 'Undo', exact: true })
+  const redoButton = page.getByRole('button', { name: 'Redo', exact: true })
+  await expect(undoButton).toBeDisabled()
+  await expect(redoButton).toBeDisabled()
+
+  await page.getByRole('button', { name: '+ Site', exact: true }).click()
+  await dialog(page, 'Add site').getByLabel('Name', { exact: true }).fill('Dublin branch')
+  await dialog(page, 'Add site').getByLabel('Originated prefix', { exact: true }).fill('10.88.0.0/16')
+  await dialog(page, 'Add site').getByRole('button', { name: 'Create object', exact: true }).click()
+  expect((await readTopology(page)).sites.some((s: { name: string }) => s.name === 'Dublin branch')).toBe(true)
+  await expect(undoButton).toBeEnabled()
+
+  await undoButton.click()
+  expect((await readTopology(page)).sites.some((s: { name: string }) => s.name === 'Dublin branch')).toBe(false)
+  await expect(redoButton).toBeEnabled()
+
+  await page.keyboard.press('Control+y')
+  expect((await readTopology(page)).sites.some((s: { name: string }) => s.name === 'Dublin branch')).toBe(true)
+
+  await page.keyboard.press('Control+z')
+  expect((await readTopology(page)).sites.some((s: { name: string }) => s.name === 'Dublin branch')).toBe(false)
+
+  await action(page, 'Select hub Europe hub', 'Route maps')
+  await createMap(page, 'Shared branch policy')
+  await page.getByRole('button', { name: 'Save route map', exact: true }).click()
+  await expect(page.locator('[data-route-map-attachments]')).toContainText('Not applied to any connection on this router.')
+
+  const mapId = (await readTopology(page)).routeMaps![0].id
+  await page.getByLabel('Inbound route map', { exact: true }).selectOption(mapId)
+  await expect(page.locator('[data-route-map-attachments]')).toContainText('Applied to: London primary (Inbound)')
+  await page.getByRole('button', { name: 'Delete route map', exact: true }).click()
+  await expect(dialog(page, 'Route maps · Europe hub')).toContainText('Delete route map Shared branch policy and remove it from London primary (Inbound)?')
+  await page.getByRole('button', { name: 'Cancel deletion', exact: true }).click()
+})
+

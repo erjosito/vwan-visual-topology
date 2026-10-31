@@ -65,6 +65,8 @@ function App() {
     }
   })
   const [topology, setTopology] = useState(initial.topology)
+  const [history, setHistory] = useState<{ past: Topology[]; future: Topology[] }>({ past: [], future: [] })
+  const maxHistory = 40
   const [error, setError] = useState(initial.error)
   const [saveError, setSaveError] = useState('')
   const [selection, setSelection] = useState<ObjectSelection>()
@@ -203,7 +205,46 @@ function App() {
     try { localStorage.setItem(storageKey, JSON.stringify(next)); setSaveError('') }
     catch { setSaveError('Browser storage is unavailable or full. Export JSON to preserve your topology.') }
   }
-  const save = (next: Topology) => { setTopology(next); persist(next); setError('') }
+  const syncSelectionAfterTopologyChange = (next: Topology) => {
+    if (!topologyObject(next, router)) setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
+    if (selection && !topologyObject(next, selection)) setSelection(undefined)
+  }
+  const save = (next: Topology, recordHistory = true) => {
+    if (recordHistory && JSON.stringify(next) !== JSON.stringify(topology)) {
+      const snapshot = structuredClone(topology)
+      setHistory((current) => ({ past: [...current.past.slice(-(maxHistory - 1)), snapshot], future: [] }))
+    }
+    setTopology(next)
+    syncSelectionAfterTopologyChange(next)
+    persist(next)
+    setError('')
+  }
+  const canUndo = history.past.length > 0
+  const canRedo = history.future.length > 0
+  const undo = () => {
+    const previous = history.past.at(-1)
+    if (!previous) return
+    const currentSnapshot = structuredClone(topology)
+    setHistory((current) => ({ past: current.past.slice(0, -1), future: [currentSnapshot, ...current.future].slice(0, maxHistory) }))
+    setTopology(previous)
+    setError('')
+    setEditorRequest(undefined)
+    setContextMenu(undefined)
+    syncSelectionAfterTopologyChange(previous)
+    persist(previous)
+  }
+  const redo = () => {
+    const [next, ...rest] = history.future
+    if (!next) return
+    const currentSnapshot = structuredClone(topology)
+    setHistory((current) => ({ past: [...current.past.slice(-(maxHistory - 1)), currentSnapshot], future: rest }))
+    setTopology(next)
+    setError('')
+    setEditorRequest(undefined)
+    setContextMenu(undefined)
+    syncSelectionAfterTopologyChange(next)
+    persist(next)
+  }
   const update = (mutate: (next: Topology) => void) => {
     try { const next = structuredClone(topology); mutate(next); save(validateTopology(next)) }
     catch (error) { setError(message(error)) }
@@ -223,10 +264,32 @@ function App() {
     importRequest.current++
     cancelRoutingCheck()
     setPendingAzureImport(undefined)
-    save(next); setSelection(undefined); setPanel(undefined); setEditorRequest(undefined); setContextMenu(undefined); setClearRequested(false)
+    setHistory({ past: [], future: [] })
+    save(next, false); setSelection(undefined); setPanel(undefined); setEditorRequest(undefined); setContextMenu(undefined); setClearRequested(false)
     setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setConnectionId(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
+  useEffect(() => {
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.defaultPrevented || (!event.ctrlKey && !event.metaKey) || event.altKey) return
+      const target = event.target as HTMLElement | null
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable || target.closest('dialog'))) return
+      const key = event.key.toLowerCase()
+      if (key === 'z' && !event.shiftKey) {
+        if (history.past.length) {
+          event.preventDefault()
+          undo()
+        }
+      } else if ((key === 'y' && !event.shiftKey) || (key === 'z' && event.shiftKey)) {
+        if (history.future.length) {
+          event.preventDefault()
+          redo()
+        }
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  })
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlighting(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
@@ -423,7 +486,7 @@ function App() {
       {topology.azureImport && <div className="notice" role="status">{t("Azure structure-only import · simulated routes are not verified Azure effective routes.")} <button onClick={() => setPanel('azure')}>{t("Review import limitations")}</button></div>}
       <section className="canvas-workspace panel" aria-label={t("Topology workspace")}>
         <div className="canvas-toolbar"><div><h2>{t("Network topology")}</h2><p className="muted">{t("Drag blank canvas to pan; drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.")}</p></div>
-          <div className="canvas-tools"><label className="field"><span>{t("Visualization")}</span><select aria-label={t("Visualization mode")} value={layout} onChange={(e) => update((next) => { next.layout ??= { mode: 'layered', positions: {} }; next.layout.mode = e.target.value as LayoutMode })}><option value="layered">{t("Layered topology")}</option><option value="constellation">{t("Network constellation")}</option></select></label><div className="zoom-controls"><button aria-label={t("Zoom out")} disabled={zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}>-</button><label className="field"><span>{t("Zoom")}</span><select aria-label={t("Canvas zoom")} value={zoom} onChange={(e) => setZoom(Number(e.target.value))}><option value={0.75}>75%</option><option value={1}>100%</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label><button aria-label={t("Zoom in")} disabled={zoom >= 1.5} onClick={() => setZoom((value) => Math.min(1.5, value + 0.25))}>+</button></div><button disabled={!Object.keys(topology.layout?.positions[layout] ?? {}).length} title={t("Restore automatic positions in the current visualization only")} onClick={() => update((next) => { if (next.layout) delete next.layout.positions[layout] })}>{t("Reset layout")}</button>
+          <div className="canvas-tools"><label className="field"><span>{t("Visualization")}</span><select aria-label={t("Visualization mode")} value={layout} onChange={(e) => update((next) => { next.layout ??= { mode: 'layered', positions: {} }; next.layout.mode = e.target.value as LayoutMode })}><option value="layered">{t("Layered topology")}</option><option value="constellation">{t("Network constellation")}</option></select></label><div className="zoom-controls"><button aria-label={t("Zoom out")} disabled={zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}>-</button><label className="field"><span>{t("Zoom")}</span><select aria-label={t("Canvas zoom")} value={zoom} onChange={(e) => setZoom(Number(e.target.value))}><option value={0.75}>75%</option><option value={1}>100%</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label><button aria-label={t("Zoom in")} disabled={zoom >= 1.5} onClick={() => setZoom((value) => Math.min(1.5, value + 0.25))}>+</button></div><button disabled={!canUndo} title={t("Undo last topology change (Ctrl+Z)")} onClick={undo}>{t("Undo")}</button><button disabled={!canRedo} title={t("Redo topology change (Ctrl+Y)")} onClick={redo}>{t("Redo")}</button><button disabled={!Object.keys(topology.layout?.positions[layout] ?? {}).length} title={t("Restore automatic positions in the current visualization only")} onClick={() => update((next) => { if (next.layout) delete next.layout.positions[layout] })}>{t("Reset layout")}</button>
             <button onClick={() => setEditorRequest({ kind: 'hub' })}>{t("+ Hub")}</button><button onClick={() => setEditorRequest({ kind: 'spoke' })}>{t("+ VNet")}</button><button onClick={() => setEditorRequest({ kind: 'site' })}>{t("+ Site")}</button><button onClick={() => setEditorRequest({ kind: 'erLocation' })}>{t("+ ER location")}</button><button onClick={() => openRouteMaps()}>{t("Route maps")}</button><button disabled={currentCheck?.status === 'running'} onClick={checkRouting}>{t("Check routing")}</button><button aria-label={t("Open model notes and warnings")} onClick={() => setPanel('notes')}>{t("Notes")}{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         {routingCheck && <div className="routing-check-status" role="status">
