@@ -145,7 +145,7 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
   const matches = routes.filter((r) => cidr(r.prefix)!.length === longest)
   const shortest = Math.min(...matches.map((r) => r.asPath.length))
   const preferred = matches.filter((r) => r.asPath.length === shortest).slice(0, 32)
-  if (!preferred.length) return [{ hubs: [], steps: ['No BGP route at the source site. Azure routes must be advertised on a supported connection; SD-WAN outbound learning is not modeled.'], status: 'unreachable', termination: 'no-route', traceComplete: learned.selectionComplete }]
+  if (!preferred.length) return [{ hubs: [], steps: ['No BGP route at the source site. Azure routes must be advertised on an enabled connection.'], status: 'unreachable', termination: 'no-route', traceComplete: learned.selectionComplete }]
   const contributions = (route: SiteAdvertisement): SiteAdvertisement[] => {
     if (!route.forwardingRoutes) return [route]
     const matches = route.forwardingRoutes.filter((child) => contains(child.prefix, address)).flatMap((child) => contributions(child as SiteAdvertisement))

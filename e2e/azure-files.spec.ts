@@ -133,6 +133,67 @@ test('secured hubs cannot be exported as unsecured; excluding them is explicit',
   await panel(page).getByRole('button', { name: 'Review Bicep export' }).click()
   await expect(panel(page).getByText('Excluded hubs: Secured hub.', { exact: true })).toBeVisible()
   await expect(panel(page).getByRole('heading', { name: '2 resources · new deployment' })).toBeVisible()
+
+  // Re-include the secured hub with an explicit Firewall Policy ID and attach an existing VNet (#4)
+  await panel(page).getByLabel('Export Secured hub', { exact: true }).check()
+  await panel(page).getByLabel('Firewall Policy ID for Secured hub').fill(`${base}/firewallPolicies/target-fw-policy`)
+  await panel(page).getByLabel('Export spoke Application VNet').check()
+  await panel(page).getByLabel('Target VNet ID for Application VNet').fill('/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/target-app-vnet')
+  await panel(page).getByRole('button', { name: 'Review Bicep export' }).click()
+  await expect(panel(page).getByRole('heading', { name: '6 resources · new deployment' })).toBeVisible()
+})
+
+test('version 2 Azure captures retain observed effective-route snapshots and expose the Hub BGP table source switch (#3)', async ({ page }) => {
+  await page.goto('/')
+  const v2 = {
+    ...capture(),
+    version: 2,
+    collectorVersion: '2',
+    context: { cloud: 'AzureCloud', subscriptionId: '11111111-1111-1111-1111-111111111111', tenantId: '22222222-2222-2222-2222-222222222222', azureCliVersion: '2.85.0' },
+    hubs: [{
+      ...capture().hubs[0],
+      connections: [{
+        id: `${base}/virtualHubs/west/hubVirtualNetworkConnections/app`,
+        name: 'Application VNet',
+        virtualNetworkId: `${base}/virtualNetworks/app`,
+        addressPrefixes: ['10.20.0.0/16'],
+        defaultRouting: true,
+        enableInternetSecurity: false,
+      }],
+    }],
+    observations: {
+      version: 1,
+      startedAt: '2026-09-10T12:00:00Z',
+      completedAt: '2026-09-10T12:00:05Z',
+      tables: [{
+        hubResourceId: `${base}/virtualHubs/west`,
+        resourceId: `${base}/virtualHubs/west/hubRouteTables/defaultRouteTable`,
+        resourceType: 'RouteTable',
+        status: 'complete',
+        capturedAt: '2026-09-10T12:00:03Z',
+        apiVersion: 'az network vhub get-effective-routes',
+        warnings: [],
+        routes: [{
+          addressPrefixes: ['10.20.0.0/16'],
+          nextHopType: 'VirtualNetworkConnection',
+          nextHops: [`${base}/virtualHubs/west/hubVirtualNetworkConnections/app`],
+          routeOrigin: `${base}/virtualHubs/west/hubVirtualNetworkConnections/app`,
+          asPath: '',
+        }],
+      }],
+    },
+  }
+  await upload(page, v2)
+  await expect(panel(page).getByText(/Observed effective-route snapshots: West hub \(complete, 1 routes\)/)).toBeVisible()
+  await confirmImport(page)
+  await page.getByRole('button', { name: 'Select hub West hub', exact: true }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'BGP table', exact: true }).click()
+  const inspector = page.getByRole('dialog', { name: 'BGP table · West hub', exact: true })
+  const sourceGroup = inspector.getByRole('group', { name: 'Route table source', exact: true })
+  await expect(sourceGroup).toBeVisible()
+  await sourceGroup.getByRole('button', { name: 'Azure snapshot', exact: true }).click()
+  await expect(inspector.getByText('Application VNet (VNet connection)').first()).toBeVisible()
+  await expect(inspector.getByText('VirtualNetworkConnection (Spoke VNet)')).toBeVisible()
 })
 
 test('collector downloads the exact reviewable script from a static asset, with no Azure authentication', async ({ page }) => {

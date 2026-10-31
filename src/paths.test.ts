@@ -48,13 +48,15 @@ describe('contextual node paths', () => {
 
   it('traces incoming groups independently from each source, including prefixless sites and unreachable paths', () => {
     const t = structuredClone(example)
+    t.sites.push({ id: 'offline', name: 'Offline site', asn: 65099, prefixes: [] })
     const simulation = simulate(t)
     const target = { kind: 'spoke' as const, id: 'eu-apps' }
     const sites = traceGroupedPaths(t, simulation, target, 'from', 'sites')
-    expect(new Set(sites.map((path) => path.sourceName))).toEqual(new Set(['London datacenter', 'New York office', 'Berlin branch']))
+    expect(new Set(sites.map((path) => path.sourceName))).toEqual(new Set(['London datacenter', 'New York office', 'Berlin branch', 'Offline site']))
     expect(sites.every((path) => path.destinationName === 'Europe applications' && path.destinationPrefix === '10.1.0.0/16')).toBe(true)
     expect(sites.find((path) => path.sourceName === 'New York office')).toMatchObject({ status: 'delivered', sourceConnectionId: 'vpn-us', hubs: ['us', 'eu'] })
-    expect(sites.find((path) => path.sourceName === 'Berlin branch')).toMatchObject({ status: 'unreachable', hubs: [] })
+    expect(sites.find((path) => path.sourceName === 'Berlin branch')).toMatchObject({ status: 'delivered', sourceConnectionId: 'sdwan-eu', hubs: ['eu'] })
+    expect(sites.find((path) => path.sourceName === 'Offline site')).toMatchObject({ status: 'unreachable', hubs: [] })
     const vnets = traceGroupedPaths(t, simulation, target, 'from', 'vnets')
     expect(vnets).toHaveLength(1)
     expect(vnets[0]).toMatchObject({ sourceName: 'Americas applications', sourceSpokeId: 'us-apps', destinationPrefix: '10.1.0.0/16', status: 'delivered', hubs: ['us', 'eu'] })

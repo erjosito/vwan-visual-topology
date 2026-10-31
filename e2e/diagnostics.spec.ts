@@ -155,6 +155,9 @@ test('automatic checks separate unassigned advertised prefixes and model scope b
     {
       id: 'sdwan', name: 'SDWAN', hubId: 'h', siteId: 'sdwan-site', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
     },
+    {
+      id: 'sdwan-vpn', name: 'SDWAN Backup VPN', hubId: 'h', siteId: 'sdwan-site', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
+    },
   )
   await page.getByLabel('Import topology file').setInputFiles({ name: 'unknown.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(unknown)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
@@ -308,7 +311,10 @@ test('spoke attachments do not produce single-point-of-failure warnings but affe
 
 test('unsupported SD-WAN checks stay in neutral coverage notes in automatic and advanced reports', async ({ page }) => {
   const unsupported = structuredClone(topology)
-  unsupported.connections = [{ id: 'sdwan', name: 'SD-WAN', hubId: 'h', siteId: 'isolated', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }]
+  unsupported.connections = [
+    { id: 'sdwan', name: 'SD-WAN', hubId: 'h', siteId: 'isolated', transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+    { id: 'sdwan-vpn', name: 'Backup VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+  ]
   await page.goto('/')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'unsupported.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(unsupported)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()

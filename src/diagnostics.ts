@@ -387,7 +387,7 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
   for (const id of hubIds) {
     for (const table of [simulation.bgpTables[id], simulation.tables[id], simulation.firewallTables[id]]) {
       const decision = table?.filter((d) => contains(d.prefix, address)).sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
-      if (decision?.candidates.some((route) => route.transport === 'SDWAN')) reasons.push(limits.sdwan)
+      if ((decision?.candidates.length ?? 0) > 1 && decision?.candidates.some((route) => route.transport === 'SDWAN')) reasons.push(limits.sdwan)
       if (decision?.candidates.some((route) => !route.remote && route.kind === 'bgp' && (route.asPath.includes(65515) || route.asPath.includes(65520)))) reasons.push(limits.ownAs)
       if (decision?.prefix === '0.0.0.0/0' && decision.selected.some((route) => route.transport === 'ExpressRoute')) reasons.push(limits.erDefault)
     }
@@ -407,7 +407,12 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
           if (reachable.has(link.b)) reachable.add(link.a)
         }
       }
-      if (topology.connections.some((c) => c.enabled && c.transport === 'SDWAN' && reachable.has(c.siteId))) reasons.push(limits.sdwan)
+      for (const c of topology.connections.filter((conn) => conn.enabled && conn.transport === 'SDWAN' && reachable.has(conn.siteId))) {
+        for (const table of [simulation.bgpTables[c.hubId], simulation.tables[c.hubId], simulation.firewallTables[c.hubId]]) {
+          const decision = table?.filter((d) => contains(d.prefix, address)).sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
+          if ((decision?.candidates.length ?? 0) > 1 && decision?.candidates.some((route) => route.transport === 'SDWAN')) reasons.push(limits.sdwan)
+        }
+      }
       const erAttached = topology.connections.some((c) => c.enabled && c.transport === 'ExpressRoute' && reachable.has(c.siteId)) ||
         topology.erLinks?.some((link) => link.enabled && link.siteId && reachable.has(link.siteId))
       if (erAttached && Object.values(simulation.bgpTables).some((table) => table.some((d) => d.prefix === '0.0.0.0/0'))) reasons.push(limits.erDefault)
@@ -649,7 +654,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
         : advertiseSiteRoutes(topology, neighbor, link, base.learned.tables[site.id] ?? [], false, value)
       snapshot = { before: stage('before'), after: stage('after') }
     } else if (site && constraint.direction === 'inbound') {
-      const attachment = [...topology.connections, ...(topology.erLinks ?? [])].find((item) => item.id === constraint.connectionId && item.siteId === site.id && item.enabled && (!('transport' in item) || item.transport !== 'SDWAN'))
+      const attachment = [...topology.connections, ...(topology.erLinks ?? [])].find((item) => item.id === constraint.connectionId && item.siteId === site.id && item.enabled)
       if (attachment) {
         const before = base.simulation.outbound[attachment.id] ?? []
         const after = [...applyRouteMapRules(before.filter((route) => route.kind !== 'vpn-static'), routerMapRules(topology, constraint.router, attachment.id, 'inbound')), ...before.filter((route) => route.kind === 'vpn-static')].filter((route) => !route.asPath.includes(site.asn))
@@ -663,7 +668,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       { code: snapshot?.after.some((route) => route.prefix === constraint.prefix) ? 'after:present' : 'after:absent' },
     ] }
     const attachment = topology.connections.find((item) => item.id === constraint.connectionId)
-    const unsupported = attachment?.enabled && attachment.transport === 'SDWAN' || (neighborAttachment?.enabled && constraint.prefix === '0.0.0.0/0' &&
+    const unsupported = (constraint.router.kind === 'hub' && attachment?.enabled && attachment.transport === 'SDWAN') || (neighborAttachment?.enabled && constraint.prefix === '0.0.0.0/0' &&
       (attachment?.transport === 'ExpressRoute' || topology.erLinks?.some((link) => link.id === constraint.connectionId)))
     if (!snapshot || base.limitations.length || unsupported) {
       limited(limits.policy)

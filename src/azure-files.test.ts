@@ -205,4 +205,67 @@ describe('offline Bicep export', () => {
     defaults.hubs[1].addressPrefix = '10.251.0.0/23'
     expect(() => generateBicep(topology, defaults)).toThrow(/unique/)
   })
+
+  it('exports secured hubs (AZFW_Hub + routingIntent) and existing-VNet spoke attachments when explicitly configured (#4)', () => {
+    const topology = importAzureCapture(capture())
+    topology.hubs[0].routingIntent = { private: true, internet: true, privatePrefixes: [] }
+    topology.spokes.push({ id: 'spoke-2', name: 'Database VNet', hubId: topology.hubs[0].id, prefixes: ['10.21.0.0/16'], propagateDefaultRoute: true })
+
+    const settings = bicepDefaults(topology)
+    // Source VNet IDs are never auto-populated as deployment targets
+    expect(settings.spokes?.every((spoke) => !spoke.selected && spoke.existingVnetId === '')).toBe(true)
+    expect(() => generateBicep(topology, settings)).toThrow(/Secured hubs require firewall deployment support/)
+
+    // Custom non-RFC1918 private prefixes are blocked on Azure Routing Intent
+    topology.hubs[0].routingIntent.privatePrefixes = ['100.64.0.0/10']
+    settings.hubs[0].firewallPolicyId = `${base}/firewallPolicies/fw-policy`
+    expect(() => generateBicep(topology, settings)).toThrow(/RFC 1918/)
+    topology.hubs[0].routingIntent.privatePrefixes = []
+
+    // Invalid firewall policy ID is rejected
+    settings.hubs[0].firewallPolicyId = `${base}/virtualNetworks/not-a-policy`
+    expect(() => generateBicep(topology, settings)).toThrow(/firewallPolicies/)
+
+    settings.hubs[0].firewallPolicyId = `${base}/firewallPolicies/fw-policy`
+    settings.hubs[0].firewallName = 'west-hub-fw'
+    settings.hubs[0].firewallTier = 'Premium'
+    settings.spokes![0].selected = true
+    expect(() => generateBicep(topology, settings)).toThrow(/virtualNetworks/)
+
+    const targetVnet1 = '/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/target-rg/providers/Microsoft.Network/virtualNetworks/app-vnet'
+    const targetVnet2 = '/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/target-rg/providers/Microsoft.Network/virtualNetworks/db-vnet'
+    settings.spokes![0].existingVnetId = targetVnet1
+    settings.spokes![0].enableInternetSecurity = false
+    settings.spokes![1].selected = true
+    settings.spokes![1].existingVnetId = targetVnet1
+    expect(() => generateBicep(topology, settings)).toThrow(/unique across selected spoke attachments/)
+
+    settings.spokes![1].existingVnetId = targetVnet2
+    settings.spokes![1].enableInternetSecurity = true
+    const exported = generateBicep(topology, settings)
+    // 1 WAN + 1 hub + 1 AZFW_Hub + 1 routingIntent + 2 hubVirtualNetworkConnections = 6 resources
+    expect(exported.resourceCount).toBe(6)
+    expect(exported.text).toContain("resource hubFirewalls 'Microsoft.Network/azureFirewalls@2024-10-01'")
+    expect(exported.text).toContain("name: 'AZFW_Hub'")
+    expect(exported.text).toContain("firewallTier: 'Premium'")
+    expect(exported.text).toContain("resource hubRoutingIntents 'Microsoft.Network/virtualHubs/routingIntent@2024-10-01'")
+    expect(exported.text).toContain("'PrivateTraffic'")
+    expect(exported.text).toContain("'Internet'")
+    expect(exported.text).toContain("resource spokeConnections 'Microsoft.Network/virtualHubs/hubVirtualNetworkConnections@2024-10-01'")
+    expect(exported.text).toContain(targetVnet1)
+    expect(exported.text).toContain(targetVnet2)
+    expect(exported.text).not.toContain(capture().hubs[0].connections[0].virtualNetworkId)
+
+    const directory = join('test-artifacts', 'azure-files', 'bicep')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'extended.bicep'), exported.text)
+
+    // Spoke NVA peers block exporting that spoke attachment
+    topology.sites.push({ id: 'nva-site', name: 'NVA appliance', asn: 65010, prefixes: ['10.90.0.0/24'], role: 'spoke-nva' })
+    topology.connections.push({
+      id: 'nva-conn', name: 'NVA peer', hubId: topology.hubs[0].id, spokeId: topology.spokes[0].id, siteId: 'nva-site',
+      transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
+    })
+    expect(() => generateBicep(topology, settings)).toThrow(/Spoke NVA BGP peers/)
+  })
 })

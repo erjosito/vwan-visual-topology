@@ -1,4 +1,5 @@
 import type { AzureImportInfo, Hub, Topology } from './model'
+import { armKey, parseAzureObservation } from './azure-observation'
 import { cidr, validateTopology } from './validation'
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -31,7 +32,28 @@ export { stableId as azureObjectId }
 
 export function importAzureCapture(input: unknown): Topology {
   const root = object(input, 'Azure capture')
-  if (root.kind !== 'azure-vwan-capture' || root.version !== 1) throw new Error('Unsupported Azure capture format/version. Use the supplied collector.')
+  if (root.kind !== 'azure-vwan-capture' || (root.version !== 1 && root.version !== 2)) throw new Error('Unsupported Azure capture format/version. Use the supplied collector.')
+  if (root.version === 2) {
+    const observation = parseAzureObservation(input)
+    const topology = importAzureCapture({ ...root, version: 1 })
+    const spokes = observation.hubs.flatMap((hub) => hub.spokes)
+      .filter((spoke) => topology.spokes.some((item) => item.id === spoke.importedId))
+      .map((spoke) => ({ spokeId: spoke.importedId, resourceId: spoke.resourceId, virtualNetworkId: spoke.virtualNetworkId }))
+    const tables = observation.tables.flatMap((table) => {
+      const hub = observation.hubs.find((item) => armKey(item.resourceId) === armKey(table.hubResourceId))
+      return hub ? [{ hubId: hub.importedId, ...table }] : []
+    })
+    topology.azureImport = {
+      ...topology.azureImport!,
+      spokes,
+      tables,
+      warnings: [
+        ...topology.azureImport!.warnings,
+        'Attached observed hub effective-route snapshots are read-only Azure observations (see Hub BGP table -> Azure snapshot) and do not modify simulated routes.',
+      ],
+    }
+    return validateTopology(topology)
+  }
   if (typeof root.complete !== 'boolean') throw new Error('Capture completeness is missing.')
   const wan = object(root.wan, 'Virtual WAN')
   const wanId = resourceId(wan.id, 'virtualWans')

@@ -53,6 +53,7 @@ export const diagnosticJa: Record<string, string> = {
   'Destination is within the source spoke; no Virtual WAN hop is required.': '宛先は送信元スポーク内にあるため、Virtual WAN のホップは不要です。',
   'On-premises Azure advertisement propagation did not converge.': 'オンプレミスの Azure アドバタイズ伝達が収束しませんでした。',
   'No BGP route at the source site. Azure routes must be advertised on a supported connection; SD-WAN outbound learning is not modeled.': '送信元サイトに BGP ルートがありません。Azure ルートは対応した接続でアドバタイズする必要があります。SD-WAN の送信方向の学習はモデル化されません。',
+  'No BGP route at the source site. Azure routes must be advertised on an enabled connection.': '送信元サイトに BGP ルートがありません。Azure ルートは有効な接続でアドバタイズする必要があります。',
   'The mapped summary has no known contributing route for this destination.': 'マップで生成した集約には、この宛先への既知の集約元ルートがありません。',
   'Source site: longest prefix {0}, shortest AS path {1}.': '送信元サイト: 最長プレフィックス一致 (LPM) {0}、最短 AS パス {1}。',
   'The Azure attachment is unavailable.': 'Azure 接続を利用できません。',

@@ -2,8 +2,8 @@ import { t, localizeDiagnostic } from './i18n'
 import { useState } from 'react'
 import type { Topology } from './model'
 import { CanvasOverlay } from './CanvasOverlay'
-import { bicepDefaults, generateBicep, hubExportBlocker } from './bicep-export'
-import type { BicepExport, BicepSettings } from './bicep-export'
+import { bicepDefaults, generateBicep, hubExportBlocker, spokeExportBlocker } from './bicep-export'
+import type { BicepExport, BicepSettings, SpokeAttachmentDeployment } from './bicep-export'
 import collectorUrl from './collect-azure-vwan.ps1?url'
 
 function download(text: string) {
@@ -39,23 +39,55 @@ export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompa
     </>}
     {report && <section aria-label={t("Azure import report")}><h3>{t("Structure-only import report")}</h3><p>{t("Captured")} {report.capturedAt}  {t("· collector")} {report.collectorVersion}</p><p className="azure-resource-id">{report.wanId}</p>
       <div className="table-scroll"><table><thead><tr><th>{t("Hub")}</th><th>{t("Infrastructure prefix")}</th><th>{t("Capture status")}</th></tr></thead><tbody>{report.hubs.map((source) => <tr key={source.hubId}><td title={source.resourceId}>{(pendingImport ?? topology).hubs.find((hub) => hub.id === source.hubId)?.name ?? source.hubId}</td><td>{source.addressPrefix}</td><td>{source.limitations.length ? t("Partial / unsupported routing") : t("Captured structure only")}</td></tr>)}</tbody></table></div>
+      {report.tables !== undefined && <p className="muted">{t("Observed effective-route snapshots")}: {report.tables.map((table) => `${(pendingImport ?? topology).hubs.find((hub) => hub.id === table.hubId)?.name ?? table.hubId} (${table.status}, ${table.routes.length} routes)`).join(' · ') || t("none")}</p>}
       {report.warnings.map((warning, index) => <p className="notice" key={index}>{localizeDiagnostic(warning)}</p>)}</section>}
     {pendingImport ? <>
       <label className="checkbox-field"><input type="checkbox" checked={acknowledged} onChange={(e) => setAcknowledged(e.target.checked)} />{t("I understand this is a structure-only import, not verified Azure routing.")}</label>
       <div className="dialog-actions"><button onClick={onCancelImport}>{t("Cancel Azure import")}</button><button className="primary" disabled={!acknowledged} onClick={onConfirmImport}>{t("Replace workspace with Azure capture")}</button></div>
     </> : <>
       <h3>{t("Export Bicep starter")}</h3>
-      <p>{t("One new Standard WAN and selected unsecured hubs only. Infrastructure CIDRs are separate from destination prefixes. No VNet connections, gateways, sites or firewall resources are deployed.")}</p>
+      <p>{t("Creates one new Standard WAN, selected hubs, and optional AZFW_Hub firewalls, Routing Intent policies, and existing-VNet attachments. Infrastructure CIDRs are separate from destination prefixes. No VNets, gateways, sites, NVAs or firewall policies are created.")}</p>
       <div className="form-grid"><label className="field"><span>{t("WAN deployment name")}</span><input aria-label={t("WAN deployment name")} value={settings.wanName} onChange={(e) => change({ ...settings, wanName: e.target.value })} /></label><label className="field"><span>{t("WAN Azure location")}</span><input aria-label={t("WAN Azure location")} value={settings.location} placeholder="westeurope" onChange={(e) => change({ ...settings, location: e.target.value })} /></label></div>
       {topology.hubs.map((hub) => {
         const entry = settings.hubs.find((entry) => entry.hubId === hub.id)
         if (!entry) return <p className="notice" key={hub.id}>{t("Workspace changed. Close and reopen Azure files to include")} {hub.name}.</p>
         const edit = (values: Partial<typeof entry>) => change({ ...settings, hubs: settings.hubs.map((item) => item.hubId === hub.id ? { ...item, ...values } : item) })
-        const blocker = hubExportBlocker(topology, hub.id)
+        const blocker = hubExportBlocker(topology, hub.id, entry)
+        const isSecured = hub.routingIntent.private || hub.routingIntent.internet
+        const hubSpokes = topology.spokes.filter((spoke) => spoke.hubId === hub.id)
         return <fieldset key={hub.id}><legend>{hub.name}</legend>
           <label className="checkbox-field"><input aria-label={t("Export {0}", hub.name)} type="checkbox" checked={entry.selected} onChange={(e) => edit({ selected: e.target.checked })} />{t("Include this hub")}</label>
           {blocker && <p className="notice">{localizeDiagnostic(blocker)}</p>}
-          {entry.selected && <div className="form-grid"><label className="field"><span>{t("Deployment name")}</span><input aria-label={t("Deployment name for {0}", hub.name)} value={entry.name} onChange={(e) => edit({ name: e.target.value })} /></label><label className="field"><span>{t("Canonical Azure location")}</span><input aria-label={t("Azure location for {0}", hub.name)} value={entry.location} onChange={(e) => edit({ location: e.target.value })} /></label><label className="field"><span>{t("Hub infrastructure CIDR")}</span><input aria-label={t("Infrastructure CIDR for {0}", hub.name)} placeholder={t("Explicit unused /23 recommended")} value={entry.addressPrefix} onChange={(e) => edit({ addressPrefix: e.target.value })} /></label></div>}
+          {entry.selected && <>
+            <div className="form-grid">
+              <label className="field"><span>{t("Deployment name")}</span><input aria-label={t("Deployment name for {0}", hub.name)} value={entry.name} onChange={(e) => edit({ name: e.target.value })} /></label>
+              <label className="field"><span>{t("Canonical Azure location")}</span><input aria-label={t("Azure location for {0}", hub.name)} value={entry.location} onChange={(e) => edit({ location: e.target.value })} /></label>
+              <label className="field"><span>{t("Hub infrastructure CIDR")}</span><input aria-label={t("Infrastructure CIDR for {0}", hub.name)} placeholder={t("Explicit unused /23 recommended")} value={entry.addressPrefix} onChange={(e) => edit({ addressPrefix: e.target.value })} /></label>
+              {isSecured && <>
+                <label className="field"><span>{t("Hub firewall name (AZFW_Hub)")}</span><input aria-label={t("Firewall name for {0}", hub.name)} value={entry.firewallName ?? `${entry.name.slice(0, 42)}-fw`} onChange={(e) => edit({ firewallName: e.target.value })} /></label>
+                <label className="field"><span>{t("Firewall tier")}</span><select aria-label={t("Firewall tier for {0}", hub.name)} value={entry.firewallTier ?? 'Standard'} onChange={(e) => edit({ firewallTier: e.target.value as 'Standard' | 'Premium' })}><option value="Standard">Standard</option><option value="Premium">Premium</option></select></label>
+                <label className="field"><span>{t("Existing Firewall Policy ARM ID")}</span><input aria-label={t("Firewall Policy ID for {0}", hub.name)} placeholder="/subscriptions/.../Microsoft.Network/firewallPolicies/..." value={entry.firewallPolicyId ?? ''} onChange={(e) => edit({ firewallPolicyId: e.target.value })} /></label>
+              </>}
+            </div>
+            {hubSpokes.map((spoke) => {
+              const spokeEntry = (settings.spokes ?? []).find((item) => item.spokeId === spoke.id)
+              if (!spokeEntry) return null
+              const editSpoke = (values: Partial<SpokeAttachmentDeployment>) => change({
+                ...settings,
+                spokes: (settings.spokes ?? []).map((item) => item.spokeId === spoke.id ? { ...item, ...values } : item),
+              })
+              const spokeBlocker = spokeExportBlocker(topology, spoke.id)
+              return <div key={spoke.id} className="spoke-export-row">
+                <label className="checkbox-field"><input aria-label={t("Export spoke {0}", spoke.name)} type="checkbox" checked={spokeEntry.selected} onChange={(e) => editSpoke({ selected: e.target.checked })} />{t("Attach existing VNet for {0}", spoke.name)}</label>
+                {spokeBlocker && <p className="notice">{localizeDiagnostic(spokeBlocker)}</p>}
+                {spokeEntry.selected && <div className="form-grid">
+                  <label className="field"><span>{t("Connection deployment name")}</span><input aria-label={t("Connection name for {0}", spoke.name)} value={spokeEntry.name} onChange={(e) => editSpoke({ name: e.target.value })} /></label>
+                  <label className="field"><span>{t("Target existing VNet ARM ID")}</span><input aria-label={t("Target VNet ID for {0}", spoke.name)} placeholder="/subscriptions/.../Microsoft.Network/virtualNetworks/..." value={spokeEntry.existingVnetId} onChange={(e) => editSpoke({ existingVnetId: e.target.value })} /></label>
+                  <label className="checkbox-field"><input aria-label={t("Enable Internet security for {0}", spoke.name)} type="checkbox" checked={spokeEntry.enableInternetSecurity} onChange={(e) => editSpoke({ enableInternetSecurity: e.target.checked })} />{t("Enable Internet security (propagate default route)")}</label>
+                </div>}
+              </div>
+            })}
+          </>}
         </fieldset>
       })}
       <p className="muted">{t("Minimum router capacity: 2 routing infrastructure units (editable in Bicep). Region availability, quotas and Azure permissions are not checked offline. Deployment incurs Azure charges.")}</p>

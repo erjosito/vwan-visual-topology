@@ -677,6 +677,30 @@ describe('route maps and on-premises transit', () => {
     // Importer loop prevention must also inspect policy-modified paths.
     expect(siteResult.tables['vpn-site'].some((r) => r.prefix === '10.80.0.0/16' && r.asPath.includes(65001))).toBe(false)
   })
+  it('models SD-WAN outbound learning and hub eBGP own-AS loop rejection (#19, #20)', () => {
+    const sim = simulate(example)
+    const sdwanOutbound = sim.outbound['sdwan-eu']
+    expect(sdwanOutbound.some((r) => r.prefix === '10.1.0.0/16' && r.asPath[0] === 65515)).toBe(true)
+    expect(sdwanOutbound.some((r) => r.prefix === '10.40.0.0/16')).toBe(false)
+
+    const ownAs = structuredClone(example)
+    ownAs.routeMaps = [{
+      id: 'site-own-as', name: 'Prepend hub ASN', siteId: 'ny',
+      rules: [{ id: 'r1', prefixes: ['10.30.0.0/16'], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [65515], nextStep: 'terminate' }],
+    }, {
+      id: 'dc-own-as', name: 'Prepend ER MSEE ASN', siteId: 'dc',
+      rules: [{ id: 'r2', prefixes: ['10.20.10.0/24'], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [65520], nextStep: 'terminate' }],
+    }]
+    ownAs.sites.find((s) => s.id === 'ny')!.routeMapAssignments = [{ connectionId: 'vpn-us', outboundMapId: 'site-own-as' }]
+    ownAs.sites.find((s) => s.id === 'dc')!.routeMapAssignments = [
+      { connectionId: 'er-eu', outboundMapId: 'dc-own-as' },
+      { connectionId: 'vpn-eu', outboundMapId: 'dc-own-as' },
+    ]
+    const ownAsSim = simulate(ownAs)
+    expect(ownAsSim.bgpTables['us'].some((d) => d.prefix === '10.30.0.0/16')).toBe(false)
+    expect(ownAsSim.bgpTables['eu'].some((d) => d.prefix === '10.20.10.0/24')).toBe(false)
+    expect(ownAsSim.bgpTables['eu'].some((d) => d.prefix === '10.20.0.0/16')).toBe(true)
+  })
 })
 
 describe('topology and input validation', () => {

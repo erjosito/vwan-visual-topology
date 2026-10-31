@@ -402,6 +402,67 @@ export function validateTopology(input: unknown): Topology {
     const capturedAt = sourceText(source.capturedAt, 'Azure capture timestamp', 40)
     if (!/^\d{4}-\d\d-\d\dT/.test(capturedAt) || !Number.isFinite(Date.parse(capturedAt))) fail('Invalid Azure capture timestamp.')
     const seen = new Set<string>()
+    const seenSpokes = new Set<string>()
+    const seenTables = new Set<string>()
+    let totalRows = 0
+    let expandedRoutes = 0
+    const freeText = (value: unknown, label: string, limit: number) => {
+      if (typeof value !== 'string' || value.length > limit || /[\r\n\0]/.test(value)) fail(`Invalid ${label}.`)
+      return value as string
+    }
+    const timestamp = (value: unknown, label: string) => {
+      const result = sourceText(value, label, 40)
+      if (!/^\d{4}-\d\d-\d\dT/.test(result) || !Number.isFinite(Date.parse(result))) fail(`Invalid ${label}.`)
+      return result
+    }
+    const sourceSpokes = source.spokes === undefined ? undefined : array(source.spokes, 1200, 'Azure source spokes').map((value) => {
+      const spoke = record(value)
+      const spokeId = sourceText(spoke.spokeId, 'Azure source spoke', 120)
+      if (seenSpokes.has(spokeId)) fail('Duplicate Azure source spoke.')
+      seenSpokes.add(spokeId)
+      return { spokeId, resourceId: resourceId(spoke.resourceId), virtualNetworkId: resourceId(spoke.virtualNetworkId) }
+    }).filter((entry) => spokes.some((spoke) => spoke.id === entry.spokeId))
+    const sourceTables = source.tables === undefined ? undefined : array(source.tables, 20, 'Azure observed route tables').map((value) => {
+      const table = record(value)
+      const hubId = sourceText(table.hubId, 'Azure observed table hub', 120)
+      const hubResourceId = resourceId(table.hubResourceId)
+      const tableResourceId = resourceId(table.resourceId)
+      if (seenTables.has(tableResourceId.toLowerCase())) fail('Duplicate Azure observed route table.')
+      seenTables.add(tableResourceId.toLowerCase())
+      if (!tableResourceId.toLowerCase().startsWith(`${hubResourceId.toLowerCase()}/hubroutetables/`)
+        || tableResourceId.slice(hubResourceId.length + '/hubroutetables/'.length).includes('/')) fail('Invalid Azure observed route table resource ID.')
+      const resourceType = sourceText(table.resourceType, 'Azure observed route table type', 120)
+      if (resourceType !== 'RouteTable' && resourceType !== 'Microsoft.Network/virtualHubs/hubRouteTables') fail('Invalid Azure observed route table resource type.')
+      const status = sourceText(table.status, 'Azure observed route table status', 30)
+      if (!['complete', 'empty', 'denied', 'failed', 'truncated', 'unsupported'].includes(status)) fail('Invalid Azure observed route table status.')
+      const routes = array(table.routes, 10_000, 'Azure observed routes').map((item) => {
+        const route = record(item)
+        const addressPrefixes = array(route.addressPrefixes, 100, 'Azure observed route prefixes').map((prefix) => sourceText(prefix, 'Azure observed route prefix', 256))
+        const nextHops = array(route.nextHops, 128, 'Azure observed route next hops').map((hop) => sourceText(hop, 'Azure observed route next hop', 2048))
+        totalRows += 1
+        expandedRoutes += addressPrefixes.length * Math.max(1, nextHops.length)
+        if (totalRows > 20_000 || expandedRoutes > 100_000) fail('Azure observed route table exceeds the safety limit.')
+        return {
+          addressPrefixes,
+          nextHopType: freeText(route.nextHopType, 'Azure observed next-hop type', 120),
+          nextHops,
+          routeOrigin: freeText(route.routeOrigin ?? '', 'Azure observed route origin', 2048),
+          asPath: freeText(route.asPath ?? '', 'Azure observed AS path', 2048),
+        }
+      })
+      if ((status === 'empty' && routes.length > 0) || (status === 'complete' && !routes.length)) fail('Azure observed route table status does not match its routes.')
+      return {
+        hubId,
+        hubResourceId,
+        resourceId: tableResourceId,
+        resourceType,
+        status: status as NonNullable<Topology['azureImport']>['tables'] extends (infer T)[] | undefined ? T extends { status: infer S } ? S : never : never,
+        capturedAt: timestamp(table.capturedAt, 'Azure observed route table timestamp'),
+        apiVersion: sourceText(table.apiVersion, 'Azure observed route table API version', 120),
+        routes,
+        warnings: messages(table.warnings),
+      }
+    }).filter((entry) => hubs.some((hub) => hub.id === entry.hubId))
     azureImport = {
       capturedAt, collectorVersion: sourceText(source.collectorVersion, 'Azure collector version', 40),
       wanId: resourceId(source.wanId), warnings: messages(source.warnings),
@@ -414,6 +475,8 @@ export function validateTopology(input: unknown): Topology {
         if (!cidr(addressPrefix)) fail('Invalid Azure hub IPv4 prefix.')
         return { hubId, resourceId: resourceId(hub.resourceId), addressPrefix, limitations: messages(hub.limitations) }
       }).filter((entry) => hubs.some((hub) => hub.id === entry.hubId)),
+      ...(sourceSpokes === undefined ? {} : { spokes: sourceSpokes }),
+      ...(sourceTables === undefined ? {} : { tables: sourceTables }),
     }
   }
   return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,

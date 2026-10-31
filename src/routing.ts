@@ -126,11 +126,16 @@ export function simulate(topology: Topology): Simulation {
     routePolicies.push({ router, connectionId, direction, before, after })
     return after
   }
-  const mapRoutes = (connection: Connection, routes: Candidate[], direction: RouteMapDirection) => policy(
-    { kind: 'hub', id: connection.hubId }, connection.id, direction, routes, [
-      ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), connectionMapRules(topology, connection, direction)),
-      ...routes.filter((route) => route.kind === 'vpn-static'),
-    ])
+  const hasHubOwnAsn = (asPath: number[]) => asPath.includes(65515) || asPath.includes(65520)
+  const mapRoutes = (connection: Connection, routes: Candidate[], direction: RouteMapDirection) => {
+    const wireRoutes = direction === 'inbound' ? routes.filter((route) => route.kind === 'vpn-static' || !hasHubOwnAsn(route.asPath)) : routes
+    const after = [
+      ...applyRouteMapRules(wireRoutes.filter((route) => route.kind !== 'vpn-static'), connectionMapRules(topology, connection, direction))
+        .filter((route) => direction !== 'inbound' || !hasHubOwnAsn(route.asPath)),
+      ...wireRoutes.filter((route) => route.kind === 'vpn-static'),
+    ]
+    return policy({ kind: 'hub', id: connection.hubId }, connection.id, direction, wireRoutes, after)
+  }
   const fromSite = (connection: Connection, routes: Candidate[]) => {
     const bgp = routes.filter((route) => route.kind !== 'vpn-static')
     const provider = new Map(bgp.map((route) => [route.key, connection.transport === 'ExpressRoute' && route.asPath[0] === 12076]))
@@ -179,8 +184,10 @@ export function simulate(topology: Topology): Simulation {
     })
     const routes = erLinks.filter((link) => link.siteId && link.locationId === hubLink.locationId)
       .flatMap((link) => (erAdvertisements[link.id] ?? []).map(receive))
+      .filter((route) => !hasHubOwnAsn(route.asPath))
     return policy({ kind: 'hub', id: hubId }, hubLink.id, 'inbound', routes,
-      applyRouteMapRules(routes, routerMapRules(topology, { kind: 'hub', id: hubId }, hubLink.id, 'inbound')))
+      applyRouteMapRules(routes, routerMapRules(topology, { kind: 'hub', id: hubId }, hubLink.id, 'inbound'))
+        .filter((route) => !hasHubOwnAsn(route.asPath)))
   })
   const local = Object.fromEntries(topology.hubs.map((hub) => [
     hub.id, [
@@ -203,7 +210,7 @@ export function simulate(topology: Topology): Simulation {
                   || topology.spokes.some((s) => s.nvaSpokeIds?.includes(spoke.id) && route.key.startsWith(`${s.id}:`))))
                 .map((route) => learnedRoute(connection, route)),
             ]))
-            .filter((route) => !route.asPath.includes(65515) && !topology.spokes.some((owner) => owner.hubId === hub.id
+            .filter((route) => !hasHubOwnAsn(route.asPath) && !topology.spokes.some((owner) => owner.hubId === hub.id
               && owner.prefixes.some((prefix) => cidr(prefix)!.length <= cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))),
         ]
         return policy({ kind: 'hub', id: hub.id }, spoke.id, 'inbound', routes,
@@ -302,7 +309,7 @@ export function simulate(topology: Topology): Simulation {
     return [policyRoute(hub, '0.0.0.0/0'), ...selected.filter((route) => route.prefix !== '0.0.0.0/0')]
   }
   const outbound: Record<string, Candidate[]> = Object.fromEntries(topology.connections.map((connection) => {
-    if (!connection.enabled || connection.transport === 'SDWAN') return [connection.id, []]
+    if (!connection.enabled) return [connection.id, []]
     const hostingSpoke = connection.spokeId ? topology.spokes.find((s) => s.id === connection.spokeId) : undefined
     const propagateDefault = Boolean(connection.propagateDefaultRoute || hostingSpoke?.propagateDefaultRoute)
     const before = hubOutboundCandidates(connection.hubId, propagateDefault)

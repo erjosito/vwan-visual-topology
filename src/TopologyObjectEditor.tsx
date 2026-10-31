@@ -323,7 +323,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <Field title={t("On-premises site")}><select name="site" required defaultValue={connection?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>{transport}
           <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={connection?.enabled ?? true} />{t("Connection enabled")}</label>
           <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={connection?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
-          {transportValue !== 'SDWAN' && <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={connection?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>}
+          <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={connection?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>
           <p className="muted">{t("Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.")}</p>
           </div>
           <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>

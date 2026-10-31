@@ -28,7 +28,8 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **Show path to/from → All Azure VNets / All onprem sites / Everywhere** highlights grouped paths on hubs, sites and spokes. “To” traces from the selected node to that group's destination prefixes; “from” traces independently from each group member to the selected node's prefixes. Everywhere combines VNets and sites, excluding the selected node; hubs are not duplicated as copies of their spokes. **Path details** identifies each source, destination, prefix and unreachable result, retaining ECMP. Shared outgoing destination prefixes are traced once, but distinct incoming sources are never merged.
 - Streams of larger circles show traffic direction at a constant 200 screen pixels per second, following the actual curved links in order. Circles are evenly spaced, with a new departure at most every 0.65 seconds rather than waiting for delivery. Each destination receives the next color in a fixed 20-color palette (teal, blue, amber, purple, and rose first), shared by its circles and a pale node-background tint. Multiple prefixes, sources, and equal-cost paths to the same destination share its color; the palette repeats after 20 destinations. Identical paths share one stream. Movement, layout, and zoom recalculate travel time; reduced-motion preferences retain static highlights and destination colors without animation.
 - Save automatically in browser storage, use bounded local **Undo / Redo** (`Ctrl+Z` / `Ctrl+Y` or `Ctrl+Shift+Z`, up to 40 steps), and import/export validated, versioned JSON.
-- **Azure files** imports a local, read-only Azure CLI capture after review and exports an offline Bicep starter for a new Standard WAN and selected unsecured hubs. No Azure authentication, SDK or deployment service is added to the app.
+- **Azure files** imports a local, read-only Azure CLI capture (v1 structural or v2 with observed effective-route snapshots) after review, persists observed snapshots on the imported topology (`azureImport.tables` and `azureImport.spokes`), and exports an offline Bicep starter for a new Standard WAN, selected hubs, optional `AZFW_Hub` Azure Firewalls with `routingIntent`, and optional existing-VNet `hubVirtualNetworkConnections`. No Azure authentication, SDK or deployment service is added to the app.
+- **Hub BGP table inspector** includes a **Simulated / Azure snapshot** source switch whenever imported observed route snapshots are present on the topology, displaying observed prefixes, next-hop types, resolved resource names, and route origins alongside simulated routes.
 - **Compare with Azure capture** attaches optional effective-route observations without replacing the design. Explicit resource mappings, route scope and coverage distinguish extra/missing routes, changed selected next hops, optional AS-path differences and unassessed cases.
 - **Send feedback** opens a zero-consent pre-filled GitHub issue in the public feedback repository (`erjosito/vwan-visual-topology-feedback`) with no OAuth consent required, while retaining the optional managed API submission flow when configured.
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
@@ -76,11 +77,11 @@ Unsupported analysis is tracked separately from detected network problems:
 
 | Coverage gap | Implementation tracking |
 |---|---|
-| SD-WAN outbound learning and integrated-NVA ranking | #19; distinct spoke BGP NVA modeling is implemented under #6 |
-| Hub own-AS rejection and advertised AS-path boundaries | #20; ER customer/native path fidelity remains #9 |
-| ER Internet/default advertisement controls and parity | #13 |
+| Integrated SD-WAN vs spoke BGP NVA parity | SD-WAN outbound learning and validated NVA tie-breaking delivered under #19; distinct spoke BGP NVA modeling delivered under #6 |
+| Hub own-AS loop rejection and advertised AS-path boundaries | Hub eBGP own-AS (`65515`/`65520`) rejection and diagnostic input gates delivered under #20; ER customer/native path fidelity remains #9 |
+| ER Internet/default advertisement controls and parity | Delivered under #13 |
 | Resumable large analyses, trace/ECMP overflow and bounded failure scenarios | #21 |
-| Imported custom hub tables, association/propagation and unobserved controls | #22; observation persistence remains #3 |
+| Imported custom hub tables, association/propagation and unobserved controls | #22; observed snapshot persistence delivered under #3 |
 
 Missing/ambiguous ownership and references to deleted endpoints or neighbors are model/profile input problems to correct, not missing application features. Actual host duplicate-IP discovery, firewall rules, NAT, sessions and traffic-hash predictions are outside the current offline routing model; duplicate **declared IP ranges** are detected, not inferred from repeated route advertisements.
 

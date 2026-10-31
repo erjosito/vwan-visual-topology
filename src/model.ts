@@ -109,12 +109,36 @@ export interface Connection {
   peerIp?: string
 }
 
+export type AzureObservationStatus = 'complete' | 'empty' | 'denied' | 'failed' | 'truncated' | 'unsupported'
+
+export interface AzureObservedRoute {
+  addressPrefixes: string[]
+  nextHopType: string
+  nextHops: string[]
+  routeOrigin: string
+  asPath: string
+}
+
+export interface AzureObservedTable {
+  hubId: string
+  hubResourceId: string
+  resourceId: string
+  resourceType: string
+  status: AzureObservationStatus
+  capturedAt: string
+  apiVersion: string
+  routes: AzureObservedRoute[]
+  warnings: string[]
+}
+
 export interface AzureImportInfo {
   capturedAt: string
   collectorVersion: string
   wanId: string
   warnings: string[]
   hubs: { hubId: string; resourceId: string; addressPrefix: string; limitations: string[] }[]
+  spokes?: { spokeId: string; resourceId: string; virtualNetworkId: string }[]
+  tables?: AzureObservedTable[]
 }
 
 export interface Topology {

@@ -5,6 +5,14 @@ import { preferenceLabels, routeLabels, transportLabels } from './model'
 import type { Candidate, Simulation } from './routing'
 import { cidr } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
+import {
+  describeObservedNextHopType,
+  describeObservedResource,
+  normalizeObservedAsPath,
+  normalizeObservedPrefix,
+  resolveObservedHubSnapshot,
+} from './azure-observation'
+import type { ObservedSnapshotLookupSession } from './azure-observation'
 import { azureRoutesAtSites } from './paths'
 import { erLocationBgpTable, neighborRoutes } from './route-views'
 import type { RouteMode, RouteStage } from './route-views'
@@ -12,17 +20,33 @@ import type { RouteMode, RouteStage } from './route-views'
 interface Row { key: string; asPath: number[]; preferred: boolean; nextHop?: string; via?: string; source: string }
 interface Group { prefix: string; candidates: Row[]; explanation: string[] }
 
-export function RouteInspector({ topology, simulation, router, view, mode, onRouter, onView, onPreference, onPrefix, onClose }: {
-  topology: Topology; simulation: Simulation; router: ObjectSelection; view: 'bgp' | 'hub' | 'firewall'; mode: RouteMode
+export function RouteInspector({ topology, simulation, comparisonSession, router, view, mode, onRouter, onView, onPreference, onPrefix, onClose }: {
+  topology: Topology; simulation: Simulation; comparisonSession?: ObservedSnapshotLookupSession; router: ObjectSelection; view: 'bgp' | 'hub' | 'firewall'; mode: RouteMode
   onRouter: (router: ObjectSelection) => void; onView: (view: 'bgp' | 'hub' | 'firewall') => void
   onPreference: (preference: Preference) => void; onPrefix: (prefix: string) => void; onClose: () => void
 }) {
   const [filter, setFilter] = useState('')
   const [neighbor, setNeighbor] = useState('')
   const [stage, setStage] = useState<RouteStage>('after')
+  const [tableSource, setTableSource] = useState<'simulated' | 'azure'>('simulated')
   const site = router.kind === 'site' ? topology.sites.find((s) => s.id === router.id) : undefined
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
   const location = router.kind === 'erLocation' ? topology.erLocations?.find((node) => node.id === router.id) : undefined
+  const observedSnapshot = useMemo(
+    () => hub && mode === 'bgp' ? resolveObservedHubSnapshot(topology, hub.id, comparisonSession) : undefined,
+    [topology, hub, mode, comparisonSession],
+  )
+  const activeSource = observedSnapshot && tableSource === 'azure' ? 'azure' : 'simulated'
+  const filteredObservedRoutes = useMemo(() => {
+    const routes = observedSnapshot?.table?.routes ?? []
+    const query = filter.trim().toLowerCase()
+    if (!query) return routes
+    return routes.filter((route) =>
+      (!route.addressPrefixes.length && t('No prefix reported').toLowerCase().includes(query))
+      || route.addressPrefixes.some((prefix) =>
+        prefix.toLowerCase().includes(query)
+        || (normalizeObservedPrefix(prefix)?.toLowerCase().includes(query) ?? false)))
+  }, [observedSnapshot, filter])
   const siteRouting = useMemo(() => site ? azureRoutesAtSites(topology, simulation) : undefined, [topology, simulation, site])
   const erRouting = useMemo(() => location && mode === 'bgp' ? erLocationBgpTable(topology, simulation, location.id) : [],
     [topology, simulation, location, mode])
@@ -99,12 +123,38 @@ export function RouteInspector({ topology, simulation, router, view, mode, onRou
         <label className="field"><span>{t("Neighbor")}</span><select aria-label={t("Neighbor")} value={neighbor} onChange={(e) => setNeighbor(e.target.value)}><option value="">{t("All neighbors")}</option>{peers.map((peer) => <option key={peer.id} value={peer.id}>{peerName(peer)}</option>)}</select></label>
         {!location && <label className="field"><span>{t("Route-map stage")}</span><select aria-label={t("Route-map stage")} value={stage} onChange={(e) => setStage(e.target.value as RouteStage)}><option value="after">{t('After {0} route maps', t(mode === 'learned' ? 'inbound' : 'outbound'))}</option><option value="before">{t('Before {0} route maps', t(mode === 'learned' ? 'inbound' : 'outbound'))}</option></select></label>}
       </>}
-      {hub && mode === 'bgp' && <><label className="field"><span>{t("Hub routing preference")}</span><select aria-label={t("Hub routing preference")} value={hub.preference} onChange={(e) => onPreference(e.target.value as Preference)}>{Object.entries(preferenceLabels).map(([v, name]) => <option key={v} value={v}>{t(name)}</option>)}</select></label>
+      {hub && mode === 'bgp' && observedSnapshot && <div className="field"><span>{t("Route table source")}</span><div className="segmented-toggle" role="group" aria-label={t("Route table source")}><button type="button" className={activeSource === 'simulated' ? 'primary' : undefined} aria-pressed={activeSource === 'simulated'} onClick={() => setTableSource('simulated')}>{t("Simulated")}</button><button type="button" className={activeSource === 'azure' ? 'primary' : undefined} aria-pressed={activeSource === 'azure'} onClick={() => setTableSource('azure')}>{t("Azure snapshot")}</button></div></div>}
+      {hub && mode === 'bgp' && activeSource === 'simulated' && <><label className="field"><span>{t("Hub routing preference")}</span><select aria-label={t("Hub routing preference")} value={hub.preference} onChange={(e) => onPreference(e.target.value as Preference)}>{Object.entries(preferenceLabels).map(([v, name]) => <option key={v} value={v}>{t(name)}</option>)}</select></label>
         <label className="field"><span>{t("Route view")}</span><select aria-label={t("Route view")} value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">{t("BGP table (before routing intent)")}</option><option value="hub">{t("Hub forwarding table")}</option><option value="firewall" disabled={!hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label></>}
     </div>
+    {activeSource === 'azure' && hub && observedSnapshot ? <>
+      <p className="muted inspector-note"><strong>{t("Observed Azure effective routes")}</strong> · {t("Captured")} {observedSnapshot.capturedAt || t("unknown")} · {t("Status")}: <strong>{observedSnapshot.table?.status ?? 'missing'}</strong>{observedSnapshot.table ? <> · API {observedSnapshot.table.apiVersion}</> : null} · {t("collector")} {observedSnapshot.collectorVersion}</p>
+      {observedSnapshot.table && <p className="azure-resource-id">{observedSnapshot.table.resourceId} ({observedSnapshot.table.resourceType})</p>}
+      {observedSnapshot.notices.map((notice) => <p className="notice" key={notice}>{localizeDiagnostic(notice)}</p>)}
+      <div className="table-scroll"><table aria-label={t("Observed Azure effective routes")}><thead><tr><th>{t("Address prefixes")}</th><th>{t("Next hop / type")}</th><th>{t("Route origin")}</th><th>{t("AS path")}</th></tr></thead><tbody>
+        {filteredObservedRoutes.map((route, index) => {
+          const hopType = describeObservedNextHopType(route.nextHopType)
+          const origin = describeObservedResource(route.routeOrigin, hub.id, topology, comparisonSession)
+          const normalizedAsPath = normalizeObservedAsPath(route.asPath)
+          return <tr key={`${route.addressPrefixes.join(',')}:${route.nextHopType}:${index}`}>
+            <td><strong>{route.addressPrefixes.length ? route.addressPrefixes.join(', ') : t("No prefix reported")}</strong></td>
+            <td>
+              <div>{hopType.label}{route.nextHops.length > 1 ? ` · ${t("ECMP ({0} next hops)", route.nextHops.length)}` : ''}</div>
+              {route.nextHops.length ? route.nextHops.map((hop, hopIndex) => {
+                const resolved = describeObservedResource(hop, hub.id, topology, comparisonSession)
+                return <div key={`${hop}:${hopIndex}`}><strong>{resolved.label}</strong>{resolved.rawId && <small className="azure-resource-id">{resolved.rawId}</small>}</div>
+              }) : <small>{t("None reported")}</small>}
+            </td>
+            <td><strong>{origin.label}</strong>{origin.rawId && <small className="azure-resource-id">{origin.rawId}</small>}</td>
+            <td className="as-path">{!route.asPath.trim() ? '—' : normalizedAsPath ?? `${route.asPath} (${t("unparsed AS-path")})`}</td>
+          </tr>
+        })}
+      </tbody></table></div>
+      {!filteredObservedRoutes.length && <p className="empty">{filter ? t("No routes match the current filters.") : t("No observed routes recorded in this Azure snapshot.")}</p>}
+    </> : <>
     {mode === 'bgp' && <p className="route-legend"><strong>{t("* Preferred")}</strong>  {t("· Click a prefix to highlight its paths.")}</p>}
     {hub && mode === 'bgp' && <p className="muted inspector-note">{t("Post-inbound candidates and preferred routes, including labeled system and VPN-static entries. Routing-intent redirection is separate in the hub forwarding table.")}</p>}
-    {site && <p className="muted inspector-note">{t("Shortest-AS-path site routing includes Azure advertisements. Azure-originated routes are not re-exported to Azure; SD-WAN outbound learning is not modeled.")}</p>}
+    {site && <p className="muted inspector-note">{t("Shortest-AS-path site routing includes Azure advertisements. Azure-originated routes are not re-exported to Azure.")}</p>}
     {mode !== 'bgp' && !location && <p className="muted inspector-note">{t("{0} {1} route maps; not best-path selection. VPN-static entries bypass BGP route maps. ER provider AS-path processing and inter-hub prepends occur in transit, outside the router's route maps.", t(stage === 'after' ? 'After' : 'Before'), t(mode === 'learned' ? 'inbound' : 'outbound'))}</p>}
     {location && mode === 'bgp' && <p className="muted inspector-note">{t("Candidates learned from enabled attachments after neighbor outbound maps. Shortest AS paths are preferred; equal-cost paths are retained. Click a prefix to highlight its preferred next hops.")}</p>}
     {location && <p className="muted inspector-note">{t("Circuit export rules still apply. Global Reach and shared-circuit hub reflection are not modeled.")}{mode !== 'bgp' && t(" Routes are shown from the ER location's perspective; it has no configurable route maps.")}</p>}
@@ -118,5 +168,6 @@ export function RouteInspector({ topology, simulation, router, view, mode, onRou
       </tr>)}</tbody>)}
     </table></div>
     {!groups.length && <p className="empty">{filter || neighbor ? t("No routes match the current filters.") : t("No routes available on this router.")}</p>}
+    </>}
   </CanvasOverlay>
 }

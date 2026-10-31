@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { Topology } from './model'
+import { example, type Topology } from './model'
 import { analyzeRouting, describeEvidenceSource, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsProfile } from './diagnostics'
 import { azureRoutesAtSites, traceNodePath } from './paths'
@@ -274,12 +274,17 @@ describe('routing diagnostic intent and evidence', () => {
     } finally { spy.mockRestore() }
   })
 
-  it('gates unsupported SDWAN, ER defaults and hub own-AS inputs instead of declaring reachability failures', () => {
+  it('gates unsupported competing SDWAN ranking, ER defaults and hub own-AS inputs instead of declaring reachability failures', () => {
     const t = fixture()
     t.connections[0].transport = 'SDWAN'
     let report = analyzeRouting(t, profile())
+    expect(report.complete).toBe(true)
+    expect(report.findings.map((f) => f.rule)).toEqual(['reachable'])
+    t.connections.push({ ...t.connections[0], id: 'vpn-competing', name: 'Competing VPN', transport: 'VPN' })
+    report = analyzeRouting(t, profile())
     expect(report.complete).toBe(false)
     expect(report.findings.map((f) => f.rule)).toEqual(['unknown'])
+    t.connections = [t.connections[0]]
     t.connections[0].transport = 'ExpressRoute'
     t.routeMaps = [{ id: 'er-default', name: 'ER default', siteId: 'b', rules: [{ id: 'r1', prefixes: ['10.2.0.0/16'], match: 'contains', action: 'summarize', summaryPrefixes: ['0.0.0.0/0'], prepend: [], nextStep: 'terminate' }] }]
     t.sites[0].routeMapAssignments = [{ connectionId: 'vpn', outboundMapId: 'er-default' }]
@@ -431,10 +436,16 @@ describe('typed engine coverage and shared site-plane behavior', () => {
       { id: 'unowned-1', prefix: '10.20.0.0/16', connectionId: 'vpn' },
       { id: 'unowned-2', prefix: '10.20.10.0/24', connectionId: 'vpn' },
     ]
-    t.connections.push({
-      id: 'sdwan-conn', name: 'SDWAN conn', hubId: 'h', siteId: 'sdwan-site',
-      transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
-    })
+    t.connections.push(
+      {
+        id: 'sdwan-conn', name: 'SDWAN conn', hubId: 'h', siteId: 'sdwan-site',
+        transport: 'SDWAN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
+      },
+      {
+        id: 'sdwan-backup', name: 'SDWAN backup', hubId: 'h', siteId: 'sdwan-site',
+        transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
+      },
+    )
     const empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
     const report = analyzeRouting(t, empty, { automatic: true })
     const unowned = report.findings.find((finding) => finding.rule === 'unowned-advertisement')
@@ -463,5 +474,9 @@ describe('typed engine coverage and shared site-plane behavior', () => {
     const truncatedCoverage = summarizeCoverage(truncated)
     expect(truncatedCoverage.scanIncomplete).toBe(true)
     expect(truncatedCoverage.scanLimitations).toContain('Analysis budget reached; some declared cases were not assessed.')
+
+    const exampleCoverage = summarizeCoverage(analyzeRouting(example, empty, { automatic: true }))
+    expect(exampleCoverage.unsupportedFlowCount).toBe(0)
+    expect(exampleCoverage.unsupportedGroups).toHaveLength(0)
   })
 })

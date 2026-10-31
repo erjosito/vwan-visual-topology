@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { azureBase, comparisonDesign, gatewayArm, hubArm, observationFixture, spokeArm } from '../tests/azure-observation-fixture'
-import { armKey, normalizeObservedAsPath, normalizeObservedPrefix, parseAzureObservation } from './azure-observation'
+import {
+  armKey,
+  describeObservedNextHopType,
+  describeObservedResource,
+  normalizeObservedAsPath,
+  normalizeObservedPrefix,
+  parseAzureObservation,
+  resolveObservedHubSnapshot,
+} from './azure-observation'
 import { compareAzure, defaultComparisonProfile } from './azure-comparison'
 import type { AzureObservation } from './azure-observation'
 import { importAzureCapture } from './azure-import'
+import { simulate } from './routing'
+import { validateTopology } from './validation'
 
 function setup() {
   const design = comparisonDesign(), capture = observationFixture(), observation = parseAzureObservation(capture)
@@ -200,5 +210,69 @@ describe('scoped selected-route comparison', () => {
     expect(compareAzure(design, observation, profile).revision).not.toBe(report.revision)
     profile.hubs = {}
     expect(compareAzure(design, observation, profile).profileKey).not.toBe(report.profileKey)
+  })
+  it('persists v2 observed effective-route snapshots in native JSON and resolves inspector labels (#3)', () => {
+    const capture = observationFixture()
+    capture.observations.tables[0].routes.push(
+      {
+        addressPrefixes: ['0.0.0.0/0'],
+        nextHopType: 'AzureFirewall',
+        nextHops: [`${azureBase}/azureFirewalls/west-fw`],
+        routeOrigin: `${hubArm}/hubRouteTables/defaultRouteTable`,
+        asPath: '',
+      },
+      {
+        addressPrefixes: ['10.50.0.0/16', '10.51.0.0/16'],
+        nextHopType: 'ExpressRouteGateway',
+        nextHops: [`${azureBase}/expressRouteGateways/west-er-gw`, `${azureBase}/vpnGateways/west-vpn-gw`],
+        routeOrigin: `${hubArm}/hubBgpConnections/nva-peer`,
+        asPath: '65515-65010-65010',
+      },
+      {
+        addressPrefixes: ['10.99.0.0/24'],
+        nextHopType: 'CustomAppliance',
+        nextHops: ['unmapped-appliance-id'],
+        routeOrigin: 'custom-origin',
+        asPath: '{65001,65002}',
+      },
+    )
+    const importedV1 = importAzureCapture({ ...capture, version: 1 })
+    const importedV2 = importAzureCapture(capture)
+    expect(simulate(importedV2).tables).toEqual(simulate(importedV1).tables)
+    expect(importedV2.azureImport?.tables).toHaveLength(1)
+    expect(importedV2.azureImport?.spokes).toHaveLength(2)
+
+    const roundTrip = validateTopology(JSON.parse(JSON.stringify(importedV2)))
+    expect(roundTrip.azureImport?.tables).toEqual(importedV2.azureImport?.tables)
+    const hubId = roundTrip.hubs[0].id
+    const snapshot = resolveObservedHubSnapshot(roundTrip, hubId)!
+    expect(snapshot.table?.status).toBe('complete')
+    expect(snapshot.table?.routes).toHaveLength(5)
+    expect(snapshot.isStale).toBe(false)
+
+    const staleCopy = structuredClone(roundTrip)
+    staleCopy.azureImport!.tables![0].capturedAt = '2020-01-01T00:00:00Z'
+    const staleSnapshot = resolveObservedHubSnapshot(staleCopy, hubId)!
+    expect(staleSnapshot.isStale).toBe(true)
+    expect(staleSnapshot.notices.join(' ')).toContain('older than 24 hours')
+
+    expect(describeObservedResource(spokeArm('a'), hubId, roundTrip)).toMatchObject({ label: 'Observed a (VNet connection)', known: true })
+    expect(describeObservedResource(hubArm, hubId, roundTrip)).toMatchObject({ label: 'Observed west (local hub)', known: true })
+    expect(describeObservedResource(`${azureBase}/azureFirewalls/west-fw`, hubId, roundTrip)).toMatchObject({ label: 'Azure Firewall (west-fw)', known: true })
+    expect(describeObservedResource(`${azureBase}/expressRouteGateways/west-er-gw`, hubId, roundTrip)).toMatchObject({ label: 'ExpressRoute gateway (west-er-gw)', known: true })
+    expect(describeObservedResource(`${azureBase}/vpnGateways/west-vpn-gw`, hubId, roundTrip)).toMatchObject({ label: 'S2S VPN gateway (west-vpn-gw)', known: true })
+    expect(describeObservedResource(`${hubArm}/hubRouteTables/defaultRouteTable`, hubId, roundTrip)).toMatchObject({ label: 'Observed west · defaultRouteTable (route table)', known: true })
+    expect(describeObservedResource(`${hubArm}/hubBgpConnections/nva-peer`, hubId, roundTrip)).toMatchObject({ label: 'Observed west · nva-peer (BGP connection)', known: true })
+    expect(describeObservedResource('unmapped-appliance-id', hubId, roundTrip)).toMatchObject({ label: 'Unknown resource (unmapped-appliance-id)', known: false })
+    expect(describeObservedNextHopType('AzureFirewall')).toEqual({ label: 'AzureFirewall (Secured hub firewall)', known: true })
+    expect(describeObservedNextHopType('CustomAppliance')).toEqual({ label: 'Unknown type (CustomAppliance)', known: false })
+
+    for (const status of ['empty', 'denied', 'failed', 'truncated', 'unsupported'] as const) {
+      const copy = structuredClone(roundTrip)
+      copy.azureImport!.tables![0].status = status
+      if (status !== 'truncated') copy.azureImport!.tables![0].routes = []
+      const state = resolveObservedHubSnapshot(copy, hubId)!
+      expect(state.notices.length).toBeGreaterThan(1)
+    }
   })
 })
