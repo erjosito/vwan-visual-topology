@@ -1,4 +1,6 @@
 import type { ObjectSelection, Topology } from './model'
+import { transportLabels } from './model'
+import { t } from './i18n'
 import type { Simulation } from './routing'
 import { advertiseSiteRoutes, applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
 import { simulate } from './routing'
@@ -295,15 +297,15 @@ function physical(path: NodePath, source: PathNode): string[] {
   siteWalk(path.sourceSiteHops, path.sourceSiteLinkIds)
   if (path.sourceErLinkIds?.length) tokens.push(...path.sourceErLinkIds.map((id) => `erLink:${id}`))
   else if (path.sourceConnectionId) tokens.push(`connection:${path.sourceConnectionId}`)
-  if (path.sourceNvaSpokeId) tokens.push(`spoke:${path.sourceNvaSpokeId}`)
+  if (path.sourceNvaSpokeId && path.sourceConnectionId) tokens.push(`spoke:${path.sourceNvaSpokeId}`)
   path.hubs.forEach((id) => {
     const token = path.firewalls?.includes(id) ? `hub-firewall:${id}` : `hub:${id}`
     if (tokens.at(-1) === `hub:${id}` && token !== `hub:${id}`) tokens.pop()
     if (tokens.at(-1) !== token) tokens.push(token)
   })
-  if (path.nvaSpokeId) tokens.push(`spoke:${path.nvaSpokeId}`)
+  if (path.nvaSpokeId && path.connectionId) tokens.push(`spoke:${path.nvaSpokeId}`)
   if (path.erLinkIds?.length) tokens.push(...path.erLinkIds.map((id) => `erLink:${id}`))
-  else if (path.connectionId && path.terminalKind !== 'spoke') tokens.push(`connection:${path.connectionId}`)
+  else if (path.connectionId && (path.terminalKind !== 'spoke' || path.nvaSpokeId)) tokens.push(`connection:${path.connectionId}`)
   siteWalk(path.siteHops, path.siteLinkIds)
   if (path.siteId && path.terminalKind) {
     const token = `${path.terminalKind}:${path.siteId}`
@@ -320,7 +322,7 @@ function pathObjects(paths: NodePath[]): ObjectSelection[] {
     ...(path.sourceSpokeId ? [{ kind: 'spoke' as const, id: path.sourceSpokeId }] : []),
     ...[path.sourceNvaSpokeId, path.nvaSpokeId].filter((id): id is string => !!id).map((id) => ({ kind: 'spoke' as const, id })),
     ...(path.sourceConnectionId && !path.sourceErLinkIds ? [{ kind: 'connection' as const, id: path.sourceConnectionId }] : []),
-    ...(path.connectionId && !path.erLinkIds ? [{ kind: path.terminalKind === 'spoke' ? 'spoke' as const : 'connection' as const, id: path.connectionId }] : []),
+    ...(path.connectionId && !path.erLinkIds ? [{ kind: path.terminalKind === 'spoke' && !path.nvaSpokeId ? 'spoke' as const : 'connection' as const, id: path.connectionId }] : []),
   ])
 }
 
@@ -475,20 +477,41 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     ...topology.sites.map((node) => ({ node: { kind: 'site' as const, id: node.id }, prefixes: node.prefixes })),
   ].sort((a, b) => `${a.node.kind}:${a.node.id}`.localeCompare(`${b.node.kind}:${b.node.id}`))
   if (options.automatic) {
+    const isOwnedPrefix = (prefix: string) => allOwners.some((owner) => owner.prefixes.some((assigned) => {
+      const range = addressRange(prefix), container = addressRange(assigned)
+      return container.start <= range.start && container.end >= range.end
+    }))
     for (const site of topology.sites) {
       if (!room()) break
-      const prefixes = [...new Set([
-        ...[...topology.connections, ...(topology.erLinks ?? [])].filter((link) => link.siteId === site.id && link.enabled).flatMap((link) => link.routes.map((route) => route.prefix)),
-        ...(site.vpnStaticRoutes ?? []).filter((route) => topology.connections.some((link) => link.id === route.connectionId && link.enabled)).map((route) => route.prefix),
-      ])].filter((prefix) => !allOwners.some((owner) => owner.prefixes.some((assigned) => {
-        const range = addressRange(prefix), container = addressRange(assigned)
-        return container.start <= range.start && container.end >= range.end
-      })))
+      const unownedSources = [
+        ...topology.connections.filter((link) => link.siteId === site.id && link.enabled)
+          .flatMap((link) => link.routes.filter((route) => !isOwnedPrefix(route.prefix)).map((route) => ({
+            code: 'unowned-advertisement' as const,
+            nodeId: site.id,
+            prefix: route.prefix,
+            connectionId: link.id,
+          }))),
+        ...(topology.erLinks ?? []).filter((link) => link.siteId === site.id && link.enabled)
+          .flatMap((link) => link.routes.filter((route) => !isOwnedPrefix(route.prefix)).map((route) => ({
+            code: 'unowned-advertisement' as const,
+            nodeId: site.id,
+            prefix: route.prefix,
+            connectionId: link.id,
+          }))),
+        ...(site.vpnStaticRoutes ?? []).filter((route) => topology.connections.some((link) => link.id === route.connectionId && link.enabled) && !isOwnedPrefix(route.prefix))
+          .map((route) => ({
+            code: 'unowned-advertisement' as const,
+            nodeId: site.id,
+            prefix: route.prefix,
+            connectionId: route.connectionId,
+          })),
+      ]
+      const prefixes = [...new Set(unownedSources.map((entry) => entry.prefix))]
       if (prefixes.length) {
         limited(limits.ownership)
         add('unowned-advertisement', 'unknown', site.id, {
           related: [{ kind: 'site', id: site.id }], prefix: prefixes.join(', '),
-          evidence: prefixes.map((prefix) => ({ code: 'unowned-advertisement', prefix })),
+          evidence: unownedSources,
         })
       }
     }
@@ -713,4 +736,41 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   report.findings.sort((a, b) => a.id.localeCompare(b.id))
   report.limitations.sort()
   return report
+}
+
+export function describeEvidenceSource(topology: Topology, evidence: DiagnosticsFinding['evidence'][number], fallbackSiteId?: string): string {
+  const siteId = evidence.nodeId ?? fallbackSiteId
+  const site = siteId ? topology.sites.find((item) => item.id === siteId) : undefined
+  if (evidence.connectionId) {
+    const connection = topology.connections.find((item) => item.id === evidence.connectionId)
+    if (connection) {
+      const bgpRoute = connection.routes.find((route) => route.prefix === evidence.prefix)
+      if (bgpRoute) {
+        const hub = topology.hubs.find((item) => item.id === connection.hubId)
+        return t(
+          'Defined in BGP advertisements on connection "{0}" ({1} → {2}, AS path {3})',
+          connection.name,
+          t(transportLabels[connection.transport]),
+          hub?.name ?? connection.hubId,
+          bgpRoute.asPath.join(' ') || t('empty'),
+        )
+      }
+      if (site?.vpnStaticRoutes?.some((route) => route.connectionId === connection.id && route.prefix === evidence.prefix)) {
+        return t('Defined in VPN static routes on site "{0}" via connection "{1}"', site.name, connection.name)
+      }
+      return connection.name
+    }
+    const erLink = topology.erLinks?.find((item) => item.id === evidence.connectionId)
+    if (erLink) {
+      const bgpRoute = erLink.routes.find((route) => route.prefix === evidence.prefix)
+      const location = topology.erLocations?.find((item) => item.id === erLink.locationId)
+      return t(
+        'Defined in ER BGP advertisements on "{0}" ({1}, AS path {2})',
+        erLink.name,
+        location?.name ?? erLink.locationId,
+        bgpRoute?.asPath.join(' ') || t('empty'),
+      )
+    }
+  }
+  return evidence.connectionId ?? ''
 }

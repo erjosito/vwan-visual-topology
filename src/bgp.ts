@@ -129,12 +129,27 @@ export function receiveSiteRoutes<T extends SiteRoute>(topology: Topology, recei
 
 export function propagateSites(topology: Topology): SiteRouting {
   let selectionComplete = true
-  const origins: Record<string, SiteRoute[]> = Object.fromEntries(topology.sites.map((site) => [site.id, [
-    ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [], sitePath: [site.id], siteLinkIds: [] as string[] })),
-    ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.siteId === site.id).flatMap((c) => c.routes.filter((r) => r.kind === 'bgp').map((r) => ({
-      key: `${c.id}:${r.id}`, prefix: r.prefix, asPath: r.asPath[0] === 12076 ? r.asPath.slice(1) : r.asPath, sitePath: [site.id], siteLinkIds: [] as string[],
-    }))),
-  ]]))
+  const origins: Record<string, SiteRoute[]> = Object.fromEntries(topology.sites.map((site) => {
+    const nvaSpokeIds = topology.connections
+      .filter((c) => c.transport === 'SpokeNVA' && c.siteId === site.id && c.spokeId)
+      .map((c) => c.spokeId!)
+    const downstreamVnetRoutes = topology.spokes
+      .filter((s) => s.nvaSpokeIds?.some((id) => nvaSpokeIds.includes(id)))
+      .flatMap((s) => s.prefixes.map((prefix) => ({
+        key: `${s.id}:${prefix}`,
+        prefix,
+        asPath: [] as number[],
+        sitePath: [site.id],
+        siteLinkIds: [] as string[],
+      })))
+    return [site.id, [
+      ...site.prefixes.map((prefix) => ({ key: `${site.id}:${prefix}`, prefix, asPath: [], sitePath: [site.id], siteLinkIds: [] as string[] })),
+      ...downstreamVnetRoutes,
+      ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.siteId === site.id).flatMap((c) => c.routes.filter((r) => r.kind === 'bgp').map((r) => ({
+        key: `${c.id}:${r.id}`, prefix: r.prefix, asPath: r.asPath[0] === 12076 ? r.asPath.slice(1) : r.asPath, sitePath: [site.id], siteLinkIds: [] as string[],
+      }))),
+    ]]
+  }))
   const best = (routes: SiteRoute[]) => [...new Set(routes.map((r) => r.prefix))].flatMap((prefix) => {
     const matching = routes.filter((r) => r.prefix === prefix)
     const shortest = Math.min(...matching.map((r) => r.asPath.length))

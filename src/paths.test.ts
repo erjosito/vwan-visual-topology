@@ -121,4 +121,27 @@ describe('contextual node paths', () => {
     t.siteLinks[0].enabled = false
     expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'dc' }, '10.90.0.5')[0].siteLinkIds).toEqual(['backup'])
   })
+  it('traces bidirectional ECMP paths for a standalone VNet connected to two spoke NVAs', () => {
+    const t = structuredClone(example)
+    t.spokes.push({ id: 'eu-nva-2', name: 'Europe NVA 2', hubId: 'eu', prefixes: ['10.11.0.0/16'] })
+    t.sites.push(
+      { id: 'nva-1', name: 'NVA 1', asn: 65051, prefixes: [] },
+      { id: 'nva-2', name: 'NVA 2', asn: 65052, prefixes: [] },
+    )
+    t.connections.push(
+      { id: 'peer-1', name: 'Peer 1', hubId: 'eu', siteId: 'nva-1', spokeId: 'eu-apps', peerIp: '10.1.0.4', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [] },
+      { id: 'peer-2', name: 'Peer 2', hubId: 'eu', siteId: 'nva-2', spokeId: 'eu-nva-2', peerIp: '10.11.0.4', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true, routes: [], inbound: [], outbound: [] },
+    )
+    t.spokes.push({ id: 'shared-downstream', name: 'Shared downstream VNet', prefixes: ['10.220.0.0/16'], nvaSpokeIds: ['eu-apps', 'eu-nva-2'] })
+    const sim = simulate(t)
+    const hubForward = traceNodePath(t, sim, { kind: 'hub', id: 'eu' }, '10.220.0.10')
+    expect(hubForward).toHaveLength(2)
+    const forward = traceNodePath(t, sim, { kind: 'spoke', id: 'us-apps' }, '10.220.0.10')
+    expect(forward.every((p) => p.status === 'delivered' && p.siteId === 'shared-downstream')).toBe(true)
+    expect(new Set(forward.map((p) => p.nvaSpokeId))).toEqual(new Set(['eu-apps', 'eu-nva-2']))
+    const reverse = traceNodePath(t, sim, { kind: 'spoke', id: 'shared-downstream' }, '10.2.0.10')
+    expect(reverse).toHaveLength(2)
+    expect(reverse.every((p) => p.status === 'delivered' && p.siteId === 'us-apps')).toBe(true)
+    expect(new Set(reverse.map((p) => p.sourceNvaSpokeId))).toEqual(new Set(['eu-apps', 'eu-nva-2']))
+  })
 })

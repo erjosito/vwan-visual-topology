@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import type { DiagnosticsReport } from './diagnostics'
-import { summarizeCoverage } from './diagnostics'
+import { describeEvidenceSource, summarizeCoverage } from './diagnostics'
 import { t } from './i18n'
-import type { ObjectSelection, Topology } from './model'
+import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 
-export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEditObject }: {
-  report: DiagnosticsReport; topology: Topology; initiallyOpen?: boolean; onEditObject?: (node: ObjectSelection) => void
+export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEditObject, onEditAdvertisements, onOpenStaticRouting }: {
+  report: DiagnosticsReport; topology: Topology; initiallyOpen?: boolean
+  onEditObject?: (node: ObjectSelection) => void
+  onEditAdvertisements?: (connectionId: string) => void
+  onOpenStaticRouting?: (router: RouterSelection) => void
 }) {
   const [visibleCount, setVisibleCount] = useState(50)
   const coverage = summarizeCoverage(report)
@@ -27,7 +30,7 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
         <p>{finding.source ? `${name(finding.source)} ${finding.sourceAddress ?? ''} → ${name(finding.target)} ${finding.destinationAddress ?? ''}`
           : finding.related.map(name).join(', ')} {finding.prefix}</p>
         <details><summary>{t('Evidence and investigation')}</summary>
-          <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> {evidence.prefix} {evidence.connectionId}</li>)}</ul>
+          <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> {evidence.prefix} {describeEvidenceSource(topology, evidence)}</li>)}</ul>
         </details>
       </article>)}
       {coverage.otherUnknownFindings.length > visibleCount && <button onClick={() => setVisibleCount((count) => count + 50)}>{t('Show more coverage notes ({0} remaining)', coverage.otherUnknownFindings.length - visibleCount)}</button>}
@@ -38,15 +41,39 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
       {coverage.noCheckablePairs && <p>{t('No network pairs could be checked. Add assigned networks to at least two endpoints.')}</p>}
       {coverage.unassignedFindings.map((finding) => {
         const owner = finding.related[0]
+        const site = owner?.kind === 'site' ? topology.sites.find((item) => item.id === owner.id) : undefined
+        const connectionAds = [...new Set(finding.evidence
+          .map((evidence) => topology.connections.find((item) => item.id === evidence.connectionId && item.routes.some((route) => route.prefix === evidence.prefix)))
+          .filter((item): item is NonNullable<typeof item> => !!item))]
+        const erLinkAds = [...new Set(finding.evidence
+          .map((evidence) => topology.erLinks?.find((item) => item.id === evidence.connectionId && item.routes.some((route) => route.prefix === evidence.prefix)))
+          .filter((item): item is NonNullable<typeof item> => !!item))]
+        const hasStaticRoutes = !!site && finding.evidence.some((evidence) =>
+          site.vpnStaticRoutes?.some((route) => route.connectionId === evidence.connectionId && route.prefix === evidence.prefix))
         return <article className="coverage-note" key={finding.id}>
           <div className="row">
             <strong>{t(finding.title)}</strong>
             {owner && onEditObject && <button type="button" className="ghost" onClick={() => onEditObject(owner)}>{t('Edit {0}', name(owner))}</button>}
+            {onEditAdvertisements && connectionAds.map((connection) => (
+              <button key={connection.id} type="button" className="ghost" onClick={() => onEditAdvertisements(connection.id)}>{t('Edit advertisements: {0}', connection.name)}</button>
+            ))}
+            {onEditObject && erLinkAds.map((erLink) => (
+              <button key={erLink.id} type="button" className="ghost" onClick={() => onEditObject({ kind: 'erLink', id: erLink.id })}>{t('Edit {0}', erLink.name)}</button>
+            ))}
+            {site && hasStaticRoutes && onOpenStaticRouting && (
+              <button type="button" className="ghost" onClick={() => onOpenStaticRouting({ kind: 'site', id: site.id })}>{t('Static routing: {0}', site.name)}</button>
+            )}
           </div>
           <p>{t(finding.detail)}</p>
           <p>{finding.related.map(name).join(', ')} · <code>{finding.prefix}</code></p>
+          <ul className="coverage-sources">
+            {finding.evidence.map((evidence, index) => (
+              <li key={index}><code>{evidence.prefix}</code> — {describeEvidenceSource(topology, evidence, owner?.id)}</li>
+            ))}
+          </ul>
           <details><summary>{t('Evidence and investigation')}</summary>
-            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> {evidence.prefix} {evidence.connectionId}</li>)}</ul>
+            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> <code>{evidence.prefix}</code> — {describeEvidenceSource(topology, evidence, owner?.id)}</li>)}</ul>
+            <p className="muted">{t('To resolve: either assign the prefix to the owning site or VNet, or open the connection advertisements / static routes above and remove the unused route.')}</p>
           </details>
         </article>
       })}

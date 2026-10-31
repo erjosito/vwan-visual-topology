@@ -82,7 +82,8 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .er-location-node > rect { fill: #faf7ff; stroke: #bcacd6; }
 .er-location-node .node-kind { fill: #80649e; }
 .draggable-node { cursor: grab; touch-action: none; user-select: none; }
-.network-link.SpokeNVA { stroke: #7198cd; stroke-dasharray: 8 3; }.spoke-nva-node > rect { fill: #edf5ff; stroke: #7198cd; }
+.network-link.SpokeNVA, .network-link.vnet-nva-link { stroke: #7198cd; stroke-dasharray: 8 3; }.spoke-nva-node > rect { fill: #edf5ff; stroke: #7198cd; }
+.node-icon.spoke-nva-icon > circle { fill: #dbe9ff; stroke: #4b7ec4; stroke-width: 1.2px; }.node-icon.spoke-nva-icon path { stroke: #1e4f96; stroke-width: 1.5; stroke-linecap: round; }
 .diagram { cursor: grab; }.diagram-scroll.is-panning .diagram { cursor: grabbing; user-select: none; }.canvas-pan-reset { position: absolute; top: 12px; left: 12px; z-index: 2; font-size: 11px; }
 .is-repositioning, .is-repositioning .draggable-node { cursor: grabbing; }
 .draggable-node > rect { filter: drop-shadow(0 5px 9px #203f6b13); transition: stroke .15s, filter .15s; }

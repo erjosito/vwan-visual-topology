@@ -207,8 +207,10 @@ export function simulate(topology: Topology): Simulation {
                   .map((child) => learnedRoute(connection, child))
                 return contributions.length ? { ...route, forwardingRoutes: contributions } : route
               }),
-              ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId]
-                .filter((route) => !route.key.startsWith(`${connection.id}:`)).map((route) => learnedRoute(connection, route)) : []),
+              ...siteRouting.tables[connection.siteId]
+                .filter((route) => !route.key.startsWith(`${connection.id}:`) && (connection.learnSiteRoutes
+                  || topology.spokes.some((s) => s.nvaSpokeIds?.includes(spoke.id) && route.key.startsWith(`${s.id}:`))))
+                .map((route) => learnedRoute(connection, route)),
             ]))
             .filter((route) => !route.asPath.includes(65515) && !topology.spokes.some((owner) => owner.hubId === hub.id
               && owner.prefixes.some((prefix) => cidr(prefix)!.length <= cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))),
@@ -313,6 +315,10 @@ export function simulate(topology: Topology): Simulation {
     return [connection.id, connection.transport === 'ExpressRoute' ? routes.map(erCustomerExport) : routes]
   }))
   for (const spoke of topology.spokes) {
+    if (!spoke.hubId) {
+      outbound[spoke.id] = []
+      continue
+    }
     const before = tables[spoke.hubId].flatMap((decision) => decision.selected)
       .filter((route) => route.connectionId !== spoke.id)
       .map((route) => ({ ...route, asPath: [65515, ...route.asPath] }))
@@ -426,17 +432,23 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
           || topology.sites.some((site) => site.id !== route.siteId && site.prefixes.some((prefix) => contains(prefix, address))))
         for (const tail of onward.length ? onward : [route]) {
           if (paths.length >= 128) { traceComplete = false; return }
+          const terminalSiteId = tail.sitePath?.[tail.sitePath.length - 1] ?? route.siteId
+          const terminalNvaSpokeId = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.siteId === terminalSiteId && c.spokeId)?.spokeId
+          const downstreamVnet = terminalNvaSpokeId
+            ? topology.spokes.find((s) => s.nvaSpokeIds?.includes(terminalNvaSpokeId) && s.prefixes.some((p) => contains(p, address)))
+            : undefined
           paths.push({ hubs, firewalls: inspected, siteHops: tail.sitePath, siteLinkIds: tail.siteLinkIds,
-            connectionId: route.connectionId, siteId: tail.sitePath?.[tail.sitePath.length - 1] ?? route.siteId,
+            connectionId: route.connectionId, siteId: downstreamVnet?.id ?? terminalSiteId,
             ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
             ...(route.nvaSpokeId ? { nvaSpokeId: route.nvaSpokeId } : {}),
             steps: [...details, `Exit via ${(topology.connections.find((c) => c.id === route.connectionId) ?? topology.spokes.find((s) => s.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId))?.name ?? route.connectionId}.`,
               ...(route.erLocationId ? [`ExpressRoute location: ${topology.erLocations?.find((location) => location.id === route.erLocationId)?.name}.`] : []),
               ...(route.nvaSpokeId ? [`BGP next hop is NVA interface ${topology.connections.find((connection) => connection.id === route.connectionId)?.peerIp} in spoke ${topology.spokes.find((spoke) => spoke.id === route.nvaSpokeId)?.name}.`] : []),
               ...(tail.sitePath && tail.sitePath.length > 1 ? [`On-premises transit: ${tail.sitePath.map((id) => topology.sites.find((s) => s.id === id)!.name).join(' → ')}.`] : []),
+              ...(downstreamVnet ? [`Downstream VNet: ${downstreamVnet.name}.`] : []),
               ...(missing ? ['No known on-premises forwarding route to the destination site.'] : [])],
             status: missing ? 'unreachable' : 'delivered', termination: missing ? 'downstream-no-route' : 'owner',
-            terminalKind: route.transport === 'VNet' ? 'spoke' : 'site', lookupPrefix: decision.prefix })
+            terminalKind: downstreamVnet || route.transport === 'VNet' ? 'spoke' : 'site', lookupPrefix: decision.prefix })
         }
       }
     }

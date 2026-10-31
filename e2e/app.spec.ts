@@ -1299,55 +1299,74 @@ test('hub route-map wizard rejects restricted prepend ASNs and explains public A
   expect((await readTopology(page)).routeMaps!.find((map) => map.siteId === 'dc')!.rules[0].prepend).toEqual([65001, 4200000000])
 })
 
-test('spoke NVA creation validates the NIC and ASN, supports bulk advertisements and preserves native roundtrip', async ({ page }) => {
+test('spoke NVA creation auto-infers peer IP, embeds the NVA icon on the spoke, and advertises attached downstream VNets and sites', async ({ page }) => {
   await page.goto('/'); await importTopology(page, structuredClone(example))
   await action(page, 'Select spoke Europe applications', 'Edit configuration')
   await page.getByRole('button', { name: 'Add BGP NVA', exact: true }).click()
+  await expect(page.getByLabel('Originated prefix', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('NVA BGP advertisements', { exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('NVA BGP interface IPv4', { exact: true })).toHaveValue('10.1.0.4')
   await page.getByLabel('Name', { exact: true }).fill('Example NVA')
   await page.getByLabel('NVA ASN', { exact: true }).fill('65040')
   await page.getByLabel('NVA BGP interface IPv4', { exact: true }).fill('10.9.0.4')
   await page.getByRole('button', { name: 'Create object', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('hosting spoke address space')
-  await page.getByLabel('NVA BGP interface IPv4', { exact: true }).fill('10.1.0.4')
+  await page.getByLabel('NVA BGP interface IPv4', { exact: true }).fill('')
   await page.getByLabel('NVA ASN', { exact: true }).fill('64496')
   await page.getByRole('button', { name: 'Create object', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('non-reserved public or private 2-byte ASN')
   await page.getByLabel('NVA ASN', { exact: true }).fill('65040')
-  const advertisements = Array.from({ length: 120 }, (_, index) => `10.64.${index}.0/24 65040`).join('\n')
-  await page.getByLabel('NVA BGP advertisements', { exact: true }).fill(advertisements)
   await expect(page.getByRole('link', { name: 'Microsoft spoke NVA BGP requirements', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Create object', exact: true }).click()
   await expect(page.locator('.object-editor')).toHaveCount(0)
   const saved = await readTopology(page), peer = saved.connections.find((connection) => connection.transport === 'SpokeNVA')!
   expect(peer).toMatchObject({ spokeId: 'eu-apps', hubId: 'eu', peerIp: '10.1.0.4' })
-  expect(peer.routes).toHaveLength(120)
   expect(saved.sites.find((site) => site.id === peer.siteId)!.prefixes).toEqual([])
-  await expect(page.locator(`[data-node-id="${peer.siteId}"]`)).toHaveAttribute('data-spoke-nva', 'true')
+  await expect(page.locator(`[data-node-id="${peer.siteId}"]`)).toHaveCount(0)
+  await expect(page.locator('[data-node-id="eu-apps"]')).toHaveAttribute('data-spoke-nva', 'true')
+  await expect(page.getByTestId('spoke-nva-icon-eu-apps')).toBeVisible()
+  await action(page, 'Select spoke Europe applications', 'Add downstream VNet')
+  await page.getByLabel('Name', { exact: true }).fill('Downstream workload VNet')
+  await page.getByLabel('Prefixes', { exact: true }).fill('10.64.0.0/16')
+  await page.getByRole('button', { name: 'Create object', exact: true }).click()
+  await expect(page.locator('.object-editor')).toHaveCount(0)
+  const withVnet = await readTopology(page), downstream = withVnet.spokes.find((s) => s.name === 'Downstream workload VNet')!
+  expect(downstream.hubId).toBeUndefined()
+  expect(downstream.nvaSpokeIds).toEqual(['eu-apps'])
+  await expect(page.getByTestId(`vnet-link-${downstream.id}-eu-apps`)).toBeVisible()
   await showRoutes(page)
-  await expect(page.locator('.effective-routes tr[data-prefix="10.64.0.0/24"]')).toContainText('Spoke BGP NVA')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.64.0.0/16"]')).toContainText('Spoke BGP NVA')
   await page.keyboard.press('Escape')
-  await action(page, `Edit connection ${peer.name}`, 'Edit configuration')
-  await expect(page.getByLabel('NVA BGP advertisements', { exact: true })).toHaveValue(advertisements)
-  await page.getByRole('button', { name: 'Save changes', exact: true }).click()
-  expect((await readTopology(page)).connections.find((connection) => connection.id === peer.id)!.routes).toEqual(peer.routes)
   await importTopology(page, await downloadTopology(page))
   expect((await readTopology(page)).connections.find((connection) => connection.id === peer.id)).toEqual(peer)
   await page.locator('header [data-language-selector]').selectOption('ja')
-  await page.locator(`[data-node-id="${peer.siteId}"]`).focus(); await page.keyboard.press('Shift+F10')
-  await page.getByRole('menuitem', { name: '構成を編集', exact: true }).click()
+  await page.locator('[data-node-id="eu-apps"]').focus(); await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'BGP NVA を構成', exact: true }).click()
   await expect(page.getByLabel('NVA ASN', { exact: true })).toHaveValue('65040')
+})
+
+test('unowned-advertisement diagnostics show exact connection source and open Edit advertisements directly', async ({ page }) => {
+  await page.goto('/'); await importTopology(page, structuredClone(example))
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await page.getByRole('button', { name: 'Review analysis coverage', exact: true }).click()
+  const dialogEl = dialog(page, 'Routing issues')
+  await expect(dialogEl).toContainText('Defined in BGP advertisements on connection "London primary" (ExpressRoute → Europe hub, AS path 12076 65010)')
+  await dialogEl.getByRole('button', { name: 'Edit advertisements: London primary', exact: true }).first().click()
+  await expect(dialog(page, 'Advertisements · London primary')).toBeVisible()
 })
 
 for (const mode of ['layered', 'constellation'] as const) {
   test(`spoke NVA paths animate through the hosting spoke in both directions in ${mode}`, async ({ page }) => {
     await page.goto('/'); await importTopology(page, spokeNvaTopology())
     await page.getByLabel('Visualization mode').selectOption(mode)
+    await expect(page.locator('[data-node-id="nva"]')).toHaveCount(0)
+    await expect(page.getByTestId('spoke-nva-icon-host')).toBeVisible()
     const menu = await pathMenu(page, 'Select spoke Remote workload', 'to', 'Downstream branch (site)')
     await menu.getByRole('menuitem', { name: '10.80.0.0/16', exact: true }).click()
     const forward = (await motionFlows(page)).flat()
     expect(forward).toEqual(expect.arrayContaining([
-      { id: 'host', from: 'eu', to: 'host' }, { id: 'peer', from: 'host', to: 'nva' },
-      { id: 'downstream', from: 'nva', to: 'branch' },
+      { id: 'host', from: 'eu', to: 'host' },
+      { id: 'downstream', from: 'host', to: 'branch' },
     ]))
     await page.getByRole('button', { name: 'Path details', exact: true }).click()
     await expect(page.locator('.flow-result')).toContainText('NVA VNet')
@@ -1356,10 +1375,10 @@ for (const mode of ['layered', 'constellation'] as const) {
     const reverse = await pathMenu(page, 'Select site Downstream branch', 'to', 'Remote workload (spoke)')
     await reverse.getByRole('menuitem', { name: '10.201.0.0/16', exact: true }).click()
     expect((await motionFlows(page)).flat()).toEqual(expect.arrayContaining([
-      { id: 'downstream', from: 'branch', to: 'nva' }, { id: 'peer', from: 'nva', to: 'host' },
+      { id: 'downstream', from: 'branch', to: 'host' },
       { id: 'host', from: 'host', to: 'eu' },
     ]))
-    await action(page, 'Edit connection NVA peering', 'Disable connection')
+    await action(page, 'Select spoke NVA VNet', 'Disable BGP NVA')
     await showRoutes(page)
     await expect(page.locator('.effective-routes tr[data-prefix="10.80.0.0/16"]')).toHaveCount(0)
     await page.keyboard.press('Escape')

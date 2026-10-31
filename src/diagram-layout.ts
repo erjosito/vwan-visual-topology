@@ -3,13 +3,25 @@ import type { LayoutMode, NodePosition, Topology } from './model'
 export function diagramLayout(topology: Topology, mode: LayoutMode) {
   const positions = new Map<string, NodePosition>()
   const locations = topology.erLocations ?? []
-  let width = Math.max(1000, topology.hubs.length * 260, topology.sites.length * 200, topology.spokes.length * 200, locations.length * 200)
-  let height = locations.length ? 900 : topology.siteLinks.length ? 750 : 650
+  const nvaMap = new Map(topology.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId).map((c) => [c.siteId, c.spokeId!]))
+  const visibleSites = topology.sites.filter((site) => !nvaMap.has(site.id))
+  const standaloneSpokes = topology.spokes.filter((spoke) => !spoke.hubId)
+  const hubSpokes = topology.spokes.filter((spoke) => Boolean(spoke.hubId))
+  let width = Math.max(1000, topology.hubs.length * 260, visibleSites.length * 200, topology.spokes.length * 200, locations.length * 200)
+  let height = locations.length ? (standaloneSpokes.length ? 960 : 900) : topology.siteLinks.length ? (standaloneSpokes.length ? 820 : 750) : (standaloneSpokes.length ? 720 : 650)
   if (mode === 'layered') {
     const row = (nodes: { id: string }[], y: number) => nodes.forEach((node, i) => positions.set(node.id, { x: width * (i + 1) / (nodes.length + 1), y }))
-    row(topology.spokes, 85); row(topology.hubs, 310); row(locations, 540); row(topology.sites, locations.length ? 780 : 550)
+    if (standaloneSpokes.length) {
+      row(standaloneSpokes, 65)
+      row(hubSpokes, 195)
+      row(topology.hubs, 390)
+      row(locations, 600)
+      row(visibleSites, locations.length ? 820 : 620)
+    } else {
+      row(topology.spokes, 85); row(topology.hubs, 310); row(locations, 540); row(visibleSites, locations.length ? 780 : 550)
+    }
   } else {
-    const outer = [...topology.spokes, ...locations, ...topology.sites]
+    const outer = [...topology.spokes, ...locations, ...visibleSites]
     const rings = Math.max(1, Math.ceil(outer.length / 12))
     const radiusX = Math.max(440, topology.hubs.length * 130 + 200)
     const radiusY = Math.max(300, Math.ceil(topology.hubs.length / 8) * 110 + 180)
@@ -31,6 +43,10 @@ export function diagramLayout(topology: Topology, mode: LayoutMode) {
   }
   for (const [id, point] of Object.entries(topology.layout?.positions[mode] ?? {})) {
     if (positions.has(id)) positions.set(id, point)
+  }
+  for (const [siteId, spokeId] of nvaMap) {
+    const spokePoint = positions.get(spokeId)
+    if (spokePoint) positions.set(siteId, spokePoint)
   }
   width = Math.max(width, ...[...positions.values()].map((p) => p.x + 140))
   height = Math.max(height, ...[...positions.entries()].map(([id, p]) => p.y + (topology.hubs.some((h) => h.id === id) ? 120 : 70)))

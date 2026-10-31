@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Topology } from './model'
-import { analyzeRouting, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
+import { analyzeRouting, describeEvidenceSource, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsProfile } from './diagnostics'
 import { azureRoutesAtSites, traceNodePath } from './paths'
 import { propagateSites } from './bgp'
@@ -424,6 +424,13 @@ describe('typed engine coverage and shared site-plane behavior', () => {
     const report = analyzeRouting(t, empty, { automatic: true })
     const unowned = report.findings.find((finding) => finding.rule === 'unowned-advertisement')
     expect(unowned?.prefix).toBe('10.20.0.0/16, 10.20.10.0/24')
+    expect(unowned?.evidence).toEqual([
+      { code: 'unowned-advertisement', nodeId: 'b', prefix: '10.20.0.0/16', connectionId: 'vpn' },
+      { code: 'unowned-advertisement', nodeId: 'b', prefix: '10.20.10.0/24', connectionId: 'vpn' },
+    ])
+    expect(describeEvidenceSource(t, unowned!.evidence[0])).toBe(
+      'Defined in BGP advertisements on connection "VPN" (S2S VPN → Hub, AS path 65002)',
+    )
     const coverage = summarizeCoverage(report)
     expect(coverage.scanIncomplete).toBe(false)
     expect(coverage.unassignedFindings).toHaveLength(1)

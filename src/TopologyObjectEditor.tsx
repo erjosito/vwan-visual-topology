@@ -3,10 +3,10 @@ import { cloneElement, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
-import { parseAsPath, validateTopology } from './validation'
+import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 
-export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; deleting?: boolean }
+export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean }
 
 function Field({ title, children }: { title: string; children: ReactElement<{ 'aria-label'?: string }> }) {
   return <label className="field"><span>{title}</span>{cloneElement(children, { 'aria-label': title })}</label>
@@ -14,8 +14,8 @@ function Field({ title, children }: { title: string; children: ReactElement<{ 'a
 
 const prefixes = (value: string) => value.trim() === '*' ? [] : value.split(/[,\s]+/).filter(Boolean)
 
-export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting, onAddNva }: {
-  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onAddNva: (spokeId: string) => void
+export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting, onEditAdvertisements, onAddNva }: {
+  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onEditAdvertisements?: (connectionId: string) => void; onAddNva: (spokeId: string) => void
 }) {
   const [error, setError] = useState('')
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
@@ -25,11 +25,18 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const connection = topology.connections.find((c) => c.id === request.id)
   const erLink = topology.erLinks?.find((link) => link.id === request.id)
   const [erEndpoint, setErEndpoint] = useState<'hub' | 'site'>(erLink?.siteId || request.siteId ? 'site' : 'hub')
-  const [transportValue, setTransportValue] = useState<Transport>(connection?.transport ?? (request.spokeId ? 'SpokeNVA' : 'ExpressRoute'))
+  const existingNvaConn = request.kind === 'site'
+    ? topology.connections.find((c) => c.transport === 'SpokeNVA' && (request.id ? c.siteId === request.id : c.spokeId === request.spokeId))
+    : undefined
+  const isSpokeNva = request.kind === 'site' && (Boolean(request.spokeId) || Boolean(existingNvaConn))
+  const [selectedHostSpokeId, setSelectedHostSpokeId] = useState(existingNvaConn?.spokeId ?? request.spokeId ?? topology.spokes.find((s) => Boolean(s.hubId))?.id ?? '')
+  const hostSpoke = topology.spokes.find((s) => s.id === selectedHostSpokeId)
+  const inferredPeerIp = hostSpoke ? defaultSpokeNvaPeerIp(hostSpoke.prefixes) ?? '' : ''
+  const [transportValue, setTransportValue] = useState<Transport>(connection?.transport ?? (isSpokeNva ? 'SpokeNVA' : 'ExpressRoute'))
   const link = topology.siteLinks.find((l) => l.id === request.id)
-  const label = t(request.kind === 'site' ? request.spokeId ? 'Spoke BGP NVA' : siteLabel(topology, request.id ?? '') : objectLabels[request.kind])
-  const connectedSite = request.kind === 'site' && !item && !!request.hubId && !request.spokeId
-  const connectedNva = request.kind === 'site' && !item && !!request.spokeId
+  const label = t(request.kind === 'site' ? isSpokeNva ? 'Spoke BGP NVA' : siteLabel(topology, request.id ?? '') : objectLabels[request.kind])
+  const connectedSite = request.kind === 'site' && !item && !!request.hubId && !isSpokeNva
+  const nvaSpokes = topology.spokes.filter((s) => s.id !== request.id && Boolean(s.hubId) && topology.connections.some((c) => c.transport === 'SpokeNVA' && c.spokeId === s.id))
   const title = request.deleting ? t("Delete {0}", label) : t(item ? 'Edit {0}' : 'Add {0}', connectedSite ? t('connected site') : label)
 
   const save = (event: FormEvent<HTMLFormElement>) => {
@@ -51,8 +58,11 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           next.siteLinks = next.siteLinks.filter((l) => l.a !== id && l.b !== id)
           next.erLinks = next.erLinks?.filter((link) => link.siteId !== id)
           next.routeMaps = next.routeMaps?.filter((map) => map.siteId !== id)
+          if (existingNvaConn?.spokeId) {
+            next.spokes = next.spokes.map((s) => s.nvaSpokeIds ? { ...s, nvaSpokeIds: s.nvaSpokeIds.filter((nvaId) => nvaId !== existingNvaConn.spokeId) } : s)
+          }
         } else if (request.kind === 'spoke') {
-          next.spokes = next.spokes.filter((s) => s.id !== id)
+          next.spokes = next.spokes.filter((s) => s.id !== id).map((s) => s.nvaSpokeIds ? { ...s, nvaSpokeIds: s.nvaSpokeIds.filter((nvaId) => nvaId !== id) } : s)
           next.connections = next.connections.filter((connection) => connection.spokeId !== id)
         }
         else if (request.kind === 'connection') next.connections = next.connections.filter((c) => c.id !== id)
@@ -80,25 +90,94 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           if (hub) next.hubs[next.hubs.findIndex((h) => h.id === id)] = value
           else next.hubs.push(value)
         } else if (request.kind === 'spoke') {
-          const value = { id, name, hubId: text('hub'), prefixes: prefixes(text('prefixes')) }
-          for (const connection of next.connections.filter((connection) => connection.spokeId === id)) connection.hubId = value.hubId
+          const hubIdValue = text('hub') || undefined
+          const selectedNvaSpokes = data.getAll('nvaSpokeIds').map(String).filter(Boolean)
+          const value = {
+            id,
+            name,
+            ...(hubIdValue ? { hubId: hubIdValue } : {}),
+            prefixes: prefixes(text('prefixes')),
+            ...(selectedNvaSpokes.length ? { nvaSpokeIds: selectedNvaSpokes } : {}),
+          }
+          if (hubIdValue) {
+            for (const connection of next.connections.filter((connection) => connection.spokeId === id)) connection.hubId = hubIdValue
+          }
           if (spoke) next.spokes[next.spokes.findIndex((s) => s.id === id)] = value
           else next.spokes.push(value)
         } else if (request.kind === 'site') {
-          const value = { ...site, id, name, asn: Number(text('asn')), prefixes: text('prefix') ? [text('prefix')] : [] }
-          if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
-          else next.sites.push(value)
-          if (connectedSite || connectedNva) next.connections.push({
-            id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
-            transport: transportValue, enabled: true, routes: [], inbound: [], outbound: [], learnSiteRoutes: true,
-            ...(transportValue === 'SpokeNVA' ? {
-              spokeId: text('spoke'), peerIp: text('peerIp'), hubId: topology.spokes.find((spoke) => spoke.id === text('spoke'))!.hubId,
-              routes: text('advertisements').split(/\r?\n/).filter((line) => line.trim()).map((line) => {
-                const [prefix, ...path] = line.trim().split(/\s+/)
-                return { id: crypto.randomUUID(), prefix, asPath: parseAsPath(path.join(' ')), kind: 'bgp' as const }
-              }),
-            } : {}),
-          })
+          if (isSpokeNva) {
+            const targetSpokeId = text('spoke') || selectedHostSpokeId
+            const targetSpoke = next.spokes.find((s) => s.id === targetSpokeId)
+            if (!targetSpoke?.hubId) throw new Error('Spoke BGP NVA requires a hub-attached hosting spoke.')
+            const peerIp = text('peerIp') || defaultSpokeNvaPeerIp(targetSpoke.prefixes) || ''
+            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: site?.prefixes ?? [] }
+            if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
+            else next.sites.push(value)
+            const connValue = {
+              ...(existingNvaConn ?? { id: crypto.randomUUID(), routes: [], inbound: [], outbound: [], enabled: true, learnSiteRoutes: true }),
+              name: existingNvaConn?.name || `${name} peering`,
+              hubId: targetSpoke.hubId,
+              siteId: id,
+              spokeId: targetSpoke.id,
+              peerIp,
+              transport: 'SpokeNVA' as const,
+            }
+            if (existingNvaConn) next.connections[next.connections.findIndex((c) => c.id === existingNvaConn.id)] = connValue
+            else next.connections.push(connValue)
+            const checkedVnets = new Set(data.getAll('downstreamVnets').map(String))
+            next.spokes = next.spokes.map((s) => {
+              if (s.id === targetSpoke.id) return s
+              const current = new Set(s.nvaSpokeIds ?? [])
+              if (checkedVnets.has(s.id)) current.add(targetSpoke.id)
+              else current.delete(targetSpoke.id)
+              return { ...s, nvaSpokeIds: current.size ? [...current] : undefined }
+            })
+            const checkedSites = new Set(data.getAll('downstreamSites').map(String))
+            for (const otherSite of next.sites) {
+              if (otherSite.id === id || next.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === otherSite.id)) continue
+              const existingLink = next.siteLinks.find((l) => (l.a === id && l.b === otherSite.id) || (l.b === id && l.a === otherSite.id))
+              if (checkedSites.has(otherSite.id) && !existingLink) {
+                next.siteLinks.push({
+                  id: crypto.randomUUID(),
+                  name: `${name} - ${otherSite.name}`,
+                  a: id,
+                  b: otherSite.id,
+                  enabled: true,
+                  aToB: { prefixes: [], prepend: [], receivePrepend: [] },
+                  bToA: { prefixes: [], prepend: [], receivePrepend: [] },
+                })
+              } else if (!checkedSites.has(otherSite.id) && existingLink) {
+                next.siteLinks = next.siteLinks.filter((l) => l.id !== existingLink.id)
+              }
+            }
+          } else {
+            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: text('prefix') ? [text('prefix')] : [] }
+            if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
+            else next.sites.push(value)
+            if (connectedSite) next.connections.push({
+              id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
+              transport: transportValue, enabled: true, routes: [], inbound: [], outbound: [], learnSiteRoutes: true,
+            })
+            const checkedNvaSpokes = new Set(data.getAll('nvaSpokeIds').map(String))
+            for (const nvaSpoke of nvaSpokes) {
+              const peerSiteId = next.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === nvaSpoke.id)?.siteId
+              if (!peerSiteId) continue
+              const existingLink = next.siteLinks.find((l) => (l.a === id && l.b === peerSiteId) || (l.b === id && l.a === peerSiteId))
+              if (checkedNvaSpokes.has(nvaSpoke.id) && !existingLink) {
+                next.siteLinks.push({
+                  id: crypto.randomUUID(),
+                  name: `${nvaSpoke.name} - ${name}`,
+                  a: peerSiteId,
+                  b: id,
+                  enabled: true,
+                  aToB: { prefixes: [], prepend: [], receivePrepend: [] },
+                  bToA: { prefixes: [], prepend: [], receivePrepend: [] },
+                })
+              } else if (!checkedNvaSpokes.has(nvaSpoke.id) && existingLink) {
+                next.siteLinks = next.siteLinks.filter((l) => l.id !== existingLink.id)
+              }
+            }
+          }
         } else if (request.kind === 'connection') {
           const value = {
             ...(connection ?? { id, routes: [], inbound: [], outbound: [] }),
@@ -160,7 +239,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         {request.kind === 'site' && <p>{t('This also removes {0} hub connection{1} and {2} on-premises link{3}.', removedConnections, removedConnections === 1 ? '' : 's', removedPeers, removedPeers === 1 ? '' : 's')}</p>}
         {(request.kind === 'hub' || request.kind === 'site' || request.kind === 'erLocation') && <p>{t("Attached ER connections are also removed; the other endpoints are kept.")}</p>}
       </> : <>
-        <Field title={t("Name")}><input name="name" required maxLength={120} defaultValue={item?.name ?? ''} autoFocus /></Field>
+        <Field title={t("Name")}><input name="name" required maxLength={120} defaultValue={item?.name ?? (isSpokeNva && hostSpoke ? `${hostSpoke.name} NVA` : '')} autoFocus /></Field>
         {request.kind === 'erLocation' && <p className="muted">{t("An ExpressRoute peering location groups site circuit attachments and their hub connections. Connect sites and hubs after creating it. ER-to-ER transit and Global Reach are not enabled.")}</p>}
         {request.kind === 'erLink' && <>
           <Field title={t("ER location")}><select name="location" required defaultValue={erLink?.locationId ?? request.locationId ?? topology.erLocations?.[0]?.id}>{topology.erLocations?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
@@ -183,22 +262,50 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
         </>}
-        {(request.kind === 'spoke' || request.kind === 'connection' && transportValue !== 'SpokeNVA') && <Field title={t("Hub")}><select name="hub" required defaultValue={spoke?.hubId ?? connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
+        {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" defaultValue={spoke ? (spoke.hubId ?? '') : (request.nvaSpokeId ? '' : request.hubId ?? topology.hubs[0]?.id ?? '')}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
+        {request.kind === 'connection' && transportValue !== 'SpokeNVA' && <Field title={t("Hub")}><select name="hub" required defaultValue={connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
         {request.kind === 'spoke' && <>
           <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
-          <fieldset><legend>{t("BGP NVAs in this spoke")}</legend><p className="muted">{t("VNet address spaces remain system routes. Add an NVA to exchange transit prefixes with the hub over BGP; this is separate from integrated SD-WAN.")}</p>
-            {spoke && <><p>{t("{0} configured BGP peers", topology.connections.filter((connection) => connection.spokeId === spoke.id).length)}</p><button type="button" onClick={() => onAddNva(spoke.id)}>{t("Add BGP NVA")}</button><p className="muted">{t("Save spoke changes before adding an NVA.")}</p></>}
+          {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
+            <p className="muted">{t("Attach this VNet behind one or more spoke BGP NVAs so those NVAs advertise its prefixes to Virtual WAN.")}</p>
+            {nvaSpokes.map((nvaSpoke) => <label key={nvaSpoke.id} className="checkbox-field"><input type="checkbox" name="nvaSpokeIds" value={nvaSpoke.id} defaultChecked={spoke?.nvaSpokeIds?.includes(nvaSpoke.id) || request.nvaSpokeId === nvaSpoke.id} />{nvaSpoke.name} ({nvaSpoke.prefixes.join(', ')})</label>)}
+          </fieldset>}
+          {(!spoke || spoke.hubId) && <fieldset><legend>{t("BGP NVAs in this spoke")}</legend><p className="muted">{t("VNet address spaces remain system routes. Add an NVA to exchange downstream VNet or site prefixes with the hub over BGP; this is separate from integrated SD-WAN.")}</p>
+            {spoke && <><p>{t("{0} configured BGP peers", topology.connections.filter((connection) => connection.spokeId === spoke.id).length)}</p><button type="button" onClick={() => onAddNva(spoke.id)}>{topology.connections.some((connection) => connection.spokeId === spoke.id && connection.transport === 'SpokeNVA') ? t("Configure BGP NVA") : t("Add BGP NVA")}</button><p className="muted">{t("Save spoke changes before adding an NVA.")}</p></>}
             {!spoke && <p className="muted">{t("Create the spoke first, then use Add BGP NVA from its menu or editor.")}</p>}
+          </fieldset>}
+        </>}
+        {request.kind === 'site' && isSpokeNva && <>
+          <Field title={t("NVA ASN")}><input name="asn" type="number" required min={1} max={65534} defaultValue={site?.asn ?? 65001} /></Field>
+          <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
+            <Field title={t("Hosting spoke")}><select name="spoke" required value={selectedHostSpokeId} onChange={(e) => setSelectedHostSpokeId(e.target.value)}>{topology.spokes.filter((s) => Boolean(s.hubId)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
+            <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" defaultValue={existingNvaConn?.peerIp ?? inferredPeerIp} placeholder={inferredPeerIp || '10.50.0.4'} /></Field>
+            <p className="muted">{t("Optional — automatically inferred from the hosting spoke's range ({0}) if left blank. Must be an IPv4 address inside the hosting spoke.", inferredPeerIp || '.4')}</p>
+            <p className="muted">{t("Use a public or private 2-byte NVA ASN, excluding Azure/IANA reserved ASNs. One logical peer represents identical advertisements to both hub router IPs (AS65515).")}</p>
+            <a href="https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub#benefits-and-considerations" target="_blank" rel="noreferrer">{t("Microsoft spoke NVA BGP requirements")}</a>
+          </fieldset>
+          <fieldset><legend>{t("Attached downstream networks")}</legend>
+            <p className="muted">{t("This NVA automatically advertises any attached downstream Azure VNets and on-premises sites over BGP to the Virtual WAN hub.")}</p>
+            {topology.spokes.filter((s) => s.id !== selectedHostSpokeId).map((s) => <label key={s.id} className="checkbox-field"><input type="checkbox" name="downstreamVnets" value={s.id} defaultChecked={Boolean(selectedHostSpokeId && s.nvaSpokeIds?.includes(selectedHostSpokeId))} />{t("Azure VNet:")} {s.name} ({s.prefixes.join(', ')})</label>)}
+            {topology.sites.filter((s) => s.id !== request.id && !topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)).map((s) => <label key={s.id} className="checkbox-field"><input type="checkbox" name="downstreamSites" value={s.id} defaultChecked={Boolean(site && topology.siteLinks.some((l) => (l.a === site.id && l.b === s.id) || (l.b === site.id && l.a === s.id)))} />{t("On-premises site:")} {s.name} (AS{s.asn}{s.prefixes[0] ? ` · ${s.prefixes[0]}` : ''})</label>)}
           </fieldset>
         </>}
-        {request.kind === 'site' && <>
-          <Field title={t(connectedNva || siteLabel(topology, site?.id ?? '') === 'Spoke BGP NVA' ? "NVA ASN" : "Site ASN")}><input name="asn" type="number" required min={1} max={connectedNva ? 65534 : 4294967294} defaultValue={site?.asn ?? 65001} /></Field>
+        {request.kind === 'site' && !isSpokeNva && <>
+          <Field title={t("Site ASN")}><input name="asn" type="number" required min={1} max={4294967294} defaultValue={site?.asn ?? 65001} /></Field>
           <Field title={t("Originated prefix")}><input name="prefix" defaultValue={site?.prefixes[0] ?? ''} placeholder="10.80.0.0/16" /></Field>
           <p className="muted">{t("One optional IPv4 network for this site. Leave blank for a transit-only site or explicit connection advertisements.")}</p>
-          {(connectedSite || connectedNva) && <>
-            {connectedSite && <p className="muted">{t("A connection to")} {topology.hubs.find((h) => h.id === request.hubId)?.name}  {t("is created with site-prefix advertisements enabled.")}</p>}
-            <Field title={t("Connection name")}><input name="connectionName" maxLength={120} placeholder={t("Defaults to site name + connection")} /></Field>{!connectedNva && transport}
+          {connectedSite && <>
+            <p className="muted">{t("A connection to")} {topology.hubs.find((h) => h.id === request.hubId)?.name}  {t("is created with site-prefix advertisements enabled.")}</p>
+            <Field title={t("Connection name")}><input name="connectionName" maxLength={120} placeholder={t("Defaults to site name + connection")} /></Field>{transport}
           </>}
+          {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
+            <p className="muted">{t("Link this on-premises site to one or more spoke BGP NVAs so they exchange BGP routes with it.")}</p>
+            {nvaSpokes.map((nvaSpoke) => {
+              const peerSiteId = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === nvaSpoke.id)?.siteId
+              const linked = Boolean(site && peerSiteId && topology.siteLinks.some((l) => (l.a === site.id && l.b === peerSiteId) || (l.b === site.id && l.a === peerSiteId)))
+              return <label key={nvaSpoke.id} className="checkbox-field"><input type="checkbox" name="nvaSpokeIds" value={nvaSpoke.id} defaultChecked={linked || request.nvaSpokeId === nvaSpoke.id} />{nvaSpoke.name}</label>
+            })}
+          </fieldset>}
         </>}
         {request.kind === 'connection' && <>
           <div className="connection-configuration">
@@ -209,10 +316,21 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           </div>
           <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>
           <p className="muted">{t("Configure VPN static prefixes through Static routing on the site or hub. Remove or reassign site static routes before changing this VPN connection's site or transport.")}</p>
+          {item && connection && transportValue !== 'SpokeNVA' && onEditAdvertisements && (
+            <fieldset>
+              <legend>{t("Explicit BGP advertisements")}</legend>
+              <p className="muted">
+                {connection.routes.length > 0
+                  ? t("Advertised on this connection: {0}", connection.routes.map((route) => route.prefix).join(', '))
+                  : t("No explicit per-connection BGP advertisements configured.")}
+              </p>
+              <button type="button" onClick={() => onEditAdvertisements(connection.id)}>{t("Edit advertisements ({0})", connection.routes.length)}</button>
+            </fieldset>
+          )}
         </>}
-        {transportValue === 'SpokeNVA' && (connectedNva || connectedSite || request.kind === 'connection') && <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
-          <Field title={t("Hosting spoke")}><select name="spoke" required defaultValue={connection?.spokeId ?? request.spokeId ?? topology.spokes[0]?.id}>{topology.spokes.map((spoke) => <option key={spoke.id} value={spoke.id}>{spoke.name}</option>)}</select></Field>
-          <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" required defaultValue={connection?.peerIp ?? ''} placeholder="10.50.0.4" /></Field>
+        {transportValue === 'SpokeNVA' && request.kind === 'connection' && <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
+          <Field title={t("Hosting spoke")}><select name="spoke" required defaultValue={connection?.spokeId ?? request.spokeId ?? topology.spokes[0]?.id}>{topology.spokes.filter((s) => Boolean(s.hubId)).map((spoke) => <option key={spoke.id} value={spoke.id}>{spoke.name}</option>)}</select></Field>
+          <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" defaultValue={connection?.peerIp ?? ''} placeholder="10.50.0.4" /></Field>
           <Field title={t("NVA BGP advertisements")}><textarea name="advertisements" rows={5} defaultValue={connection?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
           <p className="muted">{t("Use a public or private 2-byte NVA ASN, excluding Azure/IANA reserved ASNs. The peer must be an actual NVA NIC IP in this directly attached spoke, not a loopback. One logical peer represents identical advertisements to both hub router IPs (AS65515); the app does not configure live BGP sessions.")}</p>
           <p className="muted">{t("NVA advertisements start with the NVA ASN. To model downstream networks and return routing, add sites with owned prefixes and link them to this NVA. Advertisements alone do not prove delivery. Default association/propagation and branch-to-branch enabled are assumed. Apply hub route maps to the hosting VNet connection.")}</p>

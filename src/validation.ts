@@ -19,6 +19,27 @@ export function cidr(value: string): { network: number; length: number } | undef
   return { network, length }
 }
 
+export function formatIpv4(address: number): string {
+  return [24, 16, 8, 0].map((shift) => Math.floor(address / 2 ** shift) % 256).join('.')
+}
+
+export function defaultSpokeNvaPeerIp(prefixes: string[], existingPeerIps: string[] = []): string | undefined {
+  const first = prefixes.map(cidr).find((parsed) => parsed !== undefined)
+  if (!first) return undefined
+  const used = new Set(existingPeerIps)
+  const hostCount = 2 ** (32 - first.length)
+  const maxOffset = Math.max(4, Math.min(254, hostCount - 2))
+  for (let offset = 4; offset <= maxOffset; offset++) {
+    const candidate = formatIpv4(first.network + offset)
+    if (contains(prefixes[0], first.network + offset) && !used.has(candidate)) return candidate
+  }
+  for (let offset = 1; offset < Math.min(256, hostCount); offset++) {
+    const candidate = formatIpv4(first.network + offset)
+    if (contains(prefixes[0], first.network + offset) && !used.has(candidate)) return candidate
+  }
+  return undefined
+}
+
 export function contains(prefix: string, address: number): boolean {
   const parsed = cidr(prefix)
   return !!parsed && Math.floor(address / 2 ** (32 - parsed.length)) * 2 ** (32 - parsed.length) === parsed.network
@@ -138,15 +159,32 @@ export function validateTopology(input: unknown): Topology {
   })
   const spokes = array(root.spokes, 60, 'Spokes').map((value) => {
     const spoke = record(value)
-    if (!hubs.some((h) => h.id === spoke.hubId)) fail('Spoke references a missing hub.')
+    const rawHubId = typeof spoke.hubId === 'string' && !spoke.hubId.trim() ? undefined : spoke.hubId
+    const hubId = rawHubId === undefined ? undefined : text(rawHubId, 'Spoke hub')
+    if (hubId !== undefined && !hubs.some((h) => h.id === hubId)) fail('Spoke references a missing hub.')
     const prefixes = array(spoke.prefixes, 30, 'Spoke prefixes').map((value) => {
       const prefix = text(value, 'Spoke prefix')
       if (!cidr(prefix)) fail(`Invalid spoke IPv4 network CIDR: ${prefix}`)
       return prefix
     })
     if (!prefixes.length) fail('A spoke needs at least one prefix.')
-    return { id: id(spoke.id), name: text(spoke.name, 'Spoke name'), hubId: spoke.hubId as string, prefixes }
+    const nvaSpokeIds = spoke.nvaSpokeIds === undefined
+      ? undefined
+      : [...new Set(array(spoke.nvaSpokeIds, 50, 'Spoke NVA attachments').map((entry) => text(entry, 'Spoke NVA id')))]
+    return {
+      id: id(spoke.id),
+      name: text(spoke.name, 'Spoke name'),
+      ...(hubId === undefined ? {} : { hubId }),
+      prefixes,
+      ...(nvaSpokeIds?.length ? { nvaSpokeIds } : {}),
+    }
   })
+  for (const spoke of spokes) {
+    for (const nvaSpokeId of spoke.nvaSpokeIds ?? []) {
+      const host = spokes.find((candidate) => candidate.id === nvaSpokeId)
+      if (!host || host.id === spoke.id || !host.hubId) fail('Downstream VNet references an invalid hosting spoke.')
+    }
+  }
   const routeMaps: RouteMap[] = array(root.routeMaps ?? [], 240, 'Route maps').map((value) => {
     const map = record(value)
     if ((map.hubId === undefined) === (map.siteId === undefined)) fail('A route map must belong to exactly one hub or site.')
@@ -202,16 +240,32 @@ export function validateTopology(input: unknown): Topology {
       ...(link.hubId === undefined ? { siteId: link.siteId as string } : { hubId: link.hubId as string }),
       enabled: link.enabled as boolean, routes, learnSiteRoutes: link.learnSiteRoutes === true }
   })
+  const usedHubNvaPeerIps = new Map<string, string[]>()
+  for (const raw of Array.isArray(root.connections) ? root.connections : []) {
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      const c = raw as Record<string, unknown>
+      if (c.transport === 'SpokeNVA' && typeof c.hubId === 'string' && typeof c.peerIp === 'string' && c.peerIp.trim()) {
+        usedHubNvaPeerIps.set(c.hubId, [...(usedHubNvaPeerIps.get(c.hubId) ?? []), c.peerIp.trim()])
+      }
+    }
+  }
   const connections = array(root.connections, 120, 'Connections').map((value) => {
     const connection = record(value)
     if (!hubs.some((h) => h.id === connection.hubId) || !sites.some((s) => s.id === connection.siteId)) fail('Connection references a missing hub or site.')
     if (!['ExpressRoute', 'VPN', 'SDWAN', 'SpokeNVA'].includes(connection.transport as string)) fail('Invalid transport.')
+    let resolvedPeerIp: string | undefined
     if (connection.transport === 'SpokeNVA') {
       const spoke = spokes.find((spoke) => spoke.id === connection.spokeId)
       const site = sites.find((site) => site.id === connection.siteId)!
       if (!spoke || spoke.hubId !== connection.hubId) fail('A spoke BGP NVA must peer with the hub directly connected to its hosting spoke.')
-      const address = ipv4(text(connection.peerIp, 'NVA BGP interface IPv4'))
+      const existingIps = usedHubNvaPeerIps.get(connection.hubId as string) ?? []
+      const rawPeerIp = typeof connection.peerIp === 'string' ? connection.peerIp.trim() : connection.peerIp
+      resolvedPeerIp = rawPeerIp === undefined || rawPeerIp === ''
+        ? defaultSpokeNvaPeerIp(spoke!.prefixes, existingIps)
+        : text(rawPeerIp, 'NVA BGP interface IPv4')
+      const address = resolvedPeerIp === undefined ? undefined : ipv4(resolvedPeerIp)
       if (address === undefined || !spoke!.prefixes.some((prefix) => contains(prefix, address))) fail('The NVA BGP interface IPv4 address must be inside its hosting spoke address space.')
+      usedHubNvaPeerIps.set(connection.hubId as string, [...existingIps, resolvedPeerIp!])
       if (site.asn > 65534 || [8074, 8075, 12076, 23456, 65515, 65517, 65518, 65519, 65520].includes(site.asn)
         || site.asn >= 64496 && site.asn <= 64511) fail('Spoke NVA peering requires a non-reserved public or private 2-byte ASN, different from the Azure hub ASN.')
     } else if (connection.spokeId !== undefined || connection.peerIp !== undefined) fail('Spoke and NVA peer IP fields are supported only on spoke BGP NVA connections.')
@@ -252,7 +306,7 @@ export function validateTopology(input: unknown): Topology {
       inbound, outbound,
       ...(inboundMapId !== undefined ? { inboundMapId } : {}),
       ...(outboundMapId !== undefined ? { outboundMapId } : {}),
-      ...(connection.transport === 'SpokeNVA' ? { spokeId: connection.spokeId, peerIp: connection.peerIp } : {}),
+      ...(connection.transport === 'SpokeNVA' ? { spokeId: connection.spokeId, peerIp: resolvedPeerIp } : {}),
       learnSiteRoutes: connection.learnSiteRoutes ?? false } as Topology['connections'][number]
   })
   for (const hub of hubs) {

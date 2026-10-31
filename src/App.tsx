@@ -151,10 +151,11 @@ function App() {
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
   const simulation = useMemo(() => simulate(topology), [topology])
+  const nvaSiteIds = useMemo(() => new Set(topology.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId).map((c) => c.siteId)), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
     ...topology.spokes.map((n) => ({ kind: 'spoke' as const, id: n.id, name: n.name })),
-    ...topology.sites.map((n) => ({ kind: 'site' as const, id: n.id, name: n.name })),
+    ...topology.sites.filter((n) => !nvaSiteIds.has(n.id)).map((n) => ({ kind: 'site' as const, id: n.id, name: n.name })),
   ]
   const sourceNode = nodes.find((n) => nodeKey(n) === source)
   const targetNode = nodes.find((n) => nodeKey(n) === target)
@@ -276,12 +277,16 @@ function App() {
     })) : []
   const canvasActions: ContextAction[] = [
     { label: t("Add hub"), run: () => setEditorRequest({ kind: 'hub' }) },
+    { label: t("Add Azure VNet"), run: () => setEditorRequest({ kind: 'spoke' }) },
     { label: t("Add site"), run: () => setEditorRequest({ kind: 'site' }) },
     { label: t("Add ER location"), run: () => setEditorRequest({ kind: 'erLocation' }) },
     { label: t("Route maps"), run: () => openRouteMaps() },
     { label: t("Check routing"), run: checkRouting },
     { label: t("Model notes and warnings"), run: () => setPanel('notes') },
   ]
+  const spokeObj = contextSelection?.kind === 'spoke' ? topology.spokes.find((spoke) => spoke.id === contextSelection.id) : undefined
+  const spokeNvaConn = spokeObj ? topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeObj.id) : undefined
+  const spokeNvaSite = spokeNvaConn ? topology.sites.find((s) => s.id === spokeNvaConn.siteId) : undefined
   const contextActions: ContextAction[] = contextSelection ? [
     ...(contextMenu?.routeMap ? [{
       label: t("Remove route map association"),
@@ -324,8 +329,22 @@ function App() {
       { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', siteId: contextSelection.id }) },
     ] : []),
     ...(contextSelection.kind === 'spoke' ? [
-      { label: t("Add BGP NVA"), run: () => setEditorRequest({ kind: 'site', spokeId: contextSelection.id }) },
-      { label: t("Spoke connection route maps"), run: () => { openRouteMaps({ kind: 'hub', id: topology.spokes.find((spoke) => spoke.id === contextSelection.id)!.hubId }, contextSelection.id) } },
+      ...(spokeObj?.hubId ? [
+        ...(spokeNvaConn && spokeNvaSite ? [
+          { label: t("Configure BGP NVA"), run: () => setEditorRequest({ kind: 'site', id: spokeNvaSite.id, spokeId: spokeObj.id }) },
+          { label: t("Add downstream VNet"), run: () => setEditorRequest({ kind: 'spoke', nvaSpokeId: spokeObj.id }) },
+          { label: t("Add downstream site"), run: () => setEditorRequest({ kind: 'site', nvaSpokeId: spokeObj.id }) },
+          { label: t("NVA BGP table"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }) },
+          { label: t("NVA learned routes"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }, false, 'learned') },
+          { label: t("NVA advertised routes"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }, false, 'advertised') },
+          { label: t("NVA route maps"), run: () => openRouteMaps({ kind: 'site', id: spokeNvaSite.id }) },
+          { label: spokeNvaConn.enabled ? t("Disable BGP NVA") : t("Enable BGP NVA"), run: () => update((next) => { const c = next.connections.find((c) => c.id === spokeNvaConn.id)!; c.enabled = !c.enabled }) },
+          { label: t("Remove BGP NVA"), danger: true, run: () => setEditorRequest({ kind: 'site', id: spokeNvaSite.id, spokeId: spokeObj.id, deleting: true }) },
+        ] : [
+          { label: t("Add BGP NVA"), run: () => setEditorRequest({ kind: 'site', spokeId: contextSelection.id }) },
+        ]),
+        { label: t("Spoke connection route maps"), run: () => { openRouteMaps({ kind: 'hub', id: spokeObj.hubId! }, contextSelection.id) } },
+      ] : []),
     ] : []),
     ...(contextSelection.kind === 'erLocation' ? [
       { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id }) },
@@ -388,7 +407,7 @@ function App() {
       <section className="canvas-workspace panel" aria-label={t("Topology workspace")}>
         <div className="canvas-toolbar"><div><h2>{t("Network topology")}</h2><p className="muted">{t("Drag blank canvas to pan; drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.")}</p></div>
           <div className="canvas-tools"><label className="field"><span>{t("Visualization")}</span><select aria-label={t("Visualization mode")} value={layout} onChange={(e) => update((next) => { next.layout ??= { mode: 'layered', positions: {} }; next.layout.mode = e.target.value as LayoutMode })}><option value="layered">{t("Layered topology")}</option><option value="constellation">{t("Network constellation")}</option></select></label><div className="zoom-controls"><button aria-label={t("Zoom out")} disabled={zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}>-</button><label className="field"><span>{t("Zoom")}</span><select aria-label={t("Canvas zoom")} value={zoom} onChange={(e) => setZoom(Number(e.target.value))}><option value={0.75}>75%</option><option value={1}>100%</option><option value={1.25}>125%</option><option value={1.5}>150%</option></select></label><button aria-label={t("Zoom in")} disabled={zoom >= 1.5} onClick={() => setZoom((value) => Math.min(1.5, value + 0.25))}>+</button></div><button disabled={!Object.keys(topology.layout?.positions[layout] ?? {}).length} title={t("Restore automatic positions in the current visualization only")} onClick={() => update((next) => { if (next.layout) delete next.layout.positions[layout] })}>{t("Reset layout")}</button>
-            <button onClick={() => setEditorRequest({ kind: 'hub' })}>{t("+ Hub")}</button><button onClick={() => setEditorRequest({ kind: 'site' })}>{t("+ Site")}</button><button onClick={() => setEditorRequest({ kind: 'erLocation' })}>{t("+ ER location")}</button><button onClick={() => openRouteMaps()}>{t("Route maps")}</button><button disabled={currentCheck?.status === 'running'} onClick={checkRouting}>{t("Check routing")}</button><button aria-label={t("Open model notes and warnings")} onClick={() => setPanel('notes')}>{t("Notes")}{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
+            <button onClick={() => setEditorRequest({ kind: 'hub' })}>{t("+ Hub")}</button><button onClick={() => setEditorRequest({ kind: 'spoke' })}>{t("+ VNet")}</button><button onClick={() => setEditorRequest({ kind: 'site' })}>{t("+ Site")}</button><button onClick={() => setEditorRequest({ kind: 'erLocation' })}>{t("+ ER location")}</button><button onClick={() => openRouteMaps()}>{t("Route maps")}</button><button disabled={currentCheck?.status === 'running'} onClick={checkRouting}>{t("Check routing")}</button><button aria-label={t("Open model notes and warnings")} onClick={() => setPanel('notes')}>{t("Notes")}{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         {routingCheck && <div className="routing-check-status" role="status">
           <span>{t(!currentCheck ? 'Routing changed. Check routing again.' : currentCheck.status === 'running' ? 'Checking all modeled networks…'
@@ -411,8 +430,8 @@ function App() {
           <button onClick={openDiagnostics}>{t('Advanced checks')}</button>
         </div>}
         <div className="canvas-stage">
-          {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
-          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onClose={closePanel} />}
+          {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onEditAdvertisements={(id) => { setConnectionId(id); setEditorRequest(undefined); setPanel('ads') }} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
+          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onEditAdvertisements={(id) => { setConnectionId(id); setEditorRequest(undefined); setPanel('ads') }} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
           {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
           <TopologyDiagram topology={topology} issues={routingIssues} onShowIssues={(finding) => { setRoutingIssueId(finding.id); setReviewCoverage(false); setPanel('issues'); showDiagnostic(finding) }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
@@ -447,7 +466,10 @@ function App() {
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">{t("Microsoft hub routing preference")}</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">{t("Microsoft route-map behavior and limitations")}</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>{t("Load example (replaces workspace)")}</button>
           </CanvasOverlay>}
-          {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onAddNva={(spokeId) => setEditorRequest({ kind: 'site', spokeId })} onSave={(next, value) => {
+          {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onEditAdvertisements={(id) => { setConnectionId(id); setEditorRequest(undefined); setPanel('ads') }} onAddNva={(spokeId) => {
+            const existing = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeId)
+            setEditorRequest({ kind: 'site', id: existing?.siteId, spokeId })
+          }} onSave={(next, value) => {
             save(next); setSelection(editorRequest.deleting ? undefined : value); setEditorRequest(undefined)
             if (editorRequest.deleting && nodeKey(value) === nodeKey(router)) { setPanel(undefined); setHighlighting(false) }
             else if (editorRequest.deleting && mapRouter && nodeKey(value) === nodeKey(mapRouter) && (panel === 'maps' || panel === 'rules' || panel === 'static')) setPanel(undefined)

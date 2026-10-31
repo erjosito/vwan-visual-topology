@@ -85,8 +85,9 @@ export interface SiteLink {
 export interface Spoke {
   id: string
   name: string
-  hubId: string
+  hubId?: string
   prefixes: string[]
+  nvaSpokeIds?: string[]
 }
 
 export interface Advertisement {

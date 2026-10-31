@@ -74,11 +74,13 @@ export function azureRoutesAtSites(topology: Topology, simulation: Simulation) {
 export function traceGroupedPaths(topology: Topology, simulation: Simulation, anchor: PathNode, direction: PathDirection, group: PathGroup): GroupPath[] {
   const object = topologyObject(topology, anchor)
   if (!simulation.converged || !object) return []
+  const nvaSiteIds = new Set(topology.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId).map((c) => c.siteId))
   const nodes = [
     ...(group !== 'sites' ? topology.spokes.map((spoke) => ({ ...spoke, kind: 'spoke' as const })) : []),
-    ...(group !== 'vnets' ? topology.sites.map((site) => ({ ...site, kind: 'site' as const })) : []),
+    ...(group !== 'vnets' ? topology.sites.filter((site) => !nvaSiteIds.has(site.id)).map((site) => ({ ...site, kind: 'site' as const })) : []),
   ].filter((node) => node.kind !== anchor.kind || node.id !== anchor.id)
-  const siteRoutes = (direction === 'to' ? anchor.kind === 'site' : nodes.some((node) => node.kind === 'site'))
+  const needsSiteRoutes = (node: PathNode) => node.kind === 'site' || (node.kind === 'spoke' && !topology.spokes.find((s) => s.id === node.id)?.hubId)
+  const siteRoutes = (direction === 'to' ? needsSiteRoutes(anchor) : nodes.some(needsSiteRoutes))
     ? azureRoutesAtSites(topology, simulation) : undefined
   if (direction === 'from') {
     return nodes.flatMap((source) => [...new Set(nodePrefixes(topology, anchor))].flatMap((prefix) =>
@@ -104,6 +106,36 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
       hubs: [], siteId: spoke.id, steps: ['Destination is within the source spoke; no Virtual WAN hop is required.'], status: 'delivered',
       termination: 'owner', terminalKind: 'spoke', traceComplete: true,
     }]
+    if (spoke && !spoke.hubId) {
+      if (!spoke.nvaSpokeIds?.length) return [{
+        hubs: [], steps: ['Standalone VNet is not connected to a Virtual WAN hub or spoke NVA.'], status: 'unreachable',
+        termination: 'no-route', traceComplete: true,
+      }]
+      const nvaConns = topology.connections.filter((c) => c.enabled && c.transport === 'SpokeNVA' && c.spokeId && spoke.nvaSpokeIds?.includes(c.spokeId))
+      if (!nvaConns.length) return [{
+        hubs: [], steps: ['No enabled spoke BGP NVA is attached to this VNet.'], status: 'unreachable',
+        termination: 'no-route', traceComplete: true,
+      }]
+      const learned = siteRoutes ?? azureRoutesAtSites(topology, simulation)
+      if (!learned.converged) return [{ hubs: [], steps: ['On-premises Azure advertisement propagation did not converge.'], status: 'unreachable', termination: 'nonconverged', traceComplete: false }]
+      const candidateConns = nvaConns.flatMap((conn) => (learned.tables[conn.siteId] ?? [])
+        .filter((r) => contains(r.prefix, address))
+        .map((route) => ({ conn, route })))
+      if (!candidateConns.length) return [{
+        hubs: [], steps: ['No route at the attached spoke BGP NVA for this destination.'], status: 'unreachable',
+        termination: 'no-route', traceComplete: learned.selectionComplete,
+      }]
+      const longest = Math.max(...candidateConns.map((c) => cidr(c.route.prefix)!.length))
+      const longestMatches = candidateConns.filter((c) => cidr(c.route.prefix)!.length === longest)
+      const shortest = Math.min(...longestMatches.map((c) => c.route.asPath.length))
+      const winningConns = [...new Map(longestMatches.filter((c) => c.route.asPath.length === shortest).map((c) => [c.conn.id, c.conn])).values()]
+      return winningConns.flatMap((conn) => traceNodePath(topology, simulation, { kind: 'site', id: conn.siteId }, destination, learned).map((path) => ({
+        ...path,
+        sourceSpokeId: spoke.id,
+        sourceNvaSpokeId: conn.spokeId,
+        steps: [`Exit downstream VNet ${spoke.name} via spoke NVA on ${topology.spokes.find((s) => s.id === conn.spokeId)?.name ?? conn.spokeId}.`, ...path.steps],
+      })))
+    }
     const hubId = source.kind === 'hub' ? source.id : spoke?.hubId
     return hubId ? traceFlow(topology, simulation, hubId, destination).map((path) => ({
       ...path, ...(spoke && path.hubs.length ? { sourceSpokeId: spoke.id } : {}),
@@ -128,7 +160,21 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
     if (!actual.length) return [{ hubs: [], steps: ['The mapped summary has no known contributing route for this destination.'], status: 'unreachable', termination: 'summary-hole', lookupPrefix: selected.prefix }]
     return actual.flatMap((route): NodePath[] => {
       const steps = [`Source site: longest prefix ${selected.prefix}, shortest AS path ${selected.asPath.join(' ') || 'local'}.`]
-      if (!route.connectionId) return [{ hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds, siteId: route.sitePath.at(-1), steps, status: 'delivered', termination: 'owner', terminalKind: 'site', lookupPrefix: selected.prefix }]
+      if (!route.connectionId) {
+        const terminalSiteId = route.sitePath.at(-1)
+        const terminalNvaSpokeId = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.siteId === terminalSiteId && c.spokeId)?.spokeId
+        const downstreamVnet = terminalNvaSpokeId
+          ? topology.spokes.find((s) => s.nvaSpokeIds?.includes(terminalNvaSpokeId) && s.prefixes.some((p) => contains(p, address)))
+          : undefined
+        return [{
+          hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds,
+          siteId: downstreamVnet?.id ?? terminalSiteId,
+          ...(downstreamVnet && terminalNvaSpokeId ? { nvaSpokeId: terminalNvaSpokeId } : {}),
+          steps: [...steps, ...(downstreamVnet ? [`Downstream VNet: ${downstreamVnet.name}.`] : [])],
+          status: 'delivered', termination: 'owner',
+          terminalKind: downstreamVnet ? 'spoke' : 'site', lookupPrefix: selected.prefix,
+        }]
+      }
       const connection = topology.connections.find((c) => c.id === route.connectionId) ?? topology.erLinks?.find((link) => link.id === route.connectionId)
       const erHub = topology.erLinks?.find((link) => link.id === route.erHubLinkId)
       const hubId = connection?.hubId ?? erHub?.hubId

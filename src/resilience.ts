@@ -25,7 +25,8 @@ export function singleLinkIsolation(topology: Topology): LinkIsolation[] {
     ...topology.connections.filter((link) => link.enabled).map((link) => ({ a: link.spokeId ?? link.hubId, b: link.siteId, linkId: link.id, linkName: link.name, object: { kind: 'connection' as const, id: link.id } })),
     ...topology.siteLinks.filter((link) => link.enabled).map((link) => ({ a: link.a, b: link.b, linkId: link.id, linkName: link.name, object: { kind: 'siteLink' as const, id: link.id } })),
     ...(topology.erLinks ?? []).filter((link) => link.enabled).map((link) => ({ a: link.hubId ?? link.siteId!, b: link.locationId, linkId: link.id, linkName: link.name, object: { kind: 'erLink' as const, id: link.id } })),
-    ...topology.spokes.map((spoke) => ({ a: spoke.id, b: spoke.hubId, linkId: spoke.id, linkName: spoke.name, object: { kind: 'spoke' as const, id: spoke.id } })),
+    ...topology.spokes.filter((spoke): spoke is typeof spoke & { hubId: string } => Boolean(spoke.hubId)).map((spoke) => ({ a: spoke.id, b: spoke.hubId, linkId: spoke.id, linkName: spoke.name, object: { kind: 'spoke' as const, id: spoke.id } })),
+    ...topology.spokes.flatMap((spoke) => (spoke.nvaSpokeIds ?? []).map((nvaSpokeId) => ({ a: spoke.id, b: nvaSpokeId, linkId: `vnet-nva:${spoke.id}:${nvaSpokeId}`, linkName: `${spoke.name} ↔ ${topology.spokes.find((s) => s.id === nvaSpokeId)?.name ?? nvaSpokeId}`, object: { kind: 'spoke' as const, id: spoke.id } }))),
     ...topology.hubs.flatMap((hub, i) => topology.hubs.slice(i + 1).map((other) => ({ a: hub.id, b: other.id, linkId: `interhub:${[hub.id, other.id].sort().join(':')}`, linkName: `${hub.name} ↔ ${other.name}`, object: undefined }))),
   ].filter((edge) => nodes.has(edge.a) && nodes.has(edge.b))
   const adjacent = new Map([...nodes.keys()].map((id) => [id, [] as number[]]))

@@ -679,4 +679,49 @@ describe('topology and input validation', () => {
     t.connections[0].routes[0].asPath = []
     expect(() => validateTopology(t)).toThrow('only on VPN')
   })
+  it('auto-infers SpokeNVA peerIp from the hosting spoke prefix and validates standalone VNets behind NVA spokes', () => {
+    const t = structuredClone(example)
+    t.sites.push({ id: 'nva-eu', name: 'EU Spoke NVA', asn: 65050, prefixes: [] })
+    t.connections.push({
+      id: 'nva-peer-eu',
+      name: 'EU NVA Peering',
+      hubId: 'eu',
+      siteId: 'nva-eu',
+      spokeId: 'eu-apps',
+      transport: 'SpokeNVA',
+      enabled: true,
+      learnSiteRoutes: true,
+      routes: [],
+      inbound: [],
+      outbound: [],
+    })
+    t.spokes.push({
+      id: 'downstream-vnet',
+      name: 'Downstream workload VNet',
+      prefixes: ['10.150.0.0/16'],
+      nvaSpokeIds: ['eu-apps'],
+    })
+    const validated = validateTopology(t)
+    const peer = validated.connections.find((c) => c.id === 'nva-peer-eu')!
+    expect(peer.peerIp).toBe('10.1.0.4')
+    const downstream = validated.spokes.find((s) => s.id === 'downstream-vnet')!
+    expect(downstream.hubId).toBeUndefined()
+    expect(downstream.nvaSpokeIds).toEqual(['eu-apps'])
+    const sim = simulate(validated)
+    const hubRoute = sim.tables.eu.find((d) => d.prefix === '10.150.0.0/16')
+    expect(hubRoute?.selected[0]).toMatchObject({
+      connectionId: 'nva-peer-eu',
+      nvaSpokeId: 'eu-apps',
+      siteId: 'nva-eu',
+      asPath: [65050],
+    })
+    const flow = traceFlow(validated, sim, 'eu', '10.150.0.10')
+    expect(flow[0]).toMatchObject({
+      status: 'delivered',
+      hubs: ['eu'],
+      connectionId: 'nva-peer-eu',
+      nvaSpokeId: 'eu-apps',
+      siteId: 'downstream-vnet',
+    })
+  })
 })

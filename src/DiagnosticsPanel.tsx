@@ -3,11 +3,11 @@ import type { FormEvent } from 'react'
 import { CanvasOverlay } from './CanvasOverlay'
 import { AnalysisCoverage } from './AnalysisCoverage'
 import { localizeDiagnostic, t } from './i18n'
-import { routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
+import { describeEvidenceSource, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsFinding, DiagnosticsProfile, DiagnosticsReport, ExportConstraint } from './diagnostics'
 import type { PathNode } from './paths'
 import { nodePrefixes } from './paths'
-import type { ObjectSelection, Topology } from './model'
+import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
 
@@ -21,9 +21,13 @@ function download(value: unknown, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject, onClearHighlight, onProfileChange, onClose }: {
+export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject, onEditAdvertisements, onOpenStaticRouting, onClearHighlight, onProfileChange, onClose }: {
   topology: Topology; onFinding: (finding: DiagnosticsFinding) => void
-  onInspect: (node: ObjectSelection) => void; onEditObject?: (node: ObjectSelection) => void; onClearHighlight: () => void; onClose: () => void
+  onInspect: (node: ObjectSelection) => void
+  onEditObject?: (node: ObjectSelection) => void
+  onEditAdvertisements?: (connectionId: string) => void
+  onOpenStaticRouting?: (router: RouterSelection) => void
+  onClearHighlight: () => void; onClose: () => void
   onProfileChange?: () => void
 }) {
   const nodes = [
@@ -195,7 +199,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
             : 'Analysis completed within the requested model scope.')}
           {' '}{t('{0} probes · {1} address cells · {2} failure cases', currentReport.probes, currentReport.cells, currentReport.failureCases)}
           {' '}{countTokens.join(' · ')}</p>
-        <AnalysisCoverage report={currentReport} topology={topology} onEditObject={onEditObject} />
+        <AnalysisCoverage report={currentReport} topology={topology} onEditObject={onEditObject} onEditAdvertisements={onEditAdvertisements} onOpenStaticRouting={onOpenStaticRouting} />
         <div className="form-grid">
           <label className="field"><span>{t('Severity')}</span><select aria-label={t('Diagnostic severity')} value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">{t('All severities')}</option>{Object.entries(severities).filter(([value]) => value !== 'unknown').map(([value, label]) => <option value={value} key={value}>{t(label)}</option>)}</select></label>
           <label className="field"><span>{t('Diagnostic category')}</span><select aria-label={t('Diagnostic category')} value={category} onChange={(event) => setCategory(event.target.value)}><option value="">{t('All categories')}</option>{categories.map(([rule, title]) => <option key={rule} value={rule}>{t(title)}</option>)}</select></label>
@@ -213,7 +217,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
           {finding.source && <p>{name(finding.source)} · {finding.sourceAddress ?? finding.prefix} → {name(finding.target)} · {finding.destinationAddress ?? finding.prefix}</p>}
           <small>{t(finding.confidence === 'modeled' ? 'Modeled result' : finding.confidence === 'risk' ? 'Potential risk' : 'Unknown')}</small>
           <details><summary>{t('Evidence and investigation')}</summary>
-            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{evidence.code}</code> · {evidence.nodeId ? topologyObject(topology, finding.related.find((node) => node.id === evidence.nodeId) ?? { kind: 'hub', id: evidence.nodeId })?.name ?? evidence.nodeId : ''} {evidence.prefix} {evidence.connectionId}</li>)}</ul>
+            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{evidence.code}</code> · {evidence.nodeId ? topologyObject(topology, finding.related.find((node) => node.id === evidence.nodeId) ?? { kind: 'hub', id: evidence.nodeId })?.name ?? evidence.nodeId : ''} {evidence.prefix} {describeEvidenceSource(topology, evidence)}</li>)}</ul>
             <div className="row">{finding.related.filter((node) => ['hub', 'site', 'erLocation'].includes(node.kind) && topologyObject(topology, node)).slice(0, 4).map((node) => <button key={key(node)} onClick={() => onInspect(node)}>{t('Inspect routes: {0}', topologyObject(topology, node)?.name)}</button>)}</div>
             {([['Forward', finding.forward], ['Return', finding.reverse]] as const).map(([direction, paths]) => <div key={direction}><h4>{t(direction)}</h4>{paths.map((path, index) => <details key={index}><summary>{t(path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route')} · {index + 1}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details>)}</div>)}
           </details>
