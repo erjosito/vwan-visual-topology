@@ -38,6 +38,7 @@ export interface ErLink {
   enabled: boolean
   routes: Advertisement[]
   learnSiteRoutes: boolean
+  propagateDefaultRoute?: boolean
 }
 export interface RouteMapAssignment { connectionId: string; inboundMapId?: string; outboundMapId?: string }
 export interface RouterSelection { kind: 'hub' | 'site'; id: string }
@@ -89,6 +90,7 @@ export interface Spoke {
   hubId?: string
   prefixes: string[]
   nvaSpokeIds?: string[]
+  propagateDefaultRoute?: boolean
 }
 
 export interface Advertisement {
@@ -107,6 +109,7 @@ export interface Connection {
   enabled: boolean
   routes: Advertisement[]
   learnSiteRoutes: boolean
+  propagateDefaultRoute?: boolean
   inbound: PrependRule[]
   outbound: PrependRule[]
   inboundMapId?: string

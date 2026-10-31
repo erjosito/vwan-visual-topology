@@ -303,9 +303,18 @@ export function simulate(topology: Topology): Simulation {
   }))
   const branchExportEligible = (route: Candidate) => route.transport !== 'SpokeNVA' || !topology.spokes.some((spoke) =>
     spoke.prefixes.some((prefix) => cidr(prefix)!.length < cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))
+  const hubOutboundCandidates = (hubId: string, propagateDefaultRoute?: boolean): Candidate[] => {
+    const hub = topology.hubs.find((h) => h.id === hubId)!
+    const selected = tables[hubId].flatMap((decision) => decision.selected)
+    if (!propagateDefaultRoute) return selected.filter((route) => route.prefix !== '0.0.0.0/0')
+    if (!hub.routingIntent.internet) return selected
+    return [policyRoute(hub, '0.0.0.0/0'), ...selected.filter((route) => route.prefix !== '0.0.0.0/0')]
+  }
   const outbound: Record<string, Candidate[]> = Object.fromEntries(topology.connections.map((connection) => {
     if (!connection.enabled || connection.transport === 'SDWAN') return [connection.id, []]
-    const before = tables[connection.hubId].flatMap((d) => d.selected)
+    const hostingSpoke = connection.spokeId ? topology.spokes.find((s) => s.id === connection.spokeId) : undefined
+    const propagateDefault = Boolean(connection.propagateDefaultRoute || hostingSpoke?.propagateDefaultRoute)
+    const before = hubOutboundCandidates(connection.hubId, propagateDefault)
       .filter((r) => branchExportEligible(r) && r.connectionId !== connection.id && !r.sitePath?.includes(connection.siteId)
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
       .map((r) => ({ ...r, asPath: connection.transport === 'ExpressRoute' ? r.asPath : [65515, ...r.asPath] }))
@@ -319,7 +328,9 @@ export function simulate(topology: Topology): Simulation {
       outbound[spoke.id] = []
       continue
     }
-    const before = tables[spoke.hubId].flatMap((decision) => decision.selected)
+    const propagateDefault = Boolean(spoke.propagateDefaultRoute
+      || topology.connections.some((c) => c.enabled && c.transport === 'SpokeNVA' && c.spokeId === spoke.id && c.propagateDefaultRoute))
+    const before = hubOutboundCandidates(spoke.hubId, propagateDefault)
       .filter((route) => route.connectionId !== spoke.id)
       .map((route) => ({ ...route, asPath: [65515, ...route.asPath] }))
     const after = policy({ kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound', before,
@@ -330,8 +341,8 @@ export function simulate(topology: Topology): Simulation {
     warnings.push('Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515), Default association/propagation and branch-to-branch enabled. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.')
   }
   for (const link of erLinks.filter((link) => link.hubId)) {
-    const routes = tables[link.hubId!].flatMap((decision) => decision.selected)
-      .filter((route) => branchExportEligible(route) && route.transport !== 'ExpressRoute' && route.prefix !== '0.0.0.0/0')
+    const routes = hubOutboundCandidates(link.hubId!, link.propagateDefaultRoute)
+      .filter((route) => branchExportEligible(route) && route.transport !== 'ExpressRoute')
     const mapped = policy({ kind: 'hub', id: link.hubId! }, link.id, 'outbound', routes, [
       ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'hub', id: link.hubId! }, link.id, 'outbound')),
       ...routes.filter((route) => route.kind === 'vpn-static'),

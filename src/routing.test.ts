@@ -728,4 +728,43 @@ describe('topology and input validation', () => {
       siteId: 'downstream-vnet',
     })
   })
+  it('suppresses 0.0.0.0/0 outbound by default and exports it only on attachments with propagateDefaultRoute enabled', () => {
+    const t = structuredClone(example)
+    t.hubs[0].routingIntent.internet = true
+    t.erLocations = [{ id: 'loc-eu', name: 'EU MSEE' }]
+    t.erLinks = [
+      { id: 'er-hub-eu', name: 'EU Hub ER', locationId: 'loc-eu', hubId: 'eu', enabled: true, learnSiteRoutes: false, routes: [] },
+      { id: 'er-site-dc', name: 'DC ER', locationId: 'loc-eu', siteId: 'dc', enabled: true, learnSiteRoutes: true, routes: [] },
+    ]
+    const defaultSim = simulate(validateTopology(t))
+    expect(defaultSim.outbound['er-eu'].some((r) => r.prefix === '0.0.0.0/0')).toBe(false)
+    expect(defaultSim.outbound['vpn-eu'].some((r) => r.prefix === '0.0.0.0/0')).toBe(false)
+    expect(defaultSim.outbound['eu-apps'].some((r) => r.prefix === '0.0.0.0/0')).toBe(false)
+    expect(defaultSim.outbound['er-hub-eu'].some((r) => r.prefix === '0.0.0.0/0')).toBe(false)
+
+    // Enable propagateDefaultRoute on VPN connection, ER connection, spoke, and hub ER link
+    t.connections.find((c) => c.id === 'vpn-eu')!.propagateDefaultRoute = true
+    t.connections.find((c) => c.id === 'er-eu')!.propagateDefaultRoute = true
+    t.spokes.find((s) => s.id === 'eu-apps')!.propagateDefaultRoute = true
+    t.erLinks![0].propagateDefaultRoute = true
+    const optInSim = simulate(validateTopology(t))
+    expect(optInSim.outbound['vpn-eu'].find((r) => r.prefix === '0.0.0.0/0')).toMatchObject({ prefix: '0.0.0.0/0', asPath: [65515] })
+    expect(optInSim.outbound['er-eu'].find((r) => r.prefix === '0.0.0.0/0')).toMatchObject({ prefix: '0.0.0.0/0', asPath: [12076] })
+    expect(optInSim.outbound['eu-apps'].find((r) => r.prefix === '0.0.0.0/0')).toMatchObject({ prefix: '0.0.0.0/0', asPath: [65515] })
+    expect(optInSim.outbound['er-hub-eu'].find((r) => r.prefix === '0.0.0.0/0')).toMatchObject({ prefix: '0.0.0.0/0', asPath: [12076] })
+
+    // Private-only routing intent should not leak synthetic firewall Internet fallback as 0.0.0.0/0
+    t.hubs[0].routingIntent.internet = false
+    t.hubs[0].routingIntent.private = true
+    const privateOnlySim = simulate(validateTopology(t))
+    expect(privateOnlySim.outbound['vpn-eu'].some((r) => r.prefix === '0.0.0.0/0')).toBe(false)
+
+    // Rejects propagateDefaultRoute on standalone VNet or site-side ER link
+    const badVnet = structuredClone(t)
+    badVnet.spokes.push({ id: 'standalone', name: 'Standalone', prefixes: ['10.199.0.0/24'], propagateDefaultRoute: true })
+    expect(() => validateTopology(badVnet)).toThrow('Standalone VNets cannot enable hub default-route propagation.')
+    const badErLink = structuredClone(t)
+    badErLink.erLinks![1].propagateDefaultRoute = true
+    expect(() => validateTopology(badErLink)).toThrow('Configure ER default-route propagation on the hub attachment, not the site attachment.')
+  })
 })

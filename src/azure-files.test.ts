@@ -86,10 +86,15 @@ describe('offline Azure capture import', () => {
   it('maps only Azure Firewall intent and discloses unsupported providers/destinations', () => {
     const input = capture()
     input.hubs[0].routingPolicies = [{ destinations: ['PrivateTraffic', 'Internet'], nextHop: `${base}/azureFirewalls/firewall` }]
-    expect(importAzureCapture(input).hubs[0].routingIntent).toMatchObject({ private: true, internet: true })
+    ;(input.hubs[0].connections[0] as Record<string, unknown>).enableInternetSecurity = true
+    const imported = importAzureCapture(input)
+    expect(imported.hubs[0].routingIntent).toMatchObject({ private: true, internet: true })
+    expect(imported.spokes[0].propagateDefaultRoute).toBe(true)
     input.hubs[0].routingPolicies = [{ destinations: ['Internet', '10.0.0.0/8'], nextHop: `${base}/networkVirtualAppliances/nva` }]
+    ;(input.hubs[0].connections[0] as Record<string, unknown>).enableInternetSecurity = null
     const result = importAzureCapture(input)
     expect(result.hubs[0].routingIntent.internet).toBe(false)
+    expect(result.spokes[0].propagateDefaultRoute).toBeUndefined()
     expect(result.azureImport?.warnings.join(' ')).toContain('non-Azure-Firewall')
     expect(result.azureImport?.warnings.join(' ')).toContain('Unsupported routing-intent destination')
   })

@@ -212,6 +212,8 @@ export const ja: Record<string, string> = {
   '· BGP advertisements only. AS paths are entered as learned by the hub, including provider ASNs. Configure non-BGP VPN prefixes through Static routing on the site or hub.': '· BGP アドバタイズのみ。AS パスには、プロバイダー ASN を含め、ハブが学習する形式で入力します。BGP 以外の VPN プレフィックスは、サイトまたはハブの静的ルーティングで構成します。',
   'Import site mesh routes': 'サイト メッシュのルートをインポート',
   'Advertise site-originated and learned routes': 'サイトで生成したルートと学習したルートをアドバタイズ',
+  'Propagate default route (0.0.0.0/0)': 'デフォルト ルート (0.0.0.0/0) を伝播',
+  'This attachment imports site advertisements from the location and exports selected Azure, VPN and NVA routes. ER-learned routes and default routes are not exported unless default-route propagation is enabled. Configure advertisements on site attachments and route maps on the hub/site.': 'この接続はロケーションからのサイト アドバタイズをインポートし、選択された Azure、VPN、NVA ルートをエクスポートします。ER 学習ルートおよびデフォルト ルートは（デフォルト ルート伝播を有効にしない限り）エクスポートされません。アドバタイズはサイト接続で、ルート マップはハブまたはサイトで構成してください。',
   'Advertised prefix': 'アドバタイズしたプレフィックス',
   'Learned AS path': '学習した AS パス',
   'Remove route {0}': 'ルート {0} を削除',

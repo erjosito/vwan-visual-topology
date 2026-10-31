@@ -30,6 +30,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
     : undefined
   const isSpokeNva = request.kind === 'site' && (Boolean(request.spokeId) || Boolean(existingNvaConn))
   const [selectedHostSpokeId, setSelectedHostSpokeId] = useState(existingNvaConn?.spokeId ?? request.spokeId ?? topology.spokes.find((s) => Boolean(s.hubId))?.id ?? '')
+  const [selectedSpokeHubId, setSelectedSpokeHubId] = useState(spoke ? (spoke.hubId ?? '') : (request.nvaSpokeId ? '' : request.hubId ?? topology.hubs[0]?.id ?? ''))
   const hostSpoke = topology.spokes.find((s) => s.id === selectedHostSpokeId)
   const inferredPeerIp = hostSpoke ? defaultSpokeNvaPeerIp(hostSpoke.prefixes) ?? '' : ''
   const [transportValue, setTransportValue] = useState<Transport>(connection?.transport ?? (isSpokeNva ? 'SpokeNVA' : 'ExpressRoute'))
@@ -109,6 +110,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             ...(hubIdValue ? { hubId: hubIdValue } : {}),
             prefixes: prefixes(text('prefixes')),
             ...(selectedNvaSpokes.length ? { nvaSpokeIds: selectedNvaSpokes } : {}),
+            ...(hubIdValue && data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}),
           }
           if (hubIdValue) {
             for (const connection of next.connections.filter((connection) => connection.spokeId === id)) connection.hubId = hubIdValue
@@ -132,6 +134,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
               spokeId: targetSpoke.id,
               peerIp,
               transport: 'SpokeNVA' as const,
+              propagateDefaultRoute: data.has('propagateDefaultRoute') ? true : undefined,
             }
             if (existingNvaConn) next.connections[next.connections.findIndex((c) => c.id === existingNvaConn.id)] = connValue
             else next.connections.push(connValue)
@@ -194,6 +197,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             ...(connection ?? { id, routes: [], inbound: [], outbound: [] }),
             name, hubId: text('hub'), siteId: text('site'), transport: text('transport') as Transport,
             enabled: data.has('enabled'), learnSiteRoutes: data.has('learnSiteRoutes'),
+            propagateDefaultRoute: data.has('propagateDefaultRoute') ? true : undefined,
             spokeId: undefined, peerIp: undefined,
             ...(transportValue === 'SpokeNVA' ? {
               spokeId: text('spoke'), peerIp: text('peerIp'), hubId: topology.spokes.find((spoke) => spoke.id === text('spoke'))!.hubId,
@@ -216,7 +220,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             return { id: erLink?.routes[index]?.id ?? crypto.randomUUID(), prefix, asPath: parseAsPath(path.join(' ')), kind: 'bgp' as const }
           }) : []
           const value = { id, name, locationId: text('location'), enabled: data.has('enabled'),
-            ...(erEndpoint === 'hub' ? { hubId: text('endpoint') } : { siteId: text('endpoint') }),
+            ...(erEndpoint === 'hub' ? { hubId: text('endpoint'), ...(data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}) } : { siteId: text('endpoint') }),
             routes, learnSiteRoutes: erEndpoint === 'site' && data.has('learnSiteRoutes') }
           next.erLinks ??= []
           const index = next.erLinks.findIndex((link) => link.id === id)
@@ -261,7 +265,10 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={erLink?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
             <Field title={t("ER BGP advertisements")}><textarea name="advertisements" rows={4} defaultValue={erLink?.routes.map((route) => `${route.prefix} ${route.asPath.join(' ')}`).join('\n') ?? ''} placeholder={'10.80.0.0/16 65001\n10.81.0.0/16 65001 65002'} /></Field>
             <p className="muted">{t("Optional explicit advertisements: one prefix and site-side AS path per line. Provider ASN 12076 is added automatically. Each site attachment represents an independent private-peering circuit; other ER circuits are not advertised to it.")}</p>
-          </> : <p className="muted">{t("This attachment imports site advertisements from the location and exports selected Azure, VPN and NVA routes. ER-learned routes and default routes are not exported. Configure advertisements on site attachments and route maps on the hub/site.")}</p>}
+          </> : <>
+            <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={erLink?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>
+            <p className="muted">{t("This attachment imports site advertisements from the location and exports selected Azure, VPN and NVA routes. ER-learned routes and default routes are not exported unless default-route propagation is enabled. Configure advertisements on site attachments and route maps on the hub/site.")}</p>
+          </>}
         </>}
         {request.kind === 'hub' && <>
           <Field title={t("Region")}><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
@@ -273,10 +280,11 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
         </>}
-        {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" defaultValue={spoke ? (spoke.hubId ?? '') : (request.nvaSpokeId ? '' : request.hubId ?? topology.hubs[0]?.id ?? '')}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
+        {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" value={selectedSpokeHubId} onChange={(e) => setSelectedSpokeHubId(e.target.value)}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
         {request.kind === 'connection' && transportValue !== 'SpokeNVA' && <Field title={t("Hub")}><select name="hub" required defaultValue={connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
         {request.kind === 'spoke' && <>
           <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
+          {selectedSpokeHubId && <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>}
           {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
             <p className="muted">{t("Attach this VNet behind one or more spoke BGP NVAs so those NVAs advertise its prefixes to Virtual WAN.")}</p>
             {nvaSpokes.map((nvaSpoke) => <label key={nvaSpoke.id} className="checkbox-field"><input type="checkbox" name="nvaSpokeIds" value={nvaSpoke.id} defaultChecked={spoke?.nvaSpokeIds?.includes(nvaSpoke.id) || request.nvaSpokeId === nvaSpoke.id} />{nvaSpoke.name} ({nvaSpoke.prefixes.join(', ')})</label>)}
@@ -291,6 +299,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
             <Field title={t("Hosting spoke")}><select name="spoke" required value={selectedHostSpokeId} onChange={(e) => setSelectedHostSpokeId(e.target.value)}>{topology.spokes.filter((s) => Boolean(s.hubId)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
             <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" defaultValue={existingNvaConn?.peerIp ?? inferredPeerIp} placeholder={inferredPeerIp || '10.50.0.4'} /></Field>
+            <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={Boolean(existingNvaConn?.propagateDefaultRoute || hostSpoke?.propagateDefaultRoute)} />{t("Propagate default route (0.0.0.0/0)")}</label>
             <p className="muted">{t("Optional — automatically inferred from the hosting spoke's range ({0}) if left blank. Must be an IPv4 address inside the hosting spoke.", inferredPeerIp || '.4')}</p>
             <p className="muted">{t("Use a public or private 2-byte NVA ASN, excluding Azure/IANA reserved ASNs. One logical peer represents identical advertisements to both hub router IPs (AS65515).")}</p>
             <a href="https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub#benefits-and-considerations" target="_blank" rel="noreferrer">{t("Microsoft spoke NVA BGP requirements")}</a>
@@ -323,6 +332,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <Field title={t("On-premises site")}><select name="site" required defaultValue={connection?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>{transport}
           <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={connection?.enabled ?? true} />{t("Connection enabled")}</label>
           <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={connection?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
+          {transportValue !== 'SDWAN' && <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={connection?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>}
           <p className="muted">{t("Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.")}</p>
           </div>
           <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>

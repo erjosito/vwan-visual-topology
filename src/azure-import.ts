@@ -104,7 +104,13 @@ export function importAzureCapture(input: unknown): Topology {
         limitations.push('A VNet has no usable IPv4 prefixes; its spoke is omitted.')
         continue
       }
-      topology.spokes.push({ id: stableId('spoke', vnetId), name: text(connection.name, 'Spoke name'), hubId: hub.id, prefixes: [...new Set(prefixes)] })
+      if (connection.enableInternetSecurity !== undefined && connection.enableInternetSecurity !== null && typeof connection.enableInternetSecurity !== 'boolean') {
+        throw new Error('Invalid captured VNet internet security flag.')
+      }
+      topology.spokes.push({
+        id: stableId('spoke', vnetId), name: text(connection.name, 'Spoke name'), hubId: hub.id, prefixes: [...new Set(prefixes)],
+        ...(connection.enableInternetSecurity === true ? { propagateDefaultRoute: true } : {}),
+      })
     }
     const uniqueLimitations = [...new Set(limitations)]
     for (const warning of uniqueLimitations) warnings.add(`${name}: ${warning}`)

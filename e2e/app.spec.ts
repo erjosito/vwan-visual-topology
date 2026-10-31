@@ -793,20 +793,23 @@ test('compact menus work by tapping and explain missing prefixes and unreachable
   await expect(page.locator('[data-testid^="link-"][data-preferred="true"]')).toHaveCount(0)
 })
 
-test('multi-prefix imports preserve the workspace and legacy browser data can be downloaded intact', async ({ page }) => {
-  const legacy = structuredClone(example)
-  legacy.sites[0].prefixes = ['10.90.0.0/16', '10.91.0.0/16']
+test('multi-prefix imports succeed and invalid saved browser data can be downloaded intact without overwriting', async ({ page }) => {
+  const multiPrefix = structuredClone(example)
+  multiPrefix.sites[0].prefixes = ['10.90.0.0/16', '10.91.0.0/16']
   await page.goto('/')
-  await importTopology(page, example)
+  await importTopology(page, multiPrefix)
   const before = await readTopology(page)
-  await importTopology(page, legacy)
-  await expect(page.getByRole('alert')).toContainText('only one originated prefix')
+  expect(before.sites[0].prefixes).toEqual(['10.90.0.0/16', '10.91.0.0/16'])
+  const invalid = structuredClone(example)
+  invalid.sites[0].prefixes = ['10.90.0.0/99']
+  await importTopology(page, invalid)
+  await expect(page.getByRole('alert')).toContainText('Invalid IPv4 network CIDR')
   expect(await readTopology(page)).toEqual(before)
-  await page.evaluate((topology) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology)), legacy)
+  await page.evaluate((topology) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology)), invalid)
   await page.reload()
   await expect(page.getByRole('alert')).toContainText('saved data has not been overwritten')
-  expect(await readTopology(page)).toEqual(legacy)
-  expect(await downloadTopology(page, 'Download original saved topology')).toEqual(legacy)
+  expect(await readTopology(page)).toEqual( invalid)
+  expect(await downloadTopology(page, 'Download original saved topology')).toEqual(invalid)
 })
 
 async function dragNode(page: Page, id: string, dx: number, dy: number) {
@@ -1908,5 +1911,21 @@ test('supports undo/redo across topology edits and surfaces shared route-map att
   await page.getByRole('button', { name: 'Delete route map', exact: true }).click()
   await expect(dialog(page, 'Route maps · Europe hub')).toContainText('Delete route map Shared branch policy and remove it from London primary (Inbound)?')
   await page.getByRole('button', { name: 'Cancel deletion', exact: true }).click()
+  await page.keyboard.press('Escape')
+
+  await action(page, 'Select hub Europe hub', 'Edit configuration')
+  await dialog(page, 'Edit hub').getByLabel('Internet traffic routing intent', { exact: true }).check()
+  await dialog(page, 'Edit hub').getByRole('button', { name: 'Save changes', exact: true }).click()
+
+  await action(page, 'Select hub Europe hub', 'Advertised routes')
+  await expect(dialog(page, 'Advertised routes · Europe hub')).not.toContainText('0.0.0.0/0')
+  await page.keyboard.press('Escape')
+
+  await action(page, 'Edit connection London primary', 'Edit configuration')
+  await dialog(page, 'Edit connection').getByLabel('Propagate default route (0.0.0.0/0)', { exact: true }).check()
+  await dialog(page, 'Edit connection').getByRole('button', { name: 'Save changes', exact: true }).click()
+
+  await action(page, 'Select hub Europe hub', 'Advertised routes')
+  await expect(dialog(page, 'Advertised routes · Europe hub')).toContainText('0.0.0.0/0')
 })
 

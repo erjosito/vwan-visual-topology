@@ -162,6 +162,8 @@ export function validateTopology(input: unknown): Topology {
     const rawHubId = typeof spoke.hubId === 'string' && !spoke.hubId.trim() ? undefined : spoke.hubId
     const hubId = rawHubId === undefined ? undefined : text(rawHubId, 'Spoke hub')
     if (hubId !== undefined && !hubs.some((h) => h.id === hubId)) fail('Spoke references a missing hub.')
+    if (spoke.propagateDefaultRoute !== undefined && typeof spoke.propagateDefaultRoute !== 'boolean') fail('Spoke default-route propagation must be boolean.')
+    if (spoke.propagateDefaultRoute === true && hubId === undefined) fail('Standalone VNets cannot enable hub default-route propagation.')
     const prefixes = array(spoke.prefixes, 30, 'Spoke prefixes').map((value) => {
       const prefix = text(value, 'Spoke prefix')
       if (!cidr(prefix)) fail(`Invalid spoke IPv4 network CIDR: ${prefix}`)
@@ -177,6 +179,7 @@ export function validateTopology(input: unknown): Topology {
       ...(hubId === undefined ? {} : { hubId }),
       prefixes,
       ...(nvaSpokeIds?.length ? { nvaSpokeIds } : {}),
+      ...(spoke.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}),
     }
   })
   for (const spoke of spokes) {
@@ -227,6 +230,8 @@ export function validateTopology(input: unknown): Topology {
     if (link.siteId !== undefined && !sites.some((site) => site.id === link.siteId)) fail('ER connection references a missing site.')
     if (typeof link.enabled !== 'boolean') fail('ER connection enabled must be boolean.')
     if (link.learnSiteRoutes !== undefined && typeof link.learnSiteRoutes !== 'boolean') fail('ER learn site routes must be boolean.')
+    if (link.propagateDefaultRoute !== undefined && typeof link.propagateDefaultRoute !== 'boolean') fail('ER default-route propagation must be boolean.')
+    if (link.propagateDefaultRoute === true && link.hubId === undefined) fail('Configure ER default-route propagation on the hub attachment, not the site attachment.')
     const routes = array(link.routes ?? [], 100, 'ER advertisements').map((value) => {
       const route = record(value)
       const prefix = text(route.prefix, 'ER advertised prefix')
@@ -238,7 +243,8 @@ export function validateTopology(input: unknown): Topology {
     if (link.hubId !== undefined && (routes.length || link.learnSiteRoutes)) fail('Configure ER advertisements on the site attachment, not the hub attachment.')
     return { id: id(link.id), name: text(link.name, 'ER connection name'), locationId: link.locationId as string,
       ...(link.hubId === undefined ? { siteId: link.siteId as string } : { hubId: link.hubId as string }),
-      enabled: link.enabled as boolean, routes, learnSiteRoutes: link.learnSiteRoutes === true }
+      enabled: link.enabled as boolean, routes, learnSiteRoutes: link.learnSiteRoutes === true,
+      ...(link.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}) }
   })
   const usedHubNvaPeerIps = new Map<string, string[]>()
   for (const raw of Array.isArray(root.connections) ? root.connections : []) {
@@ -271,6 +277,7 @@ export function validateTopology(input: unknown): Topology {
     } else if (connection.spokeId !== undefined || connection.peerIp !== undefined) fail('Spoke and NVA peer IP fields are supported only on spoke BGP NVA connections.')
     if (typeof connection.enabled !== 'boolean') fail('Connection enabled must be boolean.')
     if (connection.learnSiteRoutes !== undefined && typeof connection.learnSiteRoutes !== 'boolean') fail('Learn site routes must be boolean.')
+    if (connection.propagateDefaultRoute !== undefined && typeof connection.propagateDefaultRoute !== 'boolean') fail('Connection default-route propagation must be boolean.')
     const connectionId = id(connection.id)
     const inbound = maps(connection.inbound)
     const outbound = maps(connection.outbound)
@@ -307,7 +314,8 @@ export function validateTopology(input: unknown): Topology {
       ...(inboundMapId !== undefined ? { inboundMapId } : {}),
       ...(outboundMapId !== undefined ? { outboundMapId } : {}),
       ...(connection.transport === 'SpokeNVA' ? { spokeId: connection.spokeId, peerIp: resolvedPeerIp } : {}),
-      learnSiteRoutes: connection.learnSiteRoutes ?? false } as Topology['connections'][number]
+      learnSiteRoutes: connection.learnSiteRoutes ?? false,
+      ...(connection.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}) } as Topology['connections'][number]
   })
   for (const hub of hubs) {
     const peers = connections.filter((connection) => connection.hubId === hub.id && connection.transport === 'SpokeNVA')
