@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "name": "Example 3: Spoke BGP NVA with Downstream Standalone VNet & Partner Site",
+  "notes": "Central US Hub peers via BGP with an NVA inside Transit NVA Spoke (10.10.0.4, ASN 65100). The NVA provides transit to a standalone Azure VNet (AI Shared Services VNet, 10.99.0.0/16) that is not directly peered to Virtual WAN, as well as a downstream on-premises B2B site (Chicago Partner Enclave, 172.30.0.0/16).",
+  "hubs": [
+    {
+      "id": "hub-cus",
+      "name": "Central US Hub",
+      "region": "Central US",
+      "preference": "ExpressRoute",
+      "routingIntent": {
+        "private": false,
+        "internet": false,
+        "privatePrefixes": []
+      }
+    }
+  ],
+  "spokes": [
+    {
+      "id": "spoke-cus-workloads",
+      "name": "Production Workloads Spoke",
+      "hubId": "hub-cus",
+      "prefixes": [
+        "10.1.0.0/16"
+      ]
+    },
+    {
+      "id": "spoke-cus-nva",
+      "name": "Transit NVA Spoke",
+      "hubId": "hub-cus",
+      "prefixes": [
+        "10.10.0.0/16"
+      ]
+    },
+    {
+      "id": "spoke-ai-standalone",
+      "name": "AI Shared Services VNet (Downstream)",
+      "prefixes": [
+        "10.99.0.0/16"
+      ],
+      "nvaSpokeIds": [
+        "spoke-cus-nva"
+      ]
+    }
+  ],
+  "erLocations": [],
+  "erLinks": [],
+  "sites": [
+    {
+      "id": "site-dallas-hq",
+      "name": "Dallas HQ Branch",
+      "asn": 65010,
+      "prefixes": [
+        "10.110.0.0/16"
+      ]
+    },
+    {
+      "id": "site-chicago-partner",
+      "name": "Chicago Partner Enclave",
+      "asn": 65050,
+      "prefixes": [
+        "172.30.0.0/16"
+      ]
+    },
+    {
+      "id": "site-nva-cus",
+      "name": "Transit NVA Spoke",
+      "asn": 65100,
+      "role": "spoke-nva",
+      "prefixes": []
+    }
+  ],
+  "siteLinks": [
+    {
+      "id": "sitelink-nva-cus-site-chicago-partner",
+      "name": "Transit NVA Spoke ↔ Chicago Partner Enclave",
+      "a": "site-nva-cus",
+      "b": "site-chicago-partner",
+      "enabled": true,
+      "aToB": {
+        "prefixes": [],
+        "prepend": [],
+        "receivePrepend": []
+      },
+      "bToA": {
+        "prefixes": [],
+        "prepend": [],
+        "receivePrepend": []
+      }
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn-vpn-dallas",
+      "name": "Dallas S2S VPN",
+      "hubId": "hub-cus",
+      "siteId": "site-dallas-hq",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    },
+    {
+      "id": "conn-nva-cus",
+      "name": "Transit NVA BGP Peering",
+      "hubId": "hub-cus",
+      "siteId": "site-nva-cus",
+      "spokeId": "spoke-cus-nva",
+      "peerIp": "10.10.0.4",
+      "transport": "SpokeNVA",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    }
+  ],
+  "routeMaps": []
+}

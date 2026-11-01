@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "name": "Example 2: Secured Virtual Hub (Firewall Routing Intent & Default Propagation)",
+  "notes": "East US Secured Hub enables Azure Firewall Routing Intent for both Private Traffic (10.0.0.0/8, 172.16.0.0/12) and Internet Traffic (0.0.0.0/0). Spoke-to-spoke, spoke-to-branch, and internet-bound traffic is inspected by Azure Firewall. Boston Retail Branch connects via static S2S VPN with Default Route Propagation enabled to learn 0.0.0.0/0 from the Secured Hub.",
+  "hubs": [
+    {
+      "id": "hub-eus-sec",
+      "name": "East US Secured Hub",
+      "region": "East US",
+      "preference": "ExpressRoute",
+      "routingIntent": {
+        "private": true,
+        "internet": true,
+        "privatePrefixes": [
+          "10.0.0.0/8",
+          "172.16.0.0/12"
+        ]
+      }
+    }
+  ],
+  "spokes": [
+    {
+      "id": "spoke-eus-web",
+      "name": "Customer Portal Spoke",
+      "hubId": "hub-eus-sec",
+      "prefixes": [
+        "10.10.0.0/16"
+      ],
+      "propagateDefaultRoute": true
+    },
+    {
+      "id": "spoke-eus-db",
+      "name": "Core Database Spoke",
+      "hubId": "hub-eus-sec",
+      "prefixes": [
+        "10.20.0.0/16"
+      ],
+      "propagateDefaultRoute": true
+    }
+  ],
+  "erLocations": [],
+  "erLinks": [],
+  "sites": [
+    {
+      "id": "site-ashburn-dc",
+      "name": "Ashburn Core Data Center",
+      "asn": 65010,
+      "prefixes": [
+        "172.16.10.0/24"
+      ]
+    },
+    {
+      "id": "site-boston-branch",
+      "name": "Boston Retail Branch (Static VPN)",
+      "asn": 65020,
+      "prefixes": [
+        "172.16.20.0/24"
+      ],
+      "vpnStaticRoutes": [
+        {
+          "id": "sr-boston-1",
+          "prefix": "172.16.20.0/24",
+          "connectionId": "conn-vpn-boston"
+        }
+      ]
+    }
+  ],
+  "siteLinks": [],
+  "connections": [
+    {
+      "id": "conn-vpn-ashburn",
+      "name": "Ashburn BGP S2S VPN",
+      "hubId": "hub-eus-sec",
+      "siteId": "site-ashburn-dc",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "propagateDefaultRoute": true,
+      "inbound": [],
+      "outbound": []
+    },
+    {
+      "id": "conn-vpn-boston",
+      "name": "Boston Static S2S VPN",
+      "hubId": "hub-eus-sec",
+      "siteId": "site-boston-branch",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": false,
+      "propagateDefaultRoute": true,
+      "inbound": [],
+      "outbound": []
+    }
+  ],
+  "routeMaps": []
+}

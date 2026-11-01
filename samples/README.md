@@ -1,6 +1,17 @@
 # Sample Topologies
 
-## `three-hub-all-features-asymmetric.json`
+This directory contains ready-to-import Virtual WAN topology JSON files used in the [User Guide & Worked Examples](../docs/README.md) ([live docs on `vwan-simulator.com/docs/`](https://vwan-simulator.com/docs/)).
+
+| File | Scenario | Live Simulator Link |
+| :--- | :--- | :--- |
+| [`hub-routing-preferences.json`](./hub-routing-preferences.json) | **Example 1:** `ExpressRoute` vs `ASPath` hub routing preference with dual ExpressRoute + BGP VPN connections | [Open in Simulator](https://vwan-simulator.com/?sample=hub-routing-preferences) |
+| [`secured-hub-routing-intent.json`](./secured-hub-routing-intent.json) | **Example 2:** Secured Virtual Hub with Private + Internet Azure Firewall Routing Intent and Static VPN default-route propagation | [Open in Simulator](https://vwan-simulator.com/?sample=secured-hub-routing-intent) |
+| [`spoke-bgp-nva-transit.json`](./spoke-bgp-nva-transit.json) | **Example 3:** Spoke BGP NVA peering with a Virtual Hub and providing transit to a downstream standalone VNet and partner site | [Open in Simulator](https://vwan-simulator.com/?sample=spoke-bgp-nva-transit) |
+| [`three-hub-all-features-asymmetric.json`](./three-hub-all-features-asymmetric.json) | **Example 4:** 3-Hub All-Features Enterprise Showcase with an intentional asymmetric routing path | [Open in Simulator](https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric) |
+
+---
+
+## `three-hub-all-features-asymmetric.json` — Detailed Walkthrough
 
 A 3-hub global enterprise topology designed to exercise every major feature of the Virtual WAN Visual Topology Simulator:
 

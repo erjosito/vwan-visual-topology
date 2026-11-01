@@ -171,6 +171,7 @@ export const ja: Record<string, string> = {
   'Import JSON': 'JSON をインポート',
   'Azure files': 'Azure ファイル',
   'Clear topology': 'トポロジをクリア',
+  'Docs': 'ドキュメント',
   'Feedback': 'フィードバック',
   'Import topology file': 'トポロジ ファイルをインポート',
   'NETWORK WORKSPACE': 'ネットワーク ワークスペース',

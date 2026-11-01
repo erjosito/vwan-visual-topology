@@ -107,6 +107,12 @@ npm run test:e2e
 
 Production output is `dist`. The app uses relative asset URLs and can be served as static files. Browser storage is specific to the origin and device; export JSON before clearing storage or moving to a different URL. Exported files contain your topology and must be treated according to your organization's data policies.
 
+## Documentation & worked examples
+
+- **Live interactive documentation:** [`https://vwan-simulator.com/docs/`](https://vwan-simulator.com/docs/) (also accessible via the **Docs** button in the simulator header)
+- **Markdown user guide & screenshots:** [`docs/README.md`](docs/README.md)
+- **Downloadable sample JSON topologies:** [`samples/`](samples/README.md) (`hub-routing-preferences.json`, `secured-hub-routing-intent.json`, `spoke-bgp-nva-transit.json`, and `three-hub-all-features-asymmetric.json`), also available via one-click `?sample=<slug>` deep links.
+
 The collector integration tests require PowerShell 7 but use a mocked Azure CLI, with no Azure access. CI also compiles a representative generated Bicep file with Bicep **v0.40.2**, without authenticating or deploying.
 
 ## Working with the app

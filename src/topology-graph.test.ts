@@ -140,6 +140,15 @@ describe('topology-graph connectivity and SpokeNVA helpers', () => {
   })
 
   it('validates the 3-hub all-features sample topology and detects its asymmetric routing path', () => {
+    for (const file of [
+      'samples/hub-routing-preferences.json',
+      'samples/secured-hub-routing-intent.json',
+      'samples/spoke-bgp-nva-transit.json',
+      'samples/three-hub-all-features-asymmetric.json',
+    ]) {
+      const sample = validateTopology(JSON.parse(readFileSync(file, 'utf8')))
+      expect(simulate(sample).converged).toBe(true)
+    }
     const raw = JSON.parse(readFileSync('samples/three-hub-all-features-asymmetric.json', 'utf8'))
     const topology = validateTopology(raw)
     expect(topology.hubs).toHaveLength(3)

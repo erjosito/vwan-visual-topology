@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "name": "Example 1: Hub Routing Preferences (ExpressRoute vs VPN vs ASPath)",
+  "notes": "Dublin Campus (10.50.0.0/16, ASN 65050) advertises the exact same prefix over both ExpressRoute (prepending 65050 65050 so the AS path is 3 hops) and BGP S2S VPN (1 hop). West Europe Hub uses 'ExpressRoute' preference and selects the ExpressRoute path despite the longer AS path. North Europe Hub uses 'ASPath' preference and selects the shorter 1-hop BGP VPN path.",
+  "hubs": [
+    {
+      "id": "hub-weu",
+      "name": "West Europe Hub (ER Preference)",
+      "region": "West Europe",
+      "preference": "ExpressRoute",
+      "routingIntent": {
+        "private": false,
+        "internet": false,
+        "privatePrefixes": []
+      }
+    },
+    {
+      "id": "hub-neu",
+      "name": "North Europe Hub (ASPath Preference)",
+      "region": "North Europe",
+      "preference": "ASPath",
+      "routingIntent": {
+        "private": false,
+        "internet": false,
+        "privatePrefixes": []
+      }
+    }
+  ],
+  "spokes": [
+    {
+      "id": "spoke-weu-app",
+      "name": "WEU Application Spoke",
+      "hubId": "hub-weu",
+      "prefixes": [
+        "10.10.0.0/16"
+      ]
+    },
+    {
+      "id": "spoke-neu-analytics",
+      "name": "NEU Analytics Spoke",
+      "hubId": "hub-neu",
+      "prefixes": [
+        "10.20.0.0/16"
+      ]
+    }
+  ],
+  "erLocations": [
+    {
+      "id": "erloc-dublin",
+      "name": "Equinix DB3 Dublin"
+    }
+  ],
+  "erLinks": [
+    {
+      "id": "er-site-dublin",
+      "name": "Dublin Campus to Equinix DB3",
+      "locationId": "erloc-dublin",
+      "siteId": "site-dublin",
+      "enabled": true,
+      "learnSiteRoutes": true
+    },
+    {
+      "id": "er-hub-weu",
+      "name": "Equinix DB3 to West Europe Hub",
+      "locationId": "erloc-dublin",
+      "hubId": "hub-weu",
+      "enabled": true,
+      "learnSiteRoutes": false
+    },
+    {
+      "id": "er-hub-neu",
+      "name": "Equinix DB3 to North Europe Hub",
+      "locationId": "erloc-dublin",
+      "hubId": "hub-neu",
+      "enabled": true,
+      "learnSiteRoutes": false
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-dublin",
+      "name": "Dublin Campus",
+      "asn": 65050,
+      "prefixes": [
+        "10.50.0.0/16"
+      ],
+      "routeMapAssignments": [
+        {
+          "connectionId": "er-site-dublin",
+          "outboundMapId": "rm-dublin-er-prepend"
+        }
+      ]
+    }
+  ],
+  "siteLinks": [],
+  "connections": [
+    {
+      "id": "conn-vpn-dublin-weu",
+      "name": "Dublin to WEU S2S VPN",
+      "hubId": "hub-weu",
+      "siteId": "site-dublin",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    },
+    {
+      "id": "conn-vpn-dublin-neu",
+      "name": "Dublin to NEU S2S VPN",
+      "hubId": "hub-neu",
+      "siteId": "site-dublin",
+      "transport": "VPN",
+      "enabled": true,
+      "learnSiteRoutes": true,
+      "inbound": [],
+      "outbound": []
+    }
+  ],
+  "routeMaps": [
+    {
+      "id": "rm-dublin-er-prepend",
+      "name": "Dublin-ER-Outbound-Prepend",
+      "siteId": "site-dublin",
+      "rules": [
+        {
+          "id": "rule-dublin-er-1",
+          "prefixes": [
+            "10.50.0.0/16"
+          ],
+          "match": "equals",
+          "action": "prepend",
+          "summaryPrefixes": [],
+          "prepend": [
+            65050,
+            65050
+          ],
+          "nextStep": "continue"
+        }
+      ]
+    }
+  ]
+}

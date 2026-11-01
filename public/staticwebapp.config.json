@@ -2,7 +2,7 @@
   "mimeTypes": { ".ps1": "text/plain" },
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/api/*", "/.auth/*", "/assets/*", "/*.{css,js,json,png,jpg,svg,ico,txt}"]
+    "exclude": ["/api/*", "/.auth/*", "/assets/*", "/docs/*", "/*.{css,js,json,png,jpg,svg,ico,txt}"]
   },
   "routes": [
     {
