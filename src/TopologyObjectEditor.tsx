@@ -4,7 +4,7 @@ import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
 import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topology-graph'
-import { deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
+import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 
@@ -48,6 +48,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
       const id = request.id ?? crypto.randomUUID()
       if (request.id && !item) throw new Error('This object no longer exists.')
       let next: Topology
+      let savedSelection: ObjectSelection = { kind: request.kind, id }
       if (request.deleting) {
         next = deleteTopologyObject(topology, { kind: request.kind, id })
       } else {
@@ -111,25 +112,51 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             const value = { ...site, id, name, asn: Number(text('asn')), prefixes: prefixes(text('prefix')) }
             if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
             else next.sites.push(value)
-            if (connectedSite) next.connections.push({
-              id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
-              transport: transportValue, enabled: true, inbound: [], outbound: [], learnSiteRoutes: true,
-            })
+            if (connectedSite) {
+              if (transportValue === 'ExpressRoute') {
+                createExpressRouteAttachment(next, {
+                  hubId: request.hubId!,
+                  siteId: id,
+                  name: text('connectionName') || `${name} ER`,
+                  enabled: true,
+                  learnSiteRoutes: true,
+                })
+              } else {
+                next.connections.push({
+                  id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
+                  transport: transportValue, enabled: true, inbound: [], outbound: [], learnSiteRoutes: true,
+                })
+              }
+            }
             syncSiteNvaSpokeLinks(next, id, name, data.getAll('nvaSpokeIds').map(String))
           }
         } else if (request.kind === 'connection') {
-          const value = {
-            ...(connection ?? { id, inbound: [], outbound: [] }),
-            name, hubId: text('hub'), siteId: text('site'), transport: text('transport') as Transport,
-            enabled: data.has('enabled'), learnSiteRoutes: data.has('learnSiteRoutes'),
-            propagateDefaultRoute: data.has('propagateDefaultRoute') ? true : undefined,
-            spokeId: undefined, peerIp: undefined,
-            ...(transportValue === 'SpokeNVA' ? {
-              spokeId: text('spoke'), peerIp: text('peerIp'), hubId: topology.spokes.find((spoke) => spoke.id === text('spoke'))!.hubId,
-            } : {}),
+          const selectedTransport = text('transport') as Transport
+          if (selectedTransport === 'ExpressRoute' && (!connection || connection.transport !== 'ExpressRoute')) {
+            const created = createExpressRouteAttachment(next, {
+              hubId: text('hub'),
+              siteId: text('site'),
+              name,
+              enabled: data.has('enabled'),
+              learnSiteRoutes: data.has('learnSiteRoutes'),
+              propagateDefaultRoute: data.has('propagateDefaultRoute'),
+              replaceConnectionId: connection?.id,
+            })
+            savedSelection = { kind: 'erLocation', id: created.locationId }
+          } else {
+            const value = {
+              ...(connection ?? { id, inbound: [], outbound: [] }),
+              name, hubId: text('hub'), siteId: text('site'), transport: selectedTransport,
+              enabled: data.has('enabled'), learnSiteRoutes: data.has('learnSiteRoutes'),
+              propagateDefaultRoute: data.has('propagateDefaultRoute') ? true : undefined,
+              spokeId: undefined, peerIp: undefined,
+              ...(transportValue === 'SpokeNVA' ? {
+                spokeId: text('spoke'), peerIp: text('peerIp'), hubId: topology.spokes.find((spoke) => spoke.id === text('spoke'))!.hubId,
+              } : {}),
+            }
+            if (connection) next.connections[next.connections.findIndex((c) => c.id === id)] = value
+            else next.connections.push(value)
           }
-          if (connection) next.connections[next.connections.findIndex((c) => c.id === id)] = value
-          else next.connections.push(value)
         } else if (request.kind === 'erLocation') {
           next.erLocations ??= []
           const index = next.erLocations.findIndex((location) => location.id === id)
@@ -153,7 +180,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           else next.siteLinks.push(value)
         }
       }
-      onSave(validateTopology(next), { kind: request.kind, id })
+      onSave(validateTopology(next), savedSelection)
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid input.') }
   }
   const hubOptions = topology.hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)

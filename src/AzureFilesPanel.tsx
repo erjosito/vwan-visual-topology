@@ -33,8 +33,8 @@ export function AzureFilesPanel({ topology, pendingImport, onImportFile, onCompa
     </> : <>
       <h3>{t("Import from Azure")}</h3>
       <p>{t("Run the reviewable, read-only collector with PowerShell 7 and an already signed-in Azure CLI, locally or in Cloud Shell PowerShell. It reads one Standard WAN in public Azure, with no secrets or effective-route queries.")}</p>
-      <p><a className="button-link" href={collectorUrl} download="collect-azure-vwan.ps1">{t("Download Azure collector")}</a> <button onClick={onImportFile}>{t("Import Azure capture")}</button></p>
-      <pre className="azure-code">./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -OutputFile ./vwan-capture.json</pre>
+      <p><a className="button-link" href={collectorUrl} download="collect-azure-vwan.ps1">{t("Download Azure collector")}</a> <a className="button-link" href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" target="_blank" rel="noopener noreferrer">{t("View script on GitHub")}</a> <button onClick={onImportFile}>{t("Import Azure capture")}</button></p>
+      <pre className="azure-code">{`Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1\n./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -OutputFile ./vwan-capture.json`}</pre>
       <p className="muted">{t("Cross-subscription VNet reads require explicit -AllowCrossSubscriptionVnets. Only referenced VNets are read. Permission failures and unsupported configurations remain visible in the capture preview.")}</p>
     </>}
     {report && <section aria-label={t("Azure import report")}><h3>{t("Structure-only import report")}</h3><p>{t("Captured")} {report.capturedAt}  {t("· collector")} {report.collectorVersion}</p><p className="azure-resource-id">{report.wanId}</p>

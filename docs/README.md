@@ -123,7 +123,11 @@ Right-click any node and select **Open path explorer** to trace specific source-
 
 Click **Azure files** in the top bar to:
 - **Download a deployable Azure Bicep template (`.bicep`)** of your modelled topology.
-- **Download the read-only Azure CLI capture script (`.sh`)** to collect a live Virtual WAN topology and effective route tables from Azure.
+- **Download the read-only PowerShell Azure CLI collector script ([`scripts/collect-azure-vwan.ps1`](https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1))** to collect a live Virtual WAN topology and effective route tables from Azure:
+  ```powershell
+  Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
+  ./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json
+  ```
 - **Import and compare observed Azure routes** against simulated routes side by side.
 
 ![Azure Files Drawer](./images/08-azure-files-export-import.png)

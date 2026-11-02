@@ -136,6 +136,10 @@ test('automatic checks keep markers across display changes but remove them when 
   await expect(page.getByRole('dialog', { name: 'Routing issues', exact: true })).toHaveCount(0)
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
   await expect(markers.first()).toBeVisible()
+  await expect(page.locator('.highlight-status')).toBeVisible()
+  await page.locator('.highlight-status').getByRole('button', { name: 'Clear highlights & icons', exact: true }).click()
+  await expect(markers).toHaveCount(0)
+  await expect(page.locator('.highlight-status')).toHaveCount(0)
 })
 
 test('automatic checks separate unassigned advertised prefixes and model scope boundaries from incomplete scans and fit mobile', async ({ page }) => {

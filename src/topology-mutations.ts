@@ -151,3 +151,72 @@ export function assignSitePrefixes(topology: Topology, siteId: string, prefixesT
   site.prefixes = [...new Set([...site.prefixes, ...prefixesToAdd])]
   return next
 }
+
+export function createExpressRouteAttachment(
+  next: Topology,
+  options: {
+    hubId: string
+    siteId: string
+    name?: string
+    enabled?: boolean
+    learnSiteRoutes?: boolean
+    propagateDefaultRoute?: boolean
+    replaceConnectionId?: string
+  },
+  createId: () => string = () => crypto.randomUUID(),
+): { locationId: string; hubLinkId: string; siteLinkId: string } {
+  const hub = next.hubs.find((h) => h.id === options.hubId)
+  const site = next.sites.find((s) => s.id === options.siteId)
+  if (!hub) throw new Error('Connection hub does not exist.')
+  if (!site) throw new Error('Connection site does not exist.')
+  if (options.replaceConnectionId) {
+    if (next.sites.some((s) => s.vpnStaticRoutes?.some((r) => r.connectionId === options.replaceConnectionId))) {
+      throw new Error('Configure VPN static routes only on S2S VPN connections attached to the same site.')
+    }
+    next.connections = next.connections.filter((c) => c.id !== options.replaceConnectionId)
+  }
+  const locationId = createId()
+  const hubLinkId = createId()
+  const siteLinkId = createId()
+  const customName = options.name?.trim()
+  const locationName = customName || `${site.name} ER`
+  next.erLocations ??= []
+  next.erLocations.push({ id: locationId, name: locationName })
+  next.erLinks ??= []
+  next.erLinks.push(
+    {
+      id: hubLinkId,
+      name: `${hub.name} - ${locationName}`,
+      locationId,
+      hubId: hub.id,
+      enabled: options.enabled ?? true,
+      learnSiteRoutes: false,
+      ...(options.propagateDefaultRoute ? { propagateDefaultRoute: true } : {}),
+    },
+    {
+      id: siteLinkId,
+      name: customName || `${site.name} - ${locationName}`,
+      locationId,
+      siteId: site.id,
+      enabled: options.enabled ?? true,
+      learnSiteRoutes: options.learnSiteRoutes ?? true,
+    },
+  )
+  if (options.replaceConnectionId) {
+    if (hub.routeMapAssignments?.length) {
+      hub.routeMapAssignments = hub.routeMapAssignments.map((assignment) =>
+        assignment.connectionId === options.replaceConnectionId
+          ? { ...assignment, connectionId: hubLinkId }
+          : assignment,
+      )
+    }
+    if (site.routeMapAssignments?.length) {
+      site.routeMapAssignments = site.routeMapAssignments.map((assignment) =>
+        assignment.connectionId === options.replaceConnectionId
+          ? { ...assignment, connectionId: siteLinkId }
+          : assignment,
+      )
+    }
+  }
+  return { locationId, hubLinkId, siteLinkId }
+}

@@ -159,9 +159,10 @@ Canvas hubs, spokes and ER locations use Microsoft's official **Virtual WAN Hub*
 
 Open **Azure files** in the header. All application processing stays in the browser; this feature adds no Azure sign-in, backend, SDK, account selector or deploy button. Ordinary native JSON import/export remains unchanged.
 
-**Import:** download and review `collect-azure-vwan.ps1`, then run it with PowerShell 7 and an Azure CLI session authenticated **outside** this app (locally or in Cloud Shell PowerShell):
+**Import:** download and review [`collect-azure-vwan.ps1`](https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1) from the app or the public repository, then run it with PowerShell 7 and an Azure CLI session authenticated **outside** this app (locally or in Cloud Shell PowerShell):
 
 ```powershell
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile .\collect-azure-vwan.ps1
 .\collect-azure-vwan.ps1 `
   -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' `
   -OutputFile .\vwan-capture.json
@@ -181,6 +182,7 @@ Choose **Azure files → Compare with Azure capture**. Download the same collect
 review it, and opt into observational route queries:
 
 ```powershell
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile .\collect-azure-vwan.ps1
 .\collect-azure-vwan.ps1 `
   -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' `
   -IncludeEffectiveRoutes -OutputFile .\vwan-observation.json

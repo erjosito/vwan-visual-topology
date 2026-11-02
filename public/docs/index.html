@@ -470,13 +470,16 @@
           Click <strong>Azure files</strong> in the top navigation bar to bridge your modelled topology with real Azure environments:
         </p>
         <ul>
-          <li><strong>Export Azure Bicep template (<code>.bicep</code>)</strong>: Generate a deployable Bicep template for your Virtual WAN, Virtual Hubs, Secured Hub Firewalls &amp; Routing Intent, VNet Connections, VPN Sites/Gateways, and Route Maps.</li>
-          <li><strong>Download Read-Only Azure CLI Collector Script (<code>.sh</code>)</strong>: Capture an existing Azure Virtual WAN's topology and effective routes into a portable JSON bundle without giving the web app any Azure credentials.</li>
+          <li><strong>Export Azure Bicep template (<code>.bicep</code>)</strong>: Generate a deployable Bicep template for your Virtual WAN, Virtual Hubs, Secured Hub Firewalls &amp; Routing Intent, and VNet Connections.</li>
+          <li><strong>Download Read-Only Azure CLI Collector Script (<a href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" style="color:var(--accent)"><code>scripts/collect-azure-vwan.ps1</code></a>)</strong>: Capture an existing Azure Virtual WAN's topology and effective routes into a portable JSON bundle from PowerShell 7 or Azure Cloud Shell without giving the web app any Azure credentials:
+            <pre style="margin-top:8px;padding:10px 12px;background:#0f172a;color:#f8fafc;border-radius:8px;overflow-x:auto;font-size:0.85rem">Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
+./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json</pre>
+          </li>
           <li><strong>Compare Observed vs. Simulated Routes</strong>: Import an Azure capture bundle to compare live Azure effective route tables against the simulator's predicted routes side by side.</li>
         </ul>
         <figure>
           <img src="./images/08-azure-files-export-import.png" alt="Azure files panel showing Bicep export and Azure CLI capture script download" />
-          <figcaption>The <strong>Azure files</strong> drawer providing one-click Bicep template export, the read-only Azure CLI collector script, and observed-vs-simulated route comparison.</figcaption>
+          <figcaption>The <strong>Azure files</strong> drawer providing one-click Bicep template export, the read-only PowerShell Azure CLI collector script (<code>collect-azure-vwan.ps1</code>), and observed-vs-simulated route comparison.</figcaption>
         </figure>
       </section>
     </main>

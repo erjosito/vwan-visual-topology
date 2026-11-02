@@ -20,7 +20,7 @@ import {
   spokeNvaPeerForSpoke,
   standaloneSites,
 } from './topology-graph'
-import { assignSitePrefixes, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
+import { assignSitePrefixes, createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { ipv4 } from './validation'
 
 describe('topology-graph connectivity and SpokeNVA helpers', () => {
@@ -137,6 +137,45 @@ describe('topology-graph connectivity and SpokeNVA helpers', () => {
     expect(afterSpokeDelete.connections.some((c) => c.id === 'nva-peer-eu')).toBe(false)
     expect(afterSpokeDelete.siteLinks.some((l) => l.id === 'link-dc-nva')).toBe(false)
     expect(afterSpokeDelete.spokes.find((s) => s.id === 'downstream-vnet')?.nvaSpokeIds).toEqual([])
+  })
+
+  it('automatically creates an ExpressRoute peering location and hub/site ER links when adding or converting an ER connection', () => {
+    const topology = structuredClone(example)
+    let counter = 0
+    const ids = () => `er-auto-${++counter}`
+
+    const created = createExpressRouteAttachment(
+      topology,
+      {
+        hubId: 'us',
+        siteId: 'ny',
+        name: 'Ashburn ExpressRoute',
+        enabled: true,
+        learnSiteRoutes: true,
+        propagateDefaultRoute: true,
+      },
+      ids,
+    )
+    expect(created).toEqual({
+      locationId: 'er-auto-1',
+      hubLinkId: 'er-auto-2',
+      siteLinkId: 'er-auto-3',
+    })
+    expect(topology.erLocations?.find((loc) => loc.id === 'er-auto-1')?.name).toBe('Ashburn ExpressRoute')
+    expect(topology.erLinks?.find((link) => link.id === 'er-auto-2')).toMatchObject({
+      locationId: 'er-auto-1',
+      hubId: 'us',
+      enabled: true,
+      learnSiteRoutes: false,
+      propagateDefaultRoute: true,
+    })
+    expect(topology.erLinks?.find((link) => link.id === 'er-auto-3')).toMatchObject({
+      locationId: 'er-auto-1',
+      siteId: 'ny',
+      enabled: true,
+      learnSiteRoutes: true,
+    })
+    expect(() => validateTopology(topology)).not.toThrow()
   })
 
   it('validates the 3-hub all-features sample topology and detects its asymmetric routing path', () => {

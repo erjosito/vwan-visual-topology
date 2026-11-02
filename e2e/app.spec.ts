@@ -450,6 +450,12 @@ test('ER locations connect hubs and sites, expose filtered advertisements, trace
   expect((await readTopology(page)).sites).toHaveLength(3)
   expect((await readTopology(page)).sites[0].routeMapAssignments).toEqual([])
   expect((await readTopology(page)).hubs[0].routeMapAssignments).toEqual([])
+  await action(page, 'Select site London datacenter', 'Connect to hub')
+  await page.getByLabel('Name', { exact: true }).fill('London ER circuit')
+  await page.getByLabel('Hub', { exact: true }).selectOption('eu')
+  await page.getByRole('button', { name: 'Create object', exact: true }).click()
+  expect((await readTopology(page)).erLocations).toHaveLength(1)
+  expect((await readTopology(page)).erLinks).toHaveLength(2)
 })
 
 test('ER BGP table shows best paths, alternatives and ties, filters prefixes and withdraws disabled neighbors', async ({ page }) => {
