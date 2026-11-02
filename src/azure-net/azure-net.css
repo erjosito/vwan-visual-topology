@@ -1,0 +1,361 @@
+.aznet-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: #f1f5f9;
+  color: #0f172a;
+  font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+}
+
+.aznet-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 18px;
+  background: #0f172a;
+  color: #f8fafc;
+  border-bottom: 1px solid #1e293b;
+  flex-shrink: 0;
+}
+
+.aznet-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.aznet-brand h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.aznet-preview-pill {
+  background: linear-gradient(135deg, #0284c7, #2563eb);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.aznet-topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.aznet-select,
+.aznet-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 12.5px;
+}
+
+.aznet-topbar .aznet-select {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+.aznet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 11px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aznet-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.aznet-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.aznet-topbar .aznet-btn {
+  background: #1e293b;
+  color: #f8fafc;
+  border-color: #334155;
+}
+
+.aznet-topbar .aznet-btn:hover:not(:disabled) {
+  background: #334155;
+}
+
+.aznet-btn-primary {
+  background: #2563eb !important;
+  color: #ffffff !important;
+  border-color: #1d4ed8 !important;
+}
+
+.aznet-btn-primary:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+}
+
+.aznet-btn-fix {
+  background: #059669 !important;
+  color: #ffffff !important;
+  border-color: #047857 !important;
+}
+
+.aznet-workspace {
+  display: grid;
+  grid-template-columns: minmax(520px, 1fr) 520px;
+  flex: 1;
+  min-height: 0;
+}
+
+.aznet-canvas-column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  border-right: 1px solid #cbd5e1;
+}
+
+.aznet-scenario-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 12px;
+  color: #334155;
+}
+
+.aznet-canvas-shell {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  background: #f8fafc;
+}
+
+.aznet-diagram-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  user-select: none;
+}
+
+.aznet-canvas-controls {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  padding: 6px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.aznet-ctrl-btn {
+  padding: 5px 9px;
+  border-radius: 5px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+.aznet-ctrl-btn:hover {
+  background: #f1f5f9;
+}
+
+.aznet-clear-highlights-btn {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.aznet-inspector-column {
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  min-height: 0;
+}
+
+.aznet-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  flex-shrink: 0;
+}
+
+.aznet-tab {
+  padding: 10px 8px;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+}
+
+.aznet-tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  background: #ffffff;
+}
+
+.aznet-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.aznet-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.aznet-card h3 {
+  margin: 0 0 8px 0;
+  font-size: 13.5px;
+  color: #0f172a;
+}
+
+.aznet-route-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+
+.aznet-route-table th,
+.aznet-route-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #e2e8f0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.aznet-route-table th {
+  background: #f1f5f9;
+  font-weight: 700;
+  color: #334155;
+}
+
+.aznet-route-row.suppressed {
+  opacity: 0.58;
+  background: #f8fafc;
+}
+
+.aznet-route-row.lpm-winner {
+  background: #ecfdf5;
+  outline: 1.5px solid #059669;
+}
+
+.aznet-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.aznet-badge.active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.aznet-badge.suppressed {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.aznet-badge.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.aznet-badge.warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.aznet-badge.info {
+  background: #e0f2fe;
+  color: #075985;
+}
+
+.aznet-hop-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aznet-hop-item {
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid #2563eb;
+  font-size: 11.5px;
+}
+
+.aznet-hop-item.dropped {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+}
+
+.aznet-hop-item.delivered {
+  border-left-color: #059669;
+  background: #ecfdf5;
+}
+
+.aznet-field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.aznet-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.aznet-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 4px 0;
+}
