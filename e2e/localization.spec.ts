@@ -271,3 +271,20 @@ test('Japanese parser errors and offline feedback remain accessible on mobile', 
   await modal.locator('[data-language-selector]').selectOption('en')
   await expect(page.getByRole('dialog', { name: 'Send feedback', exact: true }).getByRole('link', { name: 'Browse public feedback', exact: true })).toBeVisible()
 })
+
+test('Interactive documentation supports English and Japanese and syncs with simulator language preference', async ({ page }) => {
+  await page.goto('/docs/index.html?lang=ja')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+  await expect(page.getByRole('heading', { name: 'Virtual WAN トポロジ ラボ — ドキュメント', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1. 概要と主な概念', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1. Overview & Key Concepts', exact: true })).toBeHidden()
+  expect(await page.evaluate((key) => localStorage.getItem(key), languageKey)).toBe('ja')
+
+  await page.locator('header [data-language-selector]').selectOption('en')
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await expect(page.getByRole('heading', { name: 'Virtual WAN Topology Lab — Documentation', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1. Overview & Key Concepts', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: '1. 概要と主な概念', exact: true })).toBeHidden()
+  expect(await page.evaluate((key) => localStorage.getItem(key), languageKey)).toBe('en')
+})
+

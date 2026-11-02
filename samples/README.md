@@ -1,6 +1,8 @@
 # Sample Topologies
 
-This directory contains ready-to-import Virtual WAN topology JSON files used in the [User Guide & Worked Examples](../docs/README.md) ([live docs on `vwan-simulator.com/docs/`](https://vwan-simulator.com/docs/)).
+**Language / 言語:** **English** | [日本語](./README.ja.md)
+
+This directory contains ready-to-import Virtual WAN topology JSON files used in the [User Guide & Worked Examples](../docs/README.md) ([日本語ガイド](../docs/README.ja.md) · [live docs on `vwan-simulator.com/docs/`](https://vwan-simulator.com/docs/)).
 
 | File | Scenario | Live Simulator Link |
 | :--- | :--- | :--- |

@@ -1,7 +1,8 @@
 # Virtual WAN Topology Lab — User Guide & Worked Examples
 
+**Language / 言語:** **English** | [日本語](./README.ja.md)  
 **Live Application:** [https://vwan-simulator.com](https://vwan-simulator.com)  
-**Interactive Web Documentation:** [https://vwan-simulator.com/docs/](https://vwan-simulator.com/docs/)
+**Interactive Web Documentation:** [https://vwan-simulator.com/docs/](https://vwan-simulator.com/docs/) ([日本語版](https://vwan-simulator.com/docs/?lang=ja))
 
 **Virtual WAN Topology Lab** is a local-first, explainable Azure Virtual WAN topology designer and routing simulator. It runs entirely in your browser (with zero Azure credentials required) and calculates effective routes, BGP path selection, Secured Virtual Hub Routing Intent, Route Maps, Spoke BGP NVA transit, and pairwise routing diagnostics in real time.
 

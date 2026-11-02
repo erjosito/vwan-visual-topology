@@ -4,6 +4,32 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Virtual WAN Topology Lab — Documentation &amp; Worked Examples</title>
+  <script>
+    (function () {
+      var storageKey = 'vwan-visual-topology:language:v1';
+      var titles = {
+        en: 'Virtual WAN Topology Lab — Documentation & Worked Examples',
+        ja: 'Virtual WAN トポロジ ラボ — ドキュメントと実践サンプル'
+      };
+      function resolveInitialLanguage() {
+        try {
+          var param = new URLSearchParams(window.location.search).get('lang');
+          if (param === 'ja' || param === 'en') {
+            try { localStorage.setItem(storageKey, param); } catch (e) {}
+            return param;
+          }
+        } catch (e) {}
+        try {
+          return localStorage.getItem(storageKey) === 'ja' ? 'ja' : 'en';
+        } catch (e) {
+          return 'en';
+        }
+      }
+      var initial = resolveInitialLanguage();
+      document.documentElement.lang = initial;
+      document.title = titles[initial];
+    })();
+  </script>
   <style>
     :root {
       --bg: #0b1020;
@@ -19,10 +45,16 @@
       --badge-vpn: #a78bfa;
       --badge-warn: #f59e0b;
     }
+    html:not([lang="ja"]) [data-i18n-lang="ja"] {
+      display: none !important;
+    }
+    html[lang="ja"] [data-i18n-lang="en"] {
+      display: none !important;
+    }
     * { box-sizing: border-box; }
     body {
       margin: 0;
-      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", "Meiryo", Roboto, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
@@ -69,8 +101,31 @@
     }
     .header-actions {
       display: flex;
+      align-items: center;
       gap: 0.65rem;
       flex-wrap: wrap;
+    }
+    .language-selector {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      padding: 0.34rem 0.65rem;
+      border-radius: 0.5rem;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 600;
+    }
+    .language-selector select {
+      background: var(--code-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 0.35rem;
+      padding: 0.2rem 0.45rem;
+      font-size: 0.84rem;
+      font-weight: 600;
+      cursor: pointer;
     }
     .btn {
       display: inline-flex;
@@ -245,23 +300,43 @@
 <body>
   <header class="site-header">
     <a class="brand" href="https://vwan-simulator.com/">
-      <div class="brand-icon">W</div>
+      <div class="brand-icon" aria-hidden="true">W</div>
       <div>
-        <h1>Virtual WAN Topology Lab — Documentation</h1>
-        <p>Interactive routing simulator, policy inspector &amp; worked topology examples</p>
+        <h1 data-i18n-lang="en">Virtual WAN Topology Lab — Documentation</h1>
+        <h1 data-i18n-lang="ja">Virtual WAN トポロジ ラボ — ドキュメント</h1>
+        <p data-i18n-lang="en">Interactive routing simulator, policy inspector &amp; worked topology examples</p>
+        <p data-i18n-lang="ja">インタラクティブなルーティング シミュレーター、ポリシー インスペクター、実践トポロジ サンプル</p>
       </div>
     </a>
     <div class="header-actions">
-      <a class="btn primary" href="https://vwan-simulator.com/">Launch Simulator</a>
-      <a class="btn" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">Load 3-Hub Showcase</a>
-      <a class="btn" href="https://github.com/erjosito/vwan-visual-topology-feedback/issues">Feedback &amp; Community</a>
+      <label class="language-selector">
+        <span data-i18n-lang="en">Language</span>
+        <span data-i18n-lang="ja">言語</span>
+        <select id="doc-language-selector" data-language-selector aria-label="Language / 言語">
+          <option value="en" lang="en">English</option>
+          <option value="ja" lang="ja">日本語</option>
+        </select>
+      </label>
+      <a class="btn primary" href="https://vwan-simulator.com/">
+        <span data-i18n-lang="en">Launch Simulator</span>
+        <span data-i18n-lang="ja">シミュレーターを起動</span>
+      </a>
+      <a class="btn" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">
+        <span data-i18n-lang="en">Load 3-Hub Showcase</span>
+        <span data-i18n-lang="ja">3 ハブ サンプルを開く</span>
+      </a>
+      <a class="btn" href="https://github.com/erjosito/vwan-visual-topology-feedback/issues">
+        <span data-i18n-lang="en">Feedback &amp; Community</span>
+        <span data-i18n-lang="ja">フィードバックとコミュニティ</span>
+      </a>
     </div>
   </header>
 
   <div class="layout">
-    <nav class="toc" aria-label="Table of contents">
-      <h2>Contents</h2>
-      <ul>
+    <nav class="toc" id="doc-toc" aria-label="Table of contents">
+      <h2 data-i18n-lang="en">Contents</h2>
+      <h2 data-i18n-lang="ja">目次</h2>
+      <ul data-i18n-lang="en">
         <li><a href="#overview">1. Overview &amp; Key Concepts</a></li>
         <li><a href="#instructions">2. Step-by-Step Instructions</a></li>
         <li><a href="#samples-catalog">3. Sample JSON Files</a></li>
@@ -272,217 +347,502 @@
         <li><a href="#diagnostics-and-trace">8. Effective Routes, Path Explorer &amp; Diagnostics</a></li>
         <li><a href="#azure-import-export">9. Azure Bicep Export &amp; Live Snapshot Comparison</a></li>
       </ul>
+      <ul data-i18n-lang="ja">
+        <li><a href="#overview">1. 概要と主な概念</a></li>
+        <li><a href="#instructions">2. 基本的な使い方（ステップバイステップ）</a></li>
+        <li><a href="#samples-catalog">3. サンプル JSON ファイル一覧</a></li>
+        <li><a href="#example-1">4. サンプル 1: ハブのルーティングの優先順位</a></li>
+        <li><a href="#example-2">5. サンプル 2: セキュリティで保護された仮想ハブとルーティング インテント</a></li>
+        <li><a href="#example-3">6. サンプル 3: スポーク BGP NVA トランジット</a></li>
+        <li><a href="#example-4">7. サンプル 4: 3 ハブ全機能ショーケースと非対称ルーティング</a></li>
+        <li><a href="#diagnostics-and-trace">8. 有効なルート、パス エクスプローラー、自動ルーティング診断</a></li>
+        <li><a href="#azure-import-export">9. Azure Bicep エクスポートと実環境スナップショット比較</a></li>
+      </ul>
     </nav>
 
     <main>
       <section class="card" id="overview">
-        <h2>1. Overview &amp; Key Concepts</h2>
-        <p>
-          <strong>Virtual WAN Topology Lab</strong> (<a href="https://vwan-simulator.com/" style="color:var(--accent)">vwan-simulator.com</a>) is a local-first, explainable Azure Virtual WAN routing simulator. Everything runs locally in your browser without requiring Azure credentials.
-        </p>
-        <div class="grid-2">
-          <div class="feature-box">
-            <h4>Hub Routing Preferences</h4>
-            <p>Compare <code>ExpressRoute</code>, <code>VPN</code>, and <code>ASPath</code> hub routing preferences side-by-side and inspect the exact tie-breaker reason on every route.</p>
+        <div data-i18n-lang="en">
+          <h2>1. Overview &amp; Key Concepts</h2>
+          <p>
+            <strong>Virtual WAN Topology Lab</strong> (<a href="https://vwan-simulator.com/" style="color:var(--accent)">vwan-simulator.com</a>) is a local-first, explainable Azure Virtual WAN routing simulator. Everything runs locally in your browser without requiring Azure credentials.
+          </p>
+          <div class="grid-2">
+            <div class="feature-box">
+              <h4>Hub Routing Preferences</h4>
+              <p>Compare <code>ExpressRoute</code>, <code>VPN</code>, and <code>ASPath</code> hub routing preferences side-by-side and inspect the exact tie-breaker reason on every route.</p>
+            </div>
+            <div class="feature-box">
+              <h4>Secured Hubs &amp; Routing Intent</h4>
+              <p>Model Azure Firewall Private Traffic (RFC1918 or custom CIDR prefixes) and Internet Traffic (<code>0.0.0.0/0</code>) routing intent plus opt-in default-route propagation.</p>
+            </div>
+            <div class="feature-box">
+              <h4>Route Maps &amp; BGP NVAs</h4>
+              <p>Configure inbound/outbound route maps (drop, AS-path prepend, summarize) on hubs and sites, and peer Virtual Hubs with BGP NVAs in spoke VNets.</p>
+            </div>
+            <div class="feature-box">
+              <h4>Automated Routing Diagnostics</h4>
+              <p>Detect forward/reverse path asymmetry, blackholes, firewall bypasses, and single-link dependencies across all prefix pairs with one click.</p>
+            </div>
           </div>
-          <div class="feature-box">
-            <h4>Secured Hubs &amp; Routing Intent</h4>
-            <p>Model Azure Firewall Private Traffic (RFC1918 or custom CIDR prefixes) and Internet Traffic (<code>0.0.0.0/0</code>) routing intent plus opt-in default-route propagation.</p>
-          </div>
-          <div class="feature-box">
-            <h4>Route Maps &amp; BGP NVAs</h4>
-            <p>Configure inbound/outbound route maps (drop, AS-path prepend, summarize) on hubs and sites, and peer Virtual Hubs with BGP NVAs in spoke VNets.</p>
-          </div>
-          <div class="feature-box">
-            <h4>Automated Routing Diagnostics</h4>
-            <p>Detect forward/reverse path asymmetry, blackholes, firewall bypasses, and single-link dependencies across all prefix pairs with one click.</p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>1. 概要と主な概念</h2>
+          <p>
+            <strong>Virtual WAN トポロジ ラボ</strong> (<a href="https://vwan-simulator.com/" style="color:var(--accent)">vwan-simulator.com</a>) は、ローカル ファーストで動作する説明可能な Azure Virtual WAN ルーティング シミュレーターです。Azure の資格情報は一切不要で、すべての計算と可視化がブラウザー内で完結します。
+          </p>
+          <div class="grid-2">
+            <div class="feature-box">
+              <h4>ハブのルーティングの優先順位</h4>
+              <p><code>ExpressRoute</code>、<code>VPN</code>、<code>ASPath</code> の各ハブ ルーティング優先順位を比較し、すべてのルートで選択理由（タイブレーカー）を確認できます。</p>
+            </div>
+            <div class="feature-box">
+              <h4>セキュリティで保護された仮想ハブとルーティング インテント</h4>
+              <p>Azure Firewall によるプライベート トラフィック（RFC1918 またはカスタム CIDR）およびインターネット トラフィック（<code>0.0.0.0/0</code>）のルーティング インテントと、既定ルートの伝達をモデル化できます。</p>
+            </div>
+            <div class="feature-box">
+              <h4>ルート マップとスポーク BGP NVA</h4>
+              <p>ハブやオンプレミス サイトでのインバウンド / アウトバウンド ルート マップ（破棄、AS パス プリペンド、集約）や、スポーク VNet 内の BGP NVA ピアリングを構成できます。</p>
+            </div>
+            <div class="feature-box">
+              <h4>自動ルーティング診断</h4>
+              <p>ワンクリックですべてのプレフィックス ペア間の往路・復路の非対称ルーティング、ブラックホール、ファイアウォール バイパス、単一障害点（SPOF）を検出します。</p>
+            </div>
           </div>
         </div>
       </section>
 
       <section class="card" id="instructions">
-        <h2>2. Step-by-Step Instructions</h2>
-        <h3>Building or Editing a Topology</h3>
-        <ol>
-          <li><strong>Add nodes from the toolbar</strong>: Click <code>+ Hub</code>, <code>+ VNet</code>, <code>+ Site</code>, or <code>+ ER location</code> in the workspace toolbar, or right-click blank canvas.</li>
-          <li><strong>Arrange the canvas</strong>: Drag any node to reposition it, drag blank canvas to pan, or switch between <em>Layered topology</em> and <em>Network constellation</em> views.</li>
-          <li><strong>Right-click any node or link for context actions</strong>:
-            <ul>
-              <li><strong>Hubs</strong>: Edit hub preference (<code>ExpressRoute</code>, <code>VPN</code>, <code>ASPath</code>), enable Secured Virtual Hub Routing Intent, inspect the <strong>BGP table</strong> / <strong>Learned routes</strong> / <strong>Advertised routes</strong> / <strong>Firewall routes</strong>, or click <strong>Highlight preferred routes</strong>.</li>
-              <li><strong>Spoke VNets</strong>: Attach a <strong>BGP NVA</strong>, attach downstream standalone Azure VNets or downstream on-premises sites behind the NVA, or configure spoke connection route maps.</li>
-              <li><strong>On-premises Sites</strong>: Connect to hubs via <strong>ExpressRoute</strong>, <strong>VPN</strong> (BGP or Static), or <strong>SD-WAN</strong>; add site-to-site WAN links; or configure site route maps and static routing tables.</li>
-            </ul>
-          </li>
-          <li><strong>Import or Export JSON</strong>: Use <code>Export JSON</code> in the top bar to save a portable topology file, or <code>Import JSON</code> to load any of the attached sample files below.</li>
-        </ol>
+        <div data-i18n-lang="en">
+          <h2>2. Step-by-Step Instructions</h2>
+          <h3>Building or Editing a Topology</h3>
+          <ol>
+            <li><strong>Add nodes from the toolbar</strong>: Click <code>+ Hub</code>, <code>+ VNet</code>, <code>+ Site</code>, or <code>+ ER location</code> in the workspace toolbar, or right-click blank canvas.</li>
+            <li><strong>Arrange the canvas</strong>: Drag any node to reposition it, drag blank canvas to pan, or switch between <em>Layered topology</em> and <em>Network constellation</em> views.</li>
+            <li><strong>Right-click any node or link for context actions</strong>:
+              <ul>
+                <li><strong>Hubs</strong>: Edit hub preference (<code>ExpressRoute</code>, <code>VPN</code>, <code>ASPath</code>), enable Secured Virtual Hub Routing Intent, inspect the <strong>BGP table</strong> / <strong>Learned routes</strong> / <strong>Advertised routes</strong> / <strong>Firewall routes</strong>, or click <strong>Highlight preferred routes</strong>.</li>
+                <li><strong>Spoke VNets</strong>: Attach a <strong>BGP NVA</strong>, attach downstream standalone Azure VNets or downstream on-premises sites behind the NVA, or configure spoke connection route maps.</li>
+                <li><strong>On-premises Sites</strong>: Connect to hubs via <strong>ExpressRoute</strong>, <strong>VPN</strong> (BGP or Static), or <strong>SD-WAN</strong>; add site-to-site WAN links; or configure site route maps and static routing tables. Adding an <strong>ExpressRoute</strong> connection automatically creates an ExpressRoute peering location between the hub and site.</li>
+              </ul>
+            </li>
+            <li><strong>Clear highlights &amp; warning icons</strong>: Whenever path highlights or diagnostic warning/error icons are shown on the canvas, click <strong>Clear highlights &amp; icons</strong> in the bottom-left corner of the canvas to reset the view.</li>
+            <li><strong>Import or Export JSON</strong>: Use <code>Export JSON</code> in the top bar to save a portable topology file, or <code>Import JSON</code> to load any of the attached sample files below.</li>
+          </ol>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>2. 基本的な使い方（ステップバイステップ）</h2>
+          <h3>トポロジの作成と編集</h3>
+          <ol>
+            <li><strong>ツールバーからノードを追加</strong>: ワークスペース ツールバーの <code>+ ハブ</code>、<code>+ VNet</code>、<code>+ サイト</code>、<code>+ ER ピアリングの場所</code> をクリックするか、キャンバスの空白部分を右クリックします。</li>
+            <li><strong>キャンバスの配置と表示切替</strong>: ノードをドラッグして位置を調整したり、空白部分をドラッグしてパン移動したり、<em>階層型トポロジ (Layered topology)</em> と <em>ネットワーク配置図 (Network constellation)</em> を切り替えたりできます。</li>
+            <li><strong>ノードやリンクを右クリックしてコンテキスト メニューを表示</strong>:
+              <ul>
+                <li><strong>仮想ハブ</strong>: ハブのルーティングの優先順位（<code>ExpressRoute</code>、<code>VPN</code>、<code>ASPath</code>）の編集、セキュリティで保護された仮想ハブのルーティング インテントの有効化、<strong>BGP テーブル</strong> / <strong>学習したルート</strong> / <strong>アドバタイズしたルート</strong> / <strong>ファイアウォールのルートを表示</strong> の確認、または <strong>優先ルートを強調表示</strong> を実行できます。</li>
+                <li><strong>スポーク VNet</strong>: <strong>BGP NVA を追加</strong> したり、NVA 配下のダウンストリーム VNet やオンプレミス サイトを追加したり、スポーク接続のルート マップを構成したりできます。</li>
+                <li><strong>オンプレミス サイト</strong>: <strong>ExpressRoute</strong>、<strong>VPN</strong>（BGP または静的）、<strong>SD-WAN</strong> でハブに接続したり、サイト間 WAN リンクを追加したり、ルート マップや静的ルーティングを構成したりできます。<strong>ExpressRoute</strong> 接続を追加すると、ハブとサイトの間に ExpressRoute ピアリングの場所が自動的に作成されます。</li>
+              </ul>
+            </li>
+            <li><strong>強調表示と警告アイコンのクリア</strong>: キャンバス上にパス強調表示やルーティング診断の警告アイコンが表示されている場合は、キャンバス左下の <strong>強調表示とアイコンをクリア (Clear highlights &amp; icons)</strong> をクリックすると一括で消去できます。</li>
+            <li><strong>JSON のインポート / エクスポート</strong>: 上部バーの <code>JSON をエクスポート (Export JSON)</code> でトポロジを JSON ファイルとして保存し、<code>JSON をインポート (Import JSON)</code> で保存済みファイルや以下のサンプル JSON を読み込めます。</li>
+          </ol>
+        </div>
       </section>
 
       <section class="card" id="samples-catalog">
-        <h2>3. Sample Topology JSON Files</h2>
-        <p>You can download any sample JSON file below and import it via <strong>Import JSON</strong>, or click <strong>Open in Simulator</strong> to launch it directly in your browser:</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Sample Scenario</th>
-              <th>Demonstrated Features</th>
-              <th>Download JSON</th>
-              <th>Interactive Link</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><strong>1. Hub Routing Preferences</strong></td>
-              <td><code>ExpressRoute</code> vs <code>ASPath</code> hub routing preference with dual ExpressRoute + BGP VPN links</td>
-              <td><a href="./samples/hub-routing-preferences.json" download style="color:var(--accent)">hub-routing-preferences.json</a></td>
-              <td><a href="https://vwan-simulator.com/?sample=hub-routing-preferences" style="color:var(--accent)">Open in Simulator →</a></td>
-            </tr>
-            <tr>
-              <td><strong>2. Secured Hub &amp; Routing Intent</strong></td>
-              <td>Azure Firewall Private &amp; Internet Routing Intent, <code>0.0.0.0/0</code> propagation to Spokes &amp; Static S2S VPN</td>
-              <td><a href="./samples/secured-hub-routing-intent.json" download style="color:var(--accent)">secured-hub-routing-intent.json</a></td>
-              <td><a href="https://vwan-simulator.com/?sample=secured-hub-routing-intent" style="color:var(--accent)">Open in Simulator →</a></td>
-            </tr>
-            <tr>
-              <td><strong>3. Spoke BGP NVA Transit</strong></td>
-              <td>Spoke VNet BGP NVA peering with hub, downstream standalone VNet, and downstream partner site</td>
-              <td><a href="./samples/spoke-bgp-nva-transit.json" download style="color:var(--accent)">spoke-bgp-nva-transit.json</a></td>
-              <td><a href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit" style="color:var(--accent)">Open in Simulator →</a></td>
-            </tr>
-            <tr>
-              <td><strong>4. 3-Hub Enterprise Showcase (Asymmetric)</strong></td>
-              <td>3 Hubs, all preferences, Secured Hubs, ER + BGP/Static VPN + SD-WAN, Spoke NVA, Route Maps, Asymmetric routing</td>
-              <td><a href="./samples/three-hub-all-features-asymmetric.json" download style="color:var(--accent)">three-hub-all-features-asymmetric.json</a></td>
-              <td><a href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric" style="color:var(--accent)">Open in Simulator →</a></td>
-            </tr>
-          </tbody>
-        </table>
+        <div data-i18n-lang="en">
+          <h2>3. Sample Topology JSON Files</h2>
+          <p>You can download any sample JSON file below and import it via <strong>Import JSON</strong>, or click <strong>Open in Simulator</strong> to launch it directly in your browser:</p>
+          <table>
+            <thead>
+              <tr>
+                <th>Sample Scenario</th>
+                <th>Demonstrated Features</th>
+                <th>Download JSON</th>
+                <th>Interactive Link</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. Hub Routing Preferences</strong></td>
+                <td><code>ExpressRoute</code> vs <code>ASPath</code> hub routing preference with dual ExpressRoute + BGP VPN links</td>
+                <td><a href="./samples/hub-routing-preferences.json" download style="color:var(--accent)">hub-routing-preferences.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=hub-routing-preferences" style="color:var(--accent)">Open in Simulator →</a></td>
+              </tr>
+              <tr>
+                <td><strong>2. Secured Hub &amp; Routing Intent</strong></td>
+                <td>Azure Firewall Private &amp; Internet Routing Intent, <code>0.0.0.0/0</code> propagation to Spokes &amp; Static S2S VPN</td>
+                <td><a href="./samples/secured-hub-routing-intent.json" download style="color:var(--accent)">secured-hub-routing-intent.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=secured-hub-routing-intent" style="color:var(--accent)">Open in Simulator →</a></td>
+              </tr>
+              <tr>
+                <td><strong>3. Spoke BGP NVA Transit</strong></td>
+                <td>Spoke VNet BGP NVA peering with hub, downstream standalone VNet, and downstream partner site</td>
+                <td><a href="./samples/spoke-bgp-nva-transit.json" download style="color:var(--accent)">spoke-bgp-nva-transit.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit" style="color:var(--accent)">Open in Simulator →</a></td>
+              </tr>
+              <tr>
+                <td><strong>4. 3-Hub Enterprise Showcase (Asymmetric)</strong></td>
+                <td>3 Hubs, all preferences, Secured Hubs, ER + BGP/Static VPN + SD-WAN, Spoke NVA, Route Maps, Asymmetric routing</td>
+                <td><a href="./samples/three-hub-all-features-asymmetric.json" download style="color:var(--accent)">three-hub-all-features-asymmetric.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric" style="color:var(--accent)">Open in Simulator →</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>3. サンプル JSON ファイル一覧</h2>
+          <p>以下のサンプル JSON ファイルをダウンロードして <strong>JSON をインポート (Import JSON)</strong> から読み込むか、<strong>シミュレーターで開く</strong> をクリックしてブラウザーで直接開くことができます。</p>
+          <table>
+            <thead>
+              <tr>
+                <th>サンプル シナリオ</th>
+                <th>主な機能・検証ポイント</th>
+                <th>JSON ダウンロード</th>
+                <th>ワンクリック起動</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. ハブのルーティングの優先順位</strong></td>
+                <td>ExpressRoute と BGP VPN の二重接続における <code>ExpressRoute</code> 優先と <code>ASPath</code> 優先の比較</td>
+                <td><a href="./samples/hub-routing-preferences.json" download style="color:var(--accent)">hub-routing-preferences.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=hub-routing-preferences" style="color:var(--accent)">シミュレーターで開く →</a></td>
+              </tr>
+              <tr>
+                <td><strong>2. セキュリティで保護された仮想ハブとルーティング インテント</strong></td>
+                <td>Azure Firewall のプライベート / インターネット ルーティング インテント、スポークおよび静的 S2S VPN への <code>0.0.0.0/0</code> 伝達</td>
+                <td><a href="./samples/secured-hub-routing-intent.json" download style="color:var(--accent)">secured-hub-routing-intent.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=secured-hub-routing-intent" style="color:var(--accent)">シミュレーターで開く →</a></td>
+              </tr>
+              <tr>
+                <td><strong>3. スポーク BGP NVA トランジット</strong></td>
+                <td>スポーク VNet 内の BGP NVA とハブのピアリング、配下のスタンドアロン VNet およびパートナー サイトのトランジット</td>
+                <td><a href="./samples/spoke-bgp-nva-transit.json" download style="color:var(--accent)">spoke-bgp-nva-transit.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit" style="color:var(--accent)">シミュレーターで開く →</a></td>
+              </tr>
+              <tr>
+                <td><strong>4. 3 ハブ全機能ショーケース（非対称ルーティング）</strong></td>
+                <td>3 ハブ、全優先順位、Secured Hub、ER + BGP/静的 VPN + SD-WAN、スポーク NVA、ルート マップ、非対称ルーティング診断</td>
+                <td><a href="./samples/three-hub-all-features-asymmetric.json" download style="color:var(--accent)">three-hub-all-features-asymmetric.json</a></td>
+                <td><a href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric" style="color:var(--accent)">シミュレーターで開く →</a></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="card" id="example-1">
-        <h2>4. Example 1: Hub Routing Preferences (ExpressRoute vs VPN vs ASPath)</h2>
-        <p>
-          In this scenario, <strong>Dublin Campus</strong> (<code>10.50.0.0/16</code>, ASN <code>65050</code>) is dual-connected to two Virtual WAN hubs via both an <strong>ExpressRoute location</strong> (with an outbound route map prepending <code>65050 65050</code>, making the ExpressRoute AS path 3 hops long) and a <strong>BGP S2S VPN</strong> connection (1 hop).
-        </p>
-        <ul>
-          <li><strong>West Europe Hub (ER Preference)</strong> prefers the <strong>ExpressRoute</strong> path to <code>10.50.0.0/16</code> despite its longer 3-hop AS path because the hub's routing preference is set to <code>ExpressRoute</code>.</li>
-          <li><strong>North Europe Hub (ASPath Preference)</strong> prefers the <strong>BGP S2S VPN</strong> path because its routing preference is set to <code>ASPath</code> and 1 hop beats 3 hops.</li>
-        </ul>
-        <div class="sample-actions">
-          <a class="btn primary" href="https://vwan-simulator.com/?sample=hub-routing-preferences">Open Example 1 in Simulator</a>
-          <a class="btn" href="./samples/hub-routing-preferences.json" download>Download hub-routing-preferences.json</a>
+        <div data-i18n-lang="en">
+          <h2>4. Example 1: Hub Routing Preferences (ExpressRoute vs VPN vs ASPath)</h2>
+          <p>
+            In this scenario, <strong>Dublin Campus</strong> (<code>10.50.0.0/16</code>, ASN <code>65050</code>) is dual-connected to two Virtual WAN hubs via both an <strong>ExpressRoute location</strong> (with an outbound route map prepending <code>65050 65050</code>, making the ExpressRoute AS path 3 hops long) and a <strong>BGP S2S VPN</strong> connection (1 hop).
+          </p>
+          <ul>
+            <li><strong>West Europe Hub (ER Preference)</strong> prefers the <strong>ExpressRoute</strong> path to <code>10.50.0.0/16</code> despite its longer 3-hop AS path because the hub's routing preference is set to <code>ExpressRoute</code>.</li>
+            <li><strong>North Europe Hub (ASPath Preference)</strong> prefers the <strong>BGP S2S VPN</strong> path because its routing preference is set to <code>ASPath</code> and 1 hop beats 3 hops.</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=hub-routing-preferences">Open Example 1 in Simulator</a>
+            <a class="btn" href="./samples/hub-routing-preferences.json" download>Download hub-routing-preferences.json</a>
+          </div>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>4. サンプル 1: ハブのルーティングの優先順位 (ExpressRoute / VPN / ASPath)</h2>
+          <p>
+            このシナリオでは、<strong>Dublin Campus</strong>（<code>10.50.0.0/16</code>、ASN <code>65050</code>）が <strong>ExpressRoute ピアリングの場所</strong>（アウトバウンド ルート マップで <code>65050 65050</code> をプリペンドし、AS パス長が 3 ホップ）と <strong>BGP S2S VPN</strong>（AS パス長 1 ホップ）の両方で 2 つの Virtual WAN ハブに二重接続されています。
+          </p>
+          <ul>
+            <li><strong>West Europe Hub (ER Preference)</strong> はハブのルーティングの優先順位が <code>ExpressRoute</code> に設定されているため、AS パスが 3 ホップであっても <code>10.50.0.0/16</code> への経路として <strong>ExpressRoute</strong> を優先します。</li>
+            <li><strong>North Europe Hub (ASPath Preference)</strong> はハブのルーティングの優先順位が <code>ASPath</code> に設定されているため、AS パスが短い（1 ホップの）<strong>BGP S2S VPN</strong> を優先します。</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=hub-routing-preferences">サンプル 1 をシミュレーターで開く</a>
+            <a class="btn" href="./samples/hub-routing-preferences.json" download>hub-routing-preferences.json をダウンロード</a>
+          </div>
         </div>
         <figure>
-          <img src="./images/01-hub-routing-preferences.png" alt="Example 1 showing West Europe Hub highlighting preferred ExpressRoute paths" />
-          <figcaption>Right-clicking <strong>West Europe Hub (ER Preference)</strong> → <strong>Highlight preferred routes</strong> highlights the preferred ExpressRoute and inter-hub paths in amber.</figcaption>
+          <img src="./images/01-hub-routing-preferences.png"
+               alt="Example 1 showing West Europe Hub highlighting preferred ExpressRoute paths"
+               data-alt-en="Example 1 showing West Europe Hub highlighting preferred ExpressRoute paths"
+               data-alt-ja="サンプル 1: West Europe Hub で優先される ExpressRoute 経路の強調表示" />
+          <figcaption data-i18n-lang="en">Right-clicking <strong>West Europe Hub (ER Preference)</strong> → <strong>Highlight preferred routes</strong> highlights the preferred ExpressRoute and inter-hub paths in amber.</figcaption>
+          <figcaption data-i18n-lang="ja"><strong>West Europe Hub (ER Preference)</strong> を右クリックして <strong>優先ルートを強調表示 (Highlight preferred routes)</strong> を選択すると、優先される ExpressRoute 経路とハブ間経路がアンバー色で強調表示されます。</figcaption>
         </figure>
       </section>
 
       <section class="card" id="example-2">
-        <h2>5. Example 2: Secured Virtual Hub &amp; Azure Firewall Routing Intent</h2>
-        <p>
-          This example demonstrates a <strong>Secured Virtual Hub</strong> (<strong>East US Secured Hub</strong>) with both <strong>Private traffic</strong> (<code>10.0.0.0/8</code>, <code>172.16.0.0/12</code>) and <strong>Internet traffic</strong> (<code>0.0.0.0/0</code>) Routing Intent enabled:
-        </p>
-        <ul>
-          <li>All spoke-to-spoke and spoke-to-branch traffic matching the private prefixes is steered through <strong>Azure Firewall</strong> inside the Secured Hub.</li>
-          <li><strong>Boston Retail Branch</strong> connects over a <strong>Static S2S VPN</strong> with <code>Propagate Default Route (0.0.0.0/0)</code> enabled, learning the Secured Hub's firewall-backed default route.</li>
-        </ul>
-        <div class="sample-actions">
-          <a class="btn primary" href="https://vwan-simulator.com/?sample=secured-hub-routing-intent">Open Example 2 in Simulator</a>
-          <a class="btn" href="./samples/secured-hub-routing-intent.json" download>Download secured-hub-routing-intent.json</a>
+        <div data-i18n-lang="en">
+          <h2>5. Example 2: Secured Virtual Hub &amp; Azure Firewall Routing Intent</h2>
+          <p>
+            This example demonstrates a <strong>Secured Virtual Hub</strong> (<strong>East US Secured Hub</strong>) with both <strong>Private traffic</strong> (<code>10.0.0.0/8</code>, <code>172.16.0.0/12</code>) and <strong>Internet traffic</strong> (<code>0.0.0.0/0</code>) Routing Intent enabled:
+          </p>
+          <ul>
+            <li>All spoke-to-spoke and spoke-to-branch traffic matching the private prefixes is steered through <strong>Azure Firewall</strong> inside the Secured Hub.</li>
+            <li><strong>Boston Retail Branch</strong> connects over a <strong>Static S2S VPN</strong> with <code>Propagate Default Route (0.0.0.0/0)</code> enabled, learning the Secured Hub's firewall-backed default route.</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=secured-hub-routing-intent">Open Example 2 in Simulator</a>
+            <a class="btn" href="./samples/secured-hub-routing-intent.json" download>Download secured-hub-routing-intent.json</a>
+          </div>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>5. サンプル 2: セキュリティで保護された仮想ハブと Azure Firewall ルーティング インテント</h2>
+          <p>
+            このサンプルでは、<strong>East US Secured Hub</strong> において <strong>プライベート トラフィック</strong>（<code>10.0.0.0/8</code>、<code>172.16.0.0/12</code>）と <strong>インターネット トラフィック</strong>（<code>0.0.0.0/0</code>）の両方のルーティング インテントを有効化した <strong>セキュリティで保護された仮想ハブ (Secured Virtual Hub)</strong> をモデル化しています。
+          </p>
+          <ul>
+            <li>プライベート プレフィックスに一致するすべてのスポーク間およびスポーク・ブランチ間トラフィックは、Secured Hub 内の <strong>Azure Firewall</strong> を経由します。</li>
+            <li><strong>Boston Retail Branch</strong> は <code>既定ルートの伝達 (0.0.0.0/0)</code> を有効にした <strong>静的 S2S VPN</strong> で接続されており、Secured Hub の Azure Firewall を次ホップとする既定ルートを学習します。</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=secured-hub-routing-intent">サンプル 2 をシミュレーターで開く</a>
+            <a class="btn" href="./samples/secured-hub-routing-intent.json" download>secured-hub-routing-intent.json をダウンロード</a>
+          </div>
         </div>
         <figure>
-          <img src="./images/02-secured-hub-routing-intent.png" alt="Example 2 showing Secured Virtual Hub effective Azure Firewall routes" />
-          <figcaption>Right-clicking <strong>East US Secured Hub</strong> → <strong>Show firewall routes</strong> inspects the effective routes inside the Secured Hub's Azure Firewall routing table alongside the hub policy table.</figcaption>
+          <img src="./images/02-secured-hub-routing-intent.png"
+               alt="Example 2 showing Secured Virtual Hub effective Azure Firewall routes"
+               data-alt-en="Example 2 showing Secured Virtual Hub effective Azure Firewall routes"
+               data-alt-ja="サンプル 2: セキュリティで保護された仮想ハブにおける Azure Firewall の有効なルート" />
+          <figcaption data-i18n-lang="en">Right-clicking <strong>East US Secured Hub</strong> → <strong>Show firewall routes</strong> inspects the effective routes inside the Secured Hub's Azure Firewall routing table alongside the hub policy table.</figcaption>
+          <figcaption data-i18n-lang="ja"><strong>East US Secured Hub</strong> を右クリックして <strong>ファイアウォールのルートを表示 (Show firewall routes)</strong> を選択すると、ハブのポリシー ルート テーブルと Azure Firewall 自身の転送ルート テーブルを切り替えて確認できます。</figcaption>
         </figure>
       </section>
 
       <section class="card" id="example-3">
-        <h2>6. Example 3: Spoke BGP NVA Transit to Downstream VNet &amp; Partner Site</h2>
-        <p>
-          Virtual WAN hubs can peer via BGP with a Network Virtual Appliance (NVA) deployed inside a spoke VNet. In this example:
-        </p>
-        <ul>
-          <li><strong>Transit NVA Spoke</strong> (<code>10.10.0.0/16</code>) hosts a BGP NVA (<code>10.10.0.4</code>, ASN <code>65100</code>) peered with <strong>Central US Hub</strong>.</li>
-          <li>Behind the NVA sits a standalone Azure VNet (<strong>AI Shared Services VNet</strong>, <code>10.99.0.0/16</code>) that is peered only to the NVA spoke, plus an on-premises partner site (<strong>Chicago Partner Enclave</strong>, <code>172.30.0.0/16</code>).</li>
-        </ul>
-        <div class="sample-actions">
-          <a class="btn primary" href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit">Open Example 3 in Simulator</a>
-          <a class="btn" href="./samples/spoke-bgp-nva-transit.json" download>Download spoke-bgp-nva-transit.json</a>
+        <div data-i18n-lang="en">
+          <h2>6. Example 3: Spoke BGP NVA Transit to Downstream VNet &amp; Partner Site</h2>
+          <p>
+            Virtual WAN hubs can peer via BGP with a Network Virtual Appliance (NVA) deployed inside a spoke VNet. In this example:
+          </p>
+          <ul>
+            <li><strong>Transit NVA Spoke</strong> (<code>10.10.0.0/16</code>) hosts a BGP NVA (<code>10.10.0.4</code>, ASN <code>65100</code>) peered with <strong>Central US Hub</strong>.</li>
+            <li>Behind the NVA sits a standalone Azure VNet (<strong>AI Shared Services VNet</strong>, <code>10.99.0.0/16</code>) that is peered only to the NVA spoke, plus an on-premises partner site (<strong>Chicago Partner Enclave</strong>, <code>172.30.0.0/16</code>).</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit">Open Example 3 in Simulator</a>
+            <a class="btn" href="./samples/spoke-bgp-nva-transit.json" download>Download spoke-bgp-nva-transit.json</a>
+          </div>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>6. サンプル 3: スポーク BGP NVA によるダウンストリーム VNet・パートナー サイトへのトランジット</h2>
+          <p>
+            Virtual WAN ハブは、スポーク VNet 内にデプロイされたネットワーク仮想アプライアンス (NVA) と BGP ピアリングを構成できます。このサンプルの構成は以下のとおりです。
+          </p>
+          <ul>
+            <li><strong>Transit NVA Spoke</strong>（<code>10.10.0.0/16</code>）内の BGP NVA（<code>10.10.0.4</code>、ASN <code>65100</code>）が <strong>Central US Hub</strong> と BGP ピアリングしています。</li>
+            <li>NVA の背後には、NVA スポークにのみ VNet ピアリングされたスタンドアロン Azure VNet（<strong>AI Shared Services VNet</strong>、<code>10.99.0.0/16</code>）と、オンプレミスのパートナー拠点（<strong>Chicago Partner Enclave</strong>、<code>172.30.0.0/16</code>）が接続されています。</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit">サンプル 3 をシミュレーターで開く</a>
+            <a class="btn" href="./samples/spoke-bgp-nva-transit.json" download>spoke-bgp-nva-transit.json をダウンロード</a>
+          </div>
         </div>
         <figure>
-          <img src="./images/03-spoke-bgp-nva-transit.png" alt="Example 3 showing Path Explorer tracing through a Spoke BGP NVA" />
-          <figcaption>Tracing a flow from <strong>AI Shared Services VNet (Downstream)</strong> to <strong>Chicago Partner Enclave</strong> through the Spoke BGP NVA.</figcaption>
+          <img src="./images/03-spoke-bgp-nva-transit.png"
+               alt="Example 3 showing Path Explorer tracing through a Spoke BGP NVA"
+               data-alt-en="Example 3 showing Path Explorer tracing through a Spoke BGP NVA"
+               data-alt-ja="サンプル 3: スポーク BGP NVA を経由するパス エクスプローラーのフロー追跡" />
+          <figcaption data-i18n-lang="en">Tracing a flow from <strong>AI Shared Services VNet (Downstream)</strong> to <strong>Chicago Partner Enclave</strong> through the Spoke BGP NVA.</figcaption>
+          <figcaption data-i18n-lang="ja">スポーク BGP NVA を経由して <strong>AI Shared Services VNet (Downstream)</strong> から <strong>Chicago Partner Enclave</strong> へ至るフローを追跡している様子。</figcaption>
         </figure>
       </section>
 
       <section class="card" id="example-4">
-        <h2>7. Example 4: 3-Hub All-Features Enterprise Showcase (with Asymmetric Routing)</h2>
-        <p>
-          This comprehensive 3-hub topology exercises every capability of the simulator across <strong>West Europe Hub</strong> (Secured, <code>ExpressRoute</code> preference), <strong>East US Hub</strong> (<code>VPN</code> preference), and <strong>Japan East Hub</strong> (Secured, <code>ASPath</code> preference), including an intentional <strong>asymmetric routing</strong> issue between Azure and <strong>Amsterdam Core DC</strong> (<code>10.100.0.0/16</code>):
-        </p>
-        <ul>
-          <li><strong>Forward path (Azure → Amsterdam Core DC)</strong>: <code>West Europe Hub</code> has <code>preference: "ExpressRoute"</code>, so traffic from <code>EMEA ERP Spoke</code> (<code>10.10.0.0/16</code>) to <code>Amsterdam Core DC</code> (<code>10.100.0.0/16</code>) exits over <strong>ExpressRoute</strong> via <code>Equinix AM5 Amsterdam</code>.</li>
-          <li><strong>Return path (Amsterdam Core DC → Azure)</strong>: An outbound route map on <code>West Europe Hub</code>'s ExpressRoute link prepends <code>64496 64496</code> to routes advertised over ExpressRoute. Consequently, <code>Amsterdam Core DC</code> sees a 1-hop AS path over its <strong>BGP VPN</strong> backup link (<code>65515</code>) vs. a 3-hop AS path over ExpressRoute (<code>65515 64496 64496</code>) and sends return traffic back over <strong>BGP VPN</strong>.</li>
-        </ul>
-        <div class="sample-actions">
-          <a class="btn primary" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">Open 3-Hub Showcase in Simulator</a>
-          <a class="btn" href="./samples/three-hub-all-features-asymmetric.json" download>Download three-hub-all-features-asymmetric.json</a>
+        <div data-i18n-lang="en">
+          <h2>7. Example 4: 3-Hub All-Features Enterprise Showcase (with Asymmetric Routing)</h2>
+          <p>
+            This comprehensive 3-hub topology exercises every capability of the simulator across <strong>West Europe Hub</strong> (Secured, <code>ExpressRoute</code> preference), <strong>East US Hub</strong> (<code>VPN</code> preference), and <strong>Japan East Hub</strong> (Secured, <code>ASPath</code> preference), including an intentional <strong>asymmetric routing</strong> issue between Azure and <strong>Amsterdam Core DC</strong> (<code>10.100.0.0/16</code>):
+          </p>
+          <ul>
+            <li><strong>Forward path (Azure → Amsterdam Core DC)</strong>: <code>West Europe Hub</code> has <code>preference: "ExpressRoute"</code>, so traffic from <code>EMEA ERP Spoke</code> (<code>10.10.0.0/16</code>) to <code>Amsterdam Core DC</code> (<code>10.100.0.0/16</code>) exits over <strong>ExpressRoute</strong> via <code>Equinix AM5 Amsterdam</code>.</li>
+            <li><strong>Return path (Amsterdam Core DC → Azure)</strong>: An outbound route map on <code>West Europe Hub</code>'s ExpressRoute link prepends <code>64496 64496</code> to routes advertised over ExpressRoute. Consequently, <code>Amsterdam Core DC</code> sees a 1-hop AS path over its <strong>BGP VPN</strong> backup link (<code>65515</code>) vs. a 3-hop AS path over ExpressRoute (<code>65515 64496 64496</code>) and sends return traffic back over <strong>BGP VPN</strong>.</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">Open 3-Hub Showcase in Simulator</a>
+            <a class="btn" href="./samples/three-hub-all-features-asymmetric.json" download>Download three-hub-all-features-asymmetric.json</a>
+          </div>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>7. サンプル 4: 3 ハブ全機能ショーケース（非対称ルーティングを含む）</h2>
+          <p>
+            この 3 ハブ構成のエンタープライズ トポロジは、<strong>West Europe Hub</strong>（Secured、<code>ExpressRoute</code> 優先）、<strong>East US Hub</strong>（<code>VPN</code> 優先）、<strong>Japan East Hub</strong>（Secured、<code>ASPath</code> 優先）にまたがり、シミュレーターの全機能を網羅しています。さらに、Azure スポークと <strong>Amsterdam Core DC</strong>（<code>10.100.0.0/16</code>）の間に意図的な <strong>非対称ルーティング</strong> が組み込まれています。
+          </p>
+          <ul>
+            <li><strong>往路（Azure → Amsterdam Core DC）</strong>: <code>West Europe Hub</code> のルーティングの優先順位は <code>ExpressRoute</code> のため、<code>EMEA ERP Spoke</code>（<code>10.10.0.0/16</code>）から <code>Amsterdam Core DC</code>（<code>10.100.0.0/16</code>）への通信は <code>Equinix AM5 Amsterdam</code> 経由の <strong>ExpressRoute</strong> を通ります。</li>
+            <li><strong>復路（Amsterdam Core DC → Azure）</strong>: <code>West Europe Hub</code> の ExpressRoute リンクに適用されたアウトバウンド ルート マップが <code>64496 64496</code> をプリペンドするため、<code>Amsterdam Core DC</code> から見ると ExpressRoute 経由は 3 ホップ（<code>65515 64496 64496</code>）、バックアップの <strong>BGP VPN</strong> 経由は 1 ホップ（<code>65515</code>）となり、復路トラフィックは <strong>BGP VPN</strong> を通って戻ります。</li>
+          </ul>
+          <div class="sample-actions">
+            <a class="btn primary" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">3 ハブ ショーケースをシミュレーターで開く</a>
+            <a class="btn" href="./samples/three-hub-all-features-asymmetric.json" download>three-hub-all-features-asymmetric.json をダウンロード</a>
+          </div>
         </div>
         <figure>
-          <img src="./images/04-three-hub-all-features.png" alt="3-Hub All-Features Enterprise Showcase topology on the main canvas" />
-          <figcaption>The 3-Hub Enterprise Showcase topology showing IN/OUT route-map badges on connections, Secured Virtual Hubs, ExpressRoute location, Spoke BGP NVA, and multi-transport branches.</figcaption>
+          <img src="./images/04-three-hub-all-features.png"
+               alt="3-Hub All-Features Enterprise Showcase topology on the main canvas"
+               data-alt-en="3-Hub All-Features Enterprise Showcase topology on the main canvas"
+               data-alt-ja="メイン キャンバス上の 3 ハブ全機能エンタープライズ ショーケース トポロジ" />
+          <figcaption data-i18n-lang="en">The 3-Hub Enterprise Showcase topology showing IN/OUT route-map badges on connections, Secured Virtual Hubs, ExpressRoute location, Spoke BGP NVA, and multi-transport branches.</figcaption>
+          <figcaption data-i18n-lang="ja">接続上の IN/OUT ルート マップ バッジ、セキュリティで保護された仮想ハブ、ExpressRoute ピアリングの場所、スポーク BGP NVA、マルチトランスポート拠点を備えた 3 ハブ ショーケース トポロジ。</figcaption>
         </figure>
       </section>
 
       <section class="card" id="diagnostics-and-trace">
-        <h2>8. Effective Routes, Path Explorer &amp; Automated Routing Diagnostics</h2>
-        <h3>Inspecting BGP, Learned, and Advertised Routes</h3>
-        <p>
-          Right-click any Virtual Hub, Site, or ExpressRoute Location and choose <strong>BGP table</strong>, <strong>Learned routes</strong>, or <strong>Advertised routes</strong>. Clicking any prefix row highlights its winning path on the canvas and explains why it won over competing candidates.
-        </p>
+        <div data-i18n-lang="en">
+          <h2>8. Effective Routes, Path Explorer &amp; Automated Routing Diagnostics</h2>
+          <h3>Inspecting BGP, Learned, and Advertised Routes</h3>
+          <p>
+            Right-click any Virtual Hub, Site, or ExpressRoute Location and choose <strong>BGP table</strong>, <strong>Learned routes</strong>, or <strong>Advertised routes</strong>. Clicking any prefix row highlights its winning path on the canvas and explains why it won over competing candidates.
+          </p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>8. 有効なルート、パス エクスプローラー、自動ルーティング診断</h2>
+          <h3>BGP テーブル、学習したルート、アドバタイズしたルートの確認</h3>
+          <p>
+            任意の仮想ハブ、サイト、または ExpressRoute ピアリングの場所を右クリックし、<strong>BGP テーブル (BGP table)</strong>、<strong>学習したルート (Learned routes)</strong>、または <strong>アドバタイズしたルート (Advertised routes)</strong> を選択します。任意のプレフィックス行をクリックすると、採用された優先経路がキャンバス上で強調表示され、他の候補ルートより優先された理由が表示されます。
+          </p>
+        </div>
         <figure>
-          <img src="./images/05-effective-routes-modal.png" alt="Effective Routes and BGP table modal on West Europe Hub" />
-          <figcaption>The Route Inspector modal showing candidate routes, AS paths, origin/next-hop metadata, and selection reasons on <strong>West Europe Hub</strong>.</figcaption>
+          <img src="./images/05-effective-routes-modal.png"
+               alt="Effective Routes and BGP table modal on West Europe Hub"
+               data-alt-en="Effective Routes and BGP table modal on West Europe Hub"
+               data-alt-ja="West Europe Hub の有効なルートおよび BGP テーブル モーダル" />
+          <figcaption data-i18n-lang="en">The Route Inspector modal showing candidate routes, AS paths, origin/next-hop metadata, and selection reasons on <strong>West Europe Hub</strong>.</figcaption>
+          <figcaption data-i18n-lang="ja"><strong>West Europe Hub</strong> における候補ルート、AS パス、オリジン / 次ホップ情報、および選択理由を表示するルート インスペクター。</figcaption>
         </figure>
 
-        <h3>Automated Routing Check &amp; Asymmetric Path Detection</h3>
-        <p>
-          Click <strong>Check routing</strong> in the workspace toolbar to run an automated pairwise reachability and symmetry audit across all owned prefixes. Click <strong>Review routing issues</strong> to inspect each finding and highlight the forward vs. reverse paths on the canvas.
-        </p>
+        <div data-i18n-lang="en">
+          <h3>Automated Routing Check &amp; Asymmetric Path Detection</h3>
+          <p>
+            Click <strong>Check routing</strong> in the workspace toolbar to run an automated pairwise reachability and symmetry audit across all owned prefixes. Only root-cause failures are surfaced on the canvas (cascading downstream symptoms are automatically deduplicated), and you can click <strong>Review routing issues</strong> to inspect each finding or click <strong>Clear highlights &amp; icons</strong> in the bottom-left corner to remove all warning icons.
+          </p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h3>自動ルーティング診断と非対称パスの検出</h3>
+          <p>
+            ワークスペース ツールバーの <strong>ルーティングを診断 (Check routing)</strong> をクリックすると、すべての所有プレフィックス間の到達性と対称性が自動的に診断されます。連鎖的な派生エラーは自動的に除外され、根本原因のみがキャンバス上に警告アイコンとして表示されます。<strong>ルーティングの問題を確認 (Review routing issues)</strong> から往路・復路をアニメーション表示でき、左下の <strong>強調表示とアイコンをクリア (Clear highlights &amp; icons)</strong> でいつでもアイコンを消去できます。
+          </p>
+        </div>
         <figure>
-          <img src="./images/06-routing-diagnostics-asymmetric.png" alt="Routing issues panel reporting asymmetric routing between EMEA spokes and Amsterdam Core DC" />
-          <figcaption>The <strong>Routing issues</strong> drawer pinpointing the asymmetric path between Azure spokes and <strong>Amsterdam Core DC</strong> (Forward via ExpressRoute, Return via BGP VPN).</figcaption>
+          <img src="./images/06-routing-diagnostics-asymmetric.png"
+               alt="Routing issues panel reporting asymmetric routing between EMEA spokes and Amsterdam Core DC"
+               data-alt-en="Routing issues panel reporting asymmetric routing between EMEA spokes and Amsterdam Core DC"
+               data-alt-ja="EMEA スポークと Amsterdam Core DC 間の非対称ルーティングを報告するルーティングの問題パネル" />
+          <figcaption data-i18n-lang="en">The <strong>Routing issues</strong> drawer pinpointing the asymmetric path between Azure spokes and <strong>Amsterdam Core DC</strong> (Forward via ExpressRoute, Return via BGP VPN).</figcaption>
+          <figcaption data-i18n-lang="ja">Azure スポークと <strong>Amsterdam Core DC</strong> 間の非対称パス（往路は ExpressRoute、復路は BGP VPN）を特定した <strong>ルーティングの問題</strong> ドロワー。</figcaption>
         </figure>
 
-        <h3>Interactive Path Explorer</h3>
-        <p>
-          Right-click any node and select <strong>Open path explorer</strong> (or use <strong>Show path to / from</strong>) to trace forwarding hop-by-hop between any source and destination prefix, complete with a step-by-step <em>"Why this path?"</em> explanation.
-        </p>
+        <div data-i18n-lang="en">
+          <h3>Interactive Path Explorer</h3>
+          <p>
+            Right-click any node and select <strong>Open path explorer</strong> (or use <strong>Show path to / from</strong>) to trace forwarding hop-by-hop between any source and destination prefix, complete with a step-by-step <em>"Why this path?"</em> explanation.
+          </p>
+        </div>
+        <div data-i18n-lang="ja">
+          <h3>インタラクティブなパス エクスプローラー</h3>
+          <p>
+            任意のノードを右クリックして <strong>パス エクスプローラーを開く (Open path explorer)</strong>（または <strong>次へのパスを表示 / 次からのパスを表示</strong>）を選択すると、任意の送信元と宛先プレフィックス間の転送経路をホップごとに追跡し、各ホップでの選択理由を確認できます。
+          </p>
+        </div>
         <figure>
-          <img src="./images/07-trace-flow-canvas.png" alt="Path Explorer tracing EMEA ERP Spoke to Amsterdam Core DC" />
-          <figcaption>Tracing <strong>EMEA ERP Spoke</strong> → <strong>Amsterdam Core DC</strong> in the Path Explorer with hop-by-hop forwarding explanations.</figcaption>
+          <img src="./images/07-trace-flow-canvas.png"
+               alt="Path Explorer tracing EMEA ERP Spoke to Amsterdam Core DC"
+               data-alt-en="Path Explorer tracing EMEA ERP Spoke to Amsterdam Core DC"
+               data-alt-ja="EMEA ERP Spoke から Amsterdam Core DC への経路を追跡するパス エクスプローラー" />
+          <figcaption data-i18n-lang="en">Tracing <strong>EMEA ERP Spoke</strong> → <strong>Amsterdam Core DC</strong> in the Path Explorer with hop-by-hop forwarding explanations.</figcaption>
+          <figcaption data-i18n-lang="ja">パス エクスプローラーで <strong>EMEA ERP Spoke</strong> → <strong>Amsterdam Core DC</strong> の転送経路とホップごとの説明を表示している様子。</figcaption>
         </figure>
       </section>
 
       <section class="card" id="azure-import-export">
-        <h2>9. Azure Bicep Export &amp; Live Snapshot Comparison</h2>
-        <p>
-          Click <strong>Azure files</strong> in the top navigation bar to bridge your modelled topology with real Azure environments:
-        </p>
-        <ul>
-          <li><strong>Export Azure Bicep template (<code>.bicep</code>)</strong>: Generate a deployable Bicep template for your Virtual WAN, Virtual Hubs, Secured Hub Firewalls &amp; Routing Intent, and VNet Connections.</li>
-          <li><strong>Download Read-Only Azure CLI Collector Script (<a href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" style="color:var(--accent)"><code>scripts/collect-azure-vwan.ps1</code></a>)</strong>: Capture an existing Azure Virtual WAN's topology and effective routes into a portable JSON bundle from PowerShell 7 or Azure Cloud Shell without giving the web app any Azure credentials:
-            <pre style="margin-top:8px;padding:10px 12px;background:#0f172a;color:#f8fafc;border-radius:8px;overflow-x:auto;font-size:0.85rem">Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
+        <div data-i18n-lang="en">
+          <h2>9. Azure Bicep Export &amp; Live Snapshot Comparison</h2>
+          <p>
+            Click <strong>Azure files</strong> in the top navigation bar to bridge your modelled topology with real Azure environments:
+          </p>
+          <ul>
+            <li><strong>Export Azure Bicep template (<code>.bicep</code>)</strong>: Generate a deployable Bicep template for your Virtual WAN, Virtual Hubs, Secured Hub Firewalls &amp; Routing Intent, and VNet Connections.</li>
+            <li><strong>Download Read-Only Azure CLI Collector Script (<a href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" style="color:var(--accent)"><code>scripts/collect-azure-vwan.ps1</code></a>)</strong>: Capture an existing Azure Virtual WAN's topology and effective routes into a portable JSON bundle from PowerShell 7 or Azure Cloud Shell without giving the web app any Azure credentials:
+              <pre style="margin-top:8px;padding:10px 12px;background:#0f172a;color:#f8fafc;border-radius:8px;overflow-x:auto;font-size:0.85rem">Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
 ./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json</pre>
-          </li>
-          <li><strong>Compare Observed vs. Simulated Routes</strong>: Import an Azure capture bundle to compare live Azure effective route tables against the simulator's predicted routes side by side.</li>
-        </ul>
+            </li>
+            <li><strong>Compare Observed vs. Simulated Routes</strong>: Import an Azure capture bundle to compare live Azure effective route tables against the simulator's predicted routes side by side.</li>
+          </ul>
+        </div>
+        <div data-i18n-lang="ja">
+          <h2>9. Azure Bicep エクスポートと実環境スナップショット比較</h2>
+          <p>
+            上部ナビゲーション バーの <strong>Azure ファイル (Azure files)</strong> をクリックすると、モデル化したトポロジと実際の Azure 環境を連携できます。
+          </p>
+          <ul>
+            <li><strong>Azure Bicep テンプレート (<code>.bicep</code>) のエクスポート</strong>: Virtual WAN、仮想ハブ、Secured Hub の Azure Firewall とルーティング インテント、および VNet 接続を含むデプロイ可能な Bicep テンプレートを生成します。</li>
+            <li><strong>読み取り専用 Azure CLI 収集スクリプト (<a href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" style="color:var(--accent)"><code>scripts/collect-azure-vwan.ps1</code></a>) のダウンロード</strong>: Web アプリに Azure の資格情報を渡すことなく、PowerShell 7 または Azure Cloud Shell から既存の Azure Virtual WAN トポロジと有効なルート テーブルを JSON バンドルとして取得できます。
+              <pre style="margin-top:8px;padding:10px 12px;background:#0f172a;color:#f8fafc;border-radius:8px;overflow-x:auto;font-size:0.85rem">Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1
+./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json</pre>
+            </li>
+            <li><strong>実測ルートとシミュレートされたルートの比較</strong>: 取得した Azure キャプチャ JSON をインポートし、実際の Azure 有効なルート テーブルとシミュレーターの計算結果を並べて比較できます。</li>
+          </ul>
+        </div>
         <figure>
-          <img src="./images/08-azure-files-export-import.png" alt="Azure files panel showing Bicep export and Azure CLI capture script download" />
-          <figcaption>The <strong>Azure files</strong> drawer providing one-click Bicep template export, the read-only PowerShell Azure CLI collector script (<code>collect-azure-vwan.ps1</code>), and observed-vs-simulated route comparison.</figcaption>
+          <img src="./images/08-azure-files-export-import.png"
+               alt="Azure files panel showing Bicep export and Azure CLI capture script download"
+               data-alt-en="Azure files panel showing Bicep export and Azure CLI capture script download"
+               data-alt-ja="Bicep エクスポートと Azure CLI 収集スクリプトのダウンロードを表示する Azure ファイル パネル" />
+          <figcaption data-i18n-lang="en">The <strong>Azure files</strong> drawer providing one-click Bicep template export, the read-only PowerShell Azure CLI collector script (<code>collect-azure-vwan.ps1</code>), and observed-vs-simulated route comparison.</figcaption>
+          <figcaption data-i18n-lang="ja">Bicep テンプレートのエクスポート、読み取り専用 PowerShell Azure CLI 収集スクリプト (<code>collect-azure-vwan.ps1</code>)、および実測ルートとシミュレーションの比較機能を提供する <strong>Azure ファイル</strong> ドロワー。</figcaption>
         </figure>
       </section>
     </main>
   </div>
+  <script>
+    (function () {
+      var storageKey = 'vwan-visual-topology:language:v1';
+      var titles = {
+        en: 'Virtual WAN Topology Lab — Documentation & Worked Examples',
+        ja: 'Virtual WAN トポロジ ラボ — ドキュメントと実践サンプル'
+      };
+      var select = document.getElementById('doc-language-selector');
+      var toc = document.getElementById('doc-toc');
+
+      function applyLanguage(next, updateUrl) {
+        var lang = next === 'ja' ? 'ja' : 'en';
+        document.documentElement.lang = lang;
+        document.title = titles[lang];
+        try { localStorage.setItem(storageKey, lang); } catch (e) {}
+        if (select) {
+          select.value = lang;
+          select.setAttribute('aria-label', lang === 'ja' ? '言語 / Language' : 'Language / 言語');
+        }
+        if (toc) {
+          toc.setAttribute('aria-label', lang === 'ja' ? '目次' : 'Table of contents');
+        }
+        var images = document.querySelectorAll('img[data-alt-en][data-alt-ja]');
+        for (var i = 0; i < images.length; i++) {
+          var img = images[i];
+          var alt = img.getAttribute(lang === 'ja' ? 'data-alt-ja' : 'data-alt-en');
+          if (alt) img.setAttribute('alt', alt);
+        }
+        if (updateUrl && window.history && window.history.replaceState) {
+          try {
+            var url = new URL(window.location.href);
+            if (lang === 'ja') {
+              url.searchParams.set('lang', 'ja');
+            } else {
+              url.searchParams.delete('lang');
+            }
+            window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+          } catch (e) {}
+        }
+      }
+
+      applyLanguage(document.documentElement.lang, false);
+      if (select) {
+        select.addEventListener('change', function (event) {
+          applyLanguage(event.target.value, true);
+        });
+      }
+    })();
+  </script>
 </body>
 </html>
