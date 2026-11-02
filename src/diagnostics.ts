@@ -331,6 +331,8 @@ interface Scenario {
   learned: ReturnType<typeof azureRoutesAtSites>
   boundaries: number[]
   limitations: string[]
+  hasOwnAs: boolean
+  ownerRanges: { node: PathNode; start: number; end: number }[]
   cache: Map<string, NodePath[]>
   limitsCache: Map<string, string[]>
   ownersCache: Map<string, PathNode[]>
@@ -359,25 +361,41 @@ function scenario(topology: Topology): Scenario {
   if (!simulation.converged || !learned.converged) limitations.push(limits.convergence)
   if (simulation.siteSelectionComplete === false || !learned.selectionComplete) limitations.push(limits.selection)
   if (topology.azureImport && (topology.azureImport.warnings.length || topology.azureImport.hubs.some((hub) => hub.limitations.length))) limitations.push(limits.imported)
-  return { topology, simulation, learned, boundaries: [...boundaries].sort((a, b) => a - b), limitations, cache: new Map(), limitsCache: new Map(), ownersCache: new Map() }
-}
-function owners(topology: Topology, address: string): PathNode[] {
-  const n = ipv4(address)!
-  return [
-    ...topology.spokes.filter((node) => node.prefixes.some((p) => contains(p, n))).map((node) => ({ kind: 'spoke' as const, id: node.id })),
-    ...topology.sites.filter((node) => node.prefixes.some((p) => contains(p, n))).map((node) => ({ kind: 'site' as const, id: node.id })),
+  const ownAs = (asPath: number[]) => asPath.includes(65515) || asPath.includes(65520)
+  const hasOwnAs =
+    topology.sites.some((site) => [65515, 65520].includes(site.asn)) ||
+    Object.values(simulation.bgpTables).some((table) => table.some((d) => d.candidates.some((r) => !r.remote && ownAs(r.asPath))))
+  const ownerRanges = [
+    ...topology.spokes.flatMap((node) => node.prefixes.map((p) => ({ node: { kind: 'spoke' as const, id: node.id }, ...addressRange(p) }))),
+    ...topology.sites.flatMap((node) => node.prefixes.map((p) => ({ node: { kind: 'site' as const, id: node.id }, ...addressRange(p) }))),
   ]
+  return { topology, simulation, learned, boundaries: [...boundaries].sort((a, b) => a - b), limitations, hasOwnAs, ownerRanges, cache: new Map(), limitsCache: new Map(), ownersCache: new Map() }
+}
+function owners(state: Scenario, address: string): PathNode[] {
+  const n = ipv4(address)!
+  const seen = new Set<string>()
+  const result: PathNode[] = []
+  for (const entry of state.ownerRanges) {
+    if (n >= entry.start && n < entry.end) {
+      const key = `${entry.node.kind}:${entry.node.id}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        result.push(entry.node)
+      }
+    }
+  }
+  return result
 }
 const same = (a: PathNode, b: PathNode) => a.kind === b.kind && a.id === b.id
 function owned(state: Scenario, node: PathNode, address: string) {
-  const found = state.ownersCache.get(address) ?? owners(state.topology, address)
+  const found = state.ownersCache.get(address) ?? owners(state, address)
   state.ownersCache.set(address, found)
   return found.length === 1 && same(found[0], node)
 }
 const delivered = (path: NodePath, target: PathNode) => path.status === 'delivered' && path.termination === 'owner' && path.terminalKind === target.kind && path.siteId === target.id
 
 function modelLimits(state: Scenario, source: PathNode, destination: string, paths: NodePath[]): string[] {
-  const key = stable([source, destination])
+  const key = `${source.kind}:${source.id}:${destination}`
   const cached = state.limitsCache.get(key)
   if (cached) return cached
   const { topology, simulation } = state
@@ -419,10 +437,214 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
     }
   }
   const ownAs = (asPath: number[]) => asPath.includes(65515) || asPath.includes(65520)
-  if (Object.values(simulation.bgpTables).some((table) => table.some((d) => contains(d.prefix, address) && d.candidates.some((r) => !r.remote && ownAs(r.asPath)))) ||
-    topology.sites.some((site) => [65515, 65520].includes(site.asn) && (site.id === source.id || paths.some((path) => path.siteHops?.includes(site.id) || path.sourceSiteHops?.includes(site.id)) || site.prefixes.some((p) => contains(p, address))))) reasons.push(limits.ownAs)
+  if (state.hasOwnAs && (Object.values(simulation.bgpTables).some((table) => table.some((d) => contains(d.prefix, address) && d.candidates.some((r) => !r.remote && ownAs(r.asPath)))) ||
+    topology.sites.some((site) => [65515, 65520].includes(site.asn) && (site.id === source.id || paths.some((path) => path.siteHops?.includes(site.id) || path.sourceSiteHops?.includes(site.id)) || site.prefixes.some((p) => contains(p, address)))))) reasons.push(limits.ownAs)
   state.limitsCache.set(key, reasons)
   return reasons
+}
+
+function coveringCidr(cells: Cell[]): Cell {
+  const unique = [...new Map(cells.map((cell) => [cell.prefix, cell])).values()]
+  if (unique.length === 1) return unique[0]
+  const ranges = unique.map((item) => addressRange(item.prefix))
+  const minStart = Math.min(...ranges.map((range) => range.start)) >>> 0
+  const maxLast = Math.max(...ranges.map((range) => range.end - 1)) >>> 0
+  const totalAddresses = ranges.reduce((sum, range) => sum + (range.end - range.start), 0)
+  const diff = (minStart ^ maxLast) >>> 0
+  const length = diff === 0 ? 32 : Math.clz32(diff)
+  const mask = length === 0 ? 0 : (0xffffffff << (32 - length)) >>> 0
+  const network = (minStart & mask) >>> 0
+  const blockSize = length === 0 ? 0x100000000 : 2 ** (32 - length)
+  if (network === minStart && totalAddresses === blockSize) {
+    return { prefix: `${addressText(network)}/${length}`, address: addressText(network) }
+  }
+  return unique[0]
+}
+function topLevelPrefixes(prefixes: string[]): string[] {
+  const unique = [...new Set(prefixes)]
+  return unique.filter((prefix) => {
+    const current = cidr(prefix)
+    if (!current) return true
+    return !unique.some((other) => {
+      if (other === prefix) return false
+      const candidate = cidr(other)
+      return Boolean(candidate && candidate.length < current.length && contains(other, current.network))
+    })
+  })
+}
+function canonicalTopologyToken(token: string): string {
+  return token.startsWith('hub-firewall:') ? `hub:${token.slice('hub-firewall:'.length)}` : token
+}
+const isNodeToken = (token: string) =>
+  token.startsWith('site:') || token.startsWith('spoke:') || token.startsWith('hub:')
+function divergenceBounds(finding: DiagnosticsFinding): {
+  anchorKey: string
+  leftAnchor: string
+  rightAnchor: string
+  forwardCore: string[]
+  reverseCore: string[]
+} | undefined {
+  if (!finding.source || !finding.target) return undefined
+  const forwardPaths = finding.forward
+    .filter((path) => delivered(path, finding.target!))
+    .map((path) => physical(path, finding.source!).map(canonicalTopologyToken))
+  const reversePaths = finding.reverse
+    .filter((path) => delivered(path, finding.source!))
+    .map((path) => physical(path, finding.target!).reverse().map(canonicalTopologyToken))
+  const all = [...forwardPaths, ...reversePaths]
+  if (!forwardPaths.length || !reversePaths.length) return undefined
+  const minLen = Math.min(...all.map((tokens) => tokens.length))
+  let prefixLen = 0
+  while (prefixLen < minLen && all.every((tokens) => tokens[prefixLen] === all[0][prefixLen])) prefixLen++
+  let suffixLen = 0
+  while (
+    suffixLen < minLen - prefixLen &&
+    all.every((tokens) => tokens[tokens.length - 1 - suffixLen] === all[0][all[0].length - 1 - suffixLen])
+  ) {
+    suffixLen++
+  }
+  let leftIdx = Math.max(0, prefixLen - 1)
+  while (leftIdx > 0 && !isNodeToken(all[0][leftIdx])) leftIdx--
+  const leftAnchor = all[0][leftIdx] ?? `${finding.source.kind}:${finding.source.id}`
+  let rightOffset = Math.max(1, suffixLen)
+  while (rightOffset < all[0].length && !isNodeToken(all[0][all[0].length - rightOffset])) rightOffset++
+  const rightAnchor =
+    all[0][all[0].length - rightOffset] ?? `${finding.target.kind}:${finding.target.id}`
+  const sliceCore = (tokens: string[]) =>
+    tokens.slice(leftIdx, Math.max(leftIdx + 1, tokens.length - rightOffset + 1)).join('->')
+  const forwardCore = [...new Set(forwardPaths.map(sliceCore))].sort()
+  const reverseCore = [...new Set(reversePaths.map(sliceCore))].sort()
+  const orderedAnchors = [leftAnchor, rightAnchor].sort()
+  return {
+    anchorKey: `${orderedAnchors[0]}<->${orderedAnchors[1]}`,
+    leftAnchor,
+    rightAnchor,
+    forwardCore,
+    reverseCore,
+  }
+}
+function intermediateEndpoints(finding: DiagnosticsFinding): Set<string> {
+  const endpoints = new Set<string>()
+  const sourceKey = finding.source ? `${finding.source.kind}:${finding.source.id}` : ''
+  const targetKey = finding.target ? `${finding.target.kind}:${finding.target.id}` : ''
+  for (const path of [...finding.forward, ...finding.reverse]) {
+    for (const siteId of [...(path.sourceSiteHops ?? []), ...(path.siteHops ?? [])]) {
+      const key = `site:${siteId}`
+      if (key !== sourceKey && key !== targetKey) endpoints.add(key)
+    }
+    for (const spokeId of [path.sourceNvaSpokeId, path.nvaSpokeId]) {
+      if (!spokeId) continue
+      const key = `spoke:${spokeId}`
+      if (key !== sourceKey && key !== targetKey) endpoints.add(key)
+    }
+  }
+  return endpoints
+}
+function suppressCascadingAutomaticFindings(findings: DiagnosticsFinding[]): DiagnosticsFinding[] {
+  const flowRules = new Set<DiagnosticsFinding['rule']>([
+    'asymmetric',
+    'network-unreachable',
+    'network-return',
+    'loop',
+    'summary-hole',
+    'partial-ecmp',
+    'firewall-bypass',
+  ])
+  const nonFlow = findings.filter((finding) => !flowRules.has(finding.rule) || !finding.source || !finding.target)
+  const candidates = findings.filter((finding) => flowRules.has(finding.rule) && finding.source && finding.target)
+  const complexity = (finding: DiagnosticsFinding) => {
+    const transits = intermediateEndpoints(finding).size
+    const paths = [...finding.forward, ...finding.reverse]
+    const hubHops = paths.length ? Math.min(...finding.forward.map((p) => p.hubs.length || 0)) + Math.min(...(finding.reverse.length ? finding.reverse.map((p) => p.hubs.length || 0) : [0])) : 0
+    const tokenLen = paths.reduce((sum, path) => sum + (path.hubs.length + (path.siteHops?.length ?? 0) + (path.sourceSiteHops?.length ?? 0)), 0)
+    const spokeEndpointBonus = (finding.source?.kind === 'spoke' ? 0 : 1) + (finding.target?.kind === 'spoke' ? 0 : 1)
+    return [transits, hubHops, spokeEndpointBonus, tokenLen] as const
+  }
+  const ordered = [...candidates].sort((a, b) => {
+    const ca = complexity(a), cb = complexity(b)
+    for (let i = 0; i < ca.length; i++) if (ca[i] !== cb[i]) return ca[i] - cb[i]
+    return a.id.localeCompare(b.id)
+  })
+  const kept: DiagnosticsFinding[] = []
+  const seenAsymmetricAnchors = new Set<string>()
+  const seenEndpointHubDivergences: { endpoint: string; hub: string; legs: Set<string> }[] = []
+  const seenFailureKeys = new Set<string>()
+
+  for (const finding of ordered) {
+    const transits = intermediateEndpoints(finding)
+    const transitCascade = [...transits].some((mid) =>
+      kept.some((root) => {
+        if (root.rule !== finding.rule || !root.source || !root.target) return false
+        const rootEndpoints = [`${root.source.kind}:${root.source.id}`, `${root.target.kind}:${root.target.id}`]
+        return rootEndpoints.includes(mid)
+      }),
+    )
+    if (transitCascade) continue
+
+    if (finding.rule === 'asymmetric') {
+      const bounds = divergenceBounds(finding)
+      if (bounds) {
+        if (seenAsymmetricAnchors.has(bounds.anchorKey)) continue
+        const allCoreTokens = [...bounds.forwardCore, ...bounds.reverseCore]
+        const cascadedFromEndpointHub = seenEndpointHubDivergences.some((prior) => {
+          if (bounds.leftAnchor !== prior.endpoint && bounds.rightAnchor !== prior.endpoint) return false
+          return allCoreTokens.some((core) => core.includes(prior.hub)) &&
+            allCoreTokens.every((core) => [...prior.legs].some((leg) => core.includes(leg)))
+        })
+        if (cascadedFromEndpointHub) continue
+        seenAsymmetricAnchors.add(bounds.anchorKey)
+        if (
+          (bounds.leftAnchor.startsWith('site:') || bounds.leftAnchor.startsWith('spoke:')) &&
+          bounds.rightAnchor.startsWith('hub:')
+        ) {
+          const extractFirstHop = (core: string) => core.split('->').slice(0, 3).join('->')
+          seenEndpointHubDivergences.push({
+            endpoint: bounds.leftAnchor,
+            hub: bounds.rightAnchor,
+            legs: new Set(allCoreTokens.map(extractFirstHop)),
+          })
+        } else if (
+          (bounds.rightAnchor.startsWith('site:') || bounds.rightAnchor.startsWith('spoke:')) &&
+          bounds.leftAnchor.startsWith('hub:')
+        ) {
+          const extractLastHop = (core: string) => core.split('->').slice(-3).join('->')
+          seenEndpointHubDivergences.push({
+            endpoint: bounds.rightAnchor,
+            hub: bounds.leftAnchor,
+            legs: new Set(allCoreTokens.map(extractLastHop)),
+          })
+        }
+      }
+      kept.push(finding)
+      continue
+    }
+
+    if (
+      finding.rule === 'network-unreachable' ||
+      finding.rule === 'network-return' ||
+      finding.rule === 'loop' ||
+      finding.rule === 'summary-hole'
+    ) {
+      const failingForward = finding.rule !== 'network-return'
+      const paths = failingForward ? finding.forward : finding.reverse
+      const failedSource = failingForward ? finding.source! : finding.target!
+      const failedTarget = failingForward ? finding.target! : finding.source!
+      const failureSig = paths
+        .map((path) => {
+          const lastSpot = path.siteId ? `site:${path.siteId}` : path.hubs.length ? `hub:${path.hubs.at(-1)}` : `${failedSource.kind}:${failedSource.id}`
+          const targetOwner = lastSpot === `${failedSource.kind}:${failedSource.id}` ? 'egress' : `${failedTarget.kind}:${failedTarget.id}`
+          return `${finding.rule}:${lastSpot}:${path.termination ?? 'unknown'}:${path.lookupPrefix ?? targetOwner}`
+        })
+        .sort()
+        .join('|')
+      if (failureSig && seenFailureKeys.has(failureSig)) continue
+      if (failureSig) seenFailureKeys.add(failureSig)
+    }
+
+    kept.push(finding)
+  }
+
+  return [...nonFlow, ...kept]
 }
 
 export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, options: DiagnosticsOptions = {}): DiagnosticsReport {
@@ -479,12 +701,16 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   const allOwners = [
     ...topology.spokes.map((node) => ({ node: { kind: 'spoke' as const, id: node.id }, prefixes: node.prefixes })),
     ...topology.sites.map((node) => ({ node: { kind: 'site' as const, id: node.id }, prefixes: node.prefixes })),
-  ].sort((a, b) => `${a.node.kind}:${a.node.id}`.localeCompare(`${b.node.kind}:${b.node.id}`))
+  ].sort((a, b) => `${a.node.kind}:${a.node.id}`.localeCompare(`${b.node.kind}:${b.node.id}`)).map((owner) => ({
+    ...owner,
+    topPrefixes: topLevelPrefixes(owner.prefixes),
+    parsedPrefixes: owner.prefixes.map((prefix) => ({ prefix, ...addressRange(prefix), length: cidr(prefix)?.length ?? 32 })),
+  }))
   if (options.automatic) {
-    const isOwnedPrefix = (prefix: string) => allOwners.some((owner) => owner.prefixes.some((assigned) => {
-      const range = addressRange(prefix), container = addressRange(assigned)
-      return container.start <= range.start && container.end >= range.end
-    }))
+    const isOwnedPrefix = (prefix: string) => {
+      const range = addressRange(prefix)
+      return allOwners.some((owner) => owner.parsedPrefixes.some((container) => container.start <= range.start && container.end >= range.end))
+    }
     for (const site of topology.sites) {
       if (!room()) break
       const unownedSources = (site.vpnStaticRoutes ?? [])
@@ -516,7 +742,11 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   for (let i = 0; i < allOwners.length; i++) {
     for (let j = i + 1; j < allOwners.length; j++) {
       if (!time()) { exhausted('maxMillis'); break }
-      const overlaps = allOwners[i].prefixes.flatMap((a) => allOwners[j].prefixes.filter((b) => contains(a, cidr(b)!.network) || contains(b, cidr(a)!.network)).map((b) => cidr(a)!.length >= cidr(b)!.length ? a : b))
+      const overlaps = allOwners[i].parsedPrefixes.flatMap((a) =>
+        allOwners[j].parsedPrefixes
+          .filter((b) => a.start < b.end && b.start < a.end)
+          .map((b) => (a.length >= b.length ? a.prefix : b.prefix)),
+      )
       if (overlaps.length) add('ownership', 'warning', stable([allOwners[i].node, allOwners[j].node]), {
         related: [allOwners[i].node, allOwners[j].node], prefix: overlaps.sort()[0],
         evidence: [...new Set(overlaps)].sort().map((prefix) => ({ code: 'declared-overlap', prefix })),
@@ -524,7 +754,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     }
   }
   const trace = (state: Scenario, node: PathNode, destination: string): NodePath[] | undefined => {
-    const key = stable([node, destination])
+    const key = `${node.kind}:${node.id}:${destination}`
     const cached = state.cache.get(key)
     if (cached) return cached
     if (!time()) { exhausted('maxMillis'); return undefined }
@@ -568,8 +798,10 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     yield* [...profile.intents].sort((a, b) => a.id.localeCompare(b.id))
     if (!options.automatic) return
     for (let i = 0; i < allOwners.length; i++) {
+      const sourcePrefixes = allOwners[i].topPrefixes
       for (let j = i + 1; j < allOwners.length; j++) {
-        for (const sourcePrefix of allOwners[i].prefixes) for (const destinationPrefix of allOwners[j].prefixes) {
+        const destinationPrefixes = allOwners[j].topPrefixes
+        for (const sourcePrefix of sourcePrefixes) for (const destinationPrefix of destinationPrefixes) {
           yield {
             id: `automatic:${hash(stable([allOwners[i].node, sourcePrefix, allOwners[j].node, destinationPrefix]))}`,
             source: allOwners[i].node, target: allOwners[j].node, sourcePrefix, destinationPrefix, expectation: 'allow', automatic: true,
@@ -582,9 +814,37 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     const a = addressRange(prefix), b = addressRange(cell.prefix)
     return a.start <= b.start && a.end >= b.end
   }
+  type PendingCellFinding = {
+    rule: Rule
+    severity: DiagnosticsFinding['severity']
+    source: Cell
+    target: Cell
+    fields: Partial<DiagnosticsFinding>
+    groupKey: string
+  }
+  const partitionCache = new Map<string, Cell[]>()
+  const partitionCached = (prefix: string) => {
+    let cells = partitionCache.get(prefix)
+    if (!cells) {
+      cells = partition(prefix, base.boundaries, budget.maxCells + 1)
+      partitionCache.set(prefix, cells)
+    }
+    return cells
+  }
   intents: for (const intent of intents()) {
-    const sources = partition(intent.sourcePrefix, base.boundaries, budget.maxCells + 1)
-    const targets = partition(intent.destinationPrefix, base.boundaries, budget.maxCells + 1)
+    const sources = partitionCached(intent.sourcePrefix)
+    const targets = partitionCached(intent.destinationPrefix)
+    const pending: PendingCellFinding[] = []
+    const queue = (
+      rule: Rule,
+      severity: DiagnosticsFinding['severity'],
+      source: Cell,
+      target: Cell,
+      fields: Partial<DiagnosticsFinding>,
+      groupKey: string = rule,
+    ) => {
+      pending.push({ rule, severity, source, target, fields, groupKey })
+    }
     for (const source of sources) {
       for (const target of targets) {
         if (!room()) break intents
@@ -599,7 +859,6 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
           if (profile.failureAnalysis) healthy.push({ intent, source, target })
           continue
         }
-        const scope = stable([intent, source.prefix, target.prefix])
         const fields: Partial<DiagnosticsFinding> = {
           source: intent.source, target: intent.target, sourceAddress: source.address, destinationAddress: target.address, prefix: target.prefix,
           forward, reverse, related: [intent.source, intent.target, ...pathObjects([...forward, ...reverse])],
@@ -612,31 +871,67 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
         }
         if (reasons.length) {
           reasons.forEach(limited)
-          add('unknown', 'unknown', scope, { ...fields, evidence: [...fields.evidence!, ...reasons.map((reason) => ({ code: `limitation:${Object.entries(limits).find(([, text]) => text === reason)?.[0] ?? 'unknown'}` }))] })
+          const limCodes = reasons.map((reason) => ({ code: `limitation:${Object.entries(limits).find(([, text]) => text === reason)?.[0] ?? 'unknown'}` }))
+          queue('unknown', 'unknown', source, target, { ...fields, evidence: [...fields.evidence!, ...limCodes] }, `unknown:${stable(limCodes)}`)
           continue
         }
         if (intent.expectation === 'deny') {
-          add(f ? 'deny-violation' : 'denied', f ? 'error' : 'info', scope, fields)
+          const rule = f ? 'deny-violation' : 'denied'
+          queue(rule, f ? 'error' : 'info', source, target, fields, `${rule}:${signature(forward, intent.source)}`)
           continue
         }
-        if (!f) add(intent.automatic ? 'network-unreachable' : 'unreachable', intent.automatic ? 'warning' : 'error', scope, fields)
-        if (f && !r) add(intent.automatic ? 'network-return' : 'missing-return', 'error', scope, fields)
-        if ((f > 0 && f < forward.length) || (r > 0 && r < reverse.length)) add('partial-ecmp', 'error', scope, fields)
-        if ([...forward, ...reverse].some((path) => path.status === 'loop')) add('loop', 'error', scope, fields)
-        if ([...forward, ...reverse].some((path) => path.termination === 'summary-hole')) add('summary-hole', 'error', scope, fields)
-        if (forward.some((path) => path.status === 'delivered' && !delivered(path, intent.target)) ||
-          reverse.some((path) => path.status === 'delivered' && !delivered(path, intent.source))) add('wrong-exit', 'error', scope, fields)
-        if (!inspection) add('firewall', 'error', scope, fields)
-        if (f && r) {
+        const hasLoop = [...forward, ...reverse].some((path) => path.status === 'loop')
+        const hasSummaryHole = [...forward, ...reverse].some((path) => path.termination === 'summary-hole')
+        const hasWrongExit =
+          forward.some((path) => path.status === 'delivered' && !delivered(path, intent.target)) ||
+          reverse.some((path) => path.status === 'delivered' && !delivered(path, intent.source))
+        if (!f && (!intent.automatic || (!hasLoop && !hasSummaryHole && !hasWrongExit))) {
+          queue(intent.automatic ? 'network-unreachable' : 'unreachable', intent.automatic ? 'warning' : 'error', source, target, fields)
+        }
+        if (f && !r && (!intent.automatic || (!hasLoop && !hasSummaryHole && !hasWrongExit))) {
+          queue(intent.automatic ? 'network-return' : 'missing-return', 'error', source, target, fields)
+        }
+        if ((f > 0 && f < forward.length) || (r > 0 && r < reverse.length)) queue('partial-ecmp', 'error', source, target, fields)
+        if (hasLoop) queue('loop', 'error', source, target, fields)
+        if (hasSummaryHole) queue('summary-hole', 'error', source, target, fields)
+        if (hasWrongExit) queue('wrong-exit', 'error', source, target, fields)
+        if (!inspection) queue('firewall', 'error', source, target, fields)
+        if (f && r && !hasWrongExit) {
           const a = [...new Set(forward.filter((path) => delivered(path, intent.target)).map((path) => stable(physical(path, intent.source))))].sort()
           const b = [...new Set(reverse.filter((path) => delivered(path, intent.source)).map((path) => stable(physical(path, intent.target).reverse())))].sort()
-          if (stable(a) !== stable(b)) add('asymmetric', 'warning', scope, fields)
+          if (stable(a) !== stable(b)) queue('asymmetric', 'warning', source, target, fields)
         }
         if (result.success) {
-          if (!intent.automatic) add('reachable', 'info', scope, fields)
+          if (!intent.automatic) queue('reachable', 'info', source, target, fields, `reachable:${signature(forward, intent.source)}:${signature(reverse, intent.target, true)}`)
           if (profile.failureAnalysis) healthy.push({ intent, source, target })
         }
       }
+    }
+    const groups = new Map<string, PendingCellFinding[]>()
+    for (const item of pending) {
+      const list = groups.get(item.groupKey) ?? []
+      list.push(item)
+      groups.set(item.groupKey, list)
+    }
+    for (const group of groups.values()) {
+      const first = group[0]
+      const mergedSource = group.length === 1 ? first.source : coveringCidr(group.map((item) => item.source))
+      const mergedTarget = group.length === 1 ? first.target : coveringCidr(group.map((item) => item.target))
+      const scope = stable([intent, mergedSource.prefix, mergedTarget.prefix])
+      const updatedEvidence = (first.fields.evidence ?? []).map((entry) =>
+        entry.code === 'source-cell'
+          ? { ...entry, prefix: mergedSource.prefix }
+          : entry.code === 'destination-cell'
+            ? { ...entry, prefix: mergedTarget.prefix }
+            : entry,
+      )
+      add(first.rule, first.severity, scope, {
+        ...first.fields,
+        sourceAddress: mergedSource.address,
+        destinationAddress: mergedTarget.address,
+        prefix: mergedTarget.prefix,
+        evidence: updatedEvidence,
+      })
     }
   }
   for (const constraint of [...(profile.exportConstraints ?? [])].sort((a, b) => a.id.localeCompare(b.id))) {
@@ -720,6 +1015,9 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
         })
       }
     }
+  }
+  if (options.automatic) {
+    report.findings = suppressCascadingAutomaticFindings(report.findings)
   }
   if (!time()) exhausted('maxMillis')
   report.findings.sort((a, b) => a.id.localeCompare(b.id))

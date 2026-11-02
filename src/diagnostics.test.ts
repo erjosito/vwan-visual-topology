@@ -479,4 +479,65 @@ describe('typed engine coverage and shared site-plane behavior', () => {
     expect(exampleCoverage.unsupportedFlowCount).toBe(0)
     expect(exampleCoverage.unsupportedGroups).toHaveLength(0)
   })
+
+  it('coalesces partitioned sub-cells and suppresses cascading automatic findings to report only root failures', () => {
+    const t: Topology = {
+      version: 1,
+      name: 'Root vs cascading asymmetry',
+      hubs: [
+        { id: 'hub-weu', name: 'WEU Hub', region: 'West Europe', preference: 'ExpressRoute', routingIntent: { private: false, internet: false, privatePrefixes: [] } },
+        { id: 'hub-eus', name: 'EUS Hub', region: 'East US', preference: 'ASPath', routingIntent: { private: false, internet: false, privatePrefixes: [] } },
+      ],
+      spokes: [
+        { id: 'spoke-weu', name: 'WEU Spoke', hubId: 'hub-weu', prefixes: ['10.10.0.0/16'] },
+        { id: 'spoke-eus', name: 'EUS Spoke', hubId: 'hub-eus', prefixes: ['10.20.0.0/16'] },
+      ],
+      erLocations: [{ id: 'erloc-ams', name: 'Amsterdam ER' }],
+      erLinks: [
+        { id: 'er-site-ams', name: 'AMS to ER', locationId: 'erloc-ams', siteId: 'site-ams', enabled: true, learnSiteRoutes: true },
+        { id: 'er-hub-weu', name: 'ER to WEU', locationId: 'erloc-ams', hubId: 'hub-weu', enabled: true, learnSiteRoutes: false },
+      ],
+      sites: [
+        {
+          id: 'site-ams',
+          name: 'Amsterdam Core DC',
+          asn: 65010,
+          prefixes: ['10.110.0.0/16', '10.110.10.0/24'],
+          routeMapAssignments: [
+            { connectionId: 'er-site-ams', outboundMapId: 'rm-ams-er-out', inboundMapId: 'rm-ams-er-in' },
+          ],
+        },
+        { id: 'site-branch', name: 'Madrid Branch', asn: 65030, prefixes: ['10.130.0.0/16'] },
+      ],
+      connections: [
+        { id: 'vpn-ams-weu', name: 'AMS VPN WEU', hubId: 'hub-weu', siteId: 'site-ams', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+        { id: 'vpn-branch-weu', name: 'Branch VPN WEU', hubId: 'hub-weu', siteId: 'site-branch', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] },
+      ],
+      siteLinks: [],
+      routeMaps: [
+        {
+          id: 'rm-ams-er-out',
+          name: 'Prepend ER Outbound',
+          siteId: 'site-ams',
+          rules: [{ id: 'r1', prefixes: ['10.110.0.0/16', '10.110.10.0/24'], match: 'contains', action: 'prepend', summaryPrefixes: [], prepend: [65010, 65010], nextStep: 'continue' }],
+        },
+        {
+          id: 'rm-ams-er-in',
+          name: 'Prepend ER Inbound',
+          siteId: 'site-ams',
+          rules: [{ id: 'r2', prefixes: ['10.0.0.0/8'], match: 'contains', action: 'prepend', summaryPrefixes: [], prepend: [65515, 65515], nextStep: 'continue' }],
+        },
+      ],
+    }
+    const empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
+    const report = analyzeRouting(t, empty, { automatic: true })
+    const asymmetric = report.findings.filter((finding) => finding.rule === 'asymmetric')
+    expect(asymmetric).toHaveLength(1)
+    expect(asymmetric[0]).toMatchObject({
+      source: { kind: 'site', id: 'site-ams' },
+      target: { kind: 'spoke', id: 'spoke-weu' },
+      sourceAddress: '10.110.0.0',
+      prefix: '10.10.0.0/16',
+    })
+  })
 })

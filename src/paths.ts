@@ -57,11 +57,12 @@ export function azureRoutesAtSites(topology: Topology, simulation: Simulation): 
       ...(simulation.siteCandidates[site.id] ?? []).filter((r) => r.sitePath.length === 1).map((r) => advertisement(r, '')),
       ...[...topology.connections, ...(topology.erLinks ?? [])].filter((c) => c.enabled && c.siteId === site.id)
         .flatMap((c) => {
+          const isErLink = 'locationId' in c
           const routes = simulation.outbound[c.id] ?? []
           const received = [...applyRouteMapRules(routes.filter((r) => r.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'site', id: site.id }, c.id, 'inbound')), ...routes.filter((r) => r.kind === 'vpn-static')]
-          const origin = (r: typeof routes[number], erHubLinkId = r.erHubLinkId): SiteAdvertisement => ({
+          const origin = (r: typeof routes[number], erHubLinkId = isErLink ? r.erHubLinkId : undefined): SiteAdvertisement => ({
             key: `${c.id}:${erHubLinkId ?? ''}:${r.key}`, prefix: r.prefix, asPath: r.asPath, sitePath: [site.id], siteLinkIds: [], connectionId: c.id, erHubLinkId,
-            ...(r.forwardingRoutes ? { forwardingRoutes: r.forwardingRoutes.map((child) => origin(child, child.erHubLinkId ?? erHubLinkId)) } : {}),
+            ...(r.forwardingRoutes ? { forwardingRoutes: r.forwardingRoutes.map((child) => origin(child, isErLink ? (child.erHubLinkId ?? erHubLinkId) : undefined)) } : {}),
           })
           return received.filter((r) => !r.asPath.includes(site.asn)).map((route) => origin(route))
         }),
@@ -178,7 +179,7 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
         }]
       }
       const connection = resolveAttachment(topology, route.connectionId)
-      const erHub = topology.erLinks?.find((link) => link.id === route.erHubLinkId)
+      const erHub = connection?.kind === 'erLink' ? topology.erLinks?.find((link) => link.id === route.erHubLinkId) : undefined
       const hubId = connection?.hubId ?? erHub?.hubId
       if (!connection || !hubId) return [{ hubs: [], steps: [...steps, 'The Azure attachment is unavailable.'], status: 'unreachable', termination: 'attachment-unavailable', lookupPrefix: selected.prefix }]
       return traceFlow(topology, simulation, hubId, destination).map((path) => {
