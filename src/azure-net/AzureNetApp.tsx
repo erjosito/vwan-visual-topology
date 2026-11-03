@@ -248,6 +248,63 @@ export function AzureNetApp() {
       } else if (finding.category === 'ars-configuration' && finding.vnetId) {
         const v = draft.vnets.find((vn) => vn.id === finding.vnetId)
         if (v?.routeServer) v.routeServer.branchToBranchTraffic = true
+      } else if (finding.category === 'ars-default-route-self-loop' && finding.vnetId && finding.subnetId) {
+        const vnet = draft.vnets.find((v) => v.id === finding.vnetId)
+        const sub = vnet?.subnets.find((s) => s.id === finding.subnetId)
+        if (!vnet || !sub) return
+        let rt = sub.routeTableId
+          ? draft.udrTables.find((t) => t.id === sub.routeTableId)
+          : undefined
+        if (!rt) {
+          rt = {
+            id: `rt-nva-egress-${sub.id}`,
+            name: `RT-${vnet.name}-${sub.name}`,
+            disableBgpRoutePropagation: false,
+            routes: [],
+          }
+          draft.udrTables.push(rt)
+          sub.routeTableId = rt.id
+        }
+        const existingDefault = rt.routes.find((r) => r.prefix === '0.0.0.0/0')
+        if (existingDefault) {
+          existingDefault.enabled = true
+          existingDefault.nextHopType = 'Internet'
+          existingDefault.nextHopIp = undefined
+        } else {
+          rt.routes.push({
+            id: `udr-autofix-nva-internet-${sub.id}`,
+            name: 'default-to-internet',
+            prefix: '0.0.0.0/0',
+            nextHopType: 'Internet',
+            enabled: true,
+          })
+        }
+      } else if (finding.category === 'bgp-lpm-bypasses-udr' && finding.subnetId) {
+        for (const vnet of draft.vnets) {
+          const sub = vnet.subnets.find((s) => s.id === finding.subnetId)
+          if (sub?.routeTableId) {
+            const rt = draft.udrTables.find((t) => t.id === sub.routeTableId)
+            if (rt) rt.disableBgpRoutePropagation = true
+          }
+        }
+      } else if (finding.category === 'udr-vng-vnet-transit' && finding.subnetId) {
+        const hubFw = draft.vnets
+          .flatMap((v) => v.appliances)
+          .find((a) => a.inspectsTraffic || a.kind === 'azure-firewall' || a.enableIpForwarding)
+        for (const vnet of draft.vnets) {
+          const sub = vnet.subnets.find((s) => s.id === finding.subnetId)
+          if (sub?.routeTableId) {
+            const rt = draft.udrTables.find((t) => t.id === sub.routeTableId)
+            if (rt) {
+              for (const r of rt.routes) {
+                if (r.nextHopType === 'VirtualNetworkGateway' && hubFw) {
+                  r.nextHopType = 'VirtualAppliance'
+                  r.nextHopIp = hubFw.privateIp
+                }
+              }
+            }
+          }
+        }
       }
     })
   }
@@ -1106,7 +1163,7 @@ export function AzureNetApp() {
                                       : `site:${(sf.destination as { siteId: string }).siteId}`
                                   setTraceSourceKey(sKey)
                                   setTraceDestKey(dKey)
-                                  setCustomDestIp('')
+                                  setCustomDestIp(sf.destinationIp === '8.8.8.8' ? '8.8.8.8' : '')
                                   setTraceActive(true)
                                   setActiveTab('tracer')
                                 }}

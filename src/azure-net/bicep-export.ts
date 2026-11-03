@@ -345,6 +345,12 @@ export function generateAzNetBicep(
     const peerBASym = uniqueSymbol(`peer_${peering.id}_b_to_a`, 'peer')
     resourceCount += 2
 
+    const localGwDepsForA = peering.aToB.allowGatewayTransit
+      ? [...(gatewaySymbolsByVnet.get(peering.vnetAId) ?? [])]
+      : []
+    const localGwDepsForB = peering.bToA.allowGatewayTransit
+      ? [...(gatewaySymbolsByVnet.get(peering.vnetBId) ?? [])]
+      : []
     const remoteGwDepsForA = peering.aToB.useRemoteGateways
       ? [...(gatewaySymbolsByVnet.get(peering.vnetBId) ?? [])]
       : []
@@ -363,14 +369,18 @@ export function generateAzNetBicep(
       )
     }
 
-    const depsForA =
-      peering.aToB.useRemoteGateways && remoteGwDepsForA.length > 0
+    const depsForA = [
+      ...localGwDepsForA,
+      ...(peering.aToB.useRemoteGateways && remoteGwDepsForA.length > 0
         ? [...remoteGwDepsForA, ...(peering.bToA.allowGatewayTransit ? [peerBASym] : [])]
-        : []
-    const depsForB =
-      peering.bToA.useRemoteGateways && remoteGwDepsForB.length > 0
+        : []),
+    ]
+    const depsForB = [
+      ...localGwDepsForB,
+      ...(peering.bToA.useRemoteGateways && remoteGwDepsForB.length > 0
         ? [...remoteGwDepsForB, ...(peering.aToB.allowGatewayTransit ? [peerABSym] : [])]
-        : []
+        : []),
+    ]
 
     lines.push(
       `resource ${peerABSym} 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2024-05-01' = {`,
@@ -388,7 +398,7 @@ export function generateAzNetBicep(
     lines.push(`    allowForwardedTraffic: ${peering.aToB.allowForwardedTraffic ? 'true' : 'false'}`)
     lines.push(`    allowGatewayTransit: ${peering.aToB.allowGatewayTransit ? 'true' : 'false'}`)
     lines.push(
-      `    useRemoteGateways: ${peering.aToB.useRemoteGateways && depsForA.length > 0 ? 'true' : 'false'}`,
+      `    useRemoteGateways: ${peering.aToB.useRemoteGateways && remoteGwDepsForA.length > 0 ? 'true' : 'false'}`,
     )
     lines.push(`  }`)
     lines.push(`}`)
@@ -410,7 +420,7 @@ export function generateAzNetBicep(
     lines.push(`    allowForwardedTraffic: ${peering.bToA.allowForwardedTraffic ? 'true' : 'false'}`)
     lines.push(`    allowGatewayTransit: ${peering.bToA.allowGatewayTransit ? 'true' : 'false'}`)
     lines.push(
-      `    useRemoteGateways: ${peering.bToA.useRemoteGateways && depsForB.length > 0 ? 'true' : 'false'}`,
+      `    useRemoteGateways: ${peering.bToA.useRemoteGateways && remoteGwDepsForB.length > 0 ? 'true' : 'false'}`,
     )
     lines.push(`  }`)
     lines.push(`}`)

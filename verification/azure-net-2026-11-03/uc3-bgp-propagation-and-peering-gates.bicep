@@ -202,8 +202,8 @@ resource vng_vng_hub_vpn 'Microsoft.Network/virtualNetworkGateways@2024-05-01' =
       asn: 65515
     }
     sku: {
-      name: 'VpnGw1'
-      tier: 'VpnGw1'
+      name: 'VpnGw1AZ'
+      tier: 'VpnGw1AZ'
     }
     ipConfigurations: [
       {
@@ -246,6 +246,7 @@ resource ars_ars_hub 'Microsoft.Network/virtualHubs@2024-05-01' = {
 resource ars_ipcfg_ars_hub 'Microsoft.Network/virtualHubs/ipConfigurations@2024-05-01' = {
   parent: ars_ars_hub
   name: 'ars-ipconfig1'
+  dependsOn: [ vng_vng_hub_vpn ]
   properties: {
     subnet: { id: '${vnet_vnet_hub.id}/subnets/RouteServerSubnet' }
     publicIPAddress: { id: pip_ars_hub.id }
@@ -265,6 +266,7 @@ resource ars_bgp_ars_hub_app_hub_nva 'Microsoft.Network/virtualHubs/bgpConnectio
 resource peer_peer_hub_spoke1_a_to_b 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2024-05-01' = {
   parent: vnet_vnet_hub
   name: 'peer-hub-to-spoke1-to-vnet-aznet-spoke1'
+  dependsOn: [ vng_vng_hub_vpn, ars_ipcfg_ars_hub ]
   properties: {
     remoteVirtualNetwork: { id: vnet_vnet_spoke1.id }
     allowVirtualNetworkAccess: true
@@ -277,19 +279,19 @@ resource peer_peer_hub_spoke1_a_to_b 'Microsoft.Network/virtualNetworks/virtualN
 resource peer_peer_hub_spoke1_b_to_a 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2024-05-01' = {
   parent: vnet_vnet_spoke1
   name: 'peer-hub-to-spoke1-to-vnet-aznet-hub'
-  dependsOn: [ vng_vng_hub_vpn ]
   properties: {
     remoteVirtualNetwork: { id: vnet_vnet_hub.id }
     allowVirtualNetworkAccess: true
     allowForwardedTraffic: false
     allowGatewayTransit: false
-    useRemoteGateways: true
+    useRemoteGateways: false
   }
 }
 
 resource peer_peer_hub_spoke2_a_to_b 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2024-05-01' = {
   parent: vnet_vnet_hub
   name: 'peer-hub-to-spoke2-to-vnet-aznet-spoke2'
+  dependsOn: [ vng_vng_hub_vpn, ars_ipcfg_ars_hub ]
   properties: {
     remoteVirtualNetwork: { id: vnet_vnet_spoke2.id }
     allowVirtualNetworkAccess: true
@@ -302,12 +304,41 @@ resource peer_peer_hub_spoke2_a_to_b 'Microsoft.Network/virtualNetworks/virtualN
 resource peer_peer_hub_spoke2_b_to_a 'Microsoft.Network/virtualNetworks/virtualNetworkPeerings@2024-05-01' = {
   parent: vnet_vnet_spoke2
   name: 'peer-hub-to-spoke2-to-vnet-aznet-hub'
-  dependsOn: [ vng_vng_hub_vpn ]
+  dependsOn: [ vng_vng_hub_vpn, ars_ipcfg_ars_hub, peer_peer_hub_spoke2_a_to_b ]
   properties: {
     remoteVirtualNetwork: { id: vnet_vnet_hub.id }
     allowVirtualNetworkAccess: true
     allowForwardedTraffic: true
     allowGatewayTransit: false
     useRemoteGateways: true
+  }
+}
+
+resource lgw_site_branch1 'Microsoft.Network/localNetworkGateways@2024-05-01' = {
+  name: 'Branch-Site-1'
+  location: location
+  properties: {
+    gatewayIpAddress: '198.51.100.10'
+    localNetworkAddressSpace: {
+      addressPrefixes: [
+        '10.250.0.254/32'
+      ]
+    }
+    bgpSettings: {
+      asn: 65100
+      bgpPeeringAddress: '10.250.0.254'
+    }
+  }
+}
+
+resource vpn_vpn_branch1_to_hub 'Microsoft.Network/connections@2024-05-01' = {
+  name: 'conn-branch1-to-hub'
+  location: location
+  properties: {
+    connectionType: 'IPsec'
+    virtualNetworkGateway1: { id: vng_vng_hub_vpn.id, properties: {} }
+    localNetworkGateway2: { id: lgw_site_branch1.id, properties: {} }
+    enableBgp: true
+    sharedKey: 'ReplaceWithSecureSharedKey2026!'
   }
 }

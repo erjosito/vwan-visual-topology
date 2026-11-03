@@ -451,9 +451,10 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             (r) => r.preferred && !(r.nextHopKind === 'vnet-gateway' && r.nextHopId === gw.id),
           )
           for (const lr of locRoutes) {
-            // Standard MSEE propagates site routes to Azure gateways; Azure-to-Azure over MSEE requires Global Reach or hairpinned ER circuit
-            const isAzureToAzure = lr.nextHopKind === 'vnet-gateway' || lr.nextHopKind === 'vwan-hub'
-            if (isAzureToAzure && !loc.globalReachEnabled) continue
+            // Standalone ExpressRoute VNet Gateways connected to the same ExpressRoute circuit (MSEE) always
+            // exchange VNet/spoke routes via MSEE ASN 12076; Virtual WAN Hub inter-hub ER transit requires Global Reach
+            const isVwanToAzure = lr.nextHopKind === 'vwan-hub'
+            if (isVwanToAzure && !loc.globalReachEnabled) continue
             entries.push({
               id: `gw:${gw.id}:er:${link.id}:${lr.prefix}:${lr.nextHopId}`,
               prefix: lr.prefix,
@@ -527,6 +528,12 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
       const app = vnet.appliances.find((a) => a.id === appId)
       if (!app || !app.bgpEnabled || !app.enableIpForwarding) continue
       const appAsn = app.asn ?? 65501
+      if (appAsn === 65515 || appAsn === 12076) {
+        warnings.push(
+          `Azure Route Server "${ars.name}" in "${vnet.name}" cannot peer with "${app.name}" using Azure-reserved ASN ${appAsn}.`,
+        )
+        continue
+      }
       for (const prefix of app.advertisedPrefixes ?? []) {
         entries.push({
           id: `ars:${ars.id}:nva:${app.id}:${prefix}`,
@@ -2039,9 +2046,112 @@ export function traceAzNetFlow(
         }
       }
 
-      // Otherwise consult the appliance's hosting subnet Effective Route Table (for Gateway egress to on-prem / Internet),
-      // excluding routes that point back to this same appliance NIC.
+      // Check explicit appliance static routes (e.g., cross-hub NVA next hop)
+      const matchingStaticRoutes = (app.staticRoutes ?? [])
+        .filter((sr) => cidr(sr.prefix) && contains(sr.prefix, ipNum))
+        .sort((a, b) => (cidr(b.prefix)?.length ?? 0) - (cidr(a.prefix)?.length ?? 0))
+      if (matchingStaticRoutes.length > 0) {
+        const sr = matchingStaticRoutes[0]
+        const staticTargetApp = findApplianceByIp(topology, sr.nextHopIp)
+        if (staticTargetApp && staticTargetApp.appliance.id !== app.id) {
+          if (staticTargetApp.vnet.id !== vnet.id) {
+            const check = validatePeeringTransition(
+              vnet,
+              staticTargetApp.vnet,
+              true,
+              app.kind === 'vnra' || staticTargetApp.appliance.kind === 'vnra',
+            )
+            if (!check.ok) {
+              pushHop({
+                nodeKind: 'appliance',
+                nodeId: app.id,
+                vnetId: vnet.id,
+                nodeName: app.name,
+                subnetId: app.subnetId,
+                action: 'dropped',
+                edgeId: check.peeringId,
+                detail: check.reason,
+              })
+              return {
+                source,
+                destinationIp,
+                destinationLabel: targetInfo.label,
+                status: check.status,
+                hops,
+                traversedApplianceIds,
+                traversedEdgeIds,
+                traversedVnetIds,
+                summaryReason: check.reason,
+              }
+            }
+            pushHop({
+              nodeKind: 'appliance',
+              nodeId: app.id,
+              vnetId: vnet.id,
+              nodeName: app.name,
+              subnetId: app.subnetId,
+              action: actionKind,
+              edgeId: check.peering.id,
+              detail: `${app.name} forwards via static route ${sr.prefix} across peering "${check.peering.name}" to ${staticTargetApp.appliance.name} (${staticTargetApp.appliance.privateIp})`,
+            })
+          } else {
+            pushHop({
+              nodeKind: 'appliance',
+              nodeId: app.id,
+              vnetId: vnet.id,
+              nodeName: app.name,
+              subnetId: app.subnetId,
+              action: actionKind,
+              detail: `${app.name} forwards via static route ${sr.prefix} to ${staticTargetApp.appliance.name} (${staticTargetApp.appliance.privateIp})`,
+            })
+          }
+          cursor = {
+            kind: 'appliance',
+            vnetId: staticTargetApp.vnet.id,
+            applianceId: staticTargetApp.appliance.id,
+          }
+          continue
+        }
+      }
+
+      // Consult the appliance's hosting subnet Effective Route Table (for Gateway egress to on-prem / Internet).
       const appSubTable = simulation.subnetTables[app.subnetId]
+      const rawSubnetWin = appSubTable ? lookupSubnetEffectiveRoute(appSubTable, destinationIp) : undefined
+
+      // Detect ARS 0.0.0.0/0 self-blackhole loop: if the NVA advertises 0.0.0.0/0 to ARS and its own subnet lacks
+      // a 0.0.0.0/0 -> Internet UDR (or disableBgpRoutePropagation=true), ARS injects 0.0.0.0/0 -> NVA into the NVA's
+      // own subnet, overriding System 0.0.0.0/0 -> Internet and hairpining Internet egress back to the NVA NIC.
+      if (
+        rawSubnetWin &&
+        (rawSubnetWin.nextHopResourceId === app.id || rawSubnetWin.nextHopIp === app.privateIp) &&
+        rawSubnetWin.prefix === '0.0.0.0/0' &&
+        !targetInfo.endpoint
+      ) {
+        const appSubName = vnet.subnets.find((s) => s.id === app.subnetId)?.name ?? app.subnetId
+        pushHop({
+          nodeKind: 'appliance',
+          nodeId: app.id,
+          vnetId: vnet.id,
+          nodeName: app.name,
+          subnetId: app.subnetId,
+          subnetName: appSubName,
+          action: 'loop',
+          matchedRoute: rawSubnetWin,
+          detail: `${app.name} advertised 0.0.0.0/0 to ${vnet.routeServer?.name ?? 'Route Server'}, which injected 0.0.0.0/0 → ${app.privateIp} into ${vnet.name}/${appSubName} and overrode System 0.0.0.0/0 → Internet (self-loop).`,
+        })
+        return {
+          source,
+          destinationIp,
+          destinationLabel: targetInfo.label,
+          status: 'loop',
+          hops,
+          traversedApplianceIds,
+          traversedEdgeIds,
+          traversedVnetIds,
+          summaryReason: `Self-loop in ${vnet.name}/${appSubName}: ARS-injected 0.0.0.0/0 → ${app.privateIp} overrides System Internet route on ${app.name}'s own subnet.`,
+        }
+      }
+
       const filteredAppTable: AzSubnetRouteTableResult | undefined = appSubTable
         ? {
             ...appSubTable,
@@ -2069,7 +2179,10 @@ export function traceAzNetFlow(
         }
       }
 
-      const selfAdvertised = (app.advertisedPrefixes ?? []).find((p) => cidr(p) && contains(p, ipNum))
+      // Non-default prefixes originated directly by this NVA (e.g., loopback or NVA-terminated branch prefix)
+      const selfAdvertised = (app.advertisedPrefixes ?? []).find(
+        (p) => p !== '0.0.0.0/0' && cidr(p) && contains(p, ipNum),
+      )
       if (selfAdvertised) {
         const transitGw =
           vnet.routeServer?.branchToBranchTraffic !== false
@@ -2169,6 +2282,32 @@ export function traceAzNetFlow(
       const gw = vnet.gateways.find((g) => g.id === stepCursor.gatewayId)!
 
       if (stepCursor.direction === 'egress') {
+        // Standalone Virtual Network Gateways cannot route Spoke-to-Spoke traffic between peered Azure VNets
+        const gwRibMatches = (simulation.gatewayRibs[gw.id] ?? []).filter(
+          (r) => r.preferred && cidr(r.prefix) && contains(r.prefix, ipNum),
+        )
+        if (targetInfo.vnet && gwRibMatches.length === 0) {
+          pushHop({
+            nodeKind: 'vnet-gateway',
+            nodeId: gw.id,
+            vnetId: vnet.id,
+            nodeName: gw.name,
+            action: 'dropped',
+            detail: `Standalone Virtual Network Gateway ${gw.name} (${gw.kind}) does not route traffic between peered Azure VNets (${targetInfo.vnet.name}); an NVA/Firewall or Virtual WAN Hub is required for Spoke-to-Spoke transit.`,
+          })
+          return {
+            source,
+            destinationIp,
+            destinationLabel: targetInfo.label,
+            status: 'dropped-no-route',
+            hops,
+            traversedApplianceIds,
+            traversedEdgeIds,
+            traversedVnetIds,
+            summaryReason: `Dropped at ${gw.name}: standalone Virtual Network Gateways do not transit traffic between Azure VNets (${targetInfo.vnet.name}).`,
+          }
+        }
+
         if (gw.kind === 'ExpressRoute') {
           const erLink = topology.erLinks.find(
             (l) => l.enabled && l.targetKind === 'vnet-gateway' && l.targetId === gw.id,
@@ -2188,12 +2327,13 @@ export function traceAzNetFlow(
             continue
           }
         } else {
-          // VPN Gateway egress to Site
+          // VPN Gateway egress to Site matching destinationIp (or default 0.0.0.0/0 site)
           const vpnConn = topology.vpnConnections.find((c) => {
             if (!c.enabled || c.targetKind !== 'vnet-gateway' || c.targetId !== gw.id) return false
             const site = topology.sites.find((s) => s.id === c.siteId)
-            return site?.prefixes.some((p) => cidr(p) && contains(p, ipNum))
-          }) ?? topology.vpnConnections.find((c) => c.enabled && c.targetKind === 'vnet-gateway' && c.targetId === gw.id)
+            const prefixes = c.staticPrefixes?.length ? c.staticPrefixes : (site?.prefixes ?? [])
+            return prefixes.some((p) => cidr(p) && contains(p, ipNum))
+          })
           if (vpnConn) {
             pushHop({
               nodeKind: 'vnet-gateway',
@@ -2207,6 +2347,26 @@ export function traceAzNetFlow(
             cursor = { kind: 'site', siteId: vpnConn.siteId }
             continue
           }
+        }
+
+        pushHop({
+          nodeKind: 'vnet-gateway',
+          nodeId: gw.id,
+          vnetId: vnet.id,
+          nodeName: gw.name,
+          action: 'dropped',
+          detail: `${gw.name} has no active ${gw.kind} tunnel/route matching ${destinationIp} (${targetInfo.label}).`,
+        })
+        return {
+          source,
+          destinationIp,
+          destinationLabel: targetInfo.label,
+          status: 'dropped-no-route',
+          hops,
+          traversedApplianceIds,
+          traversedEdgeIds,
+          traversedVnetIds,
+          summaryReason: `Dropped at ${gw.name}: no tunnel or route matches ${destinationIp}.`,
         }
       } else {
         // Ingress from On-Premises into `GatewaySubnet`!

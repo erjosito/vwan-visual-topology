@@ -301,13 +301,16 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(directCompare.totalMatchedRoutes).toBeGreaterThan(0)
   })
 
-  it('reproduces all 5 empirical live Azure captures (uc1..uc5) with zero effective-route mismatches', () => {
+  it('reproduces all 8 empirical live Azure captures (uc1..uc8) with zero effective-route mismatches', () => {
     const pairs: Array<[string, string]> = [
       ['uc1-capture.json', 'uc1-hub-spoke-nva-ars-baseline.json'],
       ['uc2-capture.json', 'uc2-gateway-subnet-missing-udr-asymmetry.json'],
       ['uc3-capture.json', 'uc3-bgp-propagation-and-peering-gates.json'],
       ['uc4-capture.json', 'uc4-private-endpoint-udr-override.json'],
       ['uc5-capture.json', 'uc5-ars-branch-to-branch-and-bgp-selection.json'],
+      ['uc6-capture.json', 'uc6-ars-default-route-self-blackhole.json'],
+      ['uc7-capture.json', 'uc7-bgp-lpm-bypasses-summary-udr.json'],
+      ['uc8-capture.json', 'uc8-udr-next-hop-types-and-vng-transit-trap.json'],
     ]
 
     for (const [capFile, sampleFile] of pairs) {
@@ -321,6 +324,10 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
 
       const impSim = simulateAzNet(imp.topology)
       const impCmp = compareAzNetWithObservations(imp.topology, impSim, imp.observations!)
+      const mismatched = impCmp.subnetComparisons.flatMap((sc) =>
+        sc.rows.filter((r) => !r.matched).map((r) => ({ vnet: sc.vnetName, subnet: sc.subnetName, ...r })),
+      )
+      expect(mismatched, `${capFile} imported mismatches`).toEqual([])
       expect(impCmp.totalMismatchedRoutes, `${capFile} imported mismatches`).toBe(0)
       expect(impCmp.totalMatchedRoutes, `${capFile} imported matches`).toBeGreaterThanOrEqual(27)
 
@@ -334,5 +341,134 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
       expect(sampleCmp.totalMismatchedRoutes, `${capFile} vs ${sampleFile} mismatches`).toBe(0)
       expect(sampleCmp.totalMatchedRoutes, `${capFile} vs ${sampleFile} matches`).toBeGreaterThanOrEqual(25)
     }
+  })
+
+  it('validates Phase 2 unusual scenarios (UC6..UC9) and reserved ASN / static route edge cases', () => {
+    // UC6: NVA advertises 0.0.0.0/0 to ARS -> ARS injects 0.0.0.0/0 -> 10.100.2.4 into snet-nva, causing self-loop
+    const uc6 = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), 'samples', 'azure-net', 'uc6-ars-default-route-self-blackhole.json'),
+        'utf-8',
+      ),
+    ) as AzNetTopology
+    expect(validateAzNetTopology(uc6)).toEqual([])
+    expect(generateAzNetBicep(uc6).resourceCount).toBeGreaterThan(0)
+    const sim6 = simulateAzNet(uc6)
+    const nvaDefaultWinner = lookupSubnetEffectiveRoute(sim6.subnetTables['sub-hub-nva'], '8.8.8.8')
+    expect(nvaDefaultWinner?.source).toBe('RouteServer')
+    expect(nvaDefaultWinner?.nextHopIp).toBe('10.100.2.4')
+    const spokeToInternet6 = traceAzNetFlow(
+      uc6,
+      sim6,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'sub-spoke1-work' },
+      '8.8.8.8',
+    )
+    expect(spokeToInternet6.status).toBe('loop')
+    const diag6 = runAzNetDiagnostics(uc6, sim6)
+    expect(diag6.some((f) => f.category === 'ars-default-route-self-loop')).toBe(true)
+
+    // Remediating UC6 by adding UDR 0.0.0.0/0 -> Internet on rt-hub-nva breaks the self-loop
+    const uc6Fixed = JSON.parse(JSON.stringify(uc6)) as AzNetTopology
+    uc6Fixed.udrTables.find((t) => t.id === 'rt-hub-nva')!.routes.push({
+      id: 'udr-nva-internet',
+      name: 'default-to-internet',
+      prefix: '0.0.0.0/0',
+      nextHopType: 'Internet',
+      enabled: true,
+    })
+    const sim6Fixed = simulateAzNet(uc6Fixed)
+    const nvaDefaultFixed = lookupSubnetEffectiveRoute(sim6Fixed.subnetTables['sub-hub-nva'], '8.8.8.8')
+    expect(nvaDefaultFixed?.source).toBe('User')
+    expect(nvaDefaultFixed?.nextHopType).toBe('Internet')
+    const spokeToInternet6Fixed = traceAzNetFlow(
+      uc6Fixed,
+      sim6Fixed,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'sub-spoke1-work' },
+      '8.8.8.8',
+    )
+    expect(spokeToInternet6Fixed.status).toBe('delivered')
+    expect(spokeToInternet6Fixed.traversedApplianceIds).toContain('app-hub-nva')
+
+    // UC7: More-specific /16 BGP route (10.250.0.0/16) wins by LPM over summary /8 UDR (10.0.0.0/8 -> NVA)
+    const uc7 = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), 'samples', 'azure-net', 'uc7-bgp-lpm-bypasses-summary-udr.json'),
+        'utf-8',
+      ),
+    ) as AzNetTopology
+    expect(validateAzNetTopology(uc7)).toEqual([])
+    const sim7 = simulateAzNet(uc7)
+    const lpm16Winner = lookupSubnetEffectiveRoute(sim7.subnetTables['sub-spoke1-work'], '10.250.0.100')
+    expect(lpm16Winner?.prefix).toBe('10.250.0.0/16')
+    expect(lpm16Winner?.source).toBe('VirtualNetworkGateway')
+    const lpm8Winner = lookupSubnetEffectiveRoute(sim7.subnetTables['sub-spoke1-work'], '10.200.1.4')
+    expect(lpm8Winner?.prefix).toBe('10.0.0.0/8')
+    expect(lpm8Winner?.source).toBe('User')
+    const pair7 = traceAzNetPair(
+      uc7,
+      sim7,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'sub-spoke1-work' },
+      '10.101.1.4',
+      { kind: 'site', siteId: 'site-branch1' },
+      '10.250.0.100',
+    )
+    expect(pair7.forward.status).toBe('delivered')
+    expect(pair7.reverse.status).toBe('delivered')
+    expect(pair7.symmetricInspection).toBe(false)
+    const diag7 = runAzNetDiagnostics(uc7, sim7)
+    expect(diag7.some((f) => f.category === 'bgp-lpm-bypasses-udr')).toBe(true)
+    expect(diag7.some((f) => f.category === 'asymmetric-firewall-bypass')).toBe(true)
+
+    // UC8: NextHopType=None blackhole, NextHopType=Internet override, and invalid NextHopType=VirtualNetworkGateway for Spoke2
+    const uc8 = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), 'samples', 'azure-net', 'uc8-udr-next-hop-types-and-vng-transit-trap.json'),
+        'utf-8',
+      ),
+    ) as AzNetTopology
+    expect(validateAzNetTopology(uc8)).toEqual([])
+    const sim8 = simulateAzNet(uc8)
+    const carveoutFlow = traceAzNetFlow(
+      uc8,
+      sim8,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'sub-spoke1-work' },
+      '10.101.128.10',
+    )
+    expect(carveoutFlow.status).toBe('dropped-blackhole')
+    const spoke1ToSpoke2InvalidVng = traceAzNetFlow(
+      uc8,
+      sim8,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'sub-spoke1-work' },
+      '10.102.1.4',
+    )
+    expect(spoke1ToSpoke2InvalidVng.status).toBe('dropped-no-route')
+    const diag8 = runAzNetDiagnostics(uc8, sim8)
+    expect(diag8.some((f) => f.category === 'udr-vng-vnet-transit')).toBe(true)
+
+    // UC9: VNet-to-VNet transit hairpin via shared ExpressRoute MSEE (ASN 12076)
+    const uc9 = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), 'samples', 'azure-net', 'uc9-expressroute-hairpin-two-vnets.json'),
+        'utf-8',
+      ),
+    ) as AzNetTopology
+    expect(validateAzNetTopology(uc9)).toEqual([])
+    const sim9 = simulateAzNet(uc9)
+    const spokeAToSpokeB = traceAzNetFlow(
+      uc9,
+      sim9,
+      { kind: 'subnet', vnetId: 'vnet-spoke-a', subnetId: 'sub-spoke-a-work' },
+      '10.201.1.4',
+    )
+    expect(spokeAToSpokeB.status).toBe('delivered')
+    expect(spokeAToSpokeB.hops.some((h) => h.nodeKind === 'er-location')).toBe(true)
+
+    // Reserved ASN (65515 / 12076) on NVA peering with ARS is rejected
+    const ucReservedAsn = JSON.parse(JSON.stringify(uc6Fixed)) as AzNetTopology
+    ucReservedAsn.vnets[0].appliances[0].asn = 65515
+    const simReserved = simulateAzNet(ucReservedAsn)
+    expect(
+      simReserved.routeServerRibs['ars-hub'].some((r) => r.prefix === '192.168.100.0/24'),
+    ).toBe(false)
   })
 })

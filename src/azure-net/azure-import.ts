@@ -829,7 +829,31 @@ export function compareAzNetWithObservations(
 
     const simTable = subnet ? simulation.subnetTables[subnet.id] : undefined
     const simRoutes = simTable?.routes ?? []
+    const matchedSimRouteIds = new Set<string>()
     const rows: AzSubnetRouteComparisonRow[] = []
+
+    const isArsRouteMatch = (
+      sr: (typeof simRoutes)[number],
+      azRoute: (typeof nicObs.effectiveRoutes)[number],
+      azNextHopIp?: string,
+    ) =>
+      sr.source === 'RouteServer' &&
+      sr.nextHopType === 'VirtualAppliance' &&
+      azRoute.source === 'VirtualNetworkGateway' &&
+      azRoute.nextHopType === 'VirtualNetworkGateway' &&
+      Boolean(azNextHopIp && sr.nextHopIp === azNextHopIp)
+
+    // Empirical finding (UC8): when a User-Defined Route specifies NextHopType=VirtualNetworkGateway
+    // for a VNet/non-gateway prefix that no static VNG connection owns, Azure SDN compiles the UDR
+    // into source="User", nextHopType="None" (blackhole) in the NIC effective route table.
+    const isUdrUnresolvedVngMatch = (
+      sr: (typeof simRoutes)[number],
+      azRoute: (typeof nicObs.effectiveRoutes)[number],
+    ) =>
+      sr.source === 'User' &&
+      sr.nextHopType === 'VirtualNetworkGateway' &&
+      azRoute.source === 'User' &&
+      azRoute.nextHopType === 'None'
 
     for (const azRoute of nicObs.effectiveRoutes) {
       for (const prefix of azRoute.addressPrefix) {
@@ -845,29 +869,56 @@ export function compareAzNetWithObservations(
         }
         const normalizedAzSource = normalizeAzureSourceToSim(azRoute.source)
         const azNextHopIp = azRoute.nextHopIpAddress?.[0]
-        const simMatch = simRoutes.find(
-          (sr) =>
-            sr.prefix === prefix &&
-            sr.nextHopType.toLowerCase() === azRoute.nextHopType.toLowerCase(),
-        ) ?? simRoutes.find((sr) => sr.prefix === prefix)
+        const candidates = simRoutes.filter((sr) => sr.prefix === prefix)
+        const simMatch =
+          // 1. Exact source + nextHopType (or ARS/UDR-VNG equivalence) + nextHopIp, preferring unmatched
+          candidates.find(
+            (sr) =>
+              !matchedSimRouteIds.has(sr.id) &&
+              ((sr.source === normalizedAzSource &&
+                sr.nextHopType.toLowerCase() === azRoute.nextHopType.toLowerCase()) ||
+                isArsRouteMatch(sr, azRoute, azNextHopIp) ||
+                isUdrUnresolvedVngMatch(sr, azRoute)) &&
+              (!azNextHopIp || !sr.nextHopIp || sr.nextHopIp === azNextHopIp),
+          ) ??
+          // 2. Same nextHopType (or ARS/UDR-VNG equivalence) + source, even if already matched
+          candidates.find(
+            (sr) =>
+              (sr.source === normalizedAzSource &&
+                sr.nextHopType.toLowerCase() === azRoute.nextHopType.toLowerCase()) ||
+              isArsRouteMatch(sr, azRoute, azNextHopIp) ||
+              isUdrUnresolvedVngMatch(sr, azRoute),
+          ) ??
+          // 3. Same nextHopType + nextHopIp
+          candidates.find(
+            (sr) =>
+              !matchedSimRouteIds.has(sr.id) &&
+              sr.nextHopType.toLowerCase() === azRoute.nextHopType.toLowerCase() &&
+              (!azNextHopIp || !sr.nextHopIp || sr.nextHopIp === azNextHopIp),
+          ) ??
+          // 4. Fallback to any unmatched candidate for the same prefix, or first candidate
+          candidates.find((sr) => !matchedSimRouteIds.has(sr.id)) ??
+          candidates[0]
 
-        const simState = simMatch ? (simMatch.active ? 'Active' : 'Invalid') : 'Missing'
+        if (simMatch) {
+          matchedSimRouteIds.add(simMatch.id)
+        }
+
+        const simState = simMatch ? (simMatch.active ? 'Active' : 'Invalid') : 'Invalid'
         // Azure SDN programs ARS-learned NVA routes into NIC effective routes with source="VirtualNetworkGateway"
         // and nextHopType="VirtualNetworkGateway" pointing to the NVA's private IP address.
         const isArsEquivalent = Boolean(
-          simMatch &&
-            simMatch.source === 'RouteServer' &&
-            simMatch.nextHopType === 'VirtualAppliance' &&
-            azRoute.source === 'VirtualNetworkGateway' &&
-            azRoute.nextHopType === 'VirtualNetworkGateway' &&
-            azNextHopIp &&
-            simMatch.nextHopIp === azNextHopIp,
+          simMatch && isArsRouteMatch(simMatch, azRoute, azNextHopIp),
+        )
+        const isUdrVngBlackholeEquivalent = Boolean(
+          simMatch && isUdrUnresolvedVngMatch(simMatch, azRoute),
         )
         const matched = Boolean(
           simMatch &&
             simState === azRoute.state &&
             (simMatch.nextHopType.toLowerCase() === azRoute.nextHopType.toLowerCase() ||
-              isArsEquivalent) &&
+              isArsEquivalent ||
+              isUdrVngBlackholeEquivalent) &&
             (!azNextHopIp || !simMatch.nextHopIp || simMatch.nextHopIp === azNextHopIp),
         )
 
@@ -884,9 +935,46 @@ export function compareAzNetWithObservations(
           matched,
           note: isArsEquivalent
             ? `Azure programs ARS-learned NVA routes as VirtualNetworkGateway -> ${azNextHopIp}`
-            : normalizedAzSource !== (simMatch?.source ?? '')
-              ? `Azure source '${azRoute.source}' maps to '${normalizedAzSource}'`
-              : undefined,
+            : isUdrVngBlackholeEquivalent
+              ? 'Azure SDN compiles UDR NextHopType=VirtualNetworkGateway to None when no static VNG connection owns the prefix'
+              : normalizedAzSource !== (simMatch?.source ?? '')
+                ? `Azure source '${azRoute.source}' maps to '${normalizedAzSource}'`
+                : undefined,
+        })
+      }
+    }
+
+    // Also flag any active simulator route that was completely absent from Azure's effective routes
+    for (const sr of simRoutes) {
+      if (sr.active && !matchedSimRouteIds.has(sr.id)) {
+        const isRemoteHubArsConfirmedOnHub =
+          sr.source === 'RouteServer' &&
+          sr.originLabel.startsWith('BGP · Remote Hub ') &&
+          (observations.nicEffectiveRoutes ?? []).some(
+            (hubNic) =>
+              hubNic.vnetName !== nicObs.vnetName &&
+              hubNic.effectiveRoutes.some(
+                (r) =>
+                  r.state === 'Active' &&
+                  r.addressPrefix.includes(sr.prefix) &&
+                  (sr.nextHopIp ? r.nextHopIpAddress?.includes(sr.nextHopIp) : true),
+              ),
+          )
+        if (isRemoteHubArsConfirmedOnHub) {
+          continue
+        }
+        rows.push({
+          prefix: sr.prefix,
+          azureSource: 'Missing',
+          simSource: sr.source,
+          azureNextHopType: 'Missing',
+          simNextHopType: sr.nextHopType,
+          azureNextHopIp: undefined,
+          simNextHopIp: sr.nextHopIp,
+          azureState: 'Invalid',
+          simState: 'Active',
+          matched: false,
+          note: 'Simulator predicted an Active route that is absent from Azure NIC effective routes',
         })
       }
     }

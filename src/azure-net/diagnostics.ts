@@ -16,6 +16,9 @@ export type AzDiagnosticCategory =
   | 'gateway-subnet-missing-udr'
   | 'gateway-subnet-bgp-disabled'
   | 'bgp-propagation-blackhole'
+  | 'bgp-lpm-bypasses-udr'
+  | 'ars-default-route-self-loop'
+  | 'udr-vng-vnet-transit'
   | 'peering-forwarded-traffic-blocked'
   | 'vnra-peering-access-disabled'
   | 'peering-non-transitive-next-hop'
@@ -361,6 +364,157 @@ export function runAzNetDiagnostics(
           subnetId: ars.subnetId,
         })
       }
+
+      // Check if an NVA advertises 0.0.0.0/0 to ARS and blackholes its own subnet's Internet route
+      for (const appId of ars.peerApplianceIds) {
+        const app = vnet.appliances.find((a) => a.id === appId)
+        if (!app || !app.bgpEnabled || !(app.advertisedPrefixes ?? []).includes('0.0.0.0/0')) continue
+        const appSubnet = vnet.subnets.find((s) => s.id === app.subnetId)
+        const appSubTable = simulation.subnetTables[app.subnetId]
+        const defaultWinner = appSubTable ? lookupSubnetEffectiveRoute(appSubTable, '8.8.8.8') : undefined
+        if (
+          defaultWinner &&
+          defaultWinner.prefix === '0.0.0.0/0' &&
+          (defaultWinner.nextHopResourceId === app.id || defaultWinner.nextHopIp === app.privateIp)
+        ) {
+          const sampleSpokeSub = topology.vnets
+            .filter((v) => v.id !== vnet.id)
+            .flatMap((v) => v.subnets.map((s) => ({ vnetId: v.id, subnet: s })))
+            .find(
+              (x) =>
+                x.subnet.name !== 'GatewaySubnet' &&
+                x.subnet.name !== 'RouteServerSubnet' &&
+                x.subnet.name !== 'AzureFirewallSubnet',
+            )
+          findings.push({
+            id: `ars-default-self-loop:${app.id}`,
+            severity: 'error',
+            category: 'ars-default-route-self-loop',
+            title: `NVA "${app.name}" blackholes its own Internet egress via ARS 0.0.0.0/0 injection`,
+            summary: `"${app.name}" (${app.privateIp}) advertises 0.0.0.0/0 to Azure Route Server "${ars.name}". ARS injects 0.0.0.0/0 → ${app.privateIp} into every subnet of "${vnet.name}" — including "${appSubnet?.name ?? app.subnetId}" — overriding the System 0.0.0.0/0 → Internet route and looping outbound Internet traffic back to ${app.name}.`,
+            remediation: `Attach a Route Table to "${vnet.name}/${appSubnet?.name ?? app.subnetId}" with a UDR 0.0.0.0/0 → Internet (or set disableBgpRoutePropagation=true on the NVA subnet).`,
+            vnetId: vnet.id,
+            subnetId: app.subnetId,
+            applianceId: app.id,
+            ...(sampleSpokeSub
+              ? {
+                  sampleFlow: {
+                    source: { kind: 'subnet', vnetId: sampleSpokeSub.vnetId, subnetId: sampleSpokeSub.subnet.id },
+                    sourceIp: firstUsableIp(sampleSpokeSub.subnet.prefix),
+                    destination: { kind: 'subnet', vnetId: vnet.id, subnetId: app.subnetId },
+                    destinationIp: '8.8.8.8',
+                  },
+                }
+              : {}),
+          })
+        }
+      }
+    }
+
+    // Check subnets for (a) More-Specific BGP Routes (/24) bypassing Summary Firewall UDRs (/16)
+    // and (b) UDRs using NextHopType=VirtualNetworkGateway for peered Azure VNet destinations
+    for (const sub of vnet.subnets) {
+      if (
+        sub.name === 'GatewaySubnet' ||
+        sub.name === 'RouteServerSubnet' ||
+        sub.name === 'AzureFirewallSubnet'
+      ) {
+        continue
+      }
+      const rt = sub.routeTableId
+        ? topology.udrTables.find((t) => t.id === sub.routeTableId)
+        : undefined
+      if (!rt) continue
+      const subTable = simulation.subnetTables[sub.id]
+
+      for (const udr of rt.routes) {
+        if (!udr.enabled) continue
+        const udrCidr = cidr(udr.prefix)
+        if (!udrCidr) continue
+
+        // (a) Check if udr points to VirtualNetworkGateway for another Azure VNet's address space
+        if (udr.nextHopType === 'VirtualNetworkGateway') {
+          const targetVnet = topology.vnets.find(
+            (other) =>
+              other.id !== vnet.id &&
+              other.prefixes.some((vp) => {
+                const vpIp = ipv4(firstUsableIp(vp))
+                return vp === udr.prefix || (vpIp !== undefined && contains(udr.prefix, vpIp))
+              }),
+          )
+          if (targetVnet) {
+            const dstSub = targetVnet.subnets[0]
+            findings.push({
+              id: `udr-vng-vnet:${sub.id}:${udr.id}`,
+              severity: 'error',
+              category: 'udr-vng-vnet-transit',
+              title: `UDR "${udr.name}" in ${vnet.name}/${sub.name} uses VirtualNetworkGateway for VNet-to-VNet transit`,
+              summary: `Route table "${rt.name}" steers ${udr.prefix} (${targetVnet.name}) to NextHopType=VirtualNetworkGateway. Standalone Azure VPN and ExpressRoute Gateways do not transit traffic between peered spoke VNets and will drop the packet.`,
+              remediation: `Change UDR "${udr.name}" (${udr.prefix}) to NextHopType=VirtualAppliance pointing to the Hub NVA/Azure Firewall IP.`,
+              vnetId: vnet.id,
+              subnetId: sub.id,
+              ...(dstSub
+                ? {
+                    sampleFlow: {
+                      source: { kind: 'subnet', vnetId: vnet.id, subnetId: sub.id },
+                      sourceIp: firstUsableIp(sub.prefix),
+                      destination: { kind: 'subnet', vnetId: targetVnet.id, subnetId: dstSub.id },
+                      destinationIp: firstUsableIp(dstSub.prefix),
+                    },
+                  }
+                : {}),
+            })
+          }
+        }
+
+        // (b) Check if a summary VirtualAppliance UDR (e.g. /16) is bypassed by a more-specific BGP route (/24)
+        if (
+          udr.nextHopType === 'VirtualAppliance' &&
+          udr.prefix !== '0.0.0.0/0' &&
+          !rt.disableBgpRoutePropagation &&
+          subTable
+        ) {
+          const bypassingBgp = subTable.routes.filter((r) => {
+            if (!r.active) return false
+            if (r.source !== 'VirtualNetworkGateway' && r.source !== 'RouteServer') return false
+            if (r.nextHopIp && r.nextHopIp === udr.nextHopIp) return false
+            const rCidr = cidr(r.prefix)
+            if (!rCidr || rCidr.length <= udrCidr.length) return false
+            const sampleIp = ipv4(firstUsableIp(r.prefix))
+            return sampleIp !== undefined && contains(udr.prefix, sampleIp)
+          })
+          if (bypassingBgp.length > 0) {
+            const firstBypass = bypassingBgp[0]
+            const sampleDstIp = firstUsableIp(firstBypass.prefix)
+            const matchingSite = topology.sites.find((s) =>
+              s.prefixes.some((sp) => {
+                const ipNum = ipv4(sampleDstIp)
+                return ipNum !== undefined && cidr(sp) && contains(sp, ipNum)
+              }),
+            )
+            findings.push({
+              id: `bgp-lpm-bypass:${sub.id}:${udr.id}`,
+              severity: 'warning',
+              category: 'bgp-lpm-bypasses-udr',
+              title: `More-specific BGP route ${firstBypass.prefix} bypasses summary Firewall UDR ${udr.prefix} in ${vnet.name}/${sub.name}`,
+              summary: `Route table "${rt.name}" defines summary UDR ${udr.prefix} → ${udr.nextHopIp}, but disableBgpRoutePropagation=false allows learned BGP route ${firstBypass.prefix} (${firstBypass.nextHopType}) to win by Longest Prefix Match, bypassing the firewall/NVA.`,
+              remediation: `Set disableBgpRoutePropagation=true on "${rt.name}" or add a specific ${firstBypass.prefix} → ${udr.nextHopIp} UDR.`,
+              vnetId: vnet.id,
+              subnetId: sub.id,
+              ...(matchingSite
+                ? {
+                    sampleFlow: {
+                      source: { kind: 'subnet', vnetId: vnet.id, subnetId: sub.id },
+                      sourceIp: firstUsableIp(sub.prefix),
+                      destination: { kind: 'site', siteId: matchingSite.id },
+                      destinationIp: sampleDstIp,
+                    },
+                  }
+                : {}),
+            })
+          }
+        }
+      }
     }
   }
 
@@ -426,6 +580,40 @@ export function runAzNetDiagnostics(
               destinationIp: b.ip,
             },
           })
+        }
+      }
+    }
+
+    // Also check workload endpoint <-> on-prem site pairs for asymmetric stateful inspection
+    for (const site of topology.sites) {
+      for (const sitePrefix of site.prefixes) {
+        const siteIp = firstUsableIp(sitePrefix)
+        const siteRef: AzEndpointRef = { kind: 'site', siteId: site.id }
+        const a = workloadEndpoints[i]
+        const pair = traceAzNetPair(topology, simulation, a.ref, a.ip, siteRef, siteIp)
+        if (
+          pair.forward.status === 'delivered' &&
+          pair.reverse.status === 'delivered' &&
+          !pair.symmetricInspection
+        ) {
+          const key = `asym-site:${a.vnetId}:${site.id}`
+          if (!findings.some((f) => f.id === key) && alreadyHasGwBypass.size === 0) {
+            findings.push({
+              id: key,
+              severity: 'warning',
+              category: 'asymmetric-firewall-bypass',
+              title: `Asymmetric stateful inspection between ${a.ip} and ${site.name} (${siteIp})`,
+              summary: `Forward and reverse paths between ${a.ip} and ${site.name} (${siteIp}) do not traverse the same stateful appliance(s): ${pair.asymmetricBypassApplianceNames.join(', ')}. Return traffic will be dropped by stateful inspection.`,
+              remediation: `Ensure both outbound spoke UDRs and inbound GatewaySubnet UDRs steer traffic symmetrically through the same firewall/NVA.`,
+              vnetId: a.vnetId,
+              sampleFlow: {
+                source: a.ref,
+                sourceIp: a.ip,
+                destination: siteRef,
+                destinationIp: siteIp,
+              },
+            })
+          }
         }
       }
     }

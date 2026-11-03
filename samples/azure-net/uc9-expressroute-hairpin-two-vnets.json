@@ -1,0 +1,190 @@
+{
+  "version": 2,
+  "kind": "azure-network-topology",
+  "name": "UC9: VNet-to-VNet Transit Hairpin via Shared ExpressRoute MSEE",
+  "subtitle": "Two regional Hub-and-Spoke topologies without VNet peering transit across a shared ExpressRoute circuit (MSEE ASN 12076)",
+  "vnets": [
+    {
+      "id": "vnet-hub-a",
+      "name": "vnet-hub-swe",
+      "region": "swedencentral",
+      "prefixes": ["10.100.0.0/16"],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-hub-a-gw",
+          "name": "GatewaySubnet",
+          "prefix": "10.100.0.0/26"
+        },
+        {
+          "id": "sub-hub-a-shared",
+          "name": "snet-hub-swe-shared",
+          "prefix": "10.100.1.0/24"
+        }
+      ],
+      "gateways": [
+        {
+          "id": "ergw-hub-a",
+          "name": "ergw-hub-swe",
+          "kind": "ExpressRoute",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "activeActive": false,
+          "enabled": true
+        }
+      ],
+      "appliances": []
+    },
+    {
+      "id": "vnet-spoke-a",
+      "name": "vnet-spoke-swe",
+      "region": "swedencentral",
+      "prefixes": ["10.101.0.0/16"],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-spoke-a-work",
+          "name": "snet-spoke-swe-work",
+          "prefix": "10.101.1.0/24"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    },
+    {
+      "id": "vnet-hub-b",
+      "name": "vnet-hub-weu",
+      "region": "westeurope",
+      "prefixes": ["10.200.0.0/16"],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-hub-b-gw",
+          "name": "GatewaySubnet",
+          "prefix": "10.200.0.0/26"
+        },
+        {
+          "id": "sub-hub-b-shared",
+          "name": "snet-hub-weu-shared",
+          "prefix": "10.200.1.0/24"
+        }
+      ],
+      "gateways": [
+        {
+          "id": "ergw-hub-b",
+          "name": "ergw-hub-weu",
+          "kind": "ExpressRoute",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "activeActive": false,
+          "enabled": true
+        }
+      ],
+      "appliances": []
+    },
+    {
+      "id": "vnet-spoke-b",
+      "name": "vnet-spoke-weu",
+      "region": "westeurope",
+      "prefixes": ["10.201.0.0/16"],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-spoke-b-work",
+          "name": "snet-spoke-weu-work",
+          "prefix": "10.201.1.0/24"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    }
+  ],
+  "vnetPeerings": [
+    {
+      "id": "peer-swe-hub-spoke",
+      "name": "peer-swe-hub-spoke",
+      "vnetAId": "vnet-hub-a",
+      "vnetBId": "vnet-spoke-a",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    },
+    {
+      "id": "peer-weu-hub-spoke",
+      "name": "peer-weu-hub-spoke",
+      "vnetAId": "vnet-hub-b",
+      "vnetBId": "vnet-spoke-b",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    }
+  ],
+  "udrTables": [],
+  "vwanHubs": [],
+  "erLocations": [
+    {
+      "id": "er-loc-stockholm",
+      "name": "Equinix-Stockholm-ER",
+      "globalReachEnabled": false
+    }
+  ],
+  "erLinks": [
+    {
+      "id": "erlink-hub-a",
+      "name": "er-conn-hub-swe",
+      "locationId": "er-loc-stockholm",
+      "targetKind": "vnet-gateway",
+      "targetId": "ergw-hub-a",
+      "enabled": true,
+      "weight": 0
+    },
+    {
+      "id": "erlink-hub-b",
+      "name": "er-conn-hub-weu",
+      "locationId": "er-loc-stockholm",
+      "targetKind": "vnet-gateway",
+      "targetId": "ergw-hub-b",
+      "enabled": true,
+      "weight": 0
+    },
+    {
+      "id": "erlink-dc-stockholm",
+      "name": "er-circuit-stockholm-dc",
+      "locationId": "er-loc-stockholm",
+      "targetKind": "site",
+      "targetId": "site-dc-stockholm",
+      "enabled": true,
+      "weight": 0
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-dc-stockholm",
+      "name": "Stockholm-DC",
+      "asn": 65050,
+      "prefixes": ["172.20.0.0/16"]
+    }
+  ],
+  "vpnConnections": [],
+  "siteLinks": []
+}
