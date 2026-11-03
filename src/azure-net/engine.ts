@@ -566,6 +566,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     }
 
     if (ars.branchToBranchTraffic) {
+      const nvaEntries = [...entries]
       for (const gw of vnet.gateways.filter((g) => g.enabled && g.bgpEnabled)) {
         for (const gRoute of (gatewayRibs[gw.id] ?? []).filter((r) => r.preferred)) {
           entries.push({
@@ -581,6 +582,22 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             explanation: `Exchanged with ${gw.name} via ARS Branch-to-Branch`,
           })
         }
+        const gwEntries = [...(gatewayRibs[gw.id] ?? [])]
+        for (const nvaRoute of nvaEntries) {
+          gwEntries.push({
+            id: `gw:${gw.id}:ars:${ars.id}:${nvaRoute.id}`,
+            prefix: nvaRoute.prefix,
+            asPath: nvaRoute.asPath,
+            nextHopName: `${ars.name} → ${nvaRoute.nextHopName}`,
+            nextHopIp: nvaRoute.nextHopIp,
+            nextHopKind: 'appliance',
+            nextHopId: nvaRoute.nextHopId,
+            originProtocol: 'BGP-NVA',
+            preferred: true,
+            explanation: `Learned from ${ars.name} via ARS Branch-to-Branch`,
+          })
+        }
+        gatewayRibs[gw.id] = chooseBgpWinners(gwEntries, 'ASPath')
       }
     }
 
@@ -854,6 +871,10 @@ function compileSingleSubnetEffectiveRoutes(
     for (const gw of controlVnet.gateways.filter((g) => g.enabled)) {
       const gwWinners = (gatewayRibs[gw.id] ?? []).filter((r) => r.preferred)
       for (const r of gwWinners) {
+        // ARS-learned NVA routes are already injected by the ARS loop above
+        if (r.nextHopKind === 'appliance') {
+          continue
+        }
         // Avoid duplicating if ARS already injected a preferred route for the same gateway & prefix
         if (rawBgpRoutes.some((existing) => existing.prefix === r.prefix && existing.nextHopResourceId === gw.id)) {
           continue
@@ -1009,6 +1030,32 @@ function compileSingleSubnetEffectiveRoutes(
           active: false,
           suppressedReason: `Overridden by ${winner.source} route (${winner.originLabel})`,
         })
+      }
+    }
+  }
+
+  // G. When PrivateEndpointNetworkPolicies is RouteTableEnabled or Enabled, ANY covering User UDR
+  // (e.g., /16, /24, or /32) invalidates the /32 InterfaceEndpoint system route in Azure SDN.
+  for (let i = 0; i < resolved.length; i++) {
+    const r = resolved[i]
+    if (
+      r.active &&
+      r.nextHopType === 'InterfaceEndpoint' &&
+      !r.originLabel.includes('NetworkPolicies: Disabled')
+    ) {
+      const peIpStr = r.nextHopIp ?? r.prefix.split('/')[0]
+      const peIpNum = ipv4(peIpStr)
+      if (peIpNum !== undefined) {
+        const coveringUdr = resolved.find(
+          (u) => u.active && u.source === 'User' && contains(u.prefix, peIpNum),
+        )
+        if (coveringUdr) {
+          resolved[i] = {
+            ...r,
+            active: false,
+            suppressedReason: `Invalidated by covering User UDR ${coveringUdr.prefix} (${coveringUdr.originLabel}) under PrivateEndpointNetworkPolicies`,
+          }
+        }
       }
     }
   }
@@ -1261,11 +1308,17 @@ export function traceAzNetFlow(
       }
     }
     if (isForwardedPacket && !rel.reverseFlags.allowForwardedTraffic) {
-      return {
-        ok: false,
-        status: 'dropped-peering-forwarded-traffic',
-        peeringId: rel.peering.id,
-        reason: `Dropped on peering "${rel.peering.name}": "${toVnet.name}" has allowForwardedTraffic=false and rejects transit packets forwarded by "${fromVnet.name}".`,
+      const arsGatewayTransitAllows =
+        rel.forwardFlags.allowGatewayTransit &&
+        rel.reverseFlags.useRemoteGateways &&
+        Boolean(fromVnet.routeServer?.enabled)
+      if (!arsGatewayTransitAllows) {
+        return {
+          ok: false,
+          status: 'dropped-peering-forwarded-traffic',
+          peeringId: rel.peering.id,
+          reason: `Dropped on peering "${rel.peering.name}": "${toVnet.name}" has allowForwardedTraffic=false and rejects transit packets forwarded by "${fromVnet.name}".`,
+        }
       }
     }
     return { ok: true, peering: rel.peering }
@@ -1986,9 +2039,18 @@ export function traceAzNetFlow(
         }
       }
 
-      // Otherwise consult the appliance's hosting subnet Effective Route Table (for Gateway egress to on-prem / Internet)
+      // Otherwise consult the appliance's hosting subnet Effective Route Table (for Gateway egress to on-prem / Internet),
+      // excluding routes that point back to this same appliance NIC.
       const appSubTable = simulation.subnetTables[app.subnetId]
-      const nextRoute = appSubTable ? lookupSubnetEffectiveRoute(appSubTable, destinationIp) : undefined
+      const filteredAppTable: AzSubnetRouteTableResult | undefined = appSubTable
+        ? {
+            ...appSubTable,
+            routes: appSubTable.routes.filter(
+              (r) => r.nextHopResourceId !== app.id && r.nextHopIp !== app.privateIp,
+            ),
+          }
+        : undefined
+      const nextRoute = filteredAppTable ? lookupSubnetEffectiveRoute(filteredAppTable, destinationIp) : undefined
       if (nextRoute?.nextHopType === 'VirtualNetworkGateway' && nextRoute.nextHopResourceId) {
         const gw = vnet.gateways.find((g) => g.id === nextRoute.nextHopResourceId)
         if (gw) {
@@ -2004,6 +2066,55 @@ export function traceAzNetFlow(
           })
           cursor = { kind: 'vnet-gateway', vnetId: vnet.id, gatewayId: gw.id, direction: 'egress' }
           continue
+        }
+      }
+
+      const selfAdvertised = (app.advertisedPrefixes ?? []).find((p) => cidr(p) && contains(p, ipNum))
+      if (selfAdvertised) {
+        const transitGw =
+          vnet.routeServer?.branchToBranchTraffic !== false
+            ? vnet.gateways.find(
+                (g) =>
+                  g.enabled &&
+                  topology.vpnConnections.some((c) => {
+                    if (!c.enabled || c.targetKind !== 'vnet-gateway' || c.targetId !== g.id) return false
+                    const site = topology.sites.find((s) => s.id === c.siteId)
+                    return Boolean(site?.prefixes.some((sp) => cidr(sp) && contains(sp, ipNum)))
+                  }),
+              )
+            : undefined
+        if (transitGw) {
+          pushHop({
+            nodeKind: 'appliance',
+            nodeId: app.id,
+            vnetId: vnet.id,
+            nodeName: app.name,
+            subnetId: app.subnetId,
+            action: actionKind,
+            detail: `${app.name} inspects packet for advertised prefix ${selfAdvertised} and forwards to ${transitGw.name}`,
+          })
+          cursor = { kind: 'vnet-gateway', vnetId: vnet.id, gatewayId: transitGw.id, direction: 'egress' }
+          continue
+        }
+        pushHop({
+          nodeKind: 'appliance',
+          nodeId: app.id,
+          vnetId: vnet.id,
+          nodeName: app.name,
+          subnetId: app.subnetId,
+          action: 'delivered',
+          detail: `Delivered to ${app.name}-originated prefix ${selfAdvertised} (${destinationIp})`,
+        })
+        return {
+          source,
+          destinationIp,
+          destinationLabel: targetInfo.label,
+          status: 'delivered',
+          hops,
+          traversedApplianceIds,
+          traversedEdgeIds,
+          traversedVnetIds,
+          summaryReason: `Delivered to ${app.name} advertised prefix ${selfAdvertised}.`,
         }
       }
 

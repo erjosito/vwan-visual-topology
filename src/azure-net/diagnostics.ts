@@ -207,17 +207,25 @@ export function runAzNetDiagnostics(
     }
 
     // Check if spoke UDR points to an appliance in the peer VNet (or hub appliance forwards to spoke) while allowForwardedTraffic is false
-    for (const [hubVnet, spokeVnet, spokeReceiveFlags] of [
-      [vnetA, vnetB, peering.bToA],
-      [vnetB, vnetA, peering.aToB],
+    for (const [hubVnet, spokeVnet, hubSendFlags, spokeReceiveFlags] of [
+      [vnetA, vnetB, peering.aToB, peering.bToA],
+      [vnetB, vnetA, peering.bToA, peering.aToB],
     ] as const) {
       if (hubVnet.appliances.length > 0 && !spokeReceiveFlags.allowForwardedTraffic) {
+        const maskedByArsGatewayTransit =
+          hubSendFlags.allowGatewayTransit &&
+          spokeReceiveFlags.useRemoteGateways &&
+          Boolean(hubVnet.routeServer?.enabled)
         findings.push({
           id: `peering-fwd:${peering.id}:${spokeVnet.id}`,
-          severity: 'error',
+          severity: maskedByArsGatewayTransit ? 'warning' : 'error',
           category: 'peering-forwarded-traffic-blocked',
-          title: `allowForwardedTraffic=false on "${spokeVnet.name}" blocks transit from "${hubVnet.name}"`,
-          summary: `"${hubVnet.name}" hosts transit appliance(s) (${hubVnet.appliances.map((a) => a.name).join(', ')}), but "${spokeVnet.name}" has allowForwardedTraffic=false on peering "${peering.name}". Packets forwarded by the hub appliance into "${spokeVnet.name}" will be dropped at the VNet boundary.`,
+          title: maskedByArsGatewayTransit
+            ? `allowForwardedTraffic=false on "${spokeVnet.name}" (currently masked by ARS + useRemoteGateways=true)`
+            : `allowForwardedTraffic=false on "${spokeVnet.name}" blocks transit from "${hubVnet.name}"`,
+          summary: maskedByArsGatewayTransit
+            ? `"${hubVnet.name}" hosts transit appliance(s) (${hubVnet.appliances.map((a) => a.name).join(', ')}), and "${spokeVnet.name}" has allowForwardedTraffic=false on peering "${peering.name}". In Azure SDN, active Azure Route Server BGP peering + useRemoteGateways=true currently permits this transit, but disabling useRemoteGateways or ARS will immediately drop all NVA-forwarded packets.`
+            : `"${hubVnet.name}" hosts transit appliance(s) (${hubVnet.appliances.map((a) => a.name).join(', ')}), but "${spokeVnet.name}" has allowForwardedTraffic=false on peering "${peering.name}". Packets forwarded by the hub appliance into "${spokeVnet.name}" will be dropped at the VNet boundary.`,
           remediation: `Set allowForwardedTraffic=true on the "${spokeVnet.name}" side of peering "${peering.name}".`,
           peeringId: peering.id,
           vnetId: spokeVnet.id,
@@ -359,12 +367,22 @@ export function runAzNetDiagnostics(
   // 7. Check Pairwise Stateful Symmetry across Workload Subnets for any subtle bypass not already caught
   const workloadEndpoints: { ref: AzEndpointRef; ip: string; vnetId: string }[] = []
   for (const vnet of topology.vnets) {
+    const gwSub = vnet.subnets.find((s) => s.name === 'GatewaySubnet')
+    const applianceSubnetIds = new Set(vnet.appliances.map((a) => a.subnetId))
     for (const sub of vnet.subnets) {
+      const isGwProxy = Boolean(
+        gwSub &&
+          sub.id !== gwSub.id &&
+          sub.routeTableId &&
+          sub.routeTableId === gwSub.routeTableId,
+      )
       if (
         sub.name === 'GatewaySubnet' ||
         sub.name === 'AzureFirewallSubnet' ||
         sub.name === 'RouteServerSubnet' ||
-        sub.name === 'VirtualNetworkApplianceSubnet'
+        sub.name === 'VirtualNetworkApplianceSubnet' ||
+        applianceSubnetIds.has(sub.id) ||
+        isGwProxy
       ) {
         continue
       }

@@ -297,9 +297,25 @@ and the published sanitized SHA256 separately, and verify hashes against the
 staged Git blobs after line-ending normalization. Do not present an original
 prediction commitment as the hash of its redacted public copy.
 
+## Standalone Azure Networking (VNet / ARS / VNG / NVA / Private Endpoint) Lessons
+
+Validated empirically in `rg-aznet-sim-lab-20261103` (`verification/azure-net-2026-11-03/`):
+
+- **`snet-gw-proxy` is the canonical proxy for `GatewaySubnet` effective routes**:
+  Azure blocks regular VM NIC placement in `GatewaySubnet`, and `az network vnet-gateway list-learned-routes` shows only the gateway's BGP RIB rather than UDR overrides on `GatewaySubnet`. Associating the exact same Route Table (`rt-aznet-gw-subnet`) with an auxiliary subnet (`snet-gw-proxy`) in the same Hub VNet and deploying a lightweight probe NIC (`nic-vm-gw-proxy`) yields the exact effective route table (including `User` UDRs, `VNetPeering` routes, ARS/VNG `VirtualNetworkGateway` routes, and `InterfaceEndpoint` routes) that governs return-path forwarding from `GatewaySubnet`.
+- **Azure Route Server routes appear as `VirtualNetworkGateway` in NIC effective routes**:
+  When Azure Route Server (`Microsoft.Network/virtualHubs`, ASN `65515`) learns routes from an NVA BGP peer (e.g., `10.100.2.4`) and programs them into the Hub VNet and peered Spoke VNets (`useRemoteGateways=true`), `az network nic show-effective-route-table` reports `source: "VirtualNetworkGateway"`, `nextHopType: "VirtualNetworkGateway"`, and `nextHopIpAddress: ["10.100.2.4"]` (the NVA IP). When `allowBranchToBranchTraffic=true` is enabled on ARS, only a single `VirtualNetworkGateway` route with `nextHopIpAddress: ["10.100.2.4"]` is programmed per prefix on NICs (not a duplicate pair for ARS and VNG).
+- **`privateEndpointNetworkPolicies = RouteTableEnabled` invalidates `/32 InterfaceEndpoint` under ANY covering UDR**:
+  When `privateEndpointNetworkPolicies` on a Private Endpoint's subnet is `Disabled`, the `/32` `Default (InterfaceEndpoint)` system route remains `Active` even in subnets that have a covering `/16` or `/24` `User` UDR (`10.101.0.0/16 -> VirtualAppliance`). Once `privateEndpointNetworkPolicies` on the Private Endpoint's subnet is changed to `RouteTableEnabled` (or `Enabled`), **any** active `User` UDR covering the Private Endpoint's IP (`/16`, `/24`, or `/32`) in a source subnet's Route Table invalidates (`state: "Invalid"`) the `/32 InterfaceEndpoint` system route on that source subnet, while subnets without a covering UDR keep `/32 InterfaceEndpoint` as `Active`.
+- **`allowForwardedTraffic=false` + `useRemoteGateways=true` is masked when Azure Route Server peers with the NVA**:
+  On a Spoke VNet peering (`Spoke -> Hub`), setting `allowForwardedTraffic=false` while keeping `useRemoteGateways=true` does **not** drop packets forwarded by a Hub NVA (`10.100.2.4`) if the Hub VNet has an active Azure Route Server BGP-peered with that NVA—because Azure SDN authorizes the ARS-learned NVA IP under the remote-gateway channel. Setting `useRemoteGateways=false` alongside `allowForwardedTraffic=false` immediately drops NVA-forwarded traffic at the peering boundary (`100% packet loss`).
+- **Azure Route Server `allowBranchToBranchTraffic=false` isolates the ARS<->VNG BGP control plane without suppressing VNet NIC programming**:
+  Disabling `allowBranchToBranchTraffic` on ARS stops ARS from advertising VNG/VPN-learned prefixes to the NVA BGP daemon and stops VNG from learning/advertising NVA prefixes to on-prem VPN branches. However, both ARS and VNG continue programming their respective learned routes into Azure VNet NIC effective route tables (where `disableBgpRoutePropagation=false`).
+
 ## References
 
 - [Lab tracking and evidence](https://github.com/erjosito/vwan-visual-topology/issues/5)
+- [Standalone Azure Networking Simulator empirical captures (`verification/azure-net-2026-11-03/`)](verification/azure-net-2026-11-03/README.md)
 - [Virtual hub routing preference](https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference)
 - [Virtual WAN routing deep dive](https://learn.microsoft.com/azure/virtual-wan/routing-deep-dive)
 - [Routing intent and routing policies](https://learn.microsoft.com/azure/virtual-wan/how-to-routing-policies)

@@ -1,6 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
 import './azure-net.css'
 import { AzureNetDiagram, type AzSelectedEntity } from './AzureNetDiagram'
+import {
+  compareAzNetWithObservations,
+  importAzNetCapture,
+  type AzNetComparisonReport,
+} from './azure-import'
+import { generateAzNetBicep } from './bicep-export'
 import { runAzNetDiagnostics, type AzDiagnosticFinding } from './diagnostics'
 import {
   firstUsableIp,
@@ -21,7 +27,7 @@ import {
   type AzUdrNextHopType,
 } from './model'
 
-type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor'
+type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor' | 'azure'
 
 interface EndpointOption {
   key: string
@@ -49,7 +55,10 @@ export function AzureNetApp() {
 
   const [testIpQuery, setTestIpQuery] = useState<string>('')
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
+  const [captureComparison, setCaptureComparison] = useState<AzNetComparisonReport | null>(null)
+  const [captureNotices, setCaptureNotices] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const compareFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const commitTopology = (updater: (draft: AzNetTopology) => void) => {
     setHistory((prev) => [...prev.slice(-24), cloneAzNetTopology(topology)])
@@ -81,6 +90,7 @@ export function AzureNetApp() {
     [topology, simulation],
   )
   const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
+  const bicepExport = useMemo(() => generateAzNetBicep(topology), [topology])
 
   // Build endpoint list for Path Tracer
   const endpointOptions = useMemo<EndpointOption[]>(() => {
@@ -410,6 +420,15 @@ export function AzureNetApp() {
             🩺 Diagnostics ({diagnostics.length})
           </button>
 
+          <button
+            type="button"
+            className="aznet-btn"
+            data-testid="aznet-open-azure-tab-btn"
+            onClick={() => setActiveTab('azure')}
+          >
+            ☁ Azure & Bicep
+          </button>
+
           <button type="button" className="aznet-btn" onClick={handleExportJson}>
             ⬇ Export JSON
           </button>
@@ -429,12 +448,62 @@ export function AzureNetApp() {
               const file = e.target.files?.[0]
               if (!file) return
               try {
-                const parsed = JSON.parse(await file.text()) as AzNetTopology
+                const raw = JSON.parse(await file.text()) as Record<string, unknown>
+                if (raw.kind === 'azure-network-capture') {
+                  const imported = importAzNetCapture(raw)
+                  setTopology(imported.topology)
+                  setHistory([])
+                  setFuture([])
+                  setCaptureNotices(imported.warnings)
+                  if (imported.observations) {
+                    const importedSim = simulateAzNet(imported.topology)
+                    setCaptureComparison(
+                      compareAzNetWithObservations(
+                        imported.topology,
+                        importedSim,
+                        imported.observations,
+                      ),
+                    )
+                  } else {
+                    setCaptureComparison(null)
+                  }
+                  setActiveTab('azure')
+                  return
+                }
+                const parsed = raw as unknown as AzNetTopology
                 const errs = validateAzNetTopology(parsed)
                 if (errs.length === 0) {
                   setTopology(parsed)
                   setHistory([])
                   setFuture([])
+                }
+              } catch {
+                // ignore invalid json
+              }
+            }}
+          />
+          <input
+            ref={compareFileInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const file = e.target.files?.[0]
+              if (!file) return
+              try {
+                const raw = JSON.parse(await file.text()) as Record<string, unknown>
+                if (raw.kind === 'azure-network-capture') {
+                  const imported = importAzNetCapture(raw)
+                  setCaptureNotices(imported.warnings)
+                  if (imported.observations) {
+                    const report = compareAzNetWithObservations(
+                      topology,
+                      simulation,
+                      imported.observations,
+                    )
+                    setCaptureComparison(report)
+                    setActiveTab('azure')
+                  }
                 }
               } catch {
                 // ignore invalid json
@@ -552,6 +621,14 @@ export function AzureNetApp() {
               onClick={() => setActiveTab('editor')}
             >
               Configure
+            </button>
+            <button
+              type="button"
+              className={`aznet-tab ${activeTab === 'azure' ? 'active' : ''}`}
+              data-testid="aznet-tab-azure"
+              onClick={() => setActiveTab('azure')}
+            >
+              ☁ Azure & Bicep
             </button>
           </nav>
 
@@ -1404,6 +1481,233 @@ export function AzureNetApp() {
                       </div>
                     )
                   })}
+                </div>
+              </>
+            )}
+
+            {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
+            {activeTab === 'azure' && (
+              <>
+                <div className="aznet-card" data-testid="aznet-azure-capture-card">
+                  <h3>1. Azure Live Capture & Effective-Route Comparison</h3>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: '#334155' }}>
+                    Capture a live Azure resource group (VNets, Subnets, Peerings, UDRs, Route
+                    Server, Gateways, and NIC Effective Routes — including a proxy subnet sharing{' '}
+                    <code>GatewaySubnet</code>&apos;s route table) using the read-only PowerShell
+                    collector:
+                  </p>
+                  <pre
+                    style={{
+                      margin: '0 0 8px 0',
+                      padding: 8,
+                      background: '#0f172a',
+                      color: '#e2e8f0',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      overflowX: 'auto',
+                    }}
+                  >
+                    {`pwsh ./scripts/collect-azure-network.ps1 -ResourceGroupName <rg> -IncludeEffectiveRoutes -OutputPath azure-network-capture.json`}
+                  </pre>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <a
+                      className="aznet-btn"
+                      href="/scripts/collect-azure-network.ps1"
+                      download="collect-azure-network.ps1"
+                      style={{ textDecoration: 'none' }}
+                    >
+                      ⬇ Download Collector Script (.ps1)
+                    </a>
+                    <button
+                      type="button"
+                      className="aznet-btn aznet-btn-primary"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      ⬆ Import Capture as Topology + Compare
+                    </button>
+                    <button
+                      type="button"
+                      className="aznet-btn"
+                      onClick={() => compareFileInputRef.current?.click()}
+                    >
+                      🔍 Compare Capture Against Current Topology
+                    </button>
+                  </div>
+
+                  {captureNotices.length > 0 && (
+                    <div
+                      style={{
+                        marginTop: 8,
+                        padding: 8,
+                        background: '#f8fafc',
+                        borderRadius: 6,
+                        border: '1px solid #cbd5e1',
+                        fontSize: 11.5,
+                      }}
+                    >
+                      <strong>Import Notices:</strong>
+                      <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                        {captureNotices.map((n, idx) => (
+                          <li key={idx}>{n}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {captureComparison && (
+                    <div style={{ marginTop: 10 }} data-testid="aznet-comparison-report">
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: 6,
+                        }}
+                      >
+                        <strong>
+                          NIC Effective Route Comparison ({captureComparison.totalMatchedRoutes}{' '}
+                          matched, {captureComparison.totalMismatchedRoutes} mismatched)
+                        </strong>
+                      </div>
+                      {captureComparison.subnetComparisons.map((nic) => (
+                        <div
+                          key={nic.nicName}
+                          style={{
+                            marginBottom: 8,
+                            padding: 8,
+                            background: '#ffffff',
+                            borderRadius: 6,
+                            border: `1px solid ${nic.mismatchCount === 0 ? '#86efac' : '#fca5a5'}`,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: 4,
+                              fontSize: 12,
+                            }}
+                          >
+                            <span>
+                              <strong>{nic.nicName}</strong> · {nic.vnetName}/{nic.subnetName}{' '}
+                              {nic.proxyForGatewaySubnet && (
+                                <span className="aznet-badge info">GatewaySubnet Proxy</span>
+                              )}
+                            </span>
+                            <span
+                              className={`aznet-badge ${nic.mismatchCount === 0 ? 'ok' : 'error'}`}
+                            >
+                              {nic.mismatchCount === 0
+                                ? `MATCHED (${nic.matchedCount})`
+                                : `${nic.mismatchCount} DIFF`}
+                            </span>
+                          </div>
+                          <table className="aznet-route-table">
+                            <thead>
+                              <tr>
+                                <th>Status</th>
+                                <th>Prefix</th>
+                                <th>Azure Observed</th>
+                                <th>Simulator Predicted</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {nic.rows.map((d, idx) => (
+                                <tr key={idx}>
+                                  <td>
+                                    <span className={`aznet-badge ${d.matched ? 'ok' : 'error'}`}>
+                                      {d.matched ? 'match' : 'diff'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <code>{d.prefix}</code>
+                                  </td>
+                                  <td>
+                                    {`${d.azureSource} → ${d.azureNextHopType}${
+                                      d.azureNextHopIp ? ` (${d.azureNextHopIp})` : ''
+                                    } [${d.azureState}]`}
+                                  </td>
+                                  <td>
+                                    {`${d.simSource} → ${d.simNextHopType}${
+                                      d.simNextHopIp ? ` (${d.simNextHopIp})` : ''
+                                    } [${d.simState}]`}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="aznet-card" data-testid="aznet-bicep-export-card">
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <h3 style={{ margin: 0 }}>
+                      2. Deployable Azure Bicep Template ({bicepExport.resourceCount} resources)
+                    </h3>
+                    <button
+                      type="button"
+                      className="aznet-btn aznet-btn-primary"
+                      data-testid="aznet-download-bicep-btn"
+                      disabled={!bicepExport.text}
+                      onClick={() => {
+                        const blob = new Blob([bicepExport.text], { type: 'text/plain' })
+                        const url = URL.createObjectURL(blob)
+                        const a = document.createElement('a')
+                        a.href = url
+                        a.download = `${topology.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'azure-net-topology'}.bicep`
+                        a.click()
+                        URL.revokeObjectURL(url)
+                      }}
+                    >
+                      ⬇ Download .bicep
+                    </button>
+                  </div>
+                  {bicepExport.warnings.length > 0 && (
+                    <div
+                      style={{
+                        marginBottom: 8,
+                        padding: 8,
+                        background: '#fffbeb',
+                        border: '1px solid #fde68a',
+                        borderRadius: 6,
+                        fontSize: 11.5,
+                        color: '#92400e',
+                      }}
+                    >
+                      <strong>Deployment Notes:</strong>
+                      <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                        {bicepExport.warnings.map((w, idx) => (
+                          <li key={idx}>{w}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <pre
+                    data-testid="aznet-bicep-code"
+                    style={{
+                      maxHeight: 360,
+                      overflow: 'auto',
+                      padding: 10,
+                      background: '#0f172a',
+                      color: '#f8fafc',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      margin: 0,
+                    }}
+                  >
+                    {bicepExport.text || '// Fix topology validation errors to generate Bicep'}
+                  </pre>
                 </div>
               </>
             )}

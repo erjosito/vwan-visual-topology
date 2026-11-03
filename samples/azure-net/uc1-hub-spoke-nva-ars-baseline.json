@@ -1,0 +1,272 @@
+{
+  "version": 2,
+  "kind": "azure-network-topology",
+  "name": "UC1: Hub-Spoke with ARS, BGP NVA, GatewaySubnet Proxy & Private Endpoint",
+  "subtitle": "Baseline symmetric Hub-and-Spoke topology with GatewaySubnet proxy subnet (snet-gw-proxy), Azure Route Server (ASN 65515), Active-Active VPN Gateway, and Private Endpoint /32 system route",
+  "vnets": [
+    {
+      "id": "vnet-hub",
+      "name": "vnet-aznet-hub",
+      "region": "swedencentral",
+      "prefixes": ["10.100.0.0/16"],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-hub-gw",
+          "name": "GatewaySubnet",
+          "prefix": "10.100.0.0/26",
+          "routeTableId": "rt-gw-subnet"
+        },
+        {
+          "id": "sub-hub-ars",
+          "name": "RouteServerSubnet",
+          "prefix": "10.100.1.0/26"
+        },
+        {
+          "id": "sub-hub-nva",
+          "name": "snet-nva",
+          "prefix": "10.100.2.0/24",
+          "routeTableId": "rt-hub-nva"
+        },
+        {
+          "id": "sub-hub-gw-proxy",
+          "name": "snet-gw-proxy",
+          "prefix": "10.100.4.0/24",
+          "routeTableId": "rt-gw-subnet"
+        }
+      ],
+      "gateways": [
+        {
+          "id": "vng-hub-vpn",
+          "name": "vng-aznet-hub-vpn",
+          "kind": "Vpn",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "activeActive": true,
+          "enabled": true
+        }
+      ],
+      "routeServer": {
+        "id": "ars-hub",
+        "name": "ars-aznet-hub",
+        "subnetId": "sub-hub-ars",
+        "enabled": true,
+        "branchToBranchTraffic": true,
+        "hubRoutingPreference": "ExpressRoute",
+        "peerApplianceIds": ["app-hub-nva"]
+      },
+      "appliances": [
+        {
+          "id": "app-hub-nva",
+          "name": "nva-hub-router",
+          "kind": "nva-vm",
+          "subnetId": "sub-hub-nva",
+          "privateIp": "10.100.2.4",
+          "asn": 65010,
+          "bgpEnabled": true,
+          "enableIpForwarding": true,
+          "inspectsTraffic": true,
+          "advertisedPrefixes": ["192.168.100.0/24"],
+          "staticRoutes": []
+        }
+      ]
+    },
+    {
+      "id": "vnet-spoke1",
+      "name": "vnet-aznet-spoke1",
+      "region": "swedencentral",
+      "prefixes": ["10.101.0.0/16"],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-spoke1-work",
+          "name": "snet-spoke1-work",
+          "prefix": "10.101.1.0/24",
+          "routeTableId": "rt-spoke1"
+        },
+        {
+          "id": "sub-spoke1-pe",
+          "name": "snet-spoke1-pe",
+          "prefix": "10.101.2.0/24",
+          "routeTableId": "rt-spoke1",
+          "privateEndpointNetworkPolicies": "Disabled",
+          "privateEndpoints": [
+            {
+              "id": "pe-spoke1-blob",
+              "name": "pe-aznet-blob",
+              "ipAddress": "10.101.2.4",
+              "serviceName": "privatelink.blob.core.windows.net"
+            }
+          ]
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    },
+    {
+      "id": "vnet-spoke2",
+      "name": "vnet-aznet-spoke2",
+      "region": "swedencentral",
+      "prefixes": ["10.102.0.0/16"],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-spoke2-work",
+          "name": "snet-spoke2-work",
+          "prefix": "10.102.1.0/24",
+          "routeTableId": "rt-spoke2"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    }
+  ],
+  "vnetPeerings": [
+    {
+      "id": "peer-hub-spoke1",
+      "name": "peer-hub-to-spoke1",
+      "vnetAId": "vnet-hub",
+      "vnetBId": "vnet-spoke1",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    },
+    {
+      "id": "peer-hub-spoke2",
+      "name": "peer-hub-to-spoke2",
+      "vnetAId": "vnet-hub",
+      "vnetBId": "vnet-spoke2",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    }
+  ],
+  "udrTables": [
+    {
+      "id": "rt-gw-subnet",
+      "name": "rt-aznet-gw-subnet",
+      "disableBgpRoutePropagation": false,
+      "routes": [
+        {
+          "id": "udr-gw-to-spoke1",
+          "name": "to-spoke1-via-nva",
+          "prefix": "10.101.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.4",
+          "enabled": true
+        },
+        {
+          "id": "udr-gw-to-spoke2",
+          "name": "to-spoke2-via-nva",
+          "prefix": "10.102.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.4",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "rt-hub-nva",
+      "name": "rt-aznet-hub-nva",
+      "disableBgpRoutePropagation": false,
+      "routes": []
+    },
+    {
+      "id": "rt-spoke1",
+      "name": "rt-aznet-spoke1",
+      "disableBgpRoutePropagation": false,
+      "routes": [
+        {
+          "id": "udr-spoke1-to-spoke2",
+          "name": "to-spoke2-via-nva",
+          "prefix": "10.102.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.4",
+          "enabled": true
+        },
+        {
+          "id": "udr-spoke1-to-branch",
+          "name": "to-branch-via-nva",
+          "prefix": "192.168.100.0/24",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.4",
+          "enabled": true
+        },
+        {
+          "id": "udr-spoke1-to-pe-subnet",
+          "name": "to-pe-subnet-via-nva",
+          "prefix": "10.101.2.0/24",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.4",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "rt-spoke2",
+      "name": "rt-aznet-spoke2",
+      "disableBgpRoutePropagation": false,
+      "routes": [
+        {
+          "id": "udr-spoke2-to-spoke1",
+          "name": "to-spoke1-via-nva",
+          "prefix": "10.101.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.4",
+          "enabled": true
+        },
+        {
+          "id": "udr-spoke2-to-branch",
+          "name": "to-branch-via-nva",
+          "prefix": "192.168.100.0/24",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.4",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "vwanHubs": [],
+  "erLocations": [],
+  "erLinks": [],
+  "sites": [
+    {
+      "id": "site-branch1",
+      "name": "Branch-Site-1",
+      "asn": 65100,
+      "prefixes": ["10.250.0.0/16"]
+    }
+  ],
+  "vpnConnections": [
+    {
+      "id": "vpn-branch1-to-hub",
+      "name": "conn-branch1-to-hub",
+      "siteId": "site-branch1",
+      "targetKind": "vnet-gateway",
+      "targetId": "vng-hub-vpn",
+      "bgpEnabled": true,
+      "enabled": true
+    }
+  ],
+  "siteLinks": []
+}

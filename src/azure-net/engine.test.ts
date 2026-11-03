@@ -1,4 +1,11 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import {
+  compareAzNetWithObservations,
+  importAzNetCapture,
+} from './azure-import'
+import { generateAzNetBicep } from './bicep-export'
 import { runAzNetDiagnostics } from './diagnostics'
 import {
   lookupSubnetEffectiveRoute,
@@ -6,7 +13,7 @@ import {
   traceAzNetFlow,
   traceAzNetPair,
 } from './engine'
-import { AZURE_NET_SAMPLES, validateAzNetTopology } from './model'
+import { AZURE_NET_SAMPLES, validateAzNetTopology, type AzNetTopology } from './model'
 
 describe('Azure Networking Simulator Engine & Diagnostics', () => {
   it('validates all 4 canonical Azure Networking sample topologies with zero schema errors', () => {
@@ -124,5 +131,208 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(pair.forward.status).toBe('delivered')
     expect(pair.reverse.status).toBe('delivered')
     expect(pair.symmetricInspection).toBe(true)
+  })
+
+  it('validates UC1–UC5 JSON topologies, GatewaySubnet proxy parity, and Bicep generation', () => {
+    const ucFiles = [
+      'uc1-hub-spoke-nva-ars-baseline.json',
+      'uc2-gateway-subnet-missing-udr-asymmetry.json',
+      'uc3-bgp-propagation-and-peering-gates.json',
+      'uc4-private-endpoint-udr-override.json',
+      'uc5-ars-branch-to-branch-and-bgp-selection.json',
+    ]
+
+    const loaded: Record<string, AzNetTopology> = {}
+    for (const file of ucFiles) {
+      const raw = readFileSync(resolve(process.cwd(), 'samples', 'azure-net', file), 'utf-8')
+      const topo = JSON.parse(raw) as AzNetTopology
+      expect(validateAzNetTopology(topo), `${file} schema validation`).toEqual([])
+      const bicep = generateAzNetBicep(topo)
+      expect(bicep.resourceCount, `${file} bicep resourceCount`).toBeGreaterThan(0)
+      expect(bicep.text).toContain("resource vnet_vnet_hub 'Microsoft.Network/virtualNetworks@")
+      expect(bicep.text).toContain("name: 'snet-gw-proxy'")
+      expect(bicep.text).toContain('id: rt_rt_gw_subnet.id')
+      loaded[file] = topo
+    }
+
+    // UC1: snet-gw-proxy and GatewaySubnet have identical effective routes and symmetric inspection
+    const uc1 = loaded['uc1-hub-spoke-nva-ars-baseline.json']
+    const sim1 = simulateAzNet(uc1)
+    const gwSubRoutes = sim1.subnetTables['sub-hub-gw'].routes
+    const proxyRoutes = sim1.subnetTables['sub-hub-gw-proxy'].routes
+    expect(proxyRoutes.map((r) => `${r.prefix}:${r.source}:${r.nextHopType}:${r.active}`)).toEqual(
+      gwSubRoutes.map((r) => `${r.prefix}:${r.source}:${r.nextHopType}:${r.active}`),
+    )
+    const uc1Pair = traceAzNetPair(
+      uc1,
+      sim1,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'sub-spoke1-work' },
+      '10.101.1.4',
+      { kind: 'site', siteId: 'site-branch1' },
+      '192.168.100.4',
+    )
+    expect(uc1Pair.symmetricInspection).toBe(true)
+
+    // UC2: Missing UDR on rt-gw-subnet causes asymmetric bypass on return path
+    const uc2 = loaded['uc2-gateway-subnet-missing-udr-asymmetry.json']
+    const sim2 = simulateAzNet(uc2)
+    const uc2Pair = traceAzNetPair(
+      uc2,
+      sim2,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'sub-spoke1-work' },
+      '10.101.1.4',
+      { kind: 'site', siteId: 'site-branch1' },
+      '192.168.100.4',
+    )
+    expect(uc2Pair.symmetricInspection).toBe(false)
+    expect(runAzNetDiagnostics(uc2, sim2).some((f) => f.category === 'gateway-subnet-missing-udr')).toBe(
+      true,
+    )
+
+    // UC3: disableBgpRoutePropagation on rt-spoke2 + allowForwardedTraffic=false on vnet-spoke1
+    const uc3 = loaded['uc3-bgp-propagation-and-peering-gates.json']
+    const sim3 = simulateAzNet(uc3)
+    expect(sim3.subnetTables['sub-spoke2-work'].bgpPropagationDisabled).toBe(true)
+    const spoke2ToSpoke1Flow = traceAzNetFlow(
+      uc3,
+      sim3,
+      { kind: 'subnet', vnetId: 'vnet-spoke2', subnetId: 'sub-spoke2-work' },
+      '10.101.1.4',
+    )
+    expect(spoke2ToSpoke1Flow.status).toBe('dropped-peering-forwarded-traffic')
+
+    // UC4: RouteTableEnabled allows /32 UDR to override Private Endpoint InterfaceEndpoint
+    const uc4 = loaded['uc4-private-endpoint-udr-override.json']
+    const sim4 = simulateAzNet(uc4)
+    const peWinner4 = lookupSubnetEffectiveRoute(sim4.subnetTables['sub-spoke2-work'], '10.101.2.4')
+    expect(peWinner4?.source).toBe('User')
+    expect(peWinner4?.nextHopType).toBe('VirtualAppliance')
+    expect(peWinner4?.nextHopIp).toBe('10.100.2.4')
+
+    // UC5: ARS branchToBranchTraffic=false suppresses NVA<->VNG transit
+    const uc5 = loaded['uc5-ars-branch-to-branch-and-bgp-selection.json']
+    const sim5 = simulateAzNet(uc5)
+    const arsRib5 = sim5.routeServerRibs['ars-hub']
+    expect(arsRib5.some((r) => r.prefix === '192.168.100.0/24' && r.preferred)).toBe(true)
+    expect(sim1.gatewayRibs['vng-hub-vpn'].some((r) => r.prefix === '192.168.100.0/24')).toBe(true)
+    const vngRib5 = sim5.gatewayRibs['vng-hub-vpn']
+    expect(vngRib5.some((r) => r.prefix === '192.168.100.0/24')).toBe(false)
+  })
+
+  it('imports azure-network-capture v2 JSON and compares NIC effective routes including GatewaySubnet proxy', () => {
+    const rawUc1 = readFileSync(
+      resolve(process.cwd(), 'samples', 'azure-net', 'uc1-hub-spoke-nva-ars-baseline.json'),
+      'utf-8',
+    )
+    const uc1 = JSON.parse(rawUc1) as AzNetTopology
+    const sim1 = simulateAzNet(uc1)
+    const proxySimulated = sim1.subnetTables['sub-hub-gw-proxy'].routes
+
+    const capture = {
+      kind: 'azure-network-capture',
+      version: 2,
+      resourceGroup: 'rg-aznet-sim-lab',
+      vnets: [
+        {
+          id: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub',
+          name: 'vnet-aznet-hub',
+          location: 'swedencentral',
+          addressSpace: { addressPrefixes: ['10.100.0.0/16'] },
+          subnets: [
+            {
+              id: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet',
+              name: 'GatewaySubnet',
+              addressPrefix: '10.100.0.0/26',
+              routeTable: {
+                id: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/routeTables/rt-gw-subnet',
+              },
+            },
+            {
+              id: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-gw-proxy',
+              name: 'snet-gw-proxy',
+              addressPrefix: '10.100.4.0/24',
+              routeTable: {
+                id: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/routeTables/rt-gw-subnet',
+              },
+            },
+          ],
+        },
+      ],
+      routeTables: [
+        {
+          id: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/routeTables/rt-gw-subnet',
+          name: 'rt-gw-subnet',
+          disableBgpRoutePropagation: false,
+          routes: [
+            {
+              name: 'udr-gw-to-spoke1-via-nva',
+              addressPrefix: '10.101.0.0/16',
+              nextHopType: 'VirtualAppliance',
+              nextHopIpAddress: '10.100.2.4',
+            },
+          ],
+        },
+      ],
+      nicEffectiveRoutes: [
+        {
+          nicName: 'nic-vm-gw-proxy',
+          nicId: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/networkInterfaces/nic-vm-gw-proxy',
+          vnetName: 'vnet-aznet-hub',
+          subnetName: 'snet-gw-proxy',
+          effectiveRoutes: proxySimulated.map((r) => ({
+            addressPrefix: [r.prefix],
+            nextHopType: r.nextHopType,
+            nextHopIpAddress: r.nextHopIp ? [r.nextHopIp] : [],
+            source: r.source === 'RouteServer' ? 'VirtualNetworkGateway' : r.source,
+            state: r.active ? 'Active' : 'Invalid',
+          })),
+        },
+      ],
+    }
+
+    const imported = importAzNetCapture(capture)
+    expect(imported.topology.vnets).toHaveLength(1)
+    expect(imported.observations).toBeDefined()
+
+    const directCompare = compareAzNetWithObservations(uc1, sim1, imported.observations!)
+    expect(directCompare.subnetComparisons).toHaveLength(1)
+    expect(directCompare.subnetComparisons[0].proxyForGatewaySubnet).toBe(true)
+    expect(directCompare.subnetComparisons[0].mismatchCount).toBe(0)
+    expect(directCompare.totalMatchedRoutes).toBeGreaterThan(0)
+  })
+
+  it('reproduces all 5 empirical live Azure captures (uc1..uc5) with zero effective-route mismatches', () => {
+    const pairs: Array<[string, string]> = [
+      ['uc1-capture.json', 'uc1-hub-spoke-nva-ars-baseline.json'],
+      ['uc2-capture.json', 'uc2-gateway-subnet-missing-udr-asymmetry.json'],
+      ['uc3-capture.json', 'uc3-bgp-propagation-and-peering-gates.json'],
+      ['uc4-capture.json', 'uc4-private-endpoint-udr-override.json'],
+      ['uc5-capture.json', 'uc5-ars-branch-to-branch-and-bgp-selection.json'],
+    ]
+
+    for (const [capFile, sampleFile] of pairs) {
+      const capRaw = readFileSync(
+        resolve(process.cwd(), 'verification', 'azure-net-2026-11-03', capFile),
+        'utf-8',
+      )
+      const cap = JSON.parse(capRaw)
+      const imp = importAzNetCapture(cap)
+      expect(imp.observations, `${capFile} observations`).toBeDefined()
+
+      const impSim = simulateAzNet(imp.topology)
+      const impCmp = compareAzNetWithObservations(imp.topology, impSim, imp.observations!)
+      expect(impCmp.totalMismatchedRoutes, `${capFile} imported mismatches`).toBe(0)
+      expect(impCmp.totalMatchedRoutes, `${capFile} imported matches`).toBeGreaterThanOrEqual(27)
+
+      const sampleRaw = readFileSync(
+        resolve(process.cwd(), 'samples', 'azure-net', sampleFile),
+        'utf-8',
+      )
+      const sample = JSON.parse(sampleRaw) as AzNetTopology
+      const sampleSim = simulateAzNet(sample)
+      const sampleCmp = compareAzNetWithObservations(sample, sampleSim, imp.observations!)
+      expect(sampleCmp.totalMismatchedRoutes, `${capFile} vs ${sampleFile} mismatches`).toBe(0)
+      expect(sampleCmp.totalMatchedRoutes, `${capFile} vs ${sampleFile} matches`).toBeGreaterThanOrEqual(25)
+    }
   })
 })
