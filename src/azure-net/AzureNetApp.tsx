@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './azure-net.css'
 import { AzureNetDiagram, type AzSelectedEntity } from './AzureNetDiagram'
 import {
@@ -36,16 +36,116 @@ interface EndpointOption {
   defaultIp: string
 }
 
+interface AzNetSampleCatalogEntry {
+  id: string
+  title: string
+  summary: string
+  category: 'flagship' | 'validation'
+  badges: string[]
+}
+
+const FLAGSHIP_BADGES: Record<string, string[]> = {
+  'hub-spoke-firewall-udr': ['Hub & Spoke', 'AzFW Inspection', 'GatewaySubnet UDR', 'Private Endpoint /32'],
+  'ars-sdwan-nva-coexistence': ['Azure Route Server', 'SD-WAN BGP NVA', 'ER + VPN B2B', 'BGP Propagation'],
+  'dual-hub-vnra-global-peering': ['Dual-Region Hubs', 'Managed VNRA', 'Global Peering', 'Chained UDRs'],
+  'hybrid-vwan-and-hub-spoke': ['Secured vWAN Hub', 'Classic Hub-and-Spoke', 'Shared ER MSEE', 'Routing Intent'],
+  'enterprise-vnet-all-features-showcase': ['All Features', '2 Regional Hubs', 'AzFW + ARS + SD-WAN', 'PE Policies & BGP LPM'],
+}
+
+const AZURE_NET_VALIDATION_SCENARIOS: AzNetSampleCatalogEntry[] = [
+  {
+    id: 'uc1-hub-spoke-nva-ars-baseline',
+    title: 'UC1 · Hub & Spoke + NVA + Route Server Baseline',
+    summary: 'Symmetric Hub & Spoke inspection through a Linux BGP NVA peering with Azure Route Server (ASN 65515) and Gateway Transit to spokes.',
+    category: 'validation',
+    badges: ['UC1 Validated', 'Route Server', 'BGP NVA', 'Gateway Transit'],
+  },
+  {
+    id: 'uc2-gateway-subnet-missing-udr-asymmetry',
+    title: 'UC2 · GatewaySubnet Missing Return UDR Asymmetry',
+    summary: 'Outbound spoke traffic traverses the Hub NVA/Firewall via UDR, while inbound on-premises return traffic from the Gateway bypasses inspection.',
+    category: 'validation',
+    badges: ['UC2 Validated', 'Asymmetric Inspection', 'GatewaySubnet UDR', 'Auto-Fixable'],
+  },
+  {
+    id: 'uc3-bgp-propagation-and-peering-gates',
+    title: 'UC3 · BGP Route Propagation & Peering Gates',
+    summary: 'Contrasts disableBgpRoutePropagation true vs false on spoke route tables alongside VNet Peering allowForwardedTraffic and useRemoteGateways gates.',
+    category: 'validation',
+    badges: ['UC3 Validated', 'BGP Propagation', 'Peering Gates', 'Remote Gateways'],
+  },
+  {
+    id: 'uc4-private-endpoint-udr-override',
+    title: 'UC4 · Private Endpoint /32 System Route vs RouteTableEnabled',
+    summary: 'Compares PrivateEndpointNetworkPolicies Disabled (/32 InterfaceEndpoint system route overrides /24 UDR) against RouteTableEnabled.',
+    category: 'validation',
+    badges: ['UC4 Validated', 'Private Endpoint /32', 'RouteTableEnabled', 'LPM Override'],
+  },
+  {
+    id: 'uc5-ars-branch-to-branch-and-bgp-selection',
+    title: 'UC5 · ARS Branch-to-Branch & Hub Routing Preference',
+    summary: 'Tests Azure Route Server branchToBranchTraffic and hubRoutingPreference (ExpressRoute vs VpnGateway vs ASPath) across multi-homed paths.',
+    category: 'validation',
+    badges: ['UC5 Validated', 'ARS Preference', 'AS-Path Prepend', 'Branch-to-Branch'],
+  },
+  {
+    id: 'uc6-ars-default-route-self-blackhole',
+    title: 'UC6 · ARS 0.0.0.0/0 NVA Self-Loop Blackhole Trap',
+    summary: 'When an NVA advertises 0.0.0.0/0 to Azure Route Server and its own subnet leaves BGP propagation enabled, ARS programs 0.0.0.0/0 back to the NVA NIC.',
+    category: 'validation',
+    badges: ['UC6 Validated', 'ARS Self-Loop', '0.0.0.0/0 Trap', 'Auto-Fixable'],
+  },
+  {
+    id: 'uc7-bgp-lpm-bypasses-summary-udr',
+    title: 'UC7 · BGP /16 LPM Bypassing /8 Summary UDR',
+    summary: 'A spoke with a 10.0.0.0/8 summary UDR to a Firewall but BGP propagation enabled learns a more-specific /16 BGP route that wins by LPM and bypasses the Firewall.',
+    category: 'validation',
+    badges: ['UC7 Validated', 'BGP LPM Bypass', 'Summary UDR', 'Asymmetric Drop'],
+  },
+  {
+    id: 'uc8-udr-next-hop-types-and-vng-transit-trap',
+    title: 'UC8 · All 5 UDR Next-Hop Types & VNG Transit Trap',
+    summary: 'Exercises VirtualAppliance, VnetLocal, Internet, None (Blackhole), and VirtualNetworkGateway UDR next-hop types on one spoke route table.',
+    category: 'validation',
+    badges: ['UC8 Validated', '5 Next-Hop Types', 'Blackhole Route', 'VnetLocal Override'],
+  },
+  {
+    id: 'uc9-expressroute-hairpin-two-vnets',
+    title: 'UC9 · Cross-VNet Transit via Shared ExpressRoute MSEE',
+    summary: 'Two independent VNets (no VNet Peering) with standalone ExpressRoute Gateways linked to the same ExpressRoute circuit / MSEE (ASN 12076) exchanging routes via BGP.',
+    category: 'validation',
+    badges: ['UC9 Validated', 'Shared ER MSEE', 'ASN 12076 Hairpin', 'No VNet Peering'],
+  },
+]
+
+const ALL_AZURE_NET_CATALOG: AzNetSampleCatalogEntry[] = [
+  ...AZURE_NET_SAMPLES.map((s) => ({
+    id: s.id,
+    title: s.title,
+    summary: s.summary ?? '',
+    category: 'flagship' as const,
+    badges: FLAGSHIP_BADGES[s.id] ?? ['Reference Topology'],
+  })),
+  ...AZURE_NET_VALIDATION_SCENARIOS,
+]
+
+function resolveInitialBuiltInSample() {
+  if (typeof window === 'undefined') return AZURE_NET_SAMPLES[0]
+  const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
+  return AZURE_NET_SAMPLES.find((s) => s.id === requested) ?? AZURE_NET_SAMPLES[0]
+}
+
 export function AzureNetApp() {
-  const [sampleId, setSampleId] = useState<string>(AZURE_NET_SAMPLES[0].id)
+  const initialSample = resolveInitialBuiltInSample()
+  const [sampleId, setSampleId] = useState<string>(initialSample.id)
   const [topology, setTopology] = useState<AzNetTopology>(() =>
-    cloneAzNetTopology(AZURE_NET_SAMPLES[0].topology),
+    cloneAzNetTopology(initialSample.topology),
   )
   const [history, setHistory] = useState<AzNetTopology[]>([])
   const [future, setFuture] = useState<AzNetTopology[]>([])
   const [activeTab, setActiveTab] = useState<InspectorTab>('routes')
   const [selected, setSelected] = useState<AzSelectedEntity>(() => {
-    const firstVnet = AZURE_NET_SAMPLES[0].topology.vnets[1] ?? AZURE_NET_SAMPLES[0].topology.vnets[0]
+    const firstVnet = initialSample.topology.vnets[1] ?? initialSample.topology.vnets[0]
     return {
       kind: 'subnet',
       vnetId: firstVnet.id,
@@ -120,6 +220,8 @@ export function AzureNetApp() {
   const [traceDestKey, setTraceDestKey] = useState<string>('')
   const [customDestIp, setCustomDestIp] = useState<string>('')
   const [traceActive, setTraceActive] = useState<boolean>(false)
+  const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
+  const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null)
 
   const resolvedSourceOpt =
     endpointOptions.find((o) => o.key === traceSourceKey) ?? endpointOptions[1] ?? endpointOptions[0]
@@ -146,18 +248,16 @@ export function AzureNetApp() {
     return traceAzNetFlow(topology, simulation, resolvedSourceOpt.ref, customDestIp.trim())
   }, [traceActive, resolvedSourceOpt, customDestIp, topology, simulation])
 
-  const loadSample = (id: string) => {
-    const found = AZURE_NET_SAMPLES.find((s) => s.id === id)
-    if (!found) return
-    setSampleId(found.id)
-    const cloned = cloneAzNetTopology(found.topology)
-    setTopology(cloned)
+  const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
+    setSampleId(id)
+    setTopology(nextTopology)
     setHistory([])
     setFuture([])
     setTraceActive(false)
     setCustomDestIp('')
     setShowDiagnosticBadges(true)
-    const defaultVnet = cloned.vnets[1] ?? cloned.vnets[0]
+    setSampleGalleryOpen(false)
+    const defaultVnet = nextTopology.vnets[1] ?? nextTopology.vnets[0]
     if (defaultVnet && defaultVnet.subnets[0]) {
       setSelected({
         kind: 'subnet',
@@ -166,6 +266,67 @@ export function AzureNetApp() {
       })
     }
   }
+
+  const loadSample = (id: string) => {
+    const found = AZURE_NET_SAMPLES.find((s) => s.id === id)
+    if (found) {
+      applyLoadedTopology(found.id, cloneAzNetTopology(found.topology))
+      return
+    }
+    if (!/^[a-z0-9-]+$/.test(id)) return
+    setSampleLoadingId(id)
+    void fetch(`/docs/samples/azure-net/${id}.json`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Sample "${id}" not found.`)
+        return (await res.json()) as AzNetTopology
+      })
+      .then((loaded) => {
+        const errs = validateAzNetTopology(loaded)
+        if (errs.length > 0) throw new Error(errs.join('; '))
+        applyLoadedTopology(id, loaded)
+      })
+      .catch(() => {
+        // Ignore invalid or unreachable sample fetch
+      })
+      .finally(() => {
+        setSampleLoadingId(null)
+      })
+  }
+
+  const urlSampleLoaded = useRef(false)
+  useEffect(() => {
+    if (urlSampleLoaded.current) return
+    const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
+    if (!/^[a-z0-9-]+$/.test(requested)) return
+    urlSampleLoaded.current = true
+    if (AZURE_NET_SAMPLES.some((s) => s.id === requested)) {
+      return
+    }
+    void fetch(`/docs/samples/azure-net/${requested}.json`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Sample "${requested}" not found.`)
+        return (await res.json()) as AzNetTopology
+      })
+      .then((loaded) => {
+        const errs = validateAzNetTopology(loaded)
+        if (errs.length > 0) throw new Error(errs.join(' '))
+        setSampleId(requested)
+        setTopology(loaded)
+        setHistory([])
+        setFuture([])
+        const defaultVnet = loaded.vnets[1] ?? loaded.vnets[0]
+        if (defaultVnet && defaultVnet.subnets[0]) {
+          setSelected({
+            kind: 'subnet',
+            vnetId: defaultVnet.id,
+            subnetId: defaultVnet.subnets[0].id,
+          })
+        }
+      })
+      .catch((err) => {
+        setCaptureNotices([err instanceof Error ? err.message : String(err)])
+      })
+  }, [])
 
   // One-click Auto-Remediation for diagnostic findings
   const applyAutoFix = (finding: AzDiagnosticFinding) => {
@@ -376,7 +537,7 @@ export function AzureNetApp() {
     return null
   }, [selected, topology, simulation])
 
-  const currentSampleMeta = AZURE_NET_SAMPLES.find((s) => s.id === sampleId)
+  const currentSampleMeta = ALL_AZURE_NET_CATALOG.find((s) => s.id === sampleId)
 
   const handleExportJson = () => {
     const blob = new Blob([JSON.stringify(topology, null, 2)], { type: 'application/json' })
@@ -399,7 +560,7 @@ export function AzureNetApp() {
 
         <div className="aznet-topbar-controls">
           <label style={{ fontSize: 12, color: '#cbd5e1' }} htmlFor="aznet-sample-select">
-            Reference Topology:
+            Sample Topology:
           </label>
           <select
             id="aznet-sample-select"
@@ -408,12 +569,31 @@ export function AzureNetApp() {
             value={sampleId}
             onChange={(e) => loadSample(e.target.value)}
           >
-            {AZURE_NET_SAMPLES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.title}
-              </option>
-            ))}
+            <optgroup label="Flagship Reference Topologies (5)">
+              {AZURE_NET_SAMPLES.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Empirical Validation Scenarios (UC1–UC9)">
+              {AZURE_NET_VALIDATION_SCENARIOS.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.title}
+                </option>
+              ))}
+            </optgroup>
           </select>
+
+          <button
+            type="button"
+            className="aznet-btn"
+            data-testid="aznet-open-sample-gallery-btn"
+            onClick={() => setSampleGalleryOpen(true)}
+            title="Browse all 14 built-in Azure VNet & Hybrid sample topologies"
+          >
+            📚 Sample Gallery ({ALL_AZURE_NET_CATALOG.length})
+          </button>
 
           <button
             type="button"
@@ -1771,6 +1951,196 @@ export function AzureNetApp() {
           </div>
         </aside>
       </div>
+
+      {sampleGalleryOpen && (
+        <div
+          data-testid="aznet-sample-gallery-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: 24,
+          }}
+          onClick={() => setSampleGalleryOpen(false)}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 12,
+              maxWidth: 1040,
+              width: '100%',
+              maxHeight: '86vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                padding: '16px 20px',
+                background: '#0f172a',
+                color: '#f8fafc',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, fontSize: 17 }}>
+                  📚 Azure VNet & Hybrid Sample Topologies Gallery ({ALL_AZURE_NET_CATALOG.length})
+                </h2>
+                <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
+                  Click any reference architecture or live-Azure validated scenario below to load it
+                  immediately into the simulator.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="aznet-btn"
+                data-testid="aznet-close-sample-gallery-btn"
+                onClick={() => setSampleGalleryOpen(false)}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+              <div>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: '#0f172a' }}>
+                  Flagship Reference Topologies (5)
+                </h3>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(295px, 1fr))',
+                    gap: 12,
+                  }}
+                >
+                  {ALL_AZURE_NET_CATALOG.filter((s) => s.category === 'flagship').map((entry) => {
+                    const isCurrent = entry.id === sampleId
+                    return (
+                      <div
+                        key={entry.id}
+                        data-testid={`aznet-gallery-card-${entry.id}`}
+                        style={{
+                          border: isCurrent ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                          background: isCurrent ? '#eff6ff' : '#f8fafc',
+                          borderRadius: 8,
+                          padding: 12,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 4 }}>
+                            {entry.title}
+                          </div>
+                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: '#334155', lineHeight: 1.45 }}>
+                            {entry.summary}
+                          </p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {entry.badges.map((badge) => (
+                              <span key={badge} className="aznet-badge info">
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <code style={{ fontSize: 10.5, color: '#64748b' }}>{entry.id}.json</code>
+                          <button
+                            type="button"
+                            className="aznet-btn aznet-btn-primary"
+                            data-testid={`aznet-gallery-load-${entry.id}`}
+                            disabled={sampleLoadingId === entry.id}
+                            onClick={() => loadSample(entry.id)}
+                          >
+                            {isCurrent ? '✓ Loaded (Reload)' : 'Load Topology'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: '#0f172a' }}>
+                  Live-Azure Empirical Validation Scenarios (UC1–UC9)
+                </h3>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(295px, 1fr))',
+                    gap: 12,
+                  }}
+                >
+                  {ALL_AZURE_NET_CATALOG.filter((s) => s.category === 'validation').map((entry) => {
+                    const isCurrent = entry.id === sampleId
+                    return (
+                      <div
+                        key={entry.id}
+                        data-testid={`aznet-gallery-card-${entry.id}`}
+                        style={{
+                          border: isCurrent ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                          background: isCurrent ? '#eff6ff' : '#ffffff',
+                          borderRadius: 8,
+                          padding: 12,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'space-between',
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 4 }}>
+                            {entry.title}
+                          </div>
+                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: '#334155', lineHeight: 1.45 }}>
+                            {entry.summary}
+                          </p>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                            {entry.badges.map((badge) => (
+                              <span key={badge} className="aznet-badge ok">
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <code style={{ fontSize: 10.5, color: '#64748b' }}>{entry.id}.json</code>
+                          <button
+                            type="button"
+                            className="aznet-btn aznet-btn-primary"
+                            data-testid={`aznet-gallery-load-${entry.id}`}
+                            disabled={sampleLoadingId === entry.id}
+                            onClick={() => loadSample(entry.id)}
+                          >
+                            {sampleLoadingId === entry.id
+                              ? 'Loading…'
+                              : isCurrent
+                                ? '✓ Loaded (Reload)'
+                                : 'Load Scenario'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

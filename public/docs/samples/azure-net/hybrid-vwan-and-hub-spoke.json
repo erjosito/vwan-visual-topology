@@ -1,0 +1,203 @@
+{
+  "version": 2,
+  "kind": "azure-network-topology",
+  "name": "Hybrid Coexistence: Virtual WAN Secured Hub + Classic Hub-and-Spoke",
+  "vnets": [
+    {
+      "id": "vnet-vwan-spoke-1",
+      "name": "VNet-vWAN-Spoke-AI",
+      "region": "westeurope",
+      "prefixes": [
+        "10.50.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "vwanHubAttachment": {
+        "hubId": "vhub-weu-sec",
+        "enabled": true,
+        "propagateDefaultRoute": true
+      },
+      "subnets": [
+        {
+          "id": "sub-vwan-ai",
+          "name": "snet-ai-inference",
+          "prefix": "10.50.1.0/24"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    },
+    {
+      "id": "vnet-legacy-hub",
+      "name": "VNet-Legacy-Hub-DE",
+      "region": "germanywestcentral",
+      "prefixes": [
+        "10.60.0.0/22"
+      ],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-leg-gw",
+          "name": "GatewaySubnet",
+          "prefix": "10.60.0.0/26",
+          "routeTableId": "rt-leg-gw"
+        },
+        {
+          "id": "sub-leg-fw",
+          "name": "AzureFirewallSubnet",
+          "prefix": "10.60.1.0/26"
+        }
+      ],
+      "gateways": [
+        {
+          "id": "vng-leg-er",
+          "name": "ER-GW-Legacy-DE",
+          "kind": "ExpressRoute",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "enabled": true
+        }
+      ],
+      "appliances": [
+        {
+          "id": "app-leg-fw",
+          "name": "AzFW-Legacy-DE",
+          "kind": "azure-firewall",
+          "subnetId": "sub-leg-fw",
+          "privateIp": "10.60.1.4",
+          "enableIpForwarding": true,
+          "inspectsTraffic": true,
+          "staticRoutes": []
+        }
+      ]
+    },
+    {
+      "id": "vnet-legacy-spoke",
+      "name": "VNet-Legacy-CoreBanking",
+      "region": "germanywestcentral",
+      "prefixes": [
+        "10.61.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-leg-core",
+          "name": "snet-core-banking",
+          "prefix": "10.61.1.0/24",
+          "routeTableId": "rt-leg-spoke"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    }
+  ],
+  "vnetPeerings": [
+    {
+      "id": "peer-leg-hub-spoke",
+      "name": "Legacy-Hub-DE ↔ CoreBanking",
+      "vnetAId": "vnet-legacy-hub",
+      "vnetBId": "vnet-legacy-spoke",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    }
+  ],
+  "udrTables": [
+    {
+      "id": "rt-leg-spoke",
+      "name": "RT-CoreBanking-To-AzFW",
+      "disableBgpRoutePropagation": true,
+      "routes": [
+        {
+          "id": "udr-leg-all",
+          "name": "all-via-legacy-azfw",
+          "prefix": "0.0.0.0/0",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.60.1.4",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "rt-leg-gw",
+      "name": "RT-Legacy-GatewaySubnet",
+      "disableBgpRoutePropagation": false,
+      "routes": [
+        {
+          "id": "udr-leg-gw-spoke",
+          "name": "corebanking-via-azfw",
+          "prefix": "10.61.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.60.1.4",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "vwanHubs": [
+    {
+      "id": "vhub-weu-sec",
+      "name": "vHub-WestEurope-Secured",
+      "region": "westeurope",
+      "preference": "ExpressRoute",
+      "routingIntent": {
+        "private": true,
+        "internet": true
+      }
+    }
+  ],
+  "erLocations": [
+    {
+      "id": "erloc-fra",
+      "name": "Frankfurt Equinix MSEE",
+      "globalReachEnabled": true
+    }
+  ],
+  "erLinks": [
+    {
+      "id": "erlink-vhub-fra",
+      "name": "vHub-WEU ER Circuit",
+      "locationId": "erloc-fra",
+      "targetKind": "vwan-hub",
+      "targetId": "vhub-weu-sec",
+      "enabled": true
+    },
+    {
+      "id": "erlink-leghub-fra",
+      "name": "Legacy-Hub-DE ER Circuit",
+      "locationId": "erloc-fra",
+      "targetKind": "vnet-gateway",
+      "targetId": "vng-leg-er",
+      "enabled": true
+    },
+    {
+      "id": "erlink-fra-dc",
+      "name": "Frankfurt Mainframe DC",
+      "locationId": "erloc-fra",
+      "targetKind": "site",
+      "targetId": "site-frankfurt-dc",
+      "enabled": true
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-frankfurt-dc",
+      "name": "Frankfurt Mainframe DC",
+      "asn": 65090,
+      "prefixes": [
+        "172.30.0.0/16"
+      ]
+    }
+  ],
+  "vpnConnections": [],
+  "siteLinks": []
+}

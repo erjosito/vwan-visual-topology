@@ -1,0 +1,290 @@
+{
+  "version": 2,
+  "kind": "azure-network-topology",
+  "name": "Hub-and-Spoke with Azure Firewall, ER/VPN & GatewaySubnet UDR",
+  "vnets": [
+    {
+      "id": "vnet-hub-weu",
+      "name": "VNet-Hub-WEU",
+      "region": "westeurope",
+      "prefixes": [
+        "10.0.0.0/22"
+      ],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-hub-gw",
+          "name": "GatewaySubnet",
+          "prefix": "10.0.0.0/26",
+          "routeTableId": "rt-gw-subnet"
+        },
+        {
+          "id": "sub-hub-fw",
+          "name": "AzureFirewallSubnet",
+          "prefix": "10.0.1.0/26"
+        },
+        {
+          "id": "sub-hub-mgmt",
+          "name": "snet-shared-dns",
+          "prefix": "10.0.2.0/24",
+          "routeTableId": "rt-spoke-to-fw"
+        }
+      ],
+      "gateways": [
+        {
+          "id": "vng-hub-er",
+          "name": "ER-GW-Hub-WEU",
+          "kind": "ExpressRoute",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "enabled": true
+        },
+        {
+          "id": "vng-hub-vpn",
+          "name": "VPN-GW-Hub-WEU",
+          "kind": "Vpn",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "activeActive": true,
+          "enabled": true
+        }
+      ],
+      "appliances": [
+        {
+          "id": "app-hub-azfw",
+          "name": "AzFW-Hub-WEU",
+          "kind": "azure-firewall",
+          "subnetId": "sub-hub-fw",
+          "privateIp": "10.0.1.4",
+          "enableIpForwarding": true,
+          "inspectsTraffic": true,
+          "staticRoutes": []
+        }
+      ]
+    },
+    {
+      "id": "vnet-spoke-app",
+      "name": "VNet-Spoke-App",
+      "region": "westeurope",
+      "prefixes": [
+        "10.1.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-app-web",
+          "name": "snet-app-tier",
+          "prefix": "10.1.1.0/24",
+          "routeTableId": "rt-spoke-to-fw"
+        },
+        {
+          "id": "sub-app-aks",
+          "name": "snet-aks-nodes",
+          "prefix": "10.1.2.0/24",
+          "routeTableId": "rt-spoke-to-fw"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    },
+    {
+      "id": "vnet-spoke-data",
+      "name": "VNet-Spoke-Data",
+      "region": "westeurope",
+      "prefixes": [
+        "10.2.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-data-db",
+          "name": "snet-sql-mi",
+          "prefix": "10.2.1.0/24",
+          "routeTableId": "rt-spoke-to-fw"
+        },
+        {
+          "id": "sub-data-pe",
+          "name": "snet-private-endpoints",
+          "prefix": "10.2.2.0/24",
+          "routeTableId": "rt-spoke-to-fw",
+          "privateEndpointNetworkPolicies": "Disabled",
+          "privateEndpoints": [
+            {
+              "id": "pe-storage-blob",
+              "name": "pe-fin-datalake",
+              "ipAddress": "10.2.2.15",
+              "serviceName": "privatelink.blob.core.windows.net"
+            }
+          ]
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    }
+  ],
+  "vnetPeerings": [
+    {
+      "id": "peer-hub-app",
+      "name": "Hub-WEU ↔ Spoke-App",
+      "vnetAId": "vnet-hub-weu",
+      "vnetBId": "vnet-spoke-app",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    },
+    {
+      "id": "peer-hub-data",
+      "name": "Hub-WEU ↔ Spoke-Data",
+      "vnetAId": "vnet-hub-weu",
+      "vnetBId": "vnet-spoke-data",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    }
+  ],
+  "udrTables": [
+    {
+      "id": "rt-spoke-to-fw",
+      "name": "RT-Spokes-To-AzFW",
+      "disableBgpRoutePropagation": true,
+      "routes": [
+        {
+          "id": "udr-rfc1918-a",
+          "name": "to-10-8-via-azfw",
+          "prefix": "10.0.0.0/8",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4",
+          "enabled": true
+        },
+        {
+          "id": "udr-onprem-172",
+          "name": "to-onprem-via-azfw",
+          "prefix": "172.16.0.0/12",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4",
+          "enabled": true
+        },
+        {
+          "id": "udr-default-fw",
+          "name": "default-to-azfw",
+          "prefix": "0.0.0.0/0",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "rt-gw-subnet",
+      "name": "RT-GatewaySubnet-Return",
+      "disableBgpRoutePropagation": false,
+      "routes": [
+        {
+          "id": "udr-gw-to-app",
+          "name": "spoke-app-via-azfw",
+          "prefix": "10.1.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4",
+          "enabled": true
+        },
+        {
+          "id": "udr-gw-to-data",
+          "name": "spoke-data-via-azfw",
+          "prefix": "10.2.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4",
+          "enabled": false
+        }
+      ]
+    }
+  ],
+  "vwanHubs": [],
+  "erLocations": [
+    {
+      "id": "erloc-ams",
+      "name": "Amsterdam Equinix MSEE",
+      "globalReachEnabled": true
+    }
+  ],
+  "erLinks": [
+    {
+      "id": "erlink-hub-ams",
+      "name": "Hub-WEU ER Connection",
+      "locationId": "erloc-ams",
+      "targetKind": "vnet-gateway",
+      "targetId": "vng-hub-er",
+      "enabled": true,
+      "weight": 0
+    },
+    {
+      "id": "erlink-hq-ams",
+      "name": "Munich HQ ER Circuit",
+      "locationId": "erloc-ams",
+      "targetKind": "site",
+      "targetId": "site-munich-hq",
+      "enabled": true
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-munich-hq",
+      "name": "Munich Core DC",
+      "asn": 65010,
+      "prefixes": [
+        "172.16.10.0/24",
+        "172.16.20.0/24"
+      ]
+    },
+    {
+      "id": "site-zurich-br",
+      "name": "Zurich Branch (VPN)",
+      "asn": 65020,
+      "prefixes": [
+        "172.16.50.0/24"
+      ]
+    }
+  ],
+  "vpnConnections": [
+    {
+      "id": "vpn-zurich-hub",
+      "name": "S2S-Zurich-to-Hub-WEU",
+      "siteId": "site-zurich-br",
+      "targetKind": "vnet-gateway",
+      "targetId": "vng-hub-vpn",
+      "bgpEnabled": true,
+      "inboundPrepend": [
+        65020
+      ],
+      "enabled": true
+    }
+  ],
+  "siteLinks": [
+    {
+      "id": "sitelink-muc-zrh",
+      "name": "MPLS Backdoor MUC-ZRH",
+      "siteAId": "site-munich-hq",
+      "siteBId": "site-zurich-br",
+      "enabled": true
+    }
+  ]
+}

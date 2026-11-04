@@ -36,5 +36,13 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.getByTestId('aznet-sample-select').selectOption('ars-sdwan-nva-coexistence')
     await page.getByTestId('aznet-tab-diagnostics').click()
     await expect(page.getByTestId('aznet-finding-bgp-propagation-blackhole')).toBeVisible()
+
+    // Open Sample Gallery modal and load the 5th flagship all-features showcase topology
+    await page.getByTestId('aznet-open-sample-gallery-btn').click()
+    await expect(page.getByTestId('aznet-sample-gallery-modal')).toBeVisible()
+    await expect(page.getByTestId('aznet-gallery-card-uc9-expressroute-hairpin-two-vnets')).toBeVisible()
+    await page.getByTestId('aznet-gallery-load-enterprise-vnet-all-features-showcase').click()
+    await expect(page.getByTestId('aznet-sample-gallery-modal')).toHaveCount(0)
+    await expect(page.getByTestId('aznet-vnet-vnet-hub-neu')).toBeVisible()
   })
 })

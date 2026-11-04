@@ -1,0 +1,236 @@
+{
+  "version": 2,
+  "kind": "azure-network-topology",
+  "name": "Dual-Region Hub-and-Spoke with Managed VNRA & Chained UDRs",
+  "vnets": [
+    {
+      "id": "vnet-hub-r1",
+      "name": "VNet-Hub-Region1-WEU",
+      "region": "westeurope",
+      "prefixes": [
+        "10.10.0.0/22"
+      ],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-r1-vnra",
+          "name": "VirtualNetworkApplianceSubnet",
+          "prefix": "10.10.2.0/24"
+        }
+      ],
+      "gateways": [],
+      "appliances": [
+        {
+          "id": "app-vnra-r1",
+          "name": "VNRA-Hub-WEU (100 Gbps)",
+          "kind": "vnra",
+          "subnetId": "sub-r1-vnra",
+          "privateIp": "10.10.2.4",
+          "enableIpForwarding": true,
+          "staticRoutes": []
+        }
+      ]
+    },
+    {
+      "id": "vnet-hub-r2",
+      "name": "VNet-Hub-Region2-NEU",
+      "region": "northeurope",
+      "prefixes": [
+        "10.20.0.0/22"
+      ],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-r2-vnra",
+          "name": "VirtualNetworkApplianceSubnet",
+          "prefix": "10.20.2.0/24"
+        }
+      ],
+      "gateways": [],
+      "appliances": [
+        {
+          "id": "app-vnra-r2",
+          "name": "VNRA-Hub-NEU (100 Gbps)",
+          "kind": "vnra",
+          "subnetId": "sub-r2-vnra",
+          "privateIp": "10.20.2.4",
+          "enableIpForwarding": true,
+          "staticRoutes": []
+        }
+      ]
+    },
+    {
+      "id": "vnet-spoke-r1-a",
+      "name": "VNet-Spoke-WEU-A",
+      "region": "westeurope",
+      "prefixes": [
+        "10.11.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-r1a-work",
+          "name": "snet-workload-a",
+          "prefix": "10.11.1.0/24",
+          "routeTableId": "rt-r1-spoke"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    },
+    {
+      "id": "vnet-spoke-r2-b",
+      "name": "VNet-Spoke-NEU-B",
+      "region": "northeurope",
+      "prefixes": [
+        "10.21.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-r2b-work",
+          "name": "snet-workload-b",
+          "prefix": "10.21.1.0/24",
+          "routeTableId": "rt-r2-spoke"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    },
+    {
+      "id": "vnet-spoke-r2-c",
+      "name": "VNet-Spoke-NEU-C (Misconfigured Peering)",
+      "region": "northeurope",
+      "prefixes": [
+        "10.22.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-r2c-work",
+          "name": "snet-workload-c",
+          "prefix": "10.22.1.0/24",
+          "routeTableId": "rt-r2-spoke"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    }
+  ],
+  "vnetPeerings": [
+    {
+      "id": "peer-r1-r2-hubs",
+      "name": "Global Peering: Hub-WEU ↔ Hub-NEU",
+      "vnetAId": "vnet-hub-r1",
+      "vnetBId": "vnet-hub-r2",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      }
+    },
+    {
+      "id": "peer-r1-spoke-a",
+      "name": "Hub-WEU ↔ Spoke-WEU-A",
+      "vnetAId": "vnet-hub-r1",
+      "vnetBId": "vnet-spoke-r1-a",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      }
+    },
+    {
+      "id": "peer-r2-spoke-b",
+      "name": "Hub-NEU ↔ Spoke-NEU-B",
+      "vnetAId": "vnet-hub-r2",
+      "vnetBId": "vnet-spoke-r2-b",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      }
+    },
+    {
+      "id": "peer-r2-spoke-c",
+      "name": "Hub-NEU ↔ Spoke-NEU-C",
+      "vnetAId": "vnet-hub-r2",
+      "vnetBId": "vnet-spoke-r2-c",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": false,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      }
+    }
+  ],
+  "udrTables": [
+    {
+      "id": "rt-r1-spoke",
+      "name": "RT-WEU-Spokes-Via-VNRA",
+      "disableBgpRoutePropagation": false,
+      "routes": [
+        {
+          "id": "udr-r1-to-r2",
+          "name": "to-neu-via-vnra-r1",
+          "prefix": "10.20.0.0/14",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.10.2.4",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "rt-r2-spoke",
+      "name": "RT-NEU-Spokes-Via-VNRA",
+      "disableBgpRoutePropagation": false,
+      "routes": [
+        {
+          "id": "udr-r2-to-r1",
+          "name": "to-weu-via-vnra-r2",
+          "prefix": "10.8.0.0/14",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.20.2.4",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "vwanHubs": [],
+  "erLocations": [],
+  "erLinks": [],
+  "sites": [],
+  "vpnConnections": [],
+  "siteLinks": []
+}

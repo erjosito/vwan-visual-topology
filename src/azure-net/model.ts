@@ -798,6 +798,289 @@ export const sampleHybridVwanAndHubSpoke: AzNetTopology = {
   siteLinks: [],
 }
 
+export const sampleEnterpriseVnetAllFeaturesShowcase: AzNetTopology = {
+  version: 2,
+  kind: 'azure-network-topology',
+  name: 'Enterprise Multi-Region Azure VNet All-Features Showcase',
+  vnets: [
+    {
+      id: 'vnet-hub-weu',
+      name: 'VNet-Hub-WEU-Core',
+      region: 'westeurope',
+      prefixes: ['10.10.0.0/22'],
+      role: 'hub-vnet',
+      subnets: [
+        { id: 'sub-weu-gw', name: 'GatewaySubnet', prefix: '10.10.0.0/26', routeTableId: 'rt-weu-gw-return' },
+        { id: 'sub-weu-ars', name: 'RouteServerSubnet', prefix: '10.10.0.64/26' },
+        { id: 'sub-weu-fw', name: 'AzureFirewallSubnet', prefix: '10.10.1.0/26', routeTableId: 'rt-weu-fw-egress' },
+        { id: 'sub-weu-nva', name: 'snet-sdwan-nva', prefix: '10.10.2.0/24', routeTableId: 'rt-weu-nva-egress' },
+      ],
+      gateways: [
+        { id: 'vng-weu-er', name: 'ER-GW-WEU', kind: 'ExpressRoute', asn: 65515, bgpEnabled: true, enabled: true },
+        { id: 'vng-weu-vpn', name: 'VPN-GW-WEU', kind: 'Vpn', asn: 65515, bgpEnabled: true, activeActive: true, enabled: true },
+      ],
+      routeServer: {
+        id: 'ars-weu-core',
+        name: 'ARS-WEU-Core',
+        enabled: true,
+        branchToBranchTraffic: true,
+        hubRoutingPreference: 'ExpressRoute',
+        peerApplianceIds: ['app-weu-sdwan'],
+      },
+      appliances: [
+        {
+          id: 'app-weu-azfw',
+          name: 'AzFW-WEU-Premium',
+          kind: 'azure-firewall',
+          subnetId: 'sub-weu-fw',
+          privateIp: '10.10.1.4',
+          enableIpForwarding: true,
+          inspectsTraffic: true,
+          advertisedPrefixes: [],
+          staticRoutes: [],
+        },
+        {
+          id: 'app-weu-sdwan',
+          name: 'NVA-SDWAN-Edge-01',
+          kind: 'nva-vm',
+          subnetId: 'sub-weu-nva',
+          privateIp: '10.10.2.10',
+          asn: 65110,
+          bgpEnabled: true,
+          enableIpForwarding: true,
+          inspectsTraffic: false,
+          advertisedPrefixes: ['10.250.0.0/16', '192.168.200.0/24'],
+          staticRoutes: [],
+        },
+      ],
+    },
+    {
+      id: 'vnet-hub-neu',
+      name: 'VNet-Hub-NEU-DR',
+      region: 'northeurope',
+      prefixes: ['10.20.0.0/22'],
+      role: 'hub-vnet',
+      subnets: [
+        { id: 'sub-neu-gw', name: 'GatewaySubnet', prefix: '10.20.0.0/26', routeTableId: 'rt-neu-gw-return' },
+        { id: 'sub-neu-fw', name: 'AzureFirewallSubnet', prefix: '10.20.1.0/26' },
+      ],
+      gateways: [
+        { id: 'vng-neu-er', name: 'ER-GW-NEU', kind: 'ExpressRoute', asn: 65515, bgpEnabled: true, enabled: true },
+      ],
+      appliances: [
+        {
+          id: 'app-neu-azfw',
+          name: 'AzFW-NEU-DR',
+          kind: 'azure-firewall',
+          subnetId: 'sub-neu-fw',
+          privateIp: '10.20.1.4',
+          enableIpForwarding: true,
+          inspectsTraffic: true,
+          advertisedPrefixes: [],
+          staticRoutes: [],
+        },
+      ],
+    },
+    {
+      id: 'vnet-spoke-payments',
+      name: 'VNet-Spoke-Payments-WEU',
+      region: 'westeurope',
+      prefixes: ['10.11.0.0/16'],
+      role: 'spoke-vnet',
+      subnets: [
+        { id: 'sub-pay-aks', name: 'snet-payments-aks', prefix: '10.11.1.0/24', routeTableId: 'rt-weu-spoke-strict' },
+        {
+          id: 'sub-pay-pe',
+          name: 'snet-payments-privatelink',
+          prefix: '10.11.2.0/24',
+          routeTableId: 'rt-weu-spoke-strict',
+          privateEndpointNetworkPolicies: 'RouteTableEnabled',
+          privateEndpoints: [
+            { id: 'pe-pay-sql', name: 'pe-ledger-sql', ipAddress: '10.11.2.10', serviceName: 'privatelink.database.windows.net' },
+          ],
+        },
+      ],
+      gateways: [],
+      appliances: [],
+    },
+    {
+      id: 'vnet-spoke-analytics',
+      name: 'VNet-Spoke-Analytics-WEU',
+      region: 'westeurope',
+      prefixes: ['10.12.0.0/16'],
+      role: 'spoke-vnet',
+      subnets: [
+        { id: 'sub-ana-spark', name: 'snet-databricks-workers', prefix: '10.12.1.0/24', routeTableId: 'rt-weu-spoke-bgp-enabled' },
+        {
+          id: 'sub-ana-pe',
+          name: 'snet-datalake-pe',
+          prefix: '10.12.2.0/24',
+          routeTableId: 'rt-weu-spoke-bgp-enabled',
+          privateEndpointNetworkPolicies: 'Disabled',
+          privateEndpoints: [
+            { id: 'pe-ana-blob', name: 'pe-curated-adls', ipAddress: '10.12.2.25', serviceName: 'privatelink.dfs.core.windows.net' },
+          ],
+        },
+      ],
+      gateways: [],
+      appliances: [],
+    },
+    {
+      id: 'vnet-spoke-dr',
+      name: 'VNet-Spoke-DR-NEU',
+      region: 'northeurope',
+      prefixes: ['10.21.0.0/16'],
+      role: 'spoke-vnet',
+      subnets: [
+        { id: 'sub-dr-app', name: 'snet-dr-standby', prefix: '10.21.1.0/24', routeTableId: 'rt-neu-spoke' },
+      ],
+      gateways: [],
+      appliances: [],
+    },
+  ],
+  vnetPeerings: [
+    {
+      id: 'peer-weu-neu-hubs',
+      name: 'Hub-WEU ↔ Hub-NEU (Global Peering)',
+      vnetAId: 'vnet-hub-weu',
+      vnetBId: 'vnet-hub-neu',
+      enabled: true,
+      aToB: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false },
+      bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false },
+    },
+    {
+      id: 'peer-weu-payments',
+      name: 'Hub-WEU ↔ Spoke-Payments',
+      vnetAId: 'vnet-hub-weu',
+      vnetBId: 'vnet-spoke-payments',
+      enabled: true,
+      aToB: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: true, useRemoteGateways: false },
+      bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: true },
+    },
+    {
+      id: 'peer-weu-analytics',
+      name: 'Hub-WEU ↔ Spoke-Analytics',
+      vnetAId: 'vnet-hub-weu',
+      vnetBId: 'vnet-spoke-analytics',
+      enabled: true,
+      aToB: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: true, useRemoteGateways: false },
+      bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: true },
+    },
+    {
+      id: 'peer-neu-dr',
+      name: 'Hub-NEU ↔ Spoke-DR',
+      vnetAId: 'vnet-hub-neu',
+      vnetBId: 'vnet-spoke-dr',
+      enabled: true,
+      aToB: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: true, useRemoteGateways: false },
+      bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: true },
+    },
+  ],
+  udrTables: [
+    {
+      id: 'rt-weu-spoke-strict',
+      name: 'RT-WEU-Spoke-Strict-AzFW',
+      disableBgpRoutePropagation: true,
+      routes: [
+        { id: 'udr-strict-10', name: 'rfc1918-10-via-azfw', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+        { id: 'udr-strict-172', name: 'rfc1918-172-via-azfw', prefix: '172.16.0.0/12', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+        { id: 'udr-strict-192', name: 'sdwan-192-via-azfw', prefix: '192.168.0.0/16', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+        { id: 'udr-strict-def', name: 'internet-via-azfw', prefix: '0.0.0.0/0', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+      ],
+    },
+    {
+      id: 'rt-weu-spoke-bgp-enabled',
+      name: 'RT-WEU-Analytics-BGP-Enabled',
+      disableBgpRoutePropagation: false,
+      routes: [
+        { id: 'udr-ana-10', name: 'summary-10-8-via-azfw', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+        { id: 'udr-ana-172', name: 'summary-172-12-via-azfw', prefix: '172.16.0.0/12', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+        { id: 'udr-ana-blackhole', name: 'drop-deprecated-lab-range', prefix: '10.99.0.0/16', nextHopType: 'None', enabled: true },
+      ],
+    },
+    {
+      id: 'rt-weu-fw-egress',
+      name: 'RT-WEU-AzFW-Subnet',
+      disableBgpRoutePropagation: false,
+      routes: [
+        { id: 'udr-fw-to-neu', name: 'to-neu-region-via-neu-azfw', prefix: '10.20.0.0/14', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
+        { id: 'udr-fw-internet', name: 'default-internet-breakout', prefix: '0.0.0.0/0', nextHopType: 'Internet', enabled: true },
+      ],
+    },
+    {
+      id: 'rt-weu-nva-egress',
+      name: 'RT-WEU-SDWAN-NVA',
+      disableBgpRoutePropagation: false,
+      routes: [
+        { id: 'udr-nva-spokes', name: 'weu-spokes-via-azfw', prefix: '10.11.0.0/16', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+      ],
+    },
+    {
+      id: 'rt-weu-gw-return',
+      name: 'RT-WEU-GatewaySubnet',
+      disableBgpRoutePropagation: false,
+      routes: [
+        { id: 'udr-weu-gw-pay', name: 'payments-spoke-via-azfw', prefix: '10.11.0.0/16', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+        { id: 'udr-weu-gw-ana', name: 'analytics-spoke-via-azfw', prefix: '10.12.0.0/16', nextHopType: 'VirtualAppliance', nextHopIp: '10.10.1.4', enabled: true },
+      ],
+    },
+    {
+      id: 'rt-neu-spoke',
+      name: 'RT-NEU-Spoke-To-AzFW',
+      disableBgpRoutePropagation: true,
+      routes: [
+        { id: 'udr-neu-to-weu', name: 'to-weu-via-neu-azfw', prefix: '10.8.0.0/14', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
+        { id: 'udr-neu-to-onprem', name: 'to-onprem-via-neu-azfw', prefix: '172.16.0.0/12', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
+      ],
+    },
+    {
+      id: 'rt-neu-gw-return',
+      name: 'RT-NEU-GatewaySubnet',
+      disableBgpRoutePropagation: false,
+      routes: [
+        { id: 'udr-neu-gw-dr', name: 'dr-spoke-via-neu-azfw', prefix: '10.21.0.0/16', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
+      ],
+    },
+  ],
+  vwanHubs: [],
+  erLocations: [
+    { id: 'erloc-ams-core', name: 'Equinix AM5 Amsterdam (MSEE)', globalReachEnabled: true },
+  ],
+  erLinks: [
+    { id: 'erlink-weu-ams', name: 'Hub-WEU ER Circuit Connection', locationId: 'erloc-ams-core', targetKind: 'vnet-gateway', targetId: 'vng-weu-er', enabled: true, weight: 10 },
+    { id: 'erlink-neu-ams', name: 'Hub-NEU Cross-Region ER Connection', locationId: 'erloc-ams-core', targetKind: 'vnet-gateway', targetId: 'vng-neu-er', enabled: true, weight: 0 },
+    { id: 'erlink-fra-ams', name: 'Frankfurt Core DC ER Circuit', locationId: 'erloc-ams-core', targetKind: 'site', targetId: 'site-frankfurt-core', enabled: true },
+  ],
+  sites: [
+    { id: 'site-frankfurt-core', name: 'Frankfurt Primary Core DC', asn: 65010, prefixes: ['172.16.10.0/24', '172.16.20.0/24'] },
+    { id: 'site-dublin-vpn', name: 'Dublin Backup DC (S2S VPN)', asn: 65020, prefixes: ['172.16.30.0/24'] },
+    { id: 'site-zurich-sdwan', name: 'Zurich SD-WAN Partner Enclave', asn: 65250, prefixes: ['10.250.0.0/16', '192.168.200.0/24'] },
+  ],
+  vpnConnections: [
+    {
+      id: 'vpn-dublin-weu',
+      name: 'S2S-Dublin-to-WEU',
+      siteId: 'site-dublin-vpn',
+      targetKind: 'vnet-gateway',
+      targetId: 'vng-weu-vpn',
+      bgpEnabled: true,
+      enabled: true,
+    },
+    {
+      id: 'vpn-zurich-sdwan-overlay',
+      name: 'SD-WAN Overlay to Zurich Enclave',
+      siteId: 'site-zurich-sdwan',
+      targetKind: 'appliance',
+      targetId: 'app-weu-sdwan',
+      bgpEnabled: true,
+      enabled: true,
+    },
+  ],
+  siteLinks: [
+    { id: 'sitelink-fra-dub', name: 'Dark-Fiber Inter-DC Ring', siteAId: 'site-frankfurt-core', siteBId: 'site-dublin-vpn', enabled: true },
+  ],
+}
+
 export const AZURE_NET_SAMPLES: AzSampleMetadata[] = [
   {
     id: 'hub-spoke-firewall-udr',
@@ -838,6 +1121,17 @@ export const AZURE_NET_SAMPLES: AzSampleMetadata[] = [
       'Models MSEE hairpin / Global Reach transit between vWAN ER Gateway and standalone VNet ER Gateway.',
     ],
     topology: sampleHybridVwanAndHubSpoke,
+  },
+  {
+    id: 'enterprise-vnet-all-features-showcase',
+    title: 'Enterprise Multi-Region VNet All-Features Showcase',
+    subtitle: '2 Regional Hub VNets (WEU + NEU), ARS + SD-WAN BGP NVA, AzFW Inspection, ER + Active-Active VPN, Private Link Policies, and BGP LPM vs Summary UDR.',
+    highlights: [
+      'Spoke-Analytics leaves BGP route propagation enabled alongside a 10.0.0.0/8 summary UDR — ARS-advertised 10.250.0.0/16 wins by LPM and bypasses AzFW.',
+      'Compare snet-payments-privatelink (RouteTableEnabled -> inspected by AzFW) against snet-datalake-pe (Disabled -> direct /32 InterfaceEndpoint system route).',
+      'Hub-WEU and Hub-NEU share Equinix AM5 MSEE alongside Global VNet Peering, demonstrating cross-region firewall chaining and MSEE hairpin paths.',
+    ],
+    topology: sampleEnterpriseVnetAllFeaturesShowcase,
   },
 ]
 

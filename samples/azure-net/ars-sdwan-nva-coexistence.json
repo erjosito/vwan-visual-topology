@@ -1,0 +1,272 @@
+{
+  "version": 2,
+  "kind": "azure-network-topology",
+  "name": "Azure Route Server (ARS) + SD-WAN BGP NVA + ER/VPN Branch-to-Branch",
+  "vnets": [
+    {
+      "id": "vnet-ars-hub",
+      "name": "VNet-Transit-ARS-Hub",
+      "region": "northeurope",
+      "prefixes": [
+        "10.100.0.0/22"
+      ],
+      "role": "hub-vnet",
+      "subnets": [
+        {
+          "id": "sub-ars-gw",
+          "name": "GatewaySubnet",
+          "prefix": "10.100.0.0/26"
+        },
+        {
+          "id": "sub-ars-rs",
+          "name": "RouteServerSubnet",
+          "prefix": "10.100.1.0/26"
+        },
+        {
+          "id": "sub-ars-nva",
+          "name": "snet-sdwan-nva",
+          "prefix": "10.100.2.0/24"
+        }
+      ],
+      "gateways": [
+        {
+          "id": "vng-ars-er",
+          "name": "ER-GW-Transit",
+          "kind": "ExpressRoute",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "enabled": true
+        },
+        {
+          "id": "vng-ars-vpn",
+          "name": "VPN-GW-Transit",
+          "kind": "Vpn",
+          "asn": 65515,
+          "bgpEnabled": true,
+          "enabled": true
+        }
+      ],
+      "routeServer": {
+        "id": "ars-hub-neu",
+        "name": "ARS-Transit-NEU",
+        "enabled": true,
+        "branchToBranchTraffic": true,
+        "hubRoutingPreference": "ExpressRoute",
+        "peerApplianceIds": [
+          "app-sdwan-nva",
+          "app-sec-nva"
+        ]
+      },
+      "appliances": [
+        {
+          "id": "app-sdwan-nva",
+          "name": "SDWAN-Edge-NVA",
+          "kind": "nva-vm",
+          "subnetId": "sub-ars-nva",
+          "privateIp": "10.100.2.10",
+          "asn": 65100,
+          "bgpEnabled": true,
+          "enableIpForwarding": true,
+          "advertisedPrefixes": [
+            "192.168.100.0/24",
+            "10.102.0.0/16"
+          ],
+          "staticRoutes": [
+            {
+              "id": "sr-nva-dmz",
+              "prefix": "10.102.0.0/16",
+              "nextHopKind": "subnet",
+              "nextHopIp": "10.102.1.1",
+              "enabled": true
+            }
+          ]
+        },
+        {
+          "id": "app-sec-nva",
+          "name": "PaloAlto-Inspect-NVA",
+          "kind": "nva-vm",
+          "subnetId": "sub-ars-nva",
+          "privateIp": "10.100.2.20",
+          "asn": 65101,
+          "bgpEnabled": true,
+          "enableIpForwarding": true,
+          "inspectsTraffic": true,
+          "advertisedPrefixes": [
+            "0.0.0.0/0"
+          ],
+          "staticRoutes": []
+        }
+      ]
+    },
+    {
+      "id": "vnet-spoke-erp",
+      "name": "VNet-Spoke-SAP",
+      "region": "northeurope",
+      "prefixes": [
+        "10.101.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-sap-app",
+          "name": "snet-sap-app",
+          "prefix": "10.101.1.0/24"
+        },
+        {
+          "id": "sub-sap-db",
+          "name": "snet-hana-isolated",
+          "prefix": "10.101.2.0/24",
+          "routeTableId": "rt-hana-no-bgp"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    },
+    {
+      "id": "vnet-spoke-dmz",
+      "name": "VNet-Spoke-Partner-DMZ",
+      "region": "northeurope",
+      "prefixes": [
+        "10.102.0.0/16"
+      ],
+      "role": "spoke-vnet",
+      "subnets": [
+        {
+          "id": "sub-dmz-api",
+          "name": "snet-partner-api",
+          "prefix": "10.102.1.0/24",
+          "routeTableId": "rt-dmz-via-sdwan"
+        }
+      ],
+      "gateways": [],
+      "appliances": []
+    }
+  ],
+  "vnetPeerings": [
+    {
+      "id": "peer-ars-sap",
+      "name": "Transit-ARS ↔ Spoke-SAP",
+      "vnetAId": "vnet-ars-hub",
+      "vnetBId": "vnet-spoke-erp",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": true,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": true
+      }
+    },
+    {
+      "id": "peer-ars-dmz",
+      "name": "Transit-ARS ↔ Spoke-DMZ",
+      "vnetAId": "vnet-ars-hub",
+      "vnetBId": "vnet-spoke-dmz",
+      "enabled": true,
+      "aToB": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      },
+      "bToA": {
+        "allowVirtualNetworkAccess": true,
+        "allowForwardedTraffic": true,
+        "allowGatewayTransit": false,
+        "useRemoteGateways": false
+      }
+    }
+  ],
+  "udrTables": [
+    {
+      "id": "rt-hana-no-bgp",
+      "name": "RT-HANA-BGP-Disabled",
+      "disableBgpRoutePropagation": true,
+      "routes": [
+        {
+          "id": "udr-hana-sap",
+          "name": "allow-sap-hub",
+          "prefix": "10.100.0.0/22",
+          "nextHopType": "VnetLocal",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "rt-dmz-via-sdwan",
+      "name": "RT-DMZ-Via-SDWAN-NVA",
+      "disableBgpRoutePropagation": true,
+      "routes": [
+        {
+          "id": "udr-dmz-all",
+          "name": "all-private-via-sdwan",
+          "prefix": "0.0.0.0/0",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.100.2.10",
+          "enabled": true
+        }
+      ]
+    }
+  ],
+  "vwanHubs": [],
+  "erLocations": [
+    {
+      "id": "erloc-dublin",
+      "name": "Dublin Equinix MSEE",
+      "globalReachEnabled": false
+    }
+  ],
+  "erLinks": [
+    {
+      "id": "erlink-ars-dub",
+      "name": "Transit Hub ER Link",
+      "locationId": "erloc-dublin",
+      "targetKind": "vnet-gateway",
+      "targetId": "vng-ars-er",
+      "enabled": true
+    },
+    {
+      "id": "erlink-dc-dub",
+      "name": "Dublin DC ER Link",
+      "locationId": "erloc-dublin",
+      "targetKind": "site",
+      "targetId": "site-dublin-dc",
+      "enabled": true
+    }
+  ],
+  "sites": [
+    {
+      "id": "site-dublin-dc",
+      "name": "Dublin Enterprise DC",
+      "asn": 65040,
+      "prefixes": [
+        "172.20.0.0/16"
+      ]
+    },
+    {
+      "id": "site-sdwan-branch",
+      "name": "Retail SD-WAN Branches",
+      "asn": 65100,
+      "prefixes": [
+        "192.168.100.0/24"
+      ]
+    }
+  ],
+  "vpnConnections": [
+    {
+      "id": "vpn-sdwan-overlay",
+      "name": "SD-WAN Overlay Tunnel",
+      "siteId": "site-sdwan-branch",
+      "targetKind": "appliance",
+      "targetId": "app-sdwan-nva",
+      "bgpEnabled": true,
+      "enabled": true
+    }
+  ],
+  "siteLinks": []
+}

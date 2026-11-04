@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -16,10 +16,32 @@ import {
 import { AZURE_NET_SAMPLES, validateAzNetTopology, type AzNetTopology } from './model'
 
 describe('Azure Networking Simulator Engine & Diagnostics', () => {
-  it('validates all 4 canonical Azure Networking sample topologies with zero schema errors', () => {
+  it('validates all 5 canonical Azure Networking sample topologies and keeps samples/azure-net + public/docs/samples/azure-net in sync', () => {
+    const samplesDir = resolve(process.cwd(), 'samples', 'azure-net')
+    const publicDir = resolve(process.cwd(), 'public', 'docs', 'samples', 'azure-net')
+
     for (const sample of AZURE_NET_SAMPLES) {
       const errors = validateAzNetTopology(sample.topology)
       expect(errors, `Sample ${sample.id} had validation errors`).toEqual([])
+      const sim = simulateAzNet(sample.topology)
+      expect(Object.keys(sim.subnetTables).length).toBeGreaterThan(0)
+      const bicep = generateAzNetBicep(sample.topology)
+      expect(bicep.resourceCount).toBeGreaterThan(0)
+
+      const samplePath = resolve(samplesDir, `${sample.id}.json`)
+      const onDisk = JSON.parse(readFileSync(samplePath, 'utf-8')) as AzNetTopology
+      expect(onDisk).toEqual(sample.topology)
+    }
+
+    const sampleFiles = readdirSync(samplesDir).filter((f) => f.endsWith('.json'))
+    expect(sampleFiles.length).toBeGreaterThanOrEqual(14)
+    for (const file of sampleFiles) {
+      const srcPath = resolve(samplesDir, file)
+      const pubPath = resolve(publicDir, file)
+      const srcTopo = JSON.parse(readFileSync(srcPath, 'utf-8')) as AzNetTopology
+      const pubTopo = JSON.parse(readFileSync(pubPath, 'utf-8')) as AzNetTopology
+      expect(validateAzNetTopology(srcTopo), `${file} validation`).toEqual([])
+      expect(pubTopo, `${file} public mirror`).toEqual(srcTopo)
     }
   })
 

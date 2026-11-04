@@ -48,9 +48,46 @@ const message = (error: unknown) => error instanceof SyntaxError ? 'Invalid JSON
   : error instanceof Error ? error.message : 'Unexpected error.'
 const nodeKey = (node: ObjectSelection) => `${node.kind}:${node.id}`
 const parseNode = (key: string): PathNode => {
-  const index = key.indexOf(':')
-  return { kind: key.slice(0, index) as PathNode['kind'], id: key.slice(index + 1) }
+  const index = key.slice(0, key.indexOf(':'))
+  return { kind: index as PathNode['kind'], id: key.slice(key.indexOf(':') + 1) }
 }
+
+const VWAN_SAMPLE_GALLERY: Array<{
+  id: string
+  title: string
+  summary: string
+  file?: string
+}> = [
+  {
+    id: 'default-example',
+    title: 'Dual-Hub Enterprise Virtual WAN (Default Workspace)',
+    summary: 'Two regional Virtual Hubs (Europe & US) with ExpressRoute, S2S VPN, SD-WAN, Route Maps, and Spoke VNets.',
+  },
+  {
+    id: 'hub-routing-preferences',
+    title: 'Hub Routing Preferences (ExpressRoute vs VPN vs AS Path)',
+    summary: 'Three hubs connected to the same dual-homed branch site, each configured with a different Hub Routing Preference (ExpressRoute, VpnGateway, ASPath).',
+    file: '/docs/samples/hub-routing-preferences.json',
+  },
+  {
+    id: 'secured-hub-routing-intent',
+    title: 'Secured Virtual Hub with Private & Internet Routing Intent',
+    summary: 'Two hubs where West Europe enforces Private + Internet Routing Intent through Azure Firewall while North Europe remains unsecured.',
+    file: '/docs/samples/secured-hub-routing-intent.json',
+  },
+  {
+    id: 'spoke-bgp-nva-transit',
+    title: 'Spoke BGP NVA Transit & Indirect Spoke/Branch Reachability',
+    summary: 'A transit spoke hosting a BGP NVA peering with the Virtual Hub (ASN 65515) and advertising downstream peered VNet and SD-WAN branch prefixes.',
+    file: '/docs/samples/spoke-bgp-nva-transit.json',
+  },
+  {
+    id: 'three-hub-all-features-asymmetric',
+    title: 'Three-Hub Enterprise Showcase (All Features & Asymmetric Bypass)',
+    summary: 'Exercises all Virtual WAN features across 3 regional hubs and intentionally triggers asymmetric Firewall bypass & route-map findings for Check routing.',
+    file: '/docs/samples/three-hub-all-features-asymmetric.json',
+  },
+]
 
 function App() {
   const language = useLanguage()
@@ -64,7 +101,7 @@ function App() {
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [clearRequested, setClearRequested] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(() => new URLSearchParams(location.search).get('feedback') === '1')
-  const [panel, setPanel] = useState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison'>()
+  const [panel, setPanel] = useState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>()
   const [comparisonSession, setComparisonSession] = useState<ComparisonSession>()
   const [diagnosticHighlight, setDiagnosticHighlight] = useState<{ revision: string; findingId: string; paths: GroupPath[] }>()
   const [routingCheck, setRoutingCheck] = useState<{ revision: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; report?: DiagnosticsReport }>()
@@ -243,6 +280,21 @@ function App() {
     save(next, false); setSelection(undefined); setPanel(undefined); setEditorRequest(undefined); setContextMenu(undefined); setClearRequested(false)
     setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
+  }
+  const loadGallerySample = (entry: (typeof VWAN_SAMPLE_GALLERY)[number]) => {
+    if (!entry.file) {
+      reset(validateTopology(structuredClone(example)))
+      return
+    }
+    void fetch(entry.file)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`Sample topology "${entry.id}" not found.`)
+        return validateTopology(await res.json())
+      })
+      .then((loaded) => {
+        reset(loaded)
+      })
+      .catch((err) => setError(`Sample load failed: ${message(err)}`))
   }
   const sampleLoaded = useRef(false)
   useEffect(() => {
@@ -446,7 +498,7 @@ function App() {
 
   return <div className="app canvas-app" data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
     <header className="topbar"><div className="brand"><div className="brand-icon" aria-hidden="true">W</div><div><h1>Virtual WAN <span>{t("Topology Lab")}</span></h1><p>{t("Design the network. Understand the path.")}</p></div></div>
-      <div className="actions"><LanguageSelector /><span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+      <div className="actions"><LanguageSelector /><span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
     <main>
@@ -507,6 +559,20 @@ function App() {
             {simulation.warnings.map((warning) => <p className="notice" key={warning}>{localizeDiagnostic(warning)}</p>)}
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">{t("Microsoft hub routing preference")}</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">{t("Microsoft route-map behavior and limitations")}</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>{t("Load example (replaces workspace)")}</button>
+          </CanvasOverlay>}
+          {panel === 'samples' && <CanvasOverlay title={t("Sample topologies")} className="model-notes" onClose={closePanel}>
+            <p className="muted">{t("Choose a ready-made Virtual WAN topology below to replace the current workspace and immediately explore effective routes, path traces, and routing diagnostics.")}</p>
+            <div className="flow-results">
+              {VWAN_SAMPLE_GALLERY.map((sample) => (
+                <article key={sample.id} className="flow-result">
+                  <strong>{t(sample.title)}</strong>
+                  <p>{t(sample.summary)}</p>
+                  <button className="primary" onClick={() => loadGallerySample(sample)}>
+                    {t("Load sample topology")}
+                  </button>
+                </article>
+              ))}
+            </div>
           </CanvasOverlay>}
           {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onAddNva={(spokeId) => {
             const existing = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeId)
