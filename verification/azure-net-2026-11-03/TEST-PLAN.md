@@ -3,7 +3,7 @@
 - **Date**: 2026-11-03
 - **Target Preview App**: `swa-azure-net-sim-preview` (`https://gray-wave-0e5ecfd03.3.azurestaticapps.net/?mode=azure-net`)
 - **Production vWAN App (Untouched)**: `swa-vwan-visual-topology-dev-426b` (`https://vwan-simulator.com`)
-- **Target Azure Subscription**: `a8fbd8e1-fb5a-4411-804a-4ac80929c93c`
+- **Target Azure Subscription**: `00000000-0000-0000-0000-000000000000`
 - **Ephemeral Lab Resource Group**: `rg-aznet-sim-lab-20261103` (`swedencentral`)
 
 ## 1. Validation Methodology & Architectural Design

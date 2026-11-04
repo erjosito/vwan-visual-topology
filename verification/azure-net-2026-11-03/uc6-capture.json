@@ -3,7 +3,7 @@
   "version": 2,
   "collectorVersion": "2026.11.03.1",
   "capturedAt": "2026-11-03T15:53:07Z",
-  "subscriptionId": "a8fbd8e1-fb5a-4411-804a-4ac80929c93c",
+  "subscriptionId": "00000000-0000-0000-0000-000000000000",
   "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
   "warnings": [],
   "routeTables": [
@@ -11,7 +11,7 @@
       "disableBgpRoutePropagation": false,
       "disablePeeringRoute": "None",
       "etag": "W/\"7be37d60-9594-4c4d-acf6-67893541ac64\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet",
       "location": "swedencentral",
       "name": "rt-aznet-gw-subnet",
       "provisioningState": "Succeeded",
@@ -22,7 +22,7 @@
           "addressPrefix": "10.101.0.0/16",
           "etag": "W/\"7be37d60-9594-4c4d-acf6-67893541ac64\"",
           "hasBgpOverride": false,
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet/routes/to-spoke1-via-nva",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet/routes/to-spoke1-via-nva",
           "name": "to-spoke1-via-nva",
           "nextHopIpAddress": "10.100.2.4",
           "nextHopType": "VirtualAppliance",
@@ -34,7 +34,7 @@
           "addressPrefix": "10.102.0.0/16",
           "etag": "W/\"7be37d60-9594-4c4d-acf6-67893541ac64\"",
           "hasBgpOverride": false,
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet/routes/to-spoke2-via-nva",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet/routes/to-spoke2-via-nva",
           "name": "to-spoke2-via-nva",
           "nextHopIpAddress": "10.100.2.4",
           "nextHopType": "VirtualAppliance",
@@ -45,11 +45,11 @@
       ],
       "subnets": [
         {
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
         },
         {
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-gw-proxy",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-gw-proxy",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
         }
       ],
@@ -59,7 +59,7 @@
       "disableBgpRoutePropagation": false,
       "disablePeeringRoute": "None",
       "etag": "W/\"f24ab919-4765-4602-ad50-e9987d838e17\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-hub-nva",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-hub-nva",
       "location": "swedencentral",
       "name": "rt-aznet-hub-nva",
       "provisioningState": "Succeeded",
@@ -68,7 +68,7 @@
       "routes": [],
       "subnets": [
         {
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-nva",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-nva",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
         }
       ],
@@ -78,7 +78,7 @@
       "disableBgpRoutePropagation": false,
       "disablePeeringRoute": "None",
       "etag": "W/\"4e48a3e6-4485-4d4e-808a-051dddde5f3e\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1",
       "location": "swedencentral",
       "name": "rt-aznet-spoke1",
       "provisioningState": "Succeeded",
@@ -89,7 +89,7 @@
           "addressPrefix": "10.102.0.0/16",
           "etag": "W/\"4e48a3e6-4485-4d4e-808a-051dddde5f3e\"",
           "hasBgpOverride": false,
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1/routes/to-spoke2-via-nva",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1/routes/to-spoke2-via-nva",
           "name": "to-spoke2-via-nva",
           "nextHopIpAddress": "10.100.2.4",
           "nextHopType": "VirtualAppliance",
@@ -100,11 +100,11 @@
       ],
       "subnets": [
         {
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-work",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-work",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
         },
         {
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
         }
       ],
@@ -114,7 +114,7 @@
       "disableBgpRoutePropagation": false,
       "disablePeeringRoute": "None",
       "etag": "W/\"fc0a9bc9-91bd-43ff-9fc1-fd7ee5b595ab\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke2",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke2",
       "location": "swedencentral",
       "name": "rt-aznet-spoke2",
       "provisioningState": "Succeeded",
@@ -125,7 +125,7 @@
           "addressPrefix": "10.101.0.0/16",
           "etag": "W/\"fc0a9bc9-91bd-43ff-9fc1-fd7ee5b595ab\"",
           "hasBgpOverride": false,
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke2/routes/to-spoke1-via-nva",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke2/routes/to-spoke1-via-nva",
           "name": "to-spoke1-via-nva",
           "nextHopIpAddress": "10.100.2.4",
           "nextHopType": "VirtualAppliance",
@@ -136,7 +136,7 @@
       ],
       "subnets": [
         {
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/subnets/snet-spoke2-work",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/subnets/snet-spoke2-work",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
         }
       ],
@@ -155,7 +155,7 @@
       },
       "enableDdosProtection": false,
       "etag": "W/\"cacbb299-853c-40fa-9d78-449c47b20bfa\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub",
       "location": "swedencentral",
       "name": "vnet-aznet-hub",
       "privateEndpointVNetPolicies": "Disabled",
@@ -167,14 +167,14 @@
           "addressPrefix": "10.100.0.0/26",
           "delegations": [],
           "etag": "W/\"cacbb299-853c-40fa-9d78-449c47b20bfa\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/virtualNetworkGateways/VNG-AZNET-HUB-VPN/ipConfigurations/GWIPCONFIG1",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/virtualNetworkGateways/VNG-AZNET-HUB-VPN/ipConfigurations/GWIPCONFIG1",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             },
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/virtualNetworkGateways/VNG-AZNET-HUB-VPN/ipConfigurations/GWIPCONFIG2",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/virtualNetworkGateways/VNG-AZNET-HUB-VPN/ipConfigurations/GWIPCONFIG2",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
@@ -184,7 +184,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "routeTable": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "serviceEndpoints": [],
@@ -194,18 +194,18 @@
           "addressPrefix": "10.100.1.0/26",
           "delegations": [],
           "etag": "W/\"cacbb299-853c-40fa-9d78-449c47b20bfa\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/RouteServerSubnet",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/RouteServerSubnet",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/virtualHubs/ARS-AZNET-HUB/ipConfigurations/ARS-IPCONFIG1",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/virtualHubs/ARS-AZNET-HUB/ipConfigurations/ARS-IPCONFIG1",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             },
             {
-              "id": "/subscriptions/92c0bbd0-583e-4d54-a6cf-dae66b945a48/resourceGroups/ARMRG-66954C64-5EF3-44A3-8992-EDB24393958D/PROVIDERS/MICROSOFT.COMPUTE/VIRTUALMACHINESCALESETS/RS/VIRTUALMACHINES/0/NETWORKINTERFACES/CUSTNIC/ipConfigurations/IPCONFIG",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/ARMRG-66954C64-5EF3-44A3-8992-EDB24393958D/PROVIDERS/MICROSOFT.COMPUTE/VIRTUALMACHINESCALESETS/RS/VIRTUALMACHINES/0/NETWORKINTERFACES/CUSTNIC/ipConfigurations/IPCONFIG",
               "resourceGroup": "ARMRG-66954C64-5EF3-44A3-8992-EDB24393958D"
             },
             {
-              "id": "/subscriptions/92c0bbd0-583e-4d54-a6cf-dae66b945a48/resourceGroups/ARMRG-66954C64-5EF3-44A3-8992-EDB24393958D/PROVIDERS/MICROSOFT.COMPUTE/VIRTUALMACHINESCALESETS/RS/VIRTUALMACHINES/1/NETWORKINTERFACES/CUSTNIC/ipConfigurations/IPCONFIG",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/ARMRG-66954C64-5EF3-44A3-8992-EDB24393958D/PROVIDERS/MICROSOFT.COMPUTE/VIRTUALMACHINESCALESETS/RS/VIRTUALMACHINES/1/NETWORKINTERFACES/CUSTNIC/ipConfigurations/IPCONFIG",
               "resourceGroup": "ARMRG-66954C64-5EF3-44A3-8992-EDB24393958D"
             }
           ],
@@ -221,16 +221,16 @@
           "addressPrefix": "10.100.2.0/24",
           "delegations": [],
           "etag": "W/\"cacbb299-853c-40fa-9d78-449c47b20bfa\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-nva",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-nva",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-HUB-NVA/ipConfigurations/IPCONFIG1",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-HUB-NVA/ipConfigurations/IPCONFIG1",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
           "name": "snet-nva",
           "networkSecurityGroup": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/vnet-aznet-hub-snet-nva-nsg-swedencentral",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/vnet-aznet-hub-snet-nva-nsg-swedencentral",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "privateEndpointNetworkPolicies": "Disabled",
@@ -238,7 +238,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "routeTable": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-hub-nva",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-hub-nva",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "serviceEndpoints": [],
@@ -248,10 +248,10 @@
           "addressPrefix": "10.100.4.0/24",
           "delegations": [],
           "etag": "W/\"cacbb299-853c-40fa-9d78-449c47b20bfa\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-gw-proxy",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-gw-proxy",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-GW-PROXY/ipConfigurations/IPCONFIG1",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-GW-PROXY/ipConfigurations/IPCONFIG1",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
@@ -261,7 +261,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "routeTable": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-gw-subnet",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "serviceEndpoints": [],
@@ -276,7 +276,7 @@
           "allowVirtualNetworkAccess": true,
           "doNotVerifyRemoteGateways": true,
           "etag": "W/\"cacbb299-853c-40fa-9d78-449c47b20bfa\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/virtualNetworkPeerings/peer-hub-to-spoke2-to-vnet-aznet-spoke2",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/virtualNetworkPeerings/peer-hub-to-spoke2-to-vnet-aznet-spoke2",
           "name": "peer-hub-to-spoke2-to-vnet-aznet-spoke2",
           "peerCompleteVnets": true,
           "peeringState": "Connected",
@@ -288,7 +288,7 @@
             ]
           },
           "remoteVirtualNetwork": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "remoteVirtualNetworkAddressSpace": {
@@ -307,7 +307,7 @@
           "allowVirtualNetworkAccess": true,
           "doNotVerifyRemoteGateways": true,
           "etag": "W/\"cacbb299-853c-40fa-9d78-449c47b20bfa\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/virtualNetworkPeerings/peer-hub-to-spoke1-to-vnet-aznet-spoke1",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/virtualNetworkPeerings/peer-hub-to-spoke1-to-vnet-aznet-spoke1",
           "name": "peer-hub-to-spoke1-to-vnet-aznet-spoke1",
           "peerCompleteVnets": true,
           "peeringState": "Connected",
@@ -319,7 +319,7 @@
             ]
           },
           "remoteVirtualNetwork": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "remoteVirtualNetworkAddressSpace": {
@@ -345,7 +345,7 @@
       },
       "enableDdosProtection": false,
       "etag": "W/\"24a74a24-e734-4a65-9c39-50765d8628ac\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1",
       "location": "swedencentral",
       "name": "vnet-aznet-spoke1",
       "privateEndpointVNetPolicies": "Disabled",
@@ -357,10 +357,10 @@
           "addressPrefix": "10.101.1.0/24",
           "delegations": [],
           "etag": "W/\"24a74a24-e734-4a65-9c39-50765d8628ac\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-work",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-work",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-SPOKE1/ipConfigurations/IPCONFIG1",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-SPOKE1/ipConfigurations/IPCONFIG1",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
@@ -370,7 +370,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "routeTable": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "serviceEndpoints": [],
@@ -380,22 +380,22 @@
           "addressPrefix": "10.101.2.0/24",
           "delegations": [],
           "etag": "W/\"24a74a24-e734-4a65-9c39-50765d8628ac\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/PE-AZNET-BLOB.NIC.3BAAC57F-E15B-4692-A174-FACC92C875DE/ipConfigurations/PRIVATEENDPOINTIPCONFIG.CAAE8FA2-8B4E-4483-A91B-4A6EE05ED7EE",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/PE-AZNET-BLOB.NIC.3BAAC57F-E15B-4692-A174-FACC92C875DE/ipConfigurations/PRIVATEENDPOINTIPCONFIG.CAAE8FA2-8B4E-4483-A91B-4A6EE05ED7EE",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
           "name": "snet-spoke1-pe",
           "networkSecurityGroup": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/vnet-aznet-spoke1-snet-spoke1-pe-nsg-swedencentral",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/vnet-aznet-spoke1-snet-spoke1-pe-nsg-swedencentral",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "privateEndpointNetworkPolicies": "Disabled",
           "privateEndpoints": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/privateEndpoints/PE-AZNET-BLOB",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/privateEndpoints/PE-AZNET-BLOB",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
@@ -404,7 +404,7 @@
           "purpose": "PrivateEndpoints",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "routeTable": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke1",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "serviceEndpoints": [],
@@ -419,7 +419,7 @@
           "allowVirtualNetworkAccess": true,
           "doNotVerifyRemoteGateways": false,
           "etag": "W/\"24a74a24-e734-4a65-9c39-50765d8628ac\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/virtualNetworkPeerings/peer-hub-to-spoke1-to-vnet-aznet-hub",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/virtualNetworkPeerings/peer-hub-to-spoke1-to-vnet-aznet-hub",
           "name": "peer-hub-to-spoke1-to-vnet-aznet-hub",
           "peerCompleteVnets": true,
           "peeringState": "Connected",
@@ -431,7 +431,7 @@
             ]
           },
           "remoteVirtualNetwork": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "remoteVirtualNetworkAddressSpace": {
@@ -457,7 +457,7 @@
       },
       "enableDdosProtection": false,
       "etag": "W/\"759e43c5-9b57-4ef5-a590-a4248d631e9a\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2",
       "location": "swedencentral",
       "name": "vnet-aznet-spoke2",
       "privateEndpointVNetPolicies": "Disabled",
@@ -469,16 +469,16 @@
           "addressPrefix": "10.102.1.0/24",
           "delegations": [],
           "etag": "W/\"759e43c5-9b57-4ef5-a590-a4248d631e9a\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/subnets/snet-spoke2-work",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/subnets/snet-spoke2-work",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-SPOKE2/ipConfigurations/IPCONFIG1",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-SPOKE2/ipConfigurations/IPCONFIG1",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
           "name": "snet-spoke2-work",
           "networkSecurityGroup": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/vnet-aznet-spoke2-snet-spoke2-work-nsg-swedencentral",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/vnet-aznet-spoke2-snet-spoke2-work-nsg-swedencentral",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "privateEndpointNetworkPolicies": "Disabled",
@@ -486,7 +486,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "routeTable": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke2",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/routeTables/rt-aznet-spoke2",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "serviceEndpoints": [],
@@ -501,7 +501,7 @@
           "allowVirtualNetworkAccess": true,
           "doNotVerifyRemoteGateways": false,
           "etag": "W/\"759e43c5-9b57-4ef5-a590-a4248d631e9a\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/virtualNetworkPeerings/peer-hub-to-spoke2-to-vnet-aznet-hub",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/virtualNetworkPeerings/peer-hub-to-spoke2-to-vnet-aznet-hub",
           "name": "peer-hub-to-spoke2-to-vnet-aznet-hub",
           "peerCompleteVnets": true,
           "peeringState": "Connected",
@@ -513,7 +513,7 @@
             ]
           },
           "remoteVirtualNetwork": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "remoteVirtualNetworkAddressSpace": {
@@ -536,7 +536,7 @@
       },
       "enableDdosProtection": false,
       "etag": "W/\"026e7c79-21bb-42cc-84ce-6c3bf13c1fe5\"",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-branch-hq",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-branch-hq",
       "location": "swedencentral",
       "name": "vnet-branch-hq",
       "privateEndpointVNetPolicies": "Disabled",
@@ -548,16 +548,16 @@
           "addressPrefix": "10.250.0.0/24",
           "delegations": [],
           "etag": "W/\"026e7c79-21bb-42cc-84ce-6c3bf13c1fe5\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-branch-hq/subnets/snet-branch",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-branch-hq/subnets/snet-branch",
           "ipConfigurations": [
             {
-              "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-BRANCH-HQ/ipConfigurations/IPCONFIG1",
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/RG-AZNET-SIM-LAB-P2-20261103/providers/Microsoft.Network/networkInterfaces/NIC-VM-BRANCH-HQ/ipConfigurations/IPCONFIG1",
               "resourceGroup": "RG-AZNET-SIM-LAB-P2-20261103"
             }
           ],
           "name": "snet-branch",
           "networkSecurityGroup": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/nsg-aznet-lab",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/nsg-aznet-lab",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "privateEndpointNetworkPolicies": "Disabled",
@@ -585,7 +585,7 @@
             "defaultBgpIpAddresses": [
               "10.100.0.4"
             ],
-            "ipconfigurationId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig1",
+            "ipconfigurationId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig1",
             "tunnelIpAddresses": [
               "74.241.249.127"
             ]
@@ -595,7 +595,7 @@
             "defaultBgpIpAddresses": [
               "10.100.0.5"
             ],
-            "ipconfigurationId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig2",
+            "ipconfigurationId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig2",
             "tunnelIpAddresses": [
               "4.223.79.230"
             ]
@@ -610,37 +610,37 @@
       "enablePrivateIpAddress": false,
       "etag": "W/\"b14d22e9-d72f-4f51-969b-0a3f829ec7ff\"",
       "gatewayType": "Vpn",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn",
       "ipConfigurations": [
         {
           "etag": "W/\"b14d22e9-d72f-4f51-969b-0a3f829ec7ff\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig1",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig1",
           "name": "gwipconfig1",
           "privateIPAllocationMethod": "Dynamic",
           "provisioningState": "Succeeded",
           "publicIPAddress": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/vng-aznet-hub-vpn-pip1",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/vng-aznet-hub-vpn-pip1",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           }
         },
         {
           "etag": "W/\"b14d22e9-d72f-4f51-969b-0a3f829ec7ff\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig2",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn/ipConfigurations/gwipconfig2",
           "name": "gwipconfig2",
           "privateIPAllocationMethod": "Dynamic",
           "provisioningState": "Succeeded",
           "publicIPAddress": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/vng-aznet-hub-vpn-pip2",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/vng-aznet-hub-vpn-pip2",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/GatewaySubnet",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           }
         }
@@ -688,7 +688,7 @@
       },
       "etag": "W/\"a90519c0-ab2a-4c1b-991b-83ad27d9aa7c\"",
       "gatewayIpAddress": "74.241.240.48",
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/localNetworkGateways/Branch-Site-1",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/localNetworkGateways/Branch-Site-1",
       "localNetworkAddressSpace": {
         "addressPrefixes": [
           "10.250.0.254/32"
@@ -715,11 +715,11 @@
       "etag": "W/\"5f42220a-6352-4d88-bc8b-4404df5f62e8\"",
       "expressRouteGatewayBypass": false,
       "gatewayCustomBgpIpAddresses": [],
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/connections/conn-branch1-to-hub",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/connections/conn-branch1-to-hub",
       "ingressBytesTransferred": 0,
       "ipsecPolicies": [],
       "localNetworkGateway2": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/localNetworkGateways/Branch-Site-1",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/localNetworkGateways/Branch-Site-1",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "location": "swedencentral",
@@ -734,14 +734,14 @@
       "useLocalAzureIpAddress": false,
       "usePolicyBasedTrafficSelectors": false,
       "virtualNetworkGateway1": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworkGateways/vng-aznet-hub-vpn",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       }
     }
   ],
   "routeServers": [
     {
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualHubs/ars-aznet-hub",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualHubs/ars-aznet-hub",
       "name": "ars-aznet-hub",
       "location": "swedencentral",
       "allowBranchToBranchTraffic": true,
@@ -755,7 +755,7 @@
       "peerings": [
         {
           "etag": "W/\"72a25754-11c8-4454-b37d-b4a9e394a7e0\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualHubs/ars-aznet-hub/bgpConnections/peer-nva-hub-router",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualHubs/ars-aznet-hub/bgpConnections/peer-nva-hub-router",
           "name": "peer-nva-hub-router",
           "peerAsn": 65010,
           "peerIp": "10.100.2.4",
@@ -768,9 +768,9 @@
   ],
   "privateEndpoints": [
     {
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/privateEndpoints/pe-aznet-blob",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/privateEndpoints/pe-aznet-blob",
       "name": "pe-aznet-blob",
-      "subnetId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
+      "subnetId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
       "privateIp": "10.101.2.4",
       "serviceName": "privatelink.azure.net"
     }
@@ -789,11 +789,11 @@
       "enableIPForwarding": true,
       "etag": "W/\"4c7e6008-f85b-4ccf-b74e-e6ce4c64745c\"",
       "hostedWorkloads": [],
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-branch-hq",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-branch-hq",
       "ipConfigurations": [
         {
           "etag": "W/\"4c7e6008-f85b-4ccf-b74e-e6ce4c64745c\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-branch-hq/ipConfigurations/ipconfig1",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-branch-hq/ipConfigurations/ipconfig1",
           "name": "ipconfig1",
           "primary": true,
           "privateIPAddress": "10.250.0.4",
@@ -801,12 +801,12 @@
           "privateIPAllocationMethod": "Static",
           "provisioningState": "Succeeded",
           "publicIPAddress": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/pip-vm-branch-hq",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/pip-vm-branch-hq",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-branch-hq/subnets/snet-branch",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-branch-hq/subnets/snet-branch",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
@@ -816,7 +816,7 @@
       "macAddress": "70-A8-A5-52-C5-50",
       "name": "nic-vm-branch-hq",
       "networkSecurityGroup": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/nsg-aznet-lab",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/nsg-aznet-lab",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "nicType": "Standard",
@@ -827,7 +827,7 @@
       "tapConfigurations": [],
       "type": "Microsoft.Network/networkInterfaces",
       "virtualMachine": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-branch-hq",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-branch-hq",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "vnetEncryptionSupported": false
@@ -845,11 +845,11 @@
       "enableIPForwarding": false,
       "etag": "W/\"50afc13f-13fa-42f3-b46d-a90d66349568\"",
       "hostedWorkloads": [],
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-gw-proxy",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-gw-proxy",
       "ipConfigurations": [
         {
           "etag": "W/\"50afc13f-13fa-42f3-b46d-a90d66349568\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-gw-proxy/ipConfigurations/ipconfig1",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-gw-proxy/ipConfigurations/ipconfig1",
           "name": "ipconfig1",
           "primary": true,
           "privateIPAddress": "10.100.4.4",
@@ -858,7 +858,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-gw-proxy",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-gw-proxy",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
@@ -875,7 +875,7 @@
       "tapConfigurations": [],
       "type": "Microsoft.Network/networkInterfaces",
       "virtualMachine": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-gw-proxy",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-gw-proxy",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "vnetEncryptionSupported": false
@@ -893,11 +893,11 @@
       "enableIPForwarding": true,
       "etag": "W/\"37ed94c0-a0b5-429c-8c7c-20b503cb82f3\"",
       "hostedWorkloads": [],
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-hub-nva",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-hub-nva",
       "ipConfigurations": [
         {
           "etag": "W/\"37ed94c0-a0b5-429c-8c7c-20b503cb82f3\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-hub-nva/ipConfigurations/ipconfig1",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-hub-nva/ipConfigurations/ipconfig1",
           "name": "ipconfig1",
           "primary": true,
           "privateIPAddress": "10.100.2.4",
@@ -905,12 +905,12 @@
           "privateIPAllocationMethod": "Static",
           "provisioningState": "Succeeded",
           "publicIPAddress": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/pip-vm-hub-nva",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/publicIPAddresses/pip-vm-hub-nva",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-nva",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-hub/subnets/snet-nva",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
@@ -920,7 +920,7 @@
       "macAddress": "70-A8-A5-79-4E-32",
       "name": "nic-vm-hub-nva",
       "networkSecurityGroup": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/nsg-aznet-lab",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkSecurityGroups/nsg-aznet-lab",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "nicType": "Standard",
@@ -931,7 +931,7 @@
       "tapConfigurations": [],
       "type": "Microsoft.Network/networkInterfaces",
       "virtualMachine": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-hub-nva",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-hub-nva",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "vnetEncryptionSupported": false
@@ -949,11 +949,11 @@
       "enableIPForwarding": false,
       "etag": "W/\"f932a55e-fd23-46cd-8060-142a9830ba8d\"",
       "hostedWorkloads": [],
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke1",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke1",
       "ipConfigurations": [
         {
           "etag": "W/\"f932a55e-fd23-46cd-8060-142a9830ba8d\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke1/ipConfigurations/ipconfig1",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke1/ipConfigurations/ipconfig1",
           "name": "ipconfig1",
           "primary": true,
           "privateIPAddress": "10.101.1.4",
@@ -962,7 +962,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-work",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-work",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
@@ -979,7 +979,7 @@
       "tapConfigurations": [],
       "type": "Microsoft.Network/networkInterfaces",
       "virtualMachine": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-spoke1",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-spoke1",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "vnetEncryptionSupported": false
@@ -997,11 +997,11 @@
       "enableIPForwarding": false,
       "etag": "W/\"367911d6-cf70-4111-9c5c-3e0555aef5a5\"",
       "hostedWorkloads": [],
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke2",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke2",
       "ipConfigurations": [
         {
           "etag": "W/\"367911d6-cf70-4111-9c5c-3e0555aef5a5\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke2/ipConfigurations/ipconfig1",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke2/ipConfigurations/ipconfig1",
           "name": "ipconfig1",
           "primary": true,
           "privateIPAddress": "10.102.1.4",
@@ -1010,7 +1010,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/subnets/snet-spoke2-work",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke2/subnets/snet-spoke2-work",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
@@ -1027,7 +1027,7 @@
       "tapConfigurations": [],
       "type": "Microsoft.Network/networkInterfaces",
       "virtualMachine": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-spoke2",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Compute/virtualMachines/vm-spoke2",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "vnetEncryptionSupported": false
@@ -1045,11 +1045,11 @@
       "enableIPForwarding": false,
       "etag": "W/\"0b461bd1-ca1b-4413-905f-a3f757a7cacc\"",
       "hostedWorkloads": [],
-      "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/pe-aznet-blob.nic.3baac57f-e15b-4692-a174-facc92c875de",
+      "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/pe-aznet-blob.nic.3baac57f-e15b-4692-a174-facc92c875de",
       "ipConfigurations": [
         {
           "etag": "W/\"0b461bd1-ca1b-4413-905f-a3f757a7cacc\"",
-          "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/pe-aznet-blob.nic.3baac57f-e15b-4692-a174-facc92c875de/ipConfigurations/privateEndpointIpConfig.caae8fa2-8b4e-4483-a91b-4a6ee05ed7ee",
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/pe-aznet-blob.nic.3baac57f-e15b-4692-a174-facc92c875de/ipConfigurations/privateEndpointIpConfig.caae8fa2-8b4e-4483-a91b-4a6ee05ed7ee",
           "name": "privateEndpointIpConfig.caae8fa2-8b4e-4483-a91b-4a6ee05ed7ee",
           "primary": true,
           "privateIPAddress": "10.101.2.4",
@@ -1065,7 +1065,7 @@
           "provisioningState": "Succeeded",
           "resourceGroup": "rg-aznet-sim-lab-p2-20261103",
           "subnet": {
-            "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
+            "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/virtualNetworks/vnet-aznet-spoke1/subnets/snet-spoke1-pe",
             "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
           },
           "type": "Microsoft.Network/networkInterfaces/ipConfigurations"
@@ -1076,7 +1076,7 @@
       "name": "pe-aznet-blob.nic.3baac57f-e15b-4692-a174-facc92c875de",
       "nicType": "Standard",
       "privateEndpoint": {
-        "id": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/privateEndpoints/pe-aznet-blob",
+        "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/privateEndpoints/pe-aznet-blob",
         "resourceGroup": "rg-aznet-sim-lab-p2-20261103"
       },
       "provisioningState": "Succeeded",
@@ -1090,7 +1090,7 @@
   "nicEffectiveRoutes": [
     {
       "nicName": "nic-vm-branch-hq",
-      "nicId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-branch-hq",
+      "nicId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-branch-hq",
       "vnetName": "vnet-branch-hq",
       "subnetName": "snet-branch",
       "privateIp": "10.250.0.4",
@@ -2010,7 +2010,7 @@
     },
     {
       "nicName": "nic-vm-gw-proxy",
-      "nicId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-gw-proxy",
+      "nicId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-gw-proxy",
       "vnetName": "vnet-aznet-hub",
       "subnetName": "snet-gw-proxy",
       "privateIp": "10.100.4.4",
@@ -2123,7 +2123,7 @@
     },
     {
       "nicName": "nic-vm-hub-nva",
-      "nicId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-hub-nva",
+      "nicId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-hub-nva",
       "vnetName": "vnet-aznet-hub",
       "subnetName": "snet-nva",
       "privateIp": "10.100.2.4",
@@ -2210,7 +2210,7 @@
     },
     {
       "nicName": "nic-vm-spoke1",
-      "nicId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke1",
+      "nicId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke1",
       "vnetName": "vnet-aznet-spoke1",
       "subnetName": "snet-spoke1-work",
       "privateIp": "10.101.1.4",
@@ -2300,7 +2300,7 @@
     },
     {
       "nicName": "nic-vm-spoke2",
-      "nicId": "/subscriptions/a8fbd8e1-fb5a-4411-804a-4ac80929c93c/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke2",
+      "nicId": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-aznet-sim-lab-p2-20261103/providers/Microsoft.Network/networkInterfaces/nic-vm-spoke2",
       "vnetName": "vnet-aznet-spoke2",
       "subnetName": "snet-spoke2-work",
       "privateIp": "10.102.1.4",
