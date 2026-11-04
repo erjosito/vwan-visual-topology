@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AzNet Simulator">
+  <defs>
+    <linearGradient id="aznet-bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#064e3b" />
+      <stop offset="0.55" stop-color="#0f766e" />
+      <stop offset="1" stop-color="#10b981" />
+    </linearGradient>
+    <linearGradient id="aznet-route" x1="14" y1="16" x2="50" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6ee7b7" />
+      <stop offset="1" stop-color="#fde047" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#aznet-bg)" />
+  <g fill="none" stroke="#99f6e4" stroke-opacity="0.45" stroke-width="2.4" stroke-linecap="round">
+    <path d="M18 18L32 31L47 18" />
+    <path d="M16 45L32 31L48 45" />
+    <path d="M18 18L16 45" stroke-dasharray="3 3" />
+  </g>
+  <path d="M16 45L32 31L47 18" fill="none" stroke="url(#aznet-route)" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round" />
+  <polygon points="32,20 41,25.5 41,36.5 32,42 23,36.5 23,25.5" fill="#ecfdf5" stroke="#047857" stroke-width="2" />
+  <circle cx="32" cy="31" r="4" fill="#0d9488" />
+  <circle cx="18" cy="18" r="5" fill="#a7f3d0" stroke="#065f46" stroke-width="1.8" />
+  <circle cx="47" cy="18" r="5" fill="#fde047" stroke="#065f46" stroke-width="1.8" />
+  <rect x="11" y="40" width="10" height="10" rx="2.5" fill="#6ee7b7" stroke="#065f46" stroke-width="1.8" />
+  <rect x="43" y="40" width="10" height="10" rx="2.5" fill="#ccfbf1" stroke="#065f46" stroke-width="1.8" />
+</svg>

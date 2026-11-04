@@ -6,7 +6,9 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   }) => {
     await page.goto('/?mode=azure-net')
 
-    await expect(page.getByRole('heading', { name: 'Azure Networking Simulator' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
+    await expect(page).toHaveTitle('AzNet Simulator')
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/favicon-aznet.svg')
     await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
     await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
 

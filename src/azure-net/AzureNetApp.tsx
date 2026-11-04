@@ -295,6 +295,26 @@ export function AzureNetApp() {
 
   const urlSampleLoaded = useRef(false)
   useEffect(() => {
+    const prevTitle = document.title
+    document.title = 'AzNet Simulator'
+    const iconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
+    const prevIconHref = iconLink?.getAttribute('href')
+    if (iconLink) {
+      iconLink.setAttribute('href', '/favicon-aznet.svg')
+    }
+    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    const prevThemeColor = themeMeta?.getAttribute('content')
+    if (themeMeta) {
+      themeMeta.setAttribute('content', '#0f766e')
+    }
+    return () => {
+      document.title = prevTitle
+      if (iconLink && prevIconHref) iconLink.setAttribute('href', prevIconHref)
+      if (themeMeta && prevThemeColor) themeMeta.setAttribute('content', prevThemeColor)
+    }
+  }, [])
+
+  useEffect(() => {
     if (urlSampleLoaded.current) return
     const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
     if (!/^[a-z0-9-]+$/.test(requested)) return
@@ -554,11 +574,24 @@ export function AzureNetApp() {
       {/* Top Navigation & Actions Bar */}
       <header className="aznet-topbar">
         <div className="aznet-brand">
-          <span className="aznet-preview-pill">Preview SWA</span>
-          <h1>Azure Networking Simulator</h1>
+          <div className="aznet-brand-icon" aria-hidden="true">
+            Az
+          </div>
+          <h1>AzNet Simulator</h1>
+          <span className="aznet-preview-pill">Preview</span>
         </div>
 
         <div className="aznet-topbar-controls">
+          <button
+            type="button"
+            className="aznet-btn aznet-btn-gallery"
+            data-testid="aznet-open-sample-gallery-btn"
+            onClick={() => setSampleGalleryOpen(true)}
+            title="Browse all 14 built-in Azure VNet & Hybrid sample topologies"
+          >
+            📚 Sample Gallery ({ALL_AZURE_NET_CATALOG.length})
+          </button>
+
           <label style={{ fontSize: 12, color: '#cbd5e1' }} htmlFor="aznet-sample-select">
             Sample Topology:
           </label>
@@ -584,16 +617,6 @@ export function AzureNetApp() {
               ))}
             </optgroup>
           </select>
-
-          <button
-            type="button"
-            className="aznet-btn"
-            data-testid="aznet-open-sample-gallery-btn"
-            onClick={() => setSampleGalleryOpen(true)}
-            title="Browse all 14 built-in Azure VNet & Hybrid sample topologies"
-          >
-            📚 Sample Gallery ({ALL_AZURE_NET_CATALOG.length})
-          </button>
 
           <button
             type="button"
