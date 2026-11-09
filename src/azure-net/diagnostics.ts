@@ -17,6 +17,10 @@ export type AzDiagnosticCategory =
   | 'gateway-subnet-bgp-disabled'
   | 'bgp-propagation-blackhole'
   | 'bgp-lpm-bypasses-udr'
+  | 'peering-lpm-bypasses-udr'
+  | 'expressroute-msee-hairpin'
+  | 'subnet-default-outbound-disabled'
+  | 'subnet-internet-bypasses-firewall'
   | 'ars-default-route-self-loop'
   | 'udr-vng-vnet-transit'
   | 'peering-forwarded-traffic-blocked'
@@ -545,6 +549,195 @@ export function runAzNetDiagnostics(
         ip: firstUsableIp(sub.prefix),
         vnetId: vnet.id,
       })
+    }
+  }
+
+  // 8b. VNet Peering LPM bypasses broad NVA/Firewall summary UDR (disablePeeringRoutePropagation=false)
+  for (const vnet of topology.vnets) {
+    for (const subnet of vnet.subnets) {
+      if (
+        subnet.name === 'GatewaySubnet' ||
+        subnet.name === 'RouteServerSubnet' ||
+        subnet.name === 'AzureFirewallSubnet'
+      ) {
+        continue
+      }
+      const table = simulation.subnetTables[subnet.id]
+      if (!table || table.peeringPropagationDisabled) continue
+
+      const broadApplianceUdrs = table.routes.filter(
+        (r) => r.active && r.source === 'User' && r.nextHopType === 'VirtualAppliance',
+      )
+      if (!broadApplianceUdrs.length) continue
+
+      const activePeeringRoutes = table.routes.filter(
+        (r) => r.active && r.source === 'System' && r.nextHopType === 'VNetPeering',
+      )
+      for (const peerRoute of activePeeringRoutes) {
+        const peerCidr = cidr(peerRoute.prefix)
+        if (!peerCidr) continue
+        const peerIp = firstUsableIp(peerRoute.prefix)
+        const peerIpNum = ipv4(peerIp)
+        if (peerIpNum === undefined) continue
+
+        const bypassedUdr = broadApplianceUdrs.find((u) => {
+          const uCidr = cidr(u.prefix)
+          return (
+            uCidr &&
+            uCidr.length < peerCidr.length &&
+            contains(u.prefix, peerIpNum) &&
+            !table.routes.some(
+              (other) =>
+                other.active &&
+                other.source === 'User' &&
+                cidr(other.prefix)?.length === peerCidr.length &&
+                other.prefix === peerRoute.prefix,
+            )
+          )
+        })
+        if (bypassedUdr) {
+          const targetApp = bypassedUdr.nextHopIp ? findApplianceByIp(topology, bypassedUdr.nextHopIp) : undefined
+          if (targetApp && targetApp.vnet.id === peerRoute.nextHopResourceId) continue
+
+          const peerVnet = topology.vnets.find((v) => v.id === peerRoute.nextHopResourceId)
+          const peerWorkloadSubnet = peerVnet?.subnets.find(
+            (s) =>
+              s.name !== 'GatewaySubnet' &&
+              s.name !== 'RouteServerSubnet' &&
+              s.name !== 'AzureFirewallSubnet',
+          )
+          findings.push({
+            id: `diag:peering-lpm-bypass:${vnet.id}:${subnet.id}:${peerRoute.prefix}`,
+            severity: 'warning',
+            category: 'peering-lpm-bypasses-udr',
+            title: `Direct VNet Peering route ${peerRoute.prefix} in ${vnet.name}/${subnet.name} bypasses summary UDR ${bypassedUdr.prefix}`,
+            summary: `Subnet ${vnet.name}/${subnet.name} has a summary UDR ${bypassedUdr.prefix} → VirtualAppliance (${bypassedUdr.nextHopIp ?? 'NVA'}), but also has an active direct VNetPeering system route for ${peerRoute.prefix} (${peerRoute.nextHopName ?? 'Peered VNet'}). Longest Prefix Match (LPM) causes traffic to ${peerRoute.prefix} to take the direct VNet peering and bypass the NVA/Firewall.`,
+            remediation: `Enable disablePeeringRoutePropagation (Preview) on Route Table "${table.udrTableName ?? subnet.routeTableId}", remove the direct spoke-to-spoke peering, or add a matching ${peerRoute.prefix} UDR.`,
+            vnetId: vnet.id,
+            subnetId: subnet.id,
+            sampleFlow: peerWorkloadSubnet
+              ? {
+                  source: { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id },
+                  sourceIp: firstUsableIp(subnet.prefix),
+                  destination: { kind: 'subnet', vnetId: peerVnet!.id, subnetId: peerWorkloadSubnet.id },
+                  destinationIp: firstUsableIp(peerWorkloadSubnet.prefix),
+                }
+              : undefined,
+          })
+        }
+      }
+    }
+  }
+
+  // 8c. ExpressRoute MSEE Hairpin (two VNets linked to the same ExpressRoute Location without direct VNet Peering)
+  for (const loc of topology.erLocations) {
+    const vnetLinks = topology.erLinks.filter(
+      (l) => l.enabled && l.locationId === loc.id && l.targetKind === 'vnet-gateway',
+    )
+    if (vnetLinks.length < 2) continue
+
+    for (let i = 0; i < vnetLinks.length; i++) {
+      for (let j = i + 1; j < vnetLinks.length; j++) {
+        const vnetA = topology.vnets.find((v) => v.gateways.some((g) => g.id === vnetLinks[i].targetId))
+        const vnetB = topology.vnets.find((v) => v.gateways.some((g) => g.id === vnetLinks[j].targetId))
+        if (!vnetA || !vnetB || vnetA.id === vnetB.id) continue
+
+        const hasActivePeering = Boolean(getActivePeeringBetween(topology, vnetA.id, vnetB.id))
+        if (hasActivePeering) continue
+
+        const subA = vnetA.subnets.find(
+          (s) => s.name !== 'GatewaySubnet' && s.name !== 'RouteServerSubnet' && s.name !== 'AzureFirewallSubnet',
+        )
+        const subB = vnetB.subnets.find(
+          (s) => s.name !== 'GatewaySubnet' && s.name !== 'RouteServerSubnet' && s.name !== 'AzureFirewallSubnet',
+        )
+        if (!subA || !subB) continue
+
+        const tableA = simulation.subnetTables[subA.id]
+        const destIpB = firstUsableIp(subB.prefix)
+        const matchedRouteA = tableA ? lookupSubnetEffectiveRoute(tableA, destIpB) : undefined
+        if (matchedRouteA && matchedRouteA.nextHopType === 'VirtualNetworkGateway') {
+          findings.push({
+            id: `diag:er-msee-hairpin:${loc.id}:${vnetA.id}:${vnetB.id}`,
+            severity: 'warning',
+            category: 'expressroute-msee-hairpin',
+            title: `ExpressRoute MSEE Hairpin between ${vnetA.name} and ${vnetB.name} via ${loc.name}`,
+            summary: `VNets ${vnetA.name} and ${vnetB.name} are both linked to ExpressRoute location ${loc.name} without direct VNet Peering. Traffic from ${vnetA.name}/${subA.name} to ${vnetB.name}/${subB.name} (${destIpB}) matches BGP route ${matchedRouteA.prefix} → VirtualNetworkGateway and hairpins through the physical ExpressRoute MSEE routers at ${loc.name}, adding latency and consuming ExpressRoute gateway bandwidth.`,
+            remediation: `Create a direct VNet Peering between ${vnetA.name} and ${vnetB.name} so VNet-to-VNet traffic stays on the Azure backbone instead of hairpinning at ${loc.name}.`,
+            vnetId: vnetA.id,
+            subnetId: subA.id,
+            sampleFlow: {
+              source: { kind: 'subnet', vnetId: vnetA.id, subnetId: subA.id },
+              sourceIp: firstUsableIp(subA.prefix),
+              destination: { kind: 'subnet', vnetId: vnetB.id, subnetId: subB.id },
+              destinationIp: destIpB,
+            },
+          })
+        }
+      }
+    }
+  }
+
+  // 8d. Subnet defaultOutboundAccess=false without explicit 0.0.0.0/0 NVA/Firewall UDR, and Internet bypass of Hub Firewall
+  const hubFirewalls = topology.vnets.flatMap((v) =>
+    v.appliances.filter((a) => a.kind === 'azure-firewall').map((a) => ({ vnet: v, app: a })),
+  )
+  for (const vnet of topology.vnets) {
+    for (const subnet of vnet.subnets) {
+      if (
+        subnet.name === 'GatewaySubnet' ||
+        subnet.name === 'RouteServerSubnet' ||
+        subnet.name === 'AzureFirewallSubnet'
+      ) {
+        continue
+      }
+      const table = simulation.subnetTables[subnet.id]
+      if (!table) continue
+
+      const internetRoute = lookupSubnetEffectiveRoute(table, '20.50.60.70')
+      if (subnet.defaultOutboundAccess === false && internetRoute?.nextHopType === 'Internet') {
+        findings.push({
+          id: `diag:no-outbound-access:${vnet.id}:${subnet.id}`,
+          severity: 'warning',
+          category: 'subnet-default-outbound-disabled',
+          title: `Private Subnet ${vnet.name}/${subnet.name} (defaultOutboundAccess=false) has no explicit Internet egress path`,
+          summary: `Subnet ${vnet.name}/${subnet.name} has defaultOutboundAccess=false (Azure's secure-by-default setting retiring implicit outbound SNAT IPs), and its effective route for 0.0.0.0/0 still resolves to System → Internet without a NAT Gateway, Public IP, or 0.0.0.0/0 → VirtualAppliance UDR. Outbound Internet flows will be dropped.`,
+          remediation: `Associate a Route Table with a 0.0.0.0/0 → VirtualAppliance (Azure Firewall/NVA) UDR, attach a NAT Gateway, or enable defaultOutboundAccess if direct Internet breakout is intended.`,
+          vnetId: vnet.id,
+          subnetId: subnet.id,
+          sampleFlow: {
+            source: { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id },
+            sourceIp: firstUsableIp(subnet.prefix),
+            destination: { kind: 'internet', ip: '20.50.60.70' },
+            destinationIp: '20.50.60.70',
+          },
+        })
+      } else if (
+        subnet.defaultOutboundAccess !== false &&
+        internetRoute?.nextHopType === 'Internet' &&
+        hubFirewalls.length > 0 &&
+        !vnet.appliances.some((a) => a.kind === 'azure-firewall')
+      ) {
+        const fw = hubFirewalls[0]
+        if (getActivePeeringBetween(topology, vnet.id, fw.vnet.id)) {
+          findings.push({
+            id: `diag:internet-bypasses-fw:${vnet.id}:${subnet.id}`,
+            severity: 'info',
+            category: 'subnet-internet-bypasses-firewall',
+            title: `Subnet ${vnet.name}/${subnet.name} breaks out directly to Internet, bypassing ${fw.app.name}`,
+            summary: `Subnet ${vnet.name}/${subnet.name} is peered with hub ${fw.vnet.name} (which hosts ${fw.app.name} at ${fw.app.privateIp}), but has no 0.0.0.0/0 UDR or BGP default route. Outbound Internet traffic matches System 0.0.0.0/0 → Internet directly instead of being inspected by ${fw.app.name}.`,
+            remediation: `Add a 0.0.0.0/0 → VirtualAppliance (${fw.app.privateIp}) UDR on ${vnet.name}/${subnet.name} if central Internet egress inspection is required.`,
+            vnetId: vnet.id,
+            subnetId: subnet.id,
+            sampleFlow: {
+              source: { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id },
+              sourceIp: firstUsableIp(subnet.prefix),
+              destination: { kind: 'internet', ip: '20.50.60.70' },
+              destinationIp: '20.50.60.70',
+            },
+          })
+        }
+      }
     }
   }
 

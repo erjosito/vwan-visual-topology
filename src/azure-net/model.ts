@@ -25,6 +25,7 @@ export interface AzSubnet {
   name: string
   prefix: string
   routeTableId?: string
+  defaultOutboundAccess?: boolean
   privateEndpointNetworkPolicies?: AzPrivateEndpointPolicy
   privateEndpoints?: AzPrivateEndpoint[]
 }
@@ -49,6 +50,7 @@ export interface AzUdrTable {
   id: string
   name: string
   disableBgpRoutePropagation: boolean
+  disablePeeringRoutePropagation?: boolean
   routes: AzUdrRoute[]
 }
 

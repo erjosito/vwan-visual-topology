@@ -753,7 +753,13 @@ export function AzureNetDiagram({
                         width={44}
                         height={16}
                         rx={4}
-                        fill={rt.disableBgpRoutePropagation ? '#fee2e2' : '#e0e7ff'}
+                        fill={
+                          rt.disableBgpRoutePropagation
+                            ? '#fee2e2'
+                            : rt.disablePeeringRoutePropagation
+                              ? '#fef3c7'
+                              : '#e0e7ff'
+                        }
                       />
                     )}
                     {rt && (
@@ -763,9 +769,19 @@ export function AzureNetDiagram({
                         textAnchor="middle"
                         fontSize={8.5}
                         fontWeight={700}
-                        fill={rt.disableBgpRoutePropagation ? '#991b1b' : '#3730a3'}
+                        fill={
+                          rt.disableBgpRoutePropagation
+                            ? '#991b1b'
+                            : rt.disablePeeringRoutePropagation
+                              ? '#92400e'
+                              : '#3730a3'
+                        }
                       >
-                        {rt.disableBgpRoutePropagation ? 'BGP:OFF' : 'UDR'}
+                        {rt.disableBgpRoutePropagation
+                          ? 'BGP:OFF'
+                          : rt.disablePeeringRoutePropagation
+                            ? 'Peer:OFF'
+                            : 'UDR'}
                       </text>
                     )}
                     {hasPe && (

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './azure-net.css'
+import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { AzureNetDiagram, type AzSelectedEntity } from './AzureNetDiagram'
 import {
   compareAzNetWithObservations,
@@ -129,17 +130,55 @@ const ALL_AZURE_NET_CATALOG: AzNetSampleCatalogEntry[] = [
   ...AZURE_NET_VALIDATION_SCENARIOS,
 ]
 
+function encodeTopologyToUrlHash(topology: AzNetTopology): string {
+  const json = JSON.stringify(topology)
+  const bytes = new TextEncoder().encode(json)
+  let binary = ''
+  for (const b of bytes) {
+    binary += String.fromCharCode(b)
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+}
+
+function decodeTopologyFromUrlHash(hash: string): AzNetTopology | null {
+  const m = hash.match(/[#&]s=([A-Za-z0-9_-]+)/)
+  if (!m) return null
+  try {
+    let b64 = m[1].replace(/-/g, '+').replace(/_/g, '/')
+    while (b64.length % 4 !== 0) b64 += '='
+    const binary = atob(b64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    const json = new TextDecoder().decode(bytes)
+    const parsed = JSON.parse(json) as AzNetTopology
+    if (validateAzNetTopology(parsed).length === 0) {
+      return parsed
+    }
+  } catch {
+    // ignore malformed hash
+  }
+  return null
+}
+
 function resolveInitialBuiltInSample() {
   if (typeof window === 'undefined') return AZURE_NET_SAMPLES[0]
   const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
   return AZURE_NET_SAMPLES.find((s) => s.id === requested) ?? AZURE_NET_SAMPLES[0]
 }
 
-export function AzureNetApp() {
+interface AzureNetAppProps {
+  simulatorMode?: SimulatorMode
+  onChangeSimulatorMode?: (mode: SimulatorMode) => void
+}
+
+export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: AzureNetAppProps = {}) {
   const initialSample = resolveInitialBuiltInSample()
-  const [sampleId, setSampleId] = useState<string>(initialSample.id)
+  const hashTopology = typeof window !== 'undefined' ? decodeTopologyFromUrlHash(window.location.hash) : null
+  const [sampleId, setSampleId] = useState<string>(hashTopology ? 'shared-topology' : initialSample.id)
   const [topology, setTopology] = useState<AzNetTopology>(() =>
-    cloneAzNetTopology(initialSample.topology),
+    cloneAzNetTopology(hashTopology ?? initialSample.topology),
   )
   const [history, setHistory] = useState<AzNetTopology[]>([])
   const [future, setFuture] = useState<AzNetTopology[]>([])
@@ -213,6 +252,12 @@ export function AzureNetApp() {
         defaultIp: firstUsableIp(site.prefixes[0] ?? '172.16.1.0/24'),
       })
     }
+    opts.push({
+      key: 'internet:20.50.60.70',
+      label: '🌐 Public Internet (20.50.60.70)',
+      ref: { kind: 'internet', ip: '20.50.60.70' },
+      defaultIp: '20.50.60.70',
+    })
     return opts
   }, [topology])
 
@@ -222,6 +267,34 @@ export function AzureNetApp() {
   const [traceActive, setTraceActive] = useState<boolean>(false)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
   const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null)
+  const [shareCopied, setShareCopied] = useState<boolean>(false)
+
+  const handleChangeSimulatorMode = (nextMode: SimulatorMode) => {
+    if (nextMode === 'hub-spoke' && topology.vwanHubs.length > 0) {
+      const fallback = AZURE_NET_SAMPLES.find((s) => s.id === 'hub-spoke-firewall-udr') ?? AZURE_NET_SAMPLES[0]
+      setSampleId(fallback.id)
+      setTopology(cloneAzNetTopology(fallback.topology))
+      setHistory([])
+      setFuture([])
+    }
+    onChangeSimulatorMode?.(nextMode)
+  }
+
+  const handleShareUrl = () => {
+    try {
+      const encoded = encodeTopologyToUrlHash(topology)
+      const url = new URL(window.location.href)
+      url.hash = `s=${encoded}`
+      window.history.replaceState(null, '', url.toString())
+      if (navigator.clipboard?.writeText) {
+        void navigator.clipboard.writeText(url.toString()).catch(() => {})
+      }
+      setShareCopied(true)
+      window.setTimeout(() => setShareCopied(false), 2500)
+    } catch {
+      // ignore clipboard errors
+    }
+  }
 
   const resolvedSourceOpt =
     endpointOptions.find((o) => o.key === traceSourceKey) ?? endpointOptions[1] ?? endpointOptions[0]
@@ -486,6 +559,96 @@ export function AzureNetApp() {
             }
           }
         }
+      } else if (finding.category === 'peering-lpm-bypasses-udr' && finding.subnetId) {
+        for (const vnet of draft.vnets) {
+          const sub = vnet.subnets.find((s) => s.id === finding.subnetId)
+          if (sub?.routeTableId) {
+            const rt = draft.udrTables.find((t) => t.id === sub.routeTableId)
+            if (rt) rt.disablePeeringRoutePropagation = true
+          }
+        }
+      } else if (finding.category === 'expressroute-msee-hairpin') {
+        const parts = finding.id.split(':')
+        const vnetAId = parts[3]
+        const vnetBId = parts[4]
+        const vA = draft.vnets.find((v) => v.id === vnetAId)
+        const vB = draft.vnets.find((v) => v.id === vnetBId)
+        if (vA && vB) {
+          const existing = draft.vnetPeerings.find(
+            (p) =>
+              (p.vnetAId === vA.id && p.vnetBId === vB.id) ||
+              (p.vnetAId === vB.id && p.vnetBId === vA.id),
+          )
+          if (existing) {
+            existing.enabled = true
+            existing.aToB.allowVirtualNetworkAccess = true
+            existing.bToA.allowVirtualNetworkAccess = true
+          } else {
+            draft.vnetPeerings.push({
+              id: `peer-autofix-${vA.id}-${vB.id}`,
+              name: `${vA.name}-to-${vB.name}`,
+              vnetAId: vA.id,
+              vnetBId: vB.id,
+              enabled: true,
+              aToB: {
+                allowVirtualNetworkAccess: true,
+                allowForwardedTraffic: true,
+                allowGatewayTransit: false,
+                useRemoteGateways: false,
+              },
+              bToA: {
+                allowVirtualNetworkAccess: true,
+                allowForwardedTraffic: true,
+                allowGatewayTransit: false,
+                useRemoteGateways: false,
+              },
+            })
+          }
+        }
+      } else if (
+        (finding.category === 'subnet-default-outbound-disabled' ||
+          finding.category === 'subnet-internet-bypasses-firewall') &&
+        finding.subnetId
+      ) {
+        const hubFw = draft.vnets
+          .flatMap((v) => v.appliances)
+          .find((a) => a.inspectsTraffic || a.kind === 'azure-firewall' || a.enableIpForwarding)
+        for (const vnet of draft.vnets) {
+          const sub = vnet.subnets.find((s) => s.id === finding.subnetId)
+          if (!sub) continue
+          if (hubFw) {
+            let rt = sub.routeTableId
+              ? draft.udrTables.find((t) => t.id === sub.routeTableId)
+              : undefined
+            if (!rt) {
+              rt = {
+                id: `rt-egress-${sub.id}`,
+                name: `RT-${vnet.name}-${sub.name}`,
+                disableBgpRoutePropagation: false,
+                routes: [],
+              }
+              draft.udrTables.push(rt)
+              sub.routeTableId = rt.id
+            }
+            const existingDefault = rt.routes.find((r) => r.prefix === '0.0.0.0/0')
+            if (existingDefault) {
+              existingDefault.enabled = true
+              existingDefault.nextHopType = 'VirtualAppliance'
+              existingDefault.nextHopIp = hubFw.privateIp
+            } else {
+              rt.routes.push({
+                id: `udr-autofix-default-${sub.id}`,
+                name: `default-via-${hubFw.name}`,
+                prefix: '0.0.0.0/0',
+                nextHopType: 'VirtualAppliance',
+                nextHopIp: hubFw.privateIp,
+                enabled: true,
+              })
+            }
+          } else {
+            sub.defaultOutboundAccess = true
+          }
+        }
       }
     })
   }
@@ -557,6 +720,20 @@ export function AzureNetApp() {
     return null
   }, [selected, topology, simulation])
 
+  const visibleFlagshipSamples = useMemo(
+    () =>
+      simulatorMode === 'hub-spoke'
+        ? AZURE_NET_SAMPLES.filter((s) => s.id !== 'hybrid-vwan-and-hub-spoke')
+        : AZURE_NET_SAMPLES,
+    [simulatorMode],
+  )
+  const visibleCatalogEntries = useMemo(
+    () =>
+      simulatorMode === 'hub-spoke'
+        ? ALL_AZURE_NET_CATALOG.filter((s) => s.id !== 'hybrid-vwan-and-hub-spoke')
+        : ALL_AZURE_NET_CATALOG,
+    [simulatorMode],
+  )
   const currentSampleMeta = ALL_AZURE_NET_CATALOG.find((s) => s.id === sampleId)
 
   const handleExportJson = () => {
@@ -578,18 +755,28 @@ export function AzureNetApp() {
             Az
           </div>
           <h1>AzNet Simulator</h1>
-          <span className="aznet-preview-pill">Preview</span>
+          <span className="aznet-preview-pill">
+            {simulatorMode === 'hub-spoke' ? 'Hub & Spoke Mode' : 'Full Hybrid Mode'}
+          </span>
         </div>
 
         <div className="aznet-topbar-controls">
+          {onChangeSimulatorMode && (
+            <SimulatorModeSwitch
+              mode={simulatorMode}
+              onChange={handleChangeSimulatorMode}
+              variant="aznet"
+            />
+          )}
+
           <button
             type="button"
             className="aznet-btn aznet-btn-gallery"
             data-testid="aznet-open-sample-gallery-btn"
             onClick={() => setSampleGalleryOpen(true)}
-            title="Browse all 14 built-in Azure VNet & Hybrid sample topologies"
+            title="Browse built-in Azure VNet & Hybrid sample topologies"
           >
-            📚 Sample Gallery ({ALL_AZURE_NET_CATALOG.length})
+            📚 Sample Gallery ({visibleCatalogEntries.length})
           </button>
 
           <label style={{ fontSize: 12, color: '#cbd5e1' }} htmlFor="aznet-sample-select">
@@ -602,8 +789,11 @@ export function AzureNetApp() {
             value={sampleId}
             onChange={(e) => loadSample(e.target.value)}
           >
-            <optgroup label="Flagship Reference Topologies (5)">
-              {AZURE_NET_SAMPLES.map((s) => (
+            {sampleId === 'shared-topology' && (
+              <option value="shared-topology">🔗 Shared URL Topology</option>
+            )}
+            <optgroup label={`Flagship Reference Topologies (${visibleFlagshipSamples.length})`}>
+              {visibleFlagshipSamples.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.title}
                 </option>
@@ -687,6 +877,16 @@ export function AzureNetApp() {
             onClick={() => setActiveTab('azure')}
           >
             ☁ Azure & Bicep
+          </button>
+
+          <button
+            type="button"
+            className="aznet-btn"
+            data-testid="aznet-share-url-btn"
+            onClick={handleShareUrl}
+            title="Encode current topology into URL #s=... and copy shareable link"
+          >
+            {shareCopied ? '✓ Link Copied' : '🔗 Share Link'}
           </button>
 
           <button type="button" className="aznet-btn" onClick={handleExportJson}>
@@ -947,6 +1147,8 @@ export function AzureNetApp() {
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: 6,
                           marginBottom: 8,
                           fontSize: 11.5,
                         }}
@@ -955,14 +1157,24 @@ export function AzureNetApp() {
                           Route Table:{' '}
                           <strong>{inspectedSubnetTable.udrTableName ?? 'None (System + BGP)'}</strong>
                         </span>
-                        <span
-                          className={`aznet-badge ${
-                            inspectedSubnetTable.bgpPropagationDisabled ? 'error' : 'active'
-                          }`}
-                        >
-                          BGP Propagation:{' '}
-                          {inspectedSubnetTable.bgpPropagationDisabled ? 'Disabled' : 'Enabled'}
-                        </span>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          <span
+                            className={`aznet-badge ${
+                              inspectedSubnetTable.bgpPropagationDisabled ? 'error' : 'active'
+                            }`}
+                          >
+                            BGP Propagation:{' '}
+                            {inspectedSubnetTable.bgpPropagationDisabled ? 'Disabled' : 'Enabled'}
+                          </span>
+                          {inspectedSubnetTable.peeringPropagationDisabled && (
+                            <span
+                              className="aznet-badge warning"
+                              data-testid="aznet-peering-propagation-badge"
+                            >
+                              Peering Propagation: Disabled (Preview)
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <table className="aznet-route-table" data-testid="aznet-effective-route-table">
@@ -978,26 +1190,62 @@ export function AzureNetApp() {
                         <tbody>
                           {inspectedSubnetTable.routes.map((route) => {
                             const isLpmWinner = lpmMatchedRouteId === route.id
+                            const fwdFlow = singleFlowForCustomIp ?? pairAnalysis?.forward
+                            const retFlow = singleFlowForCustomIp ? null : pairAnalysis?.reverse
+                            const isFwdMatch = Boolean(
+                              fwdFlow?.hops.some(
+                                (h) =>
+                                  h.subnetId === inspectedSubnetTable.subnetId &&
+                                  h.matchedRoute?.id === route.id,
+                              ),
+                            )
+                            const isRetMatch = Boolean(
+                              retFlow?.hops.some(
+                                (h) =>
+                                  h.subnetId === inspectedSubnetTable.subnetId &&
+                                  h.matchedRoute?.id === route.id,
+                              ),
+                            )
                             return (
                               <tr
                                 key={route.id}
                                 className={`aznet-route-row ${
                                   route.active ? '' : 'suppressed'
-                                } ${isLpmWinner ? 'lpm-winner' : ''}`}
+                                } ${isLpmWinner || isFwdMatch || isRetMatch ? 'lpm-winner' : ''}`}
                                 data-testid={`aznet-route-row-${route.prefix}-${route.source}`}
                               >
                                 <td>
-                                  <span
-                                    className={`aznet-badge ${
-                                      route.active ? 'active' : 'suppressed'
-                                    }`}
-                                  >
-                                    {isLpmWinner
-                                      ? '★ LPM Winner'
-                                      : route.active
-                                        ? 'Active'
-                                        : 'Invalid'}
-                                  </span>
+                                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <span
+                                      className={`aznet-badge ${
+                                        route.active ? 'active' : 'suppressed'
+                                      }`}
+                                    >
+                                      {isLpmWinner
+                                        ? '★ LPM Winner'
+                                        : route.active
+                                          ? 'Active'
+                                          : 'Invalid'}
+                                    </span>
+                                    {isFwdMatch && (
+                                      <span
+                                        className="aznet-badge info"
+                                        data-testid="aznet-route-trace-badge-fwd"
+                                        title="Matched by active Forward Trace on this subnet"
+                                      >
+                                        FWD
+                                      </span>
+                                    )}
+                                    {isRetMatch && (
+                                      <span
+                                        className="aznet-badge warning"
+                                        data-testid="aznet-route-trace-badge-ret"
+                                        title="Matched by active Return Trace on this subnet"
+                                      >
+                                        RET
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td>{route.source}</td>
                                 <td>
@@ -1048,6 +1296,32 @@ export function AzureNetApp() {
                           </strong>
                           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                             {inspectedSubnetTable.suppressedBgpRoutes.map((sr) => (
+                              <li key={sr.id}>
+                                <code>{sr.prefix}</code> via {sr.nextHopName} ({sr.originLabel})
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {inspectedSubnetTable.suppressedPeeringRoutes.length > 0 && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: 8,
+                            borderRadius: 6,
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            fontSize: 11.5,
+                          }}
+                          data-testid="aznet-suppressed-peering-banner"
+                        >
+                          <strong style={{ color: '#92400e' }}>
+                            {inspectedSubnetTable.suppressedPeeringRoutes.length} VNetPeering
+                            route(s) suppressed by disablePeeringRoutePropagation=true (Preview):
+                          </strong>
+                          <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                            {inspectedSubnetTable.suppressedPeeringRoutes.map((sr) => (
                               <li key={sr.id}>
                                 <code>{sr.prefix}</code> via {sr.nextHopName} ({sr.originLabel})
                               </li>
@@ -1359,11 +1633,19 @@ export function AzureNetApp() {
                                   const sKey =
                                     sf.source.kind === 'subnet'
                                       ? `subnet:${sf.source.vnetId}:${sf.source.subnetId}`
-                                      : `site:${(sf.source as { siteId: string }).siteId}`
+                                      : sf.source.kind === 'internet'
+                                        ? 'internet:20.50.60.70'
+                                        : sf.source.kind === 'site'
+                                          ? `site:${sf.source.siteId}`
+                                          : ''
                                   const dKey =
                                     sf.destination.kind === 'subnet'
                                       ? `subnet:${sf.destination.vnetId}:${sf.destination.subnetId}`
-                                      : `site:${(sf.destination as { siteId: string }).siteId}`
+                                      : sf.destination.kind === 'internet'
+                                        ? 'internet:20.50.60.70'
+                                        : sf.destination.kind === 'site'
+                                          ? `site:${sf.destination.siteId}`
+                                          : ''
                                   setTraceSourceKey(sKey)
                                   setTraceDestKey(dKey)
                                   setCustomDestIp(sf.destinationIp === '8.8.8.8' ? '8.8.8.8' : '')
@@ -1525,25 +1807,44 @@ export function AzureNetApp() {
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: 8,
                           marginBottom: 6,
                         }}
                       >
                         <strong>{rt.name}</strong>
-                        <label className="aznet-checkbox-row">
-                          <input
-                            type="checkbox"
-                            data-testid={`aznet-rt-disable-bgp-${rt.id}`}
-                            checked={rt.disableBgpRoutePropagation}
-                            onChange={(e) => {
-                              const checked = e.target.checked
-                              commitTopology((draft) => {
-                                const target = draft.udrTables.find((t) => t.id === rt.id)
-                                if (target) target.disableBgpRoutePropagation = checked
-                              })
-                            }}
-                          />
-                          <span>Disable BGP route propagation</span>
-                        </label>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <label className="aznet-checkbox-row">
+                            <input
+                              type="checkbox"
+                              data-testid={`aznet-rt-disable-bgp-${rt.id}`}
+                              checked={rt.disableBgpRoutePropagation}
+                              onChange={(e) => {
+                                const checked = e.target.checked
+                                commitTopology((draft) => {
+                                  const target = draft.udrTables.find((t) => t.id === rt.id)
+                                  if (target) target.disableBgpRoutePropagation = checked
+                                })
+                              }}
+                            />
+                            <span>Disable BGP route propagation</span>
+                          </label>
+                          <label className="aznet-checkbox-row">
+                            <input
+                              type="checkbox"
+                              data-testid={`aznet-rt-disable-peering-${rt.id}`}
+                              checked={Boolean(rt.disablePeeringRoutePropagation)}
+                              onChange={(e) => {
+                                const checked = e.target.checked
+                                commitTopology((draft) => {
+                                  const target = draft.udrTables.find((t) => t.id === rt.id)
+                                  if (target) target.disablePeeringRoutePropagation = checked
+                                })
+                              }}
+                            />
+                            <span>Disable Peering route propagation (Preview)</span>
+                          </label>
+                        </div>
                       </div>
 
                       <table className="aznet-route-table">
@@ -1741,6 +2042,61 @@ export function AzureNetApp() {
                       </div>
                     )
                   })}
+                </div>
+
+                {/* Subnet Outbound Access & Security Policies */}
+                <div className="aznet-card" data-testid="aznet-subnet-security-editor">
+                  <h3>Subnet Default Outbound Access & Private Endpoint Policies</h3>
+                  {topology.vnets.map((vnet) => (
+                    <div
+                      key={vnet.id}
+                      style={{
+                        marginBottom: 8,
+                        padding: 8,
+                        background: '#ffffff',
+                        borderRadius: 6,
+                        border: '1px solid #cbd5e1',
+                      }}
+                    >
+                      <strong>{vnet.name}</strong>
+                      {vnet.subnets.map((subnet) => (
+                        <div
+                          key={subnet.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 8,
+                            marginTop: 6,
+                            fontSize: 12,
+                          }}
+                        >
+                          <span>
+                            {subnet.name} (<code>{subnet.prefix}</code>)
+                          </span>
+                          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                            <label className="aznet-checkbox-row">
+                              <input
+                                type="checkbox"
+                                data-testid={`aznet-subnet-outbound-${subnet.id}`}
+                                checked={subnet.defaultOutboundAccess !== false}
+                                onChange={(e) => {
+                                  const checked = e.target.checked
+                                  commitTopology((draft) => {
+                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
+                                    const targetS = targetV?.subnets.find((s) => s.id === subnet.id)
+                                    if (targetS) targetS.defaultOutboundAccess = checked
+                                  })
+                                }}
+                              />
+                              <span>Default Outbound Access</span>
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
                 </div>
               </>
             )}
@@ -2017,7 +2373,7 @@ export function AzureNetApp() {
             >
               <div>
                 <h2 style={{ margin: 0, fontSize: 17 }}>
-                  📚 Azure VNet & Hybrid Sample Topologies Gallery ({ALL_AZURE_NET_CATALOG.length})
+                  📚 Azure VNet & Hybrid Sample Topologies Gallery ({visibleCatalogEntries.length})
                 </h2>
                 <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
                   Click any reference architecture or live-Azure validated scenario below to load it
@@ -2037,7 +2393,7 @@ export function AzureNetApp() {
             <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div>
                 <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: '#0f172a' }}>
-                  Flagship Reference Topologies (5)
+                  Flagship Reference Topologies ({visibleCatalogEntries.filter((s) => s.category === 'flagship').length})
                 </h3>
                 <div
                   style={{
@@ -2046,7 +2402,7 @@ export function AzureNetApp() {
                     gap: 12,
                   }}
                 >
-                  {ALL_AZURE_NET_CATALOG.filter((s) => s.category === 'flagship').map((entry) => {
+                  {visibleCatalogEntries.filter((s) => s.category === 'flagship').map((entry) => {
                     const isCurrent = entry.id === sampleId
                     return (
                       <div

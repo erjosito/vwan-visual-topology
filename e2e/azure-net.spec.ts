@@ -47,4 +47,44 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('aznet-sample-gallery-modal')).toHaveCount(0)
     await expect(page.getByTestId('aznet-vnet-vnet-hub-neu')).toBeVisible()
   })
+
+  test('supports Unified Mode Switcher (Full / Hub & Spoke-Only / vWAN-Only), URL hash state sharing (#s=...), Internet egress tracing, and Effective Route trace badges', async ({
+    page,
+  }) => {
+    await page.goto('/?mode=azure-net')
+
+    // 1. Mode switcher toggles between Full Hybrid, Hub & Spoke-Only, and Virtual WAN-Only
+    await expect(page.getByTestId('simulator-mode-switch')).toBeVisible()
+    await page.getByTestId('simulator-mode-hub-spoke').click()
+    await expect(page).toHaveURL(/mode=hub-spoke/)
+
+    // In Hub & Spoke-Only mode, sample dropdown hides vWAN Hub samples
+    const sampleOptions = await page
+      .getByTestId('aznet-sample-select')
+      .locator('option')
+      .allTextContents()
+    expect(sampleOptions.some((t) => t.includes('Hybrid Secured vWAN Hub'))).toBe(false)
+
+    // Switch to vWAN-Only mode and back to Full Hybrid mode
+    await page.getByTestId('simulator-mode-vwan').click()
+    await expect(page.getByRole('heading', { name: 'Virtual WAN Topology Lab' })).toBeVisible()
+    await page.getByTestId('simulator-mode-full').click()
+    await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
+
+    // 2. Public Internet endpoint in Path Tracer + Subnet Default Outbound Access toggle
+    await page.getByTestId('aznet-tab-tracer').click()
+    await page.getByTestId('aznet-trace-source-select').selectOption('subnet:vnet-spoke-app:sub-app-web')
+    await page.getByTestId('aznet-trace-dest-select').selectOption('internet:20.50.60.70')
+    await expect(page.getByTestId('aznet-symmetry-verdict')).toBeVisible()
+
+    // 3. Active trace route highlighting (FWD / RET badges) in Effective Route Table
+    await page.getByTestId('aznet-tab-routes').click()
+    await page.getByTestId('aznet-subnet-sub-app-web').click()
+    await expect(page.getByTestId('aznet-route-trace-badge-fwd').first()).toBeVisible()
+
+    // 4. Share Link encodes topology into URL hash (#s=...) and reloads cleanly
+    await page.getByTestId('aznet-share-url-btn').click()
+    await expect(page).toHaveURL(/#s=/)
+  })
 })
+

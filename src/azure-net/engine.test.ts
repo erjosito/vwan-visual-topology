@@ -493,4 +493,109 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
       simReserved.routeServerRibs['ars-hub'].some((r) => r.prefix === '192.168.100.0/24'),
     ).toBe(false)
   })
+
+  it('validates disablePeeringRoutePropagation (Preview), PeerBypass diagnostics, defaultOutboundAccess, and ExpressRoute MSEE Hairpin diagnostics', () => {
+    // 1. ExpressRoute MSEE Hairpin diagnostic on UC9
+    const uc9 = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), 'samples', 'azure-net', 'uc9-expressroute-hairpin-two-vnets.json'),
+        'utf-8',
+      ),
+    ) as AzNetTopology
+    const sim9 = simulateAzNet(uc9)
+    const diag9 = runAzNetDiagnostics(uc9, sim9)
+    expect(diag9.some((f) => f.category === 'expressroute-msee-hairpin')).toBe(true)
+
+    // 2. Peering LPM bypasses summary UDR + disablePeeringRoutePropagation suppression
+    const peerTopo = JSON.parse(JSON.stringify(AZURE_NET_SAMPLES[0].topology)) as AzNetTopology
+    // Add a direct spoke-to-spoke peering between VNet-Spoke-App (10.1.0.0/16) and VNet-Spoke-Data (10.2.0.0/16)
+    peerTopo.vnetPeerings.push({
+      id: 'peer-app-data-direct',
+      name: 'Spoke-App ↔ Spoke-Data Direct',
+      vnetAId: 'vnet-spoke-app',
+      vnetBId: 'vnet-spoke-data',
+      enabled: true,
+      aToB: {
+        allowVirtualNetworkAccess: true,
+        allowForwardedTraffic: true,
+        allowGatewayTransit: false,
+        useRemoteGateways: false,
+      },
+      bToA: {
+        allowVirtualNetworkAccess: true,
+        allowForwardedTraffic: true,
+        allowGatewayTransit: false,
+        useRemoteGateways: false,
+      },
+    })
+    const rtSpokeApp = peerTopo.udrTables.find((t) => t.id === 'rt-spoke-to-fw')!
+    rtSpokeApp.routes = [
+      {
+        id: 'udr-summary-rfc1918',
+        name: 'summary-10-8-to-fw',
+        prefix: '10.0.0.0/8',
+        nextHopType: 'VirtualAppliance',
+        nextHopIp: '10.0.1.4',
+        enabled: true,
+      },
+    ]
+    const simPeerBefore = simulateAzNet(peerTopo)
+    const diagPeerBefore = runAzNetDiagnostics(peerTopo, simPeerBefore)
+    expect(diagPeerBefore.some((f) => f.category === 'peering-lpm-bypasses-udr')).toBe(true)
+    const winnerBefore = lookupSubnetEffectiveRoute(
+      simPeerBefore.subnetTables['sub-app-web'],
+      '10.2.1.10',
+    )
+    expect(winnerBefore?.source).toBe('System')
+    expect(winnerBefore?.nextHopType).toBe('VNetPeering')
+
+    // Enable disablePeeringRoutePropagation on rt-spoke-to-fw -> VNetPeering route is suppressed and 10.0.0.0/8 UDR wins
+    rtSpokeApp.disablePeeringRoutePropagation = true
+    const simPeerAfter = simulateAzNet(peerTopo)
+    const appWebTableAfter = simPeerAfter.subnetTables['sub-app-web']
+    expect(appWebTableAfter.peeringPropagationDisabled).toBe(true)
+    expect(appWebTableAfter.suppressedPeeringRoutes.length).toBeGreaterThan(0)
+    const winnerAfter = lookupSubnetEffectiveRoute(appWebTableAfter, '10.2.1.10')
+    expect(winnerAfter?.source).toBe('User')
+    expect(winnerAfter?.nextHopType).toBe('VirtualAppliance')
+    const diagPeerAfter = runAzNetDiagnostics(peerTopo, simPeerAfter)
+    expect(diagPeerAfter.some((f) => f.category === 'peering-lpm-bypasses-udr')).toBe(false)
+
+    // 3. Subnet defaultOutboundAccess=false and Internet egress tracing
+    const egressTopo = JSON.parse(JSON.stringify(AZURE_NET_SAMPLES[0].topology)) as AzNetTopology
+    const spokeWebSub = egressTopo.vnets
+      .find((v) => v.id === 'vnet-spoke-app')!
+      .subnets.find((s) => s.id === 'sub-app-web')!
+    // Remove 0.0.0.0/0 UDR from rt-spoke-to-fw so sub-app-web relies on System 0.0.0.0/0 -> Internet
+    const rtApp = egressTopo.udrTables.find((t) => t.id === 'rt-spoke-to-fw')!
+    rtApp.routes = rtApp.routes.filter((r) => r.prefix !== '0.0.0.0/0')
+
+    // With defaultOutboundAccess undefined/true, spoke bypasses Hub Firewall directly to Internet
+    const simEgressOpen = simulateAzNet(egressTopo)
+    const openInternetTrace = traceAzNetFlow(
+      egressTopo,
+      simEgressOpen,
+      { kind: 'subnet', vnetId: 'vnet-spoke-app', subnetId: 'sub-app-web' },
+      '20.50.60.70',
+    )
+    expect(openInternetTrace.status).toBe('delivered')
+    const diagEgressOpen = runAzNetDiagnostics(egressTopo, simEgressOpen)
+    expect(diagEgressOpen.some((f) => f.category === 'subnet-internet-bypasses-firewall')).toBe(true)
+
+    // With defaultOutboundAccess=false and no explicit egress, outbound Internet flow is dropped
+    spokeWebSub.defaultOutboundAccess = false
+    const simEgressBlocked = simulateAzNet(egressTopo)
+    const blockedInternetTrace = traceAzNetFlow(
+      egressTopo,
+      simEgressBlocked,
+      { kind: 'subnet', vnetId: 'vnet-spoke-app', subnetId: 'sub-app-web' },
+      '20.50.60.70',
+    )
+    expect(blockedInternetTrace.status).toBe('dropped-no-outbound-access')
+    const diagEgressBlocked = runAzNetDiagnostics(egressTopo, simEgressBlocked)
+    expect(diagEgressBlocked.some((f) => f.category === 'subnet-default-outbound-disabled')).toBe(
+      true,
+    )
+  })
 })
+

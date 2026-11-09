@@ -1,5 +1,7 @@
 import { t, localizeDiagnostic, useLanguage, documentTitles } from './i18n'
 import { LanguageSelector } from './LanguageSelector'
+import { SimulatorModeSwitch } from './SimulatorModeSwitch'
+import type { SimulatorMode } from './SimulatorModeSwitch'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
@@ -89,7 +91,12 @@ const VWAN_SAMPLE_GALLERY: Array<{
   },
 ]
 
-function App() {
+interface AppProps {
+  simulatorMode?: SimulatorMode
+  onChangeSimulatorMode?: (mode: SimulatorMode) => void
+}
+
+function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const language = useLanguage()
   useEffect(() => {
     document.documentElement.lang = language
@@ -498,7 +505,7 @@ function App() {
 
   return <div className="app canvas-app" data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
     <header className="topbar"><div className="brand"><div className="brand-icon" aria-hidden="true">W</div><div><h1>Virtual WAN <span>{t("Topology Lab")}</span></h1><p>{t("Design the network. Understand the path.")}</p></div></div>
-      <div className="actions"><LanguageSelector /><span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+      <div className="actions">{onChangeSimulatorMode && <SimulatorModeSwitch mode={simulatorMode} onChange={onChangeSimulatorMode} variant="vwan" />}<LanguageSelector /><span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
     <main>

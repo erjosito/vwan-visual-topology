@@ -171,7 +171,7 @@ export function createExpressRouteAttachment(
   if (!site) throw new Error('Connection site does not exist.')
   if (options.replaceConnectionId) {
     if (next.sites.some((s) => s.vpnStaticRoutes?.some((r) => r.connectionId === options.replaceConnectionId))) {
-      throw new Error('Configure VPN static routes only on S2S VPN connections attached to the same site.')
+      throw new Error('Site static routes require an attached S2S VPN connection. Remove or reassign them before changing the connection.')
     }
     next.connections = next.connections.filter((c) => c.id !== options.replaceConnectionId)
   }

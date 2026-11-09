@@ -59,8 +59,10 @@ export interface AzSubnetRouteTableResult {
   udrTableId?: string
   udrTableName?: string
   bgpPropagationDisabled: boolean
+  peeringPropagationDisabled: boolean
   routes: AzEffectiveRoute[]
   suppressedBgpRoutes: AzEffectiveRoute[]
+  suppressedPeeringRoutes: AzEffectiveRoute[]
 }
 
 export interface AzSimulationResult {
@@ -77,10 +79,11 @@ export type AzEndpointRef =
   | { kind: 'subnet'; vnetId: string; subnetId: string }
   | { kind: 'site'; siteId: string }
   | { kind: 'vwanHub'; hubId: string }
+  | { kind: 'internet'; ip?: string }
 
 export interface AzTraceHop {
   index: number
-  nodeKind: 'subnet' | 'vnet-gateway' | 'route-server' | 'appliance' | 'vwan-hub' | 'er-location' | 'site'
+  nodeKind: 'subnet' | 'vnet-gateway' | 'route-server' | 'appliance' | 'vwan-hub' | 'er-location' | 'site' | 'internet'
   nodeId: string
   vnetId?: string
   nodeName: string
@@ -108,6 +111,7 @@ export type AzTraceStatus =
   | 'delivered'
   | 'dropped-blackhole'
   | 'dropped-no-route'
+  | 'dropped-no-outbound-access'
   | 'dropped-peering-access'
   | 'dropped-peering-forwarded-traffic'
   | 'dropped-peering-non-transitive'
@@ -760,9 +764,11 @@ function compileSingleSubnetEffectiveRoutes(
     ? topology.udrTables.find((t) => t.id === subnet.routeTableId)
     : undefined
   const bgpPropagationDisabled = Boolean(udrTable?.disableBgpRoutePropagation)
+  const peeringPropagationDisabled = Boolean(udrTable?.disablePeeringRoutePropagation)
 
   const candidates: AzEffectiveRoute[] = []
   const suppressedBgpRoutes: AzEffectiveRoute[] = []
+  const suppressedPeeringRoutes: AzEffectiveRoute[] = []
 
   // A. System Routes: Local VNet prefixes
   for (const prefix of vnet.prefixes) {
@@ -820,7 +826,7 @@ function compileSingleSubnetEffectiveRoutes(
     if (!rel) continue
     if (rel.forwardFlags.allowVirtualNetworkAccess && rel.reverseFlags.allowVirtualNetworkAccess) {
       for (const prefix of otherVnet.prefixes) {
-        candidates.push({
+        const peeringRoute: AzEffectiveRoute = {
           id: `sys:peering:${subnet.id}:${rel.peering.id}:${prefix}`,
           prefix,
           source: 'System',
@@ -829,8 +835,16 @@ function compileSingleSubnetEffectiveRoutes(
           nextHopName: otherVnet.name,
           originLabel: `System · VNet Peering (${rel.peering.name})`,
           asPath: [],
-          active: true,
-        })
+          active: !peeringPropagationDisabled,
+          suppressedReason: peeringPropagationDisabled
+            ? `Suppressed by disablePeeringRoutePropagation=true (Preview) on Route Table "${udrTable?.name}"`
+            : undefined,
+        }
+        if (peeringPropagationDisabled) {
+          suppressedPeeringRoutes.push(peeringRoute)
+        } else {
+          candidates.push(peeringRoute)
+        }
       }
       addPeRoutesFromVnet(otherVnet, rel.peering.name)
     }
@@ -1084,8 +1098,10 @@ function compileSingleSubnetEffectiveRoutes(
     udrTableId: udrTable?.id,
     udrTableName: udrTable?.name,
     bgpPropagationDisabled,
+    peeringPropagationDisabled,
     routes: resolved,
     suppressedBgpRoutes,
+    suppressedPeeringRoutes,
   }
 }
 
@@ -1277,6 +1293,50 @@ export function traceAzNetFlow(
       detail: `Packet originates at on-premises site ${site?.name ?? source.siteId}`,
     })
     cursor = { kind: 'site', siteId: source.siteId }
+  } else if (source.kind === 'internet') {
+    const internetIp = source.ip ?? '20.50.60.70'
+    pushHop({
+      nodeKind: 'internet',
+      nodeId: 'internet',
+      nodeName: `Internet (${internetIp})`,
+      action: 'origin',
+      detail: `Packet originates from public Internet (${internetIp})`,
+    })
+    if (targetInfo.endpoint?.kind === 'subnet') {
+      const hubFw = topology.vnets
+        .flatMap((v) => v.appliances.map((a) => ({ vnet: v, app: a })))
+        .find(({ app }) => app.kind === 'azure-firewall' && app.enableIpForwarding)
+      if (hubFw) {
+        cursor = { kind: 'appliance', vnetId: hubFw.vnet.id, applianceId: hubFw.app.id }
+      } else {
+        cursor = {
+          kind: 'subnet',
+          vnetId: targetInfo.endpoint.vnetId,
+          subnetId: targetInfo.endpoint.subnetId,
+          fromExternalVnet: false,
+          viaVnra: false,
+        }
+      }
+    } else {
+      pushHop({
+        nodeKind: 'internet',
+        nodeId: 'internet',
+        nodeName: `Internet (${internetIp})`,
+        action: 'dropped',
+        detail: `No inbound public IP / DNAT path configured from Internet to ${destinationIp} (${targetInfo.label}).`,
+      })
+      return {
+        source,
+        destinationIp,
+        destinationLabel: targetInfo.label,
+        status: 'dropped-no-route',
+        hops,
+        traversedApplianceIds,
+        traversedEdgeIds,
+        traversedVnetIds,
+        summaryReason: `No inbound Internet route to ${destinationIp}.`,
+      }
+    }
   } else {
     const hub = topology.vwanHubs.find((h) => h.id === source.hubId)
     pushHop({
@@ -1814,6 +1874,30 @@ export function traceAzNetFlow(
 
       if (matched.nextHopType === 'Internet') {
         if (!targetInfo.endpoint) {
+          if (subnet.defaultOutboundAccess === false) {
+            pushHop({
+              nodeKind: 'subnet',
+              nodeId: subnet.id,
+              vnetId: vnet.id,
+              nodeName: vnet.name,
+              subnetId: subnet.id,
+              subnetName: subnet.name,
+              action: 'dropped',
+              matchedRoute: matched,
+              detail: `Dropped in ${vnet.name}/${subnet.name}: subnet has defaultOutboundAccess=false (private subnet without NAT Gateway / Public IP) and matched System 0.0.0.0/0 → Internet without an explicit NVA/Firewall UDR.`,
+            })
+            return {
+              source,
+              destinationIp,
+              destinationLabel: targetInfo.label,
+              status: 'dropped-no-outbound-access',
+              hops,
+              traversedApplianceIds,
+              traversedEdgeIds,
+              traversedVnetIds,
+              summaryReason: `Dropped in ${vnet.name}/${subnet.name}: defaultOutboundAccess=false blocks implicit Internet breakout; add a 0.0.0.0/0 UDR to Azure Firewall/NVA or enable outbound access.`,
+            }
+          }
           pushHop({
             nodeKind: 'subnet',
             nodeId: subnet.id,
@@ -1823,7 +1907,7 @@ export function traceAzNetFlow(
             subnetName: subnet.name,
             action: 'delivered',
             matchedRoute: matched,
-            detail: `Egresses directly to Internet from ${vnet.name}/${subnet.name}`,
+            detail: `Egresses directly to Internet from ${vnet.name}/${subnet.name} (defaultOutboundAccess=true)`,
           })
           return {
             source,
@@ -2434,6 +2518,32 @@ export function traceAzNetFlow(
           viaVnra: false,
         }
         continue
+      }
+
+      // Check if attached vWAN Hub has Internet Routing Intent for public Internet destinations
+      if (!targetInfo.endpoint && hub.routingIntent.internet) {
+        const fwId = `vhub-fw:${hub.id}`
+        if (!traversedApplianceIds.includes(fwId)) {
+          traversedApplianceIds.push(fwId)
+        }
+        pushHop({
+          nodeKind: 'vwan-hub',
+          nodeId: hub.id,
+          nodeName: `${hub.name} · Secured Hub Internet Breakout`,
+          action: 'delivered',
+          detail: `Virtual WAN Internet Routing Intent inspects and breaks out ${destinationIp} to Internet via ${hub.name} Secured Hub Firewall`,
+        })
+        return {
+          source,
+          destinationIp,
+          destinationLabel: targetInfo.label,
+          status: 'delivered',
+          hops,
+          traversedApplianceIds,
+          traversedEdgeIds,
+          traversedVnetIds,
+          summaryReason: `Inspected by ${hub.name} Secured Hub Firewall (Internet Routing Intent) and delivered to Internet.`,
+        }
       }
 
       // Check ER Links from vWAN Hub

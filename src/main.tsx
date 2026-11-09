@@ -1,16 +1,55 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
 import { AzureNetApp } from './azure-net/AzureNetApp.tsx'
+import type { SimulatorMode } from './SimulatorModeSwitch.tsx'
 
-const modeParam = new URLSearchParams(window.location.search).get('mode')
-const isAzureNetMode =
-  modeParam === 'azure-net' ||
-  (modeParam !== 'vwan' && import.meta.env.VITE_APP_MODE === 'azure-net')
+function resolveInitialMode(): SimulatorMode {
+  const params = new URLSearchParams(window.location.search)
+  const modeParam = (params.get('mode') ?? '').toLowerCase()
+  if (modeParam === 'vwan' || modeParam === 'vwan-only') return 'vwan'
+  if (modeParam === 'hub-spoke' || modeParam === 'hub-and-spoke' || modeParam === 'vnet') return 'hub-spoke'
+  if (modeParam === 'full' || modeParam === 'aznet' || modeParam === 'azure-net') return 'full'
+
+  const sampleParam = (params.get('sample') ?? '').trim()
+  if (
+    sampleParam &&
+    !sampleParam.startsWith('azure-vnet-') &&
+    !sampleParam.startsWith('uc')
+  ) {
+    if (import.meta.env.VITE_APP_MODE === 'azure-net') return 'full'
+    return 'vwan'
+  }
+
+  if (import.meta.env.VITE_APP_MODE === 'azure-net') {
+    return 'full'
+  }
+
+  return 'vwan'
+}
+
+export function UnifiedSimulatorRoot() {
+  const [mode, setMode] = useState<SimulatorMode>(resolveInitialMode)
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('mode')) {
+      url.searchParams.set('mode', mode === 'full' ? 'azure-net' : mode)
+      window.history.replaceState(null, '', url.toString())
+    }
+  }, [mode])
+
+  if (mode === 'vwan') {
+    return <App simulatorMode={mode} onChangeSimulatorMode={setMode} />
+  }
+
+  return <AzureNetApp simulatorMode={mode} onChangeSimulatorMode={setMode} />
+}
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isAzureNetMode ? <AzureNetApp /> : <App />}
+    <UnifiedSimulatorRoot />
   </StrictMode>,
 )
+
