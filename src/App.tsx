@@ -507,12 +507,9 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     <header className="topbar unified-topbar unified-topbar-vwan" data-testid="unified-topbar">
       <div className="unified-topbar-left">
         <div className="brand unified-brand">
-          <div className="brand-icon unified-brand-icon" aria-hidden="true">W</div>
-          <div className="unified-brand-text">
-            <h1>Virtual WAN <span>{t("Topology Lab")}</span></h1>
-            <p className="brand-subtitle">{t("Design the network. Understand the path.")}</p>
-          </div>
-          <span className="unified-mode-pill unified-mode-pill-vwan">Virtual WAN Mode</span>
+          <div className="brand-icon unified-brand-icon" aria-hidden="true">Az</div>
+          <h1>AzNet Simulator</h1>
+          <span className="unified-mode-pill unified-mode-pill-vwan" data-testid="unified-mode-pill">Virtual WAN</span>
         </div>
         {onChangeSimulatorMode && <SimulatorModeSwitch mode={simulatorMode} onChange={onChangeSimulatorMode} variant="vwan" />}
       </div>

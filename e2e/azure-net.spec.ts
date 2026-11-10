@@ -67,9 +67,11 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
 
     // Switch to vWAN-Only mode and back to Full Hybrid mode
     await page.getByTestId('simulator-mode-vwan').click()
-    await expect(page.getByRole('heading', { name: 'Virtual WAN Topology Lab' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
+    await expect(page.getByTestId('unified-mode-pill')).toHaveText('Virtual WAN')
     await page.getByTestId('simulator-mode-full').click()
     await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
+    await expect(page.getByTestId('unified-mode-pill')).toHaveText('Full Hybrid')
 
     // 2. Public Internet endpoint in Path Tracer + Subnet Default Outbound Access toggle
     await page.getByTestId('aznet-tab-tracer').click()

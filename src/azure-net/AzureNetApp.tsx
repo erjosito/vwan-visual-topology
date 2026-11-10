@@ -2127,8 +2127,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               Az
             </div>
             <h1>AzNet Simulator</h1>
-            <span className="aznet-preview-pill">
-              {simulatorMode === 'hub-spoke' ? 'Hub & Spoke Mode' : 'Full Hybrid Mode'}
+            <span className="aznet-preview-pill" data-testid="unified-mode-pill">
+              {simulatorMode === 'hub-spoke' ? 'Hub & Spoke' : 'Full Hybrid'}
             </span>
           </div>
 
