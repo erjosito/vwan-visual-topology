@@ -85,6 +85,25 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // 4. Share Link encodes topology into URL hash (#s=...) and reloads cleanly
     await page.getByTestId('aznet-share-url-btn').click()
     await expect(page).toHaveURL(/#s=/)
+
+    // 5. Optional diagram node labels in AzNet Configure tab & vWAN mode
+    await page.getByTestId('aznet-tab-editor').click()
+    const hubLabelInput = page.getByTestId('aznet-node-label-input-vnet-hub-weu')
+    await expect(hubLabelInput).toBeVisible()
+    await hubLabelInput.fill('Transit Inspection Hub')
+    await expect(page.getByTestId('aznet-node-label-vnet-hub-weu')).toContainText('Transit Inspection Hub')
+
+    // Switch to vWAN-Only mode and set a custom diagram label on Europe hub
+    await page.getByTestId('simulator-mode-vwan').click()
+    await page.getByLabel('Select hub Europe hub', { exact: true }).focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menu').getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
+    const editHubDialog = page.getByRole('dialog', { name: 'Edit hub', exact: true })
+    const vwanLabelInput = editHubDialog.getByLabel('Diagram label (optional)', { exact: true })
+    await expect(vwanLabelInput).toBeVisible()
+    await vwanLabelInput.fill('Core EMEA Hub')
+    await editHubDialog.getByRole('button', { name: 'Save changes', exact: true }).click()
+    await expect(page.getByTestId('node-label-eu')).toContainText('Core EMEA Hub')
   })
 })
 

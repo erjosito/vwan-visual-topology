@@ -11,6 +11,7 @@ export interface DiagramLayout {
 export interface Hub {
   id: string
   name: string
+  label?: string
   region: string
   preference: Preference
   routingIntent: { private: boolean; internet: boolean; privatePrefixes: string[] }
@@ -20,6 +21,7 @@ export interface Hub {
 export interface Site {
   id: string
   name: string
+  label?: string
   asn: number
   prefixes: string[]
   role?: 'spoke-nva'
@@ -28,7 +30,7 @@ export interface Site {
 }
 
 export interface VpnStaticRoute { id: string; prefix: string; connectionId: string }
-export interface ErLocation { id: string; name: string }
+export interface ErLocation { id: string; name: string; label?: string }
 export interface ErLink {
   id: string
   name: string
@@ -86,6 +88,7 @@ export interface SiteLink {
 export interface Spoke {
   id: string
   name: string
+  label?: string
   hubId?: string
   prefixes: string[]
   nvaSpokeIds?: string[]

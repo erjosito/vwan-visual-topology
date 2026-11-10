@@ -252,7 +252,7 @@ function hash(value: string): string {
 export function routingRevision(topology: Topology): string {
   const clean = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(clean)
-    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => !['name', 'layout', 'region'].includes(key)).map(([key, child]) => [key, clean(child)]))
+    if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => !['name', 'label', 'layout', 'region'].includes(key)).map(([key, child]) => [key, clean(child)]))
     return value
   }
   const { azureImport, ...routing } = topology

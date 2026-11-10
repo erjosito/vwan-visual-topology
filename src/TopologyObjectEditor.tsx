@@ -56,9 +56,10 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         const data = new FormData(event.currentTarget)
         const text = (name: string) => String(data.get(name) ?? '').trim()
         const name = text('name')
+        const customLabel = text('label') || undefined
         if (request.kind === 'hub') {
           const value = {
-            ...hub, id, name, region: text('region'), preference: text('preference') as Preference,
+            ...hub, id, name, label: customLabel, region: text('region'), preference: text('preference') as Preference,
             routingIntent: { private: data.has('privateIntent'), internet: data.has('internetIntent'), privatePrefixes: prefixes(text('privatePrefixes')) },
           }
           if (hub) next.hubs[next.hubs.findIndex((h) => h.id === id)] = value
@@ -69,6 +70,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           const value = {
             id,
             name,
+            ...(customLabel ? { label: customLabel } : {}),
             ...(hubIdValue ? { hubId: hubIdValue } : {}),
             prefixes: prefixes(text('prefixes')),
             ...(selectedNvaSpokes.length ? { nvaSpokeIds: selectedNvaSpokes } : {}),
@@ -85,7 +87,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             const targetSpoke = next.spokes.find((s) => s.id === targetSpokeId)
             if (!targetSpoke?.hubId) throw new Error('Spoke BGP NVA requires a hub-attached hosting spoke.')
             const peerIp = text('peerIp') || defaultSpokeNvaPeerIp(targetSpoke.prefixes) || ''
-            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: site?.prefixes ?? [], role: 'spoke-nva' as const }
+            const value = { ...site, id, name, label: customLabel, asn: Number(text('asn')), prefixes: site?.prefixes ?? [], role: 'spoke-nva' as const }
             if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
             else next.sites.push(value)
             const connValue = {
@@ -109,7 +111,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
               data.getAll('downstreamSites').map(String),
             )
           } else {
-            const value = { ...site, id, name, asn: Number(text('asn')), prefixes: prefixes(text('prefix')) }
+            const value = { ...site, id, name, label: customLabel, asn: Number(text('asn')), prefixes: prefixes(text('prefix')) }
             if (site) next.sites[next.sites.findIndex((s) => s.id === id)] = value
             else next.sites.push(value)
             if (connectedSite) {
@@ -160,8 +162,9 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         } else if (request.kind === 'erLocation') {
           next.erLocations ??= []
           const index = next.erLocations.findIndex((location) => location.id === id)
-          if (index < 0) next.erLocations.push({ id, name })
-          else next.erLocations[index] = { id, name }
+          const value = { id, name, ...(customLabel ? { label: customLabel } : {}) }
+          if (index < 0) next.erLocations.push(value)
+          else next.erLocations[index] = value
         } else if (request.kind === 'erLink') {
           const value = { id, name, locationId: text('location'), enabled: data.has('enabled'),
             ...(erEndpoint === 'hub' ? { hubId: text('endpoint'), ...(data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}) } : { siteId: text('endpoint') }),
@@ -199,6 +202,9 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         {(request.kind === 'hub' || request.kind === 'site' || request.kind === 'erLocation') && <p>{t("Attached ER connections are also removed; the other endpoints are kept.")}</p>}
       </> : <>
         <Field title={t("Name")}><input name="name" required maxLength={120} defaultValue={item?.name ?? (isSpokeNva && hostSpoke ? `${hostSpoke.name} NVA` : '')} autoFocus /></Field>
+        {(request.kind === 'hub' || request.kind === 'spoke' || request.kind === 'site' || request.kind === 'erLocation') && (
+          <Field title={t("Diagram label (optional)")}><input name="label" maxLength={120} defaultValue={(item as { label?: string } | undefined)?.label ?? ''} placeholder={t("Optional note displayed on diagram node")} /></Field>
+        )}
         {request.kind === 'erLocation' && <p className="muted">{t("An ExpressRoute peering location groups site circuit attachments and their hub connections. Connect sites and hubs after creating it. ER-to-ER transit and Global Reach are not enabled.")}</p>}
         {request.kind === 'erLink' && <>
           <Field title={t("ER location")}><select name="location" required defaultValue={erLink?.locationId ?? request.locationId ?? topology.erLocations?.[0]?.id}>{topology.erLocations?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>

@@ -2098,6 +2098,57 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     </div>
                   ))}
                 </div>
+
+                {/* Node Labels & Annotations */}
+                <div className="aznet-card" data-testid="aznet-node-labels-editor">
+                  <h3>Node Labels & Annotations</h3>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: '#475569' }}>
+                    Optional text labels displayed as annotation badges below diagram nodes.
+                  </p>
+                  {[
+                    ...topology.vnets.map((n) => ({ kind: 'vnet' as const, id: n.id, name: `VNet: ${n.name}`, label: n.label ?? '' })),
+                    ...topology.vwanHubs.map((n) => ({ kind: 'vwanHub' as const, id: n.id, name: `vWAN Hub: ${n.name}`, label: n.label ?? '' })),
+                    ...topology.erLocations.map((n) => ({ kind: 'erLocation' as const, id: n.id, name: `ER MSEE: ${n.name}`, label: n.label ?? '' })),
+                    ...topology.sites.map((n) => ({ kind: 'site' as const, id: n.id, name: `Site: ${n.name}`, label: n.label ?? '' })),
+                  ].map((item) => (
+                    <div key={`${item.kind}-${item.id}`} className="aznet-toggle-row" style={{ gap: 8 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, minWidth: 160 }}>{item.name}</span>
+                      <input
+                        type="text"
+                        maxLength={120}
+                        placeholder="Optional diagram label..."
+                        data-testid={`aznet-node-label-input-${item.id}`}
+                        value={item.label}
+                        onChange={(e) => {
+                          const nextVal = e.target.value
+                          commitTopology((draft) => {
+                            const cleaned = nextVal.trim() ? nextVal : undefined
+                            if (item.kind === 'vnet') {
+                              const target = draft.vnets.find((v) => v.id === item.id)
+                              if (target) target.label = cleaned
+                            } else if (item.kind === 'vwanHub') {
+                              const target = draft.vwanHubs.find((h) => h.id === item.id)
+                              if (target) target.label = cleaned
+                            } else if (item.kind === 'erLocation') {
+                              const target = draft.erLocations.find((l) => l.id === item.id)
+                              if (target) target.label = cleaned
+                            } else if (item.kind === 'site') {
+                              const target = draft.sites.find((s) => s.id === item.id)
+                              if (target) target.label = cleaned
+                            }
+                          })
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '4px 8px',
+                          fontSize: 12,
+                          borderRadius: 6,
+                          border: '1px solid #cbd5e1',
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
               </>
             )}
 

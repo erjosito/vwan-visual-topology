@@ -319,10 +319,11 @@ describe('diagnostic contracts, policies and bounds', () => {
     expect(() => analyzeRouting(fixture(), profile(), { maxMillis: 0.1 })).toThrow()
   })
 
-  it('changes revision for routing or coverage but not names, layout, region or locale', () => {
+  it('changes revision for routing or coverage but not names, labels, layout, region or locale', () => {
     const t = fixture()
     const revision = routingRevision(t)
     t.name = '名前'; t.hubs[0].name = '新しいハブ'; t.hubs[0].region = 'New region'
+    t.hubs[0].label = 'Primary EMEA Hub'; t.spokes[0].label = 'Prod App Spoke'; t.sites[0].label = 'Branch Note'
     t.layout = { mode: 'layered', positions: { layered: { h: { x: 90, y: 80 } } } }
     expect(routingRevision(t)).toBe(revision)
     t.connections[0].enabled = false

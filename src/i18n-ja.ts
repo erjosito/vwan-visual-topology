@@ -258,6 +258,8 @@ export const ja: Record<string, string> = {
   'Calculated locally in your browser · Export JSON for portable backups': 'ブラウザー内でローカル計算 · 持ち運び可能なバックアップには JSON をエクスポート',
   'Offline files only. No Azure sign-in, credentials, API calls or deployment from this app.': 'オフライン ファイルのみ。このアプリは Azure へのサインイン、資格情報の使用、API 呼び出し、デプロイを行いません。',
   'Review Azure capture': 'Azure の取得データを確認',
+  'Diagram label (optional)': '図のラベル (任意)',
+  'Optional note displayed on diagram node': '図のノードに表示するメモ (任意)',
   'hubs ·': 'ハブ ·',
   'IPv4 spokes. Confirming replaces the current workspace. Export its JSON first if needed.': 'IPv4 スポーク。確定すると現在のワークスペースが置き換わります。必要に応じて先に JSON をエクスポートしてください。',
   'Import from Azure': 'Azure からインポート',

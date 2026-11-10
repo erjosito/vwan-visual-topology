@@ -596,6 +596,14 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(diagEgressBlocked.some((f) => f.category === 'subnet-default-outbound-disabled')).toBe(
       true,
     )
+
+    // 4. Optional diagram node labels validate cleanly up to 120 chars and reject overly long strings
+    const labeledTopo = JSON.parse(JSON.stringify(AZURE_NET_SAMPLES[0].topology)) as AzNetTopology
+    labeledTopo.vnets[0].label = 'Core Security Hub'
+    labeledTopo.sites[0].label = 'Primary On-Prem DC'
+    expect(validateAzNetTopology(labeledTopo)).toEqual([])
+    labeledTopo.vnets[0].label = 'x'.repeat(121)
+    expect(validateAzNetTopology(labeledTopo).some((e) => e.includes('120 characters'))).toBe(true)
   })
 })
 

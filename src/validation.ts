@@ -121,12 +121,22 @@ export function validateTopology(input: unknown): Topology {
         ...(entry.outboundMapId === undefined ? {} : { outboundMapId: text(entry.outboundMapId, 'Outbound route map') }) }
     })
   }
+  const optionalLabel = (value: unknown): string | undefined => {
+    if (value === undefined) return undefined
+    if (typeof value !== 'string') return fail('Diagram label must be a string.')
+    if (value.length > 120) return fail('Diagram label must contain at most 120 characters.')
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
+  }
   const hubs = array(root.hubs, 20, 'Hubs').map((value) => {
     const hub = record(value)
     if (!['ExpressRoute', 'VPN', 'ASPath'].includes(hub.preference as string)) fail('Invalid hub routing preference.')
     const intent = record(hub.routingIntent ?? { private: false, internet: false, privatePrefixes: [] })
     if (typeof intent.private !== 'boolean' || typeof intent.internet !== 'boolean') fail('Routing intent policies must be boolean.')
-    return { id: id(hub.id), name: text(hub.name, 'Hub name'), region: text(hub.region, 'Region'), preference: hub.preference,
+    const label = optionalLabel(hub.label)
+    return { id: id(hub.id), name: text(hub.name, 'Hub name'),
+      ...(label === undefined ? {} : { label }),
+      region: text(hub.region, 'Region'), preference: hub.preference,
       routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') },
       ...(hub.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(hub.routeMapAssignments) }) } as Topology['hubs'][number]
   })
@@ -141,7 +151,10 @@ export function validateTopology(input: unknown): Topology {
       if (!cidr(prefix)) fail(`Invalid static IPv4 network CIDR: ${prefix}`)
       return { id: id(route.id), prefix, connectionId: text(route.connectionId, 'Static route VPN connection') }
     })
-    return { id: id(site.id), name: text(site.name, 'Site name'), asn, prefixes: [...new Set(prefixes(originated, 'Site originated prefix'))],
+    const label = optionalLabel(site.label)
+    return { id: id(site.id), name: text(site.name, 'Site name'),
+      ...(label === undefined ? {} : { label }),
+      asn, prefixes: [...new Set(prefixes(originated, 'Site originated prefix'))],
       ...(site.role === 'spoke-nva' ? { role: 'spoke-nva' as const } : {}),
       ...(site.vpnStaticRoutes === undefined ? {} : { vpnStaticRoutes }),
       ...(site.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(site.routeMapAssignments) }) }
@@ -173,9 +186,11 @@ export function validateTopology(input: unknown): Topology {
     const nvaSpokeIds = spoke.nvaSpokeIds === undefined
       ? undefined
       : [...new Set(array(spoke.nvaSpokeIds, 50, 'Spoke NVA attachments').map((entry) => text(entry, 'Spoke NVA id')))]
+    const label = optionalLabel(spoke.label)
     return {
       id: id(spoke.id),
       name: text(spoke.name, 'Spoke name'),
+      ...(label === undefined ? {} : { label }),
       ...(hubId === undefined ? {} : { hubId }),
       prefixes,
       ...(nvaSpokeIds?.length ? { nvaSpokeIds } : {}),
@@ -220,7 +235,8 @@ export function validateTopology(input: unknown): Topology {
   })
   const erLocations = array(root.erLocations ?? [], 60, 'ER locations').map((value) => {
     const location = record(value)
-    return { id: id(location.id), name: text(location.name, 'ER location name') }
+    const label = optionalLabel(location.label)
+    return { id: id(location.id), name: text(location.name, 'ER location name'), ...(label === undefined ? {} : { label }) }
   })
   const erLinks: NonNullable<Topology['erLinks']> = array(root.erLinks ?? [], 240, 'ER connections').map((value) => {
     const link = record(value)

@@ -809,6 +809,34 @@ export function AzureNetDiagram({
                   </g>
                 )
               })}
+              {vnet.label?.trim() ? (
+                <g
+                  data-testid={`aznet-node-label-${vnet.id}`}
+                  transform={`translate(${box.x + box.width / 2}, ${box.y + box.height + 15})`}
+                  style={{ pointerEvents: 'none' }}
+                >
+                  <rect
+                    x={-Math.min(Math.max(vnet.label.trim().length * 5.8 + 18, 64), box.width - 8) / 2}
+                    y={-10}
+                    width={Math.min(Math.max(vnet.label.trim().length * 5.8 + 18, 64), box.width - 8)}
+                    height={19}
+                    rx={9.5}
+                    fill="#fef9c3"
+                    stroke="#facc15"
+                    strokeWidth={1.1}
+                  />
+                  <text
+                    x={0}
+                    y={3.5}
+                    textAnchor="middle"
+                    fontSize={10.5}
+                    fontWeight={600}
+                    fill="#713f12"
+                  >
+                    {vnet.label.trim().length > 36 ? `${vnet.label.trim().slice(0, 35)}…` : vnet.label.trim()}
+                  </text>
+                </g>
+              ) : null}
             </g>
           )
         })}
@@ -860,6 +888,34 @@ export function AzureNetDiagram({
                 Routing Intent: {hub.routingIntent.private ? 'Private ✓' : 'Private Off'} /{' '}
                 {hub.routingIntent.internet ? 'Internet ✓' : 'Internet Off'}
               </text>
+              {hub.label?.trim() ? (
+                <g
+                  data-testid={`aznet-node-label-${hub.id}`}
+                  transform={`translate(${box.x + box.width / 2}, ${box.y + box.height + 15})`}
+                  style={{ pointerEvents: 'none' }}
+                >
+                  <rect
+                    x={-Math.min(Math.max(hub.label.trim().length * 5.8 + 18, 64), box.width - 8) / 2}
+                    y={-10}
+                    width={Math.min(Math.max(hub.label.trim().length * 5.8 + 18, 64), box.width - 8)}
+                    height={19}
+                    rx={9.5}
+                    fill="#fef9c3"
+                    stroke="#facc15"
+                    strokeWidth={1.1}
+                  />
+                  <text
+                    x={0}
+                    y={3.5}
+                    textAnchor="middle"
+                    fontSize={10.5}
+                    fontWeight={600}
+                    fill="#713f12"
+                  >
+                    {hub.label.trim().length > 36 ? `${hub.label.trim().slice(0, 35)}…` : hub.label.trim()}
+                  </text>
+                </g>
+              ) : null}
             </g>
           )
         })}
@@ -907,6 +963,34 @@ export function AzureNetDiagram({
               <text x={box.x + 12} y={box.y + 44} fontSize={10} fill="#92400e">
                 MSEE ASN 12076 · Global Reach: {loc.globalReachEnabled ? 'Enabled' : 'Off'}
               </text>
+              {loc.label?.trim() ? (
+                <g
+                  data-testid={`aznet-node-label-${loc.id}`}
+                  transform={`translate(${box.x + box.width / 2}, ${box.y + box.height + 15})`}
+                  style={{ pointerEvents: 'none' }}
+                >
+                  <rect
+                    x={-Math.min(Math.max(loc.label.trim().length * 5.8 + 18, 64), box.width - 8) / 2}
+                    y={-10}
+                    width={Math.min(Math.max(loc.label.trim().length * 5.8 + 18, 64), box.width - 8)}
+                    height={19}
+                    rx={9.5}
+                    fill="#fef9c3"
+                    stroke="#facc15"
+                    strokeWidth={1.1}
+                  />
+                  <text
+                    x={0}
+                    y={3.5}
+                    textAnchor="middle"
+                    fontSize={10.5}
+                    fontWeight={600}
+                    fill="#713f12"
+                  >
+                    {loc.label.trim().length > 36 ? `${loc.label.trim().slice(0, 35)}…` : loc.label.trim()}
+                  </text>
+                </g>
+              ) : null}
             </g>
           )
         })}
@@ -957,6 +1041,34 @@ export function AzureNetDiagram({
               <text x={box.x + 12} y={box.y + 58} fontSize={9.5} fill="#64748b">
                 On-Premises Branch / Datacenter
               </text>
+              {site.label?.trim() ? (
+                <g
+                  data-testid={`aznet-node-label-${site.id}`}
+                  transform={`translate(${box.x + box.width / 2}, ${box.y + box.height + 15})`}
+                  style={{ pointerEvents: 'none' }}
+                >
+                  <rect
+                    x={-Math.min(Math.max(site.label.trim().length * 5.8 + 18, 64), box.width - 8) / 2}
+                    y={-10}
+                    width={Math.min(Math.max(site.label.trim().length * 5.8 + 18, 64), box.width - 8)}
+                    height={19}
+                    rx={9.5}
+                    fill="#fef9c3"
+                    stroke="#facc15"
+                    strokeWidth={1.1}
+                  />
+                  <text
+                    x={0}
+                    y={3.5}
+                    textAnchor="middle"
+                    fontSize={10.5}
+                    fontWeight={600}
+                    fill="#713f12"
+                  >
+                    {site.label.trim().length > 36 ? `${site.label.trim().slice(0, 35)}…` : site.label.trim()}
+                  </text>
+                </g>
+              ) : null}
             </g>
           )
         })}

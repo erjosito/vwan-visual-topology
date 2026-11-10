@@ -409,11 +409,25 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       return <g key={link.id} className="clickable" {...selectable('erLink', link.id, t("Edit ER connection {0}", link.name))}><title>{link.name}  {t("· ExpressRoute ·")} {link.enabled ? t("Enabled") : t("Down")}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : t(' (down)')}`, edge.label)}</g>
     })}
     <PathMotion flows={flows} pixelsPerUnit={scale * zoom} colors={destinationColors} />
+    {(() => {
+      const renderCustomLabel = (nodeId: string, label: string | undefined, yOffset: number) => {
+        const trimmed = label?.trim()
+        if (!trimmed) return null
+        const display = trimmed.length > 34 ? trimmed.slice(0, 32) + '…' : trimmed
+        const width = Math.max(64, Math.min(220, display.length * 6.2 + 18))
+        return (
+          <g className="node-custom-label-group" data-testid={`node-label-${nodeId}`}>
+            <rect x={-width / 2} y={yOffset - 11} width={width} height="18" rx="9" className="node-custom-label-bg" />
+            <text y={yOffset + 1} className="node-custom-label">{display}</text>
+          </g>
+        )
+      }
+      return <>
     {topology.hubs.map((hub) => {
       const p = point(hub.id)
       const secured = hub.routingIntent.private || hub.routingIntent.internet
       const firewallActive = secured && (tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId)
-      return <g key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, t("Select hub {0}", hub.name))} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic')].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title><rect x="-112" y="-48" width="224" height="96" rx="18" /><NodeIcon kind="hub" secured={secured} /><text x="12" y="-19" className="node-kind">{secured ? t("SECURED VIRTUAL HUB") : t("VIRTUAL HUB")}</text><text y="6" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="29" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text></g>
+      return <g key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, t("Select hub {0}", hub.name))} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{hub.label ? ` · ${hub.label}` : ''}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic')].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title><rect x="-112" y="-48" width="224" height="96" rx="18" /><NodeIcon kind="hub" secured={secured} /><text x="12" y="-19" className="node-kind">{secured ? t("SECURED VIRTUAL HUB") : t("VIRTUAL HUB")}</text><text y="6" className="node-name">{hub.name.length > 25 ? hub.name.slice(0, 23) + '…' : hub.name}</text><text y="29" className="node-detail">{hub.region.length > 30 ? hub.region.slice(0, 28) + '…' : hub.region}</text>{renderCustomLabel(hub.id, hub.label, 62)}</g>
     })}
     {topology.spokes.map((spoke) => {
       const p = point(spoke.id)
@@ -421,8 +435,9 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       const nvaSite = nvas[0] ? topology.sites.find((site) => site.id === nvas[0].siteId) : undefined
       const standalone = !spoke.hubId
       const colorProps = destinationColors.has(spoke.id) ? destinationProps(spoke.id) : nvaSite ? destinationProps(nvaSite.id) : {}
+      const effectiveLabel = spoke.label || nvaSite?.label
       return <g key={spoke.id} data-node-id={spoke.id} data-spoke-nva={nvas.length > 0 ? true : undefined} data-standalone-vnet={standalone ? true : undefined} {...colorProps} transform={`translate(${p.x}, ${p.y})`} className={`spoke-node draggable-node ${nvas.length ? 'spoke-nva-node' : ''} ${standalone ? 'standalone-vnet-node' : ''}`} {...selectable('spoke', spoke.id, t("Select spoke {0}", spoke.name))} {...movable('spoke', spoke.id)}>
-        <title>{spoke.name}: {spoke.prefixes.join(', ')}{nvaSite && nvas[0] ? ` · ${t('Spoke BGP NVA')} (${nvaSite.name} · ASN ${nvaSite.asn} · ${nvas[0].peerIp})` : ''}</title>
+        <title>{spoke.name}: {spoke.prefixes.join(', ')}{effectiveLabel ? ` · ${effectiveLabel}` : ''}{nvaSite && nvas[0] ? ` · ${t('Spoke BGP NVA')} (${nvaSite.name} · ASN ${nvaSite.asn} · ${nvas[0].peerIp})` : ''}</title>
         <rect x="-94" y="-44" width="188" height="88" rx="15" />
         <NodeIcon kind="spoke" />
         {nvas.length > 0 && <SpokeNvaIcon spokeId={spoke.id} />}
@@ -430,16 +445,19 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
         <text y={nvas.length > 0 ? '-3' : '6'} className="node-name">{spoke.name.length > 22 ? spoke.name.slice(0, 20) + '…' : spoke.name}</text>
         <text y={nvas.length > 0 ? '16' : '28'} className="node-detail">{spoke.prefixes[0]}{spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}</text>
         {nvas.length > 0 && nvaSite && <text y="34" className="node-detail node-prefixes">AS{nvaSite.asn} · {nvas[0].peerIp}{nvas.length > 1 ? ` +${nvas.length - 1}` : ''}</text>}
+        {renderCustomLabel(spoke.id, effectiveLabel, 58)}
       </g>
     })}
     {topology.sites.filter((site) => !nvaSiteMap.has(site.id)).map((site) => {
       const p = point(site.id)
-      return <g key={site.id} data-node-id={site.id} {...destinationProps(site.id)} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, t("Select site {0}", site.name))} {...movable('site', site.id)}><title>{site.name}  {t("· ASN")} {site.asn}  {t("· Originated prefix:")} {site.prefixes.join(', ') || t('none')}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="site" /><text x="10" y="-24" className="node-kind">{t("ON-PREMISES")}</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{site.prefixes[0] ? `${site.prefixes[0]}${site.prefixes.length > 1 ? ` +${site.prefixes.length - 1}` : ''}` : t("No assigned prefix")}</text></g>
+      return <g key={site.id} data-node-id={site.id} {...destinationProps(site.id)} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, t("Select site {0}", site.name))} {...movable('site', site.id)}><title>{site.name}{site.label ? ` · ${site.label}` : ''}  {t("· ASN")} {site.asn}  {t("· Originated prefix:")} {site.prefixes.join(', ') || t('none')}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="site" /><text x="10" y="-24" className="node-kind">{t("ON-PREMISES")}</text><text y="-3" className="node-name">{site.name.length > 22 ? site.name.slice(0, 20) + '…' : site.name}</text><text y="16" className="node-detail">ASN {site.asn}</text><text y="34" className="node-detail node-prefixes">{site.prefixes[0] ? `${site.prefixes[0]}${site.prefixes.length > 1 ? ` +${site.prefixes.length - 1}` : ''}` : t("No assigned prefix")}</text>{renderCustomLabel(site.id, site.label, 58)}</g>
     })}
     {(topology.erLocations ?? []).map((location) => {
       const p = point(location.id)
-      return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">{t("ER LOCATION")}</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">{t("ExpressRoute private peering")}</text></g>
+      return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}{location.label ? ` · ${location.label}` : ''}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">{t("ER LOCATION")}</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">{t("ExpressRoute private peering")}</text>{renderCustomLabel(location.id, location.label, 58)}</g>
     })}
+      </>
+    })()}
     {policyMarks}
     {[...stops].map((id) => {
       const p = positions.get(id)

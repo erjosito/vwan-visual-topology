@@ -109,6 +109,7 @@ export interface AzVwanHubAttachment {
 export interface AzVNet {
   id: string
   name: string
+  label?: string
   region: string
   prefixes: string[]
   role: AzVnetRole
@@ -142,6 +143,7 @@ export interface AzVnetPeering {
 export interface AzVwanHub {
   id: string
   name: string
+  label?: string
   region: string
   prefix?: string
   preference: Preference
@@ -156,6 +158,7 @@ export interface AzVwanHub {
 export interface AzSite {
   id: string
   name: string
+  label?: string
   asn: number
   prefixes: string[]
   x?: number
@@ -165,6 +168,7 @@ export interface AzSite {
 export interface AzErLocation {
   id: string
   name: string
+  label?: string
   globalReachEnabled?: boolean
   x?: number
   y?: number
@@ -1159,6 +1163,9 @@ export function validateAzNetTopology(input: unknown): string[] {
   }
   for (const vnet of candidate.vnets) {
     if (!vnet.id || !vnet.name) errors.push('Every VNet must have an id and name.')
+    if (vnet.label !== undefined && (typeof vnet.label !== 'string' || vnet.label.length > 120)) {
+      errors.push(`VNet "${vnet.name}" label must be a string of at most 120 characters.`)
+    }
     if (!Array.isArray(vnet.prefixes) || !vnet.prefixes.length) {
       errors.push(`VNet "${vnet.name}" must have at least one CIDR prefix.`)
     }
@@ -1189,6 +1196,21 @@ export function validateAzNetTopology(input: unknown): string[] {
       if (route.nextHopType === 'VirtualAppliance' && (!route.nextHopIp || ipv4(route.nextHopIp) === undefined)) {
         errors.push(`UDR route "${route.name}" with VirtualAppliance next hop requires a valid IPv4 address.`)
       }
+    }
+  }
+  for (const hub of candidate.vwanHubs ?? []) {
+    if (hub.label !== undefined && (typeof hub.label !== 'string' || hub.label.length > 120)) {
+      errors.push(`vWAN Hub "${hub.name}" label must be a string of at most 120 characters.`)
+    }
+  }
+  for (const loc of candidate.erLocations ?? []) {
+    if (loc.label !== undefined && (typeof loc.label !== 'string' || loc.label.length > 120)) {
+      errors.push(`ER Location "${loc.name}" label must be a string of at most 120 characters.`)
+    }
+  }
+  for (const site of candidate.sites ?? []) {
+    if (site.label !== undefined && (typeof site.label !== 'string' || site.label.length > 120)) {
+      errors.push(`Site "${site.name}" label must be a string of at most 120 characters.`)
     }
   }
   return errors
