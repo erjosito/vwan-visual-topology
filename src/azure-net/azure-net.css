@@ -33,13 +33,16 @@
   align-items: center;
   gap: 14px;
   flex-shrink: 0;
+  align-self: flex-start;
+  min-height: 34px;
 }
 
 .aznet-brand {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 315px;
+  width: 320px;
+  flex-shrink: 0;
 }
 
 .aznet-brand-icon {

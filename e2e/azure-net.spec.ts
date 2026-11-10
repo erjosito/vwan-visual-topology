@@ -105,5 +105,69 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await editHubDialog.getByRole('button', { name: 'Save changes', exact: true }).click()
     await expect(page.getByTestId('node-label-eu')).toContainText('Core EMEA Hub')
   })
+
+  test('supports issues #35-#42: pinned mode switcher, context menus, peering & Route Table popovers, GWroutes:OFF badge, VNet element controls, and site/ER deletion', async ({
+    page,
+  }) => {
+    await page.goto('/?mode=hub-spoke')
+
+    // #35: Mode switcher stays at a fixed position across all 3 modes
+    const switchBoxHubSpoke = await page.getByTestId('simulator-mode-switch').boundingBox()
+    expect(switchBoxHubSpoke).not.toBeNull()
+    await page.getByTestId('simulator-mode-full').click()
+    const switchBoxFull = await page.getByTestId('simulator-mode-switch').boundingBox()
+    expect(switchBoxFull).not.toBeNull()
+    expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxFull?.x ?? 0))).toBeLessThanOrEqual(4)
+    expect(Math.abs((switchBoxHubSpoke?.y ?? 0) - (switchBoxFull?.y ?? 0))).toBeLessThanOrEqual(4)
+
+    await page.getByTestId('simulator-mode-vwan').click()
+    const switchBoxVwan = await page.getByTestId('simulator-mode-switch').boundingBox()
+    expect(switchBoxVwan).not.toBeNull()
+    expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxVwan?.x ?? 0))).toBeLessThanOrEqual(4)
+    expect(Math.abs((switchBoxHubSpoke?.y ?? 0) - (switchBoxVwan?.y ?? 0))).toBeLessThanOrEqual(4)
+
+    // Switch back to Hub & Spoke-Only mode
+    await page.getByTestId('simulator-mode-hub-spoke').click()
+
+    // #40 & #41: Verify GWroutes:OFF and RT-Spokes badge on sub-app-web
+    await expect(page.getByTestId('aznet-subnet-sub-app-web')).toContainText('GWroutes:OFF')
+    await expect(page.getByTestId('aznet-subnet-rt-badge-sub-app-web')).toContainText('RT-Spokes')
+
+    // #41: Hover over Route Table badge on sub-app-web to open Route Table popover
+    await page.getByTestId('aznet-subnet-rt-badge-sub-app-web').hover()
+    const rtHoverCard = page.getByTestId('aznet-rt-hover-card')
+    await expect(rtHoverCard).toBeVisible()
+    await expect(rtHoverCard).toContainText('Propagate Gateway Routes (GWroutes)')
+    await page.mouse.move(10, 10)
+    await expect(rtHoverCard).toHaveCount(0)
+
+    // #38: Hover peering pill on canvas to open VNet Peering interactive popover
+    await page.getByTestId('aznet-peering-pill-peer-hub-app').hover({ force: true })
+    const peerHoverCard = page.getByTestId('aznet-peering-hover-card')
+    await expect(peerHoverCard).toBeVisible()
+    await expect(peerHoverCard).toContainText('Allow GW Transit')
+    await page.mouse.move(10, 10)
+    await expect(peerHoverCard).toHaveCount(0)
+
+    // #36: Right-click VNet node to open contextual menu
+    await page.getByTestId('aznet-vnet-vnet-spoke-app').click({ button: 'right', position: { x: 24, y: 18 }, force: true })
+    const ctxMenu = page.getByRole('menu').first()
+    await expect(ctxMenu).toBeVisible()
+    await expect(ctxMenu.getByRole('menuitem', { name: /Configure VNet/i })).toBeVisible()
+    await ctxMenu.getByRole('menuitem', { name: /Add \/ Remove VNet Elements/i }).click()
+    await page.getByRole('menuitem', { name: /Add Azure Firewall/i }).click()
+
+    // #39: Verify Azure Firewall was added to VNet-Spoke-App via context menu
+    await expect(page.getByTestId('aznet-chip-vnet-spoke-app-azfw-1')).toBeVisible()
+
+    // #42: Topbar quick-create buttons (+ Site, + ER MSEE, + VNet, + Route Table)
+    await page.getByTestId('aznet-add-site-btn').click()
+    await expect(page.getByTestId('aznet-site-site-custom-3')).toBeVisible()
+
+    // #37: Delete the newly added site from the Configure tab
+    await page.getByTestId('aznet-tab-editor').click()
+    await page.getByTestId('aznet-delete-site-site-custom-3').click()
+    await expect(page.getByTestId('aznet-site-site-custom-3')).toHaveCount(0)
+  })
 })
 

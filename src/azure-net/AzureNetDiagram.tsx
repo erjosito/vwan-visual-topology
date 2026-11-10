@@ -417,6 +417,7 @@ export function AzureNetDiagram({
                 strokeDasharray={brokenAccess ? '6 5' : undefined}
               />
               <rect
+                data-testid={`aznet-peering-pill-${peering.id}`}
                 x={midX - 66}
                 y={midY - 11}
                 width={132}

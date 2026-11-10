@@ -1,7 +1,7 @@
 import { t } from './i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-export interface ContextAction { label: string; run?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean }
+export interface ContextAction { label: string; run?: () => void; onSelect?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean }
 
 function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'right', focusOnOpen, onBack, onClose }: {
   x?: number; y?: number; title: string; actions: ContextAction[]; anchor?: HTMLButtonElement
@@ -77,7 +77,7 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
         }} onPointerLeave={cancelHover}
         onClick={() => {
           if (action.children?.length) open(index, true)
-          else { cancelHover(); onClose(); action.run?.() }
+          else { cancelHover(); onClose(); (action.run ?? action.onSelect)?.() }
         }}><span>{action.label}</span>{action.children?.length ? <span aria-hidden="true" className="menu-chevron" /> : null}</button>)}
     </div>
     {opened && active?.children && <MenuLevel key={opened.index} title={active.label} actions={active.children} anchor={opened.anchor} preferredSide={side} focusOnOpen={opened.focus} onBack={() => { cancelHover(); setOpened(undefined); buttons.current[opened.index]?.focus({ preventScroll: true }) }} onClose={onClose} />}
