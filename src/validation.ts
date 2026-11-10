@@ -233,10 +233,38 @@ export function validateTopology(input: unknown): Topology {
       }),
     }
   })
-  const erLocations = array(root.erLocations ?? [], 60, 'ER locations').map((value) => {
+  const rawErLocations = array(root.erLocations ?? [], 60, 'ER locations').map((value) => {
     const location = record(value)
     const label = optionalLabel(location.label)
-    return { id: id(location.id), name: text(location.name, 'ER location name'), ...(label === undefined ? {} : { label }) }
+    const peeringLocation = typeof location.peeringLocation === 'string' && location.peeringLocation.trim()
+      ? text(location.peeringLocation, 'ER peering location')
+      : undefined
+    const sku = location.sku === undefined
+      ? undefined
+      : (['Local', 'Standard', 'Premium'].includes(location.sku as string)
+        ? (location.sku as 'Local' | 'Standard' | 'Premium')
+        : fail('Invalid ER circuit SKU.'))
+    if (location.globalReachEnabled !== undefined && typeof location.globalReachEnabled !== 'boolean') {
+      fail('ER Global Reach enabled must be boolean.')
+    }
+    const globalReachLocationIds = location.globalReachLocationIds === undefined
+      ? undefined
+      : [...new Set(array(location.globalReachLocationIds, 60, 'ER Global Reach peer locations').map((entry) => text(entry, 'ER Global Reach peer location id')))]
+    return {
+      id: id(location.id),
+      name: text(location.name, 'ER location name'),
+      ...(label === undefined ? {} : { label }),
+      ...(peeringLocation === undefined ? {} : { peeringLocation }),
+      ...(sku === undefined ? {} : { sku }),
+      ...(location.globalReachEnabled === true ? { globalReachEnabled: true } : {}),
+      ...(globalReachLocationIds?.length ? { globalReachLocationIds } : {}),
+    }
+  })
+  const erLocationIds = new Set(rawErLocations.map((loc) => loc.id))
+  const erLocations = rawErLocations.map((loc) => {
+    const validPeers = loc.globalReachLocationIds?.filter((peerId) => peerId !== loc.id && erLocationIds.has(peerId))
+    const { globalReachLocationIds: _, ...rest } = loc
+    return validPeers?.length ? { ...rest, globalReachLocationIds: validPeers } : rest
   })
   const erLinks: NonNullable<Topology['erLinks']> = array(root.erLinks ?? [], 240, 'ER connections').map((value) => {
     const link = record(value)

@@ -408,6 +408,24 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       const active = link.enabled && activeErLinks.has(link.id)
       return <g key={link.id} className="clickable" {...selectable('erLink', link.id, t("Edit ER connection {0}", link.name))}><title>{link.name}  {t("· ExpressRoute ·")} {link.enabled ? t("Enabled") : t("Down")}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : t(' (down)')}`, edge.label)}</g>
     })}
+    {(topology.erLocations ?? []).flatMap((loc) =>
+      (loc.globalReachLocationIds ?? []).filter((peerId) => loc.id < peerId).map((peerId) => {
+        const peer = topology.erLocations?.find((l) => l.id === peerId)
+        if (!peer) return null
+        const p1 = point(loc.id)
+        const p2 = point(peer.id)
+        const midX = (p1.x + p2.x) / 2
+        const midY = (p1.y + p2.y) / 2 - 22
+        const d = `M ${p1.x} ${p1.y} Q ${midX} ${midY} ${p2.x} ${p2.y}`
+        return (
+          <g key={`gr-loc:${loc.id}:${peer.id}`} data-testid={`vwan-global-reach-link-${loc.id}-${peer.id}`}>
+            <title>{loc.name} ↔ {peer.name} · ExpressRoute Global Reach (MSEE 12076)</title>
+            <path d={d} fill="none" stroke="#a855f7" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.88" />
+            {badge('Global Reach', { x: midX, y: midY })}
+          </g>
+        )
+      })
+    )}
     <PathMotion flows={flows} pixelsPerUnit={scale * zoom} colors={destinationColors} />
     {(() => {
       const renderCustomLabel = (nodeId: string, label: string | undefined, yOffset: number) => {
@@ -454,7 +472,10 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     })}
     {(topology.erLocations ?? []).map((location) => {
       const p = point(location.id)
-      return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}{location.label ? ` · ${location.label}` : ''}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">{t("ER LOCATION")}</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">{t("ExpressRoute private peering")}</text>{renderCustomLabel(location.id, location.label, 58)}</g>
+      const skuLabel = location.sku ?? 'Standard'
+      const grActive = Boolean(location.globalReachEnabled || (location.globalReachLocationIds && location.globalReachLocationIds.length > 0))
+      const detailLabel = `ER ${skuLabel}${grActive ? ' · Global Reach' : ''}`
+      return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}{location.peeringLocation ? ` (${location.peeringLocation})` : ''} · SKU {skuLabel}{grActive ? ' · Global Reach enabled' : ''}{location.label ? ` · ${location.label}` : ''}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="15" /><NodeIcon kind="erLocation" /><text x="10" y="-19" className="node-kind">{t("ER LOCATION")}</text><text y="6" className="node-name">{location.name.length > 22 ? location.name.slice(0, 20) + '…' : location.name}</text><text y="28" className="node-detail">{detailLabel}</text>{renderCustomLabel(location.id, location.label, 58)}</g>
     })}
       </>
     })()}

@@ -11,7 +11,11 @@ export type AzVnetRole =
   | 'transit'
   | 'standalone'
 
-export type AzPrivateEndpointPolicy = 'Disabled' | 'Enabled' | 'RouteTableEnabled'
+export type AzPrivateEndpointPolicy =
+  | 'Disabled'
+  | 'Enabled'
+  | 'RouteTableEnabled'
+  | 'NetworkSecurityGroupEnabled'
 
 export interface AzPrivateEndpoint {
   id: string
@@ -165,13 +169,27 @@ export interface AzSite {
   y?: number
 }
 
+export type AzErCircuitSku = 'Local' | 'Standard' | 'Premium'
+
 export interface AzErLocation {
   id: string
   name: string
   label?: string
   globalReachEnabled?: boolean
+  /** ExpressRoute circuit tier/SKU: Local (home Azure region only), Standard (geopolitical region), or Premium (global). Defaults to Standard. */
+  sku?: AzErCircuitSku
+  /** Optional canonical Microsoft Learn ExpressRoute peering location name (falls back to `name`). */
+  peeringLocation?: string
   x?: number
   y?: number
+}
+
+export interface AzErGlobalReachLink {
+  id: string
+  name: string
+  locationAId: string
+  locationBId: string
+  enabled: boolean
 }
 
 export interface AzErLink {
@@ -217,6 +235,7 @@ export interface AzNetTopology {
   vwanHubs: AzVwanHub[]
   erLocations: AzErLocation[]
   erLinks: AzErLink[]
+  erGlobalReachLinks?: AzErGlobalReachLink[]
   sites: AzSite[]
   vpnConnections: AzVpnConnection[]
   siteLinks: AzSiteLink[]
@@ -234,6 +253,7 @@ export type AzSelectionKind =
   | 'vwanHub'
   | 'erLocation'
   | 'erLink'
+  | 'erGlobalReachLink'
   | 'site'
   | 'vpnConnection'
   | 'siteLink'
@@ -1140,6 +1160,24 @@ export const AZURE_NET_SAMPLES: AzSampleMetadata[] = [
     topology: sampleEnterpriseVnetAllFeaturesShowcase,
   },
 ]
+
+export function createEmptyAzNetTopology(): AzNetTopology {
+  return {
+    version: 2,
+    kind: 'azure-network-topology',
+    name: 'Empty Topology',
+    vnets: [],
+    vnetPeerings: [],
+    udrTables: [],
+    vwanHubs: [],
+    erLocations: [],
+    erLinks: [],
+    erGlobalReachLinks: [],
+    sites: [],
+    vpnConnections: [],
+    siteLinks: [],
+  }
+}
 
 export function cloneAzNetTopology(topology: AzNetTopology): AzNetTopology {
   return structuredClone(topology)

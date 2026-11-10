@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './azure-net.css'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
+import { ErLocationInfoModal } from '../ErLocationInfoModal'
+import {
+  ALL_KNOWN_AZURE_REGIONS,
+  ER_PEERING_LOCATIONS_CATALOG,
+} from '../er-locations-catalog'
 import {
   AzureNetDiagram,
   type AzContextMenuTarget,
@@ -15,6 +20,7 @@ import {
 import { generateAzNetBicep } from './bicep-export'
 import { runAzNetDiagnostics, type AzDiagnosticFinding } from './diagnostics'
 import {
+  checkErLocationAzureRegionAccess,
   firstUsableIp,
   lookupSubnetEffectiveRoute,
   simulateAzNet,
@@ -26,8 +32,10 @@ import {
 import {
   AZURE_NET_SAMPLES,
   cloneAzNetTopology,
+  createEmptyAzNetTopology,
   validateAzNetTopology,
   type AzArsPreference,
+  type AzErCircuitSku,
   type AzNetTopology,
   type AzPeeringDirectionFlags,
   type AzUdrNextHopType,
@@ -167,10 +175,35 @@ function decodeTopologyFromUrlHash(hash: string): AzNetTopology | null {
   return null
 }
 
-function resolveInitialBuiltInSample() {
-  if (typeof window === 'undefined') return AZURE_NET_SAMPLES[0]
+const AZNET_STORAGE_KEY = 'aznet-visual-topology:v1'
+
+function loadStoredAzNetState(): { sampleId: string; topology: AzNetTopology } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(AZNET_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as unknown
+    if (parsed && typeof parsed === 'object' && 'topology' in parsed) {
+      const record = parsed as { sampleId?: string; topology?: AzNetTopology }
+      const candidate = record.topology
+      if (candidate && Array.isArray(candidate.vnets) && validateAzNetTopology(candidate).length === 0) {
+        return {
+          sampleId: typeof record.sampleId === 'string' ? record.sampleId : '',
+          topology: candidate,
+        }
+      }
+    }
+  } catch {
+    // ignore malformed localStorage
+  }
+  return null
+}
+
+function resolveInitialUrlSample() {
+  if (typeof window === 'undefined') return null
   const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
-  return AZURE_NET_SAMPLES.find((s) => s.id === requested) ?? AZURE_NET_SAMPLES[0]
+  if (!requested) return null
+  return AZURE_NET_SAMPLES.find((s) => s.id === requested) ?? null
 }
 
 interface AzureNetAppProps {
@@ -187,25 +220,72 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
       subnetId: firstVnet.subnets[0].id,
     }
   }
+  if (firstVnet) {
+    return {
+      kind: 'vnet',
+      vnetId: firstVnet.id,
+    }
+  }
+  if (topology.erLocations[0]) {
+    return {
+      kind: 'er-location',
+      locationId: topology.erLocations[0].id,
+    }
+  }
+  if (topology.sites[0]) {
+    return {
+      kind: 'site',
+      siteId: topology.sites[0].id,
+    }
+  }
   return {
     kind: 'vnet',
-    vnetId: firstVnet?.id ?? 'vnet-1',
+    vnetId: 'vnet-1',
   }
 }
 
 export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: AzureNetAppProps = {}) {
-  const initialSample = resolveInitialBuiltInSample()
-  const hashTopology = typeof window !== 'undefined' ? decodeTopologyFromUrlHash(window.location.hash) : null
-  const [sampleId, setSampleId] = useState<string>(hashTopology ? 'shared-topology' : initialSample.id)
-  const [topology, setTopology] = useState<AzNetTopology>(() =>
-    cloneAzNetTopology(hashTopology ?? initialSample.topology),
-  )
+  const initialResolved = useMemo(() => {
+    const hashTopo = typeof window !== 'undefined' ? decodeTopologyFromUrlHash(window.location.hash) : null
+    if (hashTopo) {
+      return { sampleId: 'shared-topology', topology: cloneAzNetTopology(hashTopo) }
+    }
+    const urlSample = resolveInitialUrlSample()
+    if (urlSample) {
+      return { sampleId: urlSample.id, topology: cloneAzNetTopology(urlSample.topology) }
+    }
+    const stored = loadStoredAzNetState()
+    if (stored) {
+      return { sampleId: stored.sampleId, topology: cloneAzNetTopology(stored.topology) }
+    }
+    return { sampleId: '', topology: createEmptyAzNetTopology() }
+  }, [])
+
+  const [sampleId, setSampleId] = useState<string>(initialResolved.sampleId)
+  const [topology, setTopology] = useState<AzNetTopology>(initialResolved.topology)
   const [history, setHistory] = useState<AzNetTopology[]>([])
   const [future, setFuture] = useState<AzNetTopology[]>([])
   const [activeTab, setActiveTab] = useState<InspectorTab>('routes')
   const [selected, setSelected] = useState<AzSelectedEntity>(() =>
-    defaultSelected(initialSample.topology),
+    defaultSelected(initialResolved.topology),
   )
+  const [erLocationModalState, setErLocationModalState] = useState<{
+    open: boolean
+    locationName?: string
+    sku?: AzErCircuitSku
+    targetLocationId?: string
+  }>({ open: false })
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        AZNET_STORAGE_KEY,
+        JSON.stringify({ sampleId, topology }),
+      )
+    } catch {
+      // ignore storage quota errors
+    }
+  }, [sampleId, topology])
 
   const [testIpQuery, setTestIpQuery] = useState<string>('')
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
@@ -287,11 +367,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
   const handleChangeSimulatorMode = (nextMode: SimulatorMode) => {
     if (nextMode === 'hub-spoke' && topology.vwanHubs.length > 0) {
-      const fallback = AZURE_NET_SAMPLES.find((s) => s.id === 'hub-spoke-firewall-udr') ?? AZURE_NET_SAMPLES[0]
-      setSampleId(fallback.id)
-      setTopology(cloneAzNetTopology(fallback.topology))
-      setHistory([])
-      setFuture([])
+      commitTopology((draft) => {
+        draft.vwanHubs = []
+        draft.erLinks = draft.erLinks.filter((l) => l.targetKind !== 'vwan-hub')
+        draft.vpnConnections = draft.vpnConnections.filter((c) => c.targetKind !== 'vwan-hub')
+      })
     }
     onChangeSimulatorMode?.(nextMode)
   }
@@ -357,6 +437,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }
 
   const loadSample = (id: string) => {
+    if (!id) {
+      applyLoadedTopology('', createEmptyAzNetTopology())
+      return
+    }
     const found = AZURE_NET_SAMPLES.find((s) => s.id === id)
     if (found) {
       applyLoadedTopology(found.id, cloneAzNetTopology(found.topology))
@@ -509,6 +593,45 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         if (p) {
           if (p.aToB.useRemoteGateways) p.bToA.allowGatewayTransit = true
           if (p.bToA.useRemoteGateways) p.aToB.allowGatewayTransit = true
+        }
+      } else if (finding.category === 'peering-use-remote-gateways-conflict' && finding.peeringId) {
+        const p = draft.vnetPeerings.find((pr) => pr.id === finding.peeringId)
+        if (p) {
+          const vA = draft.vnets.find((v) => v.id === p.vnetAId)
+          const vB = draft.vnets.find((v) => v.id === p.vnetBId)
+          if (vA && (vA.gateways.length > 0 || Boolean(vA.routeServer?.enabled))) {
+            p.aToB.useRemoteGateways = false
+          }
+          if (vB && (vB.gateways.length > 0 || Boolean(vB.routeServer?.enabled))) {
+            p.bToA.useRemoteGateways = false
+          }
+        }
+      } else if (finding.category === 'spoke-onprem-gateway-transit-disabled' && finding.peeringId) {
+        const p = draft.vnetPeerings.find((pr) => pr.id === finding.peeringId)
+        if (p) {
+          const vA = draft.vnets.find((v) => v.id === p.vnetAId)
+          const vB = draft.vnets.find((v) => v.id === p.vnetBId)
+          const vAHasGwOrArs = Boolean(vA && (vA.gateways.length > 0 || vA.routeServer?.enabled))
+          const vBHasGwOrArs = Boolean(vB && (vB.gateways.length > 0 || vB.routeServer?.enabled))
+          if (vAHasGwOrArs && !vBHasGwOrArs) {
+            p.aToB.allowGatewayTransit = true
+            p.bToA.useRemoteGateways = true
+          } else if (vBHasGwOrArs && !vAHasGwOrArs) {
+            p.bToA.allowGatewayTransit = true
+            p.aToB.useRemoteGateways = true
+          }
+        }
+      } else if (finding.category === 'er-sku-regional-mismatch' && finding.erLocationId) {
+        const loc = draft.erLocations.find((l) => l.id === finding.erLocationId)
+        if (loc) {
+          const nextSku: AzErCircuitSku = loc.sku === 'Local' ? 'Standard' : 'Premium'
+          loc.sku = nextSku
+          if (finding.vnetId) {
+            const vnet = draft.vnets.find((v) => v.id === finding.vnetId)
+            if (vnet && !checkErLocationAzureRegionAccess(loc, vnet.region).allowed) {
+              loc.sku = 'Premium'
+            }
+          }
         }
       } else if (finding.category === 'appliance-ip-forwarding-disabled' && finding.applianceId) {
         for (const v of draft.vnets) {
@@ -788,6 +911,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }
 
   const addSiteNode = (x?: number, y?: number) => {
+    const newId = `site-custom-${topology.sites.length + 1}`
     commitTopology((draft) => {
       const idx = draft.sites.length + 1
       draft.sites.push({
@@ -798,9 +922,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         ...(typeof x === 'number' && typeof y === 'number' ? { x, y } : {}),
       })
     })
+    setSelected({ kind: 'site', siteId: newId })
   }
 
   const addErLocationNode = (x?: number, y?: number) => {
+    const newId = `erloc-custom-${topology.erLocations.length + 1}`
     commitTopology((draft) => {
       const idx = draft.erLocations.length + 1
       draft.erLocations.push({
@@ -810,6 +936,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         ...(typeof x === 'number' && typeof y === 'number' ? { x, y } : {}),
       })
     })
+    setSelected({ kind: 'er-location', locationId: newId })
   }
 
   const deleteSiteById = (siteId: string) => {
@@ -832,9 +959,62 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     commitTopology((draft) => {
       draft.erLocations = draft.erLocations.filter((l) => l.id !== locationId)
       draft.erLinks = draft.erLinks.filter((l) => l.locationId !== locationId)
+      if (draft.erGlobalReachLinks) {
+        draft.erGlobalReachLinks = draft.erGlobalReachLinks.filter(
+          (gr) => gr.locationAId !== locationId && gr.locationBId !== locationId,
+        )
+      }
     })
     if (selected?.kind === 'er-location' && selected.locationId === locationId) {
       setSelected(defaultSelected(topology))
+    }
+  }
+
+  const vnetUsesRemoteGateways = (vnetId: string, topo: AzNetTopology = topology): boolean =>
+    topo.vnetPeerings.some(
+      (p) =>
+        p.enabled &&
+        ((p.vnetAId === vnetId && p.aToB.useRemoteGateways) ||
+          (p.vnetBId === vnetId && p.bToA.useRemoteGateways)),
+    )
+
+  const addSubnetToVnet = (vnetId: string) => {
+    let createdId = ''
+    commitTopology((draft) => {
+      const v = draft.vnets.find((x) => x.id === vnetId)
+      if (!v) return
+      let idx = v.subnets.length + 1
+      let candidateId = `snet-${v.id}-${idx}`
+      while (v.subnets.some((s) => s.id === candidateId)) {
+        idx += 1
+        candidateId = `snet-${v.id}-${idx}`
+      }
+      createdId = candidateId
+      const baseMatch = (v.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
+      const prefixBase = baseMatch ? baseMatch[1] : '10.99'
+      v.subnets.push({
+        id: createdId,
+        name: `snet-tier-${idx}`,
+        prefix: `${prefixBase}.${10 + idx}.0/24`,
+      })
+    })
+    if (createdId) {
+      setSelected({ kind: 'subnet', vnetId, subnetId: createdId })
+    }
+  }
+
+  const deleteSubnetFromVnet = (vnetId: string, subnetId: string) => {
+    commitTopology((draft) => {
+      const v = draft.vnets.find((x) => x.id === vnetId)
+      if (!v) return
+      v.subnets = v.subnets.filter((s) => s.id !== subnetId)
+      v.appliances = v.appliances.filter((a) => a.subnetId !== subnetId)
+      if (v.routeServer?.subnetId === subnetId) {
+        v.routeServer = undefined
+      }
+    })
+    if (selected.kind === 'subnet' && selected.subnetId === subnetId) {
+      setSelected({ kind: 'vnet', vnetId })
     }
   }
 
@@ -915,6 +1095,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     commitTopology((draft) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target) return
+      if (vnetUsesRemoteGateways(vnetId, draft)) return
       if (target.gateways.some((g) => g.kind === kind)) return
       const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
       const prefixBase = baseMatch ? baseMatch[1] : '10.0'
@@ -954,6 +1135,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     commitTopology((draft) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target || target.routeServer) return
+      if (vnetUsesRemoteGateways(vnetId, draft)) return
       const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
       const prefixBase = baseMatch ? baseMatch[1] : '10.0'
       let rsSubnet = target.subnets.find((s) => s.name === 'RouteServerSubnet')
@@ -1107,6 +1289,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       )
       const hasErGw = vnet.gateways.some((g) => g.kind === 'ExpressRoute')
       const hasVpnGw = vnet.gateways.some((g) => g.kind === 'Vpn')
+      const usesRemoteGw = vnetUsesRemoteGateways(vnet.id)
 
       return {
         title: `VNet · ${vnet.name} (${vnet.region})`,
@@ -1158,19 +1341,21 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Add Subnet to VNet',
             onSelect: () => {
-              commitTopology((draft) => {
-                const v = draft.vnets.find((x) => x.id === vnet.id)
-                if (!v) return
-                const idx = v.subnets.length + 1
-                const baseMatch = (v.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-                const prefixBase = baseMatch ? baseMatch[1] : '10.99'
-                v.subnets.push({
-                  id: `${v.id}-snet-${idx}`,
-                  name: `snet-tier-${idx}`,
-                  prefix: `${prefixBase}.${10 + idx}.0/24`,
-                })
-              })
+              addSubnetToVnet(vnet.id)
+              setActiveTab('editor')
             },
+          },
+          {
+            label: `Change Azure Region (${vnet.region})`,
+            children: ALL_KNOWN_AZURE_REGIONS.slice(0, 24).map((reg) => ({
+              label: `${reg}${vnet.region === reg ? ' (Current)' : ''}`,
+              onSelect: () => {
+                commitTopology((draft) => {
+                  const v = draft.vnets.find((x) => x.id === vnet.id)
+                  if (v) v.region = reg
+                })
+              },
+            })),
           },
           {
             label: 'Add / Remove VNet Elements',
@@ -1186,7 +1371,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               ...(!hasErGw
                 ? [
                     {
-                      label: '+ Add ExpressRoute Gateway',
+                      label: usesRemoteGw
+                        ? '+ Add ExpressRoute Gateway (Disable useRemoteGateways first)'
+                        : '+ Add ExpressRoute Gateway',
+                      disabled: usesRemoteGw,
                       onSelect: () => addGatewayToVnet(vnet.id, 'ExpressRoute'),
                     },
                   ]
@@ -1194,7 +1382,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               ...(!hasVpnGw
                 ? [
                     {
-                      label: '+ Add VPN Gateway',
+                      label: usesRemoteGw
+                        ? '+ Add VPN Gateway (Disable useRemoteGateways first)'
+                        : '+ Add VPN Gateway',
+                      disabled: usesRemoteGw,
                       onSelect: () => addGatewayToVnet(vnet.id, 'Vpn'),
                     },
                   ]
@@ -1202,7 +1393,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               ...(!vnet.routeServer
                 ? [
                     {
-                      label: '+ Add Azure Route Server (ARS)',
+                      label: usesRemoteGw
+                        ? '+ Add Azure Route Server (Disable useRemoteGateways first)'
+                        : '+ Add Azure Route Server (ARS)',
+                      disabled: usesRemoteGw,
                       onSelect: () => addRouteServerToVnet(vnet.id),
                     },
                   ]
@@ -1232,8 +1426,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               label: `${other.name} (${other.region})`,
               onSelect: () => {
                 commitTopology((draft) => {
-                  const isVnetHub = vnet.role === 'hub' || vnet.role === 'hub-vnet'
-                  const isOtherHub = other.role === 'hub' || other.role === 'hub-vnet'
+                  const vAHasGwOrArs = vnet.gateways.length > 0 || Boolean(vnet.routeServer?.enabled)
+                  const vBHasGwOrArs = other.gateways.length > 0 || Boolean(other.routeServer?.enabled)
+                  const isVnetHub = (vnet.role === 'hub' || vnet.role === 'hub-vnet') || vAHasGwOrArs
+                  const isOtherHub = (other.role === 'hub' || other.role === 'hub-vnet') || vBHasGwOrArs
                   draft.vnetPeerings.push({
                     id: `peer-${vnet.id}-${other.id}`,
                     name: `${vnet.name}-to-${other.name}`,
@@ -1244,13 +1440,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       allowVirtualNetworkAccess: true,
                       allowForwardedTraffic: true,
                       allowGatewayTransit: isVnetHub,
-                      useRemoteGateways: !isVnetHub && isOtherHub,
+                      useRemoteGateways: !vAHasGwOrArs && isOtherHub,
                     },
                     bToA: {
                       allowVirtualNetworkAccess: true,
                       allowForwardedTraffic: true,
                       allowGatewayTransit: isOtherHub,
-                      useRemoteGateways: !isOtherHub && isVnetHub,
+                      useRemoteGateways: !vBHasGwOrArs && isVnetHub,
                     },
                   })
                 })
@@ -1267,15 +1463,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Delete VNet',
             danger: true,
-            disabled: topology.vnets.length <= 1,
-            onSelect: () => {
-              commitTopology((draft) => {
-                draft.vnets = draft.vnets.filter((v) => v.id !== vnet.id)
-                draft.vnetPeerings = draft.vnetPeerings.filter(
-                  (p) => p.vnetAId !== vnet.id && p.vnetBId !== vnet.id,
-                )
-              })
-            },
+            onSelect: () => deleteVnetById(vnet.id),
           },
         ],
       }
@@ -1291,6 +1479,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Subnet · ${vnet.name} / ${subnet.name}`,
         actions: [
+          {
+            label: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...',
+            onSelect: () => {
+              setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
+              setActiveTab('editor')
+            },
+          },
           {
             label: 'Inspect Subnet Effective Routes',
             onSelect: () => {
@@ -1401,6 +1596,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
               setActiveTab('editor')
             },
+          },
+          {
+            label: 'Delete Subnet',
+            danger: true,
+            onSelect: () => deleteSubnetFromVnet(vnet.id, subnet.id),
           },
         ],
       }
@@ -1569,15 +1769,36 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                 ['allowGatewayTransit', 'Allow Gateway Transit'],
                 ['useRemoteGateways', 'Use Remote Gateways'],
               ] as const
-            ).map(([flagKey, flagLabel]) => ({
-              label: `${peering.aToB[flagKey] ? '✓ ' : ''}${flagLabel}`,
-              onSelect: () => {
-                commitTopology((draft) => {
-                  const p = draft.vnetPeerings.find((x) => x.id === peering.id)
-                  if (p) p.aToB[flagKey] = !p.aToB[flagKey]
-                })
-              },
-            })),
+            ).map(([flagKey, flagLabel]) => {
+              const aHasGwOrArs = Boolean((vA?.gateways.length ?? 0) > 0 || vA?.routeServer)
+              const bHasGwOrArs = Boolean((vB?.gateways.length ?? 0) > 0 || vB?.routeServer)
+              const disabledReason =
+                flagKey === 'allowGatewayTransit' && !aHasGwOrArs
+                  ? `Requires VNet Gateway or Route Server in ${vA?.name ?? 'VNet A'}`
+                  : flagKey === 'useRemoteGateways' && aHasGwOrArs
+                    ? `Cannot enable Use Remote Gateways on ${vA?.name ?? 'VNet A'} while it hosts its own Gateway or Route Server`
+                    : flagKey === 'useRemoteGateways' && !bHasGwOrArs
+                      ? `Remote VNet ${vB?.name ?? 'VNet B'} has no Gateway or Route Server`
+                      : flagKey === 'useRemoteGateways' && !peering.bToA.allowGatewayTransit
+                        ? `Requires Allow Gateway Transit on ${vB?.name ?? 'VNet B'} → ${vA?.name ?? 'VNet A'}`
+                        : null
+              return {
+                label: `${peering.aToB[flagKey] ? '✓ ' : ''}${flagLabel}${disabledReason && !peering.aToB[flagKey] ? ' (Unavailable)' : ''}`,
+                disabled: Boolean(disabledReason && !peering.aToB[flagKey]),
+                onSelect: () => {
+                  if (disabledReason && !peering.aToB[flagKey]) return
+                  commitTopology((draft) => {
+                    const p = draft.vnetPeerings.find((x) => x.id === peering.id)
+                    if (p) {
+                      p.aToB[flagKey] = !p.aToB[flagKey]
+                      if (flagKey === 'allowGatewayTransit' && !p.aToB.allowGatewayTransit) {
+                        p.bToA.useRemoteGateways = false
+                      }
+                    }
+                  })
+                },
+              }
+            }),
           },
           {
             label: `${vB?.name ?? 'VNet B'} → ${vA?.name ?? 'VNet A'} Flags`,
@@ -1588,15 +1809,36 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                 ['allowGatewayTransit', 'Allow Gateway Transit'],
                 ['useRemoteGateways', 'Use Remote Gateways'],
               ] as const
-            ).map(([flagKey, flagLabel]) => ({
-              label: `${peering.bToA[flagKey] ? '✓ ' : ''}${flagLabel}`,
-              onSelect: () => {
-                commitTopology((draft) => {
-                  const p = draft.vnetPeerings.find((x) => x.id === peering.id)
-                  if (p) p.bToA[flagKey] = !p.bToA[flagKey]
-                })
-              },
-            })),
+            ).map(([flagKey, flagLabel]) => {
+              const aHasGwOrArs = Boolean((vA?.gateways.length ?? 0) > 0 || vA?.routeServer)
+              const bHasGwOrArs = Boolean((vB?.gateways.length ?? 0) > 0 || vB?.routeServer)
+              const disabledReason =
+                flagKey === 'allowGatewayTransit' && !bHasGwOrArs
+                  ? `Requires VNet Gateway or Route Server in ${vB?.name ?? 'VNet B'}`
+                  : flagKey === 'useRemoteGateways' && bHasGwOrArs
+                    ? `Cannot enable Use Remote Gateways on ${vB?.name ?? 'VNet B'} while it hosts its own Gateway or Route Server`
+                    : flagKey === 'useRemoteGateways' && !aHasGwOrArs
+                      ? `Remote VNet ${vA?.name ?? 'VNet A'} has no Gateway or Route Server`
+                      : flagKey === 'useRemoteGateways' && !peering.aToB.allowGatewayTransit
+                        ? `Requires Allow Gateway Transit on ${vA?.name ?? 'VNet A'} → ${vB?.name ?? 'VNet B'}`
+                        : null
+              return {
+                label: `${peering.bToA[flagKey] ? '✓ ' : ''}${flagLabel}${disabledReason && !peering.bToA[flagKey] ? ' (Unavailable)' : ''}`,
+                disabled: Boolean(disabledReason && !peering.bToA[flagKey]),
+                onSelect: () => {
+                  if (disabledReason && !peering.bToA[flagKey]) return
+                  commitTopology((draft) => {
+                    const p = draft.vnetPeerings.find((x) => x.id === peering.id)
+                    if (p) {
+                      p.bToA[flagKey] = !p.bToA[flagKey]
+                      if (flagKey === 'allowGatewayTransit' && !p.bToA.allowGatewayTransit) {
+                        p.aToB.useRemoteGateways = false
+                      }
+                    }
+                  })
+                },
+              }
+            }),
           },
           {
             label: 'Enable Forwarded Traffic (Both Directions)',
@@ -1681,12 +1923,56 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       }
     }
 
+    if (target.kind === 'er-global-reach-link') {
+      const gr = (topology.erGlobalReachLinks ?? []).find((l) => l.id === target.linkId)
+      if (!gr) return null
+      const locA = topology.erLocations.find((l) => l.id === gr.locationAId)
+      const locB = topology.erLocations.find((l) => l.id === gr.locationBId)
+      return {
+        title: `ExpressRoute Global Reach · ${locA?.name ?? gr.locationAId} ↔ ${locB?.name ?? gr.locationBId}`,
+        actions: [
+          {
+            label: gr.enabled ? 'Disable Global Reach Link' : 'Enable Global Reach Link',
+            onSelect: () => {
+              commitTopology((draft) => {
+                const l = (draft.erGlobalReachLinks ?? []).find((x) => x.id === gr.id)
+                if (l) l.enabled = !l.enabled
+              })
+            },
+          },
+          {
+            label: 'Delete Global Reach Link',
+            danger: true,
+            onSelect: () => {
+              commitTopology((draft) => {
+                draft.erGlobalReachLinks = (draft.erGlobalReachLinks ?? []).filter(
+                  (x) => x.id !== gr.id,
+                )
+              })
+            },
+          },
+        ],
+      }
+    }
+
     if (target.kind === 'er-location') {
       const loc = topology.erLocations.find((l) => l.id === target.locationId)
       if (!loc) return null
+      const currentSku: AzErCircuitSku = loc.sku ?? 'Standard'
       return {
-        title: `ExpressRoute MSEE · ${loc.name}`,
+        title: `ExpressRoute MSEE · ${loc.name} (${currentSku})`,
         actions: [
+          {
+            label: 'Show ER Location Info & Providers...',
+            onSelect: () => {
+              setErLocationModalState({
+                open: true,
+                targetLocationId: loc.id,
+                locationName: loc.peeringLocation ?? loc.name,
+                sku: currentSku,
+              })
+            },
+          },
           {
             label: 'Inspect ExpressRoute MSEE BGP RIB',
             onSelect: () => {
@@ -1695,9 +1981,21 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             },
           },
           {
+            label: 'Set Circuit SKU (Local / Standard / Premium)',
+            children: (['Local', 'Standard', 'Premium'] as const).map((skuOption) => ({
+              label: `${currentSku === skuOption ? '✓ ' : ''}ER ${skuOption}`,
+              onSelect: () => {
+                commitTopology((draft) => {
+                  const l = draft.erLocations.find((x) => x.id === loc.id)
+                  if (l) l.sku = skuOption
+                })
+              },
+            })),
+          },
+          {
             label: loc.globalReachEnabled
-              ? 'Disable ExpressRoute Global Reach'
-              : 'Enable ExpressRoute Global Reach',
+              ? 'Disable ExpressRoute Global Reach (Intra-Location)'
+              : 'Enable ExpressRoute Global Reach (Intra-Location)',
             onSelect: () => {
               commitTopology((draft) => {
                 const l = draft.erLocations.find((x) => x.id === loc.id)
@@ -1711,6 +2009,34 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               setSelected({ kind: 'er-location', locationId: loc.id })
               setActiveTab('editor')
             },
+          },
+          {
+            label: 'Establish ExpressRoute Global Reach to...',
+            children: topology.erLocations
+              .filter(
+                (other) =>
+                  other.id !== loc.id &&
+                  !(topology.erGlobalReachLinks ?? []).some(
+                    (gr) =>
+                      (gr.locationAId === loc.id && gr.locationBId === other.id) ||
+                      (gr.locationAId === other.id && gr.locationBId === loc.id),
+                  ),
+              )
+              .map((other) => ({
+                label: `ER MSEE: ${other.name}`,
+                onSelect: () => {
+                  commitTopology((draft) => {
+                    draft.erGlobalReachLinks = draft.erGlobalReachLinks ?? []
+                    draft.erGlobalReachLinks.push({
+                      id: `ergr-${loc.id}-${other.id}-${Date.now().toString(36).slice(-3)}`,
+                      name: `${loc.name}-gr-${other.name}`,
+                      locationAId: loc.id,
+                      locationBId: other.id,
+                      enabled: true,
+                    })
+                  })
+                },
+              })),
           },
           {
             label: 'Connect ExpressRoute Link to...',
@@ -2153,6 +2479,23 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             📚 Sample Gallery ({visibleCatalogEntries.length})
           </button>
 
+          <button
+            type="button"
+            className="aznet-btn"
+            data-testid="aznet-open-er-locations-btn"
+            onClick={() =>
+              setErLocationModalState({
+                open: true,
+                locationName: topology.erLocations[0]?.peeringLocation ?? topology.erLocations[0]?.name,
+                sku: topology.erLocations[0]?.sku ?? 'Standard',
+                targetLocationId: topology.erLocations[0]?.id,
+              })
+            }
+            title="Inspect Microsoft ExpressRoute Peering Locations, Providers & SKU Regional Reachability"
+          >
+            🌍 ER Locations
+          </button>
+
           <label style={{ fontSize: 12, color: '#cbd5e1' }} htmlFor="aznet-sample-select">
             Sample Topology:
           </label>
@@ -2163,6 +2506,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             value={sampleId}
             onChange={(e) => loadSample(e.target.value)}
           >
+            <option value="">— No sample loaded (Custom / Blank) —</option>
             {sampleId === 'shared-topology' && (
               <option value="shared-topology">🔗 Shared URL Topology</option>
             )}
@@ -2185,7 +2529,18 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           <button
             type="button"
             className="aznet-btn"
+            data-testid="aznet-clear-topology-btn"
+            onClick={() => loadSample('')}
+            title="Clear canvas to an empty topology"
+          >
+            🗑 Clear
+          </button>
+
+          <button
+            type="button"
+            className="aznet-btn"
             onClick={() => {
+              const newId = `vnet-custom-${topology.vnets.length + 1}`
               commitTopology((draft) => {
                 const idx = draft.vnets.length + 1
                 const vId = `vnet-custom-${idx}`
@@ -2207,6 +2562,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   appliances: [],
                 })
               })
+              setSelected({ kind: 'vnet', vnetId: newId })
             }}
             data-testid="aznet-add-vnet-btn"
           >
@@ -3147,10 +3503,110 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               </div>
             )}
 
-            {/* TAB 4: CONFIGURATION EDITOR (PEERING FLAGS, UDR TABLES, SUBNETS, ARS, SITES, VNET ELEMENTS) */}
-            {activeTab === 'editor' && (
+            {/* TAB 4: CONFIGURATION EDITOR (SCOPED TO SELECTED NODE/CONNECTION #46, #47, #48, #49) */}
+            {activeTab === 'editor' && (() => {
+              const selectedVnetId =
+                selected.kind === 'vnet' ||
+                selected.kind === 'subnet' ||
+                selected.kind === 'gateway' ||
+                selected.kind === 'route-server' ||
+                selected.kind === 'appliance'
+                  ? selected.vnetId
+                  : null
+              const showPeeringEditor =
+                selected.kind === 'peering' ||
+                selectedVnetId !== null
+              const showVnetEditor = selectedVnetId !== null
+              const showSiteEditor = selected.kind === 'site'
+              const showErEditor = selected.kind === 'er-location'
+              const showVwanHubEditor = selected.kind === 'vwan-hub'
+              const filteredVnets = selectedVnetId
+                ? topology.vnets.filter((v) => v.id === selectedVnetId)
+                : topology.vnets
+              const filteredPeerings =
+                selected.kind === 'peering'
+                  ? topology.vnetPeerings.filter((p) => p.id === selected.peeringId)
+                  : selectedVnetId
+                    ? topology.vnetPeerings.filter(
+                        (p) => p.vnetAId === selectedVnetId || p.vnetBId === selectedVnetId,
+                      )
+                    : topology.vnetPeerings
+              const filteredUdrTables =
+                selected.kind === 'subnet'
+                  ? topology.udrTables.filter((rt) => {
+                      const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
+                      const snet = vnet?.subnets.find((s) => s.id === selected.subnetId)
+                      return snet?.routeTableId === rt.id
+                    })
+                  : selectedVnetId
+                    ? topology.udrTables.filter((rt) => {
+                        const vnet = topology.vnets.find((v) => v.id === selectedVnetId)
+                        return vnet?.subnets.some((s) => s.routeTableId === rt.id) ?? false
+                      })
+                    : topology.udrTables
+
+              return (
               <>
-                {/* VNet Peerings & Connections Editor (#38, #42) */}
+                <div
+                  className="aznet-card"
+                  data-testid="aznet-editor-scope-banner"
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 8,
+                    padding: '8px 12px',
+                    background: '#f8fafc',
+                    borderColor: '#cbd5e1',
+                  }}
+                >
+                  <div style={{ fontSize: 12, color: '#1e293b' }}>
+                    <strong>Scoped Configuration:</strong>{' '}
+                    {selected.kind === 'vnet' &&
+                      `VNet ${topology.vnets.find((v) => v.id === selected.vnetId)?.name ?? selected.vnetId}`}
+                    {selected.kind === 'subnet' &&
+                      (() => {
+                        const v = topology.vnets.find((x) => x.id === selected.vnetId)
+                        const s = v?.subnets.find((x) => x.id === selected.subnetId)
+                        return `Subnet ${v?.name ?? selected.vnetId}/${s?.name ?? selected.subnetId}`
+                      })()}
+                    {selected.kind === 'gateway' &&
+                      (() => {
+                        const v = topology.vnets.find((x) => x.id === selected.vnetId)
+                        const g = v?.gateways.find((x) => x.id === selected.gatewayId)
+                        return `Gateway ${g?.name ?? selected.gatewayId} (in ${v?.name ?? selected.vnetId})`
+                      })()}
+                    {selected.kind === 'route-server' &&
+                      (() => {
+                        const v = topology.vnets.find((x) => x.id === selected.vnetId)
+                        return `Route Server ${v?.routeServer?.name ?? 'ARS'} (in ${v?.name ?? selected.vnetId})`
+                      })()}
+                    {selected.kind === 'appliance' &&
+                      (() => {
+                        const v = topology.vnets.find((x) => x.id === selected.vnetId)
+                        const a = v?.appliances.find((x) => x.id === selected.applianceId)
+                        return `Appliance ${a?.name ?? selected.applianceId} (in ${v?.name ?? selected.vnetId})`
+                      })()}
+                    {selected.kind === 'peering' &&
+                      (() => {
+                        const p = topology.vnetPeerings.find((x) => x.id === selected.peeringId)
+                        return `VNet Peering ${p?.name ?? selected.peeringId}`
+                      })()}
+                    {selected.kind === 'er-location' &&
+                      `ExpressRoute MSEE ${topology.erLocations.find((l) => l.id === selected.locationId)?.name ?? selected.locationId}`}
+                    {selected.kind === 'site' &&
+                      `On-Premises Site ${topology.sites.find((s) => s.id === selected.siteId)?.name ?? selected.siteId}`}
+                    {selected.kind === 'vwan-hub' &&
+                      `Virtual WAN Hub ${topology.vwanHubs.find((h) => h.id === selected.hubId)?.name ?? selected.hubId}`}
+                  </div>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                    Click any node or connection on the diagram to configure it
+                  </span>
+                </div>
+
+                {/* VNet Peerings & Connections Editor (#38, #42, #47, #48) */}
+                {showPeeringEditor && (
                 <div className="aznet-card" data-testid="aznet-peering-editor">
                   <div
                     style={{
@@ -3174,6 +3630,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               for (let j = i + 1; j < draft.vnets.length; j++) {
                                 const a = draft.vnets[i]
                                 const b = draft.vnets[j]
+                                if (selectedVnetId && a.id !== selectedVnetId && b.id !== selectedVnetId) {
+                                  continue
+                                }
                                 const exists = draft.vnetPeerings.some(
                                   (p) =>
                                     (p.vnetAId === a.id && p.vnetBId === b.id) ||
@@ -3181,6 +3640,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 )
                                 if (!exists) {
                                   const newId = `peer-${a.id}-${b.id}-${Date.now().toString(36).slice(-3)}`
+                                  const aHasGw = a.gateways.length > 0 || Boolean(a.routeServer)
+                                  const bHasGw = b.gateways.length > 0 || Boolean(b.routeServer)
                                   draft.vnetPeerings.push({
                                     id: newId,
                                     name: `${a.name}-to-${b.name}`,
@@ -3190,14 +3651,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                     aToB: {
                                       allowVirtualNetworkAccess: true,
                                       allowForwardedTraffic: true,
-                                      allowGatewayTransit: a.role === 'hub' && a.gateways.length > 0,
-                                      useRemoteGateways: b.role === 'hub' && b.gateways.length > 0,
+                                      allowGatewayTransit: a.role === 'hub' && aHasGw,
+                                      useRemoteGateways: b.role === 'hub' && bHasGw && !aHasGw,
                                     },
                                     bToA: {
                                       allowVirtualNetworkAccess: true,
                                       allowForwardedTraffic: true,
-                                      allowGatewayTransit: b.role === 'hub' && b.gateways.length > 0,
-                                      useRemoteGateways: a.role === 'hub' && a.gateways.length > 0,
+                                      allowGatewayTransit: b.role === 'hub' && bHasGw,
+                                      useRemoteGateways: a.role === 'hub' && aHasGw && !bHasGw,
                                     },
                                   })
                                   setSelected({ kind: 'peering', peeringId: newId })
@@ -3219,9 +3680,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     below:
                   </p>
 
-                  {topology.vnetPeerings.length === 0 ? (
+                  {filteredPeerings.length === 0 ? (
                     <div style={{ fontSize: 12, color: '#64748b' }}>
-                      No VNet peerings configured. Right-click a VNet on the diagram and choose{' '}
+                      No VNet peerings configured for this selection. Right-click a VNet on the diagram and choose{' '}
                       <strong>Create VNet Peering to...</strong>
                     </div>
                   ) : (
@@ -3234,13 +3695,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           marginBottom: 8,
                         }}
                       >
-                        {topology.vnetPeerings.map((p) => {
+                        {filteredPeerings.map((p) => {
                           const vA = topology.vnets.find((v) => v.id === p.vnetAId)
                           const vB = topology.vnets.find((v) => v.id === p.vnetBId)
                           const isFocused =
                             (selected.kind === 'peering' && selected.peeringId === p.id) ||
                             (selected.kind !== 'peering' &&
-                              topology.vnetPeerings[0]?.id === p.id)
+                              filteredPeerings[0]?.id === p.id)
                           return (
                             <button
                               key={p.id}
@@ -3260,54 +3721,86 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       {(() => {
                         const activePeering =
                           (selected.kind === 'peering'
-                            ? topology.vnetPeerings.find((p) => p.id === selected.peeringId)
-                            : undefined) ?? topology.vnetPeerings[0]
+                            ? filteredPeerings.find((p) => p.id === selected.peeringId)
+                            : undefined) ?? filteredPeerings[0]
                         if (!activePeering) return null
                         const vA = topology.vnets.find((v) => v.id === activePeering.vnetAId)
                         const vB = topology.vnets.find((v) => v.id === activePeering.vnetBId)
+                        const aHasGwOrArs = Boolean((vA?.gateways.length ?? 0) > 0 || vA?.routeServer)
+                        const bHasGwOrArs = Boolean((vB?.gateways.length ?? 0) > 0 || vB?.routeServer)
                         const renderDirFlags = (
                           label: string,
                           dirKey: 'aToB' | 'bToA',
                           flags: AzPeeringDirectionFlags,
-                        ) => (
-                          <div
-                            style={{
-                              padding: 8,
-                              background: '#f8fafc',
-                              borderRadius: 6,
-                              border: '1px solid #e2e8f0',
-                            }}
-                          >
-                            <div style={{ fontWeight: 700, fontSize: 11.5, marginBottom: 4 }}>
-                              {label}
+                        ) => {
+                          const localHasGwOrArs = dirKey === 'aToB' ? aHasGwOrArs : bHasGwOrArs
+                          const remoteHasGwOrArs = dirKey === 'aToB' ? bHasGwOrArs : aHasGwOrArs
+                          const remoteFlags = dirKey === 'aToB' ? activePeering.bToA : activePeering.aToB
+                          return (
+                            <div
+                              style={{
+                                padding: 8,
+                                background: '#f8fafc',
+                                borderRadius: 6,
+                                border: '1px solid #e2e8f0',
+                              }}
+                            >
+                              <div style={{ fontWeight: 700, fontSize: 11.5, marginBottom: 4 }}>
+                                {label}
+                              </div>
+                              {(
+                                [
+                                  ['allowVirtualNetworkAccess', 'Allow VNet Access'],
+                                  ['allowForwardedTraffic', 'Allow Forwarded Traffic'],
+                                  ['allowGatewayTransit', 'Allow Gateway Transit'],
+                                  ['useRemoteGateways', 'Use Remote Gateways'],
+                                ] as const
+                              ).map(([flagName, flagLabel]) => {
+                                const disabledReason =
+                                  flagName === 'allowGatewayTransit' && !localHasGwOrArs
+                                    ? 'Requires a VNet Gateway or Route Server in the local VNet'
+                                    : flagName === 'useRemoteGateways' && localHasGwOrArs
+                                      ? 'Cannot enable Use Remote Gateways on a VNet that has its own Gateway or Route Server'
+                                      : flagName === 'useRemoteGateways' && !remoteHasGwOrArs
+                                        ? 'Remote VNet has no Gateway or Route Server'
+                                        : flagName === 'useRemoteGateways' && !remoteFlags.allowGatewayTransit
+                                          ? 'Requires Allow Gateway Transit on the remote peering direction'
+                                          : null
+                                const isDisabled = Boolean(disabledReason && !flags[flagName])
+                                return (
+                                  <label
+                                    key={flagName}
+                                    className="aznet-checkbox-row"
+                                    title={disabledReason ?? undefined}
+                                    style={isDisabled ? { opacity: 0.55, cursor: 'not-allowed' } : undefined}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      disabled={isDisabled}
+                                      checked={flags[flagName]}
+                                      onChange={(e) => {
+                                        const checked = e.target.checked
+                                        commitTopology((draft) => {
+                                          const p = draft.vnetPeerings.find(
+                                            (x) => x.id === activePeering.id,
+                                          )
+                                          if (p) {
+                                            p[dirKey][flagName] = checked
+                                            if (flagName === 'allowGatewayTransit' && !checked) {
+                                              const oppositeKey = dirKey === 'aToB' ? 'bToA' : 'aToB'
+                                              p[oppositeKey].useRemoteGateways = false
+                                            }
+                                          }
+                                        })
+                                      }}
+                                    />
+                                    <span>{flagLabel}</span>
+                                  </label>
+                                )
+                              })}
                             </div>
-                            {(
-                              [
-                                ['allowVirtualNetworkAccess', 'Allow VNet Access'],
-                                ['allowForwardedTraffic', 'Allow Forwarded Traffic'],
-                                ['allowGatewayTransit', 'Allow Gateway Transit'],
-                                ['useRemoteGateways', 'Use Remote Gateways'],
-                              ] as const
-                            ).map(([flagName, flagLabel]) => (
-                              <label key={flagName} className="aznet-checkbox-row">
-                                <input
-                                  type="checkbox"
-                                  checked={flags[flagName]}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked
-                                    commitTopology((draft) => {
-                                      const p = draft.vnetPeerings.find(
-                                        (x) => x.id === activePeering.id,
-                                      )
-                                      if (p) p[dirKey][flagName] = checked
-                                    })
-                                  }}
-                                />
-                                <span>{flagLabel}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )
+                          )
+                        }
                         return (
                           <div
                             key={activePeering.id}
@@ -3389,13 +3882,16 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     </>
                   )}
                 </div>
+                )}
 
-                {/* VNets & VNet Elements Editor (#39, #42) */}
+                {/* VNets & VNet Elements Editor (#39, #42, #46, #47, #48, #49) */}
+                {showVnetEditor && (
                 <div className="aznet-card" data-testid="aznet-vnet-elements-editor">
-                  <h3>VNets & VNet Elements (Firewall/NVA, Gateways, ARS, Subnets)</h3>
-                  {topology.vnets.map((vnet) => {
+                  <h3>VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)</h3>
+                  {filteredVnets.map((vnet) => {
                     const hasErGw = vnet.gateways.some((g) => g.kind === 'ExpressRoute')
                     const hasVpnGw = vnet.gateways.some((g) => g.kind === 'Vpn')
+                    const usesRemoteGw = vnetUsesRemoteGateways(vnet.id)
                     return (
                       <div
                         key={vnet.id}
@@ -3431,8 +3927,30 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   if (v) v.name = val
                                 })
                               }}
-                              style={{ fontWeight: 700, width: 155 }}
+                              style={{ fontWeight: 700, width: 145 }}
                             />
+                            <input
+                              type="text"
+                              className="aznet-input"
+                              list={`aznet-region-datalist-${vnet.id}`}
+                              data-testid={`aznet-vnet-region-${vnet.id}`}
+                              aria-label={`VNet region ${vnet.name}`}
+                              title="Azure Region / Location (e.g. westeurope, eastus)"
+                              value={vnet.region}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                commitTopology((draft) => {
+                                  const v = draft.vnets.find((x) => x.id === vnet.id)
+                                  if (v) v.region = val
+                                })
+                              }}
+                              style={{ width: 130, fontSize: 11.5 }}
+                            />
+                            <datalist id={`aznet-region-datalist-${vnet.id}`}>
+                              {ALL_KNOWN_AZURE_REGIONS.map((reg) => (
+                                <option key={reg} value={reg} />
+                              ))}
+                            </datalist>
                             <input
                               type="text"
                               className="aznet-input"
@@ -3456,6 +3974,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             <select
                               className="aznet-select"
                               value={vnet.role}
+                              title="Simulator topology role (controls canvas column layout & default gateway transit heuristics)"
                               onChange={(e) => {
                                 const role = e.target.value as 'hub' | 'spoke'
                                 commitTopology((draft) => {
@@ -3464,8 +3983,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 })
                               }}
                             >
-                              <option value="hub">Hub VNet</option>
-                              <option value="spoke">Spoke VNet</option>
+                              <option value="hub">Hub Layout Role</option>
+                              <option value="spoke">Spoke Layout Role</option>
                             </select>
                           </div>
                           <button
@@ -3484,7 +4003,24 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           </button>
                         </div>
 
-                        {/* Quick Add/Remove VNet Elements (#39) */}
+                        {usesRemoteGw && (
+                          <div
+                            data-testid={`aznet-vnet-remote-gw-notice-${vnet.id}`}
+                            style={{
+                              marginBottom: 8,
+                              padding: '5px 8px',
+                              background: '#fffbeb',
+                              border: '1px solid #fcd34d',
+                              borderRadius: 6,
+                              fontSize: 11,
+                              color: '#92400e',
+                            }}
+                          >
+                            ⚠️ This VNet has <strong>Use Remote Gateways</strong> enabled on a peering. Local VNet Gateways and Route Server cannot be deployed unless <code>useRemoteGateways</code> is disabled first.
+                          </div>
+                        )}
+
+                        {/* Quick Add/Remove VNet Elements (#39, #48) */}
                         <div
                           style={{
                             display: 'flex',
@@ -3511,7 +4047,17 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               type="button"
                               className="aznet-btn"
                               data-testid={`aznet-add-ergw-${vnet.id}`}
-                              style={{ fontSize: 11, padding: '3px 8px' }}
+                              disabled={usesRemoteGw}
+                              title={
+                                usesRemoteGw
+                                  ? 'Cannot add ER Gateway while Use Remote Gateways is enabled on a peering'
+                                  : 'Add ExpressRoute Gateway'
+                              }
+                              style={{
+                                fontSize: 11,
+                                padding: '3px 8px',
+                                opacity: usesRemoteGw ? 0.5 : 1,
+                              }}
                               onClick={() => addGatewayToVnet(vnet.id, 'ExpressRoute')}
                             >
                               + ER Gateway
@@ -3542,7 +4088,17 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               type="button"
                               className="aznet-btn"
                               data-testid={`aznet-add-vpngw-${vnet.id}`}
-                              style={{ fontSize: 11, padding: '3px 8px' }}
+                              disabled={usesRemoteGw}
+                              title={
+                                usesRemoteGw
+                                  ? 'Cannot add VPN Gateway while Use Remote Gateways is enabled on a peering'
+                                  : 'Add VPN Gateway'
+                              }
+                              style={{
+                                fontSize: 11,
+                                padding: '3px 8px',
+                                opacity: usesRemoteGw ? 0.5 : 1,
+                              }}
                               onClick={() => addGatewayToVnet(vnet.id, 'Vpn')}
                             >
                               + VPN Gateway
@@ -3573,7 +4129,17 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               type="button"
                               className="aznet-btn"
                               data-testid={`aznet-add-ars-${vnet.id}`}
-                              style={{ fontSize: 11, padding: '3px 8px' }}
+                              disabled={usesRemoteGw}
+                              title={
+                                usesRemoteGw
+                                  ? 'Cannot add Route Server while Use Remote Gateways is enabled on a peering'
+                                  : 'Add Azure Route Server'
+                              }
+                              style={{
+                                fontSize: 11,
+                                padding: '3px 8px',
+                                opacity: usesRemoteGw ? 0.5 : 1,
+                              }}
                               onClick={() => addRouteServerToVnet(vnet.id)}
                             >
                               + Route Server (ARS)
@@ -3694,8 +4260,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     )
                   })}
                 </div>
+                )}
 
-                {/* Independent Route Tables Editor (#40, #41) */}
+                {/* Independent Route Tables Editor (#40, #41, #47) */}
+                {showVnetEditor && (
                 <div className="aznet-card" data-testid="aznet-udr-editor">
                   <div
                     style={{
@@ -3712,7 +4280,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       type="button"
                       className="aznet-btn aznet-btn-primary"
                       data-testid="aznet-create-rt-btn"
-                      onClick={() => createAndAssociateRouteTable()}
+                      onClick={() =>
+                        selected.kind === 'subnet'
+                          ? createAndAssociateRouteTable(selected.vnetId, selected.subnetId)
+                          : createAndAssociateRouteTable()
+                      }
                     >
                       + Create Route Table
                     </button>
@@ -3722,7 +4294,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     the subnet&apos;s right-click menu, hover badge, or the subnet association
                     selector below.
                   </p>
-                  {topology.udrTables.map((rt) => {
+                  {(filteredUdrTables.length > 0 ? filteredUdrTables : topology.udrTables).map((rt) => {
                     const associatedSubnets = topology.vnets.flatMap((v) =>
                       v.subnets
                         .filter((s) => s.routeTableId === rt.id)
@@ -4004,11 +4576,18 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     )
                   })}
                 </div>
+                )}
 
-                {/* Subnet Route Table Associations & Outbound Policies (#41) */}
+                {/* Subnet CRUD, Route Table Associations & Policies (#41, #49) */}
+                {showVnetEditor && (
                 <div className="aznet-card" data-testid="aznet-subnet-security-editor">
-                  <h3>Subnets: Route Table Associations & Outbound Policies</h3>
-                  {topology.vnets.map((vnet) => (
+                  <h3>Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies</h3>
+                  {filteredVnets.map((vnet) => {
+                    const subnetsToShow =
+                      selected.kind === 'subnet' && selected.vnetId === vnet.id
+                        ? vnet.subnets.filter((s) => s.id === selected.subnetId)
+                        : vnet.subnets
+                    return (
                     <div
                       key={vnet.id}
                       style={{
@@ -4024,109 +4603,295 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           display: 'flex',
                           justifyContent: 'space-between',
                           alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: 6,
                         }}
                       >
-                        <strong>{vnet.name}</strong>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <strong>{vnet.name}</strong>
+                          {selected.kind === 'subnet' && selected.vnetId === vnet.id && vnet.subnets.length > 1 && (
+                            <button
+                              type="button"
+                              className="aznet-btn"
+                              style={{ fontSize: 10.5, padding: '1px 6px' }}
+                              onClick={() => setSelected({ kind: 'vnet', vnetId: vnet.id })}
+                            >
+                              Show All {vnet.subnets.length} Subnets in {vnet.name}
+                            </button>
+                          )}
+                        </div>
                         <button
                           type="button"
                           className="aznet-btn"
+                          data-testid={`aznet-add-subnet-${vnet.id}`}
                           style={{ fontSize: 11, padding: '2px 8px' }}
-                          onClick={() => {
-                            commitTopology((draft) => {
-                              const v = draft.vnets.find((x) => x.id === vnet.id)
-                              if (!v) return
-                              const idx = v.subnets.length + 1
-                              const baseOctets =
-                                (v.prefixes[0] ?? '10.0.0.0/16').split('/')[0].split('.')
-                              const prefixBase = `${baseOctets[0] ?? '10'}.${baseOctets[1] ?? '0'}`
-                              v.subnets.push({
-                                id: `${v.id}-snet-${idx}`,
-                                name: `snet-app-${idx}`,
-                                prefix: `${prefixBase}.${10 + idx}.0/24`,
-                              })
-                            })
-                          }}
+                          onClick={() => addSubnetToVnet(vnet.id)}
                         >
                           + Add Subnet
                         </button>
                       </div>
-                      {vnet.subnets.map((subnet) => (
+                      {subnetsToShow.map((subnet) => (
                         <div
                           key={subnet.id}
+                          data-testid={`aznet-subnet-row-${subnet.id}`}
                           style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginTop: 6,
+                            marginTop: 8,
+                            padding: 8,
+                            background: '#f8fafc',
+                            borderRadius: 6,
+                            border: '1px solid #e2e8f0',
                             fontSize: 12,
                           }}
                         >
-                          <span>
-                            {subnet.name} (<code>{subnet.prefix}</code>)
-                          </span>
-                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <label
-                              style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
-                            >
-                              <span>Route Table:</span>
-                              <select
-                                className="aznet-select"
-                                data-testid={`aznet-subnet-rt-select-${subnet.id}`}
-                                value={subnet.routeTableId ?? ''}
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: 8,
+                            }}
+                          >
+                            <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <input
+                                type="text"
+                                className="aznet-input"
+                                data-testid={`aznet-subnet-name-${subnet.id}`}
+                                aria-label={`Subnet name ${subnet.name}`}
+                                value={subnet.name}
                                 onChange={(e) => {
-                                  const nextVal = e.target.value
-                                  if (nextVal === '__create__') {
-                                    createAndAssociateRouteTable(vnet.id, subnet.id)
-                                    return
-                                  }
+                                  const val = e.target.value
+                                  commitTopology((draft) => {
+                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
+                                    const targetS = targetV?.subnets.find((s) => s.id === subnet.id)
+                                    if (targetS) targetS.name = val
+                                  })
+                                }}
+                                style={{ fontWeight: 700, width: 145 }}
+                              />
+                              <input
+                                type="text"
+                                className="aznet-input"
+                                data-testid={`aznet-subnet-prefix-${subnet.id}`}
+                                aria-label={`Subnet prefix ${subnet.name}`}
+                                value={subnet.prefix}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  commitTopology((draft) => {
+                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
+                                    const targetS = targetV?.subnets.find((s) => s.id === subnet.id)
+                                    if (targetS) targetS.prefix = val
+                                  })
+                                }}
+                                style={{ width: 120, fontFamily: 'monospace', fontSize: 11.5 }}
+                              />
+                              <label
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
+                              >
+                                <span>Route Table:</span>
+                                <select
+                                  className="aznet-select"
+                                  data-testid={`aznet-subnet-rt-select-${subnet.id}`}
+                                  value={subnet.routeTableId ?? ''}
+                                  onChange={(e) => {
+                                    const nextVal = e.target.value
+                                    if (nextVal === '__create__') {
+                                      createAndAssociateRouteTable(vnet.id, subnet.id)
+                                      return
+                                    }
+                                    commitTopology((draft) => {
+                                      const targetV = draft.vnets.find((v) => v.id === vnet.id)
+                                      const targetS = targetV?.subnets.find(
+                                        (s) => s.id === subnet.id,
+                                      )
+                                      if (targetS) {
+                                        targetS.routeTableId = nextVal || undefined
+                                      }
+                                    })
+                                  }}
+                                >
+                                  <option value="">None (No Route Table)</option>
+                                  {topology.udrTables.map((rt) => (
+                                    <option key={rt.id} value={rt.id}>
+                                      {rt.name}
+                                    </option>
+                                  ))}
+                                  <option value="__create__">+ Create & Associate New RT...</option>
+                                </select>
+                              </label>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                              <label className="aznet-checkbox-row">
+                                <input
+                                  type="checkbox"
+                                  data-testid={`aznet-subnet-outbound-${subnet.id}`}
+                                  checked={subnet.defaultOutboundAccess !== false}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked
+                                    commitTopology((draft) => {
+                                      const targetV = draft.vnets.find((v) => v.id === vnet.id)
+                                      const targetS = targetV?.subnets.find(
+                                        (s) => s.id === subnet.id,
+                                      )
+                                      if (targetS) targetS.defaultOutboundAccess = checked
+                                    })
+                                  }}
+                                />
+                                <span>Default Outbound</span>
+                              </label>
+                              <label
+                                style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
+                              >
+                                <span>PE Route Policies:</span>
+                                <select
+                                  className="aznet-select"
+                                  data-testid={`aznet-subnet-pe-policy-${subnet.id}`}
+                                  value={subnet.privateEndpointNetworkPolicies ?? 'Disabled'}
+                                  onChange={(e) => {
+                                    const val = e.target.value as
+                                      | 'Disabled'
+                                      | 'Enabled'
+                                      | 'RouteTableEnabled'
+                                      | 'NetworkSecurityGroupEnabled'
+                                    commitTopology((draft) => {
+                                      const targetV = draft.vnets.find((v) => v.id === vnet.id)
+                                      const targetS = targetV?.subnets.find(
+                                        (s) => s.id === subnet.id,
+                                      )
+                                      if (targetS) targetS.privateEndpointNetworkPolicies = val
+                                    })
+                                  }}
+                                >
+                                  <option value="Disabled">Disabled (Default)</option>
+                                  <option value="RouteTableEnabled">RouteTableEnabled</option>
+                                  <option value="NetworkSecurityGroupEnabled">NetworkSecurityGroupEnabled</option>
+                                  <option value="Enabled">Enabled (UDR + NSG)</option>
+                                </select>
+                              </label>
+                              <button
+                                type="button"
+                                className="aznet-btn"
+                                data-testid={`aznet-subnet-add-pe-${subnet.id}`}
+                                style={{ fontSize: 11, padding: '2px 7px' }}
+                                onClick={() => {
                                   commitTopology((draft) => {
                                     const targetV = draft.vnets.find((v) => v.id === vnet.id)
                                     const targetS = targetV?.subnets.find(
                                       (s) => s.id === subnet.id,
                                     )
-                                    if (targetS) {
-                                      targetS.routeTableId = nextVal || undefined
-                                    }
+                                    if (!targetS) return
+                                    targetS.privateEndpoints = targetS.privateEndpoints ?? []
+                                    const peIdx = targetS.privateEndpoints.length + 1
+                                    const baseIp = targetS.prefix.split('/')[0].split('.')
+                                    const peIp = `${baseIp[0] ?? '10'}.${baseIp[1] ?? '0'}.${baseIp[2] ?? '1'}.${50 + peIdx}`
+                                    targetS.privateEndpoints.push({
+                                      id: `${targetS.id}-pe-${peIdx}-${Date.now().toString(36).slice(-3)}`,
+                                      name: `pe-service-${peIdx}`,
+                                      ipAddress: peIp,
+                                      serviceName: `paas-${peIdx}.privatelink.azure.net`,
+                                    })
                                   })
                                 }}
                               >
-                                <option value="">None (No Route Table)</option>
-                                {topology.udrTables.map((rt) => (
-                                  <option key={rt.id} value={rt.id}>
-                                    {rt.name}
-                                  </option>
-                                ))}
-                                <option value="__create__">+ Create & Associate New RT...</option>
-                              </select>
-                            </label>
-                            <label className="aznet-checkbox-row">
-                              <input
-                                type="checkbox"
-                                data-testid={`aznet-subnet-outbound-${subnet.id}`}
-                                checked={subnet.defaultOutboundAccess !== false}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  commitTopology((draft) => {
-                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                    const targetS = targetV?.subnets.find(
-                                      (s) => s.id === subnet.id,
-                                    )
-                                    if (targetS) targetS.defaultOutboundAccess = checked
-                                  })
+                                + Private Endpoint
+                              </button>
+                              <button
+                                type="button"
+                                className="aznet-btn"
+                                data-testid={`aznet-delete-subnet-${subnet.id}`}
+                                style={{
+                                  fontSize: 11,
+                                  padding: '2px 7px',
+                                  color: '#b91c1c',
+                                  borderColor: '#fecaca',
                                 }}
-                              />
-                              <span>Default Outbound Access</span>
-                            </label>
+                                onClick={() => deleteSubnetFromVnet(vnet.id, subnet.id)}
+                              >
+                                Delete Subnet
+                              </button>
+                            </div>
                           </div>
+
+                          {(subnet.privateEndpoints ?? []).length > 0 && (
+                            <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid #cbd5e1' }}>
+                              {(subnet.privateEndpoints ?? []).map((pe) => (
+                                <div
+                                  key={pe.id}
+                                  style={{
+                                    display: 'flex',
+                                    gap: 6,
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    marginTop: 4,
+                                    fontSize: 11.5,
+                                  }}
+                                >
+                                  <span>🔒 PE:</span>
+                                  <input
+                                    type="text"
+                                    className="aznet-input"
+                                    value={pe.name}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      commitTopology((draft) => {
+                                        const s = draft.vnets
+                                          .find((v) => v.id === vnet.id)
+                                          ?.subnets.find((x) => x.id === subnet.id)
+                                        const targetPe = s?.privateEndpoints?.find((x) => x.id === pe.id)
+                                        if (targetPe) targetPe.name = val
+                                      })
+                                    }}
+                                    style={{ width: 120 }}
+                                  />
+                                  <input
+                                    type="text"
+                                    className="aznet-input"
+                                    value={pe.ipAddress}
+                                    onChange={(e) => {
+                                      const val = e.target.value
+                                      commitTopology((draft) => {
+                                        const s = draft.vnets
+                                          .find((v) => v.id === vnet.id)
+                                          ?.subnets.find((x) => x.id === subnet.id)
+                                        const targetPe = s?.privateEndpoints?.find((x) => x.id === pe.id)
+                                        if (targetPe) targetPe.ipAddress = val
+                                      })
+                                    }}
+                                    style={{ width: 105, fontFamily: 'monospace' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="aznet-btn"
+                                    style={{ fontSize: 10.5, padding: '1px 6px', color: '#b91c1c' }}
+                                    onClick={() => {
+                                      commitTopology((draft) => {
+                                        const s = draft.vnets
+                                          .find((v) => v.id === vnet.id)
+                                          ?.subnets.find((x) => x.id === subnet.id)
+                                        if (s?.privateEndpoints) {
+                                          s.privateEndpoints = s.privateEndpoints.filter(
+                                            (x) => x.id !== pe.id,
+                                          )
+                                        }
+                                      })
+                                    }}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
-                  ))}
+                  )})}
                 </div>
+                )}
 
-                {/* On-Premises Sites & ExpressRoute MSEE Locations Editor (#37, #42) */}
+                {/* On-Premises Sites & ExpressRoute MSEE Locations Editor (#37, #42, #43, #44, #45, #47) */}
+                {(showSiteEditor || showErEditor) && (
                 <div className="aznet-card" data-testid="aznet-sites-er-editor">
                   <div
                     style={{
@@ -4138,189 +4903,385 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       marginBottom: 8,
                     }}
                   >
-                    <h3 style={{ margin: 0 }}>On-Premises Sites & ExpressRoute Locations</h3>
+                    <h3 style={{ margin: 0 }}>
+                      {showSiteEditor
+                        ? 'On-Premises Site Configuration'
+                        : 'ExpressRoute Peering Location Configuration'}
+                    </h3>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <button
-                        type="button"
-                        className="aznet-btn"
-                        data-testid="aznet-editor-add-site-btn"
-                        onClick={() => addSiteNode()}
-                      >
-                        + Add Site
-                      </button>
-                      <button
-                        type="button"
-                        className="aznet-btn"
-                        data-testid="aznet-editor-add-erloc-btn"
-                        onClick={() => addErLocationNode()}
-                      >
-                        + Add ER MSEE
-                      </button>
+                      {showSiteEditor && (
+                        <button
+                          type="button"
+                          className="aznet-btn"
+                          data-testid="aznet-editor-add-site-btn"
+                          onClick={() => addSiteNode()}
+                        >
+                          + Add Site
+                        </button>
+                      )}
+                      {showErEditor && (
+                        <button
+                          type="button"
+                          className="aznet-btn"
+                          data-testid="aznet-editor-add-erloc-btn"
+                          onClick={() => addErLocationNode()}
+                        >
+                          + Add ER MSEE
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  {topology.sites.map((site) => (
-                    <div
-                      key={site.id}
-                      data-testid={`aznet-site-config-${site.id}`}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: 8,
-                        padding: 8,
-                        marginBottom: 6,
-                        background: '#ffffff',
-                        borderRadius: 6,
-                        border: '1px solid #cbd5e1',
-                      }}
-                    >
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input
-                          type="text"
-                          className="aznet-input"
-                          value={site.name}
-                          aria-label={`Site name ${site.name}`}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            commitTopology((draft) => {
-                              const s = draft.sites.find((x) => x.id === site.id)
-                              if (s) s.name = val
-                            })
+                  {showSiteEditor &&
+                    topology.sites
+                      .filter((s) => selected.kind !== 'site' || s.id === selected.siteId)
+                      .map((site) => (
+                        <div
+                          key={site.id}
+                          data-testid={`aznet-site-config-${site.id}`}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: 8,
+                            padding: 8,
+                            marginBottom: 6,
+                            background: '#ffffff',
+                            borderRadius: 6,
+                            border: '1px solid #cbd5e1',
                           }}
-                          style={{ fontWeight: 700, width: 145 }}
-                        />
-                        <label style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          ASN:
-                          <input
-                            type="number"
-                            className="aznet-input"
-                            value={site.asn}
-                            onChange={(e) => {
-                              const asn = Number(e.target.value)
-                              commitTopology((draft) => {
-                                const s = draft.sites.find((x) => x.id === site.id)
-                                if (s && Number.isFinite(asn) && asn > 0) s.asn = asn
-                              })
+                        >
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <input
+                              type="text"
+                              className="aznet-input"
+                              value={site.name}
+                              aria-label={`Site name ${site.name}`}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                commitTopology((draft) => {
+                                  const s = draft.sites.find((x) => x.id === site.id)
+                                  if (s) s.name = val
+                                })
+                              }}
+                              style={{ fontWeight: 700, width: 145 }}
+                            />
+                            <label style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              ASN:
+                              <input
+                                type="number"
+                                className="aznet-input"
+                                value={site.asn}
+                                onChange={(e) => {
+                                  const asn = Number(e.target.value)
+                                  commitTopology((draft) => {
+                                    const s = draft.sites.find((x) => x.id === site.id)
+                                    if (s && Number.isFinite(asn) && asn > 0) s.asn = asn
+                                  })
+                                }}
+                                style={{ width: 75 }}
+                              />
+                            </label>
+                            <input
+                              type="text"
+                              className="aznet-input"
+                              value={site.prefixes.join(', ')}
+                              title="Advertised prefixes (comma-separated)"
+                              onChange={(e) => {
+                                const raw = e.target.value
+                                commitTopology((draft) => {
+                                  const s = draft.sites.find((x) => x.id === site.id)
+                                  if (s) {
+                                    const parsed = raw
+                                      .split(',')
+                                      .map((p) => p.trim())
+                                      .filter(Boolean)
+                                    if (parsed.length > 0) s.prefixes = parsed
+                                  }
+                                })
+                              }}
+                              style={{ width: 150, fontSize: 11.5 }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="aznet-btn"
+                            data-testid={`aznet-delete-site-${site.id}`}
+                            style={{
+                              padding: '2px 8px',
+                              fontSize: 11,
+                              color: '#b91c1c',
+                              borderColor: '#fecaca',
                             }}
-                            style={{ width: 75 }}
-                          />
-                        </label>
-                        <input
-                          type="text"
-                          className="aznet-input"
-                          value={site.prefixes.join(', ')}
-                          title="Advertised prefixes (comma-separated)"
-                          onChange={(e) => {
-                            const raw = e.target.value
-                            commitTopology((draft) => {
-                              const s = draft.sites.find((x) => x.id === site.id)
-                              if (s) {
-                                const parsed = raw
-                                  .split(',')
-                                  .map((p) => p.trim())
-                                  .filter(Boolean)
-                                if (parsed.length > 0) s.prefixes = parsed
-                              }
-                            })
-                          }}
-                          style={{ width: 150, fontSize: 11.5 }}
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        className="aznet-btn"
-                        data-testid={`aznet-delete-site-${site.id}`}
-                        style={{
-                          padding: '2px 8px',
-                          fontSize: 11,
-                          color: '#b91c1c',
-                          borderColor: '#fecaca',
-                        }}
-                        onClick={() => deleteSiteById(site.id)}
-                      >
-                        Delete Site
-                      </button>
-                    </div>
-                  ))}
+                            onClick={() => deleteSiteById(site.id)}
+                          >
+                            Delete Site
+                          </button>
+                        </div>
+                      ))}
 
-                  {topology.erLocations.map((loc) => (
-                    <div
-                      key={loc.id}
-                      data-testid={`aznet-erloc-config-${loc.id}`}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: 8,
-                        padding: 8,
-                        marginBottom: 6,
-                        background: '#f8fafc',
-                        borderRadius: 6,
-                        border: '1px solid #cbd5e1',
-                      }}
-                    >
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <input
-                          type="text"
-                          className="aznet-input"
-                          value={loc.name}
-                          aria-label={`ER Location name ${loc.name}`}
-                          onChange={(e) => {
-                            const val = e.target.value
-                            commitTopology((draft) => {
-                              const l = draft.erLocations.find((x) => x.id === loc.id)
-                              if (l) l.name = val
-                            })
+                  {showErEditor &&
+                    topology.erLocations
+                      .filter((l) => selected.kind !== 'er-location' || l.id === selected.locationId)
+                      .map((loc) => (
+                        <div
+                          key={loc.id}
+                          data-testid={`aznet-erloc-config-${loc.id}`}
+                          style={{
+                            padding: 10,
+                            marginBottom: 6,
+                            background: '#f8fafc',
+                            borderRadius: 6,
+                            border: '1px solid #cbd5e1',
                           }}
-                          style={{ fontWeight: 700, width: 165 }}
-                        />
-                        <label className="aznet-checkbox-row">
-                          <input
-                            type="checkbox"
-                            checked={loc.globalReachEnabled}
-                            onChange={(e) => {
-                              const checked = e.target.checked
-                              commitTopology((draft) => {
-                                const l = draft.erLocations.find((x) => x.id === loc.id)
-                                if (l) l.globalReachEnabled = checked
-                              })
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              flexWrap: 'wrap',
+                              gap: 8,
                             }}
-                          />
-                          <span>Global Reach Enabled</span>
-                        </label>
-                      </div>
-                      <button
-                        type="button"
-                        className="aznet-btn"
-                        data-testid={`aznet-delete-erloc-${loc.id}`}
-                        style={{
-                          padding: '2px 8px',
-                          fontSize: 11,
-                          color: '#b91c1c',
-                          borderColor: '#fecaca',
-                        }}
-                        onClick={() => deleteErLocationById(loc.id)}
-                      >
-                        Delete ER MSEE
-                      </button>
-                    </div>
-                  ))}
+                          >
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <input
+                                type="text"
+                                className="aznet-input"
+                                list={`aznet-er-catalog-${loc.id}`}
+                                value={loc.name}
+                                aria-label={`ER Location name ${loc.name}`}
+                                onChange={(e) => {
+                                  const val = e.target.value
+                                  commitTopology((draft) => {
+                                    const l = draft.erLocations.find((x) => x.id === loc.id)
+                                    if (l) {
+                                      l.name = val
+                                      l.peeringLocation = val
+                                    }
+                                  })
+                                }}
+                                style={{ fontWeight: 700, width: 165 }}
+                              />
+                              <datalist id={`aznet-er-catalog-${loc.id}`}>
+                                {ER_PEERING_LOCATIONS_CATALOG.map((entry) => (
+                                  <option key={entry.name} value={entry.name}>
+                                    {entry.name} ({entry.geopoliticalRegion})
+                                  </option>
+                                ))}
+                              </datalist>
+                              <label style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <span>SKU:</span>
+                                <select
+                                  className="aznet-select"
+                                  data-testid={`aznet-erloc-sku-${loc.id}`}
+                                  value={loc.sku ?? 'Standard'}
+                                  onChange={(e) => {
+                                    const nextSku = e.target.value as AzErCircuitSku
+                                    commitTopology((draft) => {
+                                      const l = draft.erLocations.find((x) => x.id === loc.id)
+                                      if (l) l.sku = nextSku
+                                    })
+                                  }}
+                                >
+                                  <option value="Local">Local</option>
+                                  <option value="Standard">Standard</option>
+                                  <option value="Premium">Premium</option>
+                                </select>
+                              </label>
+                              <label className="aznet-checkbox-row">
+                                <input
+                                  type="checkbox"
+                                  checked={loc.globalReachEnabled}
+                                  onChange={(e) => {
+                                    const checked = e.target.checked
+                                    commitTopology((draft) => {
+                                      const l = draft.erLocations.find((x) => x.id === loc.id)
+                                      if (l) l.globalReachEnabled = checked
+                                    })
+                                  }}
+                                />
+                                <span>Global Reach (Intra-Location)</span>
+                              </label>
+                              <button
+                                type="button"
+                                className="aznet-btn"
+                                data-testid={`aznet-erloc-info-btn-${loc.id}`}
+                                style={{ fontSize: 11, padding: '2px 8px' }}
+                                onClick={() =>
+                                  setErLocationModalState({
+                                    open: true,
+                                    targetLocationId: loc.id,
+                                    locationName: loc.peeringLocation ?? loc.name,
+                                    sku: loc.sku ?? 'Standard',
+                                  })
+                                }
+                              >
+                                📍 Show ER Location Info
+                              </button>
+                            </div>
+                            <button
+                              type="button"
+                              className="aznet-btn"
+                              data-testid={`aznet-delete-erloc-${loc.id}`}
+                              style={{
+                                padding: '2px 8px',
+                                fontSize: 11,
+                                color: '#b91c1c',
+                                borderColor: '#fecaca',
+                              }}
+                              onClick={() => deleteErLocationById(loc.id)}
+                            >
+                              Delete ER MSEE
+                            </button>
+                          </div>
+
+                          {/* Cross-location Global Reach Links (#45) */}
+                          {topology.erLocations.length > 1 && (
+                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>
+                                ExpressRoute Global Reach (Cross-Location Circuit Peering):
+                              </div>
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                                {topology.erLocations
+                                  .filter((other) => other.id !== loc.id)
+                                  .map((other) => {
+                                    const existingGr = (topology.erGlobalReachLinks ?? []).find(
+                                      (gr) =>
+                                        (gr.locationAId === loc.id && gr.locationBId === other.id) ||
+                                        (gr.locationAId === other.id && gr.locationBId === loc.id),
+                                    )
+                                    return (
+                                      <button
+                                        key={other.id}
+                                        type="button"
+                                        data-testid={`aznet-toggle-gr-${loc.id}-${other.id}`}
+                                        className={`aznet-btn ${existingGr?.enabled ? 'aznet-btn-primary' : ''}`}
+                                        style={{ fontSize: 11, padding: '3px 8px' }}
+                                        onClick={() => {
+                                          commitTopology((draft) => {
+                                            draft.erGlobalReachLinks = draft.erGlobalReachLinks ?? []
+                                            const idx = draft.erGlobalReachLinks.findIndex(
+                                              (gr) =>
+                                                (gr.locationAId === loc.id &&
+                                                  gr.locationBId === other.id) ||
+                                                (gr.locationAId === other.id &&
+                                                  gr.locationBId === loc.id),
+                                            )
+                                            if (idx >= 0) {
+                                              draft.erGlobalReachLinks.splice(idx, 1)
+                                            } else {
+                                              draft.erGlobalReachLinks.push({
+                                                id: `ergr-${loc.id}-${other.id}-${Date.now().toString(36).slice(-3)}`,
+                                                name: `${loc.name}-gr-${other.name}`,
+                                                locationAId: loc.id,
+                                                locationBId: other.id,
+                                                enabled: true,
+                                              })
+                                            }
+                                          })
+                                        }}
+                                      >
+                                        {existingGr?.enabled ? '✓ Global Reach: ' : '+ Global Reach to '}
+                                        {other.name}
+                                      </button>
+                                    )
+                                  })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
                 </div>
+                )}
 
-                {/* Node Labels & Annotations */}
+                {showVwanHubEditor &&
+                  topology.vwanHubs
+                    .filter((h) => selected.kind !== 'vwan-hub' || h.id === selected.hubId)
+                    .map((hub) => (
+                      <div key={hub.id} className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`}>
+                        <h3>Virtual WAN Hub: {hub.name}</h3>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <input
+                            type="text"
+                            className="aznet-input"
+                            value={hub.name}
+                            onChange={(e) => {
+                              const val = e.target.value
+                              commitTopology((draft) => {
+                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
+                                if (target) target.name = val
+                              })
+                            }}
+                            style={{ fontWeight: 700, width: 155 }}
+                          />
+                          <input
+                            type="text"
+                            className="aznet-input"
+                            value={hub.region}
+                            title="Azure Region"
+                            onChange={(e) => {
+                              const val = e.target.value
+                              commitTopology((draft) => {
+                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
+                                if (target) target.region = val
+                              })
+                            }}
+                            style={{ width: 130, fontSize: 11.5 }}
+                          />
+                          <input
+                            type="text"
+                            className="aznet-input"
+                            value={hub.prefix}
+                            title="Hub address prefix"
+                            onChange={(e) => {
+                              const val = e.target.value
+                              commitTopology((draft) => {
+                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
+                                if (target) target.prefix = val
+                              })
+                            }}
+                            style={{ width: 130, fontSize: 11.5 }}
+                          />
+                          <select
+                            className="aznet-select"
+                            value={hub.preference}
+                            onChange={(e) => {
+                              const pref = e.target.value as 'ExpressRoute' | 'VPN' | 'ASPath'
+                              commitTopology((draft) => {
+                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
+                                if (target) target.preference = pref
+                              })
+                            }}
+                          >
+                            <option value="ExpressRoute">ExpressRoute Preference</option>
+                            <option value="VPN">VPN Preference</option>
+                            <option value="ASPath">ASPath Preference</option>
+                          </select>
+                        </div>
+                      </div>
+                    ))}
+
+                {/* Node Labels & Annotations (scoped to selected node #47) */}
                 <div className="aznet-card" data-testid="aznet-node-labels-editor">
-                  <h3>Node Labels & Annotations</h3>
+                  <h3>Node Label & Annotation</h3>
                   <p style={{ margin: '0 0 8px 0', fontSize: 12, color: '#475569' }}>
-                    Optional text labels displayed as annotation badges below diagram nodes.
+                    Optional text label displayed as an annotation badge below the selected node.
                   </p>
                   {[
-                    ...topology.vnets.map((n) => ({ kind: 'vnet' as const, id: n.id, name: `VNet: ${n.name}`, label: n.label ?? '' })),
-                    ...topology.vwanHubs.map((n) => ({ kind: 'vwanHub' as const, id: n.id, name: `vWAN Hub: ${n.name}`, label: n.label ?? '' })),
-                    ...topology.erLocations.map((n) => ({ kind: 'erLocation' as const, id: n.id, name: `ER MSEE: ${n.name}`, label: n.label ?? '' })),
-                    ...topology.sites.map((n) => ({ kind: 'site' as const, id: n.id, name: `Site: ${n.name}`, label: n.label ?? '' })),
+                    ...topology.vnets
+                      .filter((n) => !selectedVnetId || n.id === selectedVnetId)
+                      .map((n) => ({ kind: 'vnet' as const, id: n.id, name: `VNet: ${n.name}`, label: n.label ?? '' })),
+                    ...topology.vwanHubs
+                      .filter((n) => selected.kind === 'vwan-hub' && n.id === selected.hubId)
+                      .map((n) => ({ kind: 'vwanHub' as const, id: n.id, name: `vWAN Hub: ${n.name}`, label: n.label ?? '' })),
+                    ...topology.erLocations
+                      .filter((n) => selected.kind === 'er-location' && n.id === selected.locationId)
+                      .map((n) => ({ kind: 'erLocation' as const, id: n.id, name: `ER MSEE: ${n.name}`, label: n.label ?? '' })),
+                    ...topology.sites
+                      .filter((n) => selected.kind === 'site' && n.id === selected.siteId)
+                      .map((n) => ({ kind: 'site' as const, id: n.id, name: `Site: ${n.name}`, label: n.label ?? '' })),
                   ].map((item) => (
                     <div key={`${item.kind}-${item.id}`} className="aznet-toggle-row" style={{ gap: 8 }}>
                       <span style={{ fontSize: 12, fontWeight: 600, minWidth: 160 }}>{item.name}</span>
@@ -4361,7 +5322,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   ))}
                 </div>
               </>
-            )}
+              )
+            })()}
 
             {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
             {activeTab === 'azure' && (
@@ -4782,6 +5744,55 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           </div>
         </div>
       )}
+
+      {/* ExpressRoute Peering Locations & Providers Modal (#43, #44) */}
+      <ErLocationInfoModal
+        isOpen={erLocationModalState.open}
+        initialLocationName={erLocationModalState.locationName}
+        currentSku={erLocationModalState.sku}
+        connectedAzureRegions={
+          erLocationModalState.targetLocationId
+            ? topology.erLinks
+                .filter(
+                  (l) =>
+                    l.enabled &&
+                    l.locationId === erLocationModalState.targetLocationId &&
+                    (l.targetKind === 'vnet-gateway' || l.targetKind === 'vwan-hub'),
+                )
+                .map((l) => {
+                  if (l.targetKind === 'vnet-gateway') {
+                    const v = topology.vnets.find((x) => x.gateways.some((g) => g.id === l.targetId))
+                    const gw = v?.gateways.find((g) => g.id === l.targetId)
+                    return {
+                      name: `${v?.name ?? 'VNet'} / ${gw?.name ?? l.targetId}`,
+                      region: v?.region ?? '',
+                    }
+                  }
+                  const h = topology.vwanHubs.find((x) => x.id === l.targetId)
+                  return {
+                    name: `vWAN Hub ${h?.name ?? l.targetId}`,
+                    region: h?.region ?? '',
+                  }
+                })
+            : []
+        }
+        onSelectLocationAndSku={
+          erLocationModalState.targetLocationId
+            ? (locationName, sku) => {
+                const targetLocId = erLocationModalState.targetLocationId!
+                commitTopology((draft) => {
+                  const targetLoc = draft.erLocations.find((l) => l.id === targetLocId)
+                  if (targetLoc) {
+                    targetLoc.name = locationName
+                    targetLoc.peeringLocation = locationName
+                    targetLoc.sku = sku
+                  }
+                })
+              }
+            : undefined
+        }
+        onClose={() => setErLocationModalState((prev) => ({ ...prev, open: false }))}
+      />
     </div>
   )
 }

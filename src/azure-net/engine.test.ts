@@ -13,7 +13,17 @@ import {
   traceAzNetFlow,
   traceAzNetPair,
 } from './engine'
-import { AZURE_NET_SAMPLES, validateAzNetTopology, type AzNetTopology } from './model'
+import {
+  AZURE_NET_SAMPLES,
+  createEmptyAzNetTopology,
+  validateAzNetTopology,
+  type AzNetTopology,
+} from './model'
+import {
+  ER_PEERING_LOCATIONS_CATALOG,
+  evaluateErSkuRegionalCompatibility,
+  findErPeeringLocationEntry,
+} from '../er-locations-catalog'
 
 describe('Azure Networking Simulator Engine & Diagnostics', () => {
   it('validates all 5 canonical Azure Networking sample topologies and keeps samples/azure-net + public/docs/samples/azure-net in sync', () => {
@@ -604,6 +614,97 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(validateAzNetTopology(labeledTopo)).toEqual([])
     labeledTopo.vnets[0].label = 'x'.repeat(121)
     expect(validateAzNetTopology(labeledTopo).some((e) => e.includes('120 characters'))).toBe(true)
+  })
+
+  it('validates #43-#49: ER peering locations catalog, ER SKU regional restrictions, ER Global Reach, peering/gateway transit diagnostics, and empty default topology', () => {
+    // #43: Internal catalog of 149 ExpressRoute peering locations & providers
+    expect(ER_PEERING_LOCATIONS_CATALOG.length).toBeGreaterThanOrEqual(140)
+    const frankfurt = findErPeeringLocationEntry('Frankfurt')
+    expect(frankfurt).toBeDefined()
+    expect(frankfurt?.geopoliticalRegion).toBe('Europe')
+    expect(frankfurt?.localAzureRegions).toContain('Germany West Central')
+
+    // #44: ExpressRoute SKU regional compatibility evaluator (Local / Standard / Premium)
+    expect(evaluateErSkuRegionalCompatibility('Local', 'Frankfurt', 'germanywestcentral').allowed).toBe(true)
+    expect(evaluateErSkuRegionalCompatibility('Local', 'Frankfurt', 'westeurope').allowed).toBe(false)
+    expect(evaluateErSkuRegionalCompatibility('Standard', 'Frankfurt', 'westeurope').allowed).toBe(true)
+    expect(evaluateErSkuRegionalCompatibility('Standard', 'Frankfurt', 'eastus').allowed).toBe(false)
+    expect(evaluateErSkuRegionalCompatibility('Premium', 'Frankfurt', 'eastus').allowed).toBe(true)
+
+    // #44 in AzNet engine & diagnostics: ER Local at Frankfurt connected to Hub VNet in westeurope is blocked
+    const erLocalTopo = JSON.parse(JSON.stringify(AZURE_NET_SAMPLES[0].topology)) as AzNetTopology
+    erLocalTopo.erLocations[0].peeringLocation = 'Frankfurt'
+    erLocalTopo.erLocations[0].sku = 'Local'
+    const simErLocal = simulateAzNet(erLocalTopo)
+    const diagErLocal = runAzNetDiagnostics(erLocalTopo, simErLocal)
+    expect(diagErLocal.some((f) => f.category === 'er-sku-regional-mismatch')).toBe(true)
+    // Upgrade to Standard (both Frankfurt and westeurope are in Europe) -> allowed
+    erLocalTopo.erLocations[0].sku = 'Standard'
+    const simErStd = simulateAzNet(erLocalTopo)
+    const diagErStd = runAzNetDiagnostics(erLocalTopo, simErStd)
+    expect(diagErStd.some((f) => f.category === 'er-sku-regional-mismatch')).toBe(false)
+
+    // #45: ExpressRoute Global Reach circuit-to-circuit connectivity between two on-premises sites
+    const grTopo = JSON.parse(JSON.stringify(AZURE_NET_SAMPLES[0].topology)) as AzNetTopology
+    grTopo.erLocations.push({
+      id: 'er-loc-amsterdam',
+      name: 'ER-Amsterdam-Primary',
+      peeringLocation: 'Amsterdam',
+      sku: 'Standard',
+      x: 110,
+      y: 440,
+    })
+    grTopo.sites.push({
+      id: 'site-amsterdam-dc',
+      name: 'Amsterdam Branch DC',
+      asn: 65020,
+      prefixes: ['172.20.0.0/16'],
+      x: 30,
+      y: 440,
+    })
+    grTopo.erLinks.push({
+      id: 'erlink-ams-site',
+      name: 'Amsterdam-to-MSEE',
+      locationId: 'er-loc-amsterdam',
+      targetKind: 'site',
+      targetId: 'site-amsterdam-dc',
+      enabled: true,
+      weight: 0,
+      prepend: [],
+    })
+    grTopo.erGlobalReachLinks = [
+      {
+        id: 'gr-fra-ams',
+        name: 'GlobalReach-FRA-AMS',
+        locationAId: grTopo.erLocations[0].id,
+        locationBId: 'er-loc-amsterdam',
+        enabled: true,
+      },
+    ]
+    expect(validateAzNetTopology(grTopo)).toEqual([])
+    const simGr = simulateAzNet(grTopo)
+    const grTrace = traceAzNetFlow(
+      grTopo,
+      simGr,
+      { kind: 'site', siteId: 'site-munich-hq' },
+      '172.20.1.10',
+    )
+    expect(grTrace.status).toBe('delivered')
+    expect(grTrace.hops.some((h) => h.detail.includes('Global Reach'))).toBe(true)
+
+    // #48: Disabling useRemoteGateways or allowGatewayTransit flags broken spoke-to-onprem connectivity
+    const brokenTransitTopo = JSON.parse(JSON.stringify(AZURE_NET_SAMPLES[0].topology)) as AzNetTopology
+    const hubAppPeering = brokenTransitTopo.vnetPeerings.find((p) => p.id === 'peer-hub-app')!
+    hubAppPeering.bToA.useRemoteGateways = false
+    const simBrokenTransit = simulateAzNet(brokenTransitTopo)
+    const diagBrokenTransit = runAzNetDiagnostics(brokenTransitTopo, simBrokenTransit)
+    expect(diagBrokenTransit.some((f) => f.category === 'spoke-onprem-gateway-transit-disabled')).toBe(true)
+
+    // Empty default topology helper
+    const emptyTopo = createEmptyAzNetTopology()
+    expect(emptyTopo.vnets).toEqual([])
+    expect(emptyTopo.sites).toEqual([])
+    expect(emptyTopo.erLocations).toEqual([])
   })
 })
 

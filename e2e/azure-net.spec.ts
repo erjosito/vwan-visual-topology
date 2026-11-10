@@ -4,7 +4,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   test('renders compound VNet diagram, Subnet Effective Routes, Symmetry Tracer, and Auto-Fix Diagnostics', async ({
     page,
   }) => {
-    await page.goto('/?mode=azure-net')
+    await page.goto('/?mode=azure-net&sample=hub-spoke-firewall-udr')
 
     await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
     await expect(page).toHaveTitle('AzNet Simulator')
@@ -51,7 +51,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   test('supports Unified Mode Switcher (Full / Hub & Spoke-Only / vWAN-Only), URL hash state sharing (#s=...), Internet egress tracing, and Effective Route trace badges', async ({
     page,
   }) => {
-    await page.goto('/?mode=azure-net')
+    await page.goto('/?mode=azure-net&sample=hub-spoke-firewall-udr')
 
     // 1. Mode switcher toggles between Full Hybrid, Hub & Spoke-Only, and Virtual WAN-Only
     await expect(page.getByTestId('simulator-mode-switch')).toBeVisible()
@@ -88,7 +88,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.getByTestId('aznet-share-url-btn').click()
     await expect(page).toHaveURL(/#s=/)
 
-    // 5. Optional diagram node labels in AzNet Configure tab & vWAN mode
+    // 5. Optional diagram node labels in AzNet Configure tab & vWAN mode (#47 scoped to selected node)
+    await page.getByTestId('aznet-vnet-vnet-hub-weu').click()
     await page.getByTestId('aznet-tab-editor').click()
     const hubLabelInput = page.getByTestId('aznet-node-label-input-vnet-hub-weu')
     await expect(hubLabelInput).toBeVisible()
@@ -111,7 +112,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   test('supports issues #35-#42: pinned mode switcher, context menus, peering & Route Table popovers, GWroutes:OFF badge, VNet element controls, and site/ER deletion', async ({
     page,
   }) => {
-    await page.goto('/?mode=hub-spoke')
+    await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
 
     // #35: Mode switcher stays at a fixed position across all 3 modes
     const switchBoxHubSpoke = await page.getByTestId('simulator-mode-switch').boundingBox()
@@ -170,6 +171,46 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.getByTestId('aznet-tab-editor').click()
     await page.getByTestId('aznet-delete-site-site-custom-3').click()
     await expect(page.getByTestId('aznet-site-site-custom-3')).toHaveCount(0)
+  })
+
+  test('supports issues #43-#49 and localStorage persistence: empty default topology, reload persistence, ER Location Info modal, scoped Configure tab, VNet attribute editing, and Subnet CRUD', async ({
+    page,
+  }) => {
+    await page.goto('/?mode=hub-spoke')
+
+    // Default topology is empty when no sample or localStorage is present
+    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toHaveCount(0)
+
+    // Create a VNet and verify it persists across browser reload
+    await page.getByTestId('aznet-add-vnet-btn').click()
+    await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toBeVisible()
+    await page.reload()
+    await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toBeVisible()
+
+    // #43: Open ExpressRoute Peering Locations & Providers catalog modal
+    await page.getByTestId('aznet-open-er-locations-btn').click()
+    await expect(page.getByTestId('er-location-info-modal')).toBeVisible()
+    await page.getByTestId('er-catalog-search').fill('Equinix-Amsterdam')
+    await expect(page.getByTestId('er-location-detail-name')).toContainText('Amsterdam')
+    await expect(page.getByTestId('er-location-local-regions')).toContainText('West Europe')
+    await page.getByTestId('close-er-location-info-modal').click()
+    await expect(page.getByTestId('er-location-info-modal')).toHaveCount(0)
+
+    // #46 & #47: Select vnet-custom-1 and verify scoped Configure tab + VNet region editing
+    await page.getByTestId('aznet-vnet-vnet-custom-1').click()
+    await page.getByTestId('aznet-tab-editor').click()
+    await expect(page.getByTestId('aznet-editor-scope-banner')).toContainText('Spoke-VNet-1')
+    await page.getByTestId('aznet-vnet-region-vnet-custom-1').fill('Sweden Central')
+    await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toContainText('Sweden Central')
+
+    // #49: Subnet CRUD (create, rename, delete)
+    await page.getByTestId('aznet-add-subnet-vnet-custom-1').click()
+    const createdSubnetNameInput = page.getByTestId('aznet-subnet-name-snet-vnet-custom-1-2')
+    await expect(createdSubnetNameInput).toBeVisible()
+    await createdSubnetNameInput.fill('snet-app-tier')
+    await expect(page.getByTestId('aznet-subnet-snet-vnet-custom-1-2')).toContainText('snet-app-tier')
+    await page.getByTestId('aznet-delete-subnet-snet-vnet-custom-1-2').click()
+    await expect(page.getByTestId('aznet-subnet-snet-vnet-custom-1-2')).toHaveCount(0)
   })
 })
 

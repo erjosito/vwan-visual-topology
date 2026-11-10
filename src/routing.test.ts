@@ -330,6 +330,29 @@ describe('ExpressRoute locations and private-peering attachments', () => {
       expect(() => validateTopology(t)).toThrow()
     }
   })
+
+  it('enforces ExpressRoute SKU regional compatibility (#44) and Global Reach branch-to-branch routing (#45)', () => {
+    const t = network()
+    t.erLocations![0].peeringLocation = 'London'
+    t.erLocations![0].sku = 'Local'
+    t.hubs[0].region = 'West Europe' // London ER Local only reaches UK South / UK West
+    const simLocal = simulate(validateTopology(t))
+    expect(simLocal.tables.a.some((d) => d.prefix === '10.20.0.0/16')).toBe(false)
+    const diagLocal = analyzeRouting(validateTopology(t), { version: 1, intents: [], failureAnalysis: false }, { automatic: true })
+    expect(diagLocal.findings.some((f) => f.rule === 'er-sku-region')).toBe(true)
+
+    t.erLocations![0].sku = 'Standard'
+    const simStandard = simulate(validateTopology(t))
+    expect(simStandard.tables.a.some((d) => d.prefix === '10.20.0.0/16')).toBe(true)
+
+    t.erLocations![0].globalReachLocationIds = ['paris']
+    const validatedGr = validateTopology(t)
+    const simGr = simulate(validatedGr)
+    expect(traceNodePath(validatedGr, simGr, { kind: 'site', id: 'er-site-a' }, '10.21.0.1')[0]).toMatchObject({
+      status: 'delivered',
+      siteId: 'er-site-b',
+    })
+  })
 })
 
 describe('site-owned VPN static prefixes', () => {

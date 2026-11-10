@@ -1,8 +1,8 @@
 import type { ObjectSelection, Topology } from './model'
 import { t } from './i18n'
 import type { Simulation } from './routing'
-import { advertiseSiteRoutes, applyRouteMapRules, receiveSiteRoutes, routerMapRules } from './bgp'
-import { simulate } from './routing'
+import { advertiseSiteRoutes, applyRouteMapRules, areErLocationsGlobalReachLinked, receiveSiteRoutes, routerMapRules } from './bgp'
+import { checkErHubLinkCompatibility, simulate } from './routing'
 import type { NodePath, PathNode } from './paths'
 import { azureRoutesAtSites, traceNodePath } from './paths'
 import { cidr, contains, ipv4 } from './validation'
@@ -92,6 +92,7 @@ const messages = {
   'network-unreachable': ['Unreachable network', 'No selected path reaches this network from the other endpoint. This may be intentional isolation; add a flow requirement to declare the expected behavior.'],
   'network-return': ['Missing return route', 'Forward delivery exists, but no selected return path reaches the source network.'],
   'unowned-advertisement': ['Advertised networks have no declared owner', 'These advertisements or VPN static routes cannot be verified end to end because their destination networks are not assigned to a site or VNet. An advertisement alone does not establish ownership.'],
+  'er-sku-region': ['ExpressRoute SKU regional restriction', 'The ExpressRoute peering location SKU (Local or Standard) does not allow connectivity to this Virtual Hub Azure region.'],
 } as const
 const limits = {
   budget: 'Analysis budget reached; some declared cases were not assessed.',
@@ -256,7 +257,10 @@ export function routingRevision(topology: Topology): string {
     return value
   }
   const { azureImport, ...routing } = topology
-  return hash(stable(clean({ ...routing, azureImport: azureImport && { warnings: azureImport.warnings, hubs: azureImport.hubs.map((hub) => ({ hubId: hub.hubId, addressPrefix: hub.addressPrefix, limitations: hub.limitations })) } })))
+  const erHubRegions = topology.erLocations?.some((loc) => loc.peeringLocation || loc.sku)
+    ? topology.hubs.map((h) => [h.id, h.region])
+    : undefined
+  return hash(stable(clean({ ...routing, erHubRegions, azureImport: azureImport && { warnings: azureImport.warnings, hubs: azureImport.hubs.map((hub) => ({ hubId: hub.hubId, addressPrefix: hub.addressPrefix, limitations: hub.limitations })) } })))
 }
 
 const addressText = (address: number) => [24, 16, 8, 0].map((shift) => Math.floor(address / 2 ** shift) % 256).join('.')
@@ -418,11 +422,21 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
     if (length === 0 && matches.some((route) => er(route.connectionId))) reasons.push(limits.erDefault)
     if (paths.every((path) => path.termination === 'no-route')) {
       const reachable = new Set([source.id])
+      const grActiveSiteLinks = (topology.erLinks ?? []).filter((link) => link.enabled && link.siteId && link.learnSiteRoutes)
       for (let size = -1; size !== reachable.size;) {
         size = reachable.size
         for (const link of topology.siteLinks.filter((link) => link.enabled)) {
           if (reachable.has(link.a)) reachable.add(link.b)
           if (reachable.has(link.b)) reachable.add(link.a)
+        }
+        for (const linkA of grActiveSiteLinks) {
+          if (!reachable.has(linkA.siteId!)) continue
+          for (const linkB of grActiveSiteLinks) {
+            if (linkA.id === linkB.id || linkA.siteId === linkB.siteId) continue
+            if (areErLocationsGlobalReachLinked(topology, linkA.locationId, linkB.locationId)) {
+              reachable.add(linkB.siteId!)
+            }
+          }
         }
       }
       for (const c of topology.connections.filter((conn) => conn.enabled && conn.transport === 'SDWAN' && reachable.has(conn.siteId))) {
@@ -698,6 +712,21 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   if (!time()) { exhausted('maxMillis'); return report }
   const base = scenario(topology)
   for (const limitation of base.limitations) limited(limitation)
+  for (const link of topology.erLinks ?? []) {
+    if (!link.enabled || !link.hubId) continue
+    if (!room()) break
+    const compat = checkErHubLinkCompatibility(topology, link)
+    if (!compat.allowed) {
+      add('er-sku-region', 'error', link.id, {
+        related: [
+          { kind: 'erLink', id: link.id },
+          { kind: 'erLocation', id: link.locationId },
+          { kind: 'hub', id: link.hubId },
+        ],
+        evidence: [{ code: 'er-sku-region', nodeId: link.hubId, connectionId: link.id, prefix: compat.reason }],
+      })
+    }
+  }
   const allOwners = [
     ...topology.spokes.map((node) => ({ node: { kind: 'spoke' as const, id: node.id }, prefixes: node.prefixes })),
     ...topology.sites.map((node) => ({ node: { kind: 'site' as const, id: node.id }, prefixes: node.prefixes })),

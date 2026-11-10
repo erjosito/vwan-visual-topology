@@ -32,7 +32,8 @@ function sitePlaneCacheKey(topology: Topology): string {
     sites: topology.sites.map((s) => [s.id, s.asn, s.prefixes, s.vpnStaticRoutes, s.routeMapAssignments]),
     siteLinks: topology.siteLinks,
     connections: topology.connections.map((c) => [c.id, c.enabled, c.siteId, c.spokeId, c.transport]),
-    erLinks: (topology.erLinks ?? []).map((l) => [l.id, l.enabled, l.siteId, l.hubId, l.locationId]),
+    erLocations: (topology.erLocations ?? []).map((l) => [l.id, l.peeringLocation, l.sku, l.globalReachEnabled, l.globalReachLocationIds]),
+    erLinks: (topology.erLinks ?? []).map((l) => [l.id, l.enabled, l.siteId, l.hubId, l.locationId, l.learnSiteRoutes]),
     routeMaps: (topology.routeMaps ?? []).filter((m) => Boolean(m.siteId)),
   })
 }
@@ -171,9 +172,14 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
         const terminalNvaSpokeId = downstreamHit?.nvaSpokeId
         return [{
           hubs: [], siteHops: route.sitePath, siteLinkIds: route.siteLinkIds,
+          ...(route.erLinkIds?.length ? { erLinkIds: route.erLinkIds, sourceErLinkIds: route.erLinkIds } : {}),
           siteId: downstreamVnet?.id ?? terminalSiteId,
           ...(downstreamVnet && terminalNvaSpokeId ? { nvaSpokeId: terminalNvaSpokeId } : {}),
-          steps: [...steps, ...(downstreamVnet ? [`Downstream VNet: ${downstreamVnet.name}.`] : [])],
+          steps: [
+            ...steps,
+            ...(route.erLinkIds?.length ? ['ExpressRoute Global Reach transit via Microsoft Enterprise Edge (AS 12076).'] : []),
+            ...(downstreamVnet ? [`Downstream VNet: ${downstreamVnet.name}.`] : []),
+          ],
           status: 'delivered', termination: 'owner',
           terminalKind: downstreamVnet ? 'spoke' : 'site', lookupPrefix: selected.prefix,
         }]
@@ -182,12 +188,13 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
       const erHub = connection?.kind === 'erLink' ? topology.erLinks?.find((link) => link.id === route.erHubLinkId) : undefined
       const hubId = connection?.hubId ?? erHub?.hubId
       if (!connection || !hubId) return [{ hubs: [], steps: [...steps, 'The Azure attachment is unavailable.'], status: 'unreachable', termination: 'attachment-unavailable', lookupPrefix: selected.prefix }]
+      const combinedSourceErLinkIds = [...(route.erLinkIds ?? []), ...(erHub ? [connection.id, erHub.id] : [])]
       return traceFlow(topology, simulation, hubId, destination).map((path) => {
         const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
         return {
           ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,
           ...(connection.kind === 'connection' && connection.spokeId ? { sourceNvaSpokeId: connection.spokeId } : {}),
-          ...(erHub ? { sourceErLinkIds: [connection.id, erHub.id] } : {}),
+          ...(combinedSourceErLinkIds.length ? { sourceErLinkIds: combinedSourceErLinkIds } : {}),
           status: loop ? 'loop' : path.status,
           termination: loop ? 'loop' : path.termination,
           steps: [...steps, `Enter Azure via ${connection.name}${erHub ? ` → ${topology.erLocations?.find((location) => location.id === erHub.locationId)?.name} → ${erHub.name}` : ''}.`, ...path.steps, ...(loop ? ['The selected Azure route returns to the source-side site path.'] : [])],

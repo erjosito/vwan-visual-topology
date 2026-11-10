@@ -30,7 +30,16 @@ export interface Site {
 }
 
 export interface VpnStaticRoute { id: string; prefix: string; connectionId: string }
-export interface ErLocation { id: string; name: string; label?: string }
+export type ErCircuitSku = 'Local' | 'Standard' | 'Premium'
+export interface ErLocation {
+  id: string
+  name: string
+  label?: string
+  peeringLocation?: string
+  sku?: ErCircuitSku
+  globalReachEnabled?: boolean
+  globalReachLocationIds?: string[]
+}
 export interface ErLink {
   id: string
   name: string

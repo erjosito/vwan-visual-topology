@@ -3,6 +3,8 @@ import { cloneElement, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
+import { ER_PEERING_LOCATIONS_CATALOG, evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
+import type { ErCircuitSku } from './er-locations-catalog'
 import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topology-graph'
 import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
@@ -16,8 +18,8 @@ function Field({ title, children }: { title: string; children: ReactElement<{ 'a
 
 const prefixes = (value: string) => value.trim() === '*' ? [] : value.split(/[,\s]+/).filter(Boolean)
 
-export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting, onAddNva }: {
-  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onAddNva: (spokeId: string) => void
+export function TopologyObjectEditor({ topology, request, onSave, onClose, onRouteMaps, onStaticRouting, onAddNva, onOpenErLocationInfo }: {
+  topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onAddNva: (spokeId: string) => void; onOpenErLocationInfo?: (peeringLocation?: string, sku?: ErCircuitSku, hubRegion?: string, erLocationId?: string) => void
 }) {
   const [error, setError] = useState('')
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
@@ -25,8 +27,11 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const spoke = topology.spokes.find((s) => s.id === request.id)
   const site = topology.sites.find((s) => s.id === request.id)
   const connection = topology.connections.find((c) => c.id === request.id)
+  const erLocation = topology.erLocations?.find((loc) => loc.id === request.id)
   const erLink = topology.erLinks?.find((link) => link.id === request.id)
   const [erEndpoint, setErEndpoint] = useState<'hub' | 'site'>(erLink?.siteId || request.siteId ? 'site' : 'hub')
+  const [selectedErLocationId, setSelectedErLocationId] = useState<string>(erLink?.locationId ?? request.locationId ?? topology.erLocations?.[0]?.id ?? '')
+  const [selectedErHubId, setSelectedErHubId] = useState<string>(erLink?.hubId ?? request.hubId ?? topology.hubs[0]?.id ?? '')
   const existingNvaConn = request.kind === 'site'
     ? (request.id ? spokeNvaConnectionForSite(topology, request.id) : request.spokeId ? spokeNvaConnectionForSpoke(topology, request.spokeId) : undefined)
     : undefined
@@ -162,9 +167,29 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         } else if (request.kind === 'erLocation') {
           next.erLocations ??= []
           const index = next.erLocations.findIndex((location) => location.id === id)
-          const value = { id, name, ...(customLabel ? { label: customLabel } : {}) }
+          const peeringLoc = text('peeringLocation') || undefined
+          const skuVal = (text('sku') || 'Standard') as ErCircuitSku
+          const grEnabled = data.has('globalReachEnabled')
+          const grPeerIds = data.getAll('globalReachLocationIds').map(String).filter((peerId) => peerId && peerId !== id)
+          const value = {
+            id,
+            name,
+            ...(customLabel ? { label: customLabel } : {}),
+            ...(peeringLoc ? { peeringLocation: peeringLoc } : {}),
+            sku: skuVal,
+            ...(grEnabled ? { globalReachEnabled: true } : {}),
+            ...(grPeerIds.length ? { globalReachLocationIds: grPeerIds } : {}),
+          }
           if (index < 0) next.erLocations.push(value)
           else next.erLocations[index] = value
+          for (const other of next.erLocations) {
+            if (other.id === id) continue
+            const existing = new Set(other.globalReachLocationIds ?? [])
+            if (grPeerIds.includes(other.id)) existing.add(id)
+            else existing.delete(id)
+            if (existing.size) other.globalReachLocationIds = [...existing]
+            else delete other.globalReachLocationIds
+          }
         } else if (request.kind === 'erLink') {
           const value = { id, name, locationId: text('location'), enabled: data.has('enabled'),
             ...(erEndpoint === 'hub' ? { hubId: text('endpoint'), ...(data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}) } : { siteId: text('endpoint') }),
@@ -205,11 +230,79 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         {(request.kind === 'hub' || request.kind === 'spoke' || request.kind === 'site' || request.kind === 'erLocation') && (
           <Field title={t("Diagram label (optional)")}><input name="label" maxLength={120} defaultValue={(item as { label?: string } | undefined)?.label ?? ''} placeholder={t("Optional note displayed on diagram node")} /></Field>
         )}
-        {request.kind === 'erLocation' && <p className="muted">{t("An ExpressRoute peering location groups site circuit attachments and their hub connections. Connect sites and hubs after creating it. ER-to-ER transit and Global Reach are not enabled.")}</p>}
+        {request.kind === 'erLocation' && <>
+          <Field title={t("Peering location (Microsoft catalog)")}>
+            <select name="peeringLocation" defaultValue={erLocation?.peeringLocation ?? erLocation?.name ?? ''}>
+              <option value="">{t("Custom / match by name")}</option>
+              {ER_PEERING_LOCATIONS_CATALOG.map((entry) => (
+                <option key={entry.name} value={entry.name}>{entry.name} ({entry.geopoliticalRegion} · {entry.facility})</option>
+              ))}
+            </select>
+          </Field>
+          <Field title={t("ExpressRoute SKU")}>
+            <select name="sku" defaultValue={erLocation?.sku ?? 'Standard'}>
+              <option value="Local">{t("Local (ER Local Azure region only)")}</option>
+              <option value="Standard">{t("Standard (same geopolitical region)")}</option>
+              <option value="Premium">{t("Premium (global connectivity)")}</option>
+            </select>
+          </Field>
+          {onOpenErLocationInfo && (
+            <button type="button" onClick={() => onOpenErLocationInfo(erLocation?.peeringLocation ?? erLocation?.name, erLocation?.sku ?? 'Standard', undefined, erLocation?.id)}>
+              {t("Show ER Location Info")}
+            </button>
+          )}
+          <fieldset>
+            <legend>{t("ExpressRoute Global Reach")}</legend>
+            <label className="checkbox-field">
+              <input type="checkbox" name="globalReachEnabled" defaultChecked={erLocation?.globalReachEnabled ?? false} />
+              {t("Enable Global Reach between circuits at this ER location")}
+            </label>
+            {(topology.erLocations ?? []).filter((other) => other.id !== request.id).length > 0 && (
+              <>
+                <p className="muted">{t("Cross-location Global Reach peers (links on-premises sites across MSEE ASN 12076):")}</p>
+                {(topology.erLocations ?? []).filter((other) => other.id !== request.id).map((other) => {
+                  const checked = Boolean(
+                    (erLocation?.globalReachLocationIds ?? []).includes(other.id) ||
+                    (request.id && (other.globalReachLocationIds ?? []).includes(request.id))
+                  )
+                  return (
+                    <label key={other.id} className="checkbox-field">
+                      <input type="checkbox" name="globalReachLocationIds" value={other.id} defaultChecked={checked} />
+                      {other.name} ({other.sku ?? 'Standard'})
+                    </label>
+                  )
+                })}
+              </>
+            )}
+          </fieldset>
+          <p className="muted">{t("An ExpressRoute peering location groups site circuit attachments and their hub connections. Local/Standard/Premium SKU regional reachability and Global Reach (MSEE ASN 12076) are simulated.")}</p>
+        </>}
         {request.kind === 'erLink' && <>
-          <Field title={t("ER location")}><select name="location" required defaultValue={erLink?.locationId ?? request.locationId ?? topology.erLocations?.[0]?.id}>{topology.erLocations?.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}</select></Field>
+          <Field title={t("ER location")}><select name="location" required value={selectedErLocationId} onChange={(e) => setSelectedErLocationId(e.target.value)}>{topology.erLocations?.map((location) => <option key={location.id} value={location.id}>{location.name} ({location.sku ?? 'Standard'})</option>)}</select></Field>
           <Field title={t("Endpoint type")}><select value={erEndpoint} onChange={(event) => setErEndpoint(event.target.value as 'hub' | 'site')}><option value="hub">{t("Virtual WAN hub")}</option><option value="site">{t("On-premises site")}</option></select></Field>
-          <Field title={erEndpoint === 'hub' ? t("Hub") : t("On-premises site")}><select key={erEndpoint} name="endpoint" required defaultValue={erEndpoint === 'hub' ? erLink?.hubId ?? request.hubId ?? topology.hubs[0]?.id : erLink?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{erEndpoint === 'hub' ? hubOptions : siteOptions}</select></Field>
+          <Field title={erEndpoint === 'hub' ? t("Hub") : t("On-premises site")}>
+            {erEndpoint === 'hub' ? (
+              <select key="hub" name="endpoint" required value={selectedErHubId} onChange={(e) => setSelectedErHubId(e.target.value)}>{hubOptions}</select>
+            ) : (
+              <select key="site" name="endpoint" required defaultValue={erLink?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select>
+            )}
+          </Field>
+          {erEndpoint === 'hub' && (() => {
+            const loc = topology.erLocations?.find((l) => l.id === selectedErLocationId)
+            const targetHub = topology.hubs.find((h) => h.id === selectedErHubId)
+            if (!loc || !targetHub) return null
+            const compat = evaluateErSkuRegionalCompatibility(loc.sku ?? 'Standard', loc.peeringLocation ?? loc.name, targetHub.region)
+            return !compat.allowed ? <p role="alert" className="notice error">{compat.reason}</p> : null
+          })()}
+          {onOpenErLocationInfo && (() => {
+            const loc = topology.erLocations?.find((l) => l.id === selectedErLocationId)
+            const targetHub = erEndpoint === 'hub' ? topology.hubs.find((h) => h.id === selectedErHubId) : undefined
+            return (
+              <button type="button" onClick={() => onOpenErLocationInfo(loc?.peeringLocation ?? loc?.name, loc?.sku ?? 'Standard', targetHub?.region, loc?.id)}>
+                {t("Show ER Location Info")}
+              </button>
+            )
+          })()}
           <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={erLink?.enabled ?? true} />{t("Connection enabled")}</label>
           {erEndpoint === 'site' ? <>
             <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={erLink?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>

@@ -1,8 +1,19 @@
-import type { Connection, Hub, RouteKind, RouteMapDirection, RouterSelection, Topology, Transport } from './model'
+import type { Connection, ErLink, Hub, RouteKind, RouteMapDirection, RouterSelection, Topology, Transport } from './model'
 import { cidr, contains, ipv4 } from './validation'
 import { applyRouteMapRules, connectionMapRules, propagateSites, routerMapRules, siteExports } from './bgp'
 import type { SiteRoute } from './bgp'
 import { downstreamSpokesForNvaSpoke, downstreamVnetForAddress, resolveAttachment } from './topology-graph'
+import { evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
+
+export function checkErHubLinkCompatibility(topology: Topology, hubLink: ErLink) {
+  const hub = hubLink.hubId ? topology.hubs.find((h) => h.id === hubLink.hubId) : undefined
+  const loc = topology.erLocations?.find((l) => l.id === hubLink.locationId)
+  return evaluateErSkuRegionalCompatibility(
+    loc?.sku ?? 'Standard',
+    loc?.peeringLocation ?? loc?.name,
+    hub?.region,
+  )
+}
 
 const RFC1918_PREFIXES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
 
@@ -162,6 +173,7 @@ export function simulate(topology: Topology): Simulation {
       ...(connection.spokeId ? { nvaSpokeId: connection.spokeId } : {}),
     }
   }
+  const warnings: string[] = []
   const erLinks = (topology.erLinks ?? []).filter((link) => link.enabled)
   const erAdvertisements: Record<string, Candidate[]> = {}
   for (const link of erLinks.filter((link) => link.siteId)) {
@@ -173,11 +185,23 @@ export function simulate(topology: Topology): Simulation {
       erLocationId: link.locationId, erSiteLinkId: link.id,
       ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map(candidate) } : {}),
     })
-    const routes = link.learnSiteRoutes ? siteRouting.tables[site.id].filter((route) => !route.key.startsWith(`${link.id}:`)).map(candidate) : []
+    const routes = link.learnSiteRoutes
+      ? siteRouting.tables[site.id]
+          .filter((route) => !route.key.startsWith(`${link.id}:`) && !route.asPath.includes(12076))
+          .map(candidate)
+      : []
     erAdvertisements[link.id] = policy({ kind: 'site', id: site.id }, link.id, 'outbound', routes,
       siteExports(topology, site.id, link.id, routes))
   }
   const erImports = (hubId: string) => erLinks.filter((link) => link.hubId === hubId).flatMap((hubLink) => {
+    const compat = checkErHubLinkCompatibility(topology, hubLink)
+    if (!compat.allowed) {
+      const hub = topology.hubs.find((h) => h.id === hubId)
+      const loc = topology.erLocations?.find((l) => l.id === hubLink.locationId)
+      const msg = `${hub?.name ?? hubId} (${hub?.region ?? ''}) cannot use ExpressRoute location ${loc?.name ?? hubLink.locationId} (${compat.sku} SKU): ${compat.reason}`
+      if (!warnings.includes(msg)) warnings.push(msg)
+      return []
+    }
     const receive = (route: Candidate): Candidate => ({
       ...route, key: `${hubLink.id}:${route.key}`, asPath: [12076, ...route.asPath],
       connectionId: hubLink.id, originHubId: hubId, erHubLinkId: hubLink.id,
@@ -224,7 +248,6 @@ export function simulate(topology: Topology): Simulation {
     value[hub.id].map((d) => [d.prefix, d.selected.map((r) => r.key).sort()]),
   ))
   const seen = new Set([signature(tables)])
-  const warnings: string[] = []
   let converged = topology.hubs.length < 2
   for (let round = 0; round < 64 && !converged; round++) {
     const next = Object.fromEntries(topology.hubs.map((hub) => {
@@ -340,6 +363,11 @@ export function simulate(topology: Topology): Simulation {
     warnings.push('Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515), Default association/propagation and branch-to-branch enabled. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.')
   }
   for (const link of erLinks.filter((link) => link.hubId)) {
+    if (!checkErHubLinkCompatibility(topology, link).allowed) {
+      outbound[link.id] = []
+      erAdvertisements[link.id] = []
+      continue
+    }
     const routes = hubOutboundCandidates(link.hubId!, link.propagateDefaultRoute)
       .filter((route) => branchExportEligible(route) && route.transport !== 'ExpressRoute')
     const mapped = policy({ kind: 'hub', id: link.hubId! }, link.id, 'outbound', routes, [

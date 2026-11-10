@@ -1,7 +1,9 @@
 import { cidr, contains, ipv4 } from '../validation'
+import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import type {
   AzAppliance,
   AzArsPreference,
+  AzErLocation,
   AzNetTopology,
   AzPeeringDirectionFlags,
   AzSubnet,
@@ -9,6 +11,17 @@ import type {
   AzVNet,
   AzVnetPeering,
 } from './model'
+
+export function checkErLocationAzureRegionAccess(
+  loc: AzErLocation,
+  azureRegion: string,
+): ErSkuCompatibilityResult {
+  return evaluateErSkuRegionalCompatibility(
+    loc.sku ?? 'Standard',
+    loc.peeringLocation ?? loc.name,
+    azureRegion,
+  )
+}
 
 export type AzRouteSource = 'System' | 'VirtualNetworkGateway' | 'RouteServer' | 'User'
 
@@ -334,6 +347,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
       sourceName: vnet.name,
     }))
     // Include peered spokes that have allowGatewayTransit (from this hub) + useRemoteGateways (from spoke)
+    // Azure rules: hub must have an enabled Gateway/ARS, and spoke cannot have its own Gateway/ARS.
+    const hubHasGatewayOrArs = vnet.gateways.some((g) => g.enabled) || Boolean(vnet.routeServer?.enabled)
     for (const other of topology.vnets) {
       if (other.id === vnet.id) continue
       const rel = getActivePeeringBetween(topology, vnet.id, other.id)
@@ -344,6 +359,20 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         rel.forwardFlags.allowGatewayTransit &&
         rel.reverseFlags.useRemoteGateways
       ) {
+        const spokeHasLocalGatewayOrArs =
+          other.gateways.some((g) => g.enabled) || Boolean(other.routeServer?.enabled)
+        if (!hubHasGatewayOrArs) {
+          warnings.push(
+            `Peering "${rel.peering.name}": "${vnet.name}" sets allowGatewayTransit=true, but "${vnet.name}" has no enabled Virtual Network Gateway or Route Server.`,
+          )
+          continue
+        }
+        if (spokeHasLocalGatewayOrArs) {
+          warnings.push(
+            `Peering "${rel.peering.name}": "${other.name}" sets useRemoteGateways=true while also hosting its own Virtual Network Gateway or Route Server. Azure blocks useRemoteGateways when a local gateway/ARS exists.`,
+          )
+          continue
+        }
         for (const p of other.prefixes) {
           result.push({ prefix: p, asPath: [65515], sourceName: `${other.name} (via Gateway Transit)` })
         }
@@ -395,6 +424,13 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         const ownerVnet = topology.vnets.find((v) => v.gateways.some((g) => g.id === link.targetId && g.enabled && g.kind === 'ExpressRoute'))
         const gw = ownerVnet?.gateways.find((g) => g.id === link.targetId)
         if (!ownerVnet || !gw) continue
+        const skuCompat = checkErLocationAzureRegionAccess(loc, ownerVnet.region)
+        if (!skuCompat.allowed) {
+          warnings.push(
+            `ExpressRoute circuit "${loc.name}" (${loc.sku ?? 'Standard'} SKU) cannot link to ExpressRoute Gateway "${gw.name}" in "${ownerVnet.name}" (${ownerVnet.region}): ${skuCompat.reason}`,
+          )
+          continue
+        }
         for (const adv of advertisedVnetPrefixes(ownerVnet)) {
           entries.push({
             id: `erloc:${loc.id}:vng:${link.id}:${adv.prefix}`,
@@ -412,6 +448,13 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
       } else if (link.targetKind === 'vwan-hub') {
         const hub = topology.vwanHubs.find((h) => h.id === link.targetId)
         if (!hub) continue
+        const skuCompat = checkErLocationAzureRegionAccess(loc, hub.region)
+        if (!skuCompat.allowed) {
+          warnings.push(
+            `ExpressRoute circuit "${loc.name}" (${loc.sku ?? 'Standard'} SKU) cannot link to Virtual WAN Hub "${hub.name}" (${hub.region}): ${skuCompat.reason}`,
+          )
+          continue
+        }
         const attachedVnets = topology.vnets.filter(
           (v) => v.vwanHubAttachment?.enabled && v.vwanHubAttachment.hubId === hub.id,
         )
@@ -436,6 +479,47 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     erLocationRibs[loc.id] = chooseBgpWinners(entries, 'ASPath')
   }
 
+  // 2b. Propagate On-Premises Site routes across ExpressRoute Global Reach circuit-to-circuit links
+  for (let round = 0; round < 4; round++) {
+    for (const grLink of topology.erGlobalReachLinks ?? []) {
+      if (!grLink.enabled) continue
+      const locA = topology.erLocations.find((l) => l.id === grLink.locationAId)
+      const locB = topology.erLocations.find((l) => l.id === grLink.locationBId)
+      if (!locA || !locB) continue
+      for (const [srcLoc, dstLoc] of [
+        [locA, locB],
+        [locB, locA],
+      ] as const) {
+        const srcSiteRoutes = (erLocationRibs[srcLoc.id] ?? []).filter(
+          (r) =>
+            r.preferred &&
+            (r.nextHopKind === 'site' ||
+              (r.nextHopKind === 'er-location' && !r.id.includes(`:${dstLoc.id}:`))),
+        )
+        for (const sr of srcSiteRoutes) {
+          const id = `erloc-gr:${grLink.id}:${srcLoc.id}->${dstLoc.id}:${sr.prefix}`
+          if (!erLocationRibs[dstLoc.id].some((existing) => existing.id === id)) {
+            erLocationRibs[dstLoc.id].push({
+              id,
+              prefix: sr.prefix,
+              asPath: [12076, ...sr.asPath],
+              nextHopName: `${srcLoc.name} via Global Reach (${grLink.name}) → ${sr.nextHopName}`,
+              nextHopKind: 'er-location',
+              nextHopId: srcLoc.id,
+              originProtocol: 'ExpressRoute',
+              preferred: false,
+              weight: sr.weight ?? 0,
+              explanation: `Learned over ExpressRoute Global Reach link "${grLink.name}" from ${srcLoc.name} (${sr.nextHopName})`,
+            })
+          }
+        }
+      }
+    }
+    for (const loc of topology.erLocations) {
+      erLocationRibs[loc.id] = chooseBgpWinners(erLocationRibs[loc.id], 'ASPath')
+    }
+  }
+
   // 3. Populate Standalone VNet Gateways (ExpressRoute & VPN)
   for (const vnet of topology.vnets) {
     for (const gw of vnet.gateways) {
@@ -451,8 +535,12 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         for (const link of erLinks) {
           const loc = topology.erLocations.find((l) => l.id === link.locationId)
           if (!loc) continue
+          if (!checkErLocationAzureRegionAccess(loc, vnet.region).allowed) continue
           const locRoutes = (erLocationRibs[loc.id] ?? []).filter(
-            (r) => r.preferred && !(r.nextHopKind === 'vnet-gateway' && r.nextHopId === gw.id),
+            (r) =>
+              r.preferred &&
+              !(r.nextHopKind === 'vnet-gateway' && r.nextHopId === gw.id) &&
+              r.nextHopKind !== 'er-location',
           )
           for (const lr of locRoutes) {
             // Standalone ExpressRoute VNet Gateways connected to the same ExpressRoute circuit (MSEE) always
@@ -640,8 +728,12 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     )) {
       const loc = topology.erLocations.find((l) => l.id === link.locationId)
       if (!loc) continue
+      if (!checkErLocationAzureRegionAccess(loc, hub.region).allowed) continue
       for (const lr of (erLocationRibs[loc.id] ?? []).filter(
-        (r) => r.preferred && !(r.nextHopKind === 'vwan-hub' && r.nextHopId === hub.id),
+        (r) =>
+          r.preferred &&
+          !(r.nextHopKind === 'vwan-hub' && r.nextHopId === hub.id) &&
+          r.nextHopKind !== 'er-location',
       )) {
         entries.push({
           id: `vhub:${hub.id}:er:${link.id}:${lr.prefix}:${lr.nextHopId}`,
@@ -688,7 +780,10 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
       const loc = topology.erLocations.find((l) => l.id === link.locationId)
       if (!loc) continue
       for (const lr of (erLocationRibs[loc.id] ?? []).filter(
-        (r) => r.preferred && !(r.nextHopKind === 'site' && r.nextHopId === site.id),
+        (r) =>
+          r.preferred &&
+          !(r.nextHopKind === 'site' && r.nextHopId === site.id) &&
+          (r.nextHopKind !== 'site' || Boolean(loc.globalReachEnabled)),
       )) {
         learnedFromAzure.push({
           id: `site:${site.id}:er:${link.id}:${lr.prefix}`,
@@ -919,17 +1014,22 @@ function compileSingleSubnetEffectiveRoutes(
   collectFromVnetControlPlane(vnet, false)
 
   // Remote Gateways / ARS via VNet Peering (`useRemoteGateways` on this VNet + `allowGatewayTransit` on peer)
-  for (const peerVnet of topology.vnets) {
-    if (peerVnet.id === vnet.id) continue
-    const rel = getActivePeeringBetween(topology, vnet.id, peerVnet.id)
-    if (!rel) continue
-    if (
-      rel.forwardFlags.allowVirtualNetworkAccess &&
-      rel.reverseFlags.allowVirtualNetworkAccess &&
-      rel.forwardFlags.useRemoteGateways &&
-      rel.reverseFlags.allowGatewayTransit
-    ) {
-      collectFromVnetControlPlane(peerVnet, true)
+  // Azure prohibits `useRemoteGateways=true` if this VNet already has a local Gateway or Route Server.
+  const localHasGatewayOrArs =
+    vnet.gateways.some((g) => g.enabled) || Boolean(vnet.routeServer?.enabled)
+  if (!localHasGatewayOrArs) {
+    for (const peerVnet of topology.vnets) {
+      if (peerVnet.id === vnet.id) continue
+      const rel = getActivePeeringBetween(topology, vnet.id, peerVnet.id)
+      if (!rel) continue
+      if (
+        rel.forwardFlags.allowVirtualNetworkAccess &&
+        rel.reverseFlags.allowVirtualNetworkAccess &&
+        rel.forwardFlags.useRemoteGateways &&
+        rel.reverseFlags.allowGatewayTransit
+      ) {
+        collectFromVnetControlPlane(peerVnet, true)
+      }
     }
   }
 
@@ -2597,6 +2697,28 @@ export function traceAzNetFlow(
           l.targetKind === matchingEntry.nextHopKind &&
           l.targetId === matchingEntry.nextHopId,
       )
+
+      if (matchingEntry.nextHopKind === 'er-location') {
+        const remoteLoc = topology.erLocations.find((l) => l.id === matchingEntry.nextHopId)
+        const grLink = (topology.erGlobalReachLinks ?? []).find(
+          (g) =>
+            g.enabled &&
+            ((g.locationAId === loc.id && g.locationBId === matchingEntry.nextHopId) ||
+              (g.locationBId === loc.id && g.locationAId === matchingEntry.nextHopId)),
+        )
+        if (remoteLoc && grLink) {
+          pushHop({
+            nodeKind: 'er-location',
+            nodeId: loc.id,
+            nodeName: loc.name,
+            action: 'er-transit',
+            edgeId: grLink.id,
+            detail: `MSEE ${loc.name} forwards over ExpressRoute Global Reach "${grLink.name}" to ${remoteLoc.name}`,
+          })
+          cursor = { kind: 'er-location', locationId: remoteLoc.id, fromTargetId: loc.id }
+          continue
+        }
+      }
 
       if (matchingEntry.nextHopKind === 'site') {
         pushHop({

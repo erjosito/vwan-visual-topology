@@ -85,7 +85,22 @@ export interface SiteRoute {
   asPath: number[]
   sitePath: string[]
   siteLinkIds?: string[]
+  erLinkIds?: string[]
   forwardingRoutes?: SiteRoute[]
+}
+
+export function areErLocationsGlobalReachLinked(topology: Topology, locAId: string, locBId: string): boolean {
+  if (locAId === locBId) {
+    return Boolean(topology.erLocations?.find((l) => l.id === locAId)?.globalReachEnabled)
+  }
+  const locA = topology.erLocations?.find((l) => l.id === locAId)
+  const locB = topology.erLocations?.find((l) => l.id === locBId)
+  return Boolean(
+    locA && locB && (
+      locA.globalReachLocationIds?.includes(locBId) ||
+      locB.globalReachLocationIds?.includes(locAId)
+    ),
+  )
 }
 
 export interface SiteRouting<T extends SiteRoute = SiteRoute> {
@@ -178,14 +193,45 @@ export function propagateSites<T extends SiteRoute = SiteRoute>(
   const signature = (value: typeof tables) => JSON.stringify(topology.sites.map((s) =>
     value[s.id].map((r) => JSON.stringify(r)).sort(),
   ))
-  let converged = topology.siteLinks.length === 0
+  const erSiteLinks = (topology.erLinks ?? []).filter((l) => l.enabled && Boolean(l.siteId))
+  const hasGlobalReach = erSiteLinks.some((a, index) =>
+    erSiteLinks.slice(index + 1).some((b) => a.siteId !== b.siteId && areErLocationsGlobalReachLinked(topology, a.locationId, b.locationId)),
+  )
+  let converged = topology.siteLinks.length === 0 && !hasGlobalReach
   for (let round = 0; round < 64 && !converged; round++) {
     const nextCandidates = Object.fromEntries(topology.sites.map((receiver) => {
-      const received = topology.siteLinks.filter((l) => l.enabled && (l.a === receiver.id || l.b === receiver.id)).flatMap((link) => {
+      const receivedFromSiteLinks = topology.siteLinks.filter((l) => l.enabled && (l.a === receiver.id || l.b === receiver.id)).flatMap((link) => {
         const senderId = link.a === receiver.id ? link.b : link.a
         return receiveSiteRoutes(topology, receiver, link, tables[senderId])
       })
-      return [receiver.id, [...origins[receiver.id], ...received]]
+      const receivedFromGlobalReach = !hasGlobalReach ? [] : erSiteLinks
+        .filter((l) => l.siteId === receiver.id)
+        .flatMap((receiverErLink) =>
+          erSiteLinks
+            .filter((l) => l.siteId !== receiver.id && areErLocationsGlobalReachLinked(topology, receiverErLink.locationId, l.locationId))
+            .flatMap((senderErLink) => {
+              const senderId = senderErLink.siteId!
+              const sender = topology.sites.find((s) => s.id === senderId)!
+              const transit = (route: T): T => ({
+                ...route,
+                key: `gr:${receiverErLink.id}:${senderErLink.id}:${route.key}`,
+                asPath: route.asPath[0] === sender.asn ? route.asPath : [sender.asn, ...route.asPath],
+                sitePath: [receiver.id, ...route.sitePath],
+                erLinkIds: [receiverErLink.id, senderErLink.id, ...(route.erLinkIds ?? [])],
+                ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map((child) => transit(child as T)) } : {}),
+              })
+              const eligible = tables[senderId]
+                .filter((route) => !route.sitePath.includes(receiver.id) && !route.asPath.includes(receiver.asn) && !route.asPath.includes(12076))
+                .map(transit)
+              const exported = siteExports(topology, senderId, senderErLink.id, eligible).map((route) => ({
+                ...route,
+                asPath: [12076, ...route.asPath],
+              }))
+              return applyRouteMapRules(exported, routerMapRules(topology, { kind: 'site', id: receiver.id }, receiverErLink.id, 'inbound'))
+                .filter((route) => !route.asPath.includes(receiver.asn))
+            }),
+        )
+      return [receiver.id, [...origins[receiver.id], ...receivedFromSiteLinks, ...receivedFromGlobalReach]]
     }))
     const next = Object.fromEntries(topology.sites.map((site) => [site.id, best(nextCandidates[site.id])]))
     converged = signature(next) === signature(tables)

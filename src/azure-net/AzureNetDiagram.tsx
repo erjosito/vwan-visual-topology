@@ -11,6 +11,7 @@ export type AzSelectedEntity =
   | { kind: 'appliance'; vnetId: string; applianceId: string }
   | { kind: 'peering'; peeringId: string }
   | { kind: 'er-link'; linkId: string }
+  | { kind: 'er-global-reach-link'; linkId: string }
   | { kind: 'vpn-connection'; connectionId: string }
   | { kind: 'site-link'; siteLinkId: string }
   | { kind: 'vwan-hub'; hubId: string }
@@ -490,15 +491,20 @@ export function AzureNetDiagram({
           const inForward = forwardEdges.has(link.id)
           const inReverse = reverseEdges.has(link.id)
           const isSelected = selected.kind === 'er-link' && selected.linkId === link.id
+          const hasSkuMismatch =
+            showDiagnosticBadges &&
+            diagnostics.some((d) => d.category === 'er-sku-regional-mismatch' && d.erLinkId === link.id)
           const stroke = !link.enabled
             ? '#94a3b8'
-            : isSelected
-              ? '#2563eb'
-              : inForward
-                ? '#059669'
-                : inReverse
-                  ? '#d97706'
-                  : '#b45309'
+            : hasSkuMismatch
+              ? '#dc2626'
+              : isSelected
+                ? '#2563eb'
+                : inForward
+                  ? '#059669'
+                  : inReverse
+                    ? '#d97706'
+                    : '#b45309'
           return (
             <g
               key={link.id}
@@ -530,15 +536,15 @@ export function AzureNetDiagram({
                 y2={b.cy}
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4.2 : 2.8}
-                strokeDasharray={!link.enabled ? '5 4' : undefined}
+                strokeDasharray={!link.enabled || hasSkuMismatch ? '5 4' : undefined}
               />
               <rect
-                x={midX - 44}
+                x={midX - 48}
                 y={midY - 9}
-                width={88}
+                width={96}
                 height={18}
                 rx={5}
-                fill="#fffbeb"
+                fill={hasSkuMismatch ? '#fef2f2' : '#fffbeb'}
                 stroke={stroke}
                 strokeWidth={1.1}
               />
@@ -548,11 +554,97 @@ export function AzureNetDiagram({
                 textAnchor="middle"
                 fontSize={9}
                 fontWeight={600}
-                fill="#78350f"
+                fill={hasSkuMismatch ? '#991b1b' : '#78350f'}
               >
                 ER{link.weight ? ` · W:${link.weight}` : ''}
                 {link.prepend?.length ? ` · +${link.prepend.length}AS` : ''}
+                {hasSkuMismatch ? ' · ! SKU' : ''}
                 {!link.enabled ? ' · OFF' : ''}
+              </text>
+            </g>
+          )
+        })}
+
+        {/* 3b. ExpressRoute Global Reach Links between ER Locations (#45) */}
+        {(topology.erGlobalReachLinks ?? []).map((grLink) => {
+          const boxA = positions.erLocations[grLink.locationAId]
+          const boxB = positions.erLocations[grLink.locationBId]
+          if (!boxA || !boxB) return null
+          const a = centerOf(boxA)
+          const b = centerOf(boxB)
+          const midX = (a.cx + b.cx) / 2
+          const midY = (a.cy + b.cy) / 2
+          const inForward = forwardEdges.has(grLink.id)
+          const inReverse = reverseEdges.has(grLink.id)
+          const isSelected =
+            selected.kind === 'er-global-reach-link' && selected.linkId === grLink.id
+          const stroke = !grLink.enabled
+            ? '#94a3b8'
+            : isSelected
+              ? '#2563eb'
+              : inForward
+                ? '#059669'
+                : inReverse
+                  ? '#d97706'
+                  : '#0284c7'
+          return (
+            <g
+              key={grLink.id}
+              data-testid={`aznet-ergrlink-${grLink.id}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                const entity: AzSelectedEntity = {
+                  kind: 'er-global-reach-link',
+                  linkId: grLink.id,
+                }
+                onSelect(entity)
+                onOpenEditorForEntity?.(entity)
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const entity: AzSelectedEntity = {
+                  kind: 'er-global-reach-link',
+                  linkId: grLink.id,
+                }
+                onSelect(entity)
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity,
+                })
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <line
+                x1={a.cx}
+                y1={a.cy}
+                x2={b.cx}
+                y2={b.cy}
+                stroke={stroke}
+                strokeWidth={inForward || inReverse || isSelected ? 4 : 2.6}
+                strokeDasharray="6 3"
+              />
+              <rect
+                x={midX - 50}
+                y={midY - 9}
+                width={100}
+                height={18}
+                rx={5}
+                fill="#e0f2fe"
+                stroke={stroke}
+                strokeWidth={1.1}
+              />
+              <text
+                x={midX}
+                y={midY + 3.5}
+                textAnchor="middle"
+                fontSize={8.5}
+                fontWeight={700}
+                fill="#0369a1"
+              >
+                🌐 Global Reach{!grLink.enabled ? ' · OFF' : ''}
               </text>
             </g>
           )
@@ -1359,7 +1451,7 @@ export function AzureNetDiagram({
                 ⚡ {loc.name}
               </text>
               <text x={box.x + 12} y={box.y + 44} fontSize={10} fill="#92400e">
-                MSEE ASN 12076 · Global Reach: {loc.globalReachEnabled ? 'Enabled' : 'Off'}
+                MSEE 12076 · {loc.sku ?? 'Standard'} · GR: {loc.globalReachEnabled ? 'On' : 'Off'}
               </text>
               {loc.label?.trim() ? (
                 <g
@@ -1485,12 +1577,18 @@ export function AzureNetDiagram({
         })}
       </svg>
 
-      {/* Interactive Peering Hover Popover (#38) */}
+      {/* Interactive Peering Hover Popover (#38, #48) */}
       {hoverPopover?.kind === 'peering' && (() => {
         const peering = topology.vnetPeerings.find((p) => p.id === hoverPopover.peeringId)
         if (!peering) return null
         const vnetA = topology.vnets.find((v) => v.id === peering.vnetAId)
         const vnetB = topology.vnets.find((v) => v.id === peering.vnetBId)
+        const vnetAHasGwOrArs = Boolean(
+          vnetA && (vnetA.gateways.some((g) => g.enabled) || vnetA.routeServer?.enabled),
+        )
+        const vnetBHasGwOrArs = Boolean(
+          vnetB && (vnetB.gateways.some((g) => g.enabled) || vnetB.routeServer?.enabled),
+        )
         return (
           <div
             className="aznet-hover-popover"
@@ -1522,18 +1620,32 @@ export function AzureNetDiagram({
                     ['allowGatewayTransit', 'Allow GW Transit'],
                     ['useRemoteGateways', 'Use Remote GW'],
                   ] as const
-                ).map(([flag, label]) => (
-                  <label key={flag} className="aznet-hover-check">
-                    <input
-                      type="checkbox"
-                      checked={peering.aToB[flag]}
-                      onChange={(e) =>
-                        onUpdatePeeringFlag?.(peering.id, 'aToB', flag, e.target.checked)
-                      }
-                    />
-                    {label}
-                  </label>
-                ))}
+                ).map(([flag, label]) => {
+                  const disabledReason =
+                    flag === 'useRemoteGateways' && !peering.aToB.useRemoteGateways && vnetAHasGwOrArs
+                      ? `${vnetA?.name} already has a local Gateway or Route Server`
+                      : flag === 'allowGatewayTransit' && !peering.aToB.allowGatewayTransit && !vnetAHasGwOrArs
+                        ? `${vnetA?.name} has no enabled Gateway or Route Server`
+                        : undefined
+                  return (
+                    <label
+                      key={flag}
+                      className="aznet-hover-check"
+                      title={disabledReason}
+                      style={disabledReason ? { opacity: 0.55 } : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={peering.aToB[flag]}
+                        disabled={Boolean(disabledReason)}
+                        onChange={(e) =>
+                          onUpdatePeeringFlag?.(peering.id, 'aToB', flag, e.target.checked)
+                        }
+                      />
+                      {label}
+                    </label>
+                  )
+                })}
               </div>
               <div className="aznet-hover-popover-col">
                 <div className="aznet-hover-col-title">
@@ -1546,18 +1658,32 @@ export function AzureNetDiagram({
                     ['allowGatewayTransit', 'Allow GW Transit'],
                     ['useRemoteGateways', 'Use Remote GW'],
                   ] as const
-                ).map(([flag, label]) => (
-                  <label key={flag} className="aznet-hover-check">
-                    <input
-                      type="checkbox"
-                      checked={peering.bToA[flag]}
-                      onChange={(e) =>
-                        onUpdatePeeringFlag?.(peering.id, 'bToA', flag, e.target.checked)
-                      }
-                    />
-                    {label}
-                  </label>
-                ))}
+                ).map(([flag, label]) => {
+                  const disabledReason =
+                    flag === 'useRemoteGateways' && !peering.bToA.useRemoteGateways && vnetBHasGwOrArs
+                      ? `${vnetB?.name} already has a local Gateway or Route Server`
+                      : flag === 'allowGatewayTransit' && !peering.bToA.allowGatewayTransit && !vnetBHasGwOrArs
+                        ? `${vnetB?.name} has no enabled Gateway or Route Server`
+                        : undefined
+                  return (
+                    <label
+                      key={flag}
+                      className="aznet-hover-check"
+                      title={disabledReason}
+                      style={disabledReason ? { opacity: 0.55 } : undefined}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={peering.bToA[flag]}
+                        disabled={Boolean(disabledReason)}
+                        onChange={(e) =>
+                          onUpdatePeeringFlag?.(peering.id, 'bToA', flag, e.target.checked)
+                        }
+                      />
+                      {label}
+                    </label>
+                  )
+                })}
               </div>
             </div>
             <div className="aznet-hover-popover-footer">

@@ -1,5 +1,6 @@
 import { cidr, contains, ipv4 } from '../validation'
 import {
+  checkErLocationAzureRegionAccess,
   findApplianceByIp,
   firstUsableIp,
   getActivePeeringBetween,
@@ -19,6 +20,7 @@ export type AzDiagnosticCategory =
   | 'bgp-lpm-bypasses-udr'
   | 'peering-lpm-bypasses-udr'
   | 'expressroute-msee-hairpin'
+  | 'er-sku-regional-mismatch'
   | 'subnet-default-outbound-disabled'
   | 'subnet-internet-bypasses-firewall'
   | 'ars-default-route-self-loop'
@@ -27,6 +29,8 @@ export type AzDiagnosticCategory =
   | 'vnra-peering-access-disabled'
   | 'peering-non-transitive-next-hop'
   | 'remote-gateway-transit-mismatch'
+  | 'peering-use-remote-gateways-conflict'
+  | 'spoke-onprem-gateway-transit-disabled'
   | 'private-endpoint-udr-bypass'
   | 'ars-configuration'
   | 'appliance-ip-forwarding-disabled'
@@ -44,6 +48,8 @@ export interface AzDiagnosticFinding {
   subnetId?: string
   peeringId?: string
   applianceId?: string
+  erLocationId?: string
+  erLinkId?: string
   sampleFlow?: {
     source: AzEndpointRef
     sourceIp: string
@@ -254,6 +260,136 @@ export function runAzNetDiagnostics(
         remediation: `Enable allowGatewayTransit=true on the hub VNet side and useRemoteGateways=true on the spoke VNet side of "${peering.name}".`,
         peeringId: peering.id,
       })
+    }
+
+    // Check Gateway/ARS vs. VNet Peering compatibility rules & spoke-to-onprem connectivity (#48)
+    for (const [sideVnet, peerVnet, sideFlags, peerFlags] of [
+      [vnetA, vnetB, peering.aToB, peering.bToA],
+      [vnetB, vnetA, peering.bToA, peering.aToB],
+    ] as const) {
+      const sideHasGwOrArs =
+        sideVnet.gateways.some((g) => g.enabled) || Boolean(sideVnet.routeServer?.enabled)
+      const peerHasGwOrArs =
+        peerVnet.gateways.some((g) => g.enabled) || Boolean(peerVnet.routeServer?.enabled)
+
+      if (sideFlags.useRemoteGateways && sideHasGwOrArs) {
+        findings.push({
+          id: `peering-urg-conflict:${peering.id}:${sideVnet.id}`,
+          severity: 'error',
+          category: 'peering-use-remote-gateways-conflict',
+          title: `Incompatible useRemoteGateways=true on "${sideVnet.name}" (already has local Gateway/ARS)`,
+          summary: `VNet "${sideVnet.name}" enables useRemoteGateways=true on peering "${peering.name}" while also hosting its own Virtual Network Gateway or Azure Route Server. Azure prohibits enabling useRemoteGateways on a VNet that has a local gateway or Route Server; remote gateway routes are blocked.`,
+          remediation: `Disable useRemoteGateways on "${sideVnet.name}" for peering "${peering.name}" or remove the local Gateway/Route Server from "${sideVnet.name}".`,
+          peeringId: peering.id,
+          vnetId: sideVnet.id,
+        })
+      }
+
+      if (sideFlags.allowGatewayTransit && !sideHasGwOrArs) {
+        findings.push({
+          id: `peering-agt-no-gw:${peering.id}:${sideVnet.id}`,
+          severity: 'warning',
+          category: 'peering-use-remote-gateways-conflict',
+          title: `allowGatewayTransit=true on "${sideVnet.name}" without a Gateway or Route Server`,
+          summary: `VNet "${sideVnet.name}" sets allowGatewayTransit=true on peering "${peering.name}", but "${sideVnet.name}" has no enabled VPN/ExpressRoute Gateway or Azure Route Server to share with "${peerVnet.name}".`,
+          remediation: `Deploy an ExpressRoute/VPN Gateway or Azure Route Server in "${sideVnet.name}", or disable allowGatewayTransit on "${peering.name}".`,
+          peeringId: peering.id,
+          vnetId: sideVnet.id,
+        })
+      }
+
+      // Check if sideVnet is a hub with active BGP S2S VPN / ExpressRoute / ARS connectivity to on-premises,
+      // and peerVnet is a spoke without its own on-prem connectivity, but gateway transit is disabled.
+      const hubHasBgpOnPrem =
+        topology.vpnConnections.some(
+          (c) =>
+            c.enabled &&
+            c.bgpEnabled &&
+            c.targetKind === 'vnet-gateway' &&
+            sideVnet.gateways.some((g) => g.id === c.targetId && g.enabled),
+        ) ||
+        topology.erLinks.some(
+          (l) =>
+            l.enabled &&
+            l.targetKind === 'vnet-gateway' &&
+            sideVnet.gateways.some((g) => g.id === l.targetId && g.enabled),
+        ) ||
+        Boolean(sideVnet.routeServer?.enabled && sideVnet.routeServer.branchToBranchTraffic)
+
+      const spokeHasOwnOnPrem =
+        peerHasGwOrArs || Boolean(peerVnet.vwanHubAttachment?.enabled)
+
+      if (
+        hubHasBgpOnPrem &&
+        !spokeHasOwnOnPrem &&
+        (!sideFlags.allowGatewayTransit || !peerFlags.useRemoteGateways)
+      ) {
+        const firstSite = topology.sites[0]
+        const spokeSubnet = peerVnet.subnets[0]
+        findings.push({
+          id: `spoke-onprem-no-transit:${peering.id}:${peerVnet.id}`,
+          severity: 'warning',
+          category: 'spoke-onprem-gateway-transit-disabled',
+          title: `Spoke "${peerVnet.name}" lacks on-premises BGP/ER connectivity via "${sideVnet.name}"`,
+          summary: `Hub "${sideVnet.name}" has active BGP-based S2S VPN, ExpressRoute, or Route Server connectivity, but peering "${peering.name}" has ${!sideFlags.allowGatewayTransit && !peerFlags.useRemoteGateways ? 'both allowGatewayTransit and useRemoteGateways disabled' : !sideFlags.allowGatewayTransit ? `allowGatewayTransit=false on "${sideVnet.name}"` : `useRemoteGateways=false on "${peerVnet.name}"`}. On-premises sites will not learn "${peerVnet.name}" prefixes (${peerVnet.prefixes.join(', ')}) over BGP/ExpressRoute, and "${peerVnet.name}" will not receive on-premises gateway routes.`,
+          remediation: `Enable allowGatewayTransit=true on "${sideVnet.name}" and useRemoteGateways=true on "${peerVnet.name}" for peering "${peering.name}".`,
+          peeringId: peering.id,
+          vnetId: peerVnet.id,
+          sampleFlow:
+            firstSite && spokeSubnet
+              ? {
+                  source: { kind: 'subnet', vnetId: peerVnet.id, subnetId: spokeSubnet.id },
+                  sourceIp: firstUsableIp(spokeSubnet.prefix),
+                  destination: { kind: 'site', siteId: firstSite.id },
+                  destinationIp: firstUsableIp(firstSite.prefixes[0] ?? '172.16.1.0/24'),
+                }
+              : undefined,
+        })
+      }
+    }
+  }
+
+  // 3b. Check ExpressRoute SKU Regional Compatibility (#44)
+  for (const link of topology.erLinks) {
+    if (!link.enabled) continue
+    const loc = topology.erLocations.find((l) => l.id === link.locationId)
+    if (!loc) continue
+    if (link.targetKind === 'vnet-gateway') {
+      const ownerVnet = topology.vnets.find((v) =>
+        v.gateways.some((g) => g.id === link.targetId && g.enabled && g.kind === 'ExpressRoute'),
+      )
+      const gw = ownerVnet?.gateways.find((g) => g.id === link.targetId)
+      if (!ownerVnet || !gw) continue
+      const compat = checkErLocationAzureRegionAccess(loc, ownerVnet.region)
+      if (!compat.allowed) {
+        findings.push({
+          id: `er-sku-mismatch:${link.id}`,
+          severity: 'error',
+          category: 'er-sku-regional-mismatch',
+          title: `ExpressRoute ${compat.sku} SKU on "${loc.name}" cannot reach ${ownerVnet.name} (${ownerVnet.region})`,
+          summary: `${compat.reason} Link "${link.name}" to gateway "${gw.name}" in VNet "${ownerVnet.name}" (${ownerVnet.region}) cannot exchange BGP routes or forward traffic.`,
+          remediation: `Upgrade ExpressRoute circuit "${loc.name}" SKU from ${compat.sku} to ${compat.sku === 'Local' ? 'Standard (same geopolitical region) or Premium (global)' : 'Premium'}, or move "${ownerVnet.name}" to an eligible Azure region (${(compat.peeringEntry?.localAzureRegions ?? []).join(', ') || compat.peeringGeopoliticalRegion || 'same geopolitical region'}).`,
+          vnetId: ownerVnet.id,
+          erLocationId: loc.id,
+          erLinkId: link.id,
+        })
+      }
+    } else if (link.targetKind === 'vwan-hub') {
+      const hub = topology.vwanHubs.find((h) => h.id === link.targetId)
+      if (!hub) continue
+      const compat = checkErLocationAzureRegionAccess(loc, hub.region)
+      if (!compat.allowed) {
+        findings.push({
+          id: `er-sku-mismatch:${link.id}`,
+          severity: 'error',
+          category: 'er-sku-regional-mismatch',
+          title: `ExpressRoute ${compat.sku} SKU on "${loc.name}" cannot reach Virtual WAN Hub "${hub.name}" (${hub.region})`,
+          summary: `${compat.reason} Link "${link.name}" to Virtual WAN Hub "${hub.name}" (${hub.region}) cannot exchange BGP routes or forward traffic.`,
+          remediation: `Upgrade ExpressRoute circuit "${loc.name}" SKU from ${compat.sku} to ${compat.sku === 'Local' ? 'Standard (same geopolitical region) or Premium (global)' : 'Premium'}.`,
+          erLocationId: loc.id,
+          erLinkId: link.id,
+        })
+      }
     }
   }
 
