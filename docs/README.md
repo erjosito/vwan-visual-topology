@@ -23,12 +23,16 @@
 
 ## 1. Step-by-Step Instructions
 
-1. **Add Topology Objects**: Use the workspace toolbar buttons (`+ Hub`, `+ VNet`, `+ Site`, `+ ER location`) or right-click blank canvas to add Virtual WAN hubs, spoke VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.
-2. **Configure Connections & Routing Policies**: Right-click any node or link on the canvas to open its context menu:
+1. **Choose an Architecture Mode**: Use the **Architecture View** switcher in the top bar to switch between **Full Hybrid Mode** (Hub & Spoke VNets + Virtual WAN + On-Premises), **Hub & Spoke-Only**, and **Virtual WAN-Only** (`?mode=full`, `?mode=hub-spoke`, or `?mode=vwan`).
+2. **Add Topology Objects**: Use the workspace toolbar buttons (`+ Hub`, `+ VNet`, `+ Site`, `+ ER location` in Virtual WAN-Only mode, or the **Configure** tab in Full Hybrid / Hub & Spoke modes) or right-click blank canvas to add Virtual WAN hubs, spoke/hub VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.
+3. **Add Optional Custom Node Labels**: Every node (Hub, Spoke/VNet, ExpressRoute Location, and On-Premises Site) supports an optional `label` text annotation (up to 120 characters) rendered as an amber pill badge directly on the diagram:
+   - In **Virtual WAN-Only** mode, right-click any node → **Edit configuration** and enter **Optional diagram label**.
+   - In **Full Hybrid** and **Hub & Spoke-Only** modes, open the **Configure** tab → **Node Labels & Annotations** (or set the `Label` field when adding a node).
+4. **Configure Connections & Routing Policies**: Right-click any node or link on the canvas to open its context menu:
    - **Virtual Hubs**: Configure the hub routing preference (`ExpressRoute`, `VPN`, or `ASPath`), enable **Secured Virtual Hub** Azure Firewall Routing Intent (Private traffic and/or Internet traffic), inspect the **BGP table** / **Learned routes** / **Advertised routes** / **Firewall routes**, or click **Highlight preferred routes**.
    - **Spoke VNets**: Attach a **BGP NVA**, connect downstream standalone Azure VNets or downstream on-premises sites behind that NVA, or configure spoke connection route maps.
    - **On-Premises Sites**: Connect to hubs via **ExpressRoute**, **VPN** (BGP or Static), or **SD-WAN**; add site-to-site WAN links; or configure site route maps and static routing tables.
-3. **Save, Share, or Load JSON Topologies**: Click **Export JSON** in the top bar to save your topology as a portable `.json` file, or click **Import JSON** to load any saved topology.
+5. **Save, Share, or Load JSON Topologies**: Click **Share Link** (`#s=...` permalink in Full Hybrid / Hub & Spoke modes) or **Export JSON** in the top bar to save your topology as a portable `.json` file, or click **Import JSON** to load any saved topology.
 
 ---
 

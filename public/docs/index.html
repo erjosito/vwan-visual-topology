@@ -438,7 +438,9 @@
           <h2>2. Step-by-Step Instructions</h2>
           <h3>Building or Editing a Topology</h3>
           <ol>
+            <li><strong>Choose an architecture mode</strong>: Use the <strong>Architecture View</strong> switcher in the top bar to switch between <strong>Full Hybrid Mode</strong> (Hub &amp; Spoke VNets + Virtual WAN + On-Premises), <strong>Hub &amp; Spoke-Only</strong>, and <strong>Virtual WAN-Only</strong>.</li>
             <li><strong>Add nodes from the toolbar</strong>: Click <code>+ Hub</code>, <code>+ VNet</code>, <code>+ Site</code>, or <code>+ ER location</code> in the workspace toolbar, or right-click blank canvas.</li>
+            <li><strong>Add optional custom node labels</strong>: Every node (Hub, Spoke/VNet, ExpressRoute Location, and On-Premises Site) supports an optional <code>label</code> text annotation (up to 120 characters) displayed as a pill badge on the diagram. Edit it via right-click → <strong>Edit configuration</strong> → <strong>Optional diagram label</strong> in Virtual WAN-Only mode, or via <strong>Configure → Node Labels &amp; Annotations</strong> in Full Hybrid / Hub &amp; Spoke-Only modes.</li>
             <li><strong>Arrange the canvas</strong>: Drag any node to reposition it, drag blank canvas to pan, or switch between <em>Layered topology</em> and <em>Network constellation</em> views.</li>
             <li><strong>Right-click any node or link for context actions</strong>:
               <ul>
@@ -448,14 +450,16 @@
               </ul>
             </li>
             <li><strong>Clear highlights &amp; warning icons</strong>: Whenever path highlights or diagnostic warning/error icons are shown on the canvas, click <strong>Clear highlights &amp; icons</strong> in the bottom-left corner of the canvas to reset the view.</li>
-            <li><strong>Import or Export JSON</strong>: Use <code>Export JSON</code> in the top bar to save a portable topology file, or <code>Import JSON</code> to load any of the attached sample files below.</li>
+            <li><strong>Share URL or Import/Export JSON</strong>: Use <code>Share Link</code> (<code>#s=...</code> permalink) or <code>Export JSON</code> in the top bar to save a portable topology, or <code>Import JSON</code> to load any of the attached sample files below.</li>
           </ol>
         </div>
         <div data-i18n-lang="ja">
           <h2>2. 基本的な使い方（ステップバイステップ）</h2>
           <h3>トポロジの作成と編集</h3>
           <ol>
+            <li><strong>アーキテクチャ モードの選択</strong>: 上部バーのスイッチャーで <strong>Full Hybrid Mode</strong>、<strong>Hub &amp; Spoke-Only</strong>、<strong>Virtual WAN-Only</strong> を切り替えられます。</li>
             <li><strong>ツールバーからノードを追加</strong>: ワークスペース ツールバーの <code>+ ハブ</code>、<code>+ VNet</code>、<code>+ サイト</code>、<code>+ ER ピアリングの場所</code> をクリックするか、キャンバスの空白部分を右クリックします。</li>
+            <li><strong>ノードへのカスタム テキスト ラベル（任意）の追加</strong>: すべてのノード（ハブ、スポーク/VNet、ExpressRoute ピアリングの場所、オンプレミス サイト）に、図上にピル型バッジとして表示される任意の <code>label</code>（最大 120 文字）を設定できます（Virtual WAN-Only モードの <strong>構成を編集 → 図のラベル（省略可能）</strong>、または Full Hybrid / Hub &amp; Spoke-Only モードの <strong>Configure → Node Labels &amp; Annotations</strong> から編集）。</li>
             <li><strong>キャンバスの配置と表示切替</strong>: ノードをドラッグして位置を調整したり、空白部分をドラッグしてパン移動したり、<em>階層型トポロジ (Layered topology)</em> と <em>ネットワーク配置図 (Network constellation)</em> を切り替えたりできます。</li>
             <li><strong>ノードやリンクを右クリックしてコンテキスト メニューを表示</strong>:
               <ul>
@@ -465,7 +469,7 @@
               </ul>
             </li>
             <li><strong>強調表示と警告アイコンのクリア</strong>: キャンバス上にパス強調表示やルーティング診断の警告アイコンが表示されている場合は、キャンバス左下の <strong>強調表示とアイコンをクリア (Clear highlights &amp; icons)</strong> をクリックすると一括で消去できます。</li>
-            <li><strong>JSON のインポート / エクスポート</strong>: 上部バーの <code>JSON をエクスポート (Export JSON)</code> でトポロジを JSON ファイルとして保存し、<code>JSON をインポート (Import JSON)</code> で保存済みファイルや以下のサンプル JSON を読み込めます。</li>
+            <li><strong>URL 共有および JSON のインポート / エクスポート</strong>: 上部バーの <code>Share Link</code>（<code>#s=...</code> パーマリンク）または <code>JSON をエクスポート (Export JSON)</code> でトポロジを保存し、<code>JSON をインポート (Import JSON)</code> で保存済みファイルや以下のサンプル JSON を読み込めます。</li>
           </ol>
         </div>
       </section>

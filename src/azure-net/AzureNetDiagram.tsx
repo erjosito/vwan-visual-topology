@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import type { AzDiagnosticFinding } from './diagnostics'
 import type { AzFlowTrace } from './engine'
-import type { AzNetTopology, AzVNet } from './model'
+import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
 
 export type AzSelectedEntity =
   | { kind: 'subnet'; vnetId: string; subnetId: string }
@@ -10,20 +10,45 @@ export type AzSelectedEntity =
   | { kind: 'route-server'; vnetId: string; routeServerId: string }
   | { kind: 'appliance'; vnetId: string; applianceId: string }
   | { kind: 'peering'; peeringId: string }
+  | { kind: 'er-link'; linkId: string }
+  | { kind: 'vpn-connection'; connectionId: string }
+  | { kind: 'site-link'; siteLinkId: string }
   | { kind: 'vwan-hub'; hubId: string }
   | { kind: 'er-location'; locationId: string }
   | { kind: 'site'; siteId: string }
+
+export type AzContextMenuTarget =
+  | { kind: 'canvas'; x: number; y: number; svgX: number; svgY: number }
+  | { kind: 'entity'; x: number; y: number; entity: AzSelectedEntity }
 
 interface AzureNetDiagramProps {
   topology: AzNetTopology
   selected: AzSelectedEntity
   onSelect: (entity: AzSelectedEntity) => void
+  onContextMenu?: (target: AzContextMenuTarget) => void
   onMoveNode: (
     nodeKind: 'vnet' | 'vwan-hub' | 'er-location' | 'site',
     nodeId: string,
     x: number,
     y: number,
   ) => void
+  onTogglePeeringEnabled?: (peeringId: string, enabled: boolean) => void
+  onUpdatePeeringFlag?: (
+    peeringId: string,
+    direction: 'aToB' | 'bToA',
+    flag: keyof AzPeeringDirectionFlags,
+    value: boolean,
+  ) => void
+  onUpdateRouteTable?: (
+    routeTableId: string,
+    patch: Partial<Pick<AzUdrTable, 'disableBgpRoutePropagation' | 'disablePeeringRoutePropagation'>>,
+  ) => void
+  onAssociateSubnetRouteTable?: (
+    vnetId: string,
+    subnetId: string,
+    routeTableId: string | undefined,
+  ) => void
+  onOpenEditorForEntity?: (entity: AzSelectedEntity) => void
   forwardTrace?: AzFlowTrace | null
   reverseTrace?: AzFlowTrace | null
   diagnostics: AzDiagnosticFinding[]
@@ -119,16 +144,52 @@ export function AzureNetDiagram({
   topology,
   selected,
   onSelect,
+  onContextMenu,
   onMoveNode,
+  onTogglePeeringEnabled,
+  onUpdatePeeringFlag,
+  onUpdateRouteTable,
+  onAssociateSubnetRouteTable,
+  onOpenEditorForEntity,
   forwardTrace,
   reverseTrace,
   diagnostics,
   showDiagnosticBadges,
   onClearHighlights,
 }: AzureNetDiagramProps) {
+  const shellRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const hoverTimerRef = useRef<number | null>(null)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [hoverPopover, setHoverPopover] = useState<
+    | { kind: 'peering'; peeringId: string; x: number; y: number }
+    | { kind: 'route-table'; vnetId: string; subnetId: string; routeTableId: string; x: number; y: number }
+    | null
+  >(null)
+
+  const clearHoverTimer = () => {
+    if (hoverTimerRef.current !== null) {
+      window.clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+  }
+
+  const scheduleClosePopover = () => {
+    clearHoverTimer()
+    hoverTimerRef.current = window.setTimeout(() => {
+      setHoverPopover(null)
+    }, 180)
+  }
+
+  const getRelativePopoverPosition = (clientX: number, clientY: number) => {
+    const shell = shellRef.current
+    if (!shell) return { x: 24, y: 24 }
+    const rect = shell.getBoundingClientRect()
+    const x = Math.min(Math.max(12, clientX - rect.left + 10), Math.max(12, rect.width - 335))
+    const y = Math.min(Math.max(12, clientY - rect.top + 10), Math.max(12, rect.height - 260))
+    return { x, y }
+  }
   const [dragState, setDragState] = useState<
     | {
         mode: 'node'
@@ -205,13 +266,14 @@ export function AzureNetDiagram({
   const viewH = 790 / zoom
 
   return (
-    <div className="aznet-canvas-shell" data-testid="aznet-canvas-shell">
+    <div ref={shellRef} className="aznet-canvas-shell" data-testid="aznet-canvas-shell">
       <svg
         ref={svgRef}
         className="aznet-diagram-svg"
         data-testid="aznet-diagram-svg"
         viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
         onPointerDown={(e) => {
+          setHoverPopover(null)
           if (e.target === svgRef.current) {
             setDragState({
               mode: 'pan',
@@ -224,6 +286,27 @@ export function AzureNetDiagram({
         }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onContextMenu={(e) => {
+          if (!onContextMenu) return
+          e.preventDefault()
+          const svg = svgRef.current
+          let svgX = 320
+          let svgY = 180
+          if (svg) {
+            const rect = svg.getBoundingClientRect()
+            const scaleX = (1180 / zoom) / Math.max(rect.width, 1)
+            const scaleY = (790 / zoom) / Math.max(rect.height, 1)
+            svgX = Math.round(pan.x + (e.clientX - rect.left) * scaleX)
+            svgY = Math.round(pan.y + (e.clientY - rect.top) * scaleY)
+          }
+          onContextMenu({
+            kind: 'canvas',
+            x: e.clientX,
+            y: e.clientY,
+            svgX,
+            svgY,
+          })
+        }}
       >
         <defs>
           <pattern id="aznet-grid" width="28" height="28" patternUnits="userSpaceOnUse">
@@ -287,9 +370,40 @@ export function AzureNetDiagram({
               key={peering.id}
               className="aznet-edge-group"
               data-testid={`aznet-peering-${peering.id}`}
+              onMouseEnter={(e) => {
+                clearHoverTimer()
+                const pos = getRelativePopoverPosition(e.clientX, e.clientY)
+                setHoverPopover({
+                  kind: 'peering',
+                  peeringId: peering.id,
+                  x: pos.x,
+                  y: pos.y,
+                })
+              }}
+              onMouseLeave={scheduleClosePopover}
               onClick={(e) => {
                 e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'peering', peeringId: peering.id }
+                onSelect(entity)
+                const pos = getRelativePopoverPosition(e.clientX, e.clientY)
+                setHoverPopover({
+                  kind: 'peering',
+                  peeringId: peering.id,
+                  x: pos.x,
+                  y: pos.y,
+                })
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                setHoverPopover(null)
                 onSelect({ kind: 'peering', peeringId: peering.id })
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity: { kind: 'peering', peeringId: peering.id },
+                })
               }}
               style={{ cursor: 'pointer' }}
             >
@@ -354,7 +468,6 @@ export function AzureNetDiagram({
 
         {/* 3. ExpressRoute Links (via MSEE Locations) */}
         {topology.erLinks.map((link) => {
-          if (!link.enabled) return null
           const locBox = positions.erLocations[link.locationId]
           if (!locBox) return null
           let targetBox: BoxPosition | undefined
@@ -371,26 +484,81 @@ export function AzureNetDiagram({
           if (!targetBox) return null
           const a = centerOf(locBox)
           const b = centerOf(targetBox)
+          const midX = (a.cx + b.cx) / 2
+          const midY = (a.cy + b.cy) / 2
           const inForward = forwardEdges.has(link.id)
           const inReverse = reverseEdges.has(link.id)
-          const stroke = inForward ? '#059669' : inReverse ? '#d97706' : '#b45309'
+          const isSelected = selected.kind === 'er-link' && selected.linkId === link.id
+          const stroke = !link.enabled
+            ? '#94a3b8'
+            : isSelected
+              ? '#2563eb'
+              : inForward
+                ? '#059669'
+                : inReverse
+                  ? '#d97706'
+                  : '#b45309'
           return (
-            <g key={link.id}>
+            <g
+              key={link.id}
+              data-testid={`aznet-erlink-${link.id}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'er-link', linkId: link.id }
+                onSelect(entity)
+                onOpenEditorForEntity?.(entity)
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'er-link', linkId: link.id }
+                onSelect(entity)
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity,
+                })
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <line
                 x1={a.cx}
                 y1={a.cy}
                 x2={b.cx}
                 y2={b.cy}
                 stroke={stroke}
-                strokeWidth={inForward || inReverse ? 4.2 : 2.8}
+                strokeWidth={inForward || inReverse || isSelected ? 4.2 : 2.8}
+                strokeDasharray={!link.enabled ? '5 4' : undefined}
               />
+              <rect
+                x={midX - 44}
+                y={midY - 9}
+                width={88}
+                height={18}
+                rx={5}
+                fill="#fffbeb"
+                stroke={stroke}
+                strokeWidth={1.1}
+              />
+              <text
+                x={midX}
+                y={midY + 3.5}
+                textAnchor="middle"
+                fontSize={9}
+                fontWeight={600}
+                fill="#78350f"
+              >
+                ER{link.weight ? ` · W:${link.weight}` : ''}
+                {link.prepend?.length ? ` · +${link.prepend.length}AS` : ''}
+                {!link.enabled ? ' · OFF' : ''}
+              </text>
             </g>
           )
         })}
 
         {/* 4. S2S VPN / SD-WAN Overlay Connections */}
         {topology.vpnConnections.map((conn) => {
-          if (!conn.enabled) return null
           const siteBox = positions.sites[conn.siteId]
           if (!siteBox) return null
           let targetBox: BoxPosition | undefined
@@ -410,45 +578,160 @@ export function AzureNetDiagram({
           if (!targetBox) return null
           const a = centerOf(siteBox)
           const b = centerOf(targetBox)
+          const midX = (a.cx + b.cx) / 2
+          const midY = (a.cy + b.cy) / 2
           const inForward = forwardEdges.has(conn.id)
           const inReverse = reverseEdges.has(conn.id)
-          const stroke = inForward ? '#059669' : inReverse ? '#d97706' : '#7c3aed'
+          const isSelected =
+            selected.kind === 'vpn-connection' && selected.connectionId === conn.id
+          const stroke = !conn.enabled
+            ? '#94a3b8'
+            : isSelected
+              ? '#2563eb'
+              : inForward
+                ? '#059669'
+                : inReverse
+                  ? '#d97706'
+                  : '#7c3aed'
           return (
-            <g key={conn.id}>
+            <g
+              key={conn.id}
+              data-testid={`aznet-vpnconn-${conn.id}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                const entity: AzSelectedEntity = {
+                  kind: 'vpn-connection',
+                  connectionId: conn.id,
+                }
+                onSelect(entity)
+                onOpenEditorForEntity?.(entity)
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const entity: AzSelectedEntity = {
+                  kind: 'vpn-connection',
+                  connectionId: conn.id,
+                }
+                onSelect(entity)
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity,
+                })
+              }}
+              style={{ cursor: 'pointer' }}
+            >
               <line
                 x1={a.cx}
                 y1={a.cy}
                 x2={b.cx}
                 y2={b.cy}
                 stroke={stroke}
-                strokeWidth={inForward || inReverse ? 3.8 : 2.2}
+                strokeWidth={inForward || inReverse || isSelected ? 3.8 : 2.2}
                 strokeDasharray="6 4"
               />
+              <rect
+                x={midX - 42}
+                y={midY - 9}
+                width={84}
+                height={18}
+                rx={5}
+                fill="#f5f3ff"
+                stroke={stroke}
+                strokeWidth={1.1}
+              />
+              <text
+                x={midX}
+                y={midY + 3.5}
+                textAnchor="middle"
+                fontSize={9}
+                fontWeight={600}
+                fill="#5b21b6"
+              >
+                VPN · {conn.bgpEnabled ? 'BGP' : 'Static'}
+                {!conn.enabled ? ' · OFF' : ''}
+              </text>
             </g>
           )
         })}
 
         {/* 5. Site-to-Site Links */}
         {topology.siteLinks.map((sLink) => {
-          if (!sLink.enabled) return null
           const boxA = positions.sites[sLink.siteAId]
           const boxB = positions.sites[sLink.siteBId]
           if (!boxA || !boxB) return null
           const a = centerOf(boxA)
           const b = centerOf(boxB)
+          const midX = (a.cx + b.cx) / 2
+          const midY = (a.cy + b.cy) / 2
           const inForward = forwardEdges.has(sLink.id)
           const inReverse = reverseEdges.has(sLink.id)
+          const isSelected = selected.kind === 'site-link' && selected.siteLinkId === sLink.id
+          const stroke = !sLink.enabled
+            ? '#94a3b8'
+            : isSelected
+              ? '#2563eb'
+              : inForward
+                ? '#059669'
+                : inReverse
+                  ? '#d97706'
+                  : '#64748b'
           return (
-            <line
+            <g
               key={sLink.id}
-              x1={a.cx}
-              y1={a.cy}
-              x2={b.cx}
-              y2={b.cy}
-              stroke={inForward ? '#059669' : inReverse ? '#d97706' : '#64748b'}
-              strokeWidth={inForward || inReverse ? 3.6 : 2}
-              strokeDasharray="4 4"
-            />
+              data-testid={`aznet-sitelink-${sLink.id}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'site-link', siteLinkId: sLink.id }
+                onSelect(entity)
+                onOpenEditorForEntity?.(entity)
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'site-link', siteLinkId: sLink.id }
+                onSelect(entity)
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity,
+                })
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              <line
+                x1={a.cx}
+                y1={a.cy}
+                x2={b.cx}
+                y2={b.cy}
+                stroke={stroke}
+                strokeWidth={inForward || inReverse || isSelected ? 3.6 : 2}
+                strokeDasharray="4 4"
+              />
+              <rect
+                x={midX - 38}
+                y={midY - 9}
+                width={76}
+                height={18}
+                rx={5}
+                fill="#f8fafc"
+                stroke={stroke}
+                strokeWidth={1.1}
+              />
+              <text
+                x={midX}
+                y={midY + 3.5}
+                textAnchor="middle"
+                fontSize={8.5}
+                fontWeight={600}
+                fill="#334155"
+              >
+                WAN Link{!sLink.enabled ? ' · OFF' : ''}
+              </text>
+            </g>
           )
         })}
 
@@ -472,6 +755,7 @@ export function AzureNetDiagram({
               key={vnet.id}
               data-testid={`aznet-vnet-${vnet.id}`}
               onPointerDown={(e) => {
+                if (e.button === 2) return
                 e.stopPropagation()
                 setDragState({
                   mode: 'node',
@@ -486,6 +770,17 @@ export function AzureNetDiagram({
               onClick={(e) => {
                 e.stopPropagation()
                 onSelect({ kind: 'vnet', vnetId: vnet.id })
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                onSelect({ kind: 'vnet', vnetId: vnet.id })
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity: { kind: 'vnet', vnetId: vnet.id },
+                })
               }}
               style={{ cursor: 'grab' }}
             >
@@ -653,6 +948,17 @@ export function AzureNetDiagram({
                             e.stopPropagation()
                             onSelect(chip.entity)
                           }}
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            onSelect(chip.entity)
+                            onContextMenu?.({
+                              kind: 'entity',
+                              x: e.clientX,
+                              y: e.clientY,
+                              entity: chip.entity,
+                            })
+                          }}
                           style={{ cursor: 'pointer' }}
                         >
                           <rect
@@ -717,6 +1023,22 @@ export function AzureNetDiagram({
                       e.stopPropagation()
                       onSelect({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
                     }}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      const entity: AzSelectedEntity = {
+                        kind: 'subnet',
+                        vnetId: vnet.id,
+                        subnetId: subnet.id,
+                      }
+                      onSelect(entity)
+                      onContextMenu?.({
+                        kind: 'entity',
+                        x: e.clientX,
+                        y: e.clientY,
+                        entity,
+                      })
+                    }}
                     style={{ cursor: 'pointer' }}
                   >
                     <rect
@@ -746,44 +1068,93 @@ export function AzureNetDiagram({
                     >
                       {subnet.prefix}
                     </text>
-                    {rt && (
-                      <rect
-                        x={box.x + box.width - (hasPe ? 84 : 54)}
-                        y={rowY + 4}
-                        width={44}
-                        height={16}
-                        rx={4}
-                        fill={
-                          rt.disableBgpRoutePropagation
-                            ? '#fee2e2'
-                            : rt.disablePeeringRoutePropagation
-                              ? '#fef3c7'
-                              : '#e0e7ff'
-                        }
-                      />
-                    )}
-                    {rt && (
-                      <text
-                        x={box.x + box.width - (hasPe ? 62 : 32)}
-                        y={rowY + 15}
-                        textAnchor="middle"
-                        fontSize={8.5}
-                        fontWeight={700}
-                        fill={
-                          rt.disableBgpRoutePropagation
-                            ? '#991b1b'
-                            : rt.disablePeeringRoutePropagation
-                              ? '#92400e'
-                              : '#3730a3'
-                        }
-                      >
-                        {rt.disableBgpRoutePropagation
-                          ? 'BGP:OFF'
-                          : rt.disablePeeringRoutePropagation
-                            ? 'Peer:OFF'
-                            : 'UDR'}
-                      </text>
-                    )}
+                    {rt && (() => {
+                      const rtTags: string[] = [`🗂️ ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}`]
+                      if (rt.disableBgpRoutePropagation) {
+                        rtTags.push('GWroutes:OFF')
+                      }
+                      if (rt.disablePeeringRoutePropagation) {
+                        rtTags.push('Peer:OFF')
+                      }
+                      const badgeText = rtTags.join(' · ')
+                      const badgeW = Math.min(124, Math.max(54, badgeText.length * 4.8 + 10))
+                      const badgeX = box.x + box.width - (hasPe ? 38 + badgeW : 10 + badgeW)
+                      return (
+                        <g
+                          data-testid={`aznet-subnet-rt-badge-${subnet.id}`}
+                          onMouseEnter={(e) => {
+                            clearHoverTimer()
+                            const pos = getRelativePopoverPosition(e.clientX, e.clientY)
+                            setHoverPopover({
+                              kind: 'route-table',
+                              vnetId: vnet.id,
+                              subnetId: subnet.id,
+                              routeTableId: rt.id,
+                              x: pos.x,
+                              y: pos.y,
+                            })
+                          }}
+                          onMouseLeave={scheduleClosePopover}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const entity: AzSelectedEntity = {
+                              kind: 'subnet',
+                              vnetId: vnet.id,
+                              subnetId: subnet.id,
+                            }
+                            onSelect(entity)
+                            const pos = getRelativePopoverPosition(e.clientX, e.clientY)
+                            setHoverPopover({
+                              kind: 'route-table',
+                              vnetId: vnet.id,
+                              subnetId: subnet.id,
+                              routeTableId: rt.id,
+                              x: pos.x,
+                              y: pos.y,
+                            })
+                          }}
+                        >
+                          <rect
+                            x={badgeX}
+                            y={rowY + 4}
+                            width={badgeW}
+                            height={16}
+                            rx={4}
+                            fill={
+                              rt.disableBgpRoutePropagation
+                                ? '#fee2e2'
+                                : rt.disablePeeringRoutePropagation
+                                  ? '#fef3c7'
+                                  : '#e0e7ff'
+                            }
+                            stroke={
+                              rt.disableBgpRoutePropagation
+                                ? '#fca5a5'
+                                : rt.disablePeeringRoutePropagation
+                                  ? '#fcd34d'
+                                  : '#a5b4fc'
+                            }
+                            strokeWidth={0.8}
+                          />
+                          <text
+                            x={badgeX + badgeW / 2}
+                            y={rowY + 15}
+                            textAnchor="middle"
+                            fontSize={8}
+                            fontWeight={700}
+                            fill={
+                              rt.disableBgpRoutePropagation
+                                ? '#991b1b'
+                                : rt.disablePeeringRoutePropagation
+                                  ? '#92400e'
+                                  : '#3730a3'
+                            }
+                          >
+                            {badgeText}
+                          </text>
+                        </g>
+                      )
+                    })()}
                     {hasPe && (
                       <g>
                         <rect
@@ -851,6 +1222,7 @@ export function AzureNetDiagram({
               key={hub.id}
               data-testid={`aznet-vwanhub-${hub.id}`}
               onPointerDown={(e) => {
+                if (e.button === 2) return
                 e.stopPropagation()
                 setDragState({
                   mode: 'node',
@@ -865,6 +1237,18 @@ export function AzureNetDiagram({
               onClick={(e) => {
                 e.stopPropagation()
                 onSelect({ kind: 'vwan-hub', hubId: hub.id })
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'vwan-hub', hubId: hub.id }
+                onSelect(entity)
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity,
+                })
               }}
               style={{ cursor: 'grab' }}
             >
@@ -930,6 +1314,7 @@ export function AzureNetDiagram({
               key={loc.id}
               data-testid={`aznet-erloc-${loc.id}`}
               onPointerDown={(e) => {
+                if (e.button === 2) return
                 e.stopPropagation()
                 setDragState({
                   mode: 'node',
@@ -944,6 +1329,18 @@ export function AzureNetDiagram({
               onClick={(e) => {
                 e.stopPropagation()
                 onSelect({ kind: 'er-location', locationId: loc.id })
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'er-location', locationId: loc.id }
+                onSelect(entity)
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity,
+                })
               }}
               style={{ cursor: 'grab' }}
             >
@@ -1005,6 +1402,7 @@ export function AzureNetDiagram({
               key={site.id}
               data-testid={`aznet-site-${site.id}`}
               onPointerDown={(e) => {
+                if (e.button === 2) return
                 e.stopPropagation()
                 setDragState({
                   mode: 'node',
@@ -1019,6 +1417,18 @@ export function AzureNetDiagram({
               onClick={(e) => {
                 e.stopPropagation()
                 onSelect({ kind: 'site', siteId: site.id })
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                const entity: AzSelectedEntity = { kind: 'site', siteId: site.id }
+                onSelect(entity)
+                onContextMenu?.({
+                  kind: 'entity',
+                  x: e.clientX,
+                  y: e.clientY,
+                  entity,
+                })
               }}
               style={{ cursor: 'grab' }}
             >
@@ -1073,6 +1483,202 @@ export function AzureNetDiagram({
           )
         })}
       </svg>
+
+      {/* Interactive Peering Hover Popover (#38) */}
+      {hoverPopover?.kind === 'peering' && (() => {
+        const peering = topology.vnetPeerings.find((p) => p.id === hoverPopover.peeringId)
+        if (!peering) return null
+        const vnetA = topology.vnets.find((v) => v.id === peering.vnetAId)
+        const vnetB = topology.vnets.find((v) => v.id === peering.vnetBId)
+        return (
+          <div
+            className="aznet-hover-popover"
+            data-testid="aznet-peering-hover-card"
+            style={{ left: hoverPopover.x, top: hoverPopover.y }}
+            onMouseEnter={clearHoverTimer}
+            onMouseLeave={scheduleClosePopover}
+          >
+            <div className="aznet-hover-popover-header">
+              <strong>🔗 {peering.name}</strong>
+              <label className="aznet-hover-toggle">
+                <input
+                  type="checkbox"
+                  checked={peering.enabled}
+                  onChange={(e) => onTogglePeeringEnabled?.(peering.id, e.target.checked)}
+                />
+                Enabled
+              </label>
+            </div>
+            <div className="aznet-hover-popover-grid">
+              <div className="aznet-hover-popover-col">
+                <div className="aznet-hover-col-title">
+                  {vnetA?.name ?? peering.vnetAId} → {vnetB?.name ?? peering.vnetBId}
+                </div>
+                {(
+                  [
+                    ['allowVirtualNetworkAccess', 'VNet Access'],
+                    ['allowForwardedTraffic', 'Forwarded Traffic'],
+                    ['allowGatewayTransit', 'Allow GW Transit'],
+                    ['useRemoteGateways', 'Use Remote GW'],
+                  ] as const
+                ).map(([flag, label]) => (
+                  <label key={flag} className="aznet-hover-check">
+                    <input
+                      type="checkbox"
+                      checked={peering.aToB[flag]}
+                      onChange={(e) =>
+                        onUpdatePeeringFlag?.(peering.id, 'aToB', flag, e.target.checked)
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+              <div className="aznet-hover-popover-col">
+                <div className="aznet-hover-col-title">
+                  {vnetB?.name ?? peering.vnetBId} → {vnetA?.name ?? peering.vnetAId}
+                </div>
+                {(
+                  [
+                    ['allowVirtualNetworkAccess', 'VNet Access'],
+                    ['allowForwardedTraffic', 'Forwarded Traffic'],
+                    ['allowGatewayTransit', 'Allow GW Transit'],
+                    ['useRemoteGateways', 'Use Remote GW'],
+                  ] as const
+                ).map(([flag, label]) => (
+                  <label key={flag} className="aznet-hover-check">
+                    <input
+                      type="checkbox"
+                      checked={peering.bToA[flag]}
+                      onChange={(e) =>
+                        onUpdatePeeringFlag?.(peering.id, 'bToA', flag, e.target.checked)
+                      }
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="aznet-hover-popover-footer">
+              <button
+                type="button"
+                className="aznet-mini-btn"
+                onClick={() => {
+                  const entity: AzSelectedEntity = { kind: 'peering', peeringId: peering.id }
+                  onSelect(entity)
+                  onOpenEditorForEntity?.(entity)
+                  setHoverPopover(null)
+                }}
+              >
+                Configure Peering…
+              </button>
+              <button
+                type="button"
+                className="aznet-mini-btn"
+                onClick={() => setHoverPopover(null)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Interactive Subnet Route Table Hover Popover (#41) */}
+      {hoverPopover?.kind === 'route-table' && (() => {
+        const rt = topology.udrTables.find((t) => t.id === hoverPopover.routeTableId)
+        const vnet = topology.vnets.find((v) => v.id === hoverPopover.vnetId)
+        const subnet = vnet?.subnets.find((s) => s.id === hoverPopover.subnetId)
+        if (!rt || !vnet || !subnet) return null
+        return (
+          <div
+            className="aznet-hover-popover"
+            data-testid="aznet-rt-hover-card"
+            style={{ left: hoverPopover.x, top: hoverPopover.y }}
+            onMouseEnter={clearHoverTimer}
+            onMouseLeave={scheduleClosePopover}
+          >
+            <div className="aznet-hover-popover-header">
+              <strong>🗂️ {rt.name}</strong>
+              <span className="aznet-hover-subtitle">
+                {vnet.name} / {subnet.name}
+              </span>
+            </div>
+            <div className="aznet-hover-checks-stack">
+              <label className="aznet-hover-check">
+                <input
+                  type="checkbox"
+                  checked={!rt.disableBgpRoutePropagation}
+                  onChange={(e) =>
+                    onUpdateRouteTable?.(rt.id, {
+                      disableBgpRoutePropagation: !e.target.checked,
+                    })
+                  }
+                />
+                Propagate Gateway Routes (GWroutes)
+              </label>
+              <label className="aznet-hover-check">
+                <input
+                  type="checkbox"
+                  checked={!rt.disablePeeringRoutePropagation}
+                  onChange={(e) =>
+                    onUpdateRouteTable?.(rt.id, {
+                      disablePeeringRoutePropagation: !e.target.checked,
+                    })
+                  }
+                />
+                Propagate Peering Routes
+              </label>
+            </div>
+            <div className="aznet-hover-routes-list">
+              <div className="aznet-hover-col-title">
+                UDR Routes ({rt.routes.length})
+              </div>
+              {rt.routes.length === 0 ? (
+                <div className="aznet-hover-empty">No static UDR routes configured.</div>
+              ) : (
+                rt.routes.slice(0, 5).map((r) => (
+                  <div key={r.id} className="aznet-hover-route-row">
+                    <code>{r.prefix}</code>
+                    <span>
+                      → {r.nextHopType}
+                      {r.nextHopIp ? ` (${r.nextHopIp})` : ''}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="aznet-hover-popover-footer">
+              <button
+                type="button"
+                className="aznet-mini-btn"
+                onClick={() => {
+                  const entity: AzSelectedEntity = {
+                    kind: 'subnet',
+                    vnetId: vnet.id,
+                    subnetId: subnet.id,
+                  }
+                  onSelect(entity)
+                  onOpenEditorForEntity?.(entity)
+                  setHoverPopover(null)
+                }}
+              >
+                Edit Route Table…
+              </button>
+              <button
+                type="button"
+                className="aznet-mini-btn aznet-danger-btn"
+                onClick={() => {
+                  onAssociateSubnetRouteTable?.(vnet.id, subnet.id, undefined)
+                  setHoverPopover(null)
+                }}
+              >
+                Detach
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Bottom-left Canvas Controls & Clear Highlights */}
       <div className="aznet-canvas-controls">

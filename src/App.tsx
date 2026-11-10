@@ -503,9 +503,20 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const submitPath = (event: FormEvent) => { event.preventDefault(); setGroupTrace(undefined); setHighlighting(false); setTracing(true) }
   const closePanel = () => setPanel(undefined)
 
-  return <div className="app canvas-app" data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
-    <header className="topbar"><div className="brand"><div className="brand-icon" aria-hidden="true">W</div><div><h1>Virtual WAN <span>{t("Topology Lab")}</span></h1><p>{t("Design the network. Understand the path.")}</p></div></div>
-      <div className="actions">{onChangeSimulatorMode && <SimulatorModeSwitch mode={simulatorMode} onChange={onChangeSimulatorMode} variant="vwan" />}<LanguageSelector /><span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+  return <div className="app canvas-app mode-vwan" data-testid="vwan-app" data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
+    <header className="topbar unified-topbar unified-topbar-vwan" data-testid="unified-topbar">
+      <div className="unified-topbar-left">
+        <div className="brand unified-brand">
+          <div className="brand-icon unified-brand-icon" aria-hidden="true">W</div>
+          <div className="unified-brand-text">
+            <h1>Virtual WAN <span>{t("Topology Lab")}</span></h1>
+            <p className="brand-subtitle">{t("Design the network. Understand the path.")}</p>
+          </div>
+          <span className="unified-mode-pill unified-mode-pill-vwan">Virtual WAN Mode</span>
+        </div>
+        {onChangeSimulatorMode && <SimulatorModeSwitch mode={simulatorMode} onChange={onChangeSimulatorMode} variant="vwan" />}
+      </div>
+      <div className="actions unified-topbar-controls"><LanguageSelector /><span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
     <main>
