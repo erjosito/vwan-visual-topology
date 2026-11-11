@@ -6,7 +6,8 @@ import {
   importAzNetCapture,
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
-import { runAzNetDiagnostics } from './diagnostics'
+import { analyzeAzNetConnectivity, runAzNetDiagnostics } from './diagnostics'
+import { getAzNetEndpoints } from './endpoints'
 import {
   lookupSubnetEffectiveRoute,
   simulateAzNet,
@@ -26,6 +27,209 @@ import {
 } from '../er-locations-catalog'
 
 describe('Azure Networking Simulator Engine & Diagnostics', () => {
+  function transitTopology(transport: 'ExpressRoute' | 'Vpn' = 'ExpressRoute'): AzNetTopology {
+    const topology = createEmptyAzNetTopology()
+    topology.vnets = [
+      {
+        id: 'hub', name: 'Hub', role: 'hub', region: 'West Europe', prefixes: ['10.0.0.0/16'],
+        subnets: [{ id: 'gateway', name: 'GatewaySubnet', prefix: '10.0.255.0/27' }],
+        gateways: [{ id: 'gw', name: 'Gateway', kind: transport, asn: 65515, enabled: true, bgpEnabled: true }],
+        appliances: [],
+      },
+      {
+        id: 'spoke', name: 'Spoke', role: 'spoke', region: 'West Europe', prefixes: ['10.1.0.0/16'],
+        subnets: [{ id: 'work', name: 'Workload', prefix: '10.1.1.0/24' }],
+        gateways: [], appliances: [],
+      },
+    ]
+    topology.vnetPeerings = [{
+      id: 'peer', name: 'Hub-Spoke', enabled: true, vnetAId: 'hub', vnetBId: 'spoke',
+      aToB: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: true, useRemoteGateways: false },
+      bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: true },
+    }]
+    topology.sites = [{ id: 'site', name: 'On-prem', asn: 65001, prefixes: ['172.16.0.0/24'] }]
+    if (transport === 'ExpressRoute') {
+      topology.erLocations = [{ id: 'er', name: 'Amsterdam', peeringLocation: 'Amsterdam', sku: 'Standard' }]
+      topology.erLinks = [
+        { id: 'er-gw', name: 'Gateway circuit', locationId: 'er', targetKind: 'vnet-gateway', targetId: 'gw', enabled: true },
+        { id: 'er-site', name: 'Site circuit', locationId: 'er', targetKind: 'site', targetId: 'site', enabled: true },
+      ]
+    } else {
+      topology.vpnConnections = [{ id: 'vpn', name: 'S2S', siteId: 'site', targetKind: 'vnet-gateway', targetId: 'gw', bgpEnabled: true, enabled: true }]
+    }
+    return topology
+  }
+
+  const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
+
+  it.each(['ExpressRoute', 'Vpn'] as const)('analyzes %s transit loss in both directions and clears findings after repair', (transport) => {
+    const topology = transitTopology(transport)
+    const analyze = () => analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair)
+    expect(analyze()).toMatchObject({ checked: 1, total: 1, complete: true, findings: [] })
+    for (const disabled of ['remote', 'transit', 'both']) {
+      topology.vnetPeerings[0].bToA.useRemoteGateways = disabled === 'transit'
+      topology.vnetPeerings[0].aToB.allowGatewayTransit = disabled === 'remote'
+      const finding = analyze().findings[0]
+      expect(finding).toMatchObject({ category: 'connectivity-failure', severity: 'error', peeringId: 'peer' })
+      expect(finding.summary).toContain('Return')
+      expect(finding.summary).toContain('useRemoteGateways / allowGatewayTransit')
+      topology.vnetPeerings[0].bToA.useRemoteGateways = true
+      topology.vnetPeerings[0].aToB.allowGatewayTransit = true
+      expect(analyze().findings).toEqual([])
+    }
+  })
+
+  it('distinguishes intentional suppression from a failed expected flow and honors alternate UDR paths', () => {
+    const topology = JSON.parse(readFileSync(resolve(process.cwd(), 'samples', 'azure-net', 'uc1-hub-spoke-nva-ars-baseline.json'), 'utf8')) as AzNetTopology
+    const table = topology.udrTables.find((t) => t.id === 'rt-spoke1')!
+    table.disableBgpRoutePropagation = true
+    table.routes.push({
+      id: 'branch', name: 'Branch via NVA', prefix: '10.250.0.0/16', nextHopType: 'VirtualAppliance',
+      nextHopIp: '10.100.2.4', enabled: true,
+    })
+    const scope = { scope: 'pair', sourceKey: 'subnet:vnet-spoke1:sub-spoke1-work', destinationKey: 'site:site-branch1:10.250.0.0/16' } as const
+    const simulation = simulateAzNet(topology)
+    expect(simulation.subnetTables['sub-spoke1-work'].suppressedBgpRoutes.length).toBeGreaterThan(0)
+    expect(analyzeAzNetConnectivity(topology, simulation, scope).findings).toEqual([])
+    table.routes = table.routes.filter((r) => r.id !== 'branch')
+    const isolatedSimulation = simulateAzNet(topology)
+    expect(runAzNetDiagnostics(topology, isolatedSimulation)).toContainEqual(expect.objectContaining({
+      category: 'bgp-routes-suppressed', subnetId: 'sub-spoke1-work', severity: 'info',
+    }))
+    expect(analyzeAzNetConnectivity(topology, isolatedSimulation, scope).findings[0]?.category).toBe('connectivity-failure')
+  })
+
+  it('reports a missing ER return advertisement even when a UDR preserves the outbound path', () => {
+    const topology = transitTopology()
+    topology.udrTables = [{
+      id: 'rt', name: 'Explicit next hop', disableBgpRoutePropagation: false,
+      routes: [{ id: 'onprem', name: 'On-prem', prefix: '172.16.0.0/24', nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4', enabled: true }],
+    }]
+    topology.vnets[0].subnets.push({ id: 'nva-sub', name: 'NVA', prefix: '10.0.2.0/24' })
+    topology.vnets[0].appliances.push({
+      id: 'nva', name: 'Router', kind: 'nva-vm', subnetId: 'nva-sub', privateIp: '10.0.2.4',
+      enableIpForwarding: true, staticRoutes: [],
+    })
+    topology.vnets[1].subnets[0].routeTableId = 'rt'
+    topology.vnetPeerings[0].bToA.useRemoteGateways = false
+    const simulation = simulateAzNet(topology)
+    const pair = traceAzNetPair(topology, simulation,
+      { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '10.1.1.4',
+      { kind: 'site', siteId: 'site' }, '172.16.0.4')
+    expect(pair.forward.status).toBe('delivered')
+    expect(pair.reverse.status).not.toBe('delivered')
+    expect(analyzeAzNetConnectivity(topology, simulation, expectedPair).findings[0].summary).toContain('Return')
+  })
+
+  it('does not report lost gateway transit when an alternate local ER path still delivers both ways', () => {
+    const topology = transitTopology()
+    topology.vnetPeerings[0].aToB.allowGatewayTransit = false
+    topology.vnetPeerings[0].bToA.useRemoteGateways = false
+    topology.vnets[1].gateways.push({
+      id: 'spoke-gw', name: 'Alternate gateway', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true,
+    })
+    topology.vnets[1].subnets.push({ id: 'spoke-gateway', name: 'GatewaySubnet', prefix: '10.1.255.0/27' })
+    topology.erLinks.push({
+      id: 'alternate', name: 'Alternate circuit connection', locationId: 'er',
+      targetKind: 'vnet-gateway', targetId: 'spoke-gw', enabled: true,
+    })
+    expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings).toEqual([])
+  })
+
+  it.each(['blackhole', 'unreachable', 'loop'] as const)('reports an actual %s in the expected forwarding path', (failure) => {
+    const topology = transitTopology()
+    topology.udrTables.push({
+      id: 'bad-path', name: 'Broken route', disableBgpRoutePropagation: false,
+      routes: [{
+        id: 'broken', name: 'Broken', prefix: '172.16.0.0/24', enabled: true,
+        nextHopType: failure === 'blackhole' ? 'None' : 'VirtualAppliance',
+        nextHopIp: failure === 'loop' ? '10.0.2.4' : '10.0.99.4',
+      }],
+    })
+    topology.vnets[1].subnets[0].routeTableId = 'bad-path'
+    if (failure === 'loop') {
+      topology.vnets[0].subnets.push({ id: 'nva-sub', name: 'NVA', prefix: '10.0.2.0/24', routeTableId: 'bad-path' })
+      topology.vnets[0].appliances.push({
+        id: 'nva', name: 'Looping router', kind: 'nva-vm', subnetId: 'nva-sub', privateIp: '10.0.2.4',
+        enableIpForwarding: true,
+        staticRoutes: [{ id: 'to-second', prefix: '172.16.0.0/24', nextHopKind: 'appliance', nextHopIp: '10.0.2.5', enabled: true }],
+      }, {
+        id: 'second-nva', name: 'Second router', kind: 'nva-vm', subnetId: 'nva-sub', privateIp: '10.0.2.5',
+        enableIpForwarding: true,
+        staticRoutes: [{ id: 'to-first', prefix: '172.16.0.0/24', nextHopKind: 'appliance', nextHopIp: '10.0.2.4', enabled: true }],
+      })
+    }
+    const simulation = simulateAzNet(topology)
+    const trace = traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '172.16.0.4')
+    expect(trace.status).toBe(failure === 'loop' ? 'loop' : failure === 'blackhole' ? 'dropped-blackhole' : 'dropped-no-route')
+    const finding = analyzeAzNetConnectivity(topology, simulation, expectedPair).findings[0]
+    expect(finding).toMatchObject({ category: 'connectivity-failure', severity: 'error' })
+    expect(finding.summary).toContain(trace.summaryReason)
+  })
+
+  it('still flags invalid GatewaySubnet propagation while leaving informational findings non-actionable', () => {
+    const topology = transitTopology()
+    topology.udrTables.push({ id: 'gateway-table', name: 'Gateway', disableBgpRoutePropagation: true, routes: [] })
+    topology.vnets[0].subnets[0].routeTableId = 'gateway-table'
+    expect(runAzNetDiagnostics(topology, simulateAzNet(topology)))
+      .toContainEqual(expect.objectContaining({ category: 'gateway-subnet-bgp-disabled', severity: 'error' }))
+  })
+
+  it('keeps intentional isolation outside the expected scope and exposes limits and removed endpoints', () => {
+    const topology = transitTopology()
+    topology.vnets.push({
+      id: 'isolated', name: 'Isolated', role: 'spoke', region: 'West Europe', prefixes: ['10.9.0.0/16'],
+      subnets: [{ id: 'isolated-work', name: 'Work', prefix: '10.9.1.0/24' }], gateways: [], appliances: [],
+    })
+    topology.sites[0].prefixes.push('172.17.0.0/24')
+    const simulation = simulateAzNet(topology)
+    expect(analyzeAzNetConnectivity(topology, simulation, expectedPair).findings).toEqual([])
+    const all = analyzeAzNetConnectivity(topology, simulation, { scope: 'all' })
+    expect(all.findings.some((f) => f.vnetId === 'isolated')).toBe(true)
+    expect(all).toMatchObject({ total: 5, checked: 5, complete: true })
+    expect(analyzeAzNetConnectivity(topology, simulation, { scope: 'all' }, 1))
+      .toMatchObject({ total: 5, checked: 1, complete: false })
+    topology.sites[0].prefixes.reverse()
+    expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings).toEqual([])
+    topology.sites[0].prefixes = ['172.17.0.0/24']
+    expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair))
+      .toMatchObject({ total: 1, checked: 0, complete: false })
+    topology.vnets[1].subnets = []
+    expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair))
+      .toMatchObject({ total: 1, checked: 0, complete: false })
+    expect(getAzNetEndpoints(topology).filter((e) => e.group === 'site').map((e) => e.prefix))
+      .toEqual(['172.17.0.0/24'])
+  })
+
+  it('finds stateful asymmetry in the scoped pair without treating harmless path differences as faults', () => {
+    const topology = AZURE_NET_SAMPLES[0].topology
+    const analysis = analyzeAzNetConnectivity(topology, simulateAzNet(topology), {
+      scope: 'pair', sourceKey: 'subnet:vnet-spoke-data:sub-data-db', destinationKey: 'site:site-munich-hq:172.16.10.0/24',
+    })
+    expect(analysis.findings[0]).toMatchObject({ category: 'asymmetric-firewall-bypass', severity: 'warning' })
+    expect(analysis.findings[0].summary).toContain('AzFW-Hub-WEU')
+    const harmless = transitTopology()
+    harmless.vnets[0].gateways.push({
+      id: 'vpn-gw', name: 'VPN return gateway', kind: 'Vpn', asn: 65515, enabled: true, bgpEnabled: true,
+    })
+    harmless.vpnConnections.push({
+      id: 'vpn-return', name: 'VPN return path', siteId: 'site', targetKind: 'vnet-gateway',
+      targetId: 'vpn-gw', bgpEnabled: true, enabled: true, inboundPrepend: [65002, 65002, 65002],
+    })
+    const simulation = simulateAzNet(harmless)
+    // Model an independent on-premises preference for the VPN return route.
+    simulation.siteRibs.site = simulation.siteRibs.site.map((route) => ({
+      ...route, preferred: route.originProtocol === 'VPN' || route.originProtocol === 'VNet',
+    }))
+    const pair = traceAzNetPair(harmless, simulation,
+      { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '10.1.1.4',
+      { kind: 'site', siteId: 'site' }, '172.16.0.4')
+    expect(pair.forward.traversedEdgeIds).toContain('er-gw')
+    expect(pair.reverse.traversedEdgeIds).toContain('vpn-return')
+    expect(pair.symmetricInspection).toBe(true)
+    expect(analyzeAzNetConnectivity(harmless, simulation, expectedPair).findings).toEqual([])
+  })
+
   it('validates all 5 canonical Azure Networking sample topologies and keeps samples/azure-net + public/docs/samples/azure-net in sync', () => {
     const samplesDir = resolve(process.cwd(), 'samples', 'azure-net')
     const publicDir = resolve(process.cwd(), 'public', 'docs', 'samples', 'azure-net')
@@ -115,7 +319,7 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(brokenTrace.status).toBe('dropped-no-route')
 
     const findings = runAzNetDiagnostics(topo, sim)
-    expect(findings.some((f) => f.category === 'bgp-propagation-blackhole')).toBe(true)
+    expect(findings).toContainEqual(expect.objectContaining({ category: 'bgp-routes-suppressed', severity: 'info' }))
   })
 
   it('traces multi-region Managed VNRA 100 Gbps transit and catches allowVirtualNetworkAccess=false in Sample 3', () => {
@@ -217,9 +421,9 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
       '192.168.100.4',
     )
     expect(uc2Pair.symmetricInspection).toBe(false)
-    expect(runAzNetDiagnostics(uc2, sim2).some((f) => f.category === 'gateway-subnet-missing-udr')).toBe(
-      true,
-    )
+    // The sample's site prefix is 10.250.0.0/16, not the NVA advertisement above.
+    // An unrelated firewall UDR is not proof of asymmetric site connectivity.
+    expect(runAzNetDiagnostics(uc2, sim2).some((f) => f.category === 'gateway-subnet-missing-udr')).toBe(false)
 
     // UC3: disableBgpRoutePropagation on rt-spoke2 + allowForwardedTraffic=false on vnet-spoke1
     const uc3 = loaded['uc3-bgp-propagation-and-peering-gates.json']

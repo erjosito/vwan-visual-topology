@@ -63,6 +63,51 @@ async function groupPath(page: Page, object: string, direction: 'to' | 'from', g
   await page.getByRole('menu', { name: `Show path ${direction}`, exact: true }).getByRole('menuitem', { name: group, exact: true }).click()
 }
 
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  test(`ER location catalog matches the light UI with readable text in ${mode}`, async ({ page }) => {
+    await page.goto(`/?mode=${mode}`)
+    await page.getByTestId(mode === 'vwan' ? 'vwan-topbar-er-locations-btn' : 'aznet-open-er-locations-btn').click()
+    const modal = page.getByTestId('er-location-info-modal')
+    const card = modal.locator('.aznet-modal-card')
+    await expect(card).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await expect(card).toHaveCSS('color', await page.locator('html').evaluate((el) => getComputedStyle(el).color))
+    await expect(modal.getByTestId('er-catalog-search')).toHaveCSS('background-color', 'rgb(255, 255, 255)')
+    await modal.getByLabel('Filter by cloud environment').selectOption('Commercial')
+    await modal.getByTestId('er-catalog-search').fill('Equinix-Amsterdam')
+    await modal.locator('[data-testid^="er-catalog-item-"]').first().click()
+    await expect(modal.getByTestId('er-location-detail-name')).toContainText('Amsterdam')
+    await expect(modal.getByTestId('er-location-local-regions')).toContainText('West Europe')
+    await expect(modal.getByTestId('er-location-providers')).not.toBeEmpty()
+
+    const lowContrast = await card.evaluate((root) => {
+      const rgb = (color: string) => color.match(/[\d.]+/g)!.map(Number)
+      const luminance = (channels: number[]) => channels.slice(0, 3).map((value) => {
+        const c = value / 255
+        return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+      }).reduce((sum, value, i) => sum + value * [0.2126, 0.7152, 0.0722][i], 0)
+      return [...root.querySelectorAll<HTMLElement>('*')].filter((el) =>
+        el.tagName !== 'OPTION' && el.checkVisibility() &&
+        [...el.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()),
+      ).flatMap((el) => {
+        let parent: HTMLElement | null = el
+        let background: number[] = [255, 255, 255]
+        while (parent) {
+          const channels = rgb(getComputedStyle(parent).backgroundColor)
+          if (channels.length === 3 || channels[3] === 1) { background = channels; break }
+          parent = parent.parentElement
+        }
+        const foreground = luminance(rgb(getComputedStyle(el).color))
+        const backdrop = luminance(background)
+        const contrast = (Math.max(foreground, backdrop) + 0.05) / (Math.min(foreground, backdrop) + 0.05)
+        return contrast < 4.5 ? [{ text: el.textContent?.trim().slice(0, 80), contrast }] : []
+      })
+    })
+    expect(lowContrast).toEqual([])
+    await modal.getByTestId('close-er-location-info-modal').click()
+    await expect(modal).toHaveCount(0)
+  })
+}
+
 test('tab icon resolves to a browser-decodable SVG rather than the app fallback', async ({ page }) => {
   await page.goto('/')
   const icon = page.locator('link[rel="icon"]')

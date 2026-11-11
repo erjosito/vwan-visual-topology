@@ -10,13 +10,14 @@ import {
   type AzSimulationResult,
 } from './engine'
 import type { AzNetTopology } from './model'
+import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
 
 export type AzDiagnosticSeverity = 'error' | 'warning' | 'info'
 
 export type AzDiagnosticCategory =
   | 'gateway-subnet-missing-udr'
   | 'gateway-subnet-bgp-disabled'
-  | 'bgp-propagation-blackhole'
+  | 'bgp-routes-suppressed'
   | 'bgp-lpm-bypasses-udr'
   | 'peering-lpm-bypasses-udr'
   | 'expressroute-msee-hairpin'
@@ -35,6 +36,7 @@ export type AzDiagnosticCategory =
   | 'ars-configuration'
   | 'appliance-ip-forwarding-disabled'
   | 'asymmetric-firewall-bypass'
+  | 'connectivity-failure'
   | 'scale-limit'
 
 export interface AzDiagnosticFinding {
@@ -56,11 +58,14 @@ export interface AzDiagnosticFinding {
     destination: AzEndpointRef
     destinationIp: string
   }
+  sourceKey?: string
+  destinationKey?: string
 }
 
 export function runAzNetDiagnostics(
   topology: AzNetTopology,
   simulation: AzSimulationResult,
+  options: { includePairAnalysis?: boolean } = {},
 ): AzDiagnosticFinding[] {
   const findings: AzDiagnosticFinding[] = []
 
@@ -91,7 +96,7 @@ export function runAzNetDiagnostics(
       )
       if (hubFirewall) {
         const gwTable = simulation.subnetTables[gwSubnet.id]
-        const missingSpokes: { spokeName: string; prefix: string; spokeVnetId: string; spokeSubnetId: string }[] = []
+        const missingSpokes: { spokeName: string; prefix: string; sampleFlow: NonNullable<AzDiagnosticFinding['sampleFlow']> }[] = []
 
         for (const spoke of topology.vnets) {
           if (spoke.id === vnet.id) continue
@@ -114,19 +119,28 @@ export function runAzNetDiagnostics(
             const testIp = firstUsableIp(prefix)
             const gwRoute = gwTable ? lookupSubnetEffectiveRoute(gwTable, testIp) : undefined
             if (gwRoute && gwRoute.nextHopType === 'VNetPeering') {
-              missingSpokes.push({
-                spokeName: spoke.name,
-                prefix,
-                spokeVnetId: spoke.id,
-                spokeSubnetId: spokeWorkloadSubnet.id,
-              })
+              const source: AzEndpointRef = { kind: 'subnet', vnetId: spoke.id, subnetId: spokeWorkloadSubnet.id }
+              for (const site of topology.sites) {
+                const sitePrefix = site.prefixes[0]
+                if (!sitePrefix) continue
+                const destination: AzEndpointRef = { kind: 'site', siteId: site.id }
+                const sourceIp = firstUsableIp(spokeWorkloadSubnet.prefix)
+                const destinationIp = firstUsableIp(sitePrefix)
+                const pair = traceAzNetPair(topology, simulation, source, sourceIp, destination, destinationIp)
+                if (pair.forward.status === 'delivered' && pair.reverse.status === 'delivered' &&
+                  pair.forward.traversedApplianceIds.includes(hubFirewall.id) &&
+                  !pair.reverse.traversedApplianceIds.includes(hubFirewall.id)) {
+                  missingSpokes.push({ spokeName: spoke.name, prefix,
+                    sampleFlow: { source, sourceIp, destination, destinationIp } })
+                  break
+                }
+              }
             }
           }
         }
 
         if (missingSpokes.length > 0) {
           const first = missingSpokes[0]
-          const firstSite = topology.sites[0]
           findings.push({
             id: `gw-missing-udr:${vnet.id}`,
             severity: 'error',
@@ -137,21 +151,14 @@ export function runAzNetDiagnostics(
             vnetId: vnet.id,
             subnetId: gwSubnet.id,
             applianceId: hubFirewall.id,
-            sampleFlow: firstSite
-              ? {
-                  source: { kind: 'subnet', vnetId: first.spokeVnetId, subnetId: first.spokeSubnetId },
-                  sourceIp: firstUsableIp(first.prefix),
-                  destination: { kind: 'site', siteId: firstSite.id },
-                  destinationIp: firstUsableIp(firstSite.prefixes[0] ?? '172.16.1.0/24'),
-                }
-              : undefined,
+            sampleFlow: first.sampleFlow,
           })
         }
       }
     }
   }
 
-  // 2. Check BGP Propagation Blackhole on Subnets
+  // Suppression is configuration information, not evidence of failed required connectivity.
   for (const vnet of topology.vnets) {
     for (const subnet of vnet.subnets) {
       if (subnet.name === 'GatewaySubnet') continue
@@ -170,24 +177,15 @@ export function runAzNetDiagnostics(
       }
 
       if (uncoveredPrefixes.length > 0) {
-        const firstSite = topology.sites[0]
         findings.push({
-          id: `bgp-blackhole:${subnet.id}`,
-          severity: 'error',
-          category: 'bgp-propagation-blackhole',
-          title: `BGP Route Propagation disabled without covering UDR on ${vnet.name}/${subnet.name}`,
-          summary: `Route table "${table.udrTableName}" sets disableBgpRoutePropagation=true, suppressing ${table.suppressedBgpRoutes.length} BGP route(s) (${uncoveredPrefixes.slice(0, 4).join(', ')}) without a replacement UDR. Traffic to those private prefixes falls back to System 0.0.0.0/0 → Internet and fails.`,
-          remediation: `Either re-enable BGP route propagation on "${table.udrTableName}" or add an explicit UDR (e.g., 0.0.0.0/0 or ${uncoveredPrefixes[0]} → VirtualAppliance) to steer traffic through your NVA/Firewall.`,
+          id: `bgp-suppressed:${subnet.id}`,
+          severity: 'info',
+          category: 'bgp-routes-suppressed',
+          title: `Gateway routes suppressed on ${vnet.name}/${subnet.name}`,
+          summary: `Route table "${table.udrTableName}" suppresses BGP routes by configuration. Prefixes ${uncoveredPrefixes.slice(0, 4).join(', ')} have no active private next hop. This can be intentional isolation; suppression alone is not a fault.`,
+          remediation: `Analyze the expected endpoint pairs to verify connectivity. If access is required, enable propagation or configure a valid replacement route.`,
           vnetId: vnet.id,
           subnetId: subnet.id,
-          sampleFlow: firstSite
-            ? {
-                source: { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id },
-                sourceIp: firstUsableIp(subnet.prefix),
-                destination: { kind: 'site', siteId: firstSite.id },
-                destinationIp: firstUsableIp(uncoveredPrefixes[0]),
-              }
-            : undefined,
         })
       }
     }
@@ -231,7 +229,7 @@ export function runAzNetDiagnostics(
           Boolean(hubVnet.routeServer?.enabled)
         findings.push({
           id: `peering-fwd:${peering.id}:${spokeVnet.id}`,
-          severity: maskedByArsGatewayTransit ? 'warning' : 'error',
+          severity: maskedByArsGatewayTransit ? 'info' : 'error',
           category: 'peering-forwarded-traffic-blocked',
           title: maskedByArsGatewayTransit
             ? `allowForwardedTraffic=false on "${spokeVnet.name}" (currently masked by ARS + useRemoteGateways=true)`
@@ -328,11 +326,11 @@ export function runAzNetDiagnostics(
         const spokeSubnet = peerVnet.subnets[0]
         findings.push({
           id: `spoke-onprem-no-transit:${peering.id}:${peerVnet.id}`,
-          severity: 'warning',
+          severity: 'info',
           category: 'spoke-onprem-gateway-transit-disabled',
-          title: `Spoke "${peerVnet.name}" lacks on-premises BGP/ER connectivity via "${sideVnet.name}"`,
-          summary: `Hub "${sideVnet.name}" has active BGP-based S2S VPN, ExpressRoute, or Route Server connectivity, but peering "${peering.name}" has ${!sideFlags.allowGatewayTransit && !peerFlags.useRemoteGateways ? 'both allowGatewayTransit and useRemoteGateways disabled' : !sideFlags.allowGatewayTransit ? `allowGatewayTransit=false on "${sideVnet.name}"` : `useRemoteGateways=false on "${peerVnet.name}"`}. On-premises sites will not learn "${peerVnet.name}" prefixes (${peerVnet.prefixes.join(', ')}) over BGP/ExpressRoute, and "${peerVnet.name}" will not receive on-premises gateway routes.`,
-          remediation: `Enable allowGatewayTransit=true on "${sideVnet.name}" and useRemoteGateways=true on "${peerVnet.name}" for peering "${peering.name}".`,
+          title: `Gateway routes are not shared with "${peerVnet.name}" via "${sideVnet.name}"`,
+          summary: `Peering "${peering.name}" has ${!sideFlags.allowGatewayTransit && !peerFlags.useRemoteGateways ? 'both allowGatewayTransit and useRemoteGateways disabled' : !sideFlags.allowGatewayTransit ? `allowGatewayTransit=false on "${sideVnet.name}"` : `useRemoteGateways=false on "${peerVnet.name}"`}. This disables gateway route exchange on this peering, but alternate paths or intentional isolation may make this valid.`,
+          remediation: `Analyze expected spoke/on-premises connectivity before changing these flags. If this peering must provide gateway transit, enable allowGatewayTransit on the hub and useRemoteGateways on the spoke.`,
           peeringId: peering.id,
           vnetId: peerVnet.id,
           sampleFlow:
@@ -495,7 +493,7 @@ export function runAzNetDiagnostics(
       if (!ars.branchToBranchTraffic && vnet.gateways.some((g) => g.enabled)) {
         findings.push({
           id: `ars-b2b-off:${ars.id}`,
-          severity: 'warning',
+          severity: 'info',
           category: 'ars-configuration',
           title: `Azure Route Server "${ars.name}" has Branch-to-Branch disabled alongside a VNet Gateway`,
           summary: `"${vnet.name}" hosts both Azure Route Server "${ars.name}" and Virtual Network Gateway(s) (${vnet.gateways.map((g) => g.name).join(', ')}), but branchToBranchTraffic=false. ARS will not exchange routes between BGP NVAs and ExpressRoute/VPN gateways.`,
@@ -634,7 +632,7 @@ export function runAzNetDiagnostics(
             )
             findings.push({
               id: `bgp-lpm-bypass:${sub.id}:${udr.id}`,
-              severity: 'warning',
+              severity: 'info',
               category: 'bgp-lpm-bypasses-udr',
               title: `More-specific BGP route ${firstBypass.prefix} bypasses summary Firewall UDR ${udr.prefix} in ${vnet.name}/${sub.name}`,
               summary: `Route table "${rt.name}" defines summary UDR ${udr.prefix} → ${udr.nextHopIp}, but disableBgpRoutePropagation=false allows learned BGP route ${firstBypass.prefix} (${firstBypass.nextHopType}) to win by Longest Prefix Match, bypassing the firewall/NVA.`,
@@ -655,36 +653,6 @@ export function runAzNetDiagnostics(
           }
         }
       }
-    }
-  }
-
-  // 7. Check Pairwise Stateful Symmetry across Workload Subnets for any subtle bypass not already caught
-  const workloadEndpoints: { ref: AzEndpointRef; ip: string; vnetId: string }[] = []
-  for (const vnet of topology.vnets) {
-    const gwSub = vnet.subnets.find((s) => s.name === 'GatewaySubnet')
-    const applianceSubnetIds = new Set(vnet.appliances.map((a) => a.subnetId))
-    for (const sub of vnet.subnets) {
-      const isGwProxy = Boolean(
-        gwSub &&
-          sub.id !== gwSub.id &&
-          sub.routeTableId &&
-          sub.routeTableId === gwSub.routeTableId,
-      )
-      if (
-        sub.name === 'GatewaySubnet' ||
-        sub.name === 'AzureFirewallSubnet' ||
-        sub.name === 'RouteServerSubnet' ||
-        sub.name === 'VirtualNetworkApplianceSubnet' ||
-        applianceSubnetIds.has(sub.id) ||
-        isGwProxy
-      ) {
-        continue
-      }
-      workloadEndpoints.push({
-        ref: { kind: 'subnet', vnetId: vnet.id, subnetId: sub.id },
-        ip: firstUsableIp(sub.prefix),
-        vnetId: vnet.id,
-      })
     }
   }
 
@@ -744,7 +712,7 @@ export function runAzNetDiagnostics(
           )
           findings.push({
             id: `diag:peering-lpm-bypass:${vnet.id}:${subnet.id}:${peerRoute.prefix}`,
-            severity: 'warning',
+            severity: 'info',
             category: 'peering-lpm-bypasses-udr',
             title: `Direct VNet Peering route ${peerRoute.prefix} in ${vnet.name}/${subnet.name} bypasses summary UDR ${bypassedUdr.prefix}`,
             summary: `Subnet ${vnet.name}/${subnet.name} has a summary UDR ${bypassedUdr.prefix} → VirtualAppliance (${bypassedUdr.nextHopIp ?? 'NVA'}), but also has an active direct VNetPeering system route for ${peerRoute.prefix} (${peerRoute.nextHopName ?? 'Peered VNet'}). Longest Prefix Match (LPM) causes traffic to ${peerRoute.prefix} to take the direct VNet peering and bypass the NVA/Firewall.`,
@@ -795,7 +763,7 @@ export function runAzNetDiagnostics(
         if (matchedRouteA && matchedRouteA.nextHopType === 'VirtualNetworkGateway') {
           findings.push({
             id: `diag:er-msee-hairpin:${loc.id}:${vnetA.id}:${vnetB.id}`,
-            severity: 'warning',
+            severity: 'info',
             category: 'expressroute-msee-hairpin',
             title: `ExpressRoute MSEE Hairpin between ${vnetA.name} and ${vnetB.name} via ${loc.name}`,
             summary: `VNets ${vnetA.name} and ${vnetB.name} are both linked to ExpressRoute location ${loc.name} without direct VNet Peering. Traffic from ${vnetA.name}/${subA.name} to ${vnetB.name}/${subB.name} (${destIpB}) matches BGP route ${matchedRouteA.prefix} → VirtualNetworkGateway and hairpins through the physical ExpressRoute MSEE routers at ${loc.name}, adding latency and consuming ExpressRoute gateway bandwidth.`,
@@ -834,7 +802,7 @@ export function runAzNetDiagnostics(
       if (subnet.defaultOutboundAccess === false && internetRoute?.nextHopType === 'Internet') {
         findings.push({
           id: `diag:no-outbound-access:${vnet.id}:${subnet.id}`,
-          severity: 'warning',
+          severity: 'info',
           category: 'subnet-default-outbound-disabled',
           title: `Private Subnet ${vnet.name}/${subnet.name} (defaultOutboundAccess=false) has no explicit Internet egress path`,
           summary: `Subnet ${vnet.name}/${subnet.name} has defaultOutboundAccess=false (Azure's secure-by-default setting retiring implicit outbound SNAT IPs), and its effective route for 0.0.0.0/0 still resolves to System → Internet without a NAT Gateway, Public IP, or 0.0.0.0/0 → VirtualAppliance UDR. Outbound Internet flows will be dropped.`,
@@ -877,76 +845,118 @@ export function runAzNetDiagnostics(
     }
   }
 
-  const alreadyHasGwBypass = new Set(
-    findings.filter((f) => f.category === 'gateway-subnet-missing-udr').map((f) => f.vnetId),
-  )
-
-  for (let i = 0; i < workloadEndpoints.length; i++) {
-    for (let j = i + 1; j < workloadEndpoints.length; j++) {
-      const a = workloadEndpoints[i]
-      const b = workloadEndpoints[j]
-      if (a.vnetId === b.vnetId) continue
-      const pair = traceAzNetPair(topology, simulation, a.ref, a.ip, b.ref, b.ip)
-      if (
-        pair.forward.status === 'delivered' &&
-        pair.reverse.status === 'delivered' &&
-        !pair.symmetricInspection
-      ) {
-        const key = `asym:${a.vnetId}:${b.vnetId}`
-        if (!findings.some((f) => f.id === key) && !alreadyHasGwBypass.has(a.vnetId) && !alreadyHasGwBypass.has(b.vnetId)) {
-          findings.push({
-            id: key,
-            severity: 'warning',
-            category: 'asymmetric-firewall-bypass',
-            title: `Asymmetric stateful inspection between ${a.ip} and ${b.ip}`,
-            summary: `Forward and reverse paths between ${a.ip} and ${b.ip} do not traverse the same stateful appliance(s): ${pair.asymmetricBypassApplianceNames.join(', ')}. Stateful firewalls will drop return packets without matching session state.`,
-            remediation: `Ensure both directions of the UDR tables steer traffic symmetrically through the same stateful firewall/NVA.`,
-            vnetId: a.vnetId,
-            sampleFlow: {
-              source: a.ref,
-              sourceIp: a.ip,
-              destination: b.ref,
-              destinationIp: b.ip,
-            },
-          })
-        }
-      }
-    }
-
-    // Also check workload endpoint <-> on-prem site pairs for asymmetric stateful inspection
-    for (const site of topology.sites) {
-      for (const sitePrefix of site.prefixes) {
-        const siteIp = firstUsableIp(sitePrefix)
-        const siteRef: AzEndpointRef = { kind: 'site', siteId: site.id }
-        const a = workloadEndpoints[i]
-        const pair = traceAzNetPair(topology, simulation, a.ref, a.ip, siteRef, siteIp)
-        if (
-          pair.forward.status === 'delivered' &&
-          pair.reverse.status === 'delivered' &&
-          !pair.symmetricInspection
-        ) {
-          const key = `asym-site:${a.vnetId}:${site.id}`
-          if (!findings.some((f) => f.id === key) && alreadyHasGwBypass.size === 0) {
-            findings.push({
-              id: key,
-              severity: 'warning',
-              category: 'asymmetric-firewall-bypass',
-              title: `Asymmetric stateful inspection between ${a.ip} and ${site.name} (${siteIp})`,
-              summary: `Forward and reverse paths between ${a.ip} and ${site.name} (${siteIp}) do not traverse the same stateful appliance(s): ${pair.asymmetricBypassApplianceNames.join(', ')}. Return traffic will be dropped by stateful inspection.`,
-              remediation: `Ensure both outbound spoke UDRs and inbound GatewaySubnet UDRs steer traffic symmetrically through the same firewall/NVA.`,
-              vnetId: a.vnetId,
-              sampleFlow: {
-                source: a.ref,
-                sourceIp: a.ip,
-                destination: siteRef,
-                destinationIp: siteIp,
-              },
-            })
-          }
-        }
-      }
+  if (options.includePairAnalysis !== false) {
+    const analysis = analyzeAzNetConnectivity(topology, simulation, { scope: 'all' })
+    findings.push(...analysis.findings.filter((f) =>
+      f.category === 'asymmetric-firewall-bypass' &&
+      !findings.some((existing) => existing.category === 'gateway-subnet-missing-udr' &&
+        existing.sampleFlow?.source.kind === 'subnet' &&
+        f.sampleFlow?.source.kind === 'subnet' &&
+        existing.sampleFlow.source.vnetId === f.sampleFlow.source.vnetId),
+    ))
+    if (!analysis.complete) {
+      findings.push({
+        id: 'pair-analysis-limit',
+        severity: 'info',
+        category: 'scale-limit',
+        title: 'Stateful symmetry analysis is incomplete',
+        summary: `Checked ${analysis.checked} of ${analysis.total} representative pairs.`,
+        remediation: 'Use selected-pair analysis to inspect the remaining expected flows.',
+      })
     }
   }
 
   return findings
+}
+
+export type AzConnectivityScope =
+  | { scope: 'all' | 'onprem' }
+  | { scope: 'pair'; sourceKey: string; destinationKey: string }
+
+export const AZ_NET_PAIR_LIMIT = 200
+
+export function analyzeAzNetConnectivity(
+  topology: AzNetTopology,
+  simulation: AzSimulationResult,
+  scope: AzConnectivityScope,
+  limit = AZ_NET_PAIR_LIMIT,
+): { findings: AzDiagnosticFinding[]; checked: number; total: number; complete: boolean } {
+  const endpoints = getAzNetEndpoints(topology)
+  const workloads = endpoints.filter((e) => e.group === 'workload')
+  const sites = endpoints.filter((e) => e.group === 'site')
+  const findings: AzDiagnosticFinding[] = []
+  let total = 0
+  let checked = 0
+  const budget = Math.min(AZ_NET_PAIR_LIMIT, Math.max(0, Math.floor(limit)))
+
+  const check = (a: AzEndpointOption, b: AzEndpointOption) => {
+    if (checked >= budget) return
+    checked++
+    const pair = traceAzNetPair(topology, simulation, a.ref, a.defaultIp, b.ref, b.defaultIp)
+    const failed = pair.forward.status !== 'delivered' || pair.reverse.status !== 'delivered'
+    if (!failed && pair.symmetricInspection) return
+    const vnetId = a.ref.kind === 'subnet' ? a.ref.vnetId : b.ref.kind === 'subnet' ? b.ref.vnetId : undefined
+    const siteIp = a.group === 'site' ? ipv4(a.defaultIp) : b.group === 'site' ? ipv4(b.defaultIp) : undefined
+    const transitCandidates = siteIp === undefined ? [] : topology.vnetPeerings.filter((p) => {
+      if (!p.enabled || (p.vnetAId !== vnetId && p.vnetBId !== vnetId)) return false
+      const local = p.vnetAId === vnetId ? p.aToB : p.bToA
+      const remote = p.vnetAId === vnetId ? p.bToA : p.aToB
+      if (local.useRemoteGateways && remote.allowGatewayTransit) return false
+      const hub = topology.vnets.find((v) => v.id === (p.vnetAId === vnetId ? p.vnetBId : p.vnetAId))
+      const routes = hub?.gateways.filter((g) => g.enabled).flatMap((g) => simulation.gatewayRibs[g.id] ?? []) ?? []
+      if (hub?.routeServer?.enabled) routes.push(...simulation.routeServerRibs[hub.routeServer.id] ?? [])
+      return routes.some((r) => r.preferred && cidr(r.prefix) && contains(r.prefix, siteIp))
+    })
+    const transit = transitCandidates.length === 1 ? transitCandidates[0] : undefined
+    const failures = [
+      pair.forward.status !== 'delivered' ? `Forward (${a.defaultIp} → ${b.defaultIp}): ${pair.forward.summaryReason}` : '',
+      pair.reverse.status !== 'delivered' ? `Return (${b.defaultIp} → ${a.defaultIp}): ${pair.reverse.summaryReason}` : '',
+    ].filter(Boolean)
+    findings.push({
+      id: `flow:${a.key}:${b.key}`,
+      severity: failed ? 'error' : 'warning',
+      category: failed ? 'connectivity-failure' : 'asymmetric-firewall-bypass',
+      title: `${failed ? 'Connectivity failure' : 'Asymmetric stateful inspection'}: ${a.label} ↔ ${b.label}`,
+      summary: failed
+        ? failures.join(' ') + (transit && (a.group === 'site' || b.group === 'site')
+          ? ` Peering "${transit.name}" does not exchange gateway routes (useRemoteGateways / allowGatewayTransit); check both spoke route learning and on-premises return-prefix advertisements.`
+          : '')
+        : `Both directions deliver packets but only one traverses ${pair.asymmetricBypassApplianceNames.join(', ')}. Stateful inspection can drop return traffic.`,
+      remediation: failed
+        ? 'Open Trace Flow to inspect the failed hop and matched route in each direction. Restore the required routes, gateway transit/advertisements, peering access, or appliance forwarding; verify any alternate path in both directions.'
+        : 'Steer both directions through the same stateful inspection appliances.',
+      vnetId,
+      subnetId: a.ref.kind === 'subnet' ? a.ref.subnetId : b.ref.kind === 'subnet' ? b.ref.subnetId : undefined,
+      peeringId: failed && (a.group === 'site' || b.group === 'site') ? transit?.id : undefined,
+      sourceKey: a.key,
+      destinationKey: b.key,
+      sampleFlow: { source: a.ref, sourceIp: a.defaultIp, destination: b.ref, destinationIp: b.defaultIp },
+    })
+  }
+
+  if (scope.scope === 'pair') {
+    const a = endpoints.find((e) => e.key === scope.sourceKey)
+    const b = endpoints.find((e) => e.key === scope.destinationKey)
+    if (!a || !b || azEndpointKey(a.ref) === azEndpointKey(b.ref) || a.group === 'internet' || b.group === 'internet') {
+      return { findings, checked: 0, total: 1, complete: false }
+    }
+    total = 1
+    check(a, b)
+  } else {
+    total = workloads.length * sites.length +
+      (scope.scope === 'all' ? workloads.length * (workloads.length - 1) / 2 : 0)
+    for (let i = 0; i < workloads.length; i++) {
+      if (checked >= budget) break
+      if (scope.scope === 'all') {
+        for (let j = i + 1; j < workloads.length && checked < budget; j++) {
+          check(workloads[i], workloads[j])
+        }
+      }
+      for (const site of sites) {
+        if (checked >= budget) break
+        check(workloads[i], site)
+      }
+    }
+  }
+  return { findings, checked, total, complete: checked === total }
 }

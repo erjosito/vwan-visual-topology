@@ -104,7 +104,7 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(6, 11, 23, 0.76)',
+        background: '#142b4b66',
         backdropFilter: 'blur(4px)',
         zIndex: 9999,
         display: 'flex',
@@ -119,11 +119,11 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
         style={{
           width: 'min(1120px, 96vw)',
           maxHeight: '88vh',
-          background: '#0f172a',
-          color: '#f8fafc',
-          border: '1px solid #334155',
+          background: '#fff',
+          color: '#23344b',
+          border: '1px solid #b5c9e6',
           borderRadius: '12px',
-          boxShadow: '0 24px 60px rgba(0, 0, 0, 0.6)',
+          boxShadow: '0 16px 55px #18345629',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -136,15 +136,15 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '0.9rem 1.25rem',
-            borderBottom: '1px solid #1e293b',
-            background: '#111c33',
+            borderBottom: '1px solid #e1e9f3',
+            background: '#f6f9ff',
           }}
         >
           <div>
-            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: '#f8fafc' }}>
+            <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700 }}>
               ExpressRoute Peering Locations &amp; Providers Catalog
             </h3>
-            <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: '#94a3b8' }}>
+            <p style={{ margin: '0.2rem 0 0', fontSize: '0.78rem', color: '#5b6d84' }}>
               Official Microsoft Learn reference ({ER_PEERING_LOCATIONS_CATALOG.length} peering locations across Commercial, Metro, US Gov &amp; China)
             </p>
           </div>
@@ -153,9 +153,6 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
             onClick={onClose}
             data-testid="close-er-location-info-modal"
             style={{
-              background: '#1e293b',
-              color: '#e2e8f0',
-              border: '1px solid #334155',
               borderRadius: '6px',
               padding: '0.35rem 0.7rem',
               cursor: 'pointer',
@@ -175,8 +172,8 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
             gap: '0.6rem',
             alignItems: 'center',
             padding: '0.7rem 1.25rem',
-            borderBottom: '1px solid #1e293b',
-            background: '#0b1324',
+            borderBottom: '1px solid #e1e9f3',
+            background: '#f6f9ff',
           }}
         >
           <input
@@ -187,9 +184,6 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
             data-testid="er-catalog-search"
             style={{
               flex: '1 1 280px',
-              background: '#1e293b',
-              color: '#f8fafc',
-              border: '1px solid #334155',
               borderRadius: '6px',
               padding: '0.4rem 0.65rem',
               fontSize: '0.82rem',
@@ -200,9 +194,6 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
             onChange={(e) => setGeoFilter(e.target.value)}
             aria-label="Filter by geopolitical region"
             style={{
-              background: '#1e293b',
-              color: '#f8fafc',
-              border: '1px solid #334155',
               borderRadius: '6px',
               padding: '0.4rem 0.6rem',
               fontSize: '0.8rem',
@@ -220,9 +211,6 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
             onChange={(e) => setEnvFilter(e.target.value)}
             aria-label="Filter by cloud environment"
             style={{
-              background: '#1e293b',
-              color: '#f8fafc',
-              border: '1px solid #334155',
               borderRadius: '6px',
               padding: '0.4rem 0.6rem',
               fontSize: '0.8rem',
@@ -233,11 +221,11 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
             <option value="US Government">US Government</option>
             <option value="China">China</option>
           </select>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#cbd5e1', cursor: 'pointer' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', cursor: 'pointer' }}>
             <input type="checkbox" checked={erDirectOnly} onChange={(e) => setErDirectOnly(e.target.checked)} />
             ER Direct (✓)
           </label>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#cbd5e1', cursor: 'pointer' }}>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', cursor: 'pointer' }}>
             <input type="checkbox" checked={erLocalOnly} onChange={(e) => setErLocalOnly(e.target.checked)} />
             ER Local Supported
           </label>
@@ -256,13 +244,13 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
           {/* Left Location List */}
           <div
             style={{
-              borderRight: '1px solid #1e293b',
+              borderRight: '1px solid #e1e9f3',
               overflowY: 'auto',
               padding: '0.5rem',
-              background: '#09101f',
+              background: '#f3f6fa',
             }}
           >
-            <div style={{ fontSize: '0.72rem', color: '#64748b', padding: '0.25rem 0.5rem 0.45rem', fontWeight: 600 }}>
+            <div style={{ fontSize: '0.72rem', color: '#5b6d84', padding: '0.25rem 0.5rem 0.45rem', fontWeight: 600 }}>
               SHOWING {filteredEntries.length} OF {ER_PEERING_LOCATIONS_CATALOG.length} LOCATIONS
             </div>
             {filteredEntries.map((item) => {
@@ -276,9 +264,9 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
                   style={{
                     width: '100%',
                     textAlign: 'left',
-                    background: active ? '#1e3a8a' : 'transparent',
-                    color: active ? '#ffffff' : '#e2e8f0',
-                    border: active ? '1px solid #3b82f6' : '1px solid transparent',
+                    background: active ? '#eaf2ff' : 'transparent',
+                    color: active ? '#215fae' : '#344760',
+                    border: active ? '1px solid #b5c9e6' : '1px solid transparent',
                     borderRadius: '7px',
                     padding: '0.5rem 0.65rem',
                     marginBottom: '0.25rem',
@@ -295,14 +283,14 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
                         fontSize: '0.68rem',
                         padding: '0.1rem 0.38rem',
                         borderRadius: '4px',
-                        background: item.isMetro ? '#7c3aed' : '#1e293b',
-                        color: '#e2e8f0',
+                        background: item.isMetro ? '#f3ecff' : '#e7eef5',
+                        color: item.isMetro ? '#6940a5' : '#344760',
                       }}
                     >
                       {item.isMetro ? 'Metro' : item.zone}
                     </span>
                   </div>
-                  <div style={{ fontSize: '0.74rem', color: active ? '#bfdbfe' : '#94a3b8' }}>
+                  <div style={{ fontSize: '0.74rem', color: active ? '#215fae' : '#5b6d84' }}>
                     {item.facility} • {item.geopoliticalRegion}
                   </div>
                 </button>
@@ -316,34 +304,34 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem', flexWrap: 'wrap' }}>
-                    <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: '#f8fafc' }} data-testid="er-location-detail-name">
+                    <h4 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800 }} data-testid="er-location-detail-name">
                       {selectedEntry.name}
                     </h4>
-                    <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: '#1e293b', color: '#38bdf8', fontWeight: 700 }}>
+                    <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: '#eaf2ff', color: '#215fae', fontWeight: 700 }}>
                       {selectedEntry.geopoliticalRegion}
                     </span>
-                    <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: '#1e293b', color: '#cbd5e1', fontWeight: 600 }}>
+                    <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: '#e7eef5', color: '#344760', fontWeight: 600 }}>
                       Billing {selectedEntry.zone}
                     </span>
                     {selectedEntry.erDirectSupported && (
-                      <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: 'rgba(16, 185, 129, 0.18)', color: '#34d399', fontWeight: 700 }}>
+                      <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: '#e9f7f0', color: '#176943', fontWeight: 700 }}>
                         ✓ ExpressRoute Direct (10G / 100G)
                       </span>
                     )}
                     {selectedEntry.isMetro && (
-                      <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: 'rgba(139, 92, 246, 0.22)', color: '#c4b5fd', fontWeight: 700 }}>
+                      <span style={{ fontSize: '0.74rem', padding: '0.18rem 0.5rem', borderRadius: '999px', background: '#f3ecff', color: '#6940a5', fontWeight: 700 }}>
                         ExpressRoute Metro (Dual-Edge)
                       </span>
                     )}
                   </div>
-                  <div style={{ marginTop: '0.4rem', fontSize: '0.85rem', color: '#cbd5e1' }}>
+                  <div style={{ marginTop: '0.4rem', fontSize: '0.85rem' }}>
                     <strong>Physical Meet-Me Facility:</strong>{' '}
                     {selectedEntry.facilityUrl ? (
                       <a
                         href={selectedEntry.facilityUrl}
                         target="_blank"
                         rel="noreferrer"
-                        style={{ color: '#60a5fa', textDecoration: 'underline' }}
+                        style={{ textDecoration: 'underline' }}
                       >
                         {selectedEntry.facility} ↗
                       </a>
@@ -360,9 +348,6 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
                       onChange={(e) => setPreviewSku(e.target.value as ErCircuitSku)}
                       aria-label="Circuit SKU to apply"
                       style={{
-                        background: '#1e293b',
-                        color: '#f8fafc',
-                        border: '1px solid #475569',
                         borderRadius: '6px',
                         padding: '0.38rem 0.55rem',
                         fontSize: '0.8rem',
@@ -406,22 +391,22 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
               >
                 <div
                   style={{
-                    background: '#111c33',
-                    border: previewSku === 'Local' ? '1px solid #38bdf8' : '1px solid #1e293b',
+                    background: '#f6f9ff',
+                    border: previewSku === 'Local' ? '1px solid #2764bc' : '1px solid #e1e9f3',
                     borderRadius: '8px',
                     padding: '0.75rem',
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '0.83rem', color: '#38bdf8', marginBottom: '0.35rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.83rem', color: '#215fae', marginBottom: '0.35rem' }}>
                     ExpressRoute Local SKU
                   </div>
                   {selectedEntry.localAzureRegions.length > 0 ? (
-                    <div style={{ fontSize: '0.8rem', color: '#e2e8f0' }} data-testid="er-location-local-regions">
+                    <div style={{ fontSize: '0.8rem' }} data-testid="er-location-local-regions">
                       Reachable Local Azure Region(s):{' '}
                       <strong>{selectedEntry.localAzureRegions.join(', ')}</strong>
                     </div>
                   ) : (
-                    <div style={{ fontSize: '0.8rem', color: '#f87171' }} data-testid="er-location-local-regions">
+                    <div style={{ fontSize: '0.8rem', color: '#a43131' }} data-testid="er-location-local-regions">
                       ✗ Not available at this peering location (requires Standard or Premium)
                     </div>
                   )}
@@ -429,33 +414,33 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
 
                 <div
                   style={{
-                    background: '#111c33',
-                    border: previewSku === 'Standard' ? '1px solid #38bdf8' : '1px solid #1e293b',
+                    background: '#f6f9ff',
+                    border: previewSku === 'Standard' ? '1px solid #2764bc' : '1px solid #e1e9f3',
                     borderRadius: '8px',
                     padding: '0.75rem',
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '0.83rem', color: '#a78bfa', marginBottom: '0.35rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.83rem', color: '#6940a5', marginBottom: '0.35rem' }}>
                     ExpressRoute Standard SKU
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0' }}>
+                  <div style={{ fontSize: '0.78rem' }}>
                     All Azure regions in <strong>{selectedEntry.geopoliticalRegion}</strong> ({standardReachableRegions.length} regions):{' '}
-                    <span style={{ color: '#cbd5e1' }}>{standardReachableRegions.join(', ')}</span>
+                    <span>{standardReachableRegions.join(', ')}</span>
                   </div>
                 </div>
 
                 <div
                   style={{
-                    background: '#111c33',
-                    border: previewSku === 'Premium' ? '1px solid #38bdf8' : '1px solid #1e293b',
+                    background: '#f6f9ff',
+                    border: previewSku === 'Premium' ? '1px solid #2764bc' : '1px solid #e1e9f3',
                     borderRadius: '8px',
                     padding: '0.75rem',
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '0.83rem', color: '#34d399', marginBottom: '0.35rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.83rem', color: '#176943', marginBottom: '0.35rem' }}>
                     ExpressRoute Premium SKU
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0' }}>
+                  <div style={{ fontSize: '0.78rem' }}>
                     Global reachability across all Azure geopolitical regions within the{' '}
                     <strong>{selectedEntry.environment}</strong> cloud environment (&gt; 4,000 BGP prefixes supported).
                   </div>
@@ -466,13 +451,13 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
               {connectedAzureRegions.length > 0 && (
                 <div
                   style={{
-                    background: '#111c33',
-                    border: '1px solid #334155',
+                    background: '#f6f9ff',
+                    border: '1px solid #e1e9f3',
                     borderRadius: '8px',
                     padding: '0.75rem 0.9rem',
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '0.84rem', marginBottom: '0.45rem', color: '#f8fafc' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.84rem', marginBottom: '0.45rem' }}>
                     Connected Gateways / Hubs Compatibility ({previewSku} SKU at {selectedEntry.name})
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
@@ -485,9 +470,9 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
                             fontSize: '0.79rem',
                             padding: '0.35rem 0.55rem',
                             borderRadius: '6px',
-                            background: check.allowed ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.15)',
-                            color: check.allowed ? '#6ee7b7' : '#fca5a5',
-                            border: check.allowed ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.4)',
+                            background: check.allowed ? '#e9f7f0' : '#fff1f1',
+                            color: check.allowed ? '#176943' : '#a43131',
+                            border: check.allowed ? '1px solid #b8dfcc' : '1px solid #edc1c1',
                           }}
                         >
                           <strong>{check.allowed ? '✓ Allowed' : '✗ Blocked'}</strong> — {target.name} ({target.region}): {check.reason}
@@ -501,13 +486,13 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
               {/* Direct Service Providers */}
               <div
                 style={{
-                  background: '#111c33',
-                  border: '1px solid #1e293b',
+                  background: '#f6f9ff',
+                  border: '1px solid #e1e9f3',
                   borderRadius: '8px',
                   padding: '0.8rem 0.95rem',
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.5rem', color: '#f8fafc' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.5rem' }}>
                   Supported ExpressRoute Connectivity Providers ({selectedEntry.providers.length})
                 </div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }} data-testid="er-location-providers">
@@ -518,9 +503,8 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
                         fontSize: '0.76rem',
                         padding: '0.22rem 0.55rem',
                         borderRadius: '6px',
-                        background: '#1e293b',
-                        color: '#e2e8f0',
-                        border: '1px solid #334155',
+                        background: '#fff',
+                        border: '1px solid #d5deea',
                       }}
                     >
                       {prov}
@@ -533,13 +517,13 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
               {(selectedEntry.exchangeProviders.length > 0 || selectedEntry.additionalProviders.length > 0) && (
                 <div
                   style={{
-                    background: '#111c33',
-                    border: '1px solid #1e293b',
+                    background: '#f6f9ff',
+                    border: '1px solid #e1e9f3',
                     borderRadius: '8px',
                     padding: '0.8rem 0.95rem',
                   }}
                 >
-                  <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.4rem', color: '#f8fafc' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: '0.4rem' }}>
                     Additional Carriers via Ethernet Exchange ({selectedEntry.exchangeProviders.join(', ')})
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.38rem' }}>
@@ -550,9 +534,8 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
                           fontSize: '0.74rem',
                           padding: '0.2rem 0.5rem',
                           borderRadius: '6px',
-                          background: '#0f172a',
-                          color: '#cbd5e1',
-                          border: '1px solid #334155',
+                          background: '#fff',
+                          border: '1px solid #d5deea',
                         }}
                       >
                         {prov}
@@ -563,7 +546,7 @@ export const ErLocationInfoModal: React.FC<ErLocationInfoModalProps> = ({
               )}
 
               {/* Satellite Connectivity Note */}
-              <div style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
+              <div style={{ fontSize: '0.76rem', color: '#5b6d84' }}>
                 <strong>Satellite Connectivity Partners:</strong> {ER_SATELLITE_OPERATORS.join(', ')} (available globally via designated ground station peering locations).
               </div>
             </div>
