@@ -21,6 +21,92 @@ async function loadTopology(page: Page, topology: AzNetTopology) {
 }
 
 test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
+  for (const [hostname, defaultMode] of [['aznet-simulator.com', 'hub-spoke'], ['vwan-simulator.com', 'vwan']]) {
+    test(`defaults ${hostname} to ${defaultMode} without overriding explicit modes or reloads`, async ({ page, baseURL }) => {
+      await page.route(`https://${hostname}/**`, async (route) => {
+        const url = new URL(route.request().url())
+        await route.fulfill({ response: await route.fetch({ url: new URL(url.pathname + url.search, baseURL).href }) })
+      })
+      await page.goto(`https://${hostname}/`)
+      await expect(page.getByTestId(`simulator-mode-${defaultMode}`)).toHaveAttribute('aria-pressed', 'true')
+      await page.getByTestId('simulator-mode-full').click()
+      await page.reload()
+      await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('aria-pressed', 'true')
+      await page.goto(`https://${hostname}/?mode=hub-spoke&sample=hub-spoke-firewall-udr`)
+      await expect(page.getByTestId('simulator-mode-hub-spoke')).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
+      await page.goto(`https://${hostname}/?mode=vwan`)
+      await expect(page.getByTestId('simulator-mode-vwan')).toHaveAttribute('aria-pressed', 'true')
+    })
+  }
+
+  for (const mode of ['hub-spoke', 'full']) {
+    test(`edits ER peering locations independently of node names in ${mode}`, async ({ page }) => {
+      const topology = structuredClone(AZURE_NET_SAMPLES[0].topology)
+      const location = topology.erLocations[0]
+      location.name = 'Core circuit'
+      location.peeringLocation = 'Amsterdam'
+      await page.addInitScript((value) => {
+        if (!localStorage.getItem('aznet-visual-topology:v1')) {
+          localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
+        }
+      }, topology)
+      await page.goto(`/?mode=${mode}`)
+      const configure = async () => {
+        await openNodeMenu(page, `aznet-erloc-${location.id}`)
+        await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
+      }
+      await configure()
+      const selector = page.getByRole('combobox', { name: 'ER peering location Core circuit', exact: true })
+      await expect(selector).toHaveValue('Amsterdam')
+      await selector.selectOption('Paris')
+      await page.getByRole('textbox', { name: 'ER Location name Core circuit', exact: true }).fill('Renamed core circuit')
+      const renamedSelector = page.getByRole('combobox', { name: 'ER peering location Renamed core circuit', exact: true })
+      await expect(renamedSelector).toHaveValue('Paris')
+      await page.getByTestId(`aznet-erloc-info-btn-${location.id}`).click()
+      await expect(page.getByTestId('er-location-detail-name')).toHaveText('Paris')
+      await page.getByTestId('close-er-location-info-modal').click()
+      await page.reload()
+      await configure()
+      await expect(renamedSelector).toHaveValue('Paris')
+      await expect(page.getByRole('textbox', { name: 'ER Location name Renamed core circuit', exact: true })).toHaveValue('Renamed core circuit')
+    })
+  }
+
+  test('preserves legacy inferred and unknown ER locations until a catalog location is selected', async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES[0].topology)
+    const location = topology.erLocations[0]
+    location.name = 'Amsterdam'
+    delete location.peeringLocation
+    topology.erLocations.push({ id: 'legacy-er', name: 'Imported circuit', peeringLocation: 'Unknown facility', globalReachEnabled: false })
+    await loadTopology(page, topology)
+    await openNodeMenu(page, `aznet-erloc-${location.id}`)
+    await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
+    await expect(page.getByTestId(`aznet-erloc-peering-location-${location.id}`)).toHaveValue('Amsterdam')
+    await page.getByRole('textbox', { name: 'ER Location name Amsterdam', exact: true }).fill('Renamed legacy circuit')
+    await expect(page.getByTestId(`aznet-erloc-peering-location-${location.id}`)).toHaveValue('Amsterdam')
+    await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
+
+    await openNodeMenu(page, 'aznet-erloc-legacy-er')
+    await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
+    const selector = page.getByTestId('aznet-erloc-peering-location-legacy-er')
+    await expect(selector).toHaveValue('')
+    await expect(selector.locator('option:checked')).toHaveText('Unknown location: Unknown facility')
+    await selector.selectOption('London')
+    await expect(selector).toHaveValue('London')
+    await expect(page.getByRole('textbox', { name: 'ER Location name Imported circuit', exact: true })).toHaveValue('Imported circuit')
+
+    await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
+    await page.getByTestId('aznet-add-erloc-btn').click()
+    await openNodeMenu(page, `aznet-erloc-erloc-custom-${topology.erLocations.length + 1}`)
+    await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
+    const newSelector = page.getByRole('combobox', { name: /ER peering location ER-MSEE-/ })
+    await expect(newSelector).toHaveValue('')
+    await expect(newSelector.locator('option:checked')).toHaveText('Select ER peering location')
+    await newSelector.selectOption('Stockholm')
+    await expect(newSelector).toHaveValue('Stockholm')
+  })
+
   test('preserves every selected simulator mode across reloads from a URL without a mode', async ({ page }) => {
     await page.goto('/?keep=mode-test#retained')
     for (const [mode, label] of [['hub-spoke', 'Hub & Spoke'], ['full', 'Full Hybrid'], ['vwan', 'Virtual WAN']]) {
