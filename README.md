@@ -89,6 +89,20 @@ Missing/ambiguous ownership and references to deleted endpoints or neighbors are
 
 Analysis profiles are stored separately from topology JSON in this browser. Profiles can be downloaded/imported; diagnostic reports can be downloaded. These files contain endpoint addresses, object IDs and modeled route details and must be handled under your organization's data policies. No profile/report is sent to Azure, feedback or a new backend. Importing an analysis profile does not replace the topology.
 
+## Offline failures and failure-domain resilience
+
+All three modes support **Simulate failure of Azure region**, **ER location**, and **on-premises site** in the relevant node context menus. Regional faults remove every explicitly assigned regional resource (including embedded gateways, Route Servers and appliances) and its attachments from the active routing calculation. ER geography is never used to infer Azure region membership. A failed node is gray with an explicit **× SIMULATED FAILURE** badge; its entire context menu contains only applicable domain-wide restore actions. The active-outage banner provides **Restore all**.
+
+Failures are **session-only overlays**, separate from the baseline topology and undo history. JSON/Bicep exports, sharing and local persistence always contain the intact baseline, even during a simulated outage; reloading discards faults. Simulation does not change administrative enable flags, policies, prefixes or layout. Effective routes, independent forwarding traces and diagnostics use the active scenario. There are no Azure API calls.
+
+Virtual WAN VNets now support an optional explicit `region` field, configurable in their editor. Legacy/missing/unrecognized region metadata is **unassessed**, not guessed from a hub attachment. Embedded spoke NVAs inherit their hosting VNet's explicit region; ambiguous hosts are unassessed. Regions accept canonical names and Azure identifiers, e.g. `West Europe` / `westeurope`.
+
+Open **Failure-domain resilience analysis (N-1)** above the canvas to check the baseline-working landscape against each single modeled site, location and region loss. Findings include independent forward/return evidence and an action to inspect the corresponding reversible outage. **△ N-1 gap** markers identify surviving affected endpoints, distinctly from current-outage styling. Baseline faults, hypothetical resilience gaps and unavailable endpoints are reported separately. Endpoint loss is not evidence of inadequate path redundancy; replicas/service recovery are not inferred.
+
+Virtual WAN honors saved declared allow requirements and excludes deny intents; without requirements, full workload/site connectivity is explicitly assumed. Hub & Spoke and Full Hybrid disclose their full-connectivity assumption (they have no declared exclusions contract). Checks use actual effective routing/UDRs and BGP withdrawals, not link counts. Stateful inspection must survive symmetrically; stateless path differences alone are not defects.
+
+Coverage reports checked/total pairs, scenarios and failure/pair cases, endpoint-unavailable and unassessed cases, invalid/missing regions and computation limits (200 baseline pairs, 1,200 failure/pair cases, 3 seconds). Empty/partial/unassessed scope never establishes N-1 resilience. Representative-prefix/IP, ECMP/hash selection, physical shared risks, convergence timing, firewall policy, NAT, imported unobserved controls and application/platform recovery remain outside the conclusions. Results become stale after baseline routing changes and must be rerun. No result guarantees real-world availability.
+
 ## Run locally
 
 Requires Node.js 22.12+.

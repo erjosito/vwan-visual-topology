@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
+import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
+import { FailurePanel } from '../FailurePanel'
 import './azure-net.css'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
@@ -348,7 +351,20 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     setTopology(next)
   }
 
-  const simulation = useMemo(() => simulateAzNet(topology), [topology])
+  const [faults, setFaults] = useState<FailureDomain[]>([])
+  const [resilience, setResilience] = useState<{ revision: string; report: ResilienceReport }>()
+  const [resilienceEndpoint, setResilienceEndpoint] = useState<string>()
+  const baselineRevision = JSON.stringify(topology)
+  const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
+  const scenario = useMemo(() => projectAzFailures(topology, faults), [topology, faults])
+  const activeTopology = scenario.active
+  const addFault = (fault: FailureDomain) => {
+    setFaults((current) => [...current.filter((f) => failureKey(f) !== failureKey(fault)), fault])
+    setActiveTab(null)
+    setDeleteTarget(null)
+  }
+  const restoreFault = (fault: FailureDomain) => setFaults((current) => current.filter((f) => failureKey(f) !== failureKey(fault)))
+  const simulation = useMemo(() => simulateAzNet(activeTopology), [activeTopology])
   const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
   const bicepExport = useMemo(() => generateAzNetBicep(topology), [topology])
 
@@ -414,19 +430,19 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     if (!traceActive || groupTrace || hasInvalidCustomIp || !resolvedSourceOpt || !resolvedDestOpt) return null
     const destIp = customDestIp.trim() || resolvedDestOpt.defaultIp
     return traceAzNetPair(
-      topology,
+      activeTopology,
       simulation,
       resolvedSourceOpt.ref,
       resolvedSourceOpt.defaultIp,
       resolvedDestOpt.ref,
       destIp,
     )
-  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, topology, simulation])
+  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, activeTopology, simulation])
 
   const singleFlowForCustomIp = useMemo(() => {
     if (!traceActive || groupTrace || hasInvalidCustomIp || !resolvedSourceOpt || !resolvedDestOpt || !customDestIp.trim() || customIpInEndpoint) return null
-    return traceAzNetFlow(topology, simulation, resolvedSourceOpt.ref, customDestIp.trim())
-  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, customIpInEndpoint, topology, simulation])
+    return traceAzNetFlow(activeTopology, simulation, resolvedSourceOpt.ref, customDestIp.trim())
+  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, customIpInEndpoint, activeTopology, simulation])
 
   const groupedPaths = useMemo(() => {
     if (!traceActive || !groupTrace) return null
@@ -439,16 +455,16 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       paths: others.slice(0, AZ_NET_PAIR_LIMIT).map((other) => {
         const source = groupTrace.direction === 'to' ? anchor : other
         const destination = groupTrace.direction === 'to' ? other : anchor
-        return { source, destination, pair: traceAzNetPair(topology, simulation, source.ref, source.defaultIp, destination.ref, destination.defaultIp) }
+        return { source, destination, pair: traceAzNetPair(activeTopology, simulation, source.ref, source.defaultIp, destination.ref, destination.defaultIp) }
       }),
     }
-  }, [traceActive, groupTrace, endpointOptions, topology, simulation])
+  }, [traceActive, groupTrace, endpointOptions, activeTopology, simulation])
 
   const analysis = useMemo(() => analysisRequest
-    ? analyzeAzNetConnectivity(topology, simulation, analysisRequest) : null,
-  [analysisRequest, topology, simulation])
+    ? analyzeAzNetConnectivity(activeTopology, simulation, analysisRequest) : null,
+  [analysisRequest, activeTopology, simulation])
   const diagnostics = useMemo(() => {
-    const staticFindings = runAzNetDiagnostics(topology, simulation, { includePairAnalysis: false })
+    const staticFindings = runAzNetDiagnostics(activeTopology, simulation, { includePairAnalysis: false })
     const flowFindings = analysis?.findings ?? []
     return [...staticFindings.filter((f) =>
       !flowFindings.some((flow) => f.category === 'gateway-subnet-missing-udr' &&
@@ -457,7 +473,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         azEndpointKey(flow.sampleFlow.destination) === azEndpointKey(f.sampleFlow.destination) &&
         flow.sampleFlow.destinationIp === f.sampleFlow.destinationIp)),
     ...flowFindings]
-  }, [topology, simulation, analysis])
+  }, [activeTopology, simulation, analysis])
   const actionableCount = diagnostics.filter((f) => f.severity !== 'info').length
   const visibleDiagnostics = reviewFindingIds
     ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics
@@ -1326,7 +1342,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     ]
   }
 
-  const getContextMenuSpec = (
+  const getOrdinaryContextMenuSpec = (
     target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number },
   ): { title: string; actions: ContextAction[] } | null => {
 
@@ -2526,6 +2542,24 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
     return null
   }
+  const entityId = (target: AzSelectedEntity) => 'vnetId' in target ? target.vnetId
+    : 'siteId' in target ? target.siteId : 'hubId' in target ? target.hubId
+      : 'locationId' in target ? target.locationId : 'linkId' in target ? target.linkId
+        : 'peeringId' in target ? target.peeringId : 'connectionId' in target ? target.connectionId : target.siteLinkId
+  const getContextMenuSpec = (target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number }): { title: string; actions: ContextAction[] } | null => {
+    if (target.kind === 'canvas') return getOrdinaryContextMenuSpec(target)
+    const id = entityId(target)
+    const applicable = scenario.affected[id] ?? []
+    if (applicable.length) return { title: 'Simulated failure — restore only', actions: applicable.map((fault) => ({
+      label: `Restore ${failureLabel(fault)}`, onSelect: () => restoreFault(fault),
+    })) }
+    const ordinary = getOrdinaryContextMenuSpec(target)
+    const domain = scenario.domains.find((f) =>
+      (f.kind === 'site' && target.kind === 'site' || f.kind === 'er-location' && target.kind === 'er-location') && f.id === id ||
+      f.kind === 'region' && ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) &&
+        f.id === regionKey([...topology.vnets, ...topology.vwanHubs].find((n) => n.id === id)?.region))
+    return ordinary && { ...ordinary, actions: [...(domain ? [{ label: `Simulate failure of ${failureLabel(domain)}`, onSelect: () => addFault(domain) }] : []), ...ordinary.actions] }
+  }
   const contextMenuSpec = contextMenu && getContextMenuSpec(
     contextMenu.kind === 'canvas' ? contextMenu : contextMenu.entity,
   )
@@ -2540,6 +2574,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
   return (
     <div className="aznet-app" data-testid="aznet-app">
+      <FailurePanel faults={faults} unassessed={scenario.unassessed} onRestore={restoreFault} onRestoreAll={() => setFaults([])}
+        revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={() => analyzeAzResilience(topology)} />
       {/* Top Navigation & Actions Bar */}
       <header
         className={`aznet-topbar ${
@@ -2886,6 +2922,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
           <AzureNetDiagram
             topology={topology}
+            faults={scenario.affected}
+            risks={risks}
+            onRisk={setResilienceEndpoint}
             selected={canvasSelection}
             onSelect={(entity) => {
               setCanvasSelection(entity)

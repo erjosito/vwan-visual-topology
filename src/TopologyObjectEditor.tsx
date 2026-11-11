@@ -75,6 +75,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           const value = {
             id,
             name,
+            ...(text('region') ? { region: text('region') } : {}),
             ...(customLabel ? { label: customLabel } : {}),
             ...(hubIdValue ? { hubId: hubIdValue } : {}),
             prefixes: prefixes(text('prefixes')),
@@ -325,6 +326,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" value={selectedSpokeHubId} onChange={(e) => setSelectedSpokeHubId(e.target.value)}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
         {request.kind === 'connection' && transportValue !== 'SpokeNVA' && <Field title={t("Hub")}><select name="hub" required defaultValue={connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
         {request.kind === 'spoke' && <>
+          <Field title="Azure region (failure domain)"><input name="region" maxLength={120} defaultValue={spoke?.region ?? ''} placeholder="West Europe" /></Field>
+          <p className="muted">Region is explicit, not inferred from hub attachment or ER location. Missing or unrecognized regions are unassessed in failure analysis.</p>
           <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
           {selectedSpokeHubId && <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>}
           {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>

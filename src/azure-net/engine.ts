@@ -292,40 +292,45 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     }))
   }
 
-  for (let round = 0; round < 8; round++) {
-    for (const link of topology.siteLinks) {
-      if (!link.enabled) continue
-      const siteA = topology.sites.find((s) => s.id === link.siteAId)
-      const siteB = topology.sites.find((s) => s.id === link.siteBId)
-      if (!siteA || !siteB) continue
-      for (const [sender, receiver] of [
-        [siteA, siteB],
-        [siteB, siteA],
-      ] as const) {
-        const current = siteRibs[sender.id]?.filter((r) => r.preferred) ?? []
-        for (const r of current) {
-          if (r.asPath.includes(receiver.asn)) continue
-          const id = `sitelink:${link.id}:${sender.id}->${receiver.id}:${r.prefix}`
-          if (!siteRibs[receiver.id].some((existing) => existing.id === id)) {
-            siteRibs[receiver.id].push({
-              id,
-              prefix: r.prefix,
-              asPath: [receiver.asn, ...r.asPath],
-              nextHopName: sender.name,
-              nextHopKind: 'site',
-              nextHopId: sender.id,
-              originProtocol: 'VPN',
-              preferred: false,
-              explanation: `Learned over site link ${link.name} from ${sender.name}`,
-            })
+  const propagateSiteLinks = () => {
+    for (let round = 0; round < Math.max(1, topology.sites.length); round++) {
+      let changed = false
+      for (const link of topology.siteLinks) {
+        if (!link.enabled) continue
+        const siteA = topology.sites.find((s) => s.id === link.siteAId)
+        const siteB = topology.sites.find((s) => s.id === link.siteBId)
+        if (!siteA || !siteB) continue
+        for (const [sender, receiver] of [[siteA, siteB], [siteB, siteA]] as const) {
+          const current = siteRibs[sender.id]?.filter((r) => r.preferred) ?? []
+          for (const r of current) {
+            if (r.asPath.includes(receiver.asn)) continue
+            const id = `sitelink:${link.id}:${sender.id}->${receiver.id}:${r.prefix}`
+            const existing = siteRibs[receiver.id].findIndex((entry) => entry.id === id)
+            if (existing < 0 || siteRibs[receiver.id][existing].asPath.length > r.asPath.length + 1) {
+              const candidate: AzBgpRibEntry = {
+                ...r,
+                id,
+                prefix: r.prefix,
+                asPath: [receiver.asn, ...r.asPath],
+                nextHopName: sender.name,
+                nextHopKind: 'site',
+                nextHopId: sender.id,
+                originProtocol: 'VPN',
+                preferred: false,
+                explanation: `Learned over site link ${link.name} from ${sender.name}`,
+              }
+              if (existing < 0) siteRibs[receiver.id].push(candidate)
+              else siteRibs[receiver.id][existing] = candidate
+              changed = true
+            }
           }
         }
       }
-    }
-    for (const site of topology.sites) {
-      siteRibs[site.id] = chooseBgpWinners(siteRibs[site.id], 'ASPath')
+      for (const site of topology.sites) siteRibs[site.id] = chooseBgpWinners(siteRibs[site.id], 'ASPath')
+      if (!changed) break
     }
   }
+  propagateSiteLinks()
 
   // Helper: compute what prefixes a VNet advertises through its attached Gateways
   const advertisedVnetPrefixes = (vnet: AzVNet): { prefix: string; asPath: number[]; sourceName: string }[] => {
@@ -821,6 +826,9 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     }
     siteRibs[site.id] = chooseBgpWinners([...siteRibs[site.id], ...learnedFromAzure], 'ASPath')
   }
+
+  // Azure withdrawals/backup advertisements must also reach sites behind a transit site.
+  propagateSiteLinks()
 
   // 7. Compile Subnet Effective Route Tables for every Subnet in every VNet
   const subnetTables: Record<string, AzSubnetRouteTableResult> = {}

@@ -42,6 +42,9 @@ import { assignSitePrefixes } from './topology-mutations'
 import { useTopologyHistory } from './useTopologyHistory'
 import { useDeleteShortcut } from './useDeleteShortcut'
 import './App.css'
+import { projectVwanFailures, regionKey, failureKey, failureLabel, type FailureDomain } from './failures'
+import { analyzeVwanResilience, resilienceMarkers, type ResilienceReport } from './failure-analysis'
+import { FailurePanel } from './FailurePanel'
 
 const storageKey = 'vwan-visual-topology:v1'
 const pathGroups: { group: PathGroup; label: string }[] = [
@@ -141,11 +144,31 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
       if (selection && !topologyObject(next, selection)) setSelection(undefined)
     },
   })
+  const [faults, setFaults] = useState<FailureDomain[]>([])
+  const [resilience, setResilience] = useState<{ revision: string; report: ResilienceReport }>()
+  const [resilienceEndpoint, setResilienceEndpoint] = useState<string>()
+  const baselineRevision = routingRevision(topology)
+  const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
+  const scenario = useMemo(() => projectVwanFailures(topology, faults), [topology, faults])
+  const activeTopology = scenario.active
+  const addFault = (fault: FailureDomain) => {
+    const next = [...faults.filter((f) => failureKey(f) !== failureKey(fault)), fault]
+    setFaults(next)
+    setEditorRequest(undefined)
+    setPanel(undefined)
+    setDiagnosticHighlight(undefined)
+    if (routingCheck) runRoutingCheck(projectVwanFailures(topology, next).active, true)
+  }
+  const restoreFault = (fault?: FailureDomain) => {
+    const next = fault ? faults.filter((f) => failureKey(f) !== failureKey(fault)) : []
+    setFaults(next)
+    if (routingCheck) runRoutingCheck(projectVwanFailures(topology, next).active, true)
+  }
   const router = useMemo<ObjectSelection>(
     () => (routerState && topologyObject(topology, routerState) ? routerState : { kind: 'hub', id: topology.hubs[0]?.id ?? '' }),
     [routerState, topology],
   )
-  const routingKey = useMemo(() => routingRevision(topology), [topology])
+  const routingKey = useMemo(() => routingRevision(activeTopology), [activeTopology])
   const currentCheck = routingCheck?.revision === routingKey ? routingCheck : undefined
   const routingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity === 'error' || finding.severity === 'warning') ?? []
   const checkCoverage = currentCheck?.report ? summarizeCoverage(currentCheck.report) : undefined
@@ -174,7 +197,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     setRoutingIssueId(undefined)
     if (panel === 'issues') setPanel(undefined)
   }
-  const runRoutingCheck = (targetTopology = topology, preservePanel = false) => {
+  const runRoutingCheck = (targetTopology = activeTopology, preservePanel = false) => {
     checkWorker.current?.worker.terminate(); checkWorker.current = undefined
     setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false)
     if (!preservePanel) setPanel(undefined)
@@ -209,7 +232,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
       setRoutingCheck({ revision: targetRevision, status: 'failed' })
     }
   }
-  const checkRouting = () => runRoutingCheck(topology, false)
+  const checkRouting = () => runRoutingCheck(activeTopology, false)
   const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
   const [routeView, setRouteView] = useState<'bgp' | 'hub' | 'firewall'>('bgp')
@@ -229,7 +252,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const [groupTrace, setGroupTrace] = useState<{ group: PathGroup; direction: PathDirection }>()
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
-  const simulation = useMemo(() => simulate(topology), [topology])
+  const simulation = useMemo(() => simulate(activeTopology), [activeTopology])
   const nvaSiteIds = useMemo(() => embeddedSpokeNvaSiteIds(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
@@ -240,14 +263,14 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const targetNode = nodes.find((n) => nodeKey(n) === target)
   const paths: (NodePath | GroupPath)[] = useMemo(() => {
     if (!tracing) return []
-    if (groupTrace) return traceGroupedPaths(topology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
-    return source && topologyObject(topology, parseNode(source)) ? traceNodePath(topology, simulation, parseNode(source), destination) : []
-  }, [tracing, source, target, topology, simulation, destination, groupTrace])
+    if (groupTrace) return traceGroupedPaths(activeTopology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
+    return source && topologyObject(activeTopology, parseNode(source)) ? traceNodePath(activeTopology, simulation, parseNode(source), destination) : []
+  }, [tracing, source, target, activeTopology, simulation, destination, groupTrace])
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
   const activeView = routeView === 'firewall' && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView
-  const erRouting = useMemo(() => router.kind === 'erLocation' ? erLocationBgpTable(topology, simulation, router.id) : [],
-    [topology, simulation, router.kind, router.id])
+  const erRouting = useMemo(() => router.kind === 'erLocation' ? erLocationBgpTable(activeTopology, simulation, router.id) : [],
+    [activeTopology, simulation, router.kind, router.id])
   const decisions = router.kind === 'erLocation' ? erRouting
     : (activeView === 'bgp' ? simulation.bgpTables : activeView === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []
   const selectedRoutes = highlighting && (router.kind === 'hub' || router.kind === 'erLocation') ? [
@@ -256,15 +279,15 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   ] : []
   const siteHighlight = useMemo(() => {
     if (!highlighting || router.kind !== 'site') return []
-    const routing = azureRoutesAtSites(topology, simulation)
+    const routing = azureRoutesAtSites(activeTopology, simulation)
     const prefixes = [...new Set((routing.tables[router.id] ?? []).filter((route) => !prefix || route.prefix === prefix).map((route) => route.prefix))]
-    return prefixes.flatMap((prefix) => traceNodePath(topology, simulation, { kind: 'site', id: router.id }, prefix.split('/')[0], routing))
-  }, [highlighting, router.kind, router.id, topology, simulation, prefix])
+    return prefixes.flatMap((prefix) => traceNodePath(activeTopology, simulation, { kind: 'site', id: router.id }, prefix.split('/')[0], routing))
+  }, [highlighting, router.kind, router.id, activeTopology, simulation, prefix])
   const diagnosticPaths = (panel === 'diagnostics' || panel === 'issues') && diagnosticHighlight?.revision === routingKey ? diagnosticHighlight.paths : undefined
   const diagramPaths = diagnosticPaths ?? (tracing ? paths : siteHighlight)
   const showDiagnostic = (finding: DiagnosticsFinding) => {
     const name = (node?: PathNode) => node ? topologyObject(topology, node)?.name ?? node.id : ''
-    setDiagnosticHighlight({ revision: routingRevision(topology), findingId: finding.id, paths: [
+    setDiagnosticHighlight({ revision: routingKey, findingId: finding.id, paths: [
       ...finding.forward.map((path) => ({ ...path, sourceNode: finding.source, targetNode: finding.target, direction: 'forward' as const, sourceName: name(finding.source), destinationName: name(finding.target), destinationPrefix: finding.destinationAddress ?? finding.prefix ?? '' })),
       ...finding.reverse.map((path) => ({ ...path, sourceNode: finding.target, targetNode: finding.source, direction: 'return' as const, sourceName: name(finding.target), destinationName: name(finding.source), destinationPrefix: finding.sourceAddress ?? '' })),
     ] })
@@ -332,7 +355,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const selectObject = (value: ObjectSelection) => {
     setSelection(value)
   }
-  useDeleteShortcut(selection && topologyObject(topology, selection) && !editorRequest &&
+  useDeleteShortcut(selection && !scenario.affected[selection.id] && topologyObject(topology, selection) && !editorRequest &&
     !clearRequested && !feedbackOpen && !erLocationModal.open ? () => {
       setContextMenu(undefined)
       setEditorRequest({ ...selection, deleting: true })
@@ -407,7 +430,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const spokeObj = contextSelection?.kind === 'spoke' ? topology.spokes.find((spoke) => spoke.id === contextSelection.id) : undefined
   const spokeNvaConn = spokeObj ? topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeObj.id) : undefined
   const spokeNvaSite = spokeNvaConn ? topology.sites.find((s) => s.id === spokeNvaConn.siteId) : undefined
-  const contextActions: ContextAction[] = contextSelection ? [
+  const ordinaryContextActions: ContextAction[] = contextSelection ? [
     ...(contextMenu?.routeMap ? [{
       label: t("Remove route map association"),
       run: () => {
@@ -491,6 +514,14 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     ] : []),
     { label: t("Delete {0}", t(objectLabels[contextSelection.kind])), danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
   ] : canvasActions
+  const contextFaults = contextSelection ? scenario.affected[contextSelection.id] ?? [] : []
+  const contextDomain = contextSelection && scenario.domains.find((domain) =>
+    (domain.kind === 'site' && contextSelection.kind === 'site' || domain.kind === 'er-location' && contextSelection.kind === 'erLocation') && domain.id === contextSelection.id ||
+    domain.kind === 'region' && (contextSelection.kind === 'hub' || contextSelection.kind === 'spoke') &&
+      domain.id === regionKey((contextSelection.kind === 'hub' ? topology.hubs : topology.spokes).find((n) => n.id === contextSelection.id)?.region))
+  const contextActions: ContextAction[] = contextFaults.length
+    ? contextFaults.map((fault) => ({ label: `Restore ${failureLabel(fault)}`, run: () => restoreFault(fault) }))
+    : [...(contextDomain ? [{ label: `Simulate failure of ${failureLabel(contextDomain)}`, run: () => addFault(contextDomain) }] : []), ...ordinaryContextActions]
   const exportTopology = (original = '') => {
     const url = URL.createObjectURL(new Blob([original || JSON.stringify(topology, null, 2)], { type: 'application/json' }))
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'vwan-topology.json'; anchor.click()
@@ -525,6 +556,13 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const closePanel = () => setPanel(undefined)
 
   return <div className="app canvas-app mode-vwan" data-testid="vwan-app" data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
+    <FailurePanel faults={faults} unassessed={scenario.unassessed} onRestore={restoreFault} onRestoreAll={() => restoreFault()}
+      revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={() => {
+        let intents: ReturnType<typeof validateDiagnosticsProfile>['intents'] = []
+        try { const saved = localStorage.getItem('vwan-visual-topology:diagnostics:v1'); if (saved) intents = validateDiagnosticsProfile(JSON.parse(saved)).intents }
+        catch { const report = analyzeVwanResilience(topology, [], { maxPairs: 0 }); report.complete = false; report.limitations.push('Saved connectivity requirements could not be read; intent coverage is unassessed.'); return report }
+        return analyzeVwanResilience(topology, intents)
+      }} />
     <header className="topbar unified-topbar unified-topbar-vwan" data-testid="unified-topbar">
       <div className="unified-topbar-left">
         <div className="brand unified-brand">
@@ -585,13 +623,14 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
           <button onClick={openDiagnostics}>{t('Advanced checks')}</button>
         </div>}
         <div className="canvas-stage">
-          {panel === 'diagnostics' && <DiagnosticsPanel topology={topology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
+          {panel === 'diagnostics' && <DiagnosticsPanel topology={activeTopology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
           {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
           {panel === 'azure' && <AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} />}
-          <TopologyDiagram topology={topology} issues={routingIssues} onShowIssues={(finding) => { setRoutingIssueId(finding.id); setReviewCoverage(false); setPanel('issues'); showDiagnostic(finding) }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
+          <TopologyDiagram topology={topology} faults={scenario.affected} risks={risks} onRisk={setResilienceEndpoint}
+            issues={routingIssues} onShowIssues={(finding) => { setRoutingIssueId(finding.id); setReviewCoverage(false); setPanel('issues'); showDiagnostic(finding) }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
           {(highlighting || tracing || !!diagnosticPaths?.length || routingIssues.length > 0) && <div className="highlight-status" role="status">{(highlighting || tracing || !!diagnosticPaths?.length) ? (diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))) : t('{0} routing issues', routingIssues.length)}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}{(highlighting || tracing || !!diagnosticPaths?.length) && <button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button>}{routingIssues.length > 0 && <button onClick={clearHighlightsAndIcons}>{t("Clear highlights & icons")}</button>}</div>}
-          {panel === 'routes' && inspected && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={topology} simulation={simulation} comparisonSession={comparisonSession} router={router} view={activeView} mode={routeMode} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix(''); setHighlighting(false) }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
+          {panel === 'routes' && inspected && !scenario.affected[router.id] && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={activeTopology} simulation={simulation} comparisonSession={comparisonSession} router={router} view={activeView} mode={routeMode} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix(''); setHighlighting(false) }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
           {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}
           {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
           {panel === 'static' && mapRouter && <StaticRoutingPanel key={nodeKey(mapRouter)} topology={topology} router={mapRouter} onSave={save} onClose={closePanel} />}
