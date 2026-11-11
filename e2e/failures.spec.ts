@@ -147,7 +147,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(initial)
   })
 
-  test(`${mode} recomputes independent path evidence and analysis on fault/restore without changing saved topology`, async ({ page }) => {
+  test(`${mode} preserves routing evidence across canvas maximization and fault/restore without changing saved topology`, async ({ page }) => {
     const topology = mode === 'vwan' ? vwanFixture() : azFixture(mode === 'full')
     const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
     await page.addInitScript(({ topology, key, mode }) => {
@@ -174,6 +174,34 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await show()
     if (mode === 'vwan') await expect(page.locator('.highlight-status')).toContainText('No route')
     else await expect(page.getByTestId('aznet-path-tracer-panel')).toContainText('dropped-no-route')
+
+    const canvas = mode === 'vwan' ? page.locator('.canvas-stage') : page.getByTestId('aznet-canvas-shell')
+    const originalCanvas = await canvas.boundingBox()
+    const savedTopology = await page.evaluate((key) => localStorage.getItem(key), key)
+    const failedAnalysis = await routingStatus.textContent()
+    await page.getByRole('button', { name: 'Maximize canvas', exact: true }).click()
+    await expect(page.getByRole('banner')).toBeHidden()
+    await expect(page.getByTestId('active-faults')).toBeHidden()
+    await expect(routingStatus).toBeHidden()
+    await expect.poll(async () => (await canvas.boundingBox())!.height).toBeGreaterThan(originalCanvas!.height + 80)
+    await expect(er).toHaveAttribute('data-simulated-failed', 'true')
+    if (mode === 'vwan') await expect(page.locator('.highlight-status')).toContainText('No route')
+    else await expect(page.getByTestId('aznet-path-tracer-panel')).toContainText('dropped-no-route')
+    await page.setViewportSize({ width: 640, height: 600 })
+    const compactCanvas = await canvas.boundingBox()
+    expect(compactCanvas!.y).toBeGreaterThanOrEqual(0)
+    expect(compactCanvas!.y + compactCanvas!.height).toBeLessThanOrEqual(600)
+    await page.setViewportSize({ width: 1280, height: 720 })
+    const restorePanels = page.getByRole('button', { name: 'Restore panels', exact: true })
+    await restorePanels.focus()
+    await page.keyboard.press('Space')
+    await expect(page.getByRole('banner')).toBeVisible()
+    await expect(page.getByTestId('active-faults')).toBeVisible()
+    await expect(routingStatus).toBeVisible()
+    expect(await routingStatus.textContent()).toBe(failedAnalysis)
+    expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(savedTopology)
+    await expect.poll(async () => (await canvas.boundingBox())!.height).toBe(originalCanvas!.height)
+
     await page.getByRole('button', { name: 'Restore all simulated failures', exact: true }).click()
     await expect(routingStatus).toContainText(baselineIssues)
     await show()

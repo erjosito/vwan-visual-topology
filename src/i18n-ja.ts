@@ -34,6 +34,8 @@ export const ja: Record<string, string> = {
   'BGP next hop is NVA interface {0} in spoke {1}.': 'BGP のネクストホップは、スポーク {1} 内の NVA インターフェイス {0} です。',
   'Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515), Default association/propagation and branch-to-branch enabled. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.': 'スポーク BGP NVA では、両方の Azure ハブ ルーター (AS65515) への同一アドバタイズを 1 つの論理ピアリングとして表し、Default への関連付けと伝達、およびブランチ間通信の有効化を前提とします。NIC の到達性、UDR、セッション、ベンダー ポリシー、ロード バランサーのネクストホップおよび物理的冗長性は検証されません。直接接続するローカル VNet アドレス空間内のアドバタイズは抑制され、そのネットワークにはシステム ルートが使用されます。',
   'Reset canvas view': 'キャンバス表示をリセット',
+  'Maximize canvas': 'キャンバスを最大化',
+  'Restore panels': 'パネルを再表示',
   'Undo': '元に戻す',
   'Redo': 'やり直す',
   'Undo last topology change (Ctrl+Z)': '直前のトポロジ変更を元に戻す (Ctrl+Z)',
