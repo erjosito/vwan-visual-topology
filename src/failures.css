@@ -1,0 +1,9 @@
+.failure-controls { padding: .35rem .8rem; font-size: .85rem; max-height: 34vh; overflow: auto; flex-shrink: 0; background: var(--surface, #fff); color: var(--text, #222); }
+.failure-controls button { margin: .25rem; }
+.failure-controls pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.active-faults { border: 2px dashed var(--error, #912323); padding: .4rem; background: var(--error-surface, #fff3f0); color: var(--text, #451414); }
+[data-simulated-failed="true"] { filter: grayscale(1); opacity: .6; }
+.simulated-fault-badge { fill: var(--error-surface, #fff3f0); stroke: var(--error, #912323); stroke-width: 1; pointer-events: none; }
+.simulated-fault-text { fill: var(--error, #912323); font-size: 13px; font-weight: 800; pointer-events: none; }
+.resilience-gap-badge { fill: var(--warning-surface, #fff7db); stroke: var(--warning, #765700); stroke-width: 1; }
+.resilience-gap-text { fill: var(--text, #222); font-size: 13px; font-weight: 800; }

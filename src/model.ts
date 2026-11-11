@@ -97,6 +97,7 @@ export interface SiteLink {
 export interface Spoke {
   id: string
   name: string
+  region?: string
   label?: string
   hubId?: string
   prefixes: string[]
@@ -215,8 +216,8 @@ export const example: Topology = {
     { id: 'branch', name: 'Berlin branch', asn: 65030, prefixes: ['10.40.0.0/16'] },
   ],
   spokes: [
-    { id: 'eu-apps', name: 'Europe applications', hubId: 'eu', prefixes: ['10.1.0.0/16'] },
-    { id: 'us-apps', name: 'Americas applications', hubId: 'us', prefixes: ['10.2.0.0/16'] },
+    { id: 'eu-apps', name: 'Europe applications', region: 'West Europe', hubId: 'eu', prefixes: ['10.1.0.0/16'] },
+    { id: 'us-apps', name: 'Americas applications', region: 'East US', hubId: 'us', prefixes: ['10.2.0.0/16'] },
   ],
   siteLinks: [],
   connections: [

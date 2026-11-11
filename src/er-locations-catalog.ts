@@ -4713,7 +4713,7 @@ const REGION_CANONICAL_ALIASES: Record<string, string> = {
 }
 
 export function normalizeAzureRegionName(region: string | undefined | null): string {
-  if (!region) return ''
+  if (typeof region !== 'string') return ''
   const trimmed = region.trim()
   if (!trimmed) return ''
   const compact = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '')
