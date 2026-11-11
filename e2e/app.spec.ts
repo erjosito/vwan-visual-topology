@@ -1086,6 +1086,7 @@ test('BGP overlay preserves all candidates, colors, preference changes and topol
   await expect(inspector).not.toContainText(/\d+ candidates? · \d+ preferred/)
   await expect(inspector.locator('tr[data-reason-prefix="10.20.0.0/16"]')).toContainText('ExpressRoute wins')
   const before = await inspector.boundingBox()
+  expect(before!.width).toBeGreaterThan(1000)
   await inspector.getByRole('button', { name: 'Move BGP table · Europe hub to left', exact: true }).click()
   expect((await inspector.boundingBox())!.x).toBeLessThan(before!.x)
   await page.getByLabel('Hub routing preference', { exact: true }).selectOption('VPN')

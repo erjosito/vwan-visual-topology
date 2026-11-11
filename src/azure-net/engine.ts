@@ -1056,11 +1056,15 @@ function compileSingleSubnetEffectiveRoutes(
 
   // D. BGP / Gateway-Propagated Routes (Local Gateways, Local ARS, Remote Peered Hub Gateways/ARS, or Attached vWAN Hub)
   const rawBgpRoutes: AzEffectiveRoute[] = []
+  const vpnCoexistenceBackups = new Set<string>()
 
   const collectFromVnetControlPlane = (controlVnet: AzVNet, isRemoteGatewayTransit: boolean) => {
     const scopeLabel = isRemoteGatewayTransit ? `Remote Hub ${controlVnet.name}` : `Local ${controlVnet.name}`
     // If ARS is enabled and branchToBranch is active, ARS arbitrates preferences; otherwise read each gateway RIB
     const ars = controlVnet.routeServer?.enabled ? controlVnet.routeServer : undefined
+    const erPrefixes = new Set(ars ? [] : controlVnet.gateways
+      .filter((gateway) => gateway.enabled && gateway.kind === 'ExpressRoute')
+      .flatMap((gateway) => (gatewayRibs[gateway.id] ?? []).filter((route) => route.preferred).map((route) => route.prefix)))
     if (ars) {
       const arsWinners = (routeServerRibs[ars.id] ?? []).filter((r) => r.preferred)
       for (const r of arsWinners) {
@@ -1104,8 +1108,11 @@ function compileSingleSubnetEffectiveRoutes(
         if (rawBgpRoutes.some((existing) => existing.prefix === r.prefix && existing.nextHopResourceId === gw.id)) {
           continue
         }
+        const id = `bgp:gw:${subnet.id}:${gw.id}:${r.id}`
+        // Without ARS, coexisting ER wins identical prefixes before comparing AS-path lengths.
+        if (!ars && gw.kind === 'Vpn' && erPrefixes.has(r.prefix)) vpnCoexistenceBackups.add(id)
         rawBgpRoutes.push({
-          id: `bgp:gw:${subnet.id}:${gw.id}:${r.id}`,
+          id,
           prefix: r.prefix,
           source: 'VirtualNetworkGateway',
           nextHopType: 'VirtualNetworkGateway',
@@ -1242,7 +1249,7 @@ function compileSingleSubnetEffectiveRoutes(
       return 3 // System
     }
     const minRank = Math.min(...group.map(sourceRank))
-    const topRanked = group.filter((r) => sourceRank(r) === minRank)
+    const topRanked = group.filter((r) => sourceRank(r) === minRank && !vpnCoexistenceBackups.has(r.id))
     const minAsPath = Math.min(...topRanked.map((r) => r.asPath.length || 999))
     const winnerIds = new Set(
       topRanked

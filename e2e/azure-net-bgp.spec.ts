@@ -49,6 +49,125 @@ async function inspectSite(page: Page, id: string) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} keeps subnet pills compact and reveals prefixes and route-table settings on demand`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 650 })
+    const topology = bgpTopology()
+    topology.udrTables.push({
+      id: 'compact-rt', name: 'Production-Spoke-Route-Table',
+      disableBgpRoutePropagation: true, disablePeeringRoutePropagation: true, routes: [],
+    })
+    topology.vnets[0].subnets.push({
+      id: 'compact-work', name: 'ProductionApplicationServicesSubnetWithALongName', prefix: '10.0.2.0/24', routeTableId: 'compact-rt',
+      privateEndpoints: [{ id: 'compact-pe', name: 'Private service', ipAddress: '10.0.2.4', serviceName: 'Storage' }],
+    })
+    await load(page, mode, topology)
+    const subnet = page.getByTestId('aznet-subnet-compact-work')
+    const badge = page.getByTestId('aznet-subnet-rt-badge-compact-work')
+    await expect(subnet).not.toContainText('10.0.2.0/24')
+    await expect(subnet).not.toContainText('GWroutes:OFF')
+    await expect(subnet).not.toContainText('PeerSuppress:ON')
+    await expect(subnet).toContainText('PE')
+    expect(Number(await badge.locator('rect').getAttribute('width'))).toBeLessThanOrEqual(88)
+    const clip = subnet.locator('clipPath rect')
+    expect(Number(await clip.getAttribute('x')) + Number(await clip.getAttribute('width'))).toBeLessThan(Number(await badge.locator('rect').getAttribute('x')))
+    await page.getByTestId('aznet-canvas-shell').screenshot({ path: test.info().outputPath('compact-subnets.png') })
+    await subnet.focus()
+    const tooltip = page.getByTestId('aznet-subnet-hover-card')
+    await expect(tooltip).toBeVisible()
+    await expect(tooltip).toContainText('10.0.2.0/24')
+    await expect(tooltip).toContainText('ProductionApplicationServicesSubnetWithALongName')
+    await page.getByTestId('aznet-vnet-hub').focus()
+    await expect(tooltip).toBeHidden()
+    await subnet.hover({ position: { x: 8, y: 2 } })
+    await expect(tooltip).toBeVisible()
+    await badge.hover()
+    const settings = page.getByTestId('aznet-rt-hover-card')
+    await expect(settings).toContainText('Production-Spoke-Route-Table')
+    await expect(settings.getByRole('checkbox', { name: /Propagate Gateway Routes/ })).not.toBeChecked()
+    await settings.getByRole('checkbox', { name: /Propagate Gateway Routes/ }).check()
+    await expect(badge).not.toContainText('GWroutes')
+  })
+
+  test(`${mode} shows endpoint-owned IN/OUT policy markers with scoped previews, keyboard inspection and cleanup`, async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('same key')) errors.push(message.text()) })
+    const topology = bgpTopology()
+    const rule = { id: 'filter', prefixes: ['192.168.10.0/24'], match: 'equals' as const, action: 'drop' as const, summaryPrefixes: [], prepend: [], nextStep: 'terminate' as const }
+    topology.routeMaps = [
+      { id: 'site-filter', name: 'Site A filter', siteId: 'a', rules: [rule] },
+      { id: 'other-filter', name: 'Site B filter', siteId: 'b', rules: [{ ...rule, id: 'other-rule' }] },
+    ]
+    topology.sites[0].routeMapAssignments = [
+      { connectionId: 'primary', inboundMapId: 'site-filter', outboundMapId: 'site-filter' },
+      { connectionId: 'backup', outboundMapId: 'site-filter' },
+      { connectionId: 'circuit', outboundMapId: 'site-filter' },
+      { connectionId: 'wan', outboundMapId: 'site-filter' },
+    ]
+    topology.sites[1].routeMapAssignments = [{ connectionId: 'wan', inboundMapId: 'other-filter' }]
+    topology.vpnConnections[1].bgpEnabled = false
+    topology.siteLinks.push({ id: 'wan', name: 'Inter-site WAN', siteAId: 'a', siteBId: 'b', enabled: true })
+    const hub = topology.vnets[0]
+    hub.appliances.push({
+      id: 'one', name: 'NVA one', kind: 'nva-vm', subnetId: 'gateway', privateIp: '10.0.255.4',
+      asn: 65010, bgpEnabled: true, enableIpForwarding: true, advertisedPrefixes: [], staticRoutes: [],
+    })
+    Object.assign(hub.routeServer!, {
+      branchToBranchTraffic: true, peerApplianceIds: ['one'],
+      routeMaps: [{ id: 'ars-filter', name: 'ARS filter', rules: [{ ...rule, id: 'ars-rule' }] }],
+      routeMapAssignments: [
+        { connectionId: 'nva:one', inboundMapId: 'ars-filter', outboundMapId: 'ars-filter' },
+        { connectionId: 'gateway:gw', inboundMapId: 'ars-filter', outboundMapId: 'ars-filter' },
+      ],
+    })
+    await load(page, mode, topology)
+    const markers = page.locator('.policy-marker')
+    const marker = (owner: string, connection: string, direction: string) => page.locator(`.policy-marker[data-router-id="${owner}"][data-connection-id="${connection}"][data-direction="${direction}"]`)
+    await expect(markers).toHaveCount(10)
+    await page.getByTestId('aznet-canvas-shell').screenshot({ path: test.info().outputPath('policy-markers.png') })
+    const inbound = marker('a', 'primary', 'inbound')
+    await inbound.hover()
+    await expect(page.getByRole('tooltip')).toContainText('Site A · Primary VPN')
+    await expect(page.getByRole('tooltip')).toContainText('Site A filter')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('tooltip')).toHaveCount(0)
+    await inbound.focus()
+    await page.keyboard.press('Enter')
+    const sitePanel = page.getByRole('dialog', { name: 'Route maps · Site A', exact: true })
+    await expect(sitePanel.getByRole('combobox', { name: 'Route map connection', exact: true })).toHaveValue('primary')
+    await expect(sitePanel.getByRole('combobox', { name: 'Inbound route map', exact: true })).toBeFocused()
+    await expect(sitePanel.getByRole('textbox', { name: 'Route map name', exact: true })).toHaveValue('Site A filter')
+    await sitePanel.getByRole('button', { name: 'Close Route maps · Site A', exact: true }).click()
+    const inactive = marker('a', 'backup', 'outbound')
+    await expect(inactive).toHaveClass(/is-down/)
+    await inactive.hover()
+    await expect(page.getByRole('tooltip')).toContainText('BGP exchange inactive')
+    await page.keyboard.press('Escape')
+    const arsOut = marker('ars', 'gateway:gw', 'outbound')
+    const arsIn = marker('ars', 'gateway:gw', 'inbound')
+    expect(await arsOut.evaluate((element) => element.previousElementSibling!.querySelector('.policy-arrow')!.getAttribute('transform'))).toContain('rotate(0)')
+    expect(await arsIn.evaluate((element) => element.previousElementSibling!.querySelector('.policy-arrow')!.getAttribute('transform'))).toContain('rotate(180)')
+    await arsOut.focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Show route map rules', exact: true }).click()
+    const arsPanel = page.getByRole('dialog', { name: 'Route maps · Route Server', exact: true })
+    await expect(arsPanel.getByRole('combobox', { name: 'Route map connection', exact: true })).toHaveValue('gateway:gw')
+    await expect(arsPanel.getByRole('combobox', { name: 'Outbound route map', exact: true })).toBeFocused()
+    await expect(arsPanel.getByRole('textbox', { name: 'Route map name', exact: true })).toHaveValue('ARS filter')
+    await arsPanel.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
+    await page.reload()
+    await expect(markers).toHaveCount(10)
+    await arsOut.click()
+    await arsPanel.getByRole('button', { name: 'Delete route map', exact: true }).click()
+    await arsPanel.getByRole('button', { name: 'Confirm route map deletion', exact: true }).click()
+    await expect(markers).toHaveCount(6)
+    await expect(page.locator('[data-testid^="aznet-ars-session-"]')).toHaveCount(0)
+    await arsPanel.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
+    await marker('b', 'wan', 'inbound').hover()
+    await expect(page.getByRole('tooltip')).toContainText('Site B · Inter-site WAN')
+    expect(errors).toEqual([])
+  })
+
   test(`${mode} scopes ARS maps by peer and direction, keeps outbound separate from best paths and persists policies`, async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))
@@ -64,6 +183,8 @@ for (const mode of ['hub-spoke', 'full']) {
     hub.routeServer!.branchToBranchTraffic = true
     await load(page, mode, topology)
     const open = async () => {
+      const routes = page.getByRole('dialog', { name: 'Effective routes', exact: true })
+      if (await routes.isVisible()) await routes.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
       await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
       await page.getByRole('menuitem', { name: 'Manage ARS Route Maps', exact: true }).click()
     }
@@ -150,6 +271,33 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(policy.getByRole('combobox', { name: 'Outbound route map', exact: true })).toHaveValue(mapId!)
   })
 
+  test(`${mode} prefers ER over shorter VPN paths in FirewallSubnet effective routes without ARS`, async ({ page }) => {
+    const topology = bgpTopology()
+    topology.vnets[0].routeServer = undefined
+    topology.vnets[0].subnets.push({ id: 'firewall', name: 'AzureFirewallSubnet', prefix: '10.0.1.0/26' })
+    topology.vnets[0].gateways.push({
+      id: 'er-gw', name: 'ExpressRoute gateway', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true,
+    })
+    topology.sites[0].asn = 65010
+    topology.sites[0].prefixes = ['172.16.10.0/24']
+    topology.vpnConnections = [topology.vpnConnections[0]]
+    topology.erLinks.push({
+      id: 'er-gateway', name: 'Gateway circuit', locationId: 'er', targetKind: 'vnet-gateway', targetId: 'er-gw', enabled: true,
+    })
+    await load(page, mode, topology)
+    await page.getByTestId('aznet-subnet-firewall').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
+    const table = page.getByTestId('aznet-effective-route-table')
+    const active = table.locator('tbody tr:not(.suppressed)').filter({ hasText: '172.16.10.0/24' })
+    await expect(active).toHaveCount(1)
+    await expect(active.getByRole('cell').nth(3)).toContainText('ExpressRoute gateway')
+    await expect(active.locator('.as-path')).toHaveText('12076 65010')
+    await expect(table.locator('tr.suppressed').filter({ hasText: '172.16.10.0/24' }).locator('.as-path')).toHaveText('65010')
+    await page.getByTestId('aznet-lpm-input').fill('172.16.10.4')
+    await expect(active).toContainText('LPM Winner')
+  })
+
   test(`${mode} separates effective-route AS paths from origins and suppression details`, async ({ page }) => {
     const topology = bgpTopology()
     topology.udrTables.push({
@@ -171,7 +319,20 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(table).not.toContainText('AS Path:')
     await expect(table.getByTestId('aznet-route-row-172.16.0.0/24-User').locator('.as-path')).toHaveText('—')
     await expect(table.getByTestId('aznet-route-row-10.0.0.0/16-System').locator('.as-path')).toHaveText('—')
+    const dialog = page.getByRole('dialog', { name: 'Effective routes', exact: true })
+    expect((await dialog.boundingBox())!.width).toBeGreaterThan(1000)
+    const scroller = table.locator('..')
+    expect(await scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+    const lastHeading = table.getByRole('columnheader', { name: 'Origin / Tie-Breaker', exact: true })
+    await expect(lastHeading).toBeInViewport()
     await page.setViewportSize({ width: 640, height: 900 })
+    expect(await dialog.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      return bounds.left >= 0 && bounds.right <= window.innerWidth
+    })).toBe(true)
+    expect(await scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    await lastHeading.scrollIntoViewIfNeeded()
+    await expect(lastHeading).toBeInViewport()
     await bgp.locator('.as-path').scrollIntoViewIfNeeded()
     await expect(bgp.locator('.as-path')).toBeInViewport()
   })
@@ -239,7 +400,7 @@ test('all full-mode router inspectors use the same grouped table without a subne
   for (const [id, action, heading] of [
     ['aznet-chip-gw', 'Inspect Gateway BGP RIB', 'VPN gateway'],
     ['aznet-chip-ars', 'Inspect Route Server RIB (ASN 65515)', 'Route Server'],
-    ['aznet-erloc-er', 'Inspect ExpressRoute MSEE BGP RIB', 'Amsterdam'],
+    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP RIB', 'Amsterdam'],
     ['aznet-vwanhub-vhub', 'Inspect Virtual WAN Hub Effective RIB', 'Virtual hub'],
   ]) {
     await page.getByTestId(id).click({ button: 'right' })

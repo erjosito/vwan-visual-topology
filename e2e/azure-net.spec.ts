@@ -52,6 +52,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
         }
       }, topology)
       await page.goto(`/?mode=${mode}`)
+      await expect(page.getByTestId('aznet-add-erloc-btn')).toHaveText('+ ER location')
+      await expect(page.getByTestId(`aznet-erloc-${location.id}`)).not.toContainText('MSEE')
       const configure = async () => {
         await openNodeMenu(page, `aznet-erloc-${location.id}`)
         await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
@@ -100,7 +102,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.getByTestId('aznet-add-erloc-btn').click()
     await openNodeMenu(page, `aznet-erloc-erloc-custom-${topology.erLocations.length + 1}`)
     await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
-    const newSelector = page.getByRole('combobox', { name: /ER peering location ER-MSEE-/ })
+    const newSelector = page.getByRole('combobox', { name: /ER peering location ER-Location-/ })
     await expect(newSelector).toHaveValue('')
     await expect(newSelector.locator('option:checked')).toHaveText('Select ER peering location')
     await newSelector.selectOption('Stockholm')
@@ -203,7 +205,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
 
     // 3. Active trace route highlighting (FWD / RET badges) in Effective Route Table
     await page.getByTestId('aznet-tab-routes').click()
-    await page.getByTestId('aznet-subnet-sub-app-web').click()
+    await page.getByTestId('aznet-subnet-selector').selectOption('sub-app-web')
     await expect(page.getByTestId('aznet-route-trace-badge-fwd').first()).toBeVisible()
 
     // 4. Share Link encodes topology into URL hash (#s=...) and reloads cleanly
@@ -231,7 +233,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('node-label-eu')).toContainText('Core EMEA Hub')
   })
 
-  test('supports issues #35-#42: pinned mode switcher, context menus, peering & Route Table popovers, GWroutes:OFF badge, VNet element controls, and site/ER deletion', async ({
+  test('supports issues #35-#42: pinned mode switcher, context menus, peering & compact Route Table popovers, VNet element controls, and site/ER deletion', async ({
     page,
   }) => {
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
@@ -254,8 +256,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // Switch back to Hub & Spoke-Only mode
     await page.getByTestId('simulator-mode-hub-spoke').click()
 
-    // #40 & #41: Verify GWroutes:OFF and RT-Spokes badge on sub-app-web
-    await expect(page.getByTestId('aznet-subnet-sub-app-web')).toContainText('GWroutes:OFF')
+    await expect(page.getByTestId('aznet-subnet-sub-app-web')).not.toContainText('GWroutes:OFF')
     await expect(page.getByTestId('aznet-subnet-rt-badge-sub-app-web')).toContainText('RT-Spokes')
 
     // #41: Hover over Route Table badge on sub-app-web to open Route Table popover
@@ -285,7 +286,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // #39: Verify Azure Firewall was added to VNet-Spoke-App via context menu
     await expect(page.getByTestId('aznet-chip-vnet-spoke-app-azfw-1')).toBeVisible()
 
-    // #42: Topbar quick-create buttons (+ Site, + ER MSEE, + VNet, + Route Table)
+    // #42: Topbar quick-create buttons (+ Site, + ER location, + VNet, + Route Table)
     await page.getByTestId('aznet-add-site-btn').click()
     await expect(page.getByTestId('aznet-site-site-custom-3')).toBeVisible()
 

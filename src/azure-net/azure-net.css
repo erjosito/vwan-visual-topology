@@ -279,6 +279,18 @@
   width: min(660px, calc(100% - 32px));
 }
 
+.canvas-overlay.aznet-routes-window {
+  width: min(1100px, calc(100% - 32px));
+}
+
+.aznet-routes-window .aznet-route-table {
+  min-width: 960px;
+}
+
+.canvas-overlay.aznet-routes-window .table-scroll {
+  margin-inline: 0;
+}
+
 .aznet-inspector-window > .overlay-content {
   padding: 0;
 }
@@ -553,6 +565,11 @@
   gap: 8px;
   font-size: 11.5px;
   color: var(--text);
+}
+
+.aznet-subnet-tooltip {
+  pointer-events: none;
+  overflow-wrap: anywhere;
 }
 
 .aznet-hover-popover-header {

@@ -146,6 +146,7 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .overlay-content { overflow: auto; padding: 18px; min-height: 0; }.overlay-content > .muted, .overlay-content > p { margin-bottom: 14px; }.overlay-content .route-legend { padding: 0; }.overlay-content .route-editor { padding: 12px 0 0; }.overlay-content .route-edit-row { grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--border); padding-bottom: 14px; }.overlay-content .route-edit-row button { justify-self: start; }.overlay-content .flow-results { padding: 16px 0 0; }
 .inspector-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 16px; }.inspector-controls > .field { flex: 1; min-width: 150px; }.inspector-note { margin-bottom: 14px; }
 .canvas-overlay .table-scroll { margin-inline: -18px; }.canvas-overlay table th, .canvas-overlay table td { padding: 10px 12px; }.canvas-overlay .as-path { min-width: 85px; }.canvas-overlay .selection-reason { min-width: 185px; }
+.canvas-overlay.effective-routes { width: min(1100px, calc(100% - 32px)); }
 .effective-routes .overlay-content { padding: 12px; }.effective-routes .inspector-controls { gap: 8px; margin-bottom: 10px; }.effective-routes .inspector-controls > .field { flex: 1 1 240px; min-width: 0; }
 .effective-routes .route-legend, .effective-routes .inspector-note { margin-bottom: 8px; font-size: 10px; }
 .canvas-overlay.effective-routes .table-scroll { margin-inline: -12px; }.effective-routes table { min-width: 350px; }
