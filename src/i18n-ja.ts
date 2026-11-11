@@ -1,5 +1,10 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Canvas controls': 'キャンバス コントロール',
+  'Canvas style': 'キャンバスのスタイル',
+  'Grid / edge-to-edge': 'グリッド / 全幅',
+  'Dots / framed': 'ドット / 枠付き',
+  'Reset view': '表示をリセット',
   'Spoke BGP NVA': 'スポーク BGP NVA',
   'SPOKE BGP NVA': 'スポーク BGP NVA',
   'Add BGP NVA': 'BGP NVA を追加',

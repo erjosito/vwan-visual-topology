@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
+import { CanvasBackground, CanvasControls } from '../CanvasPresentation'
 import type { RouteMap, RouteMapAssignment, RouteMapDirection } from '../model'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
 import { RouteMapPreview } from '../RouteMapPreview'
@@ -580,23 +581,11 @@ export function AzureNetDiagram({
           })
         }}
       >
-        <defs>
-          <pattern id="aznet-grid" width="28" height="28" patternUnits="userSpaceOnUse">
-            <path
-              d="M 28 0 L 0 0 0 28"
-              fill="none"
-              stroke="var(--grid)"
-              strokeWidth="1"
-            />
-          </pattern>
-        </defs>
-        <rect
+        <CanvasBackground
           x={pan.x - 1000}
           y={pan.y - 1000}
           width={viewW + 2000}
           height={viewH + 2000}
-          fill="url(#aznet-grid)"
-          pointerEvents="none"
         />
 
         {/* 1. VNet Peerings */}
@@ -2140,45 +2129,19 @@ export function AzureNetDiagram({
         )
       })()}
 
-      {/* Bottom-left Canvas Controls & Clear Highlights */}
-      <div className="aznet-canvas-controls">
-        <button
-          type="button"
-          className="aznet-ctrl-btn"
-          onClick={() => setZoom((z) => Math.min(1.6, +(z + 0.15).toFixed(2)))}
-          title="Zoom in"
-        >
-          +
-        </button>
-        <button
-          type="button"
-          className="aznet-ctrl-btn"
-          onClick={() => setZoom((z) => Math.max(0.65, +(z - 0.15).toFixed(2)))}
-          title="Zoom out"
-        >
-          −
-        </button>
-        <button
-          type="button"
-          className="aznet-ctrl-btn"
-          onClick={() => {
-            setZoom(1)
-            setPan({ x: 0, y: 0 })
-          }}
-        >
-          Reset view
-        </button>
+      <CanvasControls zoom={zoom} onZoom={setZoom} minZoom={0.65} maxZoom={1.6} zoomStep={0.15}
+        onResetView={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>
         {hasActiveHighlights && (
           <button
             type="button"
-            className="aznet-ctrl-btn aznet-clear-highlights-btn"
+            className="aznet-clear-highlights-btn"
             data-testid="aznet-clear-highlights-btn"
             onClick={onClearHighlights}
           >
             ✕ Clear highlights & icons
           </button>
         )}
-      </div>
+      </CanvasControls>
     </div>
   )
 }

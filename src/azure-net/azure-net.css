@@ -246,35 +246,6 @@
   user-select: none;
 }
 
-.aznet-canvas-controls {
-  position: absolute;
-  left: 14px;
-  bottom: 14px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: var(--surface);
-  padding: 6px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 12px var(--shadow);
-}
-
-.aznet-ctrl-btn {
-  padding: 5px 9px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  font-size: 11.5px;
-  font-weight: 600;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.aznet-ctrl-btn:hover {
-  background: var(--page);
-}
-
 .aznet-clear-highlights-btn {
   background: var(--surface-muted);
   color: var(--error);
