@@ -29,8 +29,12 @@ jobs:
       - run: npm run build
         env:
           VITE_APP_REVISION: ${{ github.sha }}
-      - run: npx playwright install --with-deps chromium
-      - run: npm run test:e2e -- --workers=2
+      - name: Run browser suite with matching preinstalled browsers
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          docker run --rm --init --ipc=host -e CI=true \
+            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
+            npm run test:e2e -- --workers=2
       - uses: actions/upload-artifact@v4
         with:
           name: static-site

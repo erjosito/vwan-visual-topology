@@ -3,7 +3,7 @@ import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { topologyObject, transportLabels } from './model'
-import type { DiagnosticsFinding } from './diagnostics'
+import { diagnosticFlowCount, type DiagnosticsFinding } from './diagnostics'
 import { isolationLinkName } from './resilience'
 import type { Candidate } from './routing'
 import type { GroupPath, NodePath } from './paths'
@@ -491,23 +491,29 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
         <title>{label}</title><circle r="11" /><path d="M -4 -4 L 4 4 M -4 4 L 4 -4" />
       </g>
     })}
-    {issues.filter((finding) => finding.severity === 'error' || finding.severity === 'warning').map((finding) => {
+    {issues.filter((finding) => finding.severity === 'error' || finding.severity === 'warning').flatMap((finding) => {
       const failed = [...finding.forward, ...finding.reverse].find((path) => path.status !== 'delivered')
       const failedSource = failed && (finding.forward.includes(failed) ? finding.source : finding.target)
       const failedId = failed && (failed.siteHops?.at(-1) ?? failed.hubs.at(-1) ?? failedSource?.id)
       const object = finding.isolation?.object
         ?? (failedId ? finding.related.find((node) => node.id === failedId) : undefined)
         ?? finding.source ?? finding.related.find((node) => topologyObject(topology, node))
-      const node = object && positions.get(object.id)
-      const edge = (finding.isolation ? motionEdges.get(finding.isolation.linkId)?.curve : object && curves.get(object.id))?.at(0.5)
+      const members = finding.occurrences ?? [finding]
+      const objects = [...new Map([object, ...members.flatMap((entry) => [entry.source, entry.target])]
+        .filter((entry) => entry !== undefined)
+        .map((entry) => [`${entry.kind}:${entry.id}`, entry])).values()]
+      return objects.map((markerObject) => {
+      const node = positions.get(markerObject.id)
+      const edge = (finding.isolation && markerObject === object ? motionEdges.get(finding.isolation.linkId)?.curve : curves.get(markerObject.id))?.at(0.5)
       const p = edge ? { x: edge.x, y: edge.y - 30 / (scale * zoom) }
-        : node && { x: node.x + (object?.kind === 'hub' ? 100 : 82), y: node.y - 36 }
+        : node && { x: node.x + (markerObject.kind === 'hub' ? 100 : 82), y: node.y - 36 }
       if (!p || !onShowIssues) return null
-      const key = finding.isolation ? `link:${finding.isolation.linkId}` : object ? `${object.kind}:${object.id}` : finding.id
+      const key = finding.isolation && markerObject === object ? `link:${finding.isolation.linkId}` : `${markerObject.kind}:${markerObject.id}`
       const slot = markerSlots.get(key) ?? 0
       markerSlots.set(key, slot + 1)
-      const label = `${t(finding.title)}${finding.prefix ? ` · ${finding.prefix}` : ''}${finding.source ? ` · ${topologyObject(topology, finding.source)?.name} → ${finding.target ? topologyObject(topology, finding.target)?.name : ''}` : finding.isolation ? ` · ${isolationLinkName(topology, finding.isolation)}` : ''}`
-      return <g key={finding.id} className="routing-issue-marker danger" data-issue-id={finding.id} data-object-key={key} role="button" tabIndex={0} aria-label={label}
+      const label = `${t(finding.title)} · ${t('1 root-cause issue; {0} affected flow pairs', diagnosticFlowCount([finding]))}${finding.prefix ? ` · ${finding.prefix}` : ''}${finding.source ? ` · ${topologyObject(topology, finding.source)?.name} → ${finding.target ? topologyObject(topology, finding.target)?.name : ''}` : finding.isolation ? ` · ${isolationLinkName(topology, finding.isolation)}` : ''}`
+      return <g key={`${finding.id}:${key}`} className="routing-issue-marker danger" data-issue-id={finding.id} data-object-key={key}
+        data-root-count="1" data-affected-pairs={diagnosticFlowCount([finding])} role="button" tabIndex={0} aria-label={label}
         transform={`translate(${p.x - slot % 3 * 44 / (scale * zoom)},${p.y + Math.floor(slot / 3) * 44 / (scale * zoom)}) scale(${1 / (scale * zoom)})`}
         onClick={(event) => { event.stopPropagation(); onShowIssues(finding) }}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); onShowIssues(finding) } }}>
@@ -515,14 +521,15 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
         <path className="warning-triangle" d="M 0 -18 L 19 16 H -19 Z" />
         <text className="warning-symbol" y="10">!</text>
       </g>
+      })
     })}
     {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">{t("Right-click the canvas to add your first hub or site.")}</text>}
     {Object.entries(risks).filter(([id]) => positions.has(id) && !faults[id]).map(([id, count]) => {
       const p = point(id)
-      return <g key={`risk:${id}`} role="button" tabIndex={0} aria-label={`Review ${count} N-1 resilience gaps for ${id}`}
+      return <g key={`risk:${id}`} role="button" tabIndex={0} data-root-count={count} aria-label={`Review ${count} N-1 failure scenarios for ${id}`}
         transform={`translate(${p.x},${p.y + 52})`} onClick={() => onRisk?.(id)}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRisk?.(id) } }}>
-        <rect className="resilience-gap-badge" x="-80" y="-10" width="160" height="22" rx="3" /><text className="resilience-gap-text" textAnchor="middle" y="6">△ {count} N-1 gaps</text>
+        <rect className="resilience-gap-badge" x="-80" y="-10" width="160" height="22" rx="3" /><text className="resilience-gap-text" textAnchor="middle" y="6">△ {count} N-1 scenarios</text>
       </g>
     })}
     {Object.entries(faults).filter(([id]) => positions.has(id) && !nvaSiteMap.has(id)).map(([id, failures]) => {

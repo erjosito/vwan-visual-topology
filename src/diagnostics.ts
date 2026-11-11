@@ -49,6 +49,8 @@ export interface DiagnosticsFinding {
   forward: NodePath[]
   reverse: NodePath[]
   evidence: { code: string; nodeId?: string; prefix?: string; connectionId?: string }[]
+  causeKey?: string
+  occurrences?: DiagnosticsFinding[]
 }
 export interface DiagnosticsReport {
   budget?: { maxProbes: number; maxCells: number; maxFindings: number; maxFailureCases: number; maxMillis: number }
@@ -554,6 +556,40 @@ function intermediateEndpoints(finding: DiagnosticsFinding): Set<string> {
   }
   return endpoints
 }
+export function diagnosticFlowCount(findings: DiagnosticsFinding[]): number {
+  return new Set(findings.flatMap((finding) => finding.occurrences ?? [finding])
+    .filter((finding) => finding.source && finding.target)
+    .map((finding) => [
+      `${finding.source!.kind}:${finding.source!.id}:${finding.sourceAddress}`,
+      `${finding.target!.kind}:${finding.target!.id}:${finding.destinationAddress}`,
+    ].sort().join('|'))).size
+}
+
+export function diagnosticImpact(finding: DiagnosticsFinding) {
+  const members = finding.occurrences ?? [finding]
+  const endpoints = members.flatMap((entry) => [entry.source, entry.target]).filter((entry) => entry !== undefined)
+  return {
+    pairs: diagnosticFlowCount([finding]),
+    workloads: new Set(endpoints.filter((entry) => entry.kind === 'spoke').map((entry) => entry.id)).size,
+    sites: new Set(endpoints.filter((entry) => entry.kind === 'site').map((entry) => entry.id)).size,
+    prefixes: new Set(members.flatMap((entry) => entry.evidence
+      .filter((evidence) => evidence.code === 'source-cell' || evidence.code === 'destination-cell')
+      .map((evidence) => evidence.prefix).filter(Boolean))).size,
+  }
+}
+
+function pathConnections(path: NodePath): string[] {
+  return [path.connectionId, path.sourceConnectionId, ...(path.erLinkIds ?? []), ...(path.sourceErLinkIds ?? []),
+    ...(path.siteLinkIds ?? []), ...(path.sourceSiteLinkIds ?? [])].filter((id): id is string => Boolean(id))
+}
+
+function mergeFinding(root: DiagnosticsFinding, finding: DiagnosticsFinding) {
+  root.occurrences = [...(root.occurrences ?? [{ ...root }]), ...(finding.occurrences ?? [finding])]
+  root.related = [...new Map([...root.related, ...finding.related]
+    .map((object) => [`${object.kind}:${object.id}`, object])).values()]
+  if (finding.severity === 'error') root.severity = 'error'
+}
+
 function suppressCascadingAutomaticFindings(findings: DiagnosticsFinding[]): DiagnosticsFinding[] {
   const flowRules = new Set<DiagnosticsFinding['rule']>([
     'asymmetric',
@@ -577,36 +613,44 @@ function suppressCascadingAutomaticFindings(findings: DiagnosticsFinding[]): Dia
   const ordered = [...candidates].sort((a, b) => {
     const ca = complexity(a), cb = complexity(b)
     for (let i = 0; i < ca.length; i++) if (ca[i] !== cb[i]) return ca[i] - cb[i]
-    return a.id.localeCompare(b.id)
+    return (ipv4(a.sourceAddress ?? '') ?? 0) - (ipv4(b.sourceAddress ?? '') ?? 0) ||
+      (ipv4(a.destinationAddress ?? '') ?? 0) - (ipv4(b.destinationAddress ?? '') ?? 0) ||
+      a.id.localeCompare(b.id)
   })
   const kept: DiagnosticsFinding[] = []
-  const seenAsymmetricAnchors = new Set<string>()
-  const seenEndpointHubDivergences: { endpoint: string; hub: string; legs: Set<string> }[] = []
-  const seenFailureKeys = new Set<string>()
+  const seenAsymmetricAnchors = new Map<string, DiagnosticsFinding>()
+  const seenEndpointHubDivergences: { endpoint: string; hub: string; legs: Set<string>; finding: DiagnosticsFinding }[] = []
+  const seenFailureKeys = new Map<string, DiagnosticsFinding>()
 
   for (const finding of ordered) {
     const transits = intermediateEndpoints(finding)
-    const transitCascade = [...transits].some((mid) =>
-      kept.some((root) => {
+    const transitCascade = finding.rule === 'asymmetric' && kept.find((root) =>
+      [...transits].some((mid) => {
         if (root.rule !== finding.rule || !root.source || !root.target) return false
         const rootEndpoints = [`${root.source.kind}:${root.source.id}`, `${root.target.kind}:${root.target.id}`]
-        return rootEndpoints.includes(mid)
+        const rootLegs = new Set([...root.forward, ...root.reverse].flatMap(pathConnections))
+        return rootEndpoints.includes(mid) && [...finding.forward, ...finding.reverse]
+          .some((path) => pathConnections(path).some((link) => rootLegs.has(link)))
       }),
     )
-    if (transitCascade) continue
+    if (transitCascade) { mergeFinding(transitCascade, finding); continue }
 
     if (finding.rule === 'asymmetric') {
       const bounds = divergenceBounds(finding)
       if (bounds) {
-        if (seenAsymmetricAnchors.has(bounds.anchorKey)) continue
+        const key = stable([finding.rule, bounds.anchorKey, [...bounds.forwardCore, ...bounds.reverseCore].sort()])
+        const existing = seenAsymmetricAnchors.get(key)
+        if (existing) { mergeFinding(existing, finding); continue }
         const allCoreTokens = [...bounds.forwardCore, ...bounds.reverseCore]
-        const cascadedFromEndpointHub = seenEndpointHubDivergences.some((prior) => {
+        const cascadedFromEndpointHub = seenEndpointHubDivergences.find((prior) => {
           if (bounds.leftAnchor !== prior.endpoint && bounds.rightAnchor !== prior.endpoint) return false
           return allCoreTokens.some((core) => core.includes(prior.hub)) &&
             allCoreTokens.every((core) => [...prior.legs].some((leg) => core.includes(leg)))
         })
-        if (cascadedFromEndpointHub) continue
-        seenAsymmetricAnchors.add(bounds.anchorKey)
+        if (cascadedFromEndpointHub) { mergeFinding(cascadedFromEndpointHub.finding, finding); continue }
+        finding.causeKey = key
+        finding.id = `asymmetric:root:${hash(key)}`
+        seenAsymmetricAnchors.set(key, finding)
         if (
           (bounds.leftAnchor.startsWith('site:') || bounds.leftAnchor.startsWith('spoke:')) &&
           bounds.rightAnchor.startsWith('hub:')
@@ -616,6 +660,7 @@ function suppressCascadingAutomaticFindings(findings: DiagnosticsFinding[]): Dia
             endpoint: bounds.leftAnchor,
             hub: bounds.rightAnchor,
             legs: new Set(allCoreTokens.map(extractFirstHop)),
+            finding,
           })
         } else if (
           (bounds.rightAnchor.startsWith('site:') || bounds.rightAnchor.startsWith('spoke:')) &&
@@ -626,6 +671,7 @@ function suppressCascadingAutomaticFindings(findings: DiagnosticsFinding[]): Dia
             endpoint: bounds.rightAnchor,
             hub: bounds.leftAnchor,
             legs: new Set(allCoreTokens.map(extractLastHop)),
+            finding,
           })
         }
       }
@@ -643,16 +689,26 @@ function suppressCascadingAutomaticFindings(findings: DiagnosticsFinding[]): Dia
       const paths = failingForward ? finding.forward : finding.reverse
       const failedSource = failingForward ? finding.source! : finding.target!
       const failedTarget = failingForward ? finding.target! : finding.source!
+      const missingPrefix = finding.evidence.find((entry) =>
+        entry.code === (failingForward ? 'destination-cell' : 'source-cell'))?.prefix
+      const category = finding.rule === 'network-return' ? 'network-unreachable' : finding.rule
       const failureSig = paths
+        .filter((path) => path.status !== 'delivered')
         .map((path) => {
           const lastSpot = path.siteId ? `site:${path.siteId}` : path.hubs.length ? `hub:${path.hubs.at(-1)}` : `${failedSource.kind}:${failedSource.id}`
-          const targetOwner = lastSpot === `${failedSource.kind}:${failedSource.id}` ? 'egress' : `${failedTarget.kind}:${failedTarget.id}`
-          return `${finding.rule}:${lastSpot}:${path.termination ?? 'unknown'}:${path.lookupPrefix ?? targetOwner}`
+          const targetOwner = path.termination === 'attachment-unavailable' ? 'attachment'
+            : missingPrefix ?? `${failedTarget.kind}:${failedTarget.id}`
+          return `${category}:${lastSpot}:${path.termination ?? 'unknown'}:${path.connectionId ?? ''}:${path.lookupPrefix ?? targetOwner}`
         })
         .sort()
         .join('|')
-      if (failureSig && seenFailureKeys.has(failureSig)) continue
-      if (failureSig) seenFailureKeys.add(failureSig)
+      const existing = seenFailureKeys.get(failureSig)
+      if (failureSig && existing) { mergeFinding(existing, finding); continue }
+      if (failureSig) {
+        finding.causeKey = failureSig
+        finding.id = `${category}:root:${hash(failureSig)}`
+        seenFailureKeys.set(failureSig, finding)
+      }
     }
 
     kept.push(finding)
@@ -938,9 +994,13 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     }
     const groups = new Map<string, PendingCellFinding[]>()
     for (const item of pending) {
-      const list = groups.get(item.groupKey) ?? []
+      const pathCause = (path: NodePath) => [path.status, path.termination, path.siteId, path.hubs.at(-1), path.lookupPrefix, path.connectionId]
+      const causalGroupKey = item.groupKey === item.rule
+        ? stable([item.groupKey, item.fields.forward?.map(pathCause), item.fields.reverse?.map(pathCause)])
+        : item.groupKey
+      const list = groups.get(causalGroupKey) ?? []
       list.push(item)
-      groups.set(item.groupKey, list)
+      groups.set(causalGroupKey, list)
     }
     for (const group of groups.values()) {
       const first = group[0]
@@ -960,6 +1020,12 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
         destinationAddress: mergedTarget.address,
         prefix: mergedTarget.prefix,
         evidence: updatedEvidence,
+        occurrences: group.length > 1 ? group.map((item) => ({
+          id: `${item.rule}:cell:${hash(stable([intent.id, item.source.prefix, item.target.prefix]))}`,
+          rule: item.rule, severity: item.severity, confidence: item.severity === 'warning' ? 'risk' : item.severity === 'unknown' ? 'unknown' : 'modeled',
+          title: messages[item.rule][0], detail: messages[item.rule][1], related: [], forward: [], reverse: [], evidence: [],
+          ...item.fields,
+        })) : undefined,
       })
     }
   }

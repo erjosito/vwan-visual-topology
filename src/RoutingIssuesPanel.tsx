@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { CanvasOverlay } from './CanvasOverlay'
 import { AnalysisCoverage } from './AnalysisCoverage'
+import { FindingFlows } from './FindingFlows'
 import { localizeDiagnostic, t } from './i18n'
 import type { DiagnosticsFinding, DiagnosticsReport } from './diagnostics'
 import { describeEvidenceSource, summarizeCoverage } from './diagnostics'
@@ -23,8 +24,9 @@ export function RoutingIssuesPanel({ topology, report, findingId, selectedFindin
   const coverage = summarizeCoverage(report)
   const allActionable = report.findings.filter((finding) => finding.severity !== 'info' && finding.severity !== 'unknown')
   const findings = allActionable.filter((finding) => (!findingId || finding.id === findingId)
-    && (!filter || [finding.prefix, finding.sourceAddress, finding.destinationAddress, name(finding.source), name(finding.target), t(finding.title), t(finding.detail)]
-      .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))))
+    && (!filter || (finding.occurrences ?? [finding]).some((entry) =>
+      [entry.prefix, entry.sourceAddress, entry.destinationAddress, name(entry.source), name(entry.target), t(entry.title), t(entry.detail)]
+        .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase())))))
   const severity = { error: 'Error', warning: 'Warning', unknown: 'Not assessed', info: 'Information' } as const
   return <CanvasOverlay title={t('Routing issues')} className="routing-issues-panel" onClose={onClose}>
     {findingId && <div className="row"><span className="muted">{t('Showing selected issue ({0} of {1})', findings.length, allActionable.length)}</span><button onClick={onShowAll}>{t('Show all routing issues')}</button></div>}
@@ -34,6 +36,7 @@ export function RoutingIssuesPanel({ topology, report, findingId, selectedFindin
     <div className="flow-results">{findings.slice(0, visibleCount).map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
       <div className="row"><span className="diagnostic-severity">{t(severity[finding.severity])}</span><button className="finding-title" aria-pressed={selectedFindingId === finding.id} onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
       <p>{t(finding.detail)}</p>
+      <FindingFlows finding={finding} topology={topology} onFinding={onFinding} />
       {!finding.source && <p>{t('Affected objects: {0}', finding.related.map(name).join(', '))}</p>}
       {finding.isolation && <div className="isolation-groups"><p>{t('Link: {0}', isolationLinkName(topology, finding.isolation))}</p>
         {finding.isolation.groups.map((group, index) => <p key={index}><strong>{t('Separated group {0} ({1} nodes)', index + 1, group.length)}</strong>: {group.map(name).join(', ')}</p>)}

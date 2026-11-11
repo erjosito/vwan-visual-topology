@@ -89,7 +89,7 @@ test('worker analysis can be cancelled and mobile reports stay within the viewpo
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
 })
 
-test('one click shows one sign per issue and selecting a sign explains and animates that issue only', async ({ page }) => {
+test('one click marks shared root issues and selecting a sign explains and animates that issue only', async ({ page }) => {
   await setup(page, false)
   await expect(page.getByRole('dialog')).toHaveCount(0)
   const marker = page.locator('.routing-issue-marker[data-issue-id^="network-unreachable:"]').first()
@@ -106,7 +106,7 @@ test('one click shows one sign per issue and selecting a sign explains and anima
   await issues.getByRole('button', { name: 'Show all routing issues', exact: true }).click()
   const findingCount = await issues.locator('.diagnostic-finding').count()
   const ids = await page.locator('.routing-issue-marker').evaluateAll((markers) => markers.map((marker) => marker.getAttribute('data-issue-id')))
-  expect(ids).toHaveLength(findingCount)
+  expect(ids.length).toBeGreaterThanOrEqual(findingCount)
   expect(new Set(ids).size).toBe(findingCount)
   await page.getByRole('button', { name: 'Clear highlighting', exact: true }).click()
   await page.keyboard.press('Escape')
@@ -116,6 +116,41 @@ test('one click shows one sign per issue and selecting a sign explains and anima
   await page.locator('header [data-language-selector]').selectOption('ja')
   await expect(page.getByRole('dialog', { name: 'ルーティングの問題', exact: true })).toContainText('到達できないネットワーク')
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
+})
+
+test('shared VWAN root markers navigate from either workload and preserve each directional trace', async ({ page }) => {
+  const broken: Topology = structuredClone(topology)
+  broken.connections = [{
+    id: 'vpn', name: 'VPN', hubId: 'h', siteId: 'isolated', transport: 'VPN',
+    enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
+  }]
+  await page.goto('/?mode=vwan')
+  await page.getByLabel('Import topology file').setInputFiles({
+    name: 'shared-cause.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken)),
+  })
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  const first = page.locator('.routing-issue-marker[data-object-key="spoke:a"][data-affected-pairs="2"]')
+  const second = page.locator('.routing-issue-marker[data-object-key="spoke:b"][data-affected-pairs="2"]')
+  await expect(first).toHaveCount(1)
+  await expect(second).toHaveCount(1)
+  expect(await first.getAttribute('data-issue-id')).toBe(await second.getAttribute('data-issue-id'))
+  await second.focus()
+  await page.keyboard.press('Enter')
+  const issues = page.getByRole('dialog', { name: 'Routing issues', exact: true })
+  await expect(issues.getByTestId('vwan-root-impact')).toContainText('2 affected flow pairs, 2 workload VNets, 1 sites')
+  await issues.getByTestId('vwan-affected-flows').getByText('Affected flows and directional evidence', { exact: true }).click()
+  await expect(issues.getByRole('button', { name: 'Highlight affected flow', exact: true })).toHaveCount(2)
+  await issues.getByRole('button', { name: 'Highlight affected flow', exact: true }).last().click()
+  await expect(page.getByTestId('spoke-link-b')).toHaveClass(/preferred-link/)
+  await issues.getByLabel('Filter routing issues').fill('Destination VNet')
+  await expect(issues.locator('.diagnostic-finding')).toHaveCount(1)
+  broken.connections[0].learnSiteRoutes = true
+  await page.getByLabel('Import topology file').setInputFiles({
+    name: 'repaired.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(broken)),
+  })
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await expect(page.locator('.routing-check-status')).toContainText('affecting 0 flow pairs')
+  await expect(page.locator('.routing-issue-marker[data-issue-id^="network-"]')).toHaveCount(0)
 })
 
 test('automatic checks keep markers across display changes but remove them when routing changes', async ({ page }) => {
@@ -227,7 +262,7 @@ test('selecting an asymmetric issue animates independently selected forward and 
   await page.goto('/')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'asymmetric.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(asymmetric)) })
   await page.getByRole('button', { name: 'Check routing', exact: true }).click()
-  await page.locator('.routing-issue-marker[data-issue-id^="asymmetric:"]').click()
+  await page.locator('.routing-issue-marker[data-issue-id^="asymmetric:"]').first().click()
   await expect(page.locator('.diagnostic-finding')).toHaveCount(1)
   await expect(page.getByRole('button', { name: 'Asymmetric physical path sets', exact: true })).toHaveAttribute('aria-pressed', 'true')
   const forward = page.locator('.path-flow[data-direction="forward"]'), reverse = page.locator('.path-flow[data-direction="return"]')

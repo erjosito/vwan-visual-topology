@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { CanvasOverlay } from './CanvasOverlay'
 import { AnalysisCoverage } from './AnalysisCoverage'
+import { FindingFlows } from './FindingFlows'
 import { localizeDiagnostic, t } from './i18n'
 import { describeEvidenceSource, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsFinding, DiagnosticsProfile, DiagnosticsReport, ExportConstraint } from './diagnostics'
@@ -132,8 +133,9 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   const visible = currentReport?.findings.filter((finding) => finding.severity !== 'unknown' &&
     (!severity || finding.severity === severity) && (!category || finding.rule === category)
     && (!nodeFilter || [finding.source, finding.target, ...finding.related].some((node) => node && key(node) === nodeFilter))
-    && (!filter || [finding.prefix, finding.sourceAddress, finding.destinationAddress, name(finding.source), name(finding.target), t(finding.title), t(finding.detail)]
-      .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase())))) ?? []
+    && (!filter || (finding.occurrences ?? [finding]).some((entry) =>
+      [entry.prefix, entry.sourceAddress, entry.destinationAddress, name(entry.source), name(entry.target), t(entry.title), t(entry.detail)]
+        .some((value) => value?.toLocaleLowerCase().includes(filter.toLocaleLowerCase()))))) ?? []
   const categories = [...new Map(currentReport?.findings.filter((finding) => finding.severity !== 'unknown').map((finding) => [finding.rule, finding.title]) ?? []).entries()]
   return <CanvasOverlay title={t('Routing diagnostics')} className="diagnostics-panel" onClose={onClose}>
     <p className="muted">{t('Offline, intent-aware routing checks. Declare expected communication; asymmetric transit alone is not an error. Actual hosts, firewall rules, NAT and traffic hashes are not verified.')}</p>
@@ -210,6 +212,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
         <div className="flow-results">{visible.map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
           <div className="row"><span className="diagnostic-severity">{t(severities[finding.severity])}</span><button className="finding-title" onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
           <p>{t(finding.detail)}</p>
+          <FindingFlows finding={finding} topology={topology} onFinding={onFinding} />
           {!finding.source && <p>{t('Affected objects: {0}', finding.related.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', '))}</p>}
           {finding.isolation && <div className="isolation-groups"><p>{t('Link: {0}', isolationLinkName(topology, finding.isolation))}</p>
             {finding.isolation.groups.map((group, index) => <p key={index}><strong>{t('Separated group {0} ({1} nodes)', index + 1, group.length)}</strong>: {group.map((node) => topologyObject(topology, node)?.name ?? node.id).join(', ')}</p>)}
