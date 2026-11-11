@@ -4,8 +4,9 @@ import { createPortal } from 'react-dom'
 import type { RouteMap, RouteMapDirection } from './model'
 import { RouteMapRules } from './RouteMapRules'
 
-export function RouteMapPreview({ id, anchor, map, owner, connection, direction, enabled, onEnter, onLeave, onClose }: {
+export function RouteMapPreview({ id, anchor, map, owner, connection, direction, enabled, inactiveReason, onEnter, onLeave, onClose }: {
   id: string; anchor: SVGGElement; map: RouteMap; owner: string; connection: string; direction: RouteMapDirection; enabled: boolean
+  inactiveReason?: string
   onEnter: () => void; onLeave: () => void; onClose: () => void
 }) {
   const preview = useRef<HTMLDivElement>(null)
@@ -44,7 +45,7 @@ export function RouteMapPreview({ id, anchor, map, owner, connection, direction,
   return createPortal(<div ref={preview} id={id} role="tooltip" className={`route-map-preview ${direction}`} onPointerEnter={onEnter} onPointerLeave={onLeave}>
     <h3><span className={`policy-tag ${direction}`}>{t(direction === 'inbound' ? 'IN' : 'OUT')}</span>{map.name}</h3>
     <p>{owner} · {connection}</p>
-    {!enabled && <p className="notice">{t("Connection down; configured but inactive.")}</p>}
+    {!enabled && <p className="notice">{inactiveReason ?? t("Connection down; configured but inactive.")}</p>}
     <RouteMapRules map={map} label={t("Preview rules for {0}", map.name)} />
     <p className="muted">{t("Rules run in order; unmatched routes pass unchanged. Click the marker to inspect or configure. Escape dismisses this preview.")}</p>
   </div>, document.body)

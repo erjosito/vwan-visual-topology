@@ -15,6 +15,7 @@ import {
 } from '../er-locations-catalog'
 import {
   AzureNetDiagram,
+  type AzRouteMapSelection,
   type AzContextMenuTarget,
   type AzSelectedEntity,
 } from './AzureNetDiagram'
@@ -287,6 +288,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
   const [routeMapArsId, setRouteMapArsId] = useState<string>()
+  const [routeMapInspection, setRouteMapInspection] = useState<AzRouteMapSelection>()
   const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
     setInspectedEntity(entity)
@@ -1774,7 +1776,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Azure Route Server · ${ars.name}`,
         actions: [
-          { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
+          { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
           {
             label: 'Inspect Route Server RIB (ASN 65515)',
             onSelect: () => {
@@ -2280,7 +2282,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `On-Premises Site · ${site.name} (ASN ${site.asn})`,
         actions: [
-          { label: 'Manage Site Route Maps', onSelect: () => { setActiveTab(null); setRouteMapArsId(undefined); setRouteMapSiteId(site.id) } },
+          { label: 'Manage Site Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapArsId(undefined); setRouteMapSiteId(site.id) } },
           ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'site' && e.ref.siteId === site.id)),
           {
             label: 'Inspect Site BGP Route Table',
@@ -2584,9 +2586,21 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     return ordinary && { ...ordinary, actions: [...(domain ? [{ label: `Simulate failure of ${failureLabel(domain)}`, onSelect: () => addFault(domain) }]
       : ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...ordinary.actions] }
   }
-  const contextMenuSpec = contextMenu && getContextMenuSpec(
+  const openRouteMapRules = (selection: AzRouteMapSelection) => {
+    setActiveTab(null)
+    setCanvasSelection(selection.owner)
+    setRouteMapInspection(selection)
+    setRouteMapSiteId(selection.owner.kind === 'site' ? selection.owner.siteId : undefined)
+    setRouteMapArsId(selection.owner.kind === 'route-server' ? selection.owner.routeServerId : undefined)
+  }
+  const ordinaryContextMenuSpec = contextMenu && getContextMenuSpec(
     contextMenu.kind === 'canvas' ? contextMenu : contextMenu.entity,
   )
+  const policyContext = contextMenu?.kind === 'entity' ? contextMenu.routeMap : undefined
+  const contextMenuSpec = ordinaryContextMenuSpec && policyContext ? {
+    ...ordinaryContextMenuSpec,
+    actions: [{ label: 'Show route map rules', onSelect: () => openRouteMapRules(policyContext) }, ...ordinaryContextMenuSpec.actions],
+  } : ordinaryContextMenuSpec
   const deletionSpec = deleteTarget && getContextMenuSpec(deleteTarget)
   const deletionAction = deletionSpec?.actions.find((action) => action.danger && !action.disabled && action.onSelect)
   useDeleteShortcut(canvasSelection && !deletionAction && !sampleGalleryOpen && !erLocationModalState.open ? () => {
@@ -2947,6 +2961,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
           <AzureNetDiagram
             topology={topology}
+            onShowRouteMapRules={openRouteMapRules}
             faults={scenario.affected}
             risks={risks}
             onRisk={setResilienceEndpoint}
@@ -3065,7 +3080,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           )}
         </section>
 
-        {(routeMapSiteId || routeMapArsId) && <AzRouteMapsPanel key={routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`} topology={topology}
+        {(routeMapSiteId || routeMapArsId) && <AzRouteMapsPanel key={`${routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`}:${routeMapInspection?.connectionId ?? ''}:${routeMapInspection?.direction ?? ''}`} topology={topology}
+          initialConnectionId={routeMapInspection?.connectionId} initialDirection={routeMapInspection?.direction}
           siteId={routeMapSiteId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
           inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
           onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined) }} />}

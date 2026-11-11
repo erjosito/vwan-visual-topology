@@ -1,5 +1,11 @@
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { diagramCurve } from '../diagram-layout'
+import { t } from '../i18n'
+import type { RouteMap, RouteMapAssignment, RouteMapDirection } from '../model'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
+import { RouteMapPreview } from '../RouteMapPreview'
+import { azArsPolicyLinks } from './ars-route-maps'
+import { azSitePolicyLinks } from './route-maps'
 import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
 import type { AzFlowTrace } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
@@ -21,7 +27,13 @@ export type AzSelectedEntity =
 
 export type AzContextMenuTarget =
   | { kind: 'canvas'; x: number; y: number; svgX: number; svgY: number }
-  | { kind: 'entity'; x: number; y: number; entity: AzSelectedEntity }
+  | { kind: 'entity'; x: number; y: number; entity: AzSelectedEntity; routeMap?: AzRouteMapSelection }
+
+export interface AzRouteMapSelection {
+  owner: Extract<AzSelectedEntity, { kind: 'site' | 'route-server' }>
+  connectionId: string
+  direction: RouteMapDirection
+}
 
 interface AzureNetDiagramProps {
   faults?: import('../failures').FaultMap
@@ -54,6 +66,7 @@ interface AzureNetDiagramProps {
     routeTableId: string | undefined,
   ) => void
   onOpenEditorForEntity?: (entity: AzSelectedEntity) => void
+  onShowRouteMapRules?: (selection: AzRouteMapSelection) => void
   forwardTrace?: AzFlowTrace | null
   reverseTrace?: AzFlowTrace | null
   additionalForwardTraces?: AzFlowTrace[]
@@ -71,11 +84,18 @@ interface BoxPosition {
   height: number
 }
 
+function mappedArsLinks(vnet: AzVNet) {
+  return azArsPolicyLinks(vnet).filter((link) => {
+    const binding = vnet.routeServer?.routeMapAssignments?.find((assignment) => assignment.connectionId === link.id)
+    return [binding?.inboundMapId, binding?.outboundMapId].some((id) => id && vnet.routeServer?.routeMaps?.some((map) => map.id === id))
+  })
+}
+
 function getVnetBoxHeight(vnet: AzVNet): number {
   const headerH = 44
   const controlStripH = vnet.gateways.length > 0 || vnet.routeServer || vnet.appliances.length > 0 ? 30 : 0
   const subnetsH = Math.max(1, vnet.subnets.length) * 28 + 14
-  return headerH + controlStripH + subnetsH
+  return headerH + controlStripH + mappedArsLinks(vnet).length * 44 + subnetsH
 }
 
 function isHubVnetRole(role: string): boolean {
@@ -162,6 +182,7 @@ export function AzureNetDiagram({
   onUpdateRouteTable,
   onAssociateSubnetRouteTable,
   onOpenEditorForEntity,
+  onShowRouteMapRules,
   forwardTrace,
   reverseTrace,
   additionalForwardTraces = [],
@@ -174,11 +195,27 @@ export function AzureNetDiagram({
   const shellRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const hoverTimerRef = useRef<number | null>(null)
+  const tooltipId = useId()
+  const policyPreviewId = useId()
+  const policyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [policyPreview, setPolicyPreview] = useState<{ id: string; anchor: SVGGElement }>()
+  const cancelPolicyClose = () => clearTimeout(policyTimer.current)
+  const closePolicyPreview = () => { cancelPolicyClose(); setPolicyPreview(undefined) }
+  const leavePolicyPreview = () => {
+    if (policyPreview?.anchor === document.activeElement) return
+    cancelPolicyClose()
+    policyTimer.current = setTimeout(() => setPolicyPreview(undefined), 150)
+  }
+  useEffect(() => () => {
+    clearTimeout(policyTimer.current)
+    if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
+  }, [])
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [hoverPopover, setHoverPopover] = useState<
     | { kind: 'peering'; peeringId: string; x: number; y: number }
     | { kind: 'route-table'; vnetId: string; subnetId: string; routeTableId: string; x: number; y: number }
+    | { kind: 'subnet'; vnetId: string; subnetId: string; x: number; y: number }
     | null
   >(null)
 
@@ -339,6 +376,111 @@ export function AzureNetDiagram({
   ))
   const targetKey = (kind: string, id: string) =>
     kind === 'site' || kind === 'vwan-hub' ? `${kind}:${id}` : deviceOwners.get(id)
+  const policyMarkers: {
+    id: string; selection: AzRouteMapSelection; ownerName: string; connectionName: string; map: RouteMap; enabled: boolean
+    point: { x: number; y: number }; position: { x: number; y: number }; angle: number
+  }[] = []
+  const addPolicyMarkers = (
+    owner: AzRouteMapSelection['owner'], ownerName: string, connectionId: string, connectionName: string,
+    maps: RouteMap[], bindings: RouteMapAssignment[], enabled: boolean,
+    curve: ReturnType<typeof diagramCurve>, offset = 28, internal = false,
+  ) => {
+    const ownerId = owner.kind === 'site' ? owner.siteId : owner.routeServerId
+    const binding = bindings.find((assignment) => assignment.connectionId === connectionId)
+    const directions = (['inbound', 'outbound'] as const).filter((direction) => maps.some((map) => map.id === binding?.[`${direction}MapId`]))
+    directions.forEach((direction, index) => {
+      const map = maps.find((map) => map.id === binding?.[`${direction}MapId`])!
+      const point = curve.at(0.2 + index * (internal ? 0.4 : 0.18))
+      const length = Math.hypot(point.dx, point.dy) || 1
+      policyMarkers.push({
+        id: `${ownerId}:${connectionId}:${direction}`, selection: { owner, connectionId, direction },
+        ownerName, connectionName, map, enabled: enabled && !faults[ownerId] && !faults[connectionId],
+        point, position: { x: point.x - point.dy / length * offset, y: point.y + point.dx / length * offset },
+        angle: Math.atan2(point.dy, point.dx) * 180 / Math.PI + (direction === 'inbound' ? 180 : 0),
+      })
+    })
+  }
+  for (const site of topology.sites) {
+    const box = positions.sites[site.id]
+    const slots = new Map<string, number>()
+    for (const link of azSitePolicyLinks(topology, site.id)) {
+      if (!site.routeMapAssignments?.some((assignment) => assignment.connectionId === link.id)) continue
+      const vpn = topology.vpnConnections.find((connection) => connection.id === link.id)
+      const er = topology.erLinks.find((connection) => connection.id === link.id)
+      const wan = topology.siteLinks.find((connection) => connection.id === link.id)
+      const target = vpn ? targetKey(vpn.targetKind, vpn.targetId) : er ? `er-location:${er.locationId}`
+        : wan ? `site:${wan.siteAId === site.id ? wan.siteBId : wan.siteAId}` : undefined
+      const other = target && motionBoxes.get(target)
+      if (!other || !target) continue
+      const slot = slots.get(target) ?? 0
+      slots.set(target, slot + 1)
+      const curve = diagramCurve(
+        { x: box.x + box.width / 2, y: box.y + box.height / 2 },
+        { x: other.x + other.width / 2, y: other.y + other.height / 2 },
+        { x: box.width / 2, y: box.height / 2 }, { x: other.width / 2, y: other.height / 2 }, 0,
+      )
+      const gateway = vpn?.targetKind === 'vnet-gateway' ? topology.vnets.flatMap((vnet) => vnet.gateways).find((gateway) => gateway.id === vpn.targetId) : undefined
+      addPolicyMarkers({ kind: 'site', siteId: site.id }, site.name, link.id, link.name,
+        topology.routeMaps?.filter((map) => map.siteId === site.id) ?? [], site.routeMapAssignments ?? [],
+        Boolean((vpn ?? er ?? wan)?.enabled && link.bgp && (!gateway || gateway.enabled) && !faults[target.slice(target.indexOf(':') + 1)]),
+        curve, 28 + slot * 52)
+    }
+  }
+  for (const vnet of topology.vnets) {
+    const ars = vnet.routeServer
+    if (!ars) continue
+    const box = positions.vnets[vnet.id]
+    mappedArsLinks(vnet).forEach((link, index) => {
+      const y = box.y + 82 + index * 44
+      const peer = vnet.appliances.find((app) => app.id === link.targetId)
+      const gateway = vnet.gateways.find((gateway) => gateway.id === link.targetId)
+      addPolicyMarkers({ kind: 'route-server', vnetId: vnet.id, routeServerId: ars.id }, ars.name, link.id, link.name,
+        ars.routeMaps ?? [], ars.routeMapAssignments ?? [],
+        Boolean(ars.enabled && link.bgp && !faults[vnet.id] && !faults[link.targetId] &&
+          (peer ? peer.enableIpForwarding && peer.asn !== 65515 && peer.asn !== 12076 : gateway?.enabled && ars.branchToBranchTraffic)),
+        diagramCurve({ x: box.x + 40, y }, { x: box.x + box.width - 106, y }, { x: 1, y: 1 }, { x: 1, y: 1 }, 0), 18, true)
+    })
+  }
+  const previewMarker = policyMarkers.find((marker) => marker.id === policyPreview?.id)
+  const renderPolicyMarker = (marker: typeof policyMarkers[number]) => {
+    const { direction, owner, connectionId } = marker.selection
+    const ownerId = owner.kind === 'site' ? owner.siteId : owner.routeServerId
+    const label = t("{0} route map rules for {1} on {2}", t(direction === 'inbound' ? 'Inbound' : 'Outbound'), marker.ownerName, marker.connectionName)
+    const activate = () => { closePolicyPreview(); setHoverPopover(null); onShowRouteMapRules?.(marker.selection) }
+    return <Fragment key={marker.id}>
+      <g className={`policy-guide ${direction} ${marker.enabled ? '' : 'is-down'}`} aria-hidden="true">
+        <path d={`M ${marker.point.x} ${marker.point.y} L ${marker.position.x} ${marker.position.y}`} className="policy-leader" />
+        <path transform={`translate(${marker.point.x},${marker.point.y}) rotate(${marker.angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow-halo" />
+        <path transform={`translate(${marker.point.x},${marker.point.y}) rotate(${marker.angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow" />
+      </g>
+      <g className={`policy-marker ${direction} ${marker.enabled ? '' : 'is-down'}`} role="button" tabIndex={0} aria-label={label}
+        data-connection-id={connectionId} data-router-id={ownerId} data-direction={direction}
+        aria-describedby={policyPreview?.id === marker.id ? policyPreviewId : undefined}
+        transform={`translate(${marker.position.x},${marker.position.y})`}
+        onPointerDown={(event) => event.stopPropagation()}
+        onClick={(event) => { event.stopPropagation(); activate() }}
+        onContextMenu={(event) => {
+          event.preventDefault(); event.stopPropagation(); closePolicyPreview()
+          onContextMenu?.({ kind: 'entity', entity: owner, routeMap: marker.selection, x: event.clientX, y: event.clientY })
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); activate() }
+          else if (event.key === 'ContextMenu' || event.shiftKey && event.key === 'F10') {
+            event.preventDefault(); event.stopPropagation(); closePolicyPreview()
+            const bounds = event.currentTarget.getBoundingClientRect()
+            onContextMenu?.({ kind: 'entity', entity: owner, routeMap: marker.selection, x: bounds.left, y: bounds.bottom })
+          }
+        }}
+        onPointerEnter={(event) => { cancelPolicyClose(); setHoverPopover(null); setPolicyPreview({ id: marker.id, anchor: event.currentTarget }) }}
+        onPointerLeave={leavePolicyPreview}
+        onFocus={(event) => { cancelPolicyClose(); setPolicyPreview({ id: marker.id, anchor: event.currentTarget }) }}
+        onBlur={closePolicyPreview}>
+        <rect x="-23" y="-11" width="46" height="22" rx="7" />
+        <path className="policy-filter" d="M -17 -5 H -7 L -10 0 V 5 L -14 3 V 0 Z" />
+        <text x="7" y="4">{t(direction === 'inbound' ? 'IN' : 'OUT')}</text>
+      </g>
+    </Fragment>
+  }
   const motionEdges = new Map<string, MotionSegment>()
   const addMotionEdge = (id: string, from: string | undefined, to: string | undefined) => {
     const a = from && motionBoxes.get(from), b = to && motionBoxes.get(to)
@@ -401,6 +543,7 @@ export function AzureNetDiagram({
         className="aznet-diagram-svg"
         data-testid="aznet-diagram-svg"
         viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
+        onPointerDownCapture={closePolicyPreview}
         onPointerDown={(e) => {
           setHoverPopover(null)
           if (e.target === svgRef.current) {
@@ -960,7 +1103,7 @@ export function AzureNetDiagram({
         <PathMotion flows={motionFlows} pixelsPerUnit={pixelsPerUnit} colors={motionColors} />
 
         {/* 6. Compound VNet Cards */}
-        {topology.vnets.map((vnet) => {
+        {topology.vnets.map((vnet, vnetIndex) => {
           const box = positions.vnets[vnet.id]
           if (!box) return null
           const isVnetSelected = selected?.kind === 'vnet' && selected.vnetId === vnet.id
@@ -970,7 +1113,8 @@ export function AzureNetDiagram({
 
           const hasControlRow =
             vnet.gateways.length > 0 || Boolean(vnet.routeServer) || vnet.appliances.length > 0
-          const subnetStartY = box.y + 44 + (hasControlRow ? 30 : 0) + 6
+          const arsLinks = mappedArsLinks(vnet)
+          const subnetStartY = box.y + 44 + (hasControlRow ? 30 : 0) + arsLinks.length * 44 + 6
 
           return (
             <g
@@ -1191,6 +1335,18 @@ export function AzureNetDiagram({
                 </g>
               )}
 
+              {arsLinks.map((link, index) => {
+                const y = box.y + 82 + index * 44
+                return <g key={link.id} data-testid={`aznet-ars-session-${vnet.routeServer!.id}-${link.id}`}>
+                  <title>{vnet.routeServer!.name} · {link.name}</title>
+                  <line x1={box.x + 40} y1={y} x2={box.x + box.width - 106} y2={y} stroke="var(--link)" strokeDasharray="3 3" />
+                  <text x={box.x + 10} y={y + 3} fontSize={9} fill="var(--success)">ARS</text>
+                  <text x={box.x + box.width - 10} y={y + 3} textAnchor="end" fontSize={9} fill="var(--text)">
+                    {link.name.length > 16 ? `${link.name.slice(0, 15)}…` : link.name}
+                  </text>
+                </g>
+              })}
+
               {/* Clickable Subnet Rows */}
               {vnet.subnets.map((subnet, sIdx) => {
                 const rowY = subnetStartY + sIdx * 28
@@ -1202,6 +1358,14 @@ export function AzureNetDiagram({
                   ? topology.udrTables.find((t) => t.id === subnet.routeTableId)
                   : undefined
                 const hasPe = (subnet.privateEndpoints?.length ?? 0) > 0
+                const badgeText = rt ? `RT: ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}` : ''
+                const badgeW = rt ? Math.min(88, Math.max(42, badgeText.length * 4.8 + 10)) : 0
+                const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW
+                const labelClipId = `${tooltipId}-subnet-${vnetIndex}-${sIdx}`
+                const showSubnet = (x: number, y: number) => {
+                  clearHoverTimer()
+                  setHoverPopover({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id, ...getRelativePopoverPosition(x, y) })
+                }
 
                 let rowFill = 'var(--surface-muted)'
                 let rowStroke = 'var(--link)'
@@ -1224,8 +1388,20 @@ export function AzureNetDiagram({
                     data-testid={`aznet-subnet-${subnet.id}`}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Subnet ${vnet.name} / ${subnet.name}`}
-                    onKeyDown={(e) => openKeyboardContext(e, { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })}
+                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})`}
+                    aria-describedby={hoverPopover?.kind === 'subnet' && hoverPopover.subnetId === subnet.id ? tooltipId : undefined}
+                    onMouseEnter={(e) => showSubnet(e.clientX, e.clientY)}
+                    onMouseLeave={scheduleClosePopover}
+                    onFocus={(e) => {
+                      if (e.target !== e.currentTarget) return
+                      const bounds = e.currentTarget.getBoundingClientRect()
+                      showSubnet(bounds.left, bounds.bottom)
+                    }}
+                    onBlur={scheduleClosePopover}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') { e.stopPropagation(); setHoverPopover(null) }
+                      else openKeyboardContext(e, { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
+                    }}
                     onClick={(e) => {
                       e.stopPropagation()
                       onSelect({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
@@ -1258,7 +1434,9 @@ export function AzureNetDiagram({
                       stroke={rowStroke}
                       strokeWidth={isSubSelected || inFwd || inRev ? 1.8 : 1}
                     />
+                    <defs><clipPath id={labelClipId}><rect x={box.x + 15} y={rowY} width={Math.max(0, badgeX - box.x - 22)} height={24} /></clipPath></defs>
                     <text
+                      clipPath={`url(#${labelClipId})`}
                       x={box.x + 15}
                       y={rowY + 15}
                       fontSize={10.5}
@@ -1267,25 +1445,7 @@ export function AzureNetDiagram({
                     >
                       {subnet.name}
                     </text>
-                    <text
-                      x={box.x + 148}
-                      y={rowY + 15}
-                      fontSize={9.5}
-                      fill="var(--text)"
-                    >
-                      {subnet.prefix}
-                    </text>
                     {rt && (() => {
-                      const rtTags: string[] = [`🗂️ ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}`]
-                      if (rt.disableBgpRoutePropagation) {
-                        rtTags.push('GWroutes:OFF')
-                      }
-                      if (rt.disablePeeringRoutePropagation) {
-                        rtTags.push('PeerSuppress:ON')
-                      }
-                      const badgeText = rtTags.join(' · ')
-                      const badgeW = Math.min(124, Math.max(54, badgeText.length * 4.8 + 10))
-                      const badgeX = box.x + box.width - (hasPe ? 38 + badgeW : 10 + badgeW)
                       return (
                         <g
                           data-testid={`aznet-subnet-rt-badge-${subnet.id}`}
@@ -1327,16 +1487,8 @@ export function AzureNetDiagram({
                             width={badgeW}
                             height={16}
                             rx={4}
-                            fill={
-                              rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
-                                ? 'var(--surface-muted)'
-                                : 'var(--surface-muted)'
-                            }
-                            stroke={
-                              rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
-                                ? 'var(--link)'
-                                : 'var(--link)'
-                            }
+                            fill="var(--surface-muted)"
+                            stroke="var(--link)"
                             strokeWidth={0.8}
                           />
                           <text
@@ -1739,7 +1891,25 @@ export function AzureNetDiagram({
             </text>
           </g>
         })}
+        {policyMarkers.map(renderPolicyMarker)}
       </svg>
+
+      {policyPreview && previewMarker && <RouteMapPreview id={policyPreviewId} anchor={policyPreview.anchor}
+        map={previewMarker.map} owner={previewMarker.ownerName} connection={previewMarker.connectionName}
+        direction={previewMarker.selection.direction} enabled={previewMarker.enabled}
+        inactiveReason="BGP exchange inactive (connection, peer, gateway, Branch-to-Branch or simulated failure); policy remains configured."
+        onEnter={cancelPolicyClose} onLeave={leavePolicyPreview} onClose={closePolicyPreview} />}
+
+      {hoverPopover?.kind === 'subnet' && (() => {
+        const vnet = topology.vnets.find((entry) => entry.id === hoverPopover.vnetId)
+        const subnet = vnet?.subnets.find((entry) => entry.id === hoverPopover.subnetId)
+        if (!subnet) return null
+        return <div id={tooltipId} role="tooltip" className="aznet-hover-popover"
+          data-testid="aznet-subnet-hover-card" style={{ left: hoverPopover.x, top: hoverPopover.y }}
+          onMouseEnter={clearHoverTimer} onMouseLeave={scheduleClosePopover}>
+          <strong>{subnet.name}</strong><p><code>{subnet.prefix}</code></p>
+        </div>
+      })()}
 
       {/* Interactive Peering Hover Popover (#38, #48) */}
       {hoverPopover?.kind === 'peering' && !faults[hoverPopover.peeringId] && (() => {

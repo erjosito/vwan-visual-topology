@@ -1,26 +1,29 @@
 import { useState } from 'react'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { MapDefinition } from '../RouteMapsPanel'
-import type { RouteMap } from '../model'
+import type { RouteMap, RouteMapDirection } from '../model'
 import type { AzNetTopology } from './model'
 import { azSitePolicyLinks, pruneAzSiteRouteMaps, validateAzSiteRouteMaps } from './route-maps'
 import { azArsPolicyLinks, parseArsPrependAsPath, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
 import { BgpRouteTable } from './BgpRouteTable'
 import type { AzBgpRibEntry } from './engine'
 
-export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, outbound, onSave, onClose }: {
+export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, outbound, initialConnectionId, initialDirection, onSave, onClose }: {
   topology: AzNetTopology; siteId?: string; routeServerId?: string;
   inbound?: Record<string, AzBgpRibEntry[]>; outbound?: Record<string, AzBgpRibEntry[]>;
+  initialConnectionId?: string; initialDirection?: RouteMapDirection;
   onSave: (topology: AzNetTopology) => void; onClose: () => void
 }) {
-  const [mapId, setMapId] = useState('')
-  const [draft, setDraft] = useState<RouteMap>()
-  const [connectionId, setConnectionId] = useState('')
-  const [error, setError] = useState('')
-  const [confirmDelete, setConfirmDelete] = useState(false)
   const arsVnet = topology.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)
   const ars = routeServerId ? arsVnet?.routeServer : undefined
   const site = ars ?? topology.sites.find((site) => site.id === siteId)
+  const [mapId, setMapId] = useState(() => initialDirection
+    ? site?.routeMapAssignments?.find((assignment) => assignment.connectionId === initialConnectionId)?.[`${initialDirection}MapId`] ?? ''
+    : '')
+  const [draft, setDraft] = useState<RouteMap>()
+  const [connectionId, setConnectionId] = useState(initialConnectionId ?? '')
+  const [error, setError] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState(false)
   if (!site) return null
   const maps = ars ? ars.routeMaps ?? [] : topology.routeMaps?.filter((map) => map.siteId === siteId) ?? []
   const map = draft ?? maps.find((map) => map.id === mapId)
@@ -60,7 +63,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
       </select></label>
       <div className="form-grid">{(['inboundMapId', 'outboundMapId'] as const).map((direction) => <label className="field" key={direction}>
         <span>{direction === 'inboundMapId' ? `Inbound to ${site.name}` : `Outbound from ${site.name}`}</span>
-        <select aria-label={direction === 'inboundMapId' ? 'Inbound route map' : 'Outbound route map'} value={binding?.[direction] ?? ''} disabled={!link.bgp} onChange={(event) => assign(direction, event.target.value)}>
+        <select aria-label={direction === 'inboundMapId' ? 'Inbound route map' : 'Outbound route map'} autoFocus={direction === `${initialDirection}MapId`} value={binding?.[direction] ?? ''} disabled={!link.bgp} onChange={(event) => assign(direction, event.target.value)}>
           <option value="">None</option>{maps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}
         </select>
       </label>)}</div>

@@ -231,7 +231,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('node-label-eu')).toContainText('Core EMEA Hub')
   })
 
-  test('supports issues #35-#42: pinned mode switcher, context menus, peering & Route Table popovers, GWroutes:OFF badge, VNet element controls, and site/ER deletion', async ({
+  test('supports issues #35-#42: pinned mode switcher, context menus, peering & compact Route Table popovers, VNet element controls, and site/ER deletion', async ({
     page,
   }) => {
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
@@ -254,8 +254,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // Switch back to Hub & Spoke-Only mode
     await page.getByTestId('simulator-mode-hub-spoke').click()
 
-    // #40 & #41: Verify GWroutes:OFF and RT-Spokes badge on sub-app-web
-    await expect(page.getByTestId('aznet-subnet-sub-app-web')).toContainText('GWroutes:OFF')
+    await expect(page.getByTestId('aznet-subnet-sub-app-web')).not.toContainText('GWroutes:OFF')
     await expect(page.getByTestId('aznet-subnet-rt-badge-sub-app-web')).toContainText('RT-Spokes')
 
     // #41: Hover over Route Table badge on sub-app-web to open Route Table popover
