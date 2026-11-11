@@ -521,7 +521,8 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
       domain.id === regionKey((contextSelection.kind === 'hub' ? topology.hubs : topology.spokes).find((n) => n.id === contextSelection.id)?.region))
   const contextActions: ContextAction[] = contextFaults.length
     ? contextFaults.map((fault) => ({ label: `Restore ${failureLabel(fault)}`, run: () => restoreFault(fault) }))
-    : [...(contextDomain ? [{ label: `Simulate failure of ${failureLabel(contextDomain)}`, run: () => addFault(contextDomain) }] : []), ...ordinaryContextActions]
+    : [...(contextDomain ? [{ label: `Simulate failure of ${failureLabel(contextDomain)}`, run: () => addFault(contextDomain) }]
+      : contextSelection && ['hub', 'spoke'].includes(contextSelection.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...ordinaryContextActions]
   const exportTopology = (original = '') => {
     const url = URL.createObjectURL(new Blob([original || JSON.stringify(topology, null, 2)], { type: 'application/json' }))
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'vwan-topology.json'; anchor.click()

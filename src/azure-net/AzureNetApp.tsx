@@ -2558,7 +2558,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       (f.kind === 'site' && target.kind === 'site' || f.kind === 'er-location' && target.kind === 'er-location') && f.id === id ||
       f.kind === 'region' && ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) &&
         f.id === regionKey([...topology.vnets, ...topology.vwanHubs].find((n) => n.id === id)?.region))
-    return ordinary && { ...ordinary, actions: [...(domain ? [{ label: `Simulate failure of ${failureLabel(domain)}`, onSelect: () => addFault(domain) }] : []), ...ordinary.actions] }
+    return ordinary && { ...ordinary, actions: [...(domain ? [{ label: `Simulate failure of ${failureLabel(domain)}`, onSelect: () => addFault(domain) }]
+      : ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...ordinary.actions] }
   }
   const contextMenuSpec = contextMenu && getContextMenuSpec(
     contextMenu.kind === 'canvas' ? contextMenu : contextMenu.entity,

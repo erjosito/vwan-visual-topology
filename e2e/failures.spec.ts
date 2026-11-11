@@ -102,7 +102,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
         const saved = JSON.parse(initial!)
         expect(exported).toEqual(mode === 'vwan' ? validateTopology(saved) : saved.topology)
       }
-      await page.getByRole('button', { name: 'Restore all simulated failures', exact: true }).click()
+      await menu(page, label.startsWith('Azure') ? regionalChild : node)
+      await page.getByRole('menuitem', { name: `Restore ${label}`, exact: true }).click()
       await expect(page.getByTestId('active-faults')).toHaveCount(0)
       await expect(node).not.toHaveAttribute('data-simulated-failed', 'true')
       await menu(page, node)
