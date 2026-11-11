@@ -116,7 +116,8 @@ export function generateAzNetBicep(
     const vnetLoc = resolveVnetLocation(vnet, defaultLoc)
     const locExpr = vnetLoc === defaultLoc ? 'location' : `'${escapeBicepString(vnetLoc)}'`
 
-    lines.push(`resource ${sym} 'Microsoft.Network/virtualNetworks@2024-05-01' = {`)
+    const summaries = vnet.summarizedGatewayPrefixes
+    lines.push(`resource ${sym} 'Microsoft.Network/virtualNetworks@${summaries !== undefined ? '2025-07-01' : '2024-05-01'}' = {`)
     lines.push(`  name: '${escapeBicepString(vnet.name)}'`)
     lines.push(`  location: ${locExpr}`)
     lines.push(`  properties: {`)
@@ -127,6 +128,15 @@ export function generateAzNetBicep(
     }
     lines.push(`      ]`)
     lines.push(`    }`)
+    if (summaries !== undefined) {
+      lines.push(`    summarizedGatewayPrefixes: {`)
+      lines.push(`      addressPrefixes: [`)
+      for (const prefix of summaries) {
+        lines.push(`        '${escapeBicepString(prefix)}'`)
+      }
+      lines.push(`      ]`)
+      lines.push(`    }`)
+    }
     lines.push(`    subnets: [`)
     for (const sub of vnet.subnets) {
       if (sub.name === 'RouteServerSubnet' && sub.routeTableId) {

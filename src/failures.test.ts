@@ -150,6 +150,27 @@ describe('reversible offline failure overlays', () => {
     expect(restoredRegionOnly.affected['er-transit']).toHaveLength(2)
     expect(t.connections.every((c) => c.enabled)).toBe(true)
   })
+
+  it('preserves gateway summary coverage and provenance through transit-site fault/restore without inventing local forwarding', () => {
+    const t = azFailureFixture()
+    t.vnets[0].prefixes.push('192.168.0.0/16')
+    t.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/15', '198.18.0.0/15']
+    const original = JSON.stringify(t)
+    const baseline = simulateAzNet(projectAzFailures(t).active)
+    const advertised = baseline.siteRibs.a.filter((route) => route.preferred)
+    expect(advertised.find((route) => route.prefix === '10.0.0.0/15')?.advertisedSummaryFrom).toBe('West VNet')
+    expect(advertised.find((route) => route.prefix === '198.18.0.0/15')?.advertisedSummaryFrom).toBe('West VNet')
+    expect(advertised.some((route) => route.prefix === '192.168.0.0/16')).toBe(true)
+    expect(advertised.some((route) => ['10.0.0.0/16', '10.1.0.0/16'].includes(route.prefix))).toBe(false)
+    expect(traceAzNetPair(t, baseline, { kind: 'site', siteId: 'a' }, '172.16.0.1',
+      { kind: 'subnet', vnetId: 'work', subnetId: 'work-subnet' }, '10.1.1.1').forward.status).toBe('delivered')
+    expect(traceAzNetPair(t, baseline, { kind: 'site', siteId: 'a' }, '172.16.0.1',
+      { kind: 'subnet', vnetId: 'work', subnetId: 'work-subnet' }, '198.18.1.1').forward.status).not.toBe('delivered')
+    const failed = simulateAzNet(projectAzFailures(t, [faults[1]]).active)
+    expect(failed.siteRibs.a.some((route) => route.advertisedSummaryFrom)).toBe(false)
+    expect(simulateAzNet(projectAzFailures(t).active).siteRibs).toEqual(baseline.siteRibs)
+    expect(JSON.stringify(t)).toBe(original)
+  })
 })
 
 describe('actual N-1 domain routing rather than degree heuristics', () => {

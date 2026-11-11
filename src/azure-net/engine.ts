@@ -62,6 +62,7 @@ export interface AzBgpRibEntry {
   preferred: boolean
   weight?: number
   explanation: string
+  advertisedSummaryFrom?: string
 }
 
 export interface AzSubnetRouteTableResult {
@@ -257,6 +258,7 @@ function chooseBgpWinners(
             ? `Won via shortest AS path (${minAsLen} hops)`
             : `Won via ${normalizedPref} routing preference (AS path len ${minAsLen})`
       }
+      if (c.advertisedSummaryFrom) explanation += ` · Advertised gateway summary from ${c.advertisedSummaryFrom}; not a local forwarding route`
       output.push({ ...c, preferred: isWinner, explanation })
     }
   }
@@ -333,21 +335,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
   propagateSiteLinks()
 
   // Helper: compute what prefixes a VNet advertises through its attached Gateways
-  const advertisedVnetPrefixes = (vnet: AzVNet): { prefix: string; asPath: number[]; sourceName: string }[] => {
-    if (vnet.summarizedGatewayPrefixes && vnet.summarizedGatewayPrefixes.length > 0) {
-      if (vnet.summarizedGatewayPrefixes.length > 1000) {
-        warnings.push(
-          `VNet "${vnet.name}" configures ${vnet.summarizedGatewayPrefixes.length} summarizedGatewayPrefixes (> 1,000 Azure limit). Advertisements collapse to zero routes.`,
-        )
-        return []
-      }
-      return vnet.summarizedGatewayPrefixes.map((prefix) => ({
-        prefix,
-        asPath: [65515],
-        sourceName: `${vnet.name} (Advertised gateway summary)`,
-      }))
-    }
-    const result: { prefix: string; asPath: number[]; sourceName: string }[] = vnet.prefixes.map((prefix) => ({
+  const advertisedVnetPrefixes = (vnet: AzVNet): { prefix: string; asPath: number[]; sourceName: string; advertisedSummaryFrom?: string }[] => {
+    let result: { prefix: string; asPath: number[]; sourceName: string; advertisedSummaryFrom?: string }[] = vnet.prefixes.map((prefix) => ({
       prefix,
       asPath: [65515],
       sourceName: vnet.name,
@@ -384,6 +373,19 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         }
       }
     }
+    const summaries = vnet.gateways.some((g) => g.enabled) && vnet.subnets.some((s) => s.name === 'GatewaySubnet')
+      ? (vnet.summarizedGatewayPrefixes ?? []).filter((prefix) => typeof prefix === 'string' && cidr(prefix))
+      : []
+    if (summaries.length) {
+      result = [
+        ...summaries.map((prefix) => ({ prefix, asPath: [65515], sourceName: `${vnet.name} (Advertised gateway summary)`, advertisedSummaryFrom: vnet.name })),
+        ...result.filter((route) => {
+          const prefix = cidr(route.prefix)
+          return !prefix || !summaries.some((summary) => cidr(summary)!.length <= prefix.length && contains(summary, prefix.network))
+        }),
+      ]
+    }
+    // Summaries replace VNet address-space advertisements, not NVA routes learned through ARS.
     // If ARS is present with branchToBranchTraffic, include NVA-advertised BGP prefixes
     if (vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic) {
       for (const peerAppId of vnet.routeServer.peerApplianceIds.slice(0, 8)) {
@@ -449,6 +451,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             preferred: true,
             weight: link.weight ?? 0,
             explanation: `Advertised by ${gw.name} from ${adv.sourceName}`,
+            advertisedSummaryFrom: adv.advertisedSummaryFrom,
           })
         }
       } else if (link.targetKind === 'vwan-hub') {
@@ -564,6 +567,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
               preferred: true,
               weight: link.weight ?? 0,
               explanation: `Learned via ExpressRoute connection ${link.name} at ${loc.name}`,
+              advertisedSummaryFrom: lr.advertisedSummaryFrom,
             })
           }
         }
@@ -800,7 +804,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
           nextHopId: loc.id,
           originProtocol: 'ExpressRoute',
           preferred: false,
-          explanation: `Learned from Azure over ExpressRoute circuit at ${loc.name}`,
+          explanation: `Learned from Azure over ExpressRoute circuit at ${loc.name}. ${lr.explanation}`,
+          advertisedSummaryFrom: lr.advertisedSummaryFrom,
         })
       }
     }
@@ -819,7 +824,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             nextHopId: gw.id,
             originProtocol: 'VPN',
             preferred: false,
-            explanation: `Learned from ${gw.name} over S2S VPN ${conn.name}`,
+            explanation: `Learned from ${gw.name} over S2S VPN ${conn.name} from ${adv.sourceName}`,
+            advertisedSummaryFrom: adv.advertisedSummaryFrom,
           })
         }
       }
@@ -1385,6 +1391,8 @@ export function traceAzNetFlow(
       summaryReason: `Invalid destination IPv4 address "${destinationIp}".`,
     }
   }
+
+  const privateDestination = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ipNum))
 
   type Cursor =
     | { kind: 'subnet'; vnetId: string; subnetId: string; fromExternalVnet: boolean; viaVnra: boolean }
@@ -2002,7 +2010,8 @@ export function traceAzNetFlow(
       }
 
       if (matched.nextHopType === 'Internet') {
-        if (!targetInfo.endpoint) {
+        const gatewayInternetFallback = subnet.name === 'GatewaySubnet' && stepCursor.fromExternalVnet && matched.source === 'System'
+        if (!targetInfo.endpoint && !privateDestination && !gatewayInternetFallback) {
           if (subnet.defaultOutboundAccess === false) {
             pushHop({
               nodeKind: 'subnet',
@@ -2059,7 +2068,7 @@ export function traceAzNetFlow(
           subnetName: subnet.name,
           action: 'dropped',
           matchedRoute: matched,
-          detail: `Private destination ${destinationIp} (${targetInfo.label}) fell back to System 0.0.0.0/0 Internet route and was dropped.`,
+          detail: `Destination ${destinationIp} (${targetInfo.label}) has no private forwarding route and fell back to the Internet route; private addresses and gateway-ingress traffic cannot use implicit Internet breakout.`,
         })
         return {
           source,
@@ -2070,7 +2079,7 @@ export function traceAzNetFlow(
           traversedApplianceIds,
           traversedEdgeIds,
           traversedVnetIds,
-          summaryReason: `Private destination ${destinationIp} matched only the 0.0.0.0/0 Internet system route in ${vnet.name}/${subnet.name} (missing private route or BGP propagation disabled).`,
+          summaryReason: `Destination ${destinationIp} matched only the Internet route in ${vnet.name}/${subnet.name} (missing private forwarding route, summary hole, or BGP propagation disabled).`,
         }
       }
     }
@@ -2444,7 +2453,7 @@ export function traceAzNetFlow(
         }
       }
 
-      if (nextRoute?.nextHopType === 'Internet' && !targetInfo.endpoint) {
+      if (nextRoute?.nextHopType === 'Internet' && !targetInfo.endpoint && !privateDestination) {
         pushHop({
           nodeKind: 'appliance',
           nodeId: app.id,

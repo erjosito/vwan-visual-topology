@@ -23,6 +23,7 @@ import {
   type AzNetComparisonReport,
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
+import { BgpRouteTable } from './BgpRouteTable'
 import {
   analyzeAzNetConnectivity,
   AZ_NET_PAIR_LIMIT,
@@ -45,6 +46,7 @@ import {
   cloneAzNetTopology,
   createEmptyAzNetTopology,
   validateAzNetTopology,
+  validateAdvertisedGatewayPrefixes,
   type AzArsPreference,
   type AzErCircuitSku,
   type AzNetTopology,
@@ -275,9 +277,16 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   )
   const [canvasSelection, setCanvasSelection] = useState<AzSelectedEntity>()
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
+  const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
+  const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
     setInspectedEntity(entity)
     setCanvasSelection(entity)
+  }
+  const inspectRoutes = (entity: AzSelectedEntity) => {
+    setSelected(entity)
+    setRouteInspection(entity)
+    setActiveTab('routes')
   }
   const selectedExists = (() => {
     if ('vnetId' in selected) {
@@ -887,6 +896,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
   // Resolve currently viewed Subnet Effective Route table (defaulting to selected subnet or first subnet of selected VNet)
   const inspectedSubnetTable = useMemo(() => {
+    const selected = routeSelection
     if (selected.kind === 'subnet') {
       return simulation.subnetTables[selected.subnetId]
     }
@@ -903,7 +913,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     const fallbackVnet = topology.vnets[0]
     const fallbackSub = fallbackVnet?.subnets[0]
     return fallbackSub ? simulation.subnetTables[fallbackSub.id] : undefined
-  }, [selected, simulation, topology])
+  }, [routeSelection, simulation, topology])
 
   const lpmMatchedRouteId = useMemo(() => {
     if (!inspectedSubnetTable || !testIpQuery.trim()) return undefined
@@ -911,13 +921,15 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }, [inspectedSubnetTable, testIpQuery])
 
   // Resolve control-plane RIB if a Gateway, Route Server, vWAN Hub, ER Location, or Site is selected
-  const inspectedControlRib = useMemo<{ title: string; entries: AzBgpRibEntry[] } | null>(() => {
+  const inspectedControlRib = useMemo<{ title: string; entries: AzBgpRibEntry[]; available: boolean } | null>(() => {
+    const selected = routeSelection
     if (selected.kind === 'gateway') {
       const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
       const gw = vnet?.gateways.find((g) => g.id === selected.gatewayId)
       return {
         title: `Virtual Network Gateway BGP RIB · ${gw?.name ?? selected.gatewayId}`,
         entries: simulation.gatewayRibs[selected.gatewayId] ?? [],
+        available: Boolean(gw) && !scenario.affected[selected.gatewayId],
       }
     }
     if (selected.kind === 'route-server') {
@@ -926,6 +938,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Azure Route Server (ASN 65515) RIB · ${ars?.name ?? selected.routeServerId}`,
         entries: simulation.routeServerRibs[selected.routeServerId] ?? [],
+        available: ars?.id === selected.routeServerId && !scenario.affected[selected.routeServerId],
       }
     }
     if (selected.kind === 'vwan-hub') {
@@ -933,6 +946,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Virtual WAN Hub Effective RIB · ${hub?.name ?? selected.hubId}`,
         entries: simulation.vwanHubRibs[selected.hubId] ?? [],
+        available: Boolean(hub) && !scenario.affected[selected.hubId],
       }
     }
     if (selected.kind === 'er-location') {
@@ -940,6 +954,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `ExpressRoute MSEE (ASN 12076) RIB · ${loc?.name ?? selected.locationId}`,
         entries: simulation.erLocationRibs[selected.locationId] ?? [],
+        available: Boolean(loc) && !scenario.affected[selected.locationId],
       }
     }
     if (selected.kind === 'site') {
@@ -947,10 +962,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `On-Premises Site BGP Table · ${site?.name ?? selected.siteId}`,
         entries: simulation.siteRibs[selected.siteId] ?? [],
+        available: Boolean(site) && !scenario.affected[selected.siteId],
       }
     }
     return null
-  }, [selected, topology, simulation])
+  }, [routeSelection, topology, simulation, scenario.affected])
 
   const visibleFlagshipSamples = useMemo(
     () =>
@@ -1441,8 +1457,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             disabled: !firstSub,
             onSelect: () => {
               if (!firstSub) return
-              setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: firstSub.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'subnet', vnetId: vnet.id, subnetId: firstSub.id })
             },
           },
           ...(vnet.subnets.length > 1
@@ -1452,8 +1467,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   children: vnet.subnets.map((sub) => ({
                     label: `${sub.name} (${sub.prefix})`,
                     onSelect: () => {
-                      setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: sub.id })
-                      setActiveTab('routes')
+                      inspectRoutes({ kind: 'subnet', vnetId: vnet.id, subnetId: sub.id })
                     },
                   })),
                 },
@@ -1611,8 +1625,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Inspect Subnet Effective Routes',
             onSelect: () => {
-              setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
             },
           },
           {
@@ -1721,8 +1734,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Inspect Gateway BGP RIB',
             onSelect: () => {
-              setSelected({ kind: 'gateway', vnetId: vnet.id, gatewayId: gw.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'gateway', vnetId: vnet.id, gatewayId: gw.id })
             },
           },
           {
@@ -1751,8 +1763,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Inspect Route Server RIB (ASN 65515)',
             onSelect: () => {
-              setSelected({ kind: 'route-server', vnetId: vnet.id, routeServerId: ars.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'route-server', vnetId: vnet.id, routeServerId: ars.id })
             },
           },
           {
@@ -1809,8 +1820,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Inspect Appliance Subnet Effective Routes',
             onSelect: () => {
-              setSelected({ kind: 'appliance', vnetId: vnet.id, applianceId: app.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'appliance', vnetId: vnet.id, applianceId: app.id })
             },
           },
           {
@@ -1979,8 +1989,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Inspect Virtual WAN Hub Effective RIB',
             onSelect: () => {
-              setSelected({ kind: 'vwan-hub', hubId: hub.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'vwan-hub', hubId: hub.id })
             },
           },
           {
@@ -2095,8 +2104,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Inspect ExpressRoute MSEE BGP RIB',
             onSelect: () => {
-              setSelected({ kind: 'er-location', locationId: loc.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'er-location', locationId: loc.id })
             },
           },
           {
@@ -2261,8 +2269,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           {
             label: 'Inspect Site BGP Route Table',
             onSelect: () => {
-              setSelected({ kind: 'site', siteId: site.id })
-              setActiveTab('routes')
+              inspectRoutes({ kind: 'site', siteId: site.id })
             },
           },
           {
@@ -3034,14 +3041,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   deletionAction.onSelect?.()
                   setDeleteTarget(null)
                   setCanvasSelection(undefined)
-                  setActiveTab(null)
+                  setActiveTab(activeTab === 'routes' && inspectedControlRib ? 'routes' : null)
                 }}>Confirm deletion</button>
               </div>
             </CanvasOverlay>
           )}
         </section>
 
-        {activeTab && (selectedExists || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
+        {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
           title={{
             routes: 'Effective routes',
             tracer: 'Path explorer',
@@ -3099,7 +3106,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             {/* TAB 1: SUBNET EFFECTIVE ROUTES & BGP CONTROL-PLANE RIBS */}
             {activeTab === 'routes' && (
               <>
-                <div className="aznet-card">
+                {!inspectedControlRib && <div className="aznet-card" data-testid="aznet-subnet-routes-card">
                   <h3>Inspect Subnet Effective Route Table</h3>
                   <div className="aznet-field-grid">
                     <label className="aznet-field">
@@ -3114,7 +3121,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             v.subnets.some((s) => s.id === subId),
                           )
                           if (vnet) {
-                            setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subId })
+                            inspectRoutes({ kind: 'subnet', vnetId: vnet.id, subnetId: subId })
                           }
                         }}
                       >
@@ -3335,53 +3342,12 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       )}
                     </div>
                   )}
-                </div>
+                </div>}
 
                 {inspectedControlRib && (
                   <div className="aznet-card" data-testid="aznet-control-rib-card">
                     <h3>{inspectedControlRib.title}</h3>
-                    <table className="aznet-route-table">
-                      <thead>
-                        <tr>
-                          <th>Status</th>
-                          <th>Prefix</th>
-                          <th>Protocol</th>
-                          <th>AS Path</th>
-                          <th>Next Hop & Decision</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {inspectedControlRib.entries.map((entry) => (
-                          <tr
-                            key={entry.id}
-                            className={`aznet-route-row ${entry.preferred ? '' : 'suppressed'}`}
-                          >
-                            <td>
-                              <span
-                                className={`aznet-badge ${
-                                  entry.preferred ? 'active' : 'suppressed'
-                                }`}
-                              >
-                                {entry.preferred ? 'Best' : 'Backup'}
-                              </span>
-                            </td>
-                            <td>
-                              <code>{entry.prefix}</code>
-                            </td>
-                            <td>{entry.originProtocol}</td>
-                            <td>
-                              <code>[{entry.asPath.join(' ')}]</code>
-                            </td>
-                            <td>
-                              <strong>{entry.nextHopName}</strong>
-                              <div style={{ fontSize: 10.5, color: '#475569' }}>
-                                {entry.explanation}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <BgpRouteTable key={JSON.stringify(routeSelection)} entries={inspectedControlRib.entries} available={inspectedControlRib.available} />
                   </div>
                 )}
               </>
@@ -4265,6 +4231,36 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             Delete VNet
                           </button>
                         </div>
+
+                        <label style={{ display: 'grid', gap: 4, marginBottom: 8, fontSize: 11.5 }}>
+                          Advertised gateway prefixes (IPv4, comma-separated)
+                          <input
+                            key={`${vnet.id}:${vnet.summarizedGatewayPrefixes?.join(',') ?? ''}`}
+                            type="text"
+                            className="aznet-input"
+                            aria-label={`Advertised gateway prefixes ${vnet.name}`}
+                            aria-describedby={`aznet-gateway-prefix-help-${vnet.id}`}
+                            defaultValue={vnet.summarizedGatewayPrefixes?.join(', ') ?? ''}
+                            placeholder="Default: advertise individual hub and eligible spoke address spaces"
+                            onBlur={(e) => {
+                              const value = e.target.value
+                              if (value === (vnet.summarizedGatewayPrefixes ?? []).join(', ')) return
+                              commitTopology((draft) => {
+                                const target = draft.vnets.find((v) => v.id === vnet.id)
+                                if (target) target.summarizedGatewayPrefixes = value.split(',').map((prefix) => prefix.trim()).filter(Boolean)
+                              })
+                            }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                          />
+                          <span id={`aznet-gateway-prefix-help-${vnet.id}`} className="aznet-muted">
+                            Read only by this VNet's ER/VPN gateway when GatewaySubnet exists; stored beforehand, ignored by a remote hub.
+                            Include this gateway VNet's address spaces (recommended). Covered hub/spoke spaces are summarized; uncovered spaces remain advertised.
+                            Independent of local address spaces; no overlapping entries or IPv6. No Route Server required. Advertisements do not create forwarding routes.
+                          </span>
+                          {validateAdvertisedGatewayPrefixes(vnet.summarizedGatewayPrefixes).map((error) => (
+                            <strong role="alert" key={error}>VNet "{vnet.name}" {error}</strong>
+                          ))}
+                        </label>
 
                         {usesRemoteGw && (
                           <div
