@@ -41,6 +41,36 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   }
 
   for (const mode of ['hub-spoke', 'full']) {
+    test(`keeps the sample selector compact and returns a toolbar row to the canvas in ${mode}`, async ({ page }) => {
+      await page.goto(`/?mode=${mode}&sample=hub-spoke-firewall-udr`)
+      const selector = page.getByTestId('aznet-sample-select')
+      await expect(selector).toHaveValue('hub-spoke-firewall-udr')
+      await expect(selector).toHaveAttribute('title', (await selector.locator('option:checked').textContent())!.trim())
+      await page.evaluate(() => document.fonts.ready)
+      const header = page.locator('.aznet-topbar')
+      const canvas = page.locator('.aznet-canvas-shell')
+      const reclaimedHeights: number[] = []
+      for (const width of [1280, 1440, 1920]) {
+        await page.setViewportSize({ width, height: 900 })
+        await selector.evaluate((element) => { element.style.width = '100%' })
+        const oldHeader = (await header.boundingBox())!.height
+        const oldCanvas = (await canvas.boundingBox())!.height
+        await selector.evaluate((element) => { element.style.removeProperty('width') })
+        const reclaimed = (await canvas.boundingBox())!.height - oldCanvas
+        expect(oldHeader - (await header.boundingBox())!.height, `${width}px header must not grow`).toBeGreaterThanOrEqual(0)
+        expect(reclaimed, `${width}px canvas must not shrink`).toBeGreaterThanOrEqual(0)
+        reclaimedHeights.push(reclaimed)
+      }
+      expect(Math.max(...reclaimedHeights), 'reclaim at least one toolbar row at desktop widths').toBeGreaterThanOrEqual(30)
+      await page.setViewportSize({ width: 360, height: 900 })
+      const bounds = (await selector.boundingBox())!
+      expect(bounds.x).toBeGreaterThanOrEqual(0)
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(360)
+      await selector.selectOption('')
+      await expect(selector).toHaveValue('')
+      await expect(selector).toHaveAttribute('title', 'No sample loaded (Custom / Blank)')
+    })
+
     test(`edits ER peering locations independently of node names in ${mode}`, async ({ page }) => {
       const topology = structuredClone(AZURE_NET_SAMPLES[0].topology)
       const location = topology.erLocations[0]

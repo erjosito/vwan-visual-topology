@@ -2675,7 +2675,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           <select
             id="aznet-sample-select"
             data-testid="aznet-sample-select"
-            className="aznet-select"
+            className="aznet-select aznet-sample-select"
+            title={currentSampleMeta?.title ?? (sampleId === 'shared-topology' ? 'Shared URL Topology' : 'No sample loaded (Custom / Blank)')}
             value={sampleId}
             onChange={(e) => loadSample(e.target.value)}
           >
