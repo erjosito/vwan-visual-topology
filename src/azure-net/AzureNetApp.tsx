@@ -3,6 +3,7 @@ import './azure-net.css'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { CanvasOverlay } from '../CanvasOverlay'
+import { useDeleteShortcut } from '../useDeleteShortcut'
 import { ErLocationInfoModal } from '../ErLocationInfoModal'
 import {
   ALL_KNOWN_AZURE_REGIONS,
@@ -269,7 +270,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [selected, setInspectedEntity] = useState<AzSelectedEntity>(() =>
     defaultSelected(initialResolved.topology),
   )
-  const [canvasSelection, setCanvasSelection] = useState(selected)
+  const [canvasSelection, setCanvasSelection] = useState<AzSelectedEntity>()
+  const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const setSelected = (entity: AzSelectedEntity) => {
     setInspectedEntity(entity)
     setCanvasSelection(entity)
@@ -1307,12 +1309,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     ]
   }
 
-  const contextMenuSpec: { title: string; actions: ContextAction[] } | null = (() => {
-    if (!contextMenu) return null
-    const target =
-      contextMenu.kind === 'canvas'
-        ? { kind: 'canvas' as const, svgX: contextMenu.svgX, svgY: contextMenu.svgY }
-        : contextMenu.entity
+  const getContextMenuSpec = (
+    target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number },
+  ): { title: string; actions: ContextAction[] } | null => {
 
     if (target.kind === 'canvas') {
       return {
@@ -1992,6 +1991,20 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               setActiveTab('editor')
             },
           },
+          {
+            label: 'Delete Virtual WAN Hub',
+            danger: true,
+            onSelect: () => {
+              commitTopology((draft) => {
+                draft.vwanHubs = draft.vwanHubs.filter((h) => h.id !== hub.id)
+                draft.erLinks = draft.erLinks.filter((l) => !(l.targetKind === 'vwan-hub' && l.targetId === hub.id))
+                draft.vpnConnections = draft.vpnConnections.filter((c) => !(c.targetKind === 'vwan-hub' && c.targetId === hub.id))
+                for (const vnet of draft.vnets) {
+                  if (vnet.vwanHubAttachment?.hubId === hub.id) vnet.vwanHubAttachment = undefined
+                }
+              })
+            },
+          },
         ],
       }
     }
@@ -2112,7 +2125,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               })),
           },
           {
-            label: 'Connect ExpressRoute Link to...',
+            label: 'Connect ExpressRoute to...',
             children: [
               ...topology.sites
                 .filter(
@@ -2377,11 +2390,12 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       const link = topology.erLinks.find((l) => l.id === target.linkId)
       if (!link) return null
       const loc = topology.erLocations.find((l) => l.id === link.locationId)
+      const label = link.targetKind === 'site' ? 'ExpressRoute Link' : 'ER connection'
       return {
-        title: `ExpressRoute Link · ${link.name}`,
+        title: `${label} · ${link.name}`,
         actions: [
           {
-            label: link.enabled ? 'Disable ExpressRoute Link' : 'Enable ExpressRoute Link',
+            label: `${link.enabled ? 'Disable' : 'Enable'} ${label}`,
             onSelect: () => {
               commitTopology((draft) => {
                 const l = draft.erLinks.find((x) => x.id === link.id)
@@ -2402,14 +2416,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             })),
           },
           {
-            label: `Configure ExpressRoute Link (${loc?.name ?? link.locationId})`,
+            label: `Configure ${label} (${loc?.name ?? link.locationId})`,
             onSelect: () => {
               setSelected({ kind: 'er-link', linkId: link.id })
               setActiveTab('editor')
             },
           },
           {
-            label: 'Delete ExpressRoute Link',
+            label: `Delete ${label}`,
             danger: true,
             onSelect: () => {
               commitTopology((draft) => {
@@ -2494,7 +2508,18 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     }
 
     return null
-  })()
+  }
+  const contextMenuSpec = contextMenu && getContextMenuSpec(
+    contextMenu.kind === 'canvas' ? contextMenu : contextMenu.entity,
+  )
+  const deletionSpec = deleteTarget && getContextMenuSpec(deleteTarget)
+  const deletionAction = deletionSpec?.actions.find((action) => action.danger && !action.disabled && action.onSelect)
+  useDeleteShortcut(canvasSelection && !deletionAction && !sampleGalleryOpen && !erLocationModalState.open ? () => {
+    const spec = getContextMenuSpec(canvasSelection)
+    if (!spec?.actions.some((action) => action.danger && !action.disabled && action.onSelect)) return
+    setContextMenu(null)
+    setDeleteTarget(canvasSelection)
+  } : undefined)
 
   return (
     <div className="aznet-app" data-testid="aznet-app">
@@ -2903,6 +2928,20 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               actions={contextMenuSpec.actions}
               onClose={() => setContextMenu(null)}
             />
+          )}
+          {deletionSpec && deletionAction && (
+            <CanvasOverlay title={deletionAction.label} className="object-editor" onClose={() => setDeleteTarget(null)}>
+              <p>Delete <strong>{deletionSpec.title}</strong>? Associated elements and connections may also be removed. Other endpoint nodes are kept.</p>
+              <div className="row dialog-actions">
+                <button autoFocus onClick={() => setDeleteTarget(null)}>Cancel</button>
+                <button className="danger" onClick={() => {
+                  deletionAction.onSelect?.()
+                  setDeleteTarget(null)
+                  setCanvasSelection(undefined)
+                  setActiveTab(null)
+                }}>Confirm deletion</button>
+              </div>
+            </CanvasOverlay>
           )}
         </section>
 

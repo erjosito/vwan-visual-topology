@@ -40,6 +40,7 @@ import type { GroupPath, NodePath, PathDirection, PathGroup, PathNode } from './
 import { embeddedSpokeNvaSiteIds } from './topology-graph'
 import { assignSitePrefixes } from './topology-mutations'
 import { useTopologyHistory } from './useTopologyHistory'
+import { useDeleteShortcut } from './useDeleteShortcut'
 import './App.css'
 
 const storageKey = 'vwan-visual-topology:v1'
@@ -331,6 +332,11 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const selectObject = (value: ObjectSelection) => {
     setSelection(value)
   }
+  useDeleteShortcut(selection && topologyObject(topology, selection) && !editorRequest &&
+    !clearRequested && !feedbackOpen && !erLocationModal.open ? () => {
+      setContextMenu(undefined)
+      setEditorRequest({ ...selection, deleting: true })
+    } : undefined)
   const showRoutes = (value: ObjectSelection, firewall = false, mode: RouteMode = 'bgp') => { selectRouter(value); setRouteView(firewall ? 'firewall' : 'bgp'); setRouteMode(mode); setPanel('routes') }
   const openPath = (value: PathNode, direction: 'to' | 'from') => {
     setDiagnosticHighlight(undefined)

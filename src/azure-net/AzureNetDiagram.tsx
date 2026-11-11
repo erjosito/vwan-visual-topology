@@ -24,7 +24,7 @@ export type AzContextMenuTarget =
 
 interface AzureNetDiagramProps {
   topology: AzNetTopology
-  selected: AzSelectedEntity
+  selected?: AzSelectedEntity
   onSelect: (entity: AzSelectedEntity) => void
   onContextMenu?: (target: AzContextMenuTarget) => void
   onMoveNode: (
@@ -358,7 +358,7 @@ export function AzureNetDiagram({
           const b = centerOf(boxB)
           const midX = (a.cx + b.cx) / 2
           const midY = (a.cy + b.cy) / 2
-          const isSelected = selected.kind === 'peering' && selected.peeringId === peering.id
+          const isSelected = selected?.kind === 'peering' && selected.peeringId === peering.id
           const inForward = forwardEdges.has(peering.id)
           const inReverse = reverseEdges.has(peering.id)
           const hasFinding =
@@ -511,7 +511,7 @@ export function AzureNetDiagram({
           const midY = (a.cy + b.cy) / 2
           const inForward = forwardEdges.has(link.id)
           const inReverse = reverseEdges.has(link.id)
-          const isSelected = selected.kind === 'er-link' && selected.linkId === link.id
+          const isSelected = selected?.kind === 'er-link' && selected.linkId === link.id
           const hasSkuMismatch =
             showDiagnosticBadges &&
             diagnostics.some((d) => d.category === 'er-sku-regional-mismatch' && d.erLinkId === link.id)
@@ -530,6 +530,10 @@ export function AzureNetDiagram({
             <g
               key={link.id}
               data-testid={`aznet-erlink-${link.id}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select ${link.targetKind === 'site' ? 'ExpressRoute link' : 'ER connection'} ${link.name}`}
+              onKeyDown={(e) => openKeyboardContext(e, { kind: 'er-link', linkId: link.id })}
               onClick={(e) => {
                 e.stopPropagation()
                 const entity: AzSelectedEntity = { kind: 'er-link', linkId: link.id }
@@ -597,7 +601,7 @@ export function AzureNetDiagram({
           const inForward = forwardEdges.has(grLink.id)
           const inReverse = reverseEdges.has(grLink.id)
           const isSelected =
-            selected.kind === 'er-global-reach-link' && selected.linkId === grLink.id
+            selected?.kind === 'er-global-reach-link' && selected.linkId === grLink.id
           const stroke = !grLink.enabled
             ? '#94a3b8'
             : isSelected
@@ -695,7 +699,7 @@ export function AzureNetDiagram({
           const inForward = forwardEdges.has(conn.id)
           const inReverse = reverseEdges.has(conn.id)
           const isSelected =
-            selected.kind === 'vpn-connection' && selected.connectionId === conn.id
+            selected?.kind === 'vpn-connection' && selected.connectionId === conn.id
           const stroke = !conn.enabled
             ? '#94a3b8'
             : isSelected
@@ -779,7 +783,7 @@ export function AzureNetDiagram({
           const midY = (a.cy + b.cy) / 2
           const inForward = forwardEdges.has(sLink.id)
           const inReverse = reverseEdges.has(sLink.id)
-          const isSelected = selected.kind === 'site-link' && selected.siteLinkId === sLink.id
+          const isSelected = selected?.kind === 'site-link' && selected.siteLinkId === sLink.id
           const stroke = !sLink.enabled
             ? '#94a3b8'
             : isSelected
@@ -849,7 +853,7 @@ export function AzureNetDiagram({
         {topology.vnets.map((vnet) => {
           const box = positions.vnets[vnet.id]
           if (!box) return null
-          const isVnetSelected = selected.kind === 'vnet' && selected.vnetId === vnet.id
+          const isVnetSelected = selected?.kind === 'vnet' && selected.vnetId === vnet.id
           const vnetFindings = showDiagnosticBadges
             ? diagnostics.filter((d) => d.vnetId === vnet.id && d.severity !== 'info')
             : []
@@ -1106,7 +1110,7 @@ export function AzureNetDiagram({
               {vnet.subnets.map((subnet, sIdx) => {
                 const rowY = subnetStartY + sIdx * 28
                 const isSubSelected =
-                  selected.kind === 'subnet' && selected.subnetId === subnet.id
+                  selected?.kind === 'subnet' && selected.subnetId === subnet.id
                 const inFwd = forwardSubnets.has(subnet.id)
                 const inRev = reverseSubnets.has(subnet.id)
                 const rt = subnet.routeTableId
@@ -1328,11 +1332,15 @@ export function AzureNetDiagram({
         {topology.vwanHubs.map((hub) => {
           const box = positions.vwanHubs[hub.id]
           if (!box) return null
-          const isSelected = selected.kind === 'vwan-hub' && selected.hubId === hub.id
+          const isSelected = selected?.kind === 'vwan-hub' && selected.hubId === hub.id
           return (
             <g
               key={hub.id}
               data-testid={`aznet-vwanhub-${hub.id}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select Virtual WAN Hub ${hub.name}`}
+              onKeyDown={(e) => openKeyboardContext(e, { kind: 'vwan-hub', hubId: hub.id })}
               onPointerDown={(e) => {
                 if (e.button === 2) return
                 e.stopPropagation()
@@ -1420,7 +1428,7 @@ export function AzureNetDiagram({
         {topology.erLocations.map((loc) => {
           const box = positions.erLocations[loc.id]
           if (!box) return null
-          const isSelected = selected.kind === 'er-location' && selected.locationId === loc.id
+          const isSelected = selected?.kind === 'er-location' && selected.locationId === loc.id
           return (
             <g
               key={loc.id}
@@ -1508,7 +1516,7 @@ export function AzureNetDiagram({
         {topology.sites.map((site) => {
           const box = positions.sites[site.id]
           if (!box) return null
-          const isSelected = selected.kind === 'site' && selected.siteId === site.id
+          const isSelected = selected?.kind === 'site' && selected.siteId === site.id
           return (
             <g
               key={site.id}
