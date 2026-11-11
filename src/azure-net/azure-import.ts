@@ -2,6 +2,7 @@ import { azureObjectId } from '../azure-import'
 import type { AzSimulationResult } from './engine'
 import {
   validateAzNetTopology,
+  validateAdvertisedGatewayPrefixes,
   type AzAppliance,
   type AzArsPreference,
   type AzNetTopology,
@@ -490,6 +491,13 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       Boolean(routeServer),
     )
 
+    const rawSummaries = props.summarizedGatewayPrefixes ?? v.summarizedGatewayPrefixes
+    const summaries = rawSummaries === undefined ? undefined : asObject(rawSummaries, 'summarizedGatewayPrefixes').addressPrefixes
+    if (rawSummaries !== undefined && (!Array.isArray(summaries) || summaries.some((prefix) => typeof prefix !== 'string'))) {
+      throw new Error(`VNet "${name}" summarizedGatewayPrefixes.addressPrefixes must be an array of IPv4 CIDR strings.`)
+    }
+    const summaryErrors = validateAdvertisedGatewayPrefixes(summaries)
+    if (summaryErrors.length) throw new Error(`VNet "${name}" ${summaryErrors.join(' ')}`)
     vnets.push({
       id,
       name,
@@ -500,6 +508,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       gateways,
       ...(routeServer ? { routeServer } : {}),
       appliances,
+      ...(summaries !== undefined ? { summarizedGatewayPrefixes: summaries as string[] } : {}),
     })
 
     for (const rawPeer of asArray(props.virtualNetworkPeerings ?? v.virtualNetworkPeerings)) {
