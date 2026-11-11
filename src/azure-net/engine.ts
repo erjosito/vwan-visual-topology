@@ -750,7 +750,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     }))
     for (const link of azArsPolicyLinks(vnet)) {
       const isGateway = link.id.startsWith('gateway:')
-      if (isGateway && !vnet.gateways.some((gateway) => gateway.id === link.targetId && gateway.enabled && gateway.bgpEnabled)) continue
+      if (isGateway && (!ars.branchToBranchTraffic || !vnet.gateways.some((gateway) => gateway.id === link.targetId && gateway.enabled && gateway.bgpEnabled))) continue
       if (!isGateway && !vnet.appliances.some((app) => app.id === link.targetId && app.bgpEnabled && app.enableIpForwarding && app.asn !== 65515 && app.asn !== 12076)) continue
       const candidates = routeServerRibs[ars.id].filter((route) => route.preferred && route.nextHopId !== link.targetId &&
         (!isGateway || ars.branchToBranchTraffic && route.nextHopKind === 'appliance'))

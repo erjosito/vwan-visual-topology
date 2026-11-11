@@ -156,6 +156,9 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(result.routeServerOutbound?.ars['gateway:gw']).toBeUndefined()
     expect(result.routeServerOutbound?.ars['nva:one']).toBeUndefined()
     expect(result.routeServerOutbound?.ars['nva:two'].some((route) => route.prefix === '10.0.0.0/16')).toBe(true)
+    topology.vnets[0].gateways[0].enabled = true
+    topology.vnets[0].routeServer!.branchToBranchTraffic = false
+    expect(simulateAzNet(topology).routeServerOutbound?.ars['gateway:gw']).toBeUndefined()
   })
 
   it('protects the ARS own-VNet advertisement and preserves unmatched routes on a peer', () => {
