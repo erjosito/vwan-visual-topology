@@ -1699,11 +1699,11 @@ export function AzureNetDiagram({
           )
         })}
         {diagnosticNodes.filter(({ id, box }) => risks[id] && !faults[id] && box).map(({ id, box }) => <g key={`risk:${id}`}
-          role="button" tabIndex={0} aria-label={`Review ${risks[id]} N-1 resilience gaps for ${id}`}
+          role="button" tabIndex={0} data-root-count={risks[id]} aria-label={`Review ${risks[id]} N-1 failure scenarios for ${id}`}
           transform={`translate(${box.x + box.width / 2},${box.y + box.height + 5})`}
           onClick={() => onRisk?.(id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRisk?.(id) } }}>
           <rect className="resilience-gap-badge" x="-80" y="-10" width="160" height="22" rx="3" />
-          <text className="resilience-gap-text" textAnchor="middle" y="6">△ {risks[id]} N-1 gaps</text>
+          <text className="resilience-gap-text" textAnchor="middle" y="6">△ {risks[id]} N-1 scenarios</text>
         </g>)}
         {diagnosticNodes.filter(({ id, box }) => faults[id] && box).map(({ id, box }) => <g key={`fault:${id}`}
           role="img" aria-label={`Simulated failure: ${faults[id].map((f) => f.name).join(', ')}`}

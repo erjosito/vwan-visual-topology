@@ -2916,7 +2916,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   : actionableCount ? 'Routing check completed.'
                     : 'No routing issues found within the checked model scope.'}</span>
             <span>{actionableCount} routing issues: {connectivityFailures} connectivity failures, {statefulAsymmetries} stateful asymmetries.
-              {' '}{actionableCount} root-cause issues affecting {affectedFlowCount} verified flow pairs.
+              {' '}{actionableCount} root-cause issue{actionableCount === 1 ? '' : 's'} affecting {affectedFlowCount} sampled flow pairs.
               {' '}Checked {analysis.checked} of {analysis.total} representative pairs ({analysis.checked * 2} directional traces).
               {' '}Results update when routing changes.</span>
             <button type="button" className="aznet-btn" data-testid="aznet-review-routing-issues"

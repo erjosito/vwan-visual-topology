@@ -4,7 +4,7 @@ import { createEmptyAzNetTopology, sampleHubSpokeFirewallUdr } from './azure-net
 import { simulate } from './routing'
 import { traceNodePath } from './paths'
 import { simulateAzNet, traceAzNetPair } from './azure-net/engine'
-import { analyzeAzResilience, analyzeVwanResilience } from './failure-analysis'
+import { analyzeAzResilience, analyzeVwanResilience, groupResilienceGaps, resilienceMarkers } from './failure-analysis'
 import { projectAzFailures, projectVwanFailures, regionKey, type FailureDomain } from './failures'
 import { validateTopology } from './validation'
 
@@ -174,6 +174,38 @@ describe('reversible offline failure overlays', () => {
 })
 
 describe('actual N-1 domain routing rather than degree heuristics', () => {
+  it('groups surviving flow failures by domain without losing directional evidence or including endpoint exclusions', () => {
+    const report = analyzeVwanResilience(vwanFailureFixture())
+    const before = structuredClone(report)
+    const groups = groupResilienceGaps(report.gaps)
+    const er = groups.filter((group) => group.scenarioId === 'er-location:loc')
+    expect(er).toHaveLength(1)
+    expect(er[0].occurrences).toHaveLength(2)
+    expect(er[0].endpointIds.sort()).toEqual(['a', 'b', 'work'])
+    expect(er[0].occurrences.every((gap) => gap.baseline.working && !gap.failed.working)).toBe(true)
+    expect(er[0].occurrences.map((gap) => gap.baseline.forward)).toEqual(report.gaps.filter((gap) => gap.scenarioId === 'er-location:loc').map((gap) => gap.baseline.forward))
+    expect(groups.flatMap((group) => group.occurrences).map((gap) => gap.id).sort()).toEqual(report.gaps.map((gap) => gap.id).sort())
+    expect(groups.every((group) => group.occurrences.every((gap) => gap.category === group.category && gap.scenarioId === group.scenarioId))).toBe(true)
+    expect(resilienceMarkers(report).a).toBe(4)
+    expect(report.endpointExclusions.length).toBeGreaterThan(0)
+    expect(report).toEqual(before)
+  })
+
+  it('keeps domain roots stable as affected pairs change and separates equal IDs in different failure domains', () => {
+    const t = vwanFailureFixture()
+    const before = groupResilienceGaps(analyzeVwanResilience(t).gaps).find((group) => group.scenarioId === 'er-location:loc')!
+    t.sites = t.sites.filter((site) => site.id !== 'b')
+    t.connections = []
+    const after = groupResilienceGaps(analyzeVwanResilience(t).gaps).find((group) => group.scenarioId === 'er-location:loc')!
+    expect(after.id).toBe(before.id)
+    expect(after.occurrences).toHaveLength(1)
+    const site = { ...after.occurrences[0], id: 'different-domain', scenarioId: 'site:loc',
+      fault: { kind: 'site' as const, id: 'loc', name: after.fault.name } }
+    const distinct = groupResilienceGaps([...after.occurrences, site])
+    expect(distinct).toHaveLength(2)
+    expect(new Set(distinct.map((group) => group.id)).size).toBe(2)
+  })
+
   it('names site/ER/region transit gaps only for baseline-working surviving endpoints, and verifies a real independent alternate', () => {
     const t = vwanFailureFixture()
     const report = analyzeVwanResilience(t)

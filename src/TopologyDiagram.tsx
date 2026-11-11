@@ -526,10 +526,10 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">{t("Right-click the canvas to add your first hub or site.")}</text>}
     {Object.entries(risks).filter(([id]) => positions.has(id) && !faults[id]).map(([id, count]) => {
       const p = point(id)
-      return <g key={`risk:${id}`} role="button" tabIndex={0} aria-label={`Review ${count} N-1 resilience gaps for ${id}`}
+      return <g key={`risk:${id}`} role="button" tabIndex={0} data-root-count={count} aria-label={`Review ${count} N-1 failure scenarios for ${id}`}
         transform={`translate(${p.x},${p.y + 52})`} onClick={() => onRisk?.(id)}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRisk?.(id) } }}>
-        <rect className="resilience-gap-badge" x="-80" y="-10" width="160" height="22" rx="3" /><text className="resilience-gap-text" textAnchor="middle" y="6">△ {count} N-1 gaps</text>
+        <rect className="resilience-gap-badge" x="-80" y="-10" width="160" height="22" rx="3" /><text className="resilience-gap-text" textAnchor="middle" y="6">△ {count} N-1 scenarios</text>
       </g>
     })}
     {Object.entries(faults).filter(([id]) => positions.has(id) && !nvaSiteMap.has(id)).map(([id, failures]) => {

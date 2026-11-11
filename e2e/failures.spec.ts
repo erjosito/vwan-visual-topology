@@ -32,7 +32,8 @@ function azFixture(full: boolean) {
       gateways: [{ id: 'gw', name: 'ER gateway', kind: 'ExpressRoute', enabled: true, bgpEnabled: true, asn: 65515 }],
       appliances: [] },
     { id: 'work', name: 'Workload', region: 'East US', role: 'spoke', prefixes: ['10.1.0.0/16'],
-      subnets: [{ id: 'work-subnet', name: 'Workload', prefix: '10.1.1.0/24' }], gateways: [], appliances: [] },
+      subnets: [{ id: 'work-subnet', name: 'Workload', prefix: '10.1.1.0/24' },
+        { id: 'second-subnet', name: 'Second workload', prefix: '10.1.2.0/24' }], gateways: [], appliances: [] },
   ]
   const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
   t.vnetPeerings = [{ id: 'peer', name: 'Transit peering', enabled: true, vnetAId: 'west', vnetBId: 'work',
@@ -117,16 +118,31 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await expect(result).toContainText(/N-1 resilience gaps/)
     await expect(result).toContainText('baseline-working pair/scenario cases')
     await expect(result).toContainText('service recovery unassessed')
-    const finding = result.locator('details').filter({ has: page.locator('summary').filter({ hasText: /Resilience gap:.*Workload.*loss of ER location Amsterdam/ }) }).first()
+    const finding = result.locator('[data-scenario-id="er-location:er"]')
+    await expect(finding).toHaveCount(1)
+    await expect(finding).toHaveAttribute('data-affected-pairs', '2')
     await expect(finding).toHaveAttribute('data-scenario-id', 'er-location:er')
     await expect(finding).toHaveAttribute('data-failure-domain-id', 'er')
     await expect(finding).toHaveAttribute('data-failure-domain-kind', 'er-location')
-    await expect(finding).toHaveAttribute('data-finding-id', /^resilience-gap:/)
+    await expect(finding).toHaveAttribute('data-finding-id', /^resilience-root:/)
     await finding.locator('summary').first().click()
     await expect(finding).toContainText('independently routed alternate')
+    const flows = finding.locator('[data-resilience-pair-id]')
+    await expect(flows).toHaveCount(2)
+    for (const flow of await flows.all()) {
+      await flow.locator('summary').first().click()
+      await flow.getByText('Baseline forward / return evidence', { exact: true }).click()
+      await expect(flow.locator('pre').first()).toContainText('delivered')
+      await flow.getByText('Failure forward / return evidence', { exact: true }).click()
+      expect(await flow.locator('pre').last().textContent()).toMatch(/unreachable|dropped-no-route/)
+    }
     await finding.getByRole('button', { name: 'Simulate loss of ER location Amsterdam', exact: true }).click()
     await expect(locationNode).toHaveAttribute('data-simulated-failed', 'true')
-    await expect(page.getByRole('button', { name: /Review \d+ N-1 resilience gaps for work/ })).toBeVisible()
+    const marker = page.getByRole('button', { name: /Review \d+ N-1 failure scenarios for work/ })
+    await expect(marker).toBeVisible()
+    await marker.click()
+    await expect(finding).toHaveAttribute('open', '')
+    expect(await finding.locator('[data-resilience-pair-id][open]').count()).toBeGreaterThan(0)
     await page.getByRole('button', { name: 'Restore all simulated failures', exact: true }).click()
     expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(initial)
   })
