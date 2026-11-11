@@ -42,6 +42,7 @@ import {
   cloneAzNetTopology,
   createEmptyAzNetTopology,
   validateAzNetTopology,
+  validateAdvertisedGatewayPrefixes,
   type AzArsPreference,
   type AzErCircuitSku,
   type AzNetTopology,
@@ -4225,6 +4226,36 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             Delete VNet
                           </button>
                         </div>
+
+                        <label style={{ display: 'grid', gap: 4, marginBottom: 8, fontSize: 11.5 }}>
+                          Advertised gateway prefixes (IPv4, comma-separated)
+                          <input
+                            key={`${vnet.id}:${vnet.summarizedGatewayPrefixes?.join(',') ?? ''}`}
+                            type="text"
+                            className="aznet-input"
+                            aria-label={`Advertised gateway prefixes ${vnet.name}`}
+                            aria-describedby={`aznet-gateway-prefix-help-${vnet.id}`}
+                            defaultValue={vnet.summarizedGatewayPrefixes?.join(', ') ?? ''}
+                            placeholder="Default: advertise individual hub and eligible spoke address spaces"
+                            onBlur={(e) => {
+                              const value = e.target.value
+                              if (value === (vnet.summarizedGatewayPrefixes ?? []).join(', ')) return
+                              commitTopology((draft) => {
+                                const target = draft.vnets.find((v) => v.id === vnet.id)
+                                if (target) target.summarizedGatewayPrefixes = value.split(',').map((prefix) => prefix.trim()).filter(Boolean)
+                              })
+                            }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                          />
+                          <span id={`aznet-gateway-prefix-help-${vnet.id}`} className="aznet-muted">
+                            Read only by this VNet's ER/VPN gateway when GatewaySubnet exists; stored beforehand, ignored by a remote hub.
+                            Include this gateway VNet's address spaces (recommended). Covered hub/spoke spaces are summarized; uncovered spaces remain advertised.
+                            Independent of local address spaces; no overlapping entries or IPv6. No Route Server required. Advertisements do not create forwarding routes.
+                          </span>
+                          {validateAdvertisedGatewayPrefixes(vnet.summarizedGatewayPrefixes).map((error) => (
+                            <strong role="alert" key={error}>VNet "{vnet.name}" {error}</strong>
+                          ))}
+                        </label>
 
                         {usesRemoteGw && (
                           <div

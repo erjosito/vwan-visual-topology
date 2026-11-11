@@ -33,6 +33,7 @@ export type AzDiagnosticCategory =
   | 'peering-use-remote-gateways-conflict'
   | 'spoke-onprem-gateway-transit-disabled'
   | 'private-endpoint-udr-bypass'
+  | 'gateway-prefix-summary'
   | 'ars-configuration'
   | 'appliance-ip-forwarding-disabled'
   | 'asymmetric-firewall-bypass'
@@ -73,6 +74,24 @@ export function runAzNetDiagnostics(
   for (const vnet of topology.vnets) {
     const gwSubnet = vnet.subnets.find((s) => s.name === 'GatewaySubnet')
     const hasEnabledGw = vnet.gateways.some((g) => g.enabled)
+    const summaries = (vnet.summarizedGatewayPrefixes ?? []).filter((prefix) => typeof prefix === 'string' && cidr(prefix))
+    if (summaries.length) {
+      const uncovered = vnet.prefixes.filter((prefix) => {
+        const parsed = cidr(prefix)
+        return parsed && !summaries.some((summary) => cidr(summary)!.length <= parsed.length && contains(summary, parsed.network))
+      })
+      if (!gwSubnet || !hasEnabledGw || uncovered.length) findings.push({
+        id: `gateway-summary:${vnet.id}`,
+        severity: 'info',
+        category: 'gateway-prefix-summary',
+        title: `Advertised gateway prefixes on ${vnet.name}`,
+        summary: !gwSubnet || !hasEnabledGw
+          ? 'Stored only: this VNet needs GatewaySubnet and an enabled ER/VPN gateway before its summaries take effect. A remote hub ignores this VNet setting.'
+          : `Gateway VNet address spaces ${uncovered.join(', ')} are not fully covered and remain individually advertised alongside the configured summaries.`,
+        remediation: 'Including the gateway VNet address spaces is recommended. Summaries are advertisements only; real forwarding routes and gateway-transit permissions are still required.',
+        vnetId: vnet.id,
+      })
+    }
     if (gwSubnet && hasEnabledGw) {
       const rt = gwSubnet.routeTableId
         ? topology.udrTables.find((t) => t.id === gwSubnet.routeTableId)
