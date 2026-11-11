@@ -136,6 +136,107 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(table.routes.find((route) => route.nextHopType === 'InterfaceEndpoint')?.active).toBe(nextHopType === 'InterfaceEndpoint')
   })
 
+  it.each(['ExpressRoute', 'Vpn'] as const)('summarizes covered VNet advertisements over %s and retains uncovered spaces', (transport) => {
+    const topology = transitTopology(transport)
+    topology.vnets[0].prefixes.push('192.168.0.0/16')
+    topology.vnets[1].prefixes.push('10.32.0.0/16')
+    const advertised = () => simulateAzNet(topology).siteRibs.site.filter((r) => r.preferred && r.nextHopKind !== 'local')
+    const original = advertised()
+    topology.vnets[0].summarizedGatewayPrefixes = []
+    expect(advertised()).toEqual(original)
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/15', '198.18.0.0/15']
+    expect(validateAzNetTopology(topology)).toEqual([])
+    expect(advertised().map((r) => r.prefix).sort()).toEqual(['10.0.0.0/15', '10.32.0.0/16', '192.168.0.0/16', '198.18.0.0/15'].sort())
+    expect(advertised().find((r) => r.prefix === '10.0.0.0/15')?.explanation).toContain('Advertised gateway summary')
+    expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings).toEqual([])
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/17']
+    expect(advertised().map((r) => r.prefix)).toContain('10.0.0.0/16')
+    topology.vnets[0].summarizedGatewayPrefixes = []
+    expect(advertised()).toEqual(original)
+  })
+
+  it.each(['ExpressRoute', 'Vpn'] as const)('ignores remote-spoke summaries and requires GatewaySubnet for %s summaries', (transport) => {
+    const topology = transitTopology(transport)
+    topology.vnets[1].summarizedGatewayPrefixes = ['198.18.0.0/15']
+    const advertised = () => simulateAzNet(topology).siteRibs.site.filter((r) => r.preferred && r.nextHopKind !== 'local').map((r) => r.prefix)
+    expect(advertised().sort()).toEqual(['10.0.0.0/16', '10.1.0.0/16'])
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/15']
+    topology.vnets[0].subnets = []
+    expect(advertised().sort()).toEqual(['10.0.0.0/16', '10.1.0.0/16'])
+    expect(runAzNetDiagnostics(topology, simulateAzNet(topology))).toContainEqual(expect.objectContaining({
+      category: 'gateway-prefix-summary', vnetId: 'hub', summary: expect.stringContaining('Stored only'),
+    }))
+    topology.vnets[0].gateways[0].enabled = false
+    expect(advertised()).toEqual([])
+  })
+
+  it.each(['ExpressRoute', 'Vpn'] as const)('does not turn a %s advertised summary into forwarding or gateway transit', (transport) => {
+    const topology = transitTopology(transport)
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/8']
+    let simulation = simulateAzNet(topology)
+    expect(simulation.subnetTables.gateway.routes.some((r) => r.prefix === '10.0.0.0/8')).toBe(false)
+    const hole = traceAzNetFlow(topology, simulation, { kind: 'site', siteId: 'site' }, '10.99.1.4')
+    expect(hole.status).toBe('dropped-no-route')
+    expect(hole.hops.some((h) => h.nodeKind === 'vnet-gateway')).toBe(true)
+    topology.vnets[0].summarizedGatewayPrefixes.push('198.18.0.0/15')
+    simulation = simulateAzNet(topology)
+    expect(traceAzNetFlow(topology, simulation, { kind: 'site', siteId: 'site' }, '198.18.1.4').status).toBe('dropped-no-route')
+    topology.vnetPeerings[0].aToB.allowGatewayTransit = false
+    topology.vnetPeerings[0].bToA.useRemoteGateways = false
+    simulation = simulateAzNet(topology)
+    expect(traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '172.16.0.4').status).not.toBe('delivered')
+  })
+
+  it('keeps NVA prefixes learned through ARS while summarizing only VNet address spaces', () => {
+    const topology = transitTopology()
+    const hub = topology.vnets[0]
+    hub.summarizedGatewayPrefixes = ['10.0.0.0/8']
+    hub.subnets.push({ id: 'ars-subnet', name: 'RouteServerSubnet', prefix: '10.0.3.0/27' },
+      { id: 'nva-subnet', name: 'NVA', prefix: '10.0.2.0/24' })
+    hub.routeServer = { id: 'ars', name: 'Route Server', enabled: true, branchToBranchTraffic: true,
+      hubRoutingPreference: 'ExpressRoute', peerApplianceIds: ['nva'], subnetId: 'ars-subnet' }
+    hub.appliances.push({ id: 'nva', name: 'Router', kind: 'nva-vm', subnetId: 'nva-subnet', privateIp: '10.0.2.4',
+      enableIpForwarding: true, bgpEnabled: true, asn: 65020, advertisedPrefixes: ['10.50.0.0/16'], staticRoutes: [] })
+    const routes = simulateAzNet(topology).siteRibs.site.filter((r) => r.preferred).map((r) => r.prefix)
+    expect(routes).toContain('10.0.0.0/8')
+    expect(routes).toContain('10.50.0.0/16')
+  })
+
+  it.each([
+    [['10.0.0.0/8', '10.1.0.0/16'], 'overlap'],
+    [['10.0.0.0/8', '10.0.0.0/8'], 'overlap'],
+    [['fd00::/48'], 'IPv4'],
+    [['10.1.1.4/24'], 'invalid advertised gateway prefix'],
+    ['10.0.0.0/8', 'must be an array'],
+    [[42], 'invalid advertised gateway prefix'],
+  ])('rejects invalid advertised gateway prefix lists %j', (prefixes, error) => {
+    const topology = transitTopology()
+    topology.vnets[0].summarizedGatewayPrefixes = prefixes as unknown as string[]
+    expect(validateAzNetTopology(topology).join(' ')).toContain(error)
+  })
+
+  it('imports ARM and flattened SDK gateway summaries, round-trips JSON, and exports the supported ARM shape', () => {
+    const properties = {
+      addressSpace: { addressPrefixes: ['10.0.0.0/16'] },
+      summarizedGatewayPrefixes: { addressPrefixes: ['10.0.0.0/8', '198.18.0.0/15'] },
+      subnets: [],
+    }
+    for (const format of [{ properties }, properties]) {
+      const capture = { kind: 'azure-network-capture', version: 2, resourceGroup: 'rg',
+        vnets: [{ id: '/subscriptions/000/resourceGroups/rg/providers/Microsoft.Network/virtualNetworks/hub', name: 'Hub', location: 'westeurope', ...format }] }
+      const imported = importAzNetCapture(capture).topology
+      expect(imported.vnets[0].summarizedGatewayPrefixes).toEqual(['10.0.0.0/8', '198.18.0.0/15'])
+      expect(validateAzNetTopology(JSON.parse(JSON.stringify(imported)))).toEqual([])
+      const exported = generateAzNetBicep(imported).text
+      expect(exported).toContain('Microsoft.Network/virtualNetworks@2025-07-01')
+      expect(exported).toContain("summarizedGatewayPrefixes: {\n      addressPrefixes: [\n        '10.0.0.0/8'\n        '198.18.0.0/15'")
+      imported.vnets[0].summarizedGatewayPrefixes = []
+      expect(generateAzNetBicep(imported).text).toContain('summarizedGatewayPrefixes: {\n      addressPrefixes: [\n      ]')
+    }
+    const bad = { ...properties, summarizedGatewayPrefixes: { addressPrefixes: ['10.0.0.0/8', '10.1.0.0/16'] } }
+    expect(() => importAzNetCapture({ kind: 'azure-network-capture', version: 2, resourceGroup: 'rg', vnets: [{ name: 'Hub', ...bad }] })).toThrow(/overlap/)
+  })
+
   it('checks distinct on-premises sites across their prefixes in landscape scope and clears repaired failures', () => {
     const topology = createEmptyAzNetTopology()
     topology.sites = [

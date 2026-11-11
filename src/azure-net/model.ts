@@ -1,5 +1,5 @@
 import type { LayoutMode, NodePosition, Preference } from '../model'
-import { cidr, ipv4 } from '../validation'
+import { cidr, contains, ipv4 } from '../validation'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -1183,6 +1183,24 @@ export function cloneAzNetTopology(topology: AzNetTopology): AzNetTopology {
   return structuredClone(topology)
 }
 
+export function validateAdvertisedGatewayPrefixes(value: unknown): string[] {
+  if (value === undefined) return []
+  if (!Array.isArray(value)) return ['advertised gateway prefixes must be an array of IPv4 CIDRs.']
+  const errors: string[] = []
+  for (let i = 0; i < value.length; i++) {
+    const parsed = typeof value[i] === 'string' ? cidr(value[i]) : undefined
+    if (!parsed) {
+      errors.push(`has invalid advertised gateway prefix "${value[i]}". Only canonical IPv4 CIDRs are supported.`)
+    } else if (value.slice(0, i).some((other) => {
+      const previous = typeof other === 'string' ? cidr(other) : undefined
+      return previous && (contains(other, parsed.network) || contains(value[i], previous.network))
+    })) {
+      errors.push(`advertised gateway prefixes overlap at "${value[i]}". Prefixes within this list must not overlap.`)
+    }
+  }
+  return errors
+}
+
 export function validateAzNetTopology(input: unknown): string[] {
   const errors: string[] = []
   if (!input || typeof input !== 'object') {
@@ -1210,6 +1228,7 @@ export function validateAzNetTopology(input: unknown): string[] {
     for (const prefix of vnet.prefixes ?? []) {
       if (!cidr(prefix)) errors.push(`VNet "${vnet.name}" has invalid CIDR "${prefix}".`)
     }
+    errors.push(...validateAdvertisedGatewayPrefixes(vnet.summarizedGatewayPrefixes).map((error) => `VNet "${vnet.name}" ${error}`))
     for (const subnet of vnet.subnets ?? []) {
       if (!cidr(subnet.prefix)) {
         errors.push(`Subnet "${subnet.name}" in "${vnet.name}" has invalid CIDR "${subnet.prefix}".`)
