@@ -555,6 +555,11 @@
   color: var(--text);
 }
 
+.aznet-subnet-tooltip {
+  pointer-events: none;
+  overflow-wrap: anywhere;
+}
+
 .aznet-hover-popover-header {
   display: flex;
   align-items: center;

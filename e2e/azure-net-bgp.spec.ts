@@ -50,6 +50,7 @@ async function inspectSite(page: Page, id: string) {
 
 for (const mode of ['hub-spoke', 'full']) {
   test(`${mode} keeps subnet pills compact and reveals prefixes and route-table settings on demand`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 650 })
     const topology = bgpTopology()
     topology.udrTables.push({
       id: 'compact-rt', name: 'Production-Spoke-Route-Table',
@@ -77,7 +78,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(tooltip).toContainText('ProductionApplicationServicesSubnetWithALongName')
     await page.getByTestId('aznet-vnet-hub').focus()
     await expect(tooltip).toBeHidden()
-    await subnet.hover({ position: { x: 15, y: 12 } })
+    await subnet.hover({ position: { x: 8, y: 2 } })
     await expect(tooltip).toBeVisible()
     await badge.hover()
     const settings = page.getByTestId('aznet-rt-hover-card')

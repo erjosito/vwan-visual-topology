@@ -1904,9 +1904,8 @@ export function AzureNetDiagram({
         const vnet = topology.vnets.find((entry) => entry.id === hoverPopover.vnetId)
         const subnet = vnet?.subnets.find((entry) => entry.id === hoverPopover.subnetId)
         if (!subnet) return null
-        return <div id={tooltipId} role="tooltip" className="aznet-hover-popover"
-          data-testid="aznet-subnet-hover-card" style={{ left: hoverPopover.x, top: hoverPopover.y }}
-          onMouseEnter={clearHoverTimer} onMouseLeave={scheduleClosePopover}>
+        return <div id={tooltipId} role="tooltip" className="aznet-hover-popover aznet-subnet-tooltip"
+          data-testid="aznet-subnet-hover-card" style={{ left: hoverPopover.x, top: hoverPopover.y }}>
           <strong>{subnet.name}</strong><p><code>{subnet.prefix}</code></p>
         </div>
       })()}
