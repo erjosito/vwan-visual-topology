@@ -4,7 +4,9 @@ import './index.css'
 import App from './App.tsx'
 import { AzureNetApp } from './azure-net/AzureNetApp.tsx'
 import type { SimulatorMode } from './SimulatorModeSwitch.tsx'
-import { t, useLanguage } from './i18n'
+import { useLanguage } from './i18n'
+import { CanvasMaximizeButton, CanvasPresentationProvider } from './CanvasPresentation'
+import { useCanvasPresentation } from './useCanvasPresentation'
 import './theme.css'
 
 function resolveInitialMode(): SimulatorMode {
@@ -37,7 +39,7 @@ function resolveInitialMode(): SimulatorMode {
 
 export function UnifiedSimulatorRoot() {
   const [mode, setMode] = useState<SimulatorMode>(resolveInitialMode)
-  const [canvasMaximized, setCanvasMaximized] = useState(false)
+  const { style, maximized } = useCanvasPresentation()
   useLanguage()
 
   useEffect(() => {
@@ -46,15 +48,8 @@ export function UnifiedSimulatorRoot() {
     window.history.replaceState(null, '', url.toString())
   }, [mode])
 
-  return <div className={`simulator-shell${canvasMaximized ? ' canvas-maximized' : ''}`}>
-    <button
-      type="button"
-      className="canvas-view-toggle"
-      aria-pressed={canvasMaximized}
-      onClick={() => setCanvasMaximized((value) => !value)}
-    >
-      {t(canvasMaximized ? 'Restore panels' : 'Maximize canvas')}
-    </button>
+  return <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
+    <CanvasMaximizeButton />
     {mode === 'vwan'
       ? <App simulatorMode={mode} onChangeSimulatorMode={setMode} />
       : <AzureNetApp simulatorMode={mode} onChangeSimulatorMode={setMode} />}
@@ -63,7 +58,7 @@ export function UnifiedSimulatorRoot() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <UnifiedSimulatorRoot />
+    <CanvasPresentationProvider><UnifiedSimulatorRoot /></CanvasPresentationProvider>
   </StrictMode>,
 )
 

@@ -1,6 +1,7 @@
 import { t } from './i18n'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
-import type { KeyboardEvent, MouseEvent, PointerEvent } from 'react'
+import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
+import { CanvasBackground, CanvasControls } from './CanvasPresentation'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { topologyObject, transportLabels } from './model'
 import { diagnosticFlowCount, type DiagnosticsFinding } from './diagnostics'
@@ -38,6 +39,9 @@ interface Props {
   onObjectClick: (selection: ObjectSelection) => void; onObjectContextMenu: (menu: DiagramContextMenu) => void
   onNodeMove: (id: string, position: NodePosition) => void
   onShowRouteMapRules: (router: RouterSelection, direction: RouteMapDirection, connectionId: string) => void
+  onZoom: (zoom: number) => void
+  layoutControls?: ReactNode
+  canvasStatus?: ReactNode
 }
 
 function NodeIcon({ kind, secured = false }: { kind: 'hub' | 'spoke' | 'site' | 'erLocation'; secured?: boolean }) {
@@ -54,7 +58,7 @@ function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
   </g>
 }
 
-export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
+export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, layoutControls, canvasStatus }: Props) {
   const svg = useRef<SVGSVGElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -366,11 +370,9 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     onObjectContextMenu({ x: bounds.left + 24, y: bounds.top + 24, invoker: event.currentTarget })
   }}>
     <defs>
-      <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="var(--surface-muted)" /></pattern>
-      <radialGradient id="constellation-glow"><stop offset="0" stopColor="var(--surface-muted)" /><stop offset="1" stopColor="var(--surface)" /></radialGradient>
       <linearGradient id="hub-card" x2="0" y2="1"><stop stopColor="var(--surface)" /><stop offset="1" stopColor="var(--surface-muted)" /></linearGradient>
     </defs>
-    <rect x={pan.x} y={pan.y} width={width} height={height} fill={layout === 'constellation' ? 'url(#constellation-glow)' : 'url(#grid)'} />
+    <CanvasBackground x={pan.x} y={pan.y} width={width} height={height} />
     {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">{t("AZURE SPOKE NETWORKS")}</text><text x="24" y="225" className="diagram-caption">{t("MICROSOFT GLOBAL BACKBONE")}</text><text x="24" y="465" className="diagram-caption">{topology.erLocations?.length ? t("EXPRESSROUTE LOCATIONS") : t("ON-PREMISES SITES")}</text>{!!topology.erLocations?.length && <text x="24" y="700" className="diagram-caption">{t("ON-PREMISES SITES")}</text>}</g>
       : <g className="constellation-orbits" aria-hidden="true"><ellipse cx={width / 2} cy={height / 2} rx={width / 2 - 130} ry={height / 2 - 80} /><ellipse cx={width / 2} cy={height / 2} rx={Math.max(180, topology.hubs.length * 130)} ry="145" /><text x="24" y="30" className="diagram-caption">{t("VIRTUAL WAN · NETWORK CONSTELLATION")}</text></g>}
     {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).map((other) => {
@@ -539,6 +541,9 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       </g>
     })}
   </svg>{preview && previewNode && previewLink && previewMap && !faults[preview.owner.id] && !faults[preview.connectionId] && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
-    {(pan.x !== 0 || pan.y !== 0) && <button className="canvas-pan-reset" onClick={() => setPan({ x: 0, y: 0 })}>{t('Reset canvas view')}</button>}
+    <CanvasControls zoom={zoom} onZoom={onZoom} status={canvasStatus} onResetView={() => {
+      setPan({ x: 0, y: 0 }); onZoom(1)
+      scroll.current?.scrollTo(0, 0)
+    }}>{layoutControls}</CanvasControls>
   </>
 }
