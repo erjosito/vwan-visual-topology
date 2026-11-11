@@ -28,7 +28,7 @@ export function FailurePanel({ faults, unassessed, onRestore, onRestoreAll, anal
         <p>Baseline: checked {report.baselineChecked}/{report.totalPairs} pairs; {report.baselineWorking} working, {report.baselineFaults} baseline connectivity faults, {report.baselineUnknown} unassessed.
           {' '}Failures: {report.checkedScenarios}/{report.totalScenarios} scenarios; {report.checkedCases}/{report.totalCases} baseline-working pair/scenario cases.
           {' '}{report.endpointUnavailable} unavailable-endpoint cases (service recovery unassessed), {report.unknownCases} unassessed routing cases.</p>
-        {report.gaps.map((gap) => <details key={`${gap.pairId}:${failureKey(gap.fault)}`} open={focusEndpoint && gap.endpointIds.includes(focusEndpoint) ? true : undefined}>
+        {report.gaps.map((gap) => <details key={gap.id} data-finding-id={gap.id} data-scenario-id={gap.scenarioId} data-failure-domain-id={gap.fault.id} data-failure-domain-kind={gap.fault.kind} open={focusEndpoint && gap.endpointIds.includes(focusEndpoint) ? true : undefined}>
           <summary>△ Resilience gap: {gap.name} — loss of {failureLabel(gap.fault)}</summary>
           <p>These endpoints survive this fault, but no usable independently routed alternate with symmetric stateful inspection survives.
             {' '}{gap.remediation} This is not an availability guarantee.</p>

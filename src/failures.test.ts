@@ -169,6 +169,9 @@ describe('actual N-1 domain routing rather than degree heuristics', () => {
     const t = azFailureFixture(full)
     t.erLinks.push({ ...t.erLinks[1], id: 'apparent-backup' })
     const report = analyzeAzResilience(t)
+    expect(report.endpointExclusions.length).toBe(report.endpointUnavailable)
+    expect(report.gaps.every((g) => g.scenarioId === `${g.fault.kind}:${g.fault.id}` && g.category === 'n-1-resilience-gap')).toBe(true)
+    expect(report.endpointExclusions.every((excluded) => !report.gaps.some((gap) => gap.scenarioId === excluded.scenarioId && gap.pairId === excluded.pairId))).toBe(true)
     expect(report.baselineWorking).toBe(3)
     expect(faults.every((fault) => report.gaps.some((g) => g.fault.kind === fault.kind && g.fault.id === fault.id))).toBe(true)
     expect(report.gaps.some((g) => g.fault.kind === 'site' && ['a', 'b'].includes(g.fault.id))).toBe(false)
@@ -216,5 +219,30 @@ describe('actual N-1 domain routing rather than degree heuristics', () => {
     expect(report.baselineFaults).toBeGreaterThan(0)
     expect(report.gaps.every((gap) => gap.baseline.working && gap.baseline.assessed)).toBe(true)
     expect(report.limitations.join(' ')).toContain('stateful')
+  })
+
+  it('keeps causal IDs stable across display renaming and separates unavailable endpoints from surviving routing gaps', () => {
+    const t = vwanFailureFixture()
+    const before = analyzeVwanResilience(t)
+    for (const node of [...t.hubs, ...t.spokes, ...t.sites, ...t.erLocations ?? []]) node.name = `Renamed ${node.name}`
+    const after = analyzeVwanResilience(t)
+    expect(after.gaps.map((gap) => gap.id)).toEqual(before.gaps.map((gap) => gap.id))
+    expect(after.gaps.map((gap) => gap.scenarioId)).toEqual(before.gaps.map((gap) => gap.scenarioId))
+    expect(after.endpointExclusions.map((excluded) => excluded.id)).toEqual(before.endpointExclusions.map((excluded) => excluded.id))
+    expect(new Set(after.gaps.map((gap) => gap.id)).size).toBe(after.gaps.length)
+    expect(after.endpointExclusions).toHaveLength(after.endpointUnavailable)
+    expect(after.endpointExclusions.length).toBeGreaterThan(0)
+    for (const excluded of after.endpointExclusions) {
+      expect(excluded.category).toBe('failed-endpoint-exclusion')
+      expect(excluded.failedEndpointIds.length).toBeGreaterThan(0)
+      expect(excluded.failedEndpointIds.some((id) => excluded.survivingEndpointIds.includes(id))).toBe(false)
+      expect(excluded.baseline.working).toBe(true)
+      expect(after.gaps.some((gap) => gap.scenarioId === excluded.scenarioId && gap.pairId === excluded.pairId)).toBe(false)
+    }
+    const transit = after.gaps.find((gap) => gap.fault.kind === 'site' && gap.fault.id === 't')!
+    expect(transit.scenarioId).toBe('site:t')
+    expect(transit.endpointIds).not.toContain('t')
+    expect(transit.failed.working).toBe(false)
+    expect(after.gaps.map((gap) => gap.name)).not.toEqual(before.gaps.map((gap) => gap.name))
   })
 })

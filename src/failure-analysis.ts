@@ -8,7 +8,7 @@ import { simulateAzNet, traceAzNetPair } from './azure-net/engine'
 import { azEndpointKey, getAzNetEndpoints } from './azure-net/endpoints'
 import { cidr, contains, ipv4 } from './validation'
 import { embeddedSpokeNvaSiteIds } from './topology-graph'
-import { projectAzFailures, projectVwanFailures, regionKey, type FailureDomain, type FailureProjection } from './failures'
+import { failureKey, projectAzFailures, projectVwanFailures, regionKey, type FailureDomain, type FailureProjection } from './failures'
 
 export interface FailureEvidence {
   forward: string[]
@@ -24,6 +24,9 @@ interface RequiredPair {
   trace: (active: unknown, simulation: unknown) => FailureEvidence
 }
 export interface ResilienceGap {
+  id: string
+  category: 'n-1-resilience-gap'
+  scenarioId: string
   pairId: string
   name: string
   endpointIds: string[]
@@ -32,8 +35,20 @@ export interface ResilienceGap {
   failed: FailureEvidence
   remediation: string
 }
+export interface ResilienceEndpointExclusion {
+  id: string
+  category: 'failed-endpoint-exclusion'
+  scenarioId: string
+  pairId: string
+  name: string
+  fault: FailureDomain
+  failedEndpointIds: string[]
+  survivingEndpointIds: string[]
+  baseline: FailureEvidence
+}
 export interface ResilienceReport {
   gaps: ResilienceGap[]
+  endpointExclusions: ResilienceEndpointExclusion[]
   baselineFaults: number
   baselineUnknown: number
   baselineWorking: number
@@ -67,7 +82,7 @@ function independentPathGuidance(fault: FailureDomain, attachments: { name: stri
 function evaluate<T>(baseline: T, pairs: RequiredPair[], project: (t: T, faults?: FailureDomain[]) => FailureProjection<T>, simulate: (t: T) => unknown, limitations: string[], budget: ResilienceBudget, totalPairs = pairs.length): ResilienceReport {
   const projection = project(baseline)
   const report: ResilienceReport = {
-    gaps: [], baselineFaults: 0, baselineUnknown: 0, baselineWorking: 0, baselineChecked: 0, totalPairs,
+    gaps: [], endpointExclusions: [], baselineFaults: 0, baselineUnknown: 0, baselineWorking: 0, baselineChecked: 0, totalPairs,
     checkedScenarios: 0, totalScenarios: projection.domains.length, checkedCases: 0, totalCases: 0,
     endpointUnavailable: 0, unknownCases: 0, complete: false,
     limitations: [...limitations, ...projection.unassessed,
@@ -91,16 +106,32 @@ function evaluate<T>(baseline: T, pairs: RequiredPair[], project: (t: T, faults?
   outer: for (const fault of projection.domains) {
     if (Date.now() >= deadline || report.checkedCases >= maxCases) break
     const failed = project(baseline, [fault])
+    const scenarioId = failureKey(fault)
     let simulation: unknown
     for (const { pair, evidence } of working) {
       if (Date.now() >= deadline || report.checkedCases >= maxCases) break outer
       report.checkedCases++
-      if (pair.endpointIds.some((id) => failed.affected[id])) { report.endpointUnavailable++; continue }
+      const caseId = `${encodeURIComponent(scenarioId)}:${encodeURIComponent(pair.id)}`
+      const failedEndpointIds = [...new Set(pair.endpointIds.filter((id) => failed.affected[id]))]
+      if (failedEndpointIds.length) {
+        report.endpointUnavailable++
+        report.endpointExclusions.push({
+          id: `endpoint-exclusion:${caseId}`, category: 'failed-endpoint-exclusion', scenarioId,
+          pairId: pair.id, name: pair.name, fault, failedEndpointIds,
+          survivingEndpointIds: [...new Set(pair.endpointIds.filter((id) => !failed.affected[id]))],
+          baseline: evidence,
+        })
+        continue
+      }
       if (fault.kind === 'region' && projection.unassessed.length) { report.unknownCases++; continue }
       simulation ??= simulate(failed.active)
       const result = pair.trace(failed.active, simulation)
       if (!result.assessed) report.unknownCases++
-      else if (!result.working) report.gaps.push({ pairId: pair.id, name: pair.name, endpointIds: pair.endpointIds, fault, baseline: evidence, failed: result, remediation: pair.remediation(fault) })
+      else if (!result.working) report.gaps.push({
+        id: `resilience-gap:${caseId}`, category: 'n-1-resilience-gap', scenarioId,
+        pairId: pair.id, name: pair.name, endpointIds: pair.endpointIds, fault,
+        baseline: evidence, failed: result, remediation: pair.remediation(fault),
+      })
     }
     report.checkedScenarios++
   }
