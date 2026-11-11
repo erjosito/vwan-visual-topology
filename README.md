@@ -36,7 +36,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - **Send feedback** opens a zero-consent pre-filled GitHub issue in the public feedback repository (`erjosito/vwan-visual-topology-feedback`) with no OAuth consent required.
 - **Clear topology** beside Export/Import starts an empty, saved workspace after confirmation. Cancel/Escape preserves the current topology; export first if you need a backup.
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
-- **Check routing** immediately scans modeled connectivity between all assigned endpoint networks and saved requirements. Each finding has one red-bordered triangular warning sign; click it for explanations and independent forward/return paths. Unassessed coverage is shown separately in neutral coverage notes, not danger signs. Optional **Advanced checks** retain explicit flow, firewall and neighbor requirements. No Azure credentials or packet probes are used.
+- **Check routing** immediately scans modeled connectivity between all assigned endpoint networks and saved requirements. Findings sharing a modeled cause are grouped into one issue, with separate root-cause and affected-flow counts. Warning markers at affected endpoints navigate to the shared issue; expand its flow evidence to inspect independent forward/return paths. Partial repairs update the remaining group membership. Unassessed coverage is shown separately in neutral coverage notes, not danger signs. Optional **Advanced checks** retain explicit flow, firewall and neighbor requirements. No Azure credentials or packet probes are used.
 
 ## Languages and networking terminology
 
