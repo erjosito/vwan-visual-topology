@@ -466,7 +466,7 @@
 
 .topology-context-menu {
   position: fixed;
-  z-index: 1000;
+  z-index: 1200;
   display: grid;
   width: 250px;
   max-width: calc(100vw - 16px);
