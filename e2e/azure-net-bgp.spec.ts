@@ -49,6 +49,66 @@ async function inspectSite(page: Page, id: string) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} scopes ARS maps by peer and direction, keeps outbound separate from best paths and persists policies`, async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('same key')) errors.push(message.text()) })
+    const topology = bgpTopology()
+    const hub = topology.vnets[0]
+    hub.subnets.push({ id: 'nvas', name: 'NVAs', prefix: '10.0.2.0/24' })
+    hub.appliances = ['one', 'two'].map((id, index) => ({
+      id, name: `NVA ${id}`, kind: 'nva-vm', subnetId: 'nvas', privateIp: `10.0.2.${4 + index}`,
+      asn: 65010 + index, bgpEnabled: true, enableIpForwarding: true, advertisedPrefixes: ['192.168.10.0/24'], staticRoutes: [],
+    }))
+    hub.routeServer!.peerApplianceIds = ['one', 'two']
+    hub.routeServer!.branchToBranchTraffic = true
+    await load(page, mode, topology)
+    const open = async () => {
+      await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
+      await page.getByRole('menuitem', { name: 'Manage ARS Route Maps', exact: true }).click()
+    }
+    await open()
+    const policy = page.getByRole('dialog', { name: 'Route maps · Route Server', exact: true })
+    await policy.getByRole('button', { name: 'Create route map', exact: true }).click()
+    await policy.getByRole('textbox', { name: 'Route map name', exact: true }).fill('Scoped ARS filter')
+    await policy.getByRole('button', { name: 'Add rule', exact: true }).click()
+    await policy.getByRole('textbox', { name: 'Rule 1 prefixes', exact: true }).fill('192.168.10.0/24')
+    await policy.getByRole('combobox', { name: 'Rule 1 action', exact: true }).selectOption('drop')
+    await policy.getByRole('button', { name: 'Save route map', exact: true }).click()
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('nva:one')
+    const mapId = await policy.getByRole('combobox', { name: 'Inbound route map', exact: true }).locator('option', { hasText: 'Scoped ARS filter' }).getAttribute('value')
+    await policy.getByRole('combobox', { name: 'Inbound route map', exact: true }).selectOption(mapId!)
+    await policy.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
+    const inspect = async () => {
+      await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
+      await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+    }
+    await inspect()
+    const rib = page.getByTestId('aznet-control-rib-card')
+    await expect(rib.locator('[data-prefix="192.168.10.0/24"]')).toHaveCount(1)
+    await expect(rib.locator('[data-prefix="192.168.10.0/24"]')).toContainText('NVA two')
+    await open()
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('gateway:gw')
+    await policy.getByRole('combobox', { name: 'Outbound route map', exact: true }).selectOption(mapId!)
+    await expect(policy.getByTestId('aznet-policy-outbound').locator('[data-prefix="192.168.10.0/24"]')).toHaveCount(0)
+    await expect(policy.getByTestId('aznet-policy-outbound').locator('[data-prefix="10.0.0.0/16"]')).toHaveCount(1)
+    await policy.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
+    await inspect()
+    await expect(rib.locator('[data-prefix="192.168.10.0/24"][data-preferred="true"]')).toHaveCount(1)
+    await page.reload()
+    await open()
+    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue(mapId!)
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('gateway:gw')
+    await expect(policy.getByRole('combobox', { name: 'Outbound route map', exact: true })).toHaveValue(mapId!)
+    await policy.getByRole('button', { name: /Scoped ARS filter/ }).click()
+    await policy.getByRole('button', { name: 'Delete route map', exact: true }).click()
+    await policy.getByRole('button', { name: 'Confirm route map deletion', exact: true }).click()
+    await expect(policy.getByRole('combobox', { name: 'Outbound route map', exact: true })).toHaveValue('')
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('nva:one')
+    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue('')
+    expect(errors).toEqual([])
+  })
+
   test(`${mode} edits site route maps, scopes assignments and preserves policies across reload and undo`, async ({ page }) => {
     await load(page, mode)
     await page.getByTestId('aznet-site-a').focus()

@@ -1,6 +1,7 @@
 import type { LayoutMode, NodePosition, Preference, RouteMap, RouteMapAssignment } from '../model'
 import { cidr, contains, ipv4 } from '../validation'
 import { validateAzSiteRouteMaps } from './route-maps'
+import { validateAzArsRouteMaps } from './ars-route-maps'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -79,6 +80,8 @@ export interface AzRouteServer {
   branchToBranchTraffic: boolean
   hubRoutingPreference: AzArsPreference
   peerApplianceIds: string[]
+  routeMaps?: RouteMap[]
+  routeMapAssignments?: RouteMapAssignment[]
 }
 
 export type AzApplianceKind = 'azure-firewall' | 'nva-vm' | 'vnra'
@@ -1277,5 +1280,7 @@ export function validateAzNetTopology(input: unknown): string[] {
     try { validateAzSiteRouteMaps(candidate as AzNetTopology) }
     catch (error) { errors.push(error instanceof Error ? error.message : 'Invalid site route maps.') }
   }
+  try { validateAzArsRouteMaps(candidate as AzNetTopology) }
+  catch (error) { errors.push(error instanceof Error ? error.message : 'Invalid ARS route maps.') }
   return errors
 }

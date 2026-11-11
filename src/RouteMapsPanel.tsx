@@ -8,7 +8,9 @@ import { CanvasOverlay } from './CanvasOverlay'
 
 const prefixes = (text: string) => text.trim() === '*' ? [] : text.split(/[,\s]+/).filter(Boolean)
 
-export function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: RouteMap) => void }) {
+export function MapDefinition({ map, onSave, parsePrepend }: {
+  map: RouteMap; onSave: (map: RouteMap) => void; parsePrepend?: (value: string) => number[]
+}) {
   const [rules, setRules] = useState(map.rules)
   const [error, setError] = useState('')
   const save = (event: FormEvent<HTMLFormElement>) => {
@@ -21,7 +23,7 @@ export function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: Ro
         rules: rules.map((r) => ({
           id: r.id, prefixes: prefixes(text(`${r.id}-prefixes`)), match: text(`${r.id}-match`) as RouteMapRule['match'],
           action: r.action, summaryPrefixes: r.action === 'summarize' ? prefixes(text(`${r.id}-summary`)) : [],
-          prepend: r.action === 'prepend' ? (map.hubId ? parseHubPrependAsPath : parseAsPath)(text(`${r.id}-prepend`)) : [],
+          prepend: r.action === 'prepend' ? (parsePrepend ?? (map.hubId ? parseHubPrependAsPath : parseAsPath))(text(`${r.id}-prepend`)) : [],
           nextStep: text(`${r.id}-next`) as RouteMapRule['nextStep'],
         })),
       })

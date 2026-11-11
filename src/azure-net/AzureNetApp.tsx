@@ -25,8 +25,9 @@ import {
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
 import { BgpRouteTable } from './BgpRouteTable'
-import { SiteRouteMapsPanel } from './SiteRouteMapsPanel'
+import { AzRouteMapsPanel } from './RouteMapsPanel'
 import { pruneAzSiteRouteMaps } from './route-maps'
+import { pruneAzArsRouteMaps } from './ars-route-maps'
 import {
   analyzeAzNetConnectivity,
   AZ_NET_PAIR_LIMIT,
@@ -285,6 +286,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
+  const [routeMapArsId, setRouteMapArsId] = useState<string>()
   const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
     setInspectedEntity(entity)
@@ -349,6 +351,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     const next = cloneAzNetTopology(topology)
     updater(next)
     pruneAzSiteRouteMaps(next)
+    pruneAzArsRouteMaps(next)
     setTopology(next)
   }
 
@@ -1771,6 +1774,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Azure Route Server · ${ars.name}`,
         actions: [
+          { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
           {
             label: 'Inspect Route Server RIB (ASN 65515)',
             onSelect: () => {
@@ -2276,7 +2280,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `On-Premises Site · ${site.name} (ASN ${site.asn})`,
         actions: [
-          { label: 'Manage Site Route Maps', onSelect: () => setRouteMapSiteId(site.id) },
+          { label: 'Manage Site Route Maps', onSelect: () => { setActiveTab(null); setRouteMapArsId(undefined); setRouteMapSiteId(site.id) } },
           ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'site' && e.ref.siteId === site.id)),
           {
             label: 'Inspect Site BGP Route Table',
@@ -3061,8 +3065,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           )}
         </section>
 
-        {routeMapSiteId && <SiteRouteMapsPanel key={routeMapSiteId} topology={topology} siteId={routeMapSiteId}
-          onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => setRouteMapSiteId(undefined)} />}
+        {(routeMapSiteId || routeMapArsId) && <AzRouteMapsPanel key={routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`} topology={topology}
+          siteId={routeMapSiteId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
+          inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
+          onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined) }} />}
         {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
           title={{
             routes: 'Effective routes',
