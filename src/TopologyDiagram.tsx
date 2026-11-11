@@ -18,10 +18,10 @@ import { PathMotion } from './PathMotion'
 import type { MotionFlow, MotionSegment } from './PathMotion'
 
 const destinationPalette = [
-  '#0f8b78', '#2568d7', '#cf8a16', '#8054c7', '#cb5076',
-  '#0087a8', '#bd6229', '#5b7f2b', '#b348a5', '#5073a6',
-  '#22996b', '#6b62bd', '#b99916', '#bf635d', '#417e87',
-  '#8a6c45', '#738c37', '#a36593', '#3b6b99', '#708391',
+  'var(--path-1)', 'var(--path-2)', 'var(--path-3)', 'var(--path-4)', 'var(--path-5)',
+  'var(--path-6)', 'var(--path-7)', 'var(--path-8)', 'var(--path-9)', 'var(--path-10)',
+  'var(--path-11)', 'var(--path-12)', 'var(--path-13)', 'var(--path-14)', 'var(--path-15)',
+  'var(--path-16)', 'var(--path-17)', 'var(--path-18)', 'var(--path-19)', 'var(--path-20)',
 ] as const
 
 export interface DiagramContextMenu {
@@ -366,9 +366,9 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     onObjectContextMenu({ x: bounds.left + 24, y: bounds.top + 24, invoker: event.currentTarget })
   }}>
     <defs>
-      <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#d8e2ee" /></pattern>
-      <radialGradient id="constellation-glow"><stop offset="0" stopColor="#e9f1ff" /><stop offset="1" stopColor="#f8fbff" /></radialGradient>
-      <linearGradient id="hub-card" x2="0" y2="1"><stop stopColor="#fff" /><stop offset="1" stopColor="#eef4ff" /></linearGradient>
+      <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="var(--surface-muted)" /></pattern>
+      <radialGradient id="constellation-glow"><stop offset="0" stopColor="var(--surface-muted)" /><stop offset="1" stopColor="var(--surface)" /></radialGradient>
+      <linearGradient id="hub-card" x2="0" y2="1"><stop stopColor="var(--surface)" /><stop offset="1" stopColor="var(--surface-muted)" /></linearGradient>
     </defs>
     <rect x={pan.x} y={pan.y} width={width} height={height} fill={layout === 'constellation' ? 'url(#constellation-glow)' : 'url(#grid)'} />
     {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">{t("AZURE SPOKE NETWORKS")}</text><text x="24" y="225" className="diagram-caption">{t("MICROSOFT GLOBAL BACKBONE")}</text><text x="24" y="465" className="diagram-caption">{topology.erLocations?.length ? t("EXPRESSROUTE LOCATIONS") : t("ON-PREMISES SITES")}</text>{!!topology.erLocations?.length && <text x="24" y="700" className="diagram-caption">{t("ON-PREMISES SITES")}</text>}</g>
@@ -423,7 +423,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
         return (
           <g key={`gr-loc:${loc.id}:${peer.id}`} data-testid={`vwan-global-reach-link-${loc.id}-${peer.id}`}>
             <title>{loc.name} ↔ {peer.name} · ExpressRoute Global Reach (MSEE 12076)</title>
-            <path d={d} fill="none" stroke="#a855f7" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.88" />
+            <path d={d} fill="none" stroke="var(--purple)" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.88" />
             {badge('Global Reach', { x: midX, y: midY })}
           </g>
         )

@@ -114,7 +114,9 @@ for (const mode of ['hub-spoke', 'full']) {
     const connect = page.getByRole('menuitem', { name: 'Connect ExpressRoute to...', exact: true })
     await expect(globalReach).toBeDisabled()
     await expect(connect).toBeDisabled()
-    await expect(connect).toHaveCSS('opacity', '0.45')
+    await expect(connect).toHaveCSS('opacity', '1')
+    await expect(connect).toHaveCSS('color',
+      await page.locator('.context-menu-title').evaluate((node) => getComputedStyle(node).color))
     await connect.hover({ force: true })
     await expect(page.getByRole('menu')).toHaveCount(1)
     await page.keyboard.press('End')

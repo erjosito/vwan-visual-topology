@@ -590,15 +590,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     if (iconLink) {
       iconLink.setAttribute('href', '/favicon-aznet.svg')
     }
-    const themeMeta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
-    const prevThemeColor = themeMeta?.getAttribute('content')
-    if (themeMeta) {
-      themeMeta.setAttribute('content', '#0f766e')
-    }
     return () => {
       document.title = prevTitle
       if (iconLink && prevIconHref) iconLink.setAttribute('href', prevIconHref)
-      if (themeMeta && prevThemeColor) themeMeta.setAttribute('content', prevThemeColor)
     }
   }, [])
 
@@ -2651,7 +2645,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             🌍 ER Locations
           </button>
 
-          <label style={{ fontSize: 12, color: '#cbd5e1' }} htmlFor="aznet-sample-select">
+          <label style={{ fontSize: 12, color: 'var(--text-muted)' }} htmlFor="aznet-sample-select">
             Sample Topology:
           </label>
           <select
@@ -2910,7 +2904,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               <strong>{topology.name}</strong> —{' '}
               <span>{currentSampleMeta?.summary ?? topology.subtitle}</span>
             </div>
-            <div style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#2563eb' }}>
+            <div style={{ whiteSpace: 'nowrap', fontWeight: 600, color: 'var(--accent)' }}>
               Right-click a node for routes, paths, or configuration
             </div>
           </div>
@@ -3277,7 +3271,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 <td>
                                   <strong>{route.nextHopType}</strong>
                                   {route.nextHopName && route.nextHopName !== route.nextHopType ? (
-                                    <div style={{ fontSize: 10.5, color: '#475569' }}>
+                                    <div style={{ fontSize: 10.5, color: 'var(--text)' }}>
                                       {route.nextHopName}
                                     </div>
                                   ) : null}
@@ -3285,12 +3279,12 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 <td>
                                   <div>{route.originLabel}</div>
                                   {route.asPath.length > 0 && (
-                                    <div style={{ fontSize: 10.5, color: '#0369a1' }}>
+                                    <div style={{ fontSize: 10.5, color: 'var(--info)' }}>
                                       AS Path: [{route.asPath.join(' → ')}]
                                     </div>
                                   )}
                                   {route.suppressedReason && (
-                                    <div style={{ fontSize: 10.5, color: '#dc2626' }}>
+                                    <div style={{ fontSize: 10.5, color: 'var(--error)' }}>
                                       {route.suppressedReason}
                                     </div>
                                   )}
@@ -3307,13 +3301,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             marginTop: 10,
                             padding: 8,
                             borderRadius: 6,
-                            background: '#f1f5f9',
-                            border: '1px solid #cbd5e1',
+                            background: 'var(--surface-muted)',
+                            border: '1px solid var(--border)',
                             fontSize: 11.5,
                           }}
                           data-testid="aznet-suppressed-bgp-banner"
                         >
-                          <strong style={{ color: '#475569' }}>
+                          <strong style={{ color: 'var(--text)' }}>
                             {inspectedSubnetTable.suppressedBgpRoutes.length} BGP route(s) suppressed by configuration:
                             {' '}
                             disableBgpRoutePropagation=true:
@@ -3334,13 +3328,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             marginTop: 10,
                             padding: 8,
                             borderRadius: 6,
-                            background: '#f1f5f9',
-                            border: '1px solid #cbd5e1',
+                            background: 'var(--surface-muted)',
+                            border: '1px solid var(--border)',
                             fontSize: 11.5,
                           }}
                           data-testid="aznet-suppressed-peering-banner"
                         >
-                          <strong style={{ color: '#475569' }}>
+                          <strong style={{ color: 'var(--text)' }}>
                             {inspectedSubnetTable.suppressedPeeringRoutes.length} VNetPeering
                             route(s) suppressed by disablePeeringRoutePropagation=true (Preview) with active covering UDRs:
                           </strong>
@@ -3480,17 +3474,17 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           background:
                             pairAnalysis.forward.status !== 'delivered' ||
                             pairAnalysis.reverse.status !== 'delivered'
-                              ? '#fef2f2'
+                              ? 'var(--surface-muted)'
                               : pairAnalysis.symmetricInspection
-                                ? '#ecfdf5'
-                                : '#fffbeb',
+                                ? 'var(--surface-muted)'
+                                : 'var(--surface-muted)',
                           color:
                             pairAnalysis.forward.status !== 'delivered' ||
                             pairAnalysis.reverse.status !== 'delivered'
-                              ? '#991b1b'
+                              ? 'var(--error)'
                               : pairAnalysis.symmetricInspection
-                                ? '#065f46'
-                                : '#92400e',
+                                ? 'var(--success)'
+                                : 'var(--warning)',
                           border: '1px solid currentColor',
                         }}
                       >
@@ -3527,7 +3521,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             </strong>
                             <div style={{ marginTop: 2 }}>{hop.detail}</div>
                             {hop.matchedRoute && (
-                              <div style={{ fontSize: 10.5, color: '#475569', marginTop: 2 }}>
+                              <div style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 2 }}>
                                 Matched: <code>{hop.matchedRoute.prefix}</code> →{' '}
                                 {hop.matchedRoute.nextHopType} ({hop.matchedRoute.source})
                               </div>
@@ -3562,7 +3556,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               </strong>
                               <div style={{ marginTop: 2 }}>{hop.detail}</div>
                               {hop.matchedRoute && (
-                                <div style={{ fontSize: 10.5, color: '#475569', marginTop: 2 }}>
+                                <div style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 2 }}>
                                   Matched: <code>{hop.matchedRoute.prefix}</code> →{' '}
                                   {hop.matchedRoute.nextHopType} ({hop.matchedRoute.source})
                                 </div>
@@ -3638,8 +3632,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     style={{
                       padding: 8,
                       marginBottom: 8,
-                      background: '#fef2f2',
-                      color: '#991b1b',
+                      background: 'var(--surface-muted)',
+                      color: 'var(--error)',
                       borderRadius: 6,
                       fontSize: 11.5,
                     }}
@@ -3654,8 +3648,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     style={{
                       padding: 12,
                       borderRadius: 6,
-                      background: '#ecfdf5',
-                      color: '#065f46',
+                      background: 'var(--surface-muted)',
+                      color: 'var(--success)',
                       fontWeight: 600,
                       fontSize: 12.5,
                     }}
@@ -3672,7 +3666,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         key={finding.id}
                         className="aznet-card"
                         data-testid={`aznet-finding-${finding.category}`}
-                        style={{ background: '#ffffff' }}
+                        style={{ background: 'var(--surface)' }}
                       >
                         <div
                           style={{
@@ -3718,14 +3712,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             return `1 root-cause issue; ${impact.pairs} affected flow pairs, ${impact.workloads} workload subnets, ${impact.sites} sites, ${impact.prefixes} prefixes.`
                           })()}
                         </p>
-                        <p style={{ margin: '0 0 6px 0', fontSize: 11.5, color: '#334155' }}>
+                        <p style={{ margin: '0 0 6px 0', fontSize: 11.5, color: 'var(--text)' }}>
                           {finding.summary}
                         </p>
                         <div
                           style={{
                             fontSize: 11.5,
-                            color: '#0369a1',
-                            background: '#f0f9ff',
+                            color: 'var(--info)',
+                            background: 'var(--surface-muted)',
                             padding: '6px 8px',
                             borderRadius: 5,
                           }}
@@ -3800,11 +3794,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     flexWrap: 'wrap',
                     gap: 8,
                     padding: '8px 12px',
-                    background: '#f8fafc',
-                    borderColor: '#cbd5e1',
+                    background: 'var(--surface)',
+                    borderColor: 'var(--border)',
                   }}
                 >
-                  <div style={{ fontSize: 12, color: '#1e293b' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text)' }}>
                     <strong>Scoped Configuration:</strong>{' '}
                     {selected.kind === 'vnet' &&
                       `VNet ${topology.vnets.find((v) => v.id === selected.vnetId)?.name ?? selected.vnetId}`}
@@ -3843,7 +3837,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     {selected.kind === 'vwan-hub' &&
                       `Virtual WAN Hub ${topology.vwanHubs.find((h) => h.id === selected.hubId)?.name ?? selected.hubId}`}
                   </div>
-                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                     Click any node or connection on the diagram to configure it
                   </span>
                 </div>
@@ -3917,14 +3911,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     )}
                   </div>
 
-                  <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: '#475569' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
                     💡 Hover over, click, or right-click any VNet peering line on the diagram to
                     inspect and toggle directional flags directly on the line, or select a peering
                     below:
                   </p>
 
                   {filteredPeerings.length === 0 ? (
-                    <div style={{ fontSize: 12, color: '#64748b' }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       No VNet peerings configured for this selection. Right-click a VNet on the diagram and choose{' '}
                       <strong>Create VNet Peering to...</strong>
                     </div>
@@ -3983,9 +3977,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             <div
                               style={{
                                 padding: 8,
-                                background: '#f8fafc',
+                                background: 'var(--surface)',
                                 borderRadius: 6,
-                                border: '1px solid #e2e8f0',
+                                border: '1px solid var(--border)',
                               }}
                             >
                               <div style={{ fontWeight: 700, fontSize: 11.5, marginBottom: 4 }}>
@@ -4050,9 +4044,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             data-testid={`aznet-peering-card-${activePeering.id}`}
                             style={{
                               padding: 10,
-                              background: '#ffffff',
+                              background: 'var(--surface)',
                               borderRadius: 6,
-                              border: '1px solid #cbd5e1',
+                              border: '1px solid var(--border)',
                             }}
                           >
                             <div
@@ -4092,8 +4086,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   style={{
                                     padding: '2px 8px',
                                     fontSize: 11,
-                                    color: '#b91c1c',
-                                    borderColor: '#fecaca',
+                                    color: 'var(--error)',
+                                    borderColor: 'var(--border)',
                                   }}
                                   onClick={() => {
                                     commitTopology((draft) => {
@@ -4142,9 +4136,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         style={{
                           marginBottom: 10,
                           padding: 10,
-                          background: '#ffffff',
+                          background: 'var(--surface)',
                           borderRadius: 6,
-                          border: '1px solid #cbd5e1',
+                          border: '1px solid var(--border)',
                         }}
                       >
                         <div
@@ -4237,8 +4231,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             style={{
                               padding: '2px 8px',
                               fontSize: 11,
-                              color: '#b91c1c',
-                              borderColor: '#fecaca',
+                              color: 'var(--error)',
+                              borderColor: 'var(--border)',
                             }}
                             onClick={() => deleteVnetById(vnet.id)}
                           >
@@ -4282,11 +4276,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             style={{
                               marginBottom: 8,
                               padding: '5px 8px',
-                              background: '#fffbeb',
-                              border: '1px solid #fcd34d',
+                              background: 'var(--surface-muted)',
+                              border: '1px solid var(--warning)',
                               borderRadius: 6,
                               fontSize: 11,
-                              color: '#92400e',
+                              color: 'var(--warning)',
                             }}
                           >
                             ⚠️ This VNet has <strong>Use Remote Gateways</strong> enabled on a peering. Local VNet Gateways and Route Server cannot be deployed unless <code>useRemoteGateways</code> is disabled first.
@@ -4301,9 +4295,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             flexWrap: 'wrap',
                             marginBottom: 8,
                             padding: '6px 8px',
-                            background: '#f8fafc',
+                            background: 'var(--surface)',
                             borderRadius: 6,
-                            border: '1px solid #e2e8f0',
+                            border: '1px solid var(--border)',
                           }}
                         >
                           <button
@@ -4347,8 +4341,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   style={{
                                     fontSize: 11,
                                     padding: '3px 8px',
-                                    color: '#b91c1c',
-                                    borderColor: '#fecaca',
+                                    color: 'var(--error)',
+                                    borderColor: 'var(--border)',
                                   }}
                                   onClick={() => removeGatewayFromVnet(vnet.id, gw.id)}
                                 >
@@ -4388,8 +4382,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   style={{
                                     fontSize: 11,
                                     padding: '3px 8px',
-                                    color: '#b91c1c',
-                                    borderColor: '#fecaca',
+                                    color: 'var(--error)',
+                                    borderColor: 'var(--border)',
                                   }}
                                   onClick={() => removeGatewayFromVnet(vnet.id, gw.id)}
                                 >
@@ -4425,8 +4419,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               style={{
                                 fontSize: 11,
                                 padding: '3px 8px',
-                                color: '#b91c1c',
-                                borderColor: '#fecaca',
+                                color: 'var(--error)',
+                                borderColor: 'var(--border)',
                               }}
                               onClick={() => removeRouteServerFromVnet(vnet.id)}
                             >
@@ -4519,8 +4513,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 style={{
                                   fontSize: 11,
                                   padding: '2px 6px',
-                                  color: '#b91c1c',
-                                  borderColor: '#fecaca',
+                                  color: 'var(--error)',
+                                  borderColor: 'var(--border)',
                                 }}
                                 onClick={() => removeApplianceFromVnet(vnet.id, app.id)}
                               >
@@ -4562,7 +4556,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       + Create Route Table
                     </button>
                   </div>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: '#475569' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
                     Route tables are independent objects that can be associated with any subnet via
                     the subnet&apos;s right-click menu, hover badge, or the subnet association
                     selector below.
@@ -4580,9 +4574,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         style={{
                           marginBottom: 10,
                           padding: 10,
-                          background: '#ffffff',
+                          background: 'var(--surface)',
                           borderRadius: 6,
-                          border: '1px solid #cbd5e1',
+                          border: '1px solid var(--border)',
                         }}
                       >
                         <div
@@ -4610,7 +4604,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               }}
                               style={{ fontWeight: 700, width: 175 }}
                             />
-                            <span style={{ fontSize: 11, color: '#64748b' }}>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                               {associatedSubnets.length > 0
                                 ? `Associated: ${associatedSubnets.join(', ')}`
                                 : 'Unassociated'}
@@ -4654,8 +4648,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               style={{
                                 padding: '2px 8px',
                                 fontSize: 11,
-                                color: '#b91c1c',
-                                borderColor: '#fecaca',
+                                color: 'var(--error)',
+                                borderColor: 'var(--border)',
                               }}
                               onClick={() => {
                                 commitTopology((draft) => {
@@ -4801,7 +4795,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   <button
                                     type="button"
                                     className="aznet-btn"
-                                    style={{ padding: '1px 6px', fontSize: 10.5, color: '#b91c1c' }}
+                                    style={{ padding: '1px 6px', fontSize: 10.5, color: 'var(--error)' }}
                                     onClick={() => {
                                       commitTopology((draft) => {
                                         const targetRt = draft.udrTables.find(
@@ -4866,9 +4860,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       style={{
                         marginBottom: 8,
                         padding: 8,
-                        background: '#ffffff',
+                        background: 'var(--surface)',
                         borderRadius: 6,
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--border)',
                       }}
                     >
                       <div
@@ -4910,9 +4904,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           style={{
                             marginTop: 8,
                             padding: 8,
-                            background: '#f8fafc',
+                            background: 'var(--surface)',
                             borderRadius: 6,
-                            border: '1px solid #e2e8f0',
+                            border: '1px solid var(--border)',
                             fontSize: 12,
                           }}
                         >
@@ -5076,8 +5070,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 style={{
                                   fontSize: 11,
                                   padding: '2px 7px',
-                                  color: '#b91c1c',
-                                  borderColor: '#fecaca',
+                                  color: 'var(--error)',
+                                  borderColor: 'var(--border)',
                                 }}
                                 onClick={() => deleteSubnetFromVnet(vnet.id, subnet.id)}
                               >
@@ -5087,7 +5081,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           </div>
 
                           {(subnet.privateEndpoints ?? []).length > 0 && (
-                            <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid #cbd5e1' }}>
+                            <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid var(--border)' }}>
                               {(subnet.privateEndpoints ?? []).map((pe) => (
                                 <div
                                   key={pe.id}
@@ -5136,7 +5130,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   <button
                                     type="button"
                                     className="aznet-btn"
-                                    style={{ fontSize: 10.5, padding: '1px 6px', color: '#b91c1c' }}
+                                    style={{ fontSize: 10.5, padding: '1px 6px', color: 'var(--error)' }}
                                     onClick={() => {
                                       commitTopology((draft) => {
                                         const s = draft.vnets
@@ -5220,9 +5214,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             gap: 8,
                             padding: 8,
                             marginBottom: 6,
-                            background: '#ffffff',
+                            background: 'var(--surface)',
                             borderRadius: 6,
-                            border: '1px solid #cbd5e1',
+                            border: '1px solid var(--border)',
                           }}
                         >
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -5284,8 +5278,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             style={{
                               padding: '2px 8px',
                               fontSize: 11,
-                              color: '#b91c1c',
-                              borderColor: '#fecaca',
+                              color: 'var(--error)',
+                              borderColor: 'var(--border)',
                             }}
                             onClick={() => deleteSiteById(site.id)}
                           >
@@ -5304,9 +5298,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           style={{
                             padding: 10,
                             marginBottom: 6,
-                            background: '#f8fafc',
+                            background: 'var(--surface)',
                             borderRadius: 6,
-                            border: '1px solid #cbd5e1',
+                            border: '1px solid var(--border)',
                           }}
                         >
                           <div
@@ -5401,8 +5395,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               style={{
                                 padding: '2px 8px',
                                 fontSize: 11,
-                                color: '#b91c1c',
-                                borderColor: '#fecaca',
+                                color: 'var(--error)',
+                                borderColor: 'var(--border)',
                               }}
                               onClick={() => deleteErLocationById(loc.id)}
                             >
@@ -5412,7 +5406,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
                           {/* Cross-location Global Reach Links (#45) */}
                           {topology.erLocations.length > 1 && (
-                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e2e8f0' }}>
+                            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                               <div style={{ fontSize: 11.5, fontWeight: 700, marginBottom: 4 }}>
                                 ExpressRoute Global Reach (Cross-Location Circuit Peering):
                               </div>
@@ -5539,7 +5533,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                 {/* Node Labels & Annotations (scoped to selected node #47) */}
                 <div className="aznet-card" data-testid="aznet-node-labels-editor">
                   <h3>Node Label & Annotation</h3>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: '#475569' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>
                     Optional text label displayed as an annotation badge below the selected node.
                   </p>
                   {[
@@ -5588,7 +5582,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           padding: '4px 8px',
                           fontSize: 12,
                           borderRadius: 6,
-                          border: '1px solid #cbd5e1',
+                          border: '1px solid var(--border)',
                         }}
                       />
                     </div>
@@ -5603,7 +5597,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               <>
                 <div className="aznet-card" data-testid="aznet-azure-capture-card">
                   <h3>1. Azure Live Capture & Effective-Route Comparison</h3>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: '#334155' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>
                     Capture a live Azure resource group (VNets, Subnets, Peerings, UDRs, Route
                     Server, Gateways, and NIC Effective Routes — including a proxy subnet sharing{' '}
                     <code>GatewaySubnet</code>&apos;s route table) using the read-only PowerShell
@@ -5613,8 +5607,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     style={{
                       margin: '0 0 8px 0',
                       padding: 8,
-                      background: '#0f172a',
-                      color: '#e2e8f0',
+                      background: 'var(--surface-muted)',
+                      color: 'var(--text-muted)',
                       borderRadius: 6,
                       fontSize: 11,
                       overflowX: 'auto',
@@ -5652,9 +5646,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       style={{
                         marginTop: 8,
                         padding: 8,
-                        background: '#f8fafc',
+                        background: 'var(--surface)',
                         borderRadius: 6,
-                        border: '1px solid #cbd5e1',
+                        border: '1px solid var(--border)',
                         fontSize: 11.5,
                       }}
                     >
@@ -5688,9 +5682,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           style={{
                             marginBottom: 8,
                             padding: 8,
-                            background: '#ffffff',
+                            background: 'var(--surface)',
                             borderRadius: 6,
-                            border: `1px solid ${nic.mismatchCount === 0 ? '#86efac' : '#fca5a5'}`,
+                            border: `1px solid ${nic.mismatchCount === 0 ? 'var(--success)' : 'var(--border)'}`,
                           }}
                         >
                           <div
@@ -5791,11 +5785,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       style={{
                         marginBottom: 8,
                         padding: 8,
-                        background: '#fffbeb',
-                        border: '1px solid #fde68a',
+                        background: 'var(--surface-muted)',
+                        border: '1px solid var(--warning)',
                         borderRadius: 6,
                         fontSize: 11.5,
-                        color: '#92400e',
+                        color: 'var(--warning)',
                       }}
                     >
                       <strong>Deployment Notes:</strong>
@@ -5812,8 +5806,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       maxHeight: 360,
                       overflow: 'auto',
                       padding: 10,
-                      background: '#0f172a',
-                      color: '#f8fafc',
+                      background: 'var(--surface-muted)',
+                      color: 'var(--text-muted)',
                       borderRadius: 6,
                       fontSize: 11,
                       margin: 0,
@@ -5834,7 +5828,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           style={{
             position: 'fixed',
             inset: 0,
-            background: 'rgba(15, 23, 42, 0.65)',
+            background: 'var(--backdrop)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -5845,14 +5839,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         >
           <div
             style={{
-              background: '#ffffff',
+              background: 'var(--surface)',
               borderRadius: 12,
               maxWidth: 1040,
               width: '100%',
               maxHeight: '86vh',
               display: 'flex',
               flexDirection: 'column',
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)',
+              boxShadow: '0 25px 50px -12px var(--backdrop)',
               overflow: 'hidden',
             }}
             onClick={(e) => e.stopPropagation()}
@@ -5860,8 +5854,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             <div
               style={{
                 padding: '16px 20px',
-                background: '#0f172a',
-                color: '#f8fafc',
+                background: 'var(--surface-muted)',
+                color: 'var(--text-muted)',
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
@@ -5872,7 +5866,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                 <h2 style={{ margin: 0, fontSize: 17 }}>
                   📚 Azure VNet & Hybrid Sample Topologies Gallery ({visibleCatalogEntries.length})
                 </h2>
-                <p style={{ margin: '4px 0 0 0', fontSize: 12, color: '#94a3b8' }}>
+                <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
                   Click any reference architecture or live-Azure validated scenario below to load it
                   immediately into the simulator.
                 </p>
@@ -5889,7 +5883,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
             <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: '#0f172a' }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: 'var(--text)' }}>
                   Flagship Reference Topologies ({visibleCatalogEntries.filter((s) => s.category === 'flagship').length})
                 </h3>
                 <div
@@ -5906,8 +5900,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         key={entry.id}
                         data-testid={`aznet-gallery-card-${entry.id}`}
                         style={{
-                          border: isCurrent ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                          background: isCurrent ? '#eff6ff' : '#f8fafc',
+                          border: isCurrent ? '2px solid var(--accent)' : '1px solid var(--border)',
+                          background: isCurrent ? 'var(--surface-muted)' : 'var(--surface)',
                           borderRadius: 8,
                           padding: 12,
                           display: 'flex',
@@ -5917,10 +5911,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 4 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>
                             {entry.title}
                           </div>
-                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: '#334155', lineHeight: 1.45 }}>
+                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)', lineHeight: 1.45 }}>
                             {entry.summary}
                           </p>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -5932,7 +5926,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <code style={{ fontSize: 10.5, color: '#64748b' }}>{entry.id}.json</code>
+                          <code style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{entry.id}.json</code>
                           <button
                             type="button"
                             className="aznet-btn aznet-btn-primary"
@@ -5950,7 +5944,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               </div>
 
               <div>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: '#0f172a' }}>
+                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: 'var(--text)' }}>
                   Live-Azure Empirical Validation Scenarios (UC1–UC9)
                 </h3>
                 <div
@@ -5967,8 +5961,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         key={entry.id}
                         data-testid={`aznet-gallery-card-${entry.id}`}
                         style={{
-                          border: isCurrent ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                          background: isCurrent ? '#eff6ff' : '#ffffff',
+                          border: isCurrent ? '2px solid var(--accent)' : '1px solid var(--border)',
+                          background: isCurrent ? 'var(--surface-muted)' : 'var(--surface)',
                           borderRadius: 8,
                           padding: 12,
                           display: 'flex',
@@ -5978,10 +5972,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 4 }}>
+                          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>
                             {entry.title}
                           </div>
-                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: '#334155', lineHeight: 1.45 }}>
+                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)', lineHeight: 1.45 }}>
                             {entry.summary}
                           </p>
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -5993,7 +5987,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           </div>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <code style={{ fontSize: 10.5, color: '#64748b' }}>{entry.id}.json</code>
+                          <code style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{entry.id}.json</code>
                           <button
                             type="button"
                             className="aznet-btn aznet-btn-primary"

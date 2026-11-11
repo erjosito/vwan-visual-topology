@@ -342,10 +342,11 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     })
     await loadTopology(page, topology)
     await expect(page.getByTestId('aznet-finding-badge-vnet-spoke1')).toHaveCount(0)
-    await expect(page.getByTestId('aznet-subnet-rt-badge-sub-spoke1-work').locator('rect')).toHaveAttribute('fill', '#f1f5f9')
+    await expect(page.getByTestId('aznet-subnet-rt-badge-sub-spoke1-work').locator('rect')).toHaveAttribute('fill', 'var(--surface-muted)')
     await inspectSubnet(page, 'sub-spoke1-work')
     await expect(page.getByTestId('aznet-suppressed-bgp-banner')).toContainText('suppressed by configuration')
-    await expect(page.getByTestId('aznet-suppressed-bgp-banner')).toHaveCSS('background-color', 'rgb(241, 245, 249)')
+    await expect(page.getByTestId('aznet-suppressed-bgp-banner')).toHaveCSS('background-color',
+      await page.locator('.overlay-heading').evaluate((node) => getComputedStyle(node).backgroundColor))
     await page.getByTestId('aznet-tab-diagnostics').click()
     await page.getByTestId('aznet-analysis-source').selectOption('subnet:vnet-spoke1:sub-spoke1-work')
     await page.getByTestId('aznet-analysis-destination').selectOption('site:site-branch1:10.250.0.0/16')

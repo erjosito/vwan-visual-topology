@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Design and visualize Azure Virtual WAN topologies, inspect effective routes, and trace Azure-to-on-premises flows." />
     <meta name="theme-color" content="#2568d7" />
+    <script>
+      // Resolve before styles/React paint; keep this key in sync with ThemeSelector.
+      (() => {
+        let preference = 'system'
+        try { preference = localStorage.getItem('aznet-theme') || 'system' } catch {}
+        const theme = preference === 'light' || preference === 'dark'
+          ? preference : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        document.documentElement.dataset.theme = theme
+        document.documentElement.style.colorScheme = theme
+      })()
+    </script>
     <link rel="canonical" href="https://vwan-simulator.com/" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Virtual WAN Topology Lab" />

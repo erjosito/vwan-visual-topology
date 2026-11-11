@@ -38,6 +38,14 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Select any node or connection in the diagram to rename, edit or delete it. Add spokes and connected sites from a hub, or hub/BGP links from a site, without leaving the topology.
 - **Check routing** immediately scans modeled connectivity between all assigned endpoint networks and saved requirements. Findings sharing a modeled cause are grouped into one issue, with separate root-cause and affected-flow counts. Warning markers at affected endpoints navigate to the shared issue; expand its flow evidence to inspect independent forward/return paths. Partial repairs update the remaining group membership. Unassessed coverage is shown separately in neutral coverage notes, not danger signs. Optional **Advanced checks** retain explicit flow, firewall and neighbor requirements. No Azure credentials or packet probes are used.
 
+## Appearance
+
+The header **Theme** selector offers **Light**, **Dark**, and **System** in all three simulator modes. **System is the default** and follows operating-system changes while the app is open. An explicit choice is saved locally (`aznet-theme`), survives reloads and mode switching, and synchronizes across tabs on the same origin. If browser storage is blocked, the choice works for the current view without preventing simulation.
+
+The startup page resolves the theme before React loads to avoid a wrong-theme flash. Shared semantic colors cover the canvas, SVG labels/links/badges, menus, forms, tables, inspectors, galleries, feedback and ER catalog. Status labels/icons, route-selection markers and line patterns remain alongside color; path animation still indicates direction. Reduced-motion behavior is unchanged. Printing uses the light palette; JSON/Bicep exports and saved topology data do not contain or depend on the appearance preference.
+
+For new controls, use inherited form/window styles or the CSS tokens in `src/theme.css`: `--surface`, `--surface-muted`, `--text`, `--text-muted`, `--border`, `--accent`, `--selection`, `--focus`; status text pairs with `--error-surface`, `--warning-surface`, `--info-surface`, or `--success-surface`. SVG path direction uses `--forward` / `--return`; per-destination colors use `--path-1` through `--path-20`. Do not reuse status colors for arbitrary destinations or hard-code a popup palette.
+
 ## Languages and networking terminology
 
 The interface supports **English** and **日本語 (Japanese)**. The header language selector changes the interface without changing topology names, addresses, configuration, selected routes or exported JSON. The choice is saved locally, independently of the topology; English remains the default. Translations are bundled with the app and do not call an external translation service.
