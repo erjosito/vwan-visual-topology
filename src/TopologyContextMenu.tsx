@@ -3,6 +3,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 export interface ContextAction { label: string; run?: () => void; onSelect?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean }
 
+function actionDisabled(action: ContextAction): boolean {
+  if (action.disabled) return true
+  if (action.children?.length) return action.children.every(actionDisabled)
+  return action.children !== undefined && !action.run && !action.onSelect
+}
+
 function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'right', focusOnOpen, onBack, onClose }: {
   x?: number; y?: number; title: string; actions: ContextAction[]; anchor?: HTMLButtonElement
   preferredSide?: 'left' | 'right'; focusOnOpen: boolean; onBack?: () => void; onClose: () => void
@@ -42,7 +48,7 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
   const open = (index: number, focus: boolean) => {
     cancelHover()
     const anchor = buttons.current[index]
-    setOpened(actions[index].children?.length && anchor ? { index, focus, anchor } : undefined)
+    setOpened(!actionDisabled(actions[index]) && actions[index].children?.length && anchor ? { index, focus, anchor } : undefined)
   }
   const active = opened && actions[opened.index]
   return <>
@@ -66,10 +72,10 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
       }
     }}>
       <div role="presentation" className="context-menu-title">{onBack && <button role="menuitem" className="submenu-back" aria-label={t("Back from {0}", title)} onClick={onBack}><span aria-hidden="true" className="menu-chevron back" /></button>}<span>{title}</span></div>
-      {actions.map((action, index) => <button key={index} ref={(element) => { buttons.current[index] = element }} data-action role="menuitem" className={`${action.danger ? 'danger' : ''} ${opened?.index === index ? 'submenu-active' : ''}`} disabled={action.disabled}
-        aria-haspopup={action.children?.length ? 'menu' : undefined} aria-expanded={action.children?.length ? opened?.index === index : undefined}
+      {actions.map((action, index) => <button key={index} ref={(element) => { buttons.current[index] = element }} data-action role="menuitem" className={`${action.danger ? 'danger' : ''} ${opened?.index === index ? 'submenu-active' : ''}`} disabled={actionDisabled(action)}
+        aria-haspopup={action.children?.length ? 'menu' : undefined} aria-expanded={action.children?.length ? !actionDisabled(action) && opened?.index === index : undefined}
         onPointerEnter={(event) => {
-          if (event.pointerType === 'touch' || action.disabled) return
+          if (event.pointerType === 'touch' || actionDisabled(action)) return
           const bounds = menu.current!.getBoundingClientRect()
           if (bounds.left - bounds.width < 6 && bounds.right + bounds.width > window.innerWidth - 6) return
           cancelHover()
@@ -80,7 +86,7 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
           else { cancelHover(); onClose(); (action.run ?? action.onSelect)?.() }
         }}><span>{action.label}</span>{action.children?.length ? <span aria-hidden="true" className="menu-chevron" /> : null}</button>)}
     </div>
-    {opened && active?.children && <MenuLevel key={opened.index} title={active.label} actions={active.children} anchor={opened.anchor} preferredSide={side} focusOnOpen={opened.focus} onBack={() => { cancelHover(); setOpened(undefined); buttons.current[opened.index]?.focus({ preventScroll: true }) }} onClose={onClose} />}
+    {opened && active?.children && !actionDisabled(active) && <MenuLevel key={opened.index} title={active.label} actions={active.children} anchor={opened.anchor} preferredSide={side} focusOnOpen={opened.focus} onBack={() => { cancelHover(); setOpened(undefined); buttons.current[opened.index]?.focus({ preventScroll: true }) }} onClose={onClose} />}
   </>
 }
 
