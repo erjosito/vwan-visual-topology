@@ -23,6 +23,10 @@ function resolveInitialMode(): SimulatorMode {
     return 'vwan'
   }
 
+  const hostname = window.location.hostname.toLowerCase()
+  if (hostname === 'aznet-simulator.com' || hostname === 'www.aznet-simulator.com') return 'hub-spoke'
+  if (hostname === 'vwan-simulator.com' || hostname === 'www.vwan-simulator.com') return 'vwan'
+
   if (import.meta.env.VITE_APP_MODE === 'azure-net') {
     return 'full'
   }

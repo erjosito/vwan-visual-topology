@@ -11,6 +11,7 @@ import { ErLocationInfoModal } from '../ErLocationInfoModal'
 import {
   ALL_KNOWN_AZURE_REGIONS,
   ER_PEERING_LOCATIONS_CATALOG,
+  findErPeeringLocationEntry,
 } from '../er-locations-catalog'
 import {
   AzureNetDiagram,
@@ -5316,7 +5317,6 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               <input
                                 type="text"
                                 className="aznet-input"
-                                list={`aznet-er-catalog-${loc.id}`}
                                 value={loc.name}
                                 aria-label={`ER Location name ${loc.name}`}
                                 onChange={(e) => {
@@ -5324,20 +5324,39 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   commitTopology((draft) => {
                                     const l = draft.erLocations.find((x) => x.id === loc.id)
                                     if (l) {
+                                      l.peeringLocation ??= findErPeeringLocationEntry(l.name)?.name
                                       l.name = val
-                                      l.peeringLocation = val
                                     }
                                   })
                                 }}
                                 style={{ fontWeight: 700, width: 165 }}
                               />
-                              <datalist id={`aznet-er-catalog-${loc.id}`}>
-                                {ER_PEERING_LOCATIONS_CATALOG.map((entry) => (
-                                  <option key={entry.name} value={entry.name}>
-                                    {entry.name} ({entry.geopoliticalRegion})
+                              <label style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <span>ER location:</span>
+                                <select
+                                  className="aznet-select"
+                                  data-testid={`aznet-erloc-peering-location-${loc.id}`}
+                                  aria-label={`ER peering location ${loc.name}`}
+                                  value={findErPeeringLocationEntry(loc.peeringLocation ?? loc.name)?.name ?? ''}
+                                  onChange={(e) => {
+                                    const peeringLocation = e.target.value
+                                    commitTopology((draft) => {
+                                      const l = draft.erLocations.find((x) => x.id === loc.id)
+                                      if (l) l.peeringLocation = peeringLocation
+                                    })
+                                  }}
+                                  style={{ width: 210 }}
+                                >
+                                  <option value="" disabled>
+                                    {loc.peeringLocation ? `Unknown location: ${loc.peeringLocation}` : 'Select ER peering location'}
                                   </option>
-                                ))}
-                              </datalist>
+                                  {ER_PEERING_LOCATIONS_CATALOG.map((entry) => (
+                                    <option key={entry.name} value={entry.name}>
+                                      {entry.name} ({entry.geopoliticalRegion})
+                                    </option>
+                                  ))}
+                                </select>
+                              </label>
                               <label style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4 }}>
                                 <span>SKU:</span>
                                 <select

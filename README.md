@@ -2,7 +2,7 @@
 
 A browser-based Azure Virtual WAN topology designer and **explainable planning simulator**. No Azure credentials, backend, database, or telemetry are needed for simulation. Optional online feedback opens a pre-filled issue in the public feedback repository without OAuth consent or topology uploads.
 
-**Live app:** https://black-sea-0b65eb803.4.azurestaticapps.net
+**Live app:** https://vwan-simulator.com (Virtual WAN default) or https://aznet-simulator.com (Hub & Spoke default). Explicit `?mode=...` links override the hostname default; switching modes updates the URL so reloads retain the chosen mode. Both hostnames serve the same app; browser-saved topologies are separate per origin.
 
 **Routing behavior and prioritized application recommendations:** [ROUTING-LOGIC.md](ROUTING-LOGIC.md).
 
@@ -13,7 +13,7 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 - Add virtual hubs, spoke VNets with IPv4 prefixes, and on-premises sites with editable ASNs and **one or more optional comma-separated originated prefixes** (`prefixes`, shown with a `+N` badge on multi-prefix site nodes). Connections can also advertise transit or aggregate routes.
 - Connect sites to hubs using ExpressRoute, S2S VPN, or integrated SD-WAN NVAs, with opt-in per-connection, per-spoke, and per-ER-attachment **Propagate default route (0.0.0.0/0)** (`propagateDefaultRoute`, suppressing outbound `0.0.0.0/0` by default unless explicitly enabled and a hub Internet routing intent or learned default route is present).
 - Add **spoke BGP NVAs** attached directly to existing VNet spokes (rendered as a composite spoke-plus-router badge rather than a standalone site node, and categorized separately in workspace counts and inspector selectors), with an auto-inferred or optional peer IPv4 address, ASN, and attached downstream Azure VNets (including non-spoke VNets attached only to one or more spoke-NVAs) and on-premises sites. These are distinct from hub-integrated SD-WAN.
-- Add **ER location** nodes with the official ExpressRoute icon and connect them to hubs and sites. Inspect per-attachment BGP advertisements and trace both physical links. Default ER-to-ER transit is blocked, including ER routes from remote hubs.
+- Add **ER location** nodes with the official ExpressRoute icon and connect them to hubs and sites. In H&S/Full mode, right-click an ER node and choose **Configure ER Location & Labels** to select its physical **ER location** from the Microsoft catalog dropdown, independently of its display name. VWAN mode exposes the same catalog under **Edit configuration**. Inspect per-attachment BGP advertisements and trace both physical links. Default ER-to-ER transit is blocked, including ER routes from remote hubs.
 - Configure site-owned prefixes (`prefixes`) and learned site-mesh BGP routes (`learnSiteRoutes`) on connections, plus non-BGP VPN static prefixes (`vpnStaticRoutes`) as **site attributes**, associated with the relevant VPN connection and accessible from either endpoint. Legacy connection-level `routes` fields in imported JSON are ignored for backward compatibility and omitted from exported JSON. Disable connections to explore failures.
 - Right-click a VPN connection for **Change to static routing** / **Change to BGP routing**. A configure/review wizard seeds editable site-side destinations and updates site prefixes, site statics and learning settings together. Mixed routing offers both conversions.
 - Choose ExpressRoute, VPN, or AS Path routing preference independently per hub.
@@ -393,9 +393,9 @@ Supported topology import limits: 20 hubs, 60 spokes, 60 site/NVA routers, 120 h
 
 ## Deployment
 
-Hosted on Azure Static Web Apps **Free**, with no always-on compute or database: **$0/month within Free-tier limits**. Free is not a production SLA tier. Topology data stays in your browser; deploying the app does not create Virtual WAN resources.
+Hosted on Azure Static Web Apps **Standard**, with no always-on compute or database. The West Europe retail base price is **US$9/month** (approximately **EUR8.08/month** as checked November 2026), before taxes, with 100 GB/month included bandwidth per subscription and additional bandwidth billed separately. Domain registration/renewal and Azure DNS charges are separate. The same app serves `vwan-simulator.com`, `www.vwan-simulator.com`, and `aznet-simulator.com`, with managed HTTPS certificates and an Azure DNS apex alias for each root domain. Topology data stays in your browser; deploying the app does not create Virtual WAN resources.
 
-The subscription-scope Bicep in `infra` creates only a tagged resource group and a Free Static Web App. Select your Azure subscription, review or override the names in `infra/main.parameters.json`, then preview and deploy:
+The subscription-scope Bicep in `infra` creates only a tagged resource group and a Standard Static Web App. Custom domain bindings and DNS records are configured separately. Select your Azure subscription, review or override the names in `infra/main.parameters.json`, then preview and deploy:
 
 ```powershell
 az login
