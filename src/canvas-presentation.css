@@ -1,12 +1,12 @@
 .simulator-shell .canvas-controls-stack {
-  position: absolute;
-  left: 14px;
-  bottom: 14px;
+  position: relative;
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
+  flex-shrink: 0;
+  margin: 10px 14px;
   max-width: calc(100% - 28px);
 }
 .simulator-shell .canvas-controls {
@@ -25,14 +25,14 @@
 .simulator-shell .canvas-controls > select { max-width: 100%; }
 .simulator-shell .canvas-zoom-controls { display: flex; align-items: center; gap: 4px; }
 .simulator-shell .canvas-zoom-controls > button { width: 30px; }
-.simulator-shell .canvas-view-toggle { position: static; box-shadow: none; }
 .simulator-shell .canvas-controls-stack .highlight-status { position: static; max-width: 100%; }
-.simulator-shell .canvas-app { display: flex; flex-direction: column; height: 100dvh; }
-.simulator-shell .canvas-app main { display: flex; flex-direction: column; flex: 1; min-height: 0; width: 100%; margin: 0; padding: 0; }
+.simulator-shell :is(.canvas-stage, .aznet-canvas-shell) { display: flex; flex-direction: column; }
+.simulator-shell .canvas-stage .diagram-scroll { flex: 1; min-height: 0; height: auto; }
+.simulator-shell .aznet-diagram-svg { flex: 1; min-height: 0; height: 0; }
+.simulator-shell .canvas-app main { width: 100%; margin: 0; padding: 0; }
 .simulator-shell .canvas-app .workspace-heading { flex-shrink: 0; padding: 10px 18px; margin: 0; }
 .simulator-shell .canvas-workspace { display: flex; flex-direction: column; flex: 1; min-height: 0; border: 0; border-radius: 0; box-shadow: none; }
 .simulator-shell .canvas-toolbar { flex-shrink: 0; padding: 10px 18px; }
-.simulator-shell .canvas-stage { flex: 1; height: auto; min-height: 160px; }
 .simulator-shell .canvas-app > footer { flex-shrink: 0; padding: 6px 18px; }
 .simulator-shell[data-canvas-style="dots"] :is(.canvas-stage, .aznet-canvas-shell) {
   margin: 14px;
@@ -41,7 +41,4 @@
   box-shadow: 0 4px 12px var(--shadow);
   overflow: hidden;
 }
-.simulator-shell.canvas-maximized .canvas-stage { min-height: 0; }
-@media (max-width: 760px) {
-  .simulator-shell:not(.canvas-maximized) .canvas-stage { min-height: 360px; }
-}
+.simulator-shell.canvas-maximized .canvas-stage { flex: 1; height: auto; min-height: 0; }

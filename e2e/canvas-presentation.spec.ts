@@ -15,6 +15,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const shell = page.locator('.simulator-shell')
     const canvas = mode === 'vwan' ? page.locator('.canvas-stage') : page.getByTestId('aznet-canvas-shell')
     const svg = mode === 'vwan' ? page.locator('svg.diagram') : page.getByTestId('aznet-diagram-svg')
+    const diagramViewport = mode === 'vwan' ? page.locator('.diagram-scroll') : svg
     const controls = page.getByRole('group', { name: 'Canvas controls', exact: true })
     const topologyKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), topologyKey)).not.toBeNull()
@@ -26,6 +27,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(bounds.width).toBe(1440)
     await expect(controls).toBeVisible()
     await expect(controls.getByLabel('Canvas style', { exact: true })).toBeVisible()
+    const initialViewport = (await diagramViewport.boundingBox())!
+    expect(initialViewport.y + initialViewport.height).toBeLessThanOrEqual((await controls.boundingBox())!.y)
 
     await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
     await expect(page.getByLabel('Canvas zoom')).toHaveValue(mode === 'vwan' ? '1.25' : '1.15')
@@ -64,6 +67,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const controlBounds = (await controls.boundingBox())!
     expect(controlBounds.x).toBeGreaterThanOrEqual(0)
     expect(controlBounds.x + controlBounds.width).toBeLessThanOrEqual(360)
+    const compactViewport = (await diagramViewport.boundingBox())!
+    expect(compactViewport.y + compactViewport.height).toBeLessThanOrEqual(controlBounds.y)
     await page.getByLabel('Canvas style', { exact: true }).selectOption('grid')
     await expect(shell).toHaveAttribute('data-canvas-style', 'grid')
     await page.getByRole('button', { name: 'Restore panels', exact: true }).click()

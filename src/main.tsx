@@ -5,7 +5,7 @@ import App from './App.tsx'
 import { AzureNetApp } from './azure-net/AzureNetApp.tsx'
 import type { SimulatorMode } from './SimulatorModeSwitch.tsx'
 import { useLanguage } from './i18n'
-import { CanvasPresentationProvider } from './CanvasPresentation'
+import { CanvasMaximizeButton, CanvasPresentationProvider } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
 import './theme.css'
 
@@ -49,6 +49,7 @@ export function UnifiedSimulatorRoot() {
   }, [mode])
 
   return <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
+    <CanvasMaximizeButton />
     {mode === 'vwan'
       ? <App simulatorMode={mode} onChangeSimulatorMode={setMode} />
       : <AzureNetApp simulatorMode={mode} onChangeSimulatorMode={setMode} />}

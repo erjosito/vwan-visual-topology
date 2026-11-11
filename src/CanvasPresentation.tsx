@@ -56,7 +56,7 @@ export function CanvasControls({ zoom, onZoom, onResetView, minZoom = 0.75, maxZ
   children?: ReactNode
   status?: ReactNode
 }) {
-  const { style, setStyle, maximized, toggleMaximized } = useCanvasPresentation()
+  const { style, setStyle } = useCanvasPresentation()
   const zoomLevels = [...new Set([minZoom, 0.75, 1, 1.25, 1.5, maxZoom, zoom])]
     .filter((level) => level >= minZoom && level <= maxZoom).sort((a, b) => a - b)
   return <div className="canvas-controls-stack">{status}<div className="canvas-controls" role="group" aria-label={t('Canvas controls')}>
@@ -75,8 +75,12 @@ export function CanvasControls({ zoom, onZoom, onResetView, minZoom = 0.75, maxZ
       <option value="grid">{t('Grid / edge-to-edge')}</option>
       <option value="dots">{t('Dots / framed')}</option>
     </select>
-    <button type="button" className="canvas-view-toggle" aria-pressed={maximized} onClick={toggleMaximized}>
-      {t(maximized ? 'Restore panels' : 'Maximize canvas')}
-    </button>
   </div></div>
+}
+
+export function CanvasMaximizeButton() {
+  const { maximized, toggleMaximized } = useCanvasPresentation()
+  return <button type="button" className="canvas-view-toggle" aria-pressed={maximized} onClick={toggleMaximized}>
+    {t(maximized ? 'Restore panels' : 'Maximize canvas')}
+  </button>
 }
