@@ -190,6 +190,7 @@ export function validateTopology(input: unknown): Topology {
     return {
       id: id(spoke.id),
       name: text(spoke.name, 'Spoke name'),
+      ...(spoke.region === undefined || spoke.region === '' ? {} : { region: text(spoke.region, 'VNet region') }),
       ...(label === undefined ? {} : { label }),
       ...(hubId === undefined ? {} : { hubId }),
       prefixes,

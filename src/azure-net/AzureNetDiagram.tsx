@@ -24,6 +24,9 @@ export type AzContextMenuTarget =
   | { kind: 'entity'; x: number; y: number; entity: AzSelectedEntity }
 
 interface AzureNetDiagramProps {
+  faults?: import('../failures').FaultMap
+  risks?: Record<string, number>
+  onRisk?: (id: string) => void
   topology: AzNetTopology
   selected?: AzSelectedEntity
   onSelect: (entity: AzSelectedEntity) => void
@@ -147,6 +150,9 @@ function computePositions(topology: AzNetTopology): {
 
 export function AzureNetDiagram({
   topology,
+  faults = {},
+  risks = {},
+  onRisk,
   selected,
   onSelect,
   onContextMenu,
@@ -969,9 +975,10 @@ export function AzureNetDiagram({
             <g
               key={vnet.id}
               data-testid={`aznet-vnet-${vnet.id}`}
+              data-simulated-failed={faults[vnet.id] ? 'true' : undefined}
               tabIndex={0}
               role="button"
-              aria-label={`VNet ${vnet.name}`}
+              aria-label={`VNet ${vnet.name}${faults[vnet.id] ? ` — Simulated failure: ${faults[vnet.id].map((f) => f.name).join(', ')}` : ''}`}
               onKeyDown={(e) => openKeyboardContext(e, { kind: 'vnet', vnetId: vnet.id })}
               onPointerDown={(e) => {
                 if (e.button === 2) return
@@ -1414,9 +1421,10 @@ export function AzureNetDiagram({
             <g
               key={hub.id}
               data-testid={`aznet-vwanhub-${hub.id}`}
+              data-simulated-failed={faults[hub.id] ? 'true' : undefined}
               role="button"
               tabIndex={0}
-              aria-label={`Select Virtual WAN Hub ${hub.name}`}
+              aria-label={`Select Virtual WAN Hub ${hub.name}${faults[hub.id] ? ` — Simulated failure: ${faults[hub.id].map((f) => f.name).join(', ')}` : ''}`}
               onKeyDown={(e) => openKeyboardContext(e, { kind: 'vwan-hub', hubId: hub.id })}
               onPointerDown={(e) => {
                 if (e.button === 2) return
@@ -1510,6 +1518,11 @@ export function AzureNetDiagram({
             <g
               key={loc.id}
               data-testid={`aznet-erloc-${loc.id}`}
+              data-simulated-failed={faults[loc.id] ? 'true' : undefined}
+              role="button"
+              tabIndex={0}
+              aria-label={`ExpressRoute location ${loc.name}${faults[loc.id] ? ` — Simulated failure: ${faults[loc.id].map((f) => f.name).join(', ')}` : ''}`}
+              onKeyDown={(e) => openKeyboardContext(e, { kind: 'er-location', locationId: loc.id })}
               onPointerDown={(e) => {
                 if (e.button === 2) return
                 e.stopPropagation()
@@ -1598,9 +1611,10 @@ export function AzureNetDiagram({
             <g
               key={site.id}
               data-testid={`aznet-site-${site.id}`}
+              data-simulated-failed={faults[site.id] ? 'true' : undefined}
               tabIndex={0}
               role="button"
-              aria-label={`On-premises site ${site.name}`}
+              aria-label={`On-premises site ${site.name}${faults[site.id] ? ` — Simulated failure: ${faults[site.id].map((f) => f.name).join(', ')}` : ''}`}
               onKeyDown={(e) => openKeyboardContext(e, { kind: 'site', siteId: site.id })}
               onPointerDown={(e) => {
                 if (e.button === 2) return
@@ -1683,6 +1697,19 @@ export function AzureNetDiagram({
             </g>
           )
         })}
+        {diagnosticNodes.filter(({ id, box }) => risks[id] && !faults[id] && box).map(({ id, box }) => <g key={`risk:${id}`}
+          role="button" tabIndex={0} aria-label={`Review ${risks[id]} N-1 resilience gaps for ${id}`}
+          transform={`translate(${box.x + box.width / 2},${box.y + box.height + 5})`}
+          onClick={() => onRisk?.(id)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRisk?.(id) } }}>
+          <rect className="resilience-gap-badge" x="-80" y="-10" width="160" height="22" rx="3" />
+          <text className="resilience-gap-text" textAnchor="middle" y="6">△ {risks[id]} N-1 gaps</text>
+        </g>)}
+        {diagnosticNodes.filter(({ id, box }) => faults[id] && box).map(({ id, box }) => <g key={`fault:${id}`}
+          role="img" aria-label={`Simulated failure: ${faults[id].map((f) => f.name).join(', ')}`}
+          transform={`translate(${box.x + box.width / 2},${box.y})`}>
+          <rect className="simulated-fault-badge" x="-88" y="-19" width="176" height="22" rx="3" />
+          <text className="simulated-fault-text" textAnchor="middle" y="-3">× SIMULATED FAILURE</text>
+        </g>)}
         {diagnosticNodes.map(({ kind, id, name, box }) => {
           const findings = findingsForNode(kind, id)
           if (!box || !findings.length) return null
@@ -1714,7 +1741,7 @@ export function AzureNetDiagram({
       </svg>
 
       {/* Interactive Peering Hover Popover (#38, #48) */}
-      {hoverPopover?.kind === 'peering' && (() => {
+      {hoverPopover?.kind === 'peering' && !faults[hoverPopover.peeringId] && (() => {
         const peering = topology.vnetPeerings.find((p) => p.id === hoverPopover.peeringId)
         if (!peering) return null
         const vnetA = topology.vnets.find((v) => v.id === peering.vnetAId)
@@ -1848,7 +1875,7 @@ export function AzureNetDiagram({
       })()}
 
       {/* Interactive Subnet Route Table Hover Popover (#41) */}
-      {hoverPopover?.kind === 'route-table' && (() => {
+      {hoverPopover?.kind === 'route-table' && !faults[hoverPopover.vnetId] && (() => {
         const rt = topology.udrTables.find((t) => t.id === hoverPopover.routeTableId)
         const vnet = topology.vnets.find((v) => v.id === hoverPopover.vnetId)
         const subnet = vnet?.subnets.find((s) => s.id === hoverPopover.subnetId)

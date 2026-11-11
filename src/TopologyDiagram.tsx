@@ -29,6 +29,8 @@ export interface DiagramContextMenu {
   routeMap?: { router: RouterSelection; connectionId: string; direction: RouteMapDirection }
 }
 interface Props {
+  faults?: import('./failures').FaultMap
+  risks?: Record<string, number>; onRisk?: (id: string) => void
   issues?: DiagnosticsFinding[]; onShowIssues?: (finding: DiagnosticsFinding) => void
   topology: Topology; hubId: string; erLocationId?: string; selected: Candidate[]; selectedSiteRoutes?: SiteRoute[]
   sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; layout?: LayoutMode; zoom?: number
@@ -52,7 +54,7 @@ function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
   </g>
 }
 
-export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
+export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules }: Props) {
   const svg = useRef<SVGSVGElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
@@ -248,9 +250,10 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
     y: Math.round(Math.max(65, Math.min(20000, height - (kind === 'hub' ? 115 : 65), position.y))),
   })
   const selectable = (kind: ObjectSelection['kind'], id: string, label: string, activate = () => onObjectClick({ kind, id }), routeMap?: DiagramContextMenu['routeMap']) => ({
-    role: 'button', tabIndex: 0, 'aria-label': label,
+    role: 'button', tabIndex: 0, 'aria-label': faults[id] ? `${label} — Simulated failure: ${faults[id].map((f) => f.name).join(', ')}` : label,
+    'data-simulated-failed': faults[id] ? 'true' : undefined,
     'aria-pressed': selection?.kind === kind && selection.id === id,
-    onClick: () => { if (suppressClick.current) { suppressClick.current = false; return }; activate() },
+    onClick: () => { if (suppressClick.current) { suppressClick.current = false; return }; if (!faults[id]) activate() },
     onContextMenu: (event: MouseEvent<SVGGElement>) => {
       event.preventDefault()
       event.currentTarget.focus({ preventScroll: true })
@@ -265,7 +268,7 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
         event.preventDefault()
         const bounds = event.currentTarget.getBoundingClientRect()
         onObjectContextMenu({ selection: { kind, id }, x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2, invoker: event.currentTarget, routeMap })
-      } else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activate() }
+      } else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); if (!faults[id]) activate() }
     },
   })
   const movable = (kind: 'hub' | 'spoke' | 'site' | 'erLocation', id: string) => ({
@@ -521,7 +524,21 @@ export function TopologyDiagram({ topology, issues = [], onShowIssues, hubId, er
       })
     })}
     {!topology.hubs.length && !topology.sites.length && !topology.erLocations?.length && <text x={width / 2} y={height / 2} textAnchor="middle" className="empty-diagram">{t("Right-click the canvas to add your first hub or site.")}</text>}
-  </svg>{preview && previewNode && previewLink && previewMap && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
+    {Object.entries(risks).filter(([id]) => positions.has(id) && !faults[id]).map(([id, count]) => {
+      const p = point(id)
+      return <g key={`risk:${id}`} role="button" tabIndex={0} aria-label={`Review ${count} N-1 resilience gaps for ${id}`}
+        transform={`translate(${p.x},${p.y + 52})`} onClick={() => onRisk?.(id)}
+        onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onRisk?.(id) } }}>
+        <rect className="resilience-gap-badge" x="-80" y="-10" width="160" height="22" rx="3" /><text className="resilience-gap-text" textAnchor="middle" y="6">△ {count} N-1 gaps</text>
+      </g>
+    })}
+    {Object.entries(faults).filter(([id]) => positions.has(id) && !nvaSiteMap.has(id)).map(([id, failures]) => {
+      const p = point(id)
+      return <g key={`fault:${id}`} role="img" aria-label={`Simulated failure: ${failures.map((f) => f.name).join(', ')}`} transform={`translate(${p.x},${p.y - 44})`}>
+        <rect className="simulated-fault-badge" x="-88" y="-19" width="176" height="22" rx="3" /><text className="simulated-fault-text" textAnchor="middle" y="-3">× SIMULATED FAILURE</text>
+      </g>
+    })}
+  </svg>{preview && previewNode && previewLink && previewMap && !faults[preview.owner.id] && !faults[preview.connectionId] && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
     {(pan.x !== 0 || pan.y !== 0) && <button className="canvas-pan-reset" onClick={() => setPan({ x: 0, y: 0 })}>{t('Reset canvas view')}</button>}
   </>
 }
