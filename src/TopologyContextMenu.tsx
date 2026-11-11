@@ -1,11 +1,11 @@
 import { t } from './i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-export interface ContextAction { label: string; run?: () => void; onSelect?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean }
+export interface ContextAction { label: string; run?: () => void; onSelect?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean; allowDisabledChildren?: boolean }
 
 function actionDisabled(action: ContextAction): boolean {
   if (action.disabled) return true
-  if (action.children?.length) return action.children.every(actionDisabled)
+  if (action.children?.length) return !action.allowDisabledChildren && action.children.every(actionDisabled)
   return action.children !== undefined && !action.run && !action.onSelect
 }
 
