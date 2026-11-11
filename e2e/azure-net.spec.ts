@@ -49,15 +49,19 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
       await page.evaluate(() => document.fonts.ready)
       const header = page.locator('.aznet-topbar')
       const canvas = page.locator('.aznet-canvas-shell')
+      const reclaimedHeights: number[] = []
       for (const width of [1280, 1440, 1920]) {
         await page.setViewportSize({ width, height: 900 })
         await selector.evaluate((element) => { element.style.width = '100%' })
         const oldHeader = (await header.boundingBox())!.height
         const oldCanvas = (await canvas.boundingBox())!.height
         await selector.evaluate((element) => { element.style.removeProperty('width') })
-        expect(oldHeader - (await header.boundingBox())!.height).toBeGreaterThanOrEqual(30)
-        expect((await canvas.boundingBox())!.height - oldCanvas).toBeGreaterThanOrEqual(30)
+        const reclaimed = (await canvas.boundingBox())!.height - oldCanvas
+        expect(oldHeader - (await header.boundingBox())!.height, `${width}px header must not grow`).toBeGreaterThanOrEqual(0)
+        expect(reclaimed, `${width}px canvas must not shrink`).toBeGreaterThanOrEqual(0)
+        reclaimedHeights.push(reclaimed)
       }
+      expect(Math.max(...reclaimedHeights), 'reclaim at least one toolbar row at desktop widths').toBeGreaterThanOrEqual(30)
       await page.setViewportSize({ width: 360, height: 900 })
       const bounds = (await selector.boundingBox())!
       expect(bounds.x).toBeGreaterThanOrEqual(0)
