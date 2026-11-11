@@ -21,6 +21,21 @@ async function loadTopology(page: Page, topology: AzNetTopology) {
 }
 
 test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
+  test('preserves every selected simulator mode across reloads from a URL without a mode', async ({ page }) => {
+    await page.goto('/?keep=mode-test#retained')
+    for (const [mode, label] of [['hub-spoke', 'Hub & Spoke'], ['full', 'Full Hybrid'], ['vwan', 'Virtual WAN']]) {
+      await page.getByTestId(`simulator-mode-${mode}`).click()
+      await expect(page.getByTestId('unified-mode-pill')).toHaveText(label)
+      await page.reload()
+      await expect(page.getByTestId('unified-mode-pill')).toHaveText(label)
+      await expect(page.getByTestId(`simulator-mode-${mode}`)).toHaveAttribute('aria-pressed', 'true')
+      const url = new URL(page.url())
+      expect(url.searchParams.get('mode')).toBe(mode === 'full' ? 'azure-net' : mode)
+      expect(url.searchParams.get('keep')).toBe('mode-test')
+      expect(url.hash).toBe('#retained')
+    }
+  })
+
   test('renders compound VNet diagram, Subnet Effective Routes, Symmetry Tracer, and Auto-Fix Diagnostics', async ({
     page,
   }) => {

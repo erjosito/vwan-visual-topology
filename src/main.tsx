@@ -34,10 +34,8 @@ export function UnifiedSimulatorRoot() {
 
   useEffect(() => {
     const url = new URL(window.location.href)
-    if (url.searchParams.get('mode')) {
-      url.searchParams.set('mode', mode === 'full' ? 'azure-net' : mode)
-      window.history.replaceState(null, '', url.toString())
-    }
+    url.searchParams.set('mode', mode === 'full' ? 'azure-net' : mode)
+    window.history.replaceState(null, '', url.toString())
   }, [mode])
 
   if (mode === 'vwan') {

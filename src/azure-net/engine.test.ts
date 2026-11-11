@@ -62,6 +62,53 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
 
+  it('checks distinct on-premises sites across their prefixes in landscape scope and clears repaired failures', () => {
+    const topology = createEmptyAzNetTopology()
+    topology.sites = [
+      { id: 'a', name: 'A', asn: 65001, prefixes: ['10.10.0.0/24', '10.11.0.0/24', '10.10.0.0/24'] },
+      { id: 'b', name: 'B', asn: 65002, prefixes: ['10.20.0.0/24'] },
+      { id: 'c', name: 'C', asn: 65003, prefixes: ['10.30.0.0/24'] },
+    ]
+    const scope = { scope: 'landscape' } as const
+    const disconnected = analyzeAzNetConnectivity(topology, simulateAzNet(topology), scope)
+    expect(disconnected).toMatchObject({ checked: 5, total: 5, complete: true })
+    expect(disconnected.findings).toHaveLength(5)
+    expect(new Set(disconnected.findings.map((finding) => finding.id)).size).toBe(5)
+    for (const finding of disconnected.findings) {
+      expect(finding).toMatchObject({ category: 'connectivity-failure', severity: 'error' })
+      expect(finding.sampleFlow!.source).not.toEqual(finding.sampleFlow!.destination)
+      expect(finding.summary).toContain('Forward')
+      expect(finding.summary).toContain('Return')
+    }
+    topology.siteLinks = [
+      { id: 'ab', name: 'A-B', siteAId: 'a', siteBId: 'b', enabled: true },
+      { id: 'bc', name: 'B-C', siteAId: 'b', siteBId: 'c', enabled: true },
+    ]
+    expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), scope).findings).toEqual([])
+  })
+
+  it('includes workload and distinct-site pairs without treating infrastructure or self pairs as workloads', () => {
+    const topology = transitTopology()
+    topology.vnets[0].subnets.push({ id: 'hub-work', name: 'Hub workload', prefix: '10.0.1.0/24' })
+    topology.sites.push({ id: 'other', name: 'Other site', asn: 65002, prefixes: ['172.18.0.0/24'] })
+    const report = analyzeAzNetConnectivity(topology, simulateAzNet(topology), { scope: 'landscape' })
+    expect(report).toMatchObject({ checked: 6, total: 6, complete: true })
+    expect(report.findings.some((finding) => finding.sourceKey?.startsWith('site:') &&
+      finding.destinationKey?.startsWith('site:'))).toBe(true)
+    expect(report.findings.some((finding) => finding.sourceKey?.endsWith(':gateway') ||
+      finding.destinationKey?.endsWith(':gateway'))).toBe(false)
+  })
+
+  it('exposes incomplete landscape coverage when the shared pair budget is exhausted', () => {
+    const topology = createEmptyAzNetTopology()
+    topology.sites = Array.from({ length: 22 }, (_, i) => ({
+      id: `site-${i}`, name: `Site ${i}`, asn: 65000 + i, prefixes: [`10.${i}.0.0/24`],
+    }))
+    const report = analyzeAzNetConnectivity(topology, simulateAzNet(topology), { scope: 'landscape' })
+    expect(report).toMatchObject({ checked: 200, total: 231, complete: false })
+    expect(report.findings).toHaveLength(200)
+  })
+
   it.each(['ExpressRoute', 'Vpn'] as const)('analyzes %s transit loss in both directions and clears findings after repair', (transport) => {
     const topology = transitTopology(transport)
     const analyze = () => analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair)

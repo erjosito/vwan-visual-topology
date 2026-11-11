@@ -57,6 +57,7 @@ interface AzureNetDiagramProps {
   additionalReverseTraces?: AzFlowTrace[]
   diagnostics: AzDiagnosticFinding[]
   showDiagnosticBadges: boolean
+  onShowIssues: (findings: AzDiagnosticFinding[]) => void
   onClearHighlights: () => void
 }
 
@@ -161,6 +162,7 @@ export function AzureNetDiagram({
   additionalReverseTraces = [],
   diagnostics,
   showDiagnosticBadges,
+  onShowIssues,
   onClearHighlights,
 }: AzureNetDiagramProps) {
   const shellRef = useRef<HTMLDivElement | null>(null)
@@ -246,6 +248,27 @@ export function AzureNetDiagram({
   const hasActiveHighlights =
     forwardTraces.length > 0 || reverseTraces.length > 0 ||
     (showDiagnosticBadges && diagnostics.some((d) => d.severity !== 'info'))
+
+  const findingsForNode = (kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site', id: string) =>
+    showDiagnosticBadges ? diagnostics.filter((finding) => {
+      if (finding.severity === 'info') return false
+      const endpoints = [finding.sampleFlow?.source, finding.sampleFlow?.destination]
+      if (kind === 'vnet') {
+        const peering = finding.peeringId && topology.vnetPeerings.find((p) => p.id === finding.peeringId)
+        return finding.vnetId === id || (peering && (peering.vnetAId === id || peering.vnetBId === id)) ||
+          endpoints.some((ref) => ref?.kind === 'subnet' && ref.vnetId === id)
+      }
+      if (kind === 'site') return endpoints.some((ref) => ref?.kind === 'site' && ref.siteId === id)
+      if (kind === 'vwan-hub') return endpoints.some((ref) => ref?.kind === 'vwanHub' && ref.hubId === id)
+      return finding.erLocationId === id
+    }) : []
+
+  const diagnosticNodes = [
+    ...topology.vnets.map((node) => ({ kind: 'vnet' as const, id: node.id, name: node.name, box: positions.vnets[node.id] })),
+    ...topology.vwanHubs.map((node) => ({ kind: 'vwan-hub' as const, id: node.id, name: node.name, box: positions.vwanHubs[node.id] })),
+    ...topology.erLocations.map((node) => ({ kind: 'er-location' as const, id: node.id, name: node.name, box: positions.erLocations[node.id] })),
+    ...topology.sites.map((node) => ({ kind: 'site' as const, id: node.id, name: node.name, box: positions.sites[node.id] })),
+  ]
 
   const clientToSvgDelta = (dx: number, dy: number) => {
     const svg = svgRef.current
@@ -933,9 +956,7 @@ export function AzureNetDiagram({
           const box = positions.vnets[vnet.id]
           if (!box) return null
           const isVnetSelected = selected?.kind === 'vnet' && selected.vnetId === vnet.id
-          const vnetFindings = showDiagnosticBadges
-            ? diagnostics.filter((d) => d.vnetId === vnet.id && d.severity !== 'info')
-            : []
+          const vnetFindings = findingsForNode('vnet', vnet.id)
           const hasError = vnetFindings.some((f) => f.severity === 'error')
           const hasWarning = vnetFindings.some((f) => f.severity === 'warning')
 
@@ -1050,30 +1071,6 @@ export function AzureNetDiagram({
               >
                 {vnet.role.toUpperCase()}
               </text>
-
-              {/* Diagnostic Warning Badge on VNet Header */}
-              {vnetFindings.length > 0 && (
-                <g data-testid={`aznet-finding-badge-${vnet.id}`}>
-                  <circle
-                    cx={box.x + box.width - 8}
-                    cy={box.y + 6}
-                    r={10}
-                    fill={hasError ? '#dc2626' : '#d97706'}
-                    stroke="#ffffff"
-                    strokeWidth={2}
-                  />
-                  <text
-                    x={box.x + box.width - 8}
-                    y={box.y + 10}
-                    textAnchor="middle"
-                    fontSize={10}
-                    fontWeight={800}
-                    fill="#ffffff"
-                  >
-                    !
-                  </text>
-                </g>
-              )}
 
               {/* Control Plane / Appliances Strip */}
               {hasControlRow && (
@@ -1684,6 +1681,32 @@ export function AzureNetDiagram({
               ) : null}
             </g>
           )
+        })}
+        {diagnosticNodes.map(({ kind, id, name, box }) => {
+          const findings = findingsForNode(kind, id)
+          if (!box || !findings.length) return null
+          const label = `Review ${findings.length} routing issues for ${name}`
+          return <g key={`${kind}:${id}`}
+            data-testid={`aznet-finding-badge-${kind === 'vnet' ? id : `${kind}-${id}`}`}
+            role="button" tabIndex={0} aria-label={label} style={{ cursor: 'pointer' }}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => { event.stopPropagation(); onShowIssues(findings) }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                event.stopPropagation()
+                onShowIssues(findings)
+              }
+            }}>
+            <title>{label}: {findings.map((finding) => finding.title).join('; ')}</title>
+            <circle cx={box.x + box.width - 8} cy={box.y + 6} r={11}
+              fill={findings.some((finding) => finding.severity === 'error') ? '#dc2626' : '#d97706'}
+              stroke="#ffffff" strokeWidth={2} />
+            <text x={box.x + box.width - 8} y={box.y + 10} textAnchor="middle"
+              fontSize={9} fontWeight={800} fill="#ffffff">
+              {findings.length > 99 ? '99+' : findings.length}
+            </text>
+          </g>
         })}
       </svg>
 
