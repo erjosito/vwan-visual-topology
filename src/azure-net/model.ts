@@ -1,5 +1,6 @@
-import type { LayoutMode, NodePosition, Preference } from '../model'
+import type { LayoutMode, NodePosition, Preference, RouteMap, RouteMapAssignment } from '../model'
 import { cidr, contains, ipv4 } from '../validation'
+import { validateAzSiteRouteMaps } from './route-maps'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -165,6 +166,7 @@ export interface AzSite {
   label?: string
   asn: number
   prefixes: string[]
+  routeMapAssignments?: RouteMapAssignment[]
   x?: number
   y?: number
 }
@@ -237,6 +239,7 @@ export interface AzNetTopology {
   erLinks: AzErLink[]
   erGlobalReachLinks?: AzErGlobalReachLink[]
   sites: AzSite[]
+  routeMaps?: RouteMap[]
   vpnConnections: AzVpnConnection[]
   siteLinks: AzSiteLink[]
   layout?: {
@@ -1269,6 +1272,10 @@ export function validateAzNetTopology(input: unknown): string[] {
     if (site.label !== undefined && (typeof site.label !== 'string' || site.label.length > 120)) {
       errors.push(`Site "${site.name}" label must be a string of at most 120 characters.`)
     }
+  }
+  if (candidate.routeMaps !== undefined || candidate.sites?.some((site) => site.routeMapAssignments !== undefined)) {
+    try { validateAzSiteRouteMaps(candidate as AzNetTopology) }
+    catch (error) { errors.push(error instanceof Error ? error.message : 'Invalid site route maps.') }
   }
   return errors
 }

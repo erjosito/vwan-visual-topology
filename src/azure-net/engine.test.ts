@@ -25,6 +25,8 @@ import {
   evaluateErSkuRegionalCompatibility,
   findErPeeringLocationEntry,
 } from '../er-locations-catalog'
+import { pruneAzSiteRouteMaps } from './route-maps'
+import type { RouteMapRule } from '../model'
 
 describe('Azure Networking Simulator Engine & Diagnostics', () => {
   function transitTopology(transport: 'ExpressRoute' | 'Vpn' = 'ExpressRoute'): AzNetTopology {
@@ -61,6 +63,147 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
   }
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
+
+  function sitePolicy(topology: AzNetTopology, connectionId: string, direction: 'inboundMapId' | 'outboundMapId', rules: Partial<RouteMapRule>[]) {
+    topology.routeMaps = [{
+      id: 'site-map', name: 'Site policy', siteId: 'site',
+      rules: rules.map((rule, index) => ({
+        id: `policy-rule-${index}`, prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate', ...rule,
+      })),
+    }]
+    topology.sites[0].routeMapAssignments = [{ connectionId, [direction]: 'site-map' }]
+  }
+
+  it.each(['ExpressRoute', 'Vpn'] as const)('applies site-owned outbound and inbound drop policies independently over %s', (transport) => {
+    const topology = transitTopology(transport)
+    const connection = transport === 'Vpn' ? 'vpn' : 'er-site'
+    sitePolicy(topology, connection, 'outboundMapId', [{ action: 'drop', prefixes: ['172.16.0.0/24'] }])
+    expect(validateAzNetTopology(topology)).toEqual([])
+    let result = simulateAzNet(topology)
+    expect(result.gatewayRibs.gw.some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+    expect(result.siteRibs.site.some((route) => route.prefix === '10.1.0.0/16')).toBe(true)
+    expect(result.warnings.join(' ')).toContain('filtered: 172.16.0.0/24')
+    sitePolicy(topology, connection, 'inboundMapId', [{ action: 'drop', prefixes: ['10.1.0.0/16'] }])
+    result = simulateAzNet(topology)
+    expect(result.gatewayRibs.gw.some((route) => route.prefix === '172.16.0.0/24')).toBe(true)
+    expect(result.siteRibs.site.some((route) => route.prefix === '10.1.0.0/16')).toBe(false)
+    expect(result.siteRibs.site.some((route) => route.prefix === '10.0.0.0/16')).toBe(true)
+  })
+
+  it('uses shared ordered continue/prepend rules before VPN path selection and rejects inbound AS loops', () => {
+    const topology = transitTopology('Vpn')
+    topology.vpnConnections.push({ ...topology.vpnConnections[0], id: 'backup', name: 'Backup' })
+    sitePolicy(topology, 'vpn', 'outboundMapId', [
+      { action: 'prepend', prefixes: ['172.16.0.0/16'], match: 'contains', prepend: [65001], nextStep: 'continue' },
+      { action: 'prepend', prepend: [4200000000] },
+    ])
+    let result = simulateAzNet(topology)
+    expect(result.gatewayRibs.gw.find((route) => route.id.includes(':vpn:vpn:'))?.asPath).toEqual([4200000000, 65001, 65001])
+    expect(result.gatewayRibs.gw.find((route) => route.id.includes(':vpn:backup:'))?.preferred).toBe(true)
+    expect(result.gatewayRibs.gw.find((route) => route.id.includes(':vpn:vpn:'))?.explanation).toContain('Site route map "Site policy"')
+    const flow = traceAzNetFlow(topology, result, { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '172.16.0.4')
+    expect(flow.status).toBe('delivered')
+    expect(flow.traversedEdgeIds).toContain('backup')
+    expect(flow.traversedEdgeIds).not.toContain('vpn')
+    sitePolicy(topology, 'vpn', 'inboundMapId', [{ action: 'prepend', prepend: [65099] }])
+    result = simulateAzNet(topology)
+    expect(result.siteRibs.site.find((route) => route.prefix === '10.1.0.0/16' && route.preferred)?.connectionId).toBe('backup')
+    const returning = traceAzNetFlow(topology, result, { kind: 'site', siteId: 'site' }, '10.1.1.4')
+    expect(returning.status).toBe('delivered')
+    expect(returning.traversedEdgeIds).toContain('backup')
+    expect(returning.traversedEdgeIds).not.toContain('vpn')
+    topology.vpnConnections.pop()
+    sitePolicy(topology, 'vpn', 'inboundMapId', [{ action: 'prepend', prepend: [65001] }])
+    result = simulateAzNet(topology)
+    expect(result.siteRibs.site.some((route) => route.originProtocol === 'VPN')).toBe(false)
+  })
+
+  it('summarizes site advertisements without changing local routes and leaves static VPN routes unfiltered', () => {
+    const topology = transitTopology('Vpn')
+    sitePolicy(topology, 'vpn', 'outboundMapId', [{
+      action: 'summarize', prefixes: ['172.16.0.0/24'], summaryPrefixes: ['172.16.0.0/16'],
+    }])
+    let result = simulateAzNet(topology)
+    expect(result.gatewayRibs.gw.map((route) => route.prefix)).toEqual(['172.16.0.0/16'])
+    expect(result.gatewayRibs.gw[0].asPath).toEqual([65001])
+    expect(result.gatewayRibs.gw[0].forwardingRoutes?.[0].prefix).toBe('172.16.0.0/24')
+    expect(traceAzNetFlow(topology, result, { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '172.16.99.4').status).not.toBe('delivered')
+    expect(result.siteRibs.site.some((route) => route.prefix === '172.16.0.0/24' && route.nextHopKind === 'local')).toBe(true)
+    topology.vpnConnections[0].bgpEnabled = false
+    topology.routeMaps![0].rules[0].action = 'drop'
+    result = simulateAzNet(topology)
+    expect(result.gatewayRibs.gw[0].prefix).toBe('172.16.0.0/24')
+    expect(result.gatewayRibs.gw[0].asPath).toEqual([])
+  })
+
+  it('applies both site-link policy directions, validates ownership and cleans deleted connection references', () => {
+    const topology = transitTopology('Vpn')
+    topology.sites.push({ id: 'branch', name: 'Branch', asn: 65002, prefixes: ['192.168.0.0/24'] })
+    topology.siteLinks.push({ id: 'backdoor', name: 'Backdoor', siteAId: 'site', siteBId: 'branch', enabled: true })
+    sitePolicy(topology, 'backdoor', 'outboundMapId', [{ action: 'drop', prefixes: ['172.16.0.0/24'] }])
+    expect(simulateAzNet(topology).siteRibs.branch.some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+    topology.routeMaps![0].rules[0].action = 'permit'
+    topology.routeMaps!.push({ id: 'branch-map', name: 'Branch import', siteId: 'branch',
+      rules: [{ ...topology.routeMaps![0].rules[0], id: 'branch-rule', action: 'drop' }] })
+    topology.sites[1].routeMapAssignments = [{ connectionId: 'backdoor', inboundMapId: 'branch-map' }]
+    expect(simulateAzNet(topology).siteRibs.branch.some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+    expect(validateAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual([])
+    topology.routeMaps![0].rules[0].prepend = [-1]
+    expect(validateAzNetTopology(topology).join(' ')).toContain('Invalid ASN')
+    topology.routeMaps![0].rules[0].prepend = []
+    topology.sites[1].routeMapAssignments[0].inboundMapId = 'site-map'
+    expect(validateAzNetTopology(topology).join(' ')).toContain('same site')
+    topology.siteLinks = []
+    pruneAzSiteRouteMaps(topology)
+    expect(topology.sites.every((site) => !site.routeMapAssignments?.length)).toBe(true)
+    expect(validateAzNetTopology(topology)).toEqual([])
+    expect(generateAzNetBicep(topology).warnings.join(' ')).toContain('not deployed')
+  })
+
+  it.each(['ExpressRoute', 'Vpn'] as const)('coalesces site inbound summaries across all advertisements on %s', (transport) => {
+    const topology = transitTopology(transport)
+    sitePolicy(topology, transport === 'Vpn' ? 'vpn' : 'er-site', 'inboundMapId', [{
+      action: 'summarize', match: 'contains', prefixes: ['10.0.0.0/8'], summaryPrefixes: ['10.0.0.0/8'],
+    }])
+    const summaries = simulateAzNet(topology).siteRibs.site.filter((route) => route.prefix === '10.0.0.0/8')
+    expect(summaries).toHaveLength(1)
+    expect(summaries[0].forwardingRoutes).toHaveLength(2)
+    expect(summaries[0].asPath).toEqual([])
+  })
+
+  it.each(['appliance', 'vwan-hub'] as const)('applies site route maps and traces both directions on %s VPN attachments', (targetKind) => {
+    const topology = transitTopology('Vpn')
+    const connection = topology.vpnConnections[0]
+    connection.targetKind = targetKind
+    connection.targetId = 'target'
+    if (targetKind === 'appliance') {
+      topology.vnets[0].subnets.push({ id: 'nva-subnet', name: 'NVA', prefix: '10.0.2.0/24' })
+      topology.vnets[0].appliances.push({
+        id: 'target', name: 'BGP NVA', kind: 'nva-vm', subnetId: 'nva-subnet', privateIp: '10.0.2.4',
+        asn: 65010, bgpEnabled: true, enableIpForwarding: true, staticRoutes: [],
+      })
+      topology.vnets[0].routeServer = {
+        id: 'ars', name: 'ARS', enabled: true, branchToBranchTraffic: false,
+        hubRoutingPreference: 'ASPath', peerApplianceIds: ['target'],
+      }
+    } else {
+      topology.vwanHubs.push({
+        id: 'target', name: 'Virtual hub', region: 'West Europe', preference: 'ASPath',
+        routingIntent: { private: false, internet: false },
+      })
+      for (const vnet of topology.vnets) vnet.vwanHubAttachment = { hubId: 'target', enabled: true }
+    }
+    let result = simulateAzNet(topology)
+    expect(traceAzNetFlow(topology, result, { kind: 'site', siteId: 'site' }, '10.1.1.4').status).toBe('delivered')
+    expect(traceAzNetFlow(topology, result, { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '172.16.0.4').status).toBe('delivered')
+    sitePolicy(topology, 'vpn', 'inboundMapId', [{ action: 'drop', prefixes: ['10.1.0.0/16'] }])
+    result = simulateAzNet(topology)
+    expect(result.siteRibs.site.some((route) => route.prefix === '10.1.0.0/16')).toBe(false)
+    sitePolicy(topology, 'vpn', 'outboundMapId', [{ action: 'drop', prefixes: ['172.16.0.0/24'] }])
+    result = simulateAzNet(topology)
+    const rib = targetKind === 'appliance' ? result.routeServerRibs.ars : result.vwanHubRibs.target
+    expect(rib.some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+  })
 
   it.each([
     ['', true, false],

@@ -35,7 +35,9 @@ async function load(page: Page, mode: string, topology = bgpTopology()) {
     routingIntent: { private: false, internet: false },
   })
   await page.addInitScript((value) => {
-    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
+    if (!localStorage.getItem('aznet-visual-topology:v1')) {
+      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
+    }
   }, topology)
   await page.goto(`/?mode=${mode}`)
 }
@@ -47,6 +49,47 @@ async function inspectSite(page: Page, id: string) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} edits site route maps, scopes assignments and preserves policies across reload and undo`, async ({ page }) => {
+    await load(page, mode)
+    await page.getByTestId('aznet-site-a').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Manage Site Route Maps', exact: true }).click()
+    const policy = page.getByRole('dialog', { name: 'Route maps · Site A', exact: true })
+    await policy.getByRole('button', { name: 'Create route map', exact: true }).click()
+    await policy.getByRole('textbox', { name: 'Route map name', exact: true }).fill('Block primary site export')
+    await policy.getByRole('button', { name: 'Add rule', exact: true }).click()
+    await policy.getByRole('textbox', { name: 'Rule 1 prefixes', exact: true }).fill('172.16.0.0/24')
+    await policy.getByRole('combobox', { name: 'Rule 1 action', exact: true }).selectOption('drop')
+    await policy.getByRole('button', { name: 'Save route map', exact: true }).click()
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('primary')
+    const mapId = await policy.getByRole('combobox', { name: 'Outbound route map', exact: true }).locator('option', { hasText: 'Block primary site export' }).getAttribute('value')
+    await policy.getByRole('combobox', { name: 'Outbound route map', exact: true }).selectOption(mapId!)
+    await expect(policy.locator('[data-route-map-attachments]')).toContainText('Primary VPN (Outbound)')
+    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue('')
+    await policy.getByRole('button', { name: 'Close Route maps · Site A', exact: true }).click()
+    await page.getByTestId('aznet-chip-gw').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Inspect Gateway BGP RIB', exact: true }).click()
+    const rib = page.getByTestId('aznet-control-rib-card')
+    await expect(rib.locator('[data-prefix="172.16.0.0/24"]')).toHaveCount(1)
+    await expect(rib.locator('[data-prefix="172.16.0.0/24"]')).not.toContainText('Primary VPN')
+    await expect(rib.locator('[data-prefix="172.16.0.0/24"]', { hasText: 'Backup VPN' })).toHaveCount(1)
+    await page.reload()
+    await page.getByTestId('aznet-site-a').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Manage Site Route Maps', exact: true }).click()
+    await expect(policy.getByRole('combobox', { name: 'Outbound route map', exact: true })).toHaveValue(mapId!)
+    await policy.getByRole('button', { name: /Block primary site export/, exact: false }).click()
+    await policy.getByRole('button', { name: 'Delete route map', exact: true }).click()
+    await policy.getByRole('button', { name: 'Confirm route map deletion', exact: true }).click()
+    await expect(policy.getByRole('combobox', { name: 'Outbound route map', exact: true })).toHaveValue('')
+    await policy.getByRole('button', { name: 'Close Route maps · Site A', exact: true }).click()
+    await page.getByRole('button', { name: /Undo/ }).click()
+    await page.getByTestId('aznet-site-a').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Manage Site Route Maps', exact: true }).click()
+    await expect(policy.getByRole('combobox', { name: 'Outbound route map', exact: true })).toHaveValue(mapId!)
+  })
+
   test(`${mode} separates effective-route AS paths from origins and suppression details`, async ({ page }) => {
     const topology = bgpTopology()
     topology.udrTables.push({

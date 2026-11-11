@@ -38,6 +38,9 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.routeMaps?.length) {
+    warnings.push('On-premises site route maps are simulation/device policies and are not deployed by this Azure Bicep export. Configure the corresponding site routers separately.')
+  }
   let resourceCount = 0
   const usedSymbolicNames = new Set<string>()
 

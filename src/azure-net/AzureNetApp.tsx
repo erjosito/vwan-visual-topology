@@ -25,6 +25,8 @@ import {
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
 import { BgpRouteTable } from './BgpRouteTable'
+import { SiteRouteMapsPanel } from './SiteRouteMapsPanel'
+import { pruneAzSiteRouteMaps } from './route-maps'
 import {
   analyzeAzNetConnectivity,
   AZ_NET_PAIR_LIMIT,
@@ -282,6 +284,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [canvasSelection, setCanvasSelection] = useState<AzSelectedEntity>()
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
+  const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
   const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
     setInspectedEntity(entity)
@@ -345,6 +348,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     setFuture([])
     const next = cloneAzNetTopology(topology)
     updater(next)
+    pruneAzSiteRouteMaps(next)
     setTopology(next)
   }
 
@@ -2272,6 +2276,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `On-Premises Site · ${site.name} (ASN ${site.asn})`,
         actions: [
+          { label: 'Manage Site Route Maps', onSelect: () => setRouteMapSiteId(site.id) },
           ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'site' && e.ref.siteId === site.id)),
           {
             label: 'Inspect Site BGP Route Table',
@@ -3056,6 +3061,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           )}
         </section>
 
+        {routeMapSiteId && <SiteRouteMapsPanel key={routeMapSiteId} topology={topology} siteId={routeMapSiteId}
+          onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => setRouteMapSiteId(undefined)} />}
         {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
           title={{
             routes: 'Effective routes',
