@@ -1081,7 +1081,7 @@ test('BGP overlay preserves all candidates, colors, preference changes and topol
   await expect(preferred).toContainText('London primary')
   await expect(preferred.locator('.as-path')).toHaveText('12076 65010')
   await expect(inspector.locator('tr[data-prefix="10.20.0.0/16"][data-preferred="false"]')).toHaveCount(1)
-  await expect(inspector.locator('thead th')).toHaveCount(3)
+  await expect(inspector.locator('thead th')).toHaveText(['*', 'Next hop / source', 'AS path'])
   await expect(rows.locator('.route-state')).toHaveText(['*', ''])
   await expect(inspector).not.toContainText(/\d+ candidates? · \d+ preferred/)
   await expect(inspector.locator('tr[data-reason-prefix="10.20.0.0/16"]')).toContainText('ExpressRoute wins')
