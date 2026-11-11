@@ -65,6 +65,7 @@ async function groupPath(page: Page, object: string, direction: 'to' | 'from', g
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`ER location catalog matches the light UI with readable text in ${mode}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'light' })
     await page.goto(`/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-topbar-er-locations-btn' : 'aznet-open-er-locations-btn').click()
     const modal = page.getByTestId('er-location-info-modal')

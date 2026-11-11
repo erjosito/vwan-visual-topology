@@ -1,0 +1,136 @@
+/* Semantic colors are shared by HTML, SVG, portals and all simulator modes.
+   Text tokens meet AA on their paired surfaces; path identity is separate from status. */
+:root {
+  color-scheme: light;
+  --page: #f1f5f9;
+  --surface: #ffffff;
+  --surface-muted: #eaf0f7;
+  --surface-hover: #dce7f5;
+  --text: #172b45;
+  --text-muted: #4b6078;
+  --border: #6e8198;
+  --grid: #cad5e3;
+  --accent: #1857b6;
+  --accent-hover: #10458f;
+  --selection: #deebff;
+  --on-accent: #ffffff;
+  --focus: #1857b6;
+  --error: #a92329;
+  --error-surface: #ffebed;
+  --warning: #805000;
+  --warning-surface: #fff1cc;
+  --info: #075d85;
+  --info-surface: #e0f2fe;
+  --success: #086549;
+  --success-surface: #dcf5e9;
+  --purple: #6536a5;
+  --purple-surface: #eee5ff;
+  --forward: #087c58;
+  --return: #a46100;
+  --link: #587391;
+  --backdrop: #07142699;
+  --shadow: #07142630;
+  --path-1: #087c68; --path-2: #1857b6; --path-3: #946000; --path-4: #7545b5;
+  --path-5: #b13760; --path-6: #00728d; --path-7: #a24b17; --path-8: #527124;
+  --path-9: #9c368d; --path-10: #416399; --path-11: #11734b; --path-12: #6654a8;
+  --path-13: #816900; --path-14: #a3443e; --path-15: #326c75; --path-16: #795932;
+  --path-17: #586e22; --path-18: #8d4a7b; --path-19: #2a5c89; --path-20: #526875;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #101927;
+  --surface: #19273a;
+  --surface-muted: #223349;
+  --surface-hover: #30455f;
+  --text: #edf3fc;
+  --text-muted: #bacbe0;
+  --border: #8ca3bf;
+  --grid: #35485f;
+  --accent: #a7caff;
+  --accent-hover: #c7ddff;
+  --selection: #28446b;
+  --on-accent: #101f35;
+  --focus: #b5d5ff;
+  --error: #ffb6bc;
+  --error-surface: #482632;
+  --warning: #ffda8b;
+  --warning-surface: #44351e;
+  --info: #9fddff;
+  --info-surface: #193e55;
+  --success: #98e6c1;
+  --success-surface: #1a3e34;
+  --purple: #d6bdff;
+  --purple-surface: #372b53;
+  --forward: #71e2b4;
+  --return: #ffc966;
+  --link: #a4bad4;
+  --backdrop: #020712bb;
+  --shadow: #00000066;
+  --path-1: #71e2c7; --path-2: #a7caff; --path-3: #ffc966; --path-4: #c5a0ff;
+  --path-5: #ffa1c1; --path-6: #6edcf4; --path-7: #ffb58a; --path-8: #bddf7a;
+  --path-9: #eea4e1; --path-10: #afc8f4; --path-11: #7ee6ad; --path-12: #c6b8ff;
+  --path-13: #e9d76a; --path-14: #ffa69f; --path-15: #8fd4df; --path-16: #ddbd92;
+  --path-17: #c8db8e; --path-18: #e1aed1; --path-19: #9fcdf4; --path-20: #b9d1df;
+}
+html, body { background: var(--page); color: var(--text); }
+::selection { background: var(--selection); color: var(--text); }
+.theme-selector { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+.theme-selector select { width: auto; padding: 6px; font-size: 12px; }
+input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
+/* Do not interpolate a new background against an already-switched text color. */
+button, .button-link, .aznet-btn { transition: none; }
+button:disabled, .aznet-btn:disabled { opacity: 1; color: var(--text-muted) !important; background: var(--surface-muted) !important; border-color: var(--border) !important; cursor: not-allowed; }
+.aznet-route-row.suppressed { opacity: 1; color: var(--text-muted); }
+.aznet-route-row.suppressed td:first-child { border-left: 3px dashed var(--border); }
+.simulator-mode-switch { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px; padding: 3px; border-radius: 8px; background: var(--surface-muted); border: 1px solid var(--border); flex-shrink: 0; max-width: 100%; }
+.simulator-mode-switch button { padding: 4px 10px; font-size: 11.5px; font-weight: 700; border: 0; border-radius: 6px; white-space: nowrap; background: transparent; color: var(--text-muted); }
+.simulator-mode-switch button[aria-pressed="true"] { background: var(--selection); color: var(--accent); outline: 1px solid var(--accent); }
+.simulator-mode-switch button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.brand-icon, .unified-brand-icon, .aznet-brand-icon, .aznet-topbar-hubspoke .aznet-brand-icon { background: var(--accent); color: var(--on-accent); }
+.topbar .actions button:hover:not(:disabled) { background: var(--surface-hover); }
+.object-dialog { background: var(--surface); color: var(--text); }
+.object-dialog::backdrop { background: var(--backdrop); }
+.network-link.ExpressRoute, .legend-line.er { stroke: var(--purple); border-color: var(--purple); }
+.network-link.VPN, .legend-line.vpn { stroke: var(--info); border-color: var(--info); }
+.network-link.SDWAN, .legend-line.sdwan { stroke: var(--warning); border-color: var(--warning); }
+.network-link.disabled-link { opacity: 1; }
+.edge-badge .link-label { fill: var(--text-muted); }
+.policy-marker text { fill: currentColor; }
+.policy-filter { fill: var(--surface); }
+.warning-symbol { fill: var(--text); }
+.warning-triangle { fill: var(--surface); }
+.routing-issue-marker { color: var(--error); }
+.notice, .flow-result.unreachable, .flow-result.loop { background: var(--warning-surface); }
+.notice.error { background: var(--error-surface); }
+.flow-result, .active-route { background: var(--success-surface); }
+.er-catalog-body { display: grid; grid-template-columns: 310px minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
+@media (max-width: 760px) {
+  .er-catalog-body { grid-template-columns: minmax(0, 1fr); overflow: auto; }
+  .er-catalog-body > :first-child { max-height: 180px; flex-shrink: 0; }
+  .er-catalog-body > :last-child { overflow: visible !important; }
+  .aznet-topbar { flex-direction: column; align-items: stretch; }
+  .aznet-brand { width: auto; flex-wrap: wrap; }
+  .aznet-topbar-controls { max-width: 100%; }
+  .aznet-topbar-controls > label { flex-wrap: wrap; }
+  .aznet-field-grid { grid-template-columns: minmax(0, 1fr); }
+}
+/* Print uses the light semantic palette, independent of the screen preference. */
+@media print {
+  :root[data-theme] {
+    color-scheme: light !important;
+    --page: #fff; --surface: #fff; --surface-muted: #eaf0f7; --surface-hover: #dce7f5;
+    --text: #172b45; --text-muted: #4b6078; --border: #6e8198; --grid: #cad5e3;
+    --accent: #1857b6; --accent-hover: #10458f; --selection: #deebff; --on-accent: #fff;
+    --focus: #1857b6; --error: #a92329; --error-surface: #ffebed;
+    --warning: #805000; --warning-surface: #fff1cc; --info: #075d85; --info-surface: #e0f2fe;
+    --success: #086549; --success-surface: #dcf5e9; --purple: #6536a5; --purple-surface: #eee5ff;
+    --forward: #087c58; --return: #a46100; --link: #587391;
+    --path-1: #087c68; --path-2: #1857b6; --path-3: #946000; --path-4: #7545b5;
+    --path-5: #b13760; --path-6: #00728d; --path-7: #a24b17; --path-8: #527124;
+    --path-9: #9c368d; --path-10: #416399; --path-11: #11734b; --path-12: #6654a8;
+    --path-13: #816900; --path-14: #a3443e; --path-15: #326c75; --path-16: #795932;
+    --path-17: #586e22; --path-18: #8d4a7b; --path-19: #2a5c89; --path-20: #526875;
+  }
+  .theme-selector { display: none; }
+}

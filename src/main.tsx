@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { AzureNetApp } from './azure-net/AzureNetApp.tsx'
 import type { SimulatorMode } from './SimulatorModeSwitch.tsx'
+import './theme.css'
 
 function resolveInitialMode(): SimulatorMode {
   const params = new URLSearchParams(window.location.search)
