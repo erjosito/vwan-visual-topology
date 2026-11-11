@@ -199,8 +199,8 @@
 }
 
 .aznet-workspace {
-  display: grid;
-  grid-template-columns: minmax(520px, 1fr) 520px;
+  display: flex;
+  position: relative;
   flex: 1;
   min-height: 0;
 }
@@ -210,7 +210,8 @@
   flex-direction: column;
   min-height: 0;
   position: relative;
-  border-right: 1px solid #cbd5e1;
+  flex: 1;
+  min-width: 0;
 }
 
 .aznet-scenario-banner {
@@ -274,19 +275,43 @@
   border-color: #fecaca;
 }
 
-.aznet-inspector-column {
+.canvas-overlay.aznet-inspector-window {
+  width: min(660px, calc(100% - 32px));
+}
+
+.aznet-inspector-window > .overlay-content {
+  padding: 0;
+}
+
+.aznet-group-path {
+  display: block;
+  text-align: left;
+  width: 100%;
+  margin-block: 6px;
+  white-space: normal;
+}
+
+.aznet-path-legend,
+.aznet-analysis-actions {
+  margin-block: 10px;
+  font-size: 12px;
+}
+
+.aznet-analysis-actions {
   display: flex;
-  flex-direction: column;
-  background: #ffffff;
-  min-height: 0;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .aznet-tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
   flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
 }
 
 .aznet-tab {

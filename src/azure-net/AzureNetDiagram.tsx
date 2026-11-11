@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, type KeyboardEvent } from 'react'
 import type { AzDiagnosticFinding } from './diagnostics'
 import type { AzFlowTrace } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
@@ -52,6 +52,8 @@ interface AzureNetDiagramProps {
   onOpenEditorForEntity?: (entity: AzSelectedEntity) => void
   forwardTrace?: AzFlowTrace | null
   reverseTrace?: AzFlowTrace | null
+  additionalForwardTraces?: AzFlowTrace[]
+  additionalReverseTraces?: AzFlowTrace[]
   diagnostics: AzDiagnosticFinding[]
   showDiagnosticBadges: boolean
   onClearHighlights: () => void
@@ -154,6 +156,8 @@ export function AzureNetDiagram({
   onOpenEditorForEntity,
   forwardTrace,
   reverseTrace,
+  additionalForwardTraces = [],
+  additionalReverseTraces = [],
   diagnostics,
   showDiagnosticBadges,
   onClearHighlights,
@@ -212,18 +216,35 @@ export function AzureNetDiagram({
   >(null)
 
   const positions = computePositions(topology)
+  const openKeyboardContext = (event: KeyboardEvent<SVGGElement>, entity: AzSelectedEntity) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      event.stopPropagation()
+      onSelect(entity)
+      return
+    }
+    if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = event.currentTarget.getBoundingClientRect()
+    onSelect(entity)
+    onContextMenu?.({ kind: 'entity', entity, x: rect.left + 20, y: rect.top + 20 })
+  }
 
-  const forwardEdges = new Set(forwardTrace?.traversedEdgeIds ?? [])
-  const reverseEdges = new Set(reverseTrace?.traversedEdgeIds ?? [])
+  const forwardTraces = [...(forwardTrace ? [forwardTrace] : []), ...additionalForwardTraces]
+  const reverseTraces = [...(reverseTrace ? [reverseTrace] : []), ...additionalReverseTraces]
+  const forwardEdges = new Set(forwardTraces.flatMap((trace) => trace.traversedEdgeIds))
+  const reverseEdges = new Set(reverseTraces.flatMap((trace) => trace.traversedEdgeIds))
   const forwardSubnets = new Set(
-    (forwardTrace?.hops ?? []).map((h) => h.subnetId).filter((s): s is string => Boolean(s)),
+    forwardTraces.flatMap((trace) => trace.hops).map((h) => h.subnetId).filter((s): s is string => Boolean(s)),
   )
   const reverseSubnets = new Set(
-    (reverseTrace?.hops ?? []).map((h) => h.subnetId).filter((s): s is string => Boolean(s)),
+    reverseTraces.flatMap((trace) => trace.hops).map((h) => h.subnetId).filter((s): s is string => Boolean(s)),
   )
 
   const hasActiveHighlights =
-    Boolean(forwardTrace || reverseTrace) || (showDiagnosticBadges && diagnostics.length > 0)
+    forwardTraces.length > 0 || reverseTraces.length > 0 ||
+    (showDiagnosticBadges && diagnostics.some((d) => d.severity !== 'info'))
 
   const clientToSvgDelta = (dx: number, dy: number) => {
     const svg = svgRef.current
@@ -341,7 +362,7 @@ export function AzureNetDiagram({
           const inForward = forwardEdges.has(peering.id)
           const inReverse = reverseEdges.has(peering.id)
           const hasFinding =
-            showDiagnosticBadges && diagnostics.some((d) => d.peeringId === peering.id)
+            showDiagnosticBadges && diagnostics.some((d) => d.peeringId === peering.id && d.severity !== 'info')
           const brokenAccess =
             !peering.enabled ||
             !peering.aToB.allowVirtualNetworkAccess ||
@@ -513,7 +534,6 @@ export function AzureNetDiagram({
                 e.stopPropagation()
                 const entity: AzSelectedEntity = { kind: 'er-link', linkId: link.id }
                 onSelect(entity)
-                onOpenEditorForEntity?.(entity)
               }}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -598,7 +618,6 @@ export function AzureNetDiagram({
                   linkId: grLink.id,
                 }
                 onSelect(entity)
-                onOpenEditorForEntity?.(entity)
               }}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -697,7 +716,6 @@ export function AzureNetDiagram({
                   connectionId: conn.id,
                 }
                 onSelect(entity)
-                onOpenEditorForEntity?.(entity)
               }}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -779,7 +797,6 @@ export function AzureNetDiagram({
                 e.stopPropagation()
                 const entity: AzSelectedEntity = { kind: 'site-link', siteLinkId: sLink.id }
                 onSelect(entity)
-                onOpenEditorForEntity?.(entity)
               }}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -834,7 +851,7 @@ export function AzureNetDiagram({
           if (!box) return null
           const isVnetSelected = selected.kind === 'vnet' && selected.vnetId === vnet.id
           const vnetFindings = showDiagnosticBadges
-            ? diagnostics.filter((d) => d.vnetId === vnet.id)
+            ? diagnostics.filter((d) => d.vnetId === vnet.id && d.severity !== 'info')
             : []
           const hasError = vnetFindings.some((f) => f.severity === 'error')
           const hasWarning = vnetFindings.some((f) => f.severity === 'warning')
@@ -847,6 +864,10 @@ export function AzureNetDiagram({
             <g
               key={vnet.id}
               data-testid={`aznet-vnet-${vnet.id}`}
+              tabIndex={0}
+              role="button"
+              aria-label={`VNet ${vnet.name}`}
+              onKeyDown={(e) => openKeyboardContext(e, { kind: 'vnet', vnetId: vnet.id })}
               onPointerDown={(e) => {
                 if (e.button === 2) return
                 e.stopPropagation()
@@ -1112,6 +1133,10 @@ export function AzureNetDiagram({
                   <g
                     key={subnet.id}
                     data-testid={`aznet-subnet-${subnet.id}`}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Subnet ${vnet.name} / ${subnet.name}`}
+                    onKeyDown={(e) => openKeyboardContext(e, { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })}
                     onClick={(e) => {
                       e.stopPropagation()
                       onSelect({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
@@ -1214,18 +1239,14 @@ export function AzureNetDiagram({
                             height={16}
                             rx={4}
                             fill={
-                              rt.disableBgpRoutePropagation
-                                ? '#fee2e2'
-                                : rt.disablePeeringRoutePropagation
-                                  ? '#fef3c7'
-                                  : '#e0e7ff'
+                              rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
+                                ? '#f1f5f9'
+                                : '#e0e7ff'
                             }
                             stroke={
-                              rt.disableBgpRoutePropagation
-                                ? '#fca5a5'
-                                : rt.disablePeeringRoutePropagation
-                                  ? '#fcd34d'
-                                  : '#a5b4fc'
+                              rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
+                                ? '#cbd5e1'
+                                : '#a5b4fc'
                             }
                             strokeWidth={0.8}
                           />
@@ -1236,11 +1257,9 @@ export function AzureNetDiagram({
                             fontSize={8}
                             fontWeight={700}
                             fill={
-                              rt.disableBgpRoutePropagation
-                                ? '#991b1b'
-                                : rt.disablePeeringRoutePropagation
-                                  ? '#92400e'
-                                  : '#3730a3'
+                              rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
+                                ? '#475569'
+                                : '#3730a3'
                             }
                           >
                             {badgeText}
@@ -1494,6 +1513,10 @@ export function AzureNetDiagram({
             <g
               key={site.id}
               data-testid={`aznet-site-${site.id}`}
+              tabIndex={0}
+              role="button"
+              aria-label={`On-premises site ${site.name}`}
+              onKeyDown={(e) => openKeyboardContext(e, { kind: 'site', siteId: site.id })}
               onPointerDown={(e) => {
                 if (e.button === 2) return
                 e.stopPropagation()

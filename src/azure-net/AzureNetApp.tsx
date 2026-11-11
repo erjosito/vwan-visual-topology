@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './azure-net.css'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
+import { CanvasOverlay } from '../CanvasOverlay'
 import { ErLocationInfoModal } from '../ErLocationInfoModal'
 import {
   ALL_KNOWN_AZURE_REGIONS,
@@ -18,16 +19,22 @@ import {
   type AzNetComparisonReport,
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
-import { runAzNetDiagnostics, type AzDiagnosticFinding } from './diagnostics'
+import {
+  analyzeAzNetConnectivity,
+  AZ_NET_PAIR_LIMIT,
+  runAzNetDiagnostics,
+  type AzConnectivityScope,
+  type AzDiagnosticFinding,
+} from './diagnostics'
+import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
+import { contains, ipv4 } from '../validation'
 import {
   checkErLocationAzureRegionAccess,
-  firstUsableIp,
   lookupSubnetEffectiveRoute,
   simulateAzNet,
   traceAzNetFlow,
   traceAzNetPair,
   type AzBgpRibEntry,
-  type AzEndpointRef,
 } from './engine'
 import {
   AZURE_NET_SAMPLES,
@@ -42,13 +49,6 @@ import {
 } from './model'
 
 type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor' | 'azure'
-
-interface EndpointOption {
-  key: string
-  label: string
-  ref: AzEndpointRef
-  defaultIp: string
-}
 
 interface AzNetSampleCatalogEntry {
   id: string
@@ -265,10 +265,38 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [topology, setTopology] = useState<AzNetTopology>(initialResolved.topology)
   const [history, setHistory] = useState<AzNetTopology[]>([])
   const [future, setFuture] = useState<AzNetTopology[]>([])
-  const [activeTab, setActiveTab] = useState<InspectorTab>('routes')
-  const [selected, setSelected] = useState<AzSelectedEntity>(() =>
+  const [activeTab, setActiveTab] = useState<InspectorTab | null>(null)
+  const [selected, setInspectedEntity] = useState<AzSelectedEntity>(() =>
     defaultSelected(initialResolved.topology),
   )
+  const [canvasSelection, setCanvasSelection] = useState(selected)
+  const setSelected = (entity: AzSelectedEntity) => {
+    setInspectedEntity(entity)
+    setCanvasSelection(entity)
+  }
+  const selectedExists = (() => {
+    if ('vnetId' in selected) {
+      const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
+      if (!vnet) return false
+      switch (selected.kind) {
+        case 'subnet': return vnet.subnets.some((s) => s.id === selected.subnetId)
+        case 'gateway': return vnet.gateways.some((g) => g.id === selected.gatewayId)
+        case 'appliance': return vnet.appliances.some((a) => a.id === selected.applianceId)
+        case 'route-server': return vnet.routeServer?.id === selected.routeServerId
+        default: return true
+      }
+    }
+    switch (selected.kind) {
+      case 'site': return topology.sites.some((s) => s.id === selected.siteId)
+      case 'er-location': return topology.erLocations.some((l) => l.id === selected.locationId)
+      case 'vwan-hub': return topology.vwanHubs.some((h) => h.id === selected.hubId)
+      case 'peering': return topology.vnetPeerings.some((p) => p.id === selected.peeringId)
+      case 'er-link': return topology.erLinks.some((l) => l.id === selected.linkId)
+      case 'er-global-reach-link': return topology.erGlobalReachLinks?.some((l) => l.id === selected.linkId)
+      case 'vpn-connection': return topology.vpnConnections.some((c) => c.id === selected.connectionId)
+      case 'site-link': return topology.siteLinks.some((l) => l.id === selected.siteLinkId)
+    }
+  })()
   const [erLocationModalState, setErLocationModalState] = useState<{
     open: boolean
     locationName?: string
@@ -319,47 +347,22 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }
 
   const simulation = useMemo(() => simulateAzNet(topology), [topology])
-  const diagnostics = useMemo(
-    () => runAzNetDiagnostics(topology, simulation),
-    [topology, simulation],
-  )
   const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
   const bicepExport = useMemo(() => generateAzNetBicep(topology), [topology])
 
-  // Build endpoint list for Path Tracer
-  const endpointOptions = useMemo<EndpointOption[]>(() => {
-    const opts: EndpointOption[] = []
-    for (const vnet of topology.vnets) {
-      for (const subnet of vnet.subnets) {
-        opts.push({
-          key: `subnet:${vnet.id}:${subnet.id}`,
-          label: `VNet Subnet · ${vnet.name} / ${subnet.name} (${subnet.prefix})`,
-          ref: { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id },
-          defaultIp: firstUsableIp(subnet.prefix),
-        })
-      }
-    }
-    for (const site of topology.sites) {
-      opts.push({
-        key: `site:${site.id}`,
-        label: `On-Prem Site · ${site.name} (${site.prefixes[0] ?? ''})`,
-        ref: { kind: 'site', siteId: site.id },
-        defaultIp: firstUsableIp(site.prefixes[0] ?? '172.16.1.0/24'),
-      })
-    }
-    opts.push({
-      key: 'internet:20.50.60.70',
-      label: '🌐 Public Internet (20.50.60.70)',
-      ref: { kind: 'internet', ip: '20.50.60.70' },
-      defaultIp: '20.50.60.70',
-    })
-    return opts
-  }, [topology])
+  const endpointOptions = useMemo(() => getAzNetEndpoints(topology), [topology])
 
   const [traceSourceKey, setTraceSourceKey] = useState<string>('')
   const [traceDestKey, setTraceDestKey] = useState<string>('')
   const [customDestIp, setCustomDestIp] = useState<string>('')
   const [traceActive, setTraceActive] = useState<boolean>(false)
+  const [groupTrace, setGroupTrace] = useState<{
+    anchorKey: string
+    direction: 'to' | 'from'
+    group: 'workload' | 'site'
+  } | null>(null)
+  const [analysisScope, setAnalysisScope] = useState<'pair' | 'onprem' | 'all'>('pair')
+  const [analysisRequest, setAnalysisRequest] = useState<AzConnectivityScope | null>(null)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
   const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState<boolean>(false)
@@ -393,14 +396,19 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }
 
   const resolvedSourceOpt =
-    endpointOptions.find((o) => o.key === traceSourceKey) ?? endpointOptions[1] ?? endpointOptions[0]
+    traceSourceKey ? endpointOptions.find((o) => o.key === traceSourceKey) : endpointOptions.find((o) => o.group === 'workload') ?? endpointOptions[0]
   const resolvedDestOpt =
-    endpointOptions.find((o) => o.key === traceDestKey) ??
+    traceDestKey ? endpointOptions.find((o) => o.key === traceDestKey) :
     endpointOptions[endpointOptions.length - 1] ??
     endpointOptions[0]
 
+  const customIpNumber = customDestIp.trim() ? ipv4(customDestIp.trim()) : undefined
+  const hasInvalidCustomIp = Boolean(customDestIp.trim()) && customIpNumber === undefined
+  const customIpInEndpoint = Boolean(resolvedDestOpt && customIpNumber !== undefined &&
+    contains(resolvedDestOpt.prefix, customIpNumber))
+
   const pairAnalysis = useMemo(() => {
-    if (!traceActive || !resolvedSourceOpt || !resolvedDestOpt) return null
+    if (!traceActive || groupTrace || hasInvalidCustomIp || !resolvedSourceOpt || !resolvedDestOpt) return null
     const destIp = customDestIp.trim() || resolvedDestOpt.defaultIp
     return traceAzNetPair(
       topology,
@@ -410,12 +418,61 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       resolvedDestOpt.ref,
       destIp,
     )
-  }, [traceActive, resolvedSourceOpt, resolvedDestOpt, customDestIp, topology, simulation])
+  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, topology, simulation])
 
   const singleFlowForCustomIp = useMemo(() => {
-    if (!traceActive || !resolvedSourceOpt || !customDestIp.trim()) return null
+    if (!traceActive || groupTrace || hasInvalidCustomIp || !resolvedSourceOpt || !resolvedDestOpt || !customDestIp.trim() || customIpInEndpoint) return null
     return traceAzNetFlow(topology, simulation, resolvedSourceOpt.ref, customDestIp.trim())
-  }, [traceActive, resolvedSourceOpt, customDestIp, topology, simulation])
+  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, customIpInEndpoint, topology, simulation])
+
+  const groupedPaths = useMemo(() => {
+    if (!traceActive || !groupTrace) return null
+    const anchor = endpointOptions.find((e) => e.key === groupTrace.anchorKey)
+    if (!anchor) return { paths: [], total: 0 }
+    const others = endpointOptions.filter((e) => e.group === groupTrace.group &&
+      azEndpointKey(e.ref) !== azEndpointKey(anchor.ref))
+    return {
+      total: others.length,
+      paths: others.slice(0, AZ_NET_PAIR_LIMIT).map((other) => {
+        const source = groupTrace.direction === 'to' ? anchor : other
+        const destination = groupTrace.direction === 'to' ? other : anchor
+        return { source, destination, pair: traceAzNetPair(topology, simulation, source.ref, source.defaultIp, destination.ref, destination.defaultIp) }
+      }),
+    }
+  }, [traceActive, groupTrace, endpointOptions, topology, simulation])
+
+  const analysis = useMemo(() => analysisRequest
+    ? analyzeAzNetConnectivity(topology, simulation, analysisRequest) : null,
+  [analysisRequest, topology, simulation])
+  const diagnostics = useMemo(() => {
+    const staticFindings = runAzNetDiagnostics(topology, simulation, { includePairAnalysis: false })
+    const flowFindings = analysis?.findings ?? []
+    return [...staticFindings.filter((f) =>
+      !flowFindings.some((flow) => f.category === 'gateway-subnet-missing-udr' &&
+        f.sampleFlow && flow.sampleFlow &&
+        azEndpointKey(flow.sampleFlow.source) === azEndpointKey(f.sampleFlow.source) &&
+        azEndpointKey(flow.sampleFlow.destination) === azEndpointKey(f.sampleFlow.destination) &&
+        flow.sampleFlow.destinationIp === f.sampleFlow.destinationIp)),
+    ...flowFindings]
+  }, [topology, simulation, analysis])
+  const actionableCount = diagnostics.filter((f) => f.severity !== 'info').length
+
+  const startPath = (source: AzEndpointOption, destination: AzEndpointOption) => {
+    setTraceSourceKey(source.key)
+    setTraceDestKey(destination.key)
+    setCustomDestIp('')
+    setGroupTrace(null)
+    setTraceActive(true)
+    setShowDiagnosticBadges(false)
+    setActiveTab('tracer')
+  }
+
+  const startAnalysis = () => {
+    setAnalysisRequest(analysisScope === 'pair'
+      ? { scope: 'pair', sourceKey: resolvedSourceOpt?.key ?? '', destinationKey: resolvedDestOpt?.key ?? '' }
+      : { scope: analysisScope })
+    setShowDiagnosticBadges(true)
+  }
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
     setSampleId(id)
@@ -423,6 +480,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     setHistory([])
     setFuture([])
     setTraceActive(false)
+    setGroupTrace(null)
+    setAnalysisRequest(null)
     setCustomDestIp('')
     setShowDiagnosticBadges(true)
     setSampleGalleryOpen(false)
@@ -565,8 +624,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           }
         }
       } else if (
-        (finding.category === 'bgp-propagation-blackhole' ||
-          finding.category === 'gateway-subnet-bgp-disabled') &&
+        finding.category === 'gateway-subnet-bgp-disabled' &&
         finding.subnetId
       ) {
         for (const vnet of draft.vnets) {
@@ -952,6 +1010,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     })
     if (selected?.kind === 'site' && selected.siteId === siteId) {
       setSelected(defaultSelected(topology))
+      setActiveTab(null)
     }
   }
 
@@ -967,6 +1026,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     })
     if (selected?.kind === 'er-location' && selected.locationId === locationId) {
       setSelected(defaultSelected(topology))
+      setActiveTab(null)
     }
   }
 
@@ -1034,6 +1094,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       )
     })
     setSelected(defaultSelected(topology))
+    setActiveTab(null)
   }
 
   const addFirewallToVnet = (vnetId: string, kind: 'azure-firewall' | 'nva-vm' = 'azure-firewall') => {
@@ -1200,6 +1261,52 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     })
   }
 
+  const pathContextActions = (anchors: AzEndpointOption[]): ContextAction[] => {
+    const forAnchor = (anchor: AzEndpointOption, direction: 'to' | 'from'): ContextAction[] => {
+      const peers = endpointOptions.filter((e) => azEndpointKey(e.ref) !== azEndpointKey(anchor.ref))
+      return [
+        ...(['workload', 'site'] as const).map((group) => ({
+          label: group === 'workload' ? 'All workload subnets' : 'All on-premises sites',
+          disabled: !peers.some((e) => e.group === group),
+          onSelect: () => {
+            setGroupTrace({ anchorKey: anchor.key, direction, group })
+            setTraceSourceKey(direction === 'to' ? anchor.key : '')
+            setTraceDestKey(direction === 'from' ? anchor.key : '')
+            setCustomDestIp('')
+            setTraceActive(true)
+            setShowDiagnosticBadges(false)
+            setActiveTab('tracer')
+          },
+        })),
+        ...peers.map((peer) => ({
+          label: peer.label,
+          onSelect: () => direction === 'to' ? startPath(anchor, peer) : startPath(peer, anchor),
+        })),
+        ...(!peers.length ? [{ label: 'No other endpoints configured', disabled: true }] : []),
+      ]
+    }
+    return [
+      ...(['to', 'from'] as const).map((direction) => ({
+        label: `Show path ${direction}`,
+        disabled: anchors.length === 0,
+        children: anchors.length === 1 ? forAnchor(anchors[0], direction) :
+          anchors.map((anchor) => ({ label: anchor.label, children: forAnchor(anchor, direction) })),
+      })),
+      {
+        label: 'Open path explorer',
+        disabled: anchors.length === 0,
+        onSelect: () => {
+          setTraceSourceKey(anchors[0].key)
+          setTraceDestKey('')
+          setGroupTrace(null)
+          setCustomDestIp('')
+          setTraceActive(false)
+          setActiveTab('tracer')
+        },
+      },
+    ]
+  }
+
   const contextMenuSpec: { title: string; actions: ContextAction[] } | null = (() => {
     if (!contextMenu) return null
     const target =
@@ -1267,6 +1374,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             label: 'Clear Path & Diagnostic Highlights',
             onSelect: () => {
               setTraceActive(false)
+              setGroupTrace(null)
               setShowDiagnosticBadges(false)
             },
           },
@@ -1294,6 +1402,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `VNet · ${vnet.name} (${vnet.region})`,
         actions: [
+          ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'subnet' &&
+            e.ref.vnetId === vnet.id && e.group === 'workload')),
           {
             label: 'Inspect Effective Routes',
             disabled: !firstSub,
@@ -1317,27 +1427,6 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                 },
               ]
             : []),
-          {
-            label: 'Set as Path Trace Source',
-            disabled: !firstSub,
-            onSelect: () => {
-              if (!firstSub) return
-              setTraceSourceKey(`subnet:${vnet.id}:${firstSub.id}`)
-              setTraceActive(true)
-              setActiveTab('tracer')
-            },
-          },
-          {
-            label: 'Set as Path Trace Destination',
-            disabled: !firstSub,
-            onSelect: () => {
-              if (!firstSub) return
-              setTraceDestKey(`subnet:${vnet.id}:${firstSub.id}`)
-              setCustomDestIp('')
-              setTraceActive(true)
-              setActiveTab('tracer')
-            },
-          },
           {
             label: 'Add Subnet to VNet',
             onSelect: () => {
@@ -1479,6 +1568,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Subnet · ${vnet.name} / ${subnet.name}`,
         actions: [
+          ...pathContextActions(endpointOptions.filter((e) => e.key === `subnet:${vnet.id}:${subnet.id}`)),
           {
             label: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...',
             onSelect: () => {
@@ -1491,23 +1581,6 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             onSelect: () => {
               setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
               setActiveTab('routes')
-            },
-          },
-          {
-            label: 'Set as Path Trace Source',
-            onSelect: () => {
-              setTraceSourceKey(`subnet:${vnet.id}:${subnet.id}`)
-              setTraceActive(true)
-              setActiveTab('tracer')
-            },
-          },
-          {
-            label: 'Set as Path Trace Destination',
-            onSelect: () => {
-              setTraceDestKey(`subnet:${vnet.id}:${subnet.id}`)
-              setCustomDestIp('')
-              setTraceActive(true)
-              setActiveTab('tracer')
             },
           },
           {
@@ -2138,28 +2211,12 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `On-Premises Site · ${site.name} (ASN ${site.asn})`,
         actions: [
+          ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'site' && e.ref.siteId === site.id)),
           {
             label: 'Inspect Site BGP Route Table',
             onSelect: () => {
               setSelected({ kind: 'site', siteId: site.id })
               setActiveTab('routes')
-            },
-          },
-          {
-            label: 'Set as Path Trace Source',
-            onSelect: () => {
-              setTraceSourceKey(`site:${site.id}`)
-              setTraceActive(true)
-              setActiveTab('tracer')
-            },
-          },
-          {
-            label: 'Set as Path Trace Destination',
-            onSelect: () => {
-              setTraceDestKey(`site:${site.id}`)
-              setCustomDestIp('')
-              setTraceActive(true)
-              setActiveTab('tracer')
             },
           },
           {
@@ -2630,7 +2687,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               setActiveTab('diagnostics')
             }}
           >
-            🩺 Diagnostics ({diagnostics.length})
+            🩺 Analyze & Diagnostics ({actionableCount})
           </button>
 
           <button
@@ -2746,27 +2803,15 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               <span>{currentSampleMeta?.summary ?? topology.subtitle}</span>
             </div>
             <div style={{ whiteSpace: 'nowrap', fontWeight: 600, color: '#2563eb' }}>
-              Click any subnet pill to inspect its Effective Routes
+              Right-click a node for routes, paths, or configuration
             </div>
           </div>
 
           <AzureNetDiagram
             topology={topology}
-            selected={selected}
+            selected={canvasSelection}
             onSelect={(entity) => {
-              setSelected(entity)
-              if (entity.kind === 'peering') {
-                setActiveTab('editor')
-              } else if (
-                entity.kind === 'subnet' ||
-                entity.kind === 'gateway' ||
-                entity.kind === 'route-server' ||
-                entity.kind === 'vwan-hub' ||
-                entity.kind === 'er-location' ||
-                entity.kind === 'site'
-              ) {
-                setActiveTab('routes')
-              }
+              setCanvasSelection(entity)
             }}
             onMoveNode={(nodeKind, nodeId, x, y) => {
               setTopology((prev) => {
@@ -2801,10 +2846,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             }}
             forwardTrace={singleFlowForCustomIp ?? pairAnalysis?.forward ?? null}
             reverseTrace={singleFlowForCustomIp ? null : (pairAnalysis?.reverse ?? null)}
+            additionalForwardTraces={groupedPaths?.paths.map((path) => path.pair.forward)}
+            additionalReverseTraces={groupedPaths?.paths.map((path) => path.pair.reverse)}
             diagnostics={diagnostics}
             showDiagnosticBadges={showDiagnosticBadges}
             onClearHighlights={() => {
               setTraceActive(false)
+              setGroupTrace(null)
               setShowDiagnosticBadges(false)
             }}
             onContextMenu={(target) => setContextMenu(target)}
@@ -2858,8 +2906,17 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           )}
         </section>
 
-        {/* Right: Docked Multi-Plane Inspector & Editor */}
-        <aside className="aznet-inspector-column">
+        {activeTab && (selectedExists || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
+          title={{
+            routes: 'Effective routes',
+            tracer: 'Path explorer',
+            diagnostics: 'Topology analysis',
+            editor: 'Configure selected object',
+            azure: 'Azure & Bicep',
+          }[activeTab]}
+          className="aznet-inspector-window"
+          onClose={() => setActiveTab(null)}
+        >
           <nav className="aznet-tabs">
             <button
               type="button"
@@ -2883,7 +2940,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               data-testid="aznet-tab-diagnostics"
               onClick={() => setActiveTab('diagnostics')}
             >
-              Diagnostics ({diagnostics.length})
+              Diagnostics ({actionableCount})
             </button>
             <button
               type="button"
@@ -2971,7 +3028,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           <span
                             className={`aznet-badge ${
-                              inspectedSubnetTable.bgpPropagationDisabled ? 'error' : 'active'
+                              inspectedSubnetTable.bgpPropagationDisabled ? 'info' : 'active'
                             }`}
                           >
                             BGP Propagation:{' '}
@@ -2979,7 +3036,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           </span>
                           {inspectedSubnetTable.peeringPropagationDisabled && (
                             <span
-                              className="aznet-badge warning"
+                              className="aznet-badge info"
                               data-testid="aznet-peering-propagation-badge"
                             >
                               Peering Propagation: Disabled (Preview)
@@ -3095,14 +3152,15 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             marginTop: 10,
                             padding: 8,
                             borderRadius: 6,
-                            background: '#fef2f2',
-                            border: '1px solid #fecaca',
+                            background: '#f1f5f9',
+                            border: '1px solid #cbd5e1',
                             fontSize: 11.5,
                           }}
                           data-testid="aznet-suppressed-bgp-banner"
                         >
-                          <strong style={{ color: '#991b1b' }}>
-                            {inspectedSubnetTable.suppressedBgpRoutes.length} BGP route(s) blocked by
+                          <strong style={{ color: '#475569' }}>
+                            {inspectedSubnetTable.suppressedBgpRoutes.length} BGP route(s) suppressed by configuration:
+                            {' '}
                             disableBgpRoutePropagation=true:
                           </strong>
                           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
@@ -3121,13 +3179,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             marginTop: 10,
                             padding: 8,
                             borderRadius: 6,
-                            background: '#fffbeb',
-                            border: '1px solid #fde68a',
+                            background: '#f1f5f9',
+                            border: '1px solid #cbd5e1',
                             fontSize: 11.5,
                           }}
                           data-testid="aznet-suppressed-peering-banner"
                         >
-                          <strong style={{ color: '#92400e' }}>
+                          <strong style={{ color: '#475569' }}>
                             {inspectedSubnetTable.suppressedPeeringRoutes.length} VNetPeering
                             route(s) suppressed by disablePeeringRoutePropagation=true (Preview):
                           </strong>
@@ -3198,6 +3256,26 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             {activeTab === 'tracer' && (
               <div className="aznet-card" data-testid="aznet-path-tracer-panel">
                 <h3>End-to-End Packet & Stateful Symmetry Tracer</h3>
+                <p className="aznet-path-legend">Forward: green · Return: amber/dashed. Representative IP per prefix; firewall policy and exhaustive ECMP are not simulated.</p>
+                {groupedPaths && (
+                  <div data-testid="aznet-group-path-results">
+                    <strong>
+                      {groupTrace?.direction === 'to' ? 'Paths from' : 'Paths to'}{' '}
+                      {endpointOptions.find((e) => e.key === groupTrace?.anchorKey)?.label ?? 'Removed endpoint'}
+                    </strong>
+                    <p>{groupedPaths.paths.length} of {groupedPaths.total} paths shown
+                      {groupedPaths.total > AZ_NET_PAIR_LIMIT ? ' — incomplete; choose an individual endpoint for remaining paths.' : '.'}
+                    </p>
+                    {groupedPaths.paths.length === 0 && <p>No matching endpoints or prefixes configured.</p>}
+                    {groupedPaths.paths.map(({ source, destination, pair }) => (
+                      <button key={`${source.key}:${destination.key}`} type="button" className="aznet-group-path aznet-btn"
+                        onClick={() => startPath(source, destination)}>
+                        {source.label} → {destination.label}: Forward {pair.forward.status}, Return {pair.reverse.status}
+                        {!pair.symmetricInspection && pair.forward.status === 'delivered' && pair.reverse.status === 'delivered' ? ' — asymmetric inspection' : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="aznet-field-grid">
                   <label className="aznet-field">
                     <span>Source Endpoint</span>
@@ -3207,6 +3285,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       value={resolvedSourceOpt?.key ?? ''}
                       onChange={(e) => {
                         setTraceSourceKey(e.target.value)
+                        setGroupTrace(null)
                         setTraceActive(true)
                       }}
                     >
@@ -3226,6 +3305,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       value={resolvedDestOpt?.key ?? ''}
                       onChange={(e) => {
                         setTraceDestKey(e.target.value)
+                        setGroupTrace(null)
                         setCustomDestIp('')
                         setTraceActive(true)
                       }}
@@ -3262,13 +3342,17 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     type="button"
                     className="aznet-btn aznet-btn-primary"
                     data-testid="aznet-run-trace-btn"
-                    onClick={() => setTraceActive(true)}
+                    disabled={hasInvalidCustomIp || !resolvedSourceOpt || !resolvedDestOpt}
+                    onClick={() => { setGroupTrace(null); setTraceActive(true) }}
                   >
                     ▶ Trace Flow
                   </button>
                 </div>
+                {hasInvalidCustomIp && <p role="alert">Enter a valid IPv4 destination address.</p>}
+                {(!resolvedSourceOpt || !resolvedDestOpt) && <p>Choose existing source and destination endpoints. A previously selected endpoint may have been removed.</p>}
+                {singleFlowForCustomIp && <p>Custom IP is outside the selected destination prefix. Only the forward route is known; select the owning endpoint to analyze the return path.</p>}
 
-                {pairAnalysis && (
+                {pairAnalysis && resolvedSourceOpt && (
                   <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {/* Symmetry Banner */}
                     {!singleFlowForCustomIp && (
@@ -3300,7 +3384,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         pairAnalysis.reverse.status !== 'delivered'
                           ? `✕ Flow Blocked — Forward: ${pairAnalysis.forward.status}, Reverse: ${pairAnalysis.reverse.status}`
                           : pairAnalysis.symmetricInspection
-                            ? '✓ Symmetric Path — Forward and Return flows traverse identical stateful inspection appliances.'
+                            ? '✓ Symmetric Path — Forward and Return flows use the same stateful inspection appliances (if any); graphical paths may differ.'
                             : `⚠ Asymmetric Firewall Bypass Detected — ${pairAnalysis.asymmetricBypassApplianceNames.join(', ')} is traversed in only one direction!`}
                       </div>
                     )}
@@ -3382,7 +3466,52 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             {/* TAB 3: AUTOMATED ROOT-CAUSE DIAGNOSTICS */}
             {activeTab === 'diagnostics' && (
               <div className="aznet-card" data-testid="aznet-diagnostics-panel">
-                <h3>Root-Cause Azure Networking Diagnostics ({diagnostics.length})</h3>
+                <h3>Root-Cause Azure Networking Diagnostics ({actionableCount} actionable)</h3>
+                <p>Choose the flows that are expected to communicate. Isolated or excluded pairs are not assumed to require connectivity. Results update when the topology changes.</p>
+                <label className="aznet-field">
+                  <span>Expected connectivity scope</span>
+                  <select className="aznet-select" data-testid="aznet-analysis-scope" value={analysisScope}
+                    onChange={(e) => { setAnalysisScope(e.target.value as typeof analysisScope); setAnalysisRequest(null) }}>
+                    <option value="pair">Selected source / destination pair</option>
+                    <option value="onprem">All workload subnets ↔ on-premises prefixes</option>
+                    <option value="all">All workload pairs and workload ↔ on-premises prefixes</option>
+                  </select>
+                </label>
+                {analysisScope === 'pair' && <div className="aznet-field-grid">
+                  <label className="aznet-field"><span>Expected source</span>
+                    <select className="aznet-select" data-testid="aznet-analysis-source" value={resolvedSourceOpt?.key ?? ''}
+                      onChange={(e) => { setTraceSourceKey(e.target.value); setGroupTrace(null); setTraceActive(false); setAnalysisRequest(null) }}>
+                      <option value="">Select endpoint</option>
+                      {endpointOptions.filter((e) => e.group !== 'internet').map((e) => <option key={e.key} value={e.key}>{e.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="aznet-field"><span>Expected destination</span>
+                    <select className="aznet-select" data-testid="aznet-analysis-destination" value={resolvedDestOpt?.group === 'internet' ? '' : resolvedDestOpt?.key ?? ''}
+                      onChange={(e) => { setTraceDestKey(e.target.value); setCustomDestIp(''); setGroupTrace(null); setTraceActive(false); setAnalysisRequest(null) }}>
+                      <option value="">Select endpoint</option>
+                      {endpointOptions.filter((e) => e.group !== 'internet').map((e) => <option key={e.key} value={e.key}>{e.label}</option>)}
+                    </select>
+                  </label>
+                </div>}
+                <div className="aznet-analysis-actions">
+                  <button type="button" className="aznet-btn aznet-btn-primary" data-testid="aznet-analyze-connectivity"
+                    disabled={analysisScope === 'pair' && (!resolvedSourceOpt || !resolvedDestOpt ||
+                      resolvedSourceOpt.group === 'internet' || resolvedDestOpt.group === 'internet' ||
+                      azEndpointKey(resolvedSourceOpt.ref) === azEndpointKey(resolvedDestOpt.ref))}
+                    onClick={startAnalysis}>Analyze expected connectivity</button>
+                  {analysis && <button type="button" className="aznet-btn" onClick={() => setAnalysisRequest(null)}>Clear analysis scope</button>}
+                </div>
+                {analysis ? <div data-testid="aznet-analysis-coverage" role="status">
+                  <p>Analyzed scope: {analysisRequest?.scope === 'pair'
+                    ? `${endpointOptions.find((e) => e.key === analysisRequest.sourceKey)?.label ?? 'Removed source'} ↔ ${endpointOptions.find((e) => e.key === analysisRequest.destinationKey)?.label ?? 'Removed destination'}`
+                    : analysisRequest?.scope === 'onprem' ? 'All workload / on-premises pairs' : 'All workload and on-premises pairs'}.</p>
+                  {analysis.complete ? 'Analysis complete' : 'Analysis incomplete'}: checked {analysis.checked} of {analysis.total} representative pairs
+                  {' '}({analysis.checked * 2} directional traces; limit {AZ_NET_PAIR_LIMIT} pairs).
+                  {analysis.checked === 0 ? ' No eligible endpoint pairs were checked; connectivity has not been verified.' :
+                    analysis.findings.length === 0 && analysis.complete ? ' No connectivity failures or stateful-inspection asymmetry found in this scope.' : ''}
+                  {!analysis.complete && ' Narrow the scope or choose an individual pair; unchecked pairs are not verified.'}
+                  <p>One representative IP per subnet/site prefix. Not exhaustive address-space or ECMP coverage; firewall rules, NSGs, and host/service availability are outside this routing model.</p>
+                </div> : <p data-testid="aznet-analysis-not-run">Connectivity has not been analyzed. Configuration information below does not prove a connectivity failure.</p>}
                 {validationErrors.length > 0 && (
                   <div
                     style={{
@@ -3411,8 +3540,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     }}
                     data-testid="aznet-diagnostics-clean"
                   >
-                    ✓ No routing blackholes, peering flag traps, or asymmetric firewall bypasses
-                    detected!
+                    No configuration findings. Use Analyze expected connectivity to verify the required flows.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -3441,25 +3569,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 className="aznet-btn"
                                 onClick={() => {
                                   const sf = finding.sampleFlow!
-                                  const sKey =
-                                    sf.source.kind === 'subnet'
-                                      ? `subnet:${sf.source.vnetId}:${sf.source.subnetId}`
-                                      : sf.source.kind === 'internet'
-                                        ? 'internet:20.50.60.70'
-                                        : sf.source.kind === 'site'
-                                          ? `site:${sf.source.siteId}`
-                                          : ''
-                                  const dKey =
-                                    sf.destination.kind === 'subnet'
-                                      ? `subnet:${sf.destination.vnetId}:${sf.destination.subnetId}`
-                                      : sf.destination.kind === 'internet'
-                                        ? 'internet:20.50.60.70'
-                                        : sf.destination.kind === 'site'
-                                          ? `site:${sf.destination.siteId}`
-                                          : ''
-                                  setTraceSourceKey(sKey)
-                                  setTraceDestKey(dKey)
-                                  setCustomDestIp(sf.destinationIp === '8.8.8.8' ? '8.8.8.8' : '')
+                                  const source = endpointOptions.find((e) => e.key === finding.sourceKey) ??
+                                    endpointOptions.find((e) => azEndpointKey(e.ref) === azEndpointKey(sf.source) && contains(e.prefix, ipv4(sf.sourceIp) ?? -1))
+                                  const destination = endpointOptions.find((e) => e.key === finding.destinationKey) ??
+                                    endpointOptions.find((e) => azEndpointKey(e.ref) === azEndpointKey(sf.destination) && contains(e.prefix, ipv4(sf.destinationIp) ?? -1))
+                                  setTraceSourceKey(source?.key ?? azEndpointKey(sf.source))
+                                  setTraceDestKey(destination?.key ?? azEndpointKey(sf.destination))
+                                  setCustomDestIp(destination?.defaultIp === sf.destinationIp ? '' : sf.destinationIp)
+                                  setGroupTrace(null)
                                   setTraceActive(true)
                                   setActiveTab('tracer')
                                 }}
@@ -3467,7 +3584,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 🔍 Trace Flow
                               </button>
                             )}
-                            {finding.category !== 'private-endpoint-udr-bypass' &&
+                            {finding.severity !== 'info' &&
+                              finding.category !== 'connectivity-failure' &&
+                              finding.category !== 'private-endpoint-udr-bypass' &&
                               finding.category !== 'peering-non-transitive-next-hop' &&
                               finding.category !== 'asymmetric-firewall-bypass' && (
                                 <button
@@ -5552,7 +5671,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               </>
             )}
           </div>
-        </aside>
+        </CanvasOverlay>}
       </div>
 
       {sampleGalleryOpen && (

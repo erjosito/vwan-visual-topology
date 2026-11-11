@@ -1,4 +1,24 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { AZURE_NET_SAMPLES, type AzNetTopology } from '../src/azure-net/model'
+
+async function openNodeMenu(page: Page, testId: string) {
+  await page.getByTestId(testId).focus()
+  await page.keyboard.press('Shift+F10')
+}
+
+async function inspectSubnet(page: Page, subnetId: string) {
+  await openNodeMenu(page, `aznet-subnet-${subnetId}`)
+  await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
+}
+
+async function loadTopology(page: Page, topology: AzNetTopology) {
+  await page.addInitScript((value) => {
+    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
+  }, topology)
+  await page.goto('/?mode=hub-spoke')
+}
 
 test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   test('renders compound VNet diagram, Subnet Effective Routes, Symmetry Tracer, and Auto-Fix Diagnostics', async ({
@@ -13,14 +33,14 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
 
     // Click Spoke-Data subnet and verify Private Endpoint /32 LPM override in Effective Route Table
-    await page.getByTestId('aznet-subnet-sub-data-db').click()
+    await inspectSubnet(page, 'sub-data-db')
     await page.getByTestId('aznet-lpm-input').fill('10.2.2.15')
     await expect(page.getByTestId('aznet-effective-route-table')).toContainText('InterfaceEndpoint')
 
     // Switch to Path & Symmetry Tracer and inspect asymmetric firewall bypass between Spoke-Data and Munich Core DC
     await page.getByTestId('aznet-tab-tracer').click()
     await page.getByTestId('aznet-trace-source-select').selectOption('subnet:vnet-spoke-data:sub-data-db')
-    await page.getByTestId('aznet-trace-dest-select').selectOption('site:site-munich-hq')
+    await page.getByTestId('aznet-trace-dest-select').selectOption('site:site-munich-hq:172.16.10.0/24')
     await expect(page.getByTestId('aznet-symmetry-verdict')).toContainText('Asymmetric')
 
     // Switch to Root-Cause Diagnostics and click Auto-Fix for GatewaySubnet missing UDR
@@ -37,7 +57,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // Switch to Sample 2 (Azure Route Server + SD-WAN NVA)
     await page.getByTestId('aznet-sample-select').selectOption('ars-sdwan-nva-coexistence')
     await page.getByTestId('aznet-tab-diagnostics').click()
-    await expect(page.getByTestId('aznet-finding-bgp-propagation-blackhole')).toBeVisible()
+    await expect(page.getByTestId('aznet-finding-bgp-routes-suppressed')).toBeVisible()
 
     // Open Sample Gallery modal and load the 5th flagship all-features showcase topology
     await page.getByTestId('aznet-open-sample-gallery-btn').click()
@@ -74,7 +94,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('unified-mode-pill')).toHaveText('Full Hybrid')
 
     // 2. Public Internet endpoint in Path Tracer + Subnet Default Outbound Access toggle
-    await page.getByTestId('aznet-tab-tracer').click()
+    await openNodeMenu(page, 'aznet-subnet-sub-app-web')
+    await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
     await page.getByTestId('aznet-trace-source-select').selectOption('subnet:vnet-spoke-app:sub-app-web')
     await page.getByTestId('aznet-trace-dest-select').selectOption('internet:20.50.60.70')
     await expect(page.getByTestId('aznet-symmetry-verdict')).toBeVisible()
@@ -89,8 +110,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page).toHaveURL(/#s=/)
 
     // 5. Optional diagram node labels in AzNet Configure tab & vWAN mode (#47 scoped to selected node)
-    await page.getByTestId('aznet-vnet-vnet-hub-weu').click()
-    await page.getByTestId('aznet-tab-editor').click()
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
     const hubLabelInput = page.getByTestId('aznet-node-label-input-vnet-hub-weu')
     await expect(hubLabelInput).toBeVisible()
     await hubLabelInput.fill('Transit Inspection Hub')
@@ -168,7 +189,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('aznet-site-site-custom-3')).toBeVisible()
 
     // #37: Delete the newly added site from the Configure tab
-    await page.getByTestId('aznet-tab-editor').click()
+    await openNodeMenu(page, 'aznet-site-site-custom-3')
+    await page.getByRole('menuitem', { name: 'Configure Site & Labels', exact: true }).click()
     await page.getByTestId('aznet-delete-site-site-custom-3').click()
     await expect(page.getByTestId('aznet-site-site-custom-3')).toHaveCount(0)
   })
@@ -197,8 +219,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('er-location-info-modal')).toHaveCount(0)
 
     // #46 & #47: Select vnet-custom-1 and verify scoped Configure tab + VNet region editing
-    await page.getByTestId('aznet-vnet-vnet-custom-1').click()
-    await page.getByTestId('aznet-tab-editor').click()
+    await openNodeMenu(page, 'aznet-vnet-vnet-custom-1')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
     await expect(page.getByTestId('aznet-editor-scope-banner')).toContainText('Spoke-VNet-1')
     await page.getByTestId('aznet-vnet-region-vnet-custom-1').fill('Sweden Central')
     await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toContainText('Sweden Central')
@@ -211,6 +233,124 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('aznet-subnet-snet-vnet-custom-1-2')).toContainText('snet-app-tier')
     await page.getByTestId('aznet-delete-subnet-snet-vnet-custom-1-2').click()
     await expect(page.getByTestId('aznet-subnet-snet-vnet-custom-1-2')).toHaveCount(0)
+  })
+
+  test('opens movable inspectors only on request, preserves edits when closed, and uses the full canvas', async ({ page }) => {
+    await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await page.getByTestId('aznet-subnet-sub-app-web').click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    const canvas = await page.getByTestId('aznet-diagram-svg').boundingBox()
+    expect(canvas!.width).toBeGreaterThan(1100)
+
+    await openNodeMenu(page, 'aznet-subnet-sub-app-web')
+    await page.getByRole('menuitem', { name: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'Configure selected object', exact: true })
+    await expect(dialog).toBeVisible()
+    const before = await dialog.boundingBox()
+    const header = await dialog.locator('.overlay-heading h2').boundingBox()
+    await page.mouse.move(header!.x + 20, header!.y + 5)
+    await page.mouse.down()
+    await page.mouse.move(header!.x - 120, header!.y + 30, { steps: 6 })
+    await page.mouse.up()
+    const after = await dialog.boundingBox()
+    expect(after!.x).toBeLessThan(before!.x - 100)
+    await page.getByTestId('aznet-subnet-name-sub-app-web').fill('Application Tier')
+    await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await openNodeMenu(page, 'aznet-subnet-sub-app-web')
+    await page.getByRole('menuitem', { name: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...', exact: true }).click()
+    await expect(page.getByTestId('aznet-subnet-name-sub-app-web')).toHaveValue('Application Tier')
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await page.setViewportSize({ width: 640, height: 900 })
+    await inspectSubnet(page, 'sub-app-web')
+    const mobileWindow = await page.getByRole('dialog', { name: 'Effective routes', exact: true }).boundingBox()
+    expect(mobileWindow!.x).toBeGreaterThanOrEqual(0)
+    expect(mobileWindow!.x + mobileWindow!.width).toBeLessThanOrEqual(640)
+  })
+
+  test('matches VWAN Show path to/from semantics, offers prefixes and groups, and clears stale paths', async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES[0].topology)
+    topology.sites.find((s) => s.id === 'site-munich-hq')!.prefixes.push('172.20.0.0/24')
+    topology.vnets.find((v) => v.id === 'vnet-spoke-app')!.subnets.push({
+      id: 'alternate-workload', name: 'Alternate workload', prefix: '10.1.3.0/24',
+    })
+    await loadTopology(page, topology)
+    await openNodeMenu(page, 'aznet-subnet-sub-app-web')
+    await page.getByRole('menuitem', { name: 'Show path to', exact: true }).click()
+    await page.getByRole('menuitem', { name: /On-Prem Site · Munich Core DC \(172\.20\.0\.0\/24\)/ }).click()
+    await expect(page.getByTestId('aznet-trace-source-select')).toHaveValue('subnet:vnet-spoke-app:sub-app-web')
+    await expect(page.getByTestId('aznet-trace-dest-select')).toHaveValue('site:site-munich-hq:172.20.0.0/24')
+    await expect(page.getByTestId('aznet-forward-hops')).toContainText('172.20.')
+    await expect(page.getByTestId('aznet-reverse-hops')).toBeVisible()
+    await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+
+    await openNodeMenu(page, 'aznet-site-site-munich-hq')
+    await page.getByRole('menuitem', { name: 'Show path from', exact: true }).click()
+    await page.getByRole('menuitem', { name: /On-Prem Site · Munich Core DC \(172\.16\.10\.0\/24\)/ }).last().click()
+    await page.getByRole('menuitem', { name: /VNet Subnet · VNet-Spoke-App \/ snet-app-tier/ }).click()
+    await expect(page.getByTestId('aznet-trace-source-select')).toHaveValue('subnet:vnet-spoke-app:sub-app-web')
+    await expect(page.getByTestId('aznet-trace-dest-select')).toHaveValue('site:site-munich-hq:172.16.10.0/24')
+    await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+
+    await openNodeMenu(page, 'aznet-subnet-sub-app-web')
+    await page.getByRole('menuitem', { name: 'Show path from', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'All on-premises sites', exact: true }).click()
+    await expect(page.getByTestId('aznet-group-path-results')).toContainText('Paths to')
+    await expect(page.getByTestId('aznet-group-path-results')).toContainText('Return')
+    await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+    await page.getByRole('button', { name: /Clear.*Highlights/i }).click()
+    await openNodeMenu(page, 'aznet-subnet-sub-app-web')
+    await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
+    await expect(page.getByTestId('aznet-group-path-results')).toHaveCount(0)
+    await expect(page.getByTestId('aznet-forward-hops')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+    await openNodeMenu(page, 'aznet-vnet-vnet-spoke-app')
+    await page.getByRole('menuitem', { name: 'Show path to', exact: true }).click()
+    await page.getByRole('menuitem', { name: /VNet Subnet · VNet-Spoke-App \/ Alternate workload/ }).click()
+    await page.getByRole('menuitem', { name: /^On-Prem Site · Munich Core DC \(172\.20\.0\.0\/24\)$/ }).click()
+    await expect(page.getByTestId('aznet-trace-source-select')).toHaveValue('subnet:vnet-spoke-app:alternate-workload')
+    await openNodeMenu(page, 'aznet-site-site-munich-hq')
+    await page.getByRole('menuitem', { name: 'Delete On-Premises Site', exact: true }).click()
+    await expect(page.getByTestId('aznet-forward-hops')).toHaveCount(0)
+    await expect(page.getByTestId('aznet-path-tracer-panel')).toContainText('previously selected endpoint may have been removed')
+  })
+
+  test('shows neutral route suppression and analyzes expected connectivity with live repair and trace navigation', async ({ page }) => {
+    const topology = JSON.parse(readFileSync(resolve('samples', 'azure-net', 'uc1-hub-spoke-nva-ars-baseline.json'), 'utf8')) as AzNetTopology
+    const table = topology.udrTables.find((t) => t.id === 'rt-spoke1')!
+    table.disableBgpRoutePropagation = true
+    table.routes.push({
+      id: 'expected-site', name: 'Site via NVA', prefix: '10.250.0.0/16',
+      nextHopType: 'VirtualAppliance', nextHopIp: '10.100.2.4', enabled: true,
+    })
+    await loadTopology(page, topology)
+    await expect(page.getByTestId('aznet-finding-badge-vnet-spoke1')).toHaveCount(0)
+    await expect(page.getByTestId('aznet-subnet-rt-badge-sub-spoke1-work').locator('rect')).toHaveAttribute('fill', '#f1f5f9')
+    await inspectSubnet(page, 'sub-spoke1-work')
+    await expect(page.getByTestId('aznet-suppressed-bgp-banner')).toContainText('suppressed by configuration')
+    await expect(page.getByTestId('aznet-suppressed-bgp-banner')).toHaveCSS('background-color', 'rgb(241, 245, 249)')
+    await page.getByTestId('aznet-tab-diagnostics').click()
+    await page.getByTestId('aznet-analysis-source').selectOption('subnet:vnet-spoke1:sub-spoke1-work')
+    await page.getByTestId('aznet-analysis-destination').selectOption('site:site-branch1:10.250.0.0/16')
+    await page.getByTestId('aznet-analyze-connectivity').click()
+    await expect(page.getByTestId('aznet-analysis-coverage')).toContainText('checked 1 of 1')
+    await expect(page.getByTestId('aznet-finding-connectivity-failure')).toHaveCount(0)
+
+    await page.getByTestId('aznet-tab-editor').click()
+    await page.getByTestId('aznet-select-peering-peer-hub-spoke1').click()
+    const peering = page.getByTestId('aznet-peering-card-peer-hub-spoke1')
+    await peering.getByLabel('Use Remote Gateways', { exact: true }).last().uncheck()
+    await page.getByTestId('aznet-tab-diagnostics').click()
+    const failure = page.getByTestId('aznet-finding-connectivity-failure')
+    await expect(failure).toContainText('Return')
+    await failure.getByRole('button', { name: /Trace Flow/ }).click()
+    await expect(page.getByTestId('aznet-symmetry-verdict')).toContainText('Flow Blocked')
+    await page.getByTestId('aznet-tab-editor').click()
+    await peering.getByLabel('Use Remote Gateways', { exact: true }).last().check()
+    await page.getByTestId('aznet-tab-diagnostics').click()
+    await expect(failure).toHaveCount(0)
   })
 })
 
