@@ -109,6 +109,14 @@ for (const theme of ['light', 'dark']) {
         await expect(page.getByTestId('aznet-peering-hover-card')).toBeVisible()
         await readable(page.getByTestId('aznet-peering-hover-card'))
         await page.mouse.move(0, 0)
+        await page.getByTestId('aznet-vnet-vnet-hub-weu').focus()
+        await page.keyboard.press('Shift+F10')
+        await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+        const gatewayPrefixes = page.getByRole('textbox', { name: /^Advertised gateway prefixes / }).first()
+        await expect(gatewayPrefixes).toBeVisible()
+        await gatewayPrefixes.fill('10.0.0.0/8')
+        await readable(page.locator('.canvas-overlay').last())
+        await page.locator('.canvas-overlay').last().locator('.overlay-heading button').filter({ hasText: 'Close' }).click()
       }
 
       await page.getByTestId(mode === 'vwan' ? 'vwan-topbar-er-locations-btn' : 'aznet-open-er-locations-btn').click()
