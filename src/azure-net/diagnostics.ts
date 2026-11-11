@@ -870,7 +870,7 @@ export function runAzNetDiagnostics(
 }
 
 export type AzConnectivityScope =
-  | { scope: 'all' | 'onprem' }
+  | { scope: 'all' | 'onprem' | 'landscape' }
   | { scope: 'pair'; sourceKey: string; destinationKey: string }
 
 export const AZ_NET_PAIR_LIMIT = 200
@@ -943,11 +943,20 @@ export function analyzeAzNetConnectivity(
     total = 1
     check(a, b)
   } else {
+    const includeWorkloadPairs = scope.scope !== 'onprem'
+    const siteCounts = new Map<string, number>()
+    for (const site of sites) {
+      const key = azEndpointKey(site.ref)
+      siteCounts.set(key, (siteCounts.get(key) ?? 0) + 1)
+    }
+    const sitePairCount = scope.scope === 'landscape'
+      ? (sites.length * (sites.length - 1) - [...siteCounts.values()].reduce((sum, count) => sum + count * (count - 1), 0)) / 2
+      : 0
     total = workloads.length * sites.length +
-      (scope.scope === 'all' ? workloads.length * (workloads.length - 1) / 2 : 0)
+      (includeWorkloadPairs ? workloads.length * (workloads.length - 1) / 2 : 0) + sitePairCount
     for (let i = 0; i < workloads.length; i++) {
       if (checked >= budget) break
-      if (scope.scope === 'all') {
+      if (includeWorkloadPairs) {
         for (let j = i + 1; j < workloads.length && checked < budget; j++) {
           check(workloads[i], workloads[j])
         }
@@ -955,6 +964,13 @@ export function analyzeAzNetConnectivity(
       for (const site of sites) {
         if (checked >= budget) break
         check(workloads[i], site)
+      }
+    }
+    if (sitePairCount > 0) {
+      for (let i = 0; i < sites.length && checked < budget; i++) {
+        for (let j = i + 1; j < sites.length && checked < budget; j++) {
+          if (azEndpointKey(sites[i].ref) !== azEndpointKey(sites[j].ref)) check(sites[i], sites[j])
+        }
       }
     }
   }

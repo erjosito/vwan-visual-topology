@@ -363,8 +363,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     direction: 'to' | 'from'
     group: 'workload' | 'site'
   } | null>(null)
-  const [analysisScope, setAnalysisScope] = useState<'pair' | 'onprem' | 'all'>('pair')
+  const [analysisScope, setAnalysisScope] = useState<AzConnectivityScope['scope']>('pair')
   const [analysisRequest, setAnalysisRequest] = useState<AzConnectivityScope | null>(null)
+  const [reviewFindingIds, setReviewFindingIds] = useState<string[] | null>(null)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
   const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null)
   const [shareCopied, setShareCopied] = useState<boolean>(false)
@@ -458,6 +459,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     ...flowFindings]
   }, [topology, simulation, analysis])
   const actionableCount = diagnostics.filter((f) => f.severity !== 'info').length
+  const visibleDiagnostics = reviewFindingIds
+    ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics
+  const connectivityFailures = analysis?.findings.filter((f) => f.category === 'connectivity-failure').length ?? 0
+  const statefulAsymmetries = analysis?.findings.filter((f) => f.category === 'asymmetric-firewall-bypass').length ?? 0
 
   const startPath = (source: AzEndpointOption, destination: AzEndpointOption) => {
     setTraceSourceKey(source.key)
@@ -474,6 +479,17 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       ? { scope: 'pair', sourceKey: resolvedSourceOpt?.key ?? '', destinationKey: resolvedDestOpt?.key ?? '' }
       : { scope: analysisScope })
     setShowDiagnosticBadges(true)
+    setReviewFindingIds(null)
+  }
+
+  const checkRouting = () => {
+    setAnalysisScope('landscape')
+    setAnalysisRequest({ scope: 'landscape' })
+    setReviewFindingIds(null)
+    setShowDiagnosticBadges(true)
+    setTraceActive(false)
+    setGroupTrace(null)
+    setActiveTab(null)
   }
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
@@ -484,6 +500,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     setTraceActive(false)
     setGroupTrace(null)
     setAnalysisRequest(null)
+    setReviewFindingIds(null)
     setCustomDestIp('')
     setShowDiagnosticBadges(true)
     setSampleGalleryOpen(false)
@@ -2706,13 +2723,23 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           <button
             type="button"
             className="aznet-btn aznet-btn-primary"
+            data-testid="aznet-check-routing-btn"
+            onClick={checkRouting}
+            title="Check connectivity and stateful routing symmetry across all workload subnets and on-premises sites"
+          >
+            Check routing
+          </button>
+          <button
+            type="button"
+            className="aznet-btn"
             data-testid="aznet-run-diagnostics-btn"
             onClick={() => {
               setShowDiagnosticBadges(true)
+              setReviewFindingIds(null)
               setActiveTab('diagnostics')
             }}
           >
-            🩺 Analyze & Diagnostics ({actionableCount})
+            Advanced checks ({actionableCount})
           </button>
 
           <button
@@ -2832,6 +2859,31 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             </div>
           </div>
 
+          {analysis && <div className="routing-check-status" data-testid="aznet-routing-check-status" role="status">
+            <span>{validationErrors.length ? 'Routing check incomplete: fix topology validation errors.'
+              : !analysis.checked ? 'No eligible endpoint pairs were checked; connectivity has not been verified.'
+                : !analysis.complete ? 'Routing check incomplete; unchecked pairs are not verified.'
+                  : actionableCount ? 'Routing check completed.'
+                    : 'No routing issues found within the checked model scope.'}</span>
+            <span>{actionableCount} routing issues: {connectivityFailures} connectivity failures, {statefulAsymmetries} stateful asymmetries.
+              {' '}Checked {analysis.checked} of {analysis.total} representative pairs ({analysis.checked * 2} directional traces).
+              {' '}Results update when routing changes.</span>
+            <button type="button" className="aznet-btn" data-testid="aznet-review-routing-issues"
+              onClick={() => { setReviewFindingIds(null); setActiveTab('diagnostics'); setShowDiagnosticBadges(true) }}>
+              Review routing issues
+            </button>
+            <button type="button" className="aznet-btn" onClick={() => {
+              setAnalysisRequest(null)
+              setReviewFindingIds(null)
+              setShowDiagnosticBadges(false)
+            }}>Clear routing check</button>
+            {analysisRequest?.scope === 'landscape' && <p>
+              Assumes connectivity is required between all workload subnets and distinct on-premises sites; intentional isolation may appear as disconnected pairs.
+              {' '}One representative IP per subnet/site prefix, at most {AZ_NET_PAIR_LIMIT} pairs. Infrastructure-only subnets, Internet availability,
+              exhaustive address-space/ECMP coverage, firewall rules, NSGs and host/service availability are not verified.
+            </p>}
+          </div>}
+
           <AzureNetDiagram
             topology={topology}
             selected={canvasSelection}
@@ -2875,6 +2927,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             additionalReverseTraces={groupedPaths?.paths.map((path) => path.pair.reverse)}
             diagnostics={diagnostics}
             showDiagnosticBadges={showDiagnosticBadges}
+            onShowIssues={(findings) => {
+              setReviewFindingIds(findings.map((finding) => finding.id))
+              setActiveTab('diagnostics')
+            }}
             onClearHighlights={() => {
               setTraceActive(false)
               setGroupTrace(null)
@@ -3506,7 +3562,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             {activeTab === 'diagnostics' && (
               <div className="aznet-card" data-testid="aznet-diagnostics-panel">
                 <h3>Root-Cause Azure Networking Diagnostics ({actionableCount} actionable)</h3>
-                <p>Choose the flows that are expected to communicate. Isolated or excluded pairs are not assumed to require connectivity. Results update when the topology changes.</p>
+                <p>Use Check routing above the canvas for the whole landscape, or choose the flows that are expected to communicate below. Results update when the topology changes.</p>
+                {reviewFindingIds && <div data-testid="aznet-review-finding-scope">
+                  Showing {visibleDiagnostics.length} current findings for the selected canvas marker.
+                  <button type="button" className="aznet-btn" onClick={() => setReviewFindingIds(null)}>Show all findings</button>
+                </div>}
                 <label className="aznet-field">
                   <span>Expected connectivity scope</span>
                   <select className="aznet-select" data-testid="aznet-analysis-scope" value={analysisScope}
@@ -3514,6 +3574,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     <option value="pair">Selected source / destination pair</option>
                     <option value="onprem">All workload subnets ↔ on-premises prefixes</option>
                     <option value="all">All workload pairs and workload ↔ on-premises prefixes</option>
+                    <option value="landscape">Whole landscape, including distinct on-premises site pairs</option>
                   </select>
                 </label>
                 {analysisScope === 'pair' && <div className="aznet-field-grid">
@@ -3543,11 +3604,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                 {analysis ? <div data-testid="aznet-analysis-coverage" role="status">
                   <p>Analyzed scope: {analysisRequest?.scope === 'pair'
                     ? `${endpointOptions.find((e) => e.key === analysisRequest.sourceKey)?.label ?? 'Removed source'} ↔ ${endpointOptions.find((e) => e.key === analysisRequest.destinationKey)?.label ?? 'Removed destination'}`
-                    : analysisRequest?.scope === 'onprem' ? 'All workload / on-premises pairs' : 'All workload and on-premises pairs'}.</p>
-                  {analysis.complete ? 'Analysis complete' : 'Analysis incomplete'}: checked {analysis.checked} of {analysis.total} representative pairs
+                    : analysisRequest?.scope === 'onprem' ? 'All workload / on-premises pairs'
+                      : analysisRequest?.scope === 'landscape' ? 'Whole landscape, including distinct on-premises site pairs'
+                        : 'All workload and on-premises pairs'}.</p>
+                  {analysis.complete && !validationErrors.length ? 'Analysis complete' : 'Analysis incomplete'}: checked {analysis.checked} of {analysis.total} representative pairs
                   {' '}({analysis.checked * 2} directional traces; limit {AZ_NET_PAIR_LIMIT} pairs).
                   {analysis.checked === 0 ? ' No eligible endpoint pairs were checked; connectivity has not been verified.' :
-                    analysis.findings.length === 0 && analysis.complete ? ' No connectivity failures or stateful-inspection asymmetry found in this scope.' : ''}
+                    analysis.findings.length === 0 && analysis.complete && !validationErrors.length ? ' No connectivity failures or stateful-inspection asymmetry found in this scope.' : ''}
                   {!analysis.complete && ' Narrow the scope or choose an individual pair; unchecked pairs are not verified.'}
                   <p>One representative IP per subnet/site prefix. Not exhaustive address-space or ECMP coverage; firewall rules, NSGs, and host/service availability are outside this routing model.</p>
                 </div> : <p data-testid="aznet-analysis-not-run">Connectivity has not been analyzed. Configuration information below does not prove a connectivity failure.</p>}
@@ -3567,7 +3630,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     ))}
                   </div>
                 )}
-                {diagnostics.length === 0 ? (
+                {visibleDiagnostics.length === 0 ? (
                   <div
                     style={{
                       padding: 12,
@@ -3579,11 +3642,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     }}
                     data-testid="aznet-diagnostics-clean"
                   >
-                    No configuration findings. Use Analyze expected connectivity to verify the required flows.
+                    {reviewFindingIds ? 'No current findings for this selection.'
+                      : analysis ? 'No routing or configuration findings in the checked scope. See analysis coverage above.'
+                        : 'No configuration findings. Use Check routing to verify landscape connectivity.'}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {diagnostics.map((finding) => (
+                    {visibleDiagnostics.map((finding) => (
                       <div
                         key={finding.id}
                         className="aznet-card"
