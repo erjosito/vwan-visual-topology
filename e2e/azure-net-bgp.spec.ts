@@ -29,8 +29,7 @@ function bgpTopology() {
   return topology
 }
 
-async function load(page: Page, mode: string) {
-  const topology = bgpTopology()
+async function load(page: Page, mode: string, topology = bgpTopology()) {
   if (mode === 'full') topology.vwanHubs.push({
     id: 'vhub', name: 'Virtual hub', region: 'West Europe', preference: 'ExpressRoute', x: 700, y: 700,
     routingIntent: { private: false, internet: false },
@@ -48,6 +47,32 @@ async function inspectSite(page: Page, id: string) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} separates effective-route AS paths from origins and suppression details`, async ({ page }) => {
+    const topology = bgpTopology()
+    topology.udrTables.push({
+      id: 'override', name: 'Override BGP', disableBgpRoutePropagation: false,
+      routes: [{ id: 'discard', name: 'Discard site traffic', prefix: '172.16.0.0/24', nextHopType: 'None', enabled: true }],
+    })
+    topology.vnets[0].subnets[0].routeTableId = 'override'
+    await load(page, mode, topology)
+    await page.getByTestId('aznet-subnet-gateway').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
+    const table = page.getByTestId('aznet-effective-route-table')
+    await expect(table.locator('thead th')).toHaveText(['State', 'Source', 'Prefix', 'Next Hop', 'AS path', 'Origin / Tie-Breaker'])
+    const bgp = table.getByTestId('aznet-route-row-172.16.0.0/24-VirtualNetworkGateway').first()
+    await expect(bgp.locator('.as-path')).toHaveText('65001')
+    await expect(bgp.getByRole('cell').nth(5)).toContainText('BGP')
+    await expect(bgp.getByRole('cell').nth(5)).toContainText('Overridden by User route')
+    await expect(bgp.getByRole('cell').nth(5)).not.toContainText('65001')
+    await expect(table).not.toContainText('AS Path:')
+    await expect(table.getByTestId('aznet-route-row-172.16.0.0/24-User').locator('.as-path')).toHaveText('—')
+    await expect(table.getByTestId('aznet-route-row-10.0.0.0/16-System').locator('.as-path')).toHaveText('—')
+    await page.setViewportSize({ width: 640, height: 900 })
+    await bgp.locator('.as-path').scrollIntoViewIfNeeded()
+    await expect(bgp.locator('.as-path')).toBeInViewport()
+  })
+
   test(`${mode} groups only the requested site's BGP candidates and preserves explicit scope`, async ({ page }) => {
     await load(page, mode)
     await page.getByTestId('aznet-subnet-gateway').focus()

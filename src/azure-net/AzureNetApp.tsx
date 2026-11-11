@@ -3195,13 +3195,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         </div>
                       </div>
 
-                      <table className="aznet-route-table" data-testid="aznet-effective-route-table">
+                      <div className="table-scroll"><table className="aznet-route-table" data-testid="aznet-effective-route-table">
                         <thead>
                           <tr>
                             <th>State</th>
                             <th>Source</th>
                             <th>Prefix</th>
                             <th>Next Hop</th>
+                            <th>AS path</th>
                             <th>Origin / Tie-Breaker</th>
                           </tr>
                         </thead>
@@ -3277,13 +3278,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                     </div>
                                   ) : null}
                                 </td>
+                                <td className="as-path">{route.asPath.join(' ') || '—'}</td>
                                 <td>
                                   <div>{route.originLabel}</div>
-                                  {route.asPath.length > 0 && (
-                                    <div style={{ fontSize: 10.5, color: 'var(--info)' }}>
-                                      AS Path: [{route.asPath.join(' → ')}]
-                                    </div>
-                                  )}
                                   {route.suppressedReason && (
                                     <div style={{ fontSize: 10.5, color: 'var(--error)' }}>
                                       {route.suppressedReason}
@@ -3294,7 +3291,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             )
                           })}
                         </tbody>
-                      </table>
+                      </table></div>
 
                       {inspectedSubnetTable.suppressedBgpRoutes.length > 0 && (
                         <div
