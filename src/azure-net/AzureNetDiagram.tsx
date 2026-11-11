@@ -1,4 +1,5 @@
-import { useRef, useState, type KeyboardEvent } from 'react'
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
 import type { AzDiagnosticFinding } from './diagnostics'
 import type { AzFlowTrace } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
@@ -283,6 +284,82 @@ export function AzureNetDiagram({
 
   const centerOf = (box?: BoxPosition) =>
     box ? { cx: box.x + box.width / 2, cy: box.y + box.height / 2 } : { cx: 0, cy: 0 }
+
+  const [pixelsPerUnit, setPixelsPerUnit] = useState(1)
+  useLayoutEffect(() => {
+    const svg = svgRef.current!
+    const updateScale = () => {
+      const matrix = svg.getScreenCTM()
+      if (matrix) setPixelsPerUnit(Math.hypot(matrix.a, matrix.b))
+    }
+    updateScale()
+    const observer = new ResizeObserver(updateScale)
+    observer.observe(svg)
+    return () => observer.disconnect()
+  }, [zoom])
+
+  const motionBoxes = new Map<string, BoxPosition>([
+    ...Object.entries(positions.vnets).map(([id, box]) => [`vnet:${id}`, box] as const),
+    ...Object.entries(positions.vwanHubs).map(([id, box]) => [`vwan-hub:${id}`, box] as const),
+    ...Object.entries(positions.erLocations).map(([id, box]) => [`er-location:${id}`, box] as const),
+    ...Object.entries(positions.sites).map(([id, box]) => [`site:${id}`, box] as const),
+  ])
+  const deviceOwners = new Map(topology.vnets.flatMap((vnet) =>
+    [...vnet.gateways, ...vnet.appliances].map((device) => [device.id, `vnet:${vnet.id}`] as const),
+  ))
+  const targetKey = (kind: string, id: string) =>
+    kind === 'site' || kind === 'vwan-hub' ? `${kind}:${id}` : deviceOwners.get(id)
+  const motionEdges = new Map<string, MotionSegment>()
+  const addMotionEdge = (id: string, from: string | undefined, to: string | undefined) => {
+    const a = from && motionBoxes.get(from), b = to && motionBoxes.get(to)
+    if (!a || !b || !from || !to) return
+    const start = { x: a.x + a.width / 2, y: a.y + a.height / 2 }
+    const end = { x: b.x + b.width / 2, y: b.y + b.height / 2 }
+    motionEdges.set(id, { id, from, to, start, end, control: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } })
+  }
+  for (const peering of topology.vnetPeerings) {
+    if (peering.enabled) addMotionEdge(peering.id, `vnet:${peering.vnetAId}`, `vnet:${peering.vnetBId}`)
+  }
+  for (const vnet of topology.vnets) {
+    const attachment = vnet.vwanHubAttachment
+    if (attachment?.enabled) addMotionEdge(`vhub-attach:${vnet.id}:${attachment.hubId}`, `vnet:${vnet.id}`, `vwan-hub:${attachment.hubId}`)
+  }
+  for (const link of topology.erLinks) {
+    if (link.enabled) addMotionEdge(link.id, `er-location:${link.locationId}`, targetKey(link.targetKind, link.targetId))
+  }
+  for (const link of topology.erGlobalReachLinks ?? []) {
+    if (link.enabled) addMotionEdge(link.id, `er-location:${link.locationAId}`, `er-location:${link.locationBId}`)
+  }
+  for (const connection of topology.vpnConnections) {
+    if (connection.enabled) addMotionEdge(connection.id, `site:${connection.siteId}`, targetKey(connection.targetKind, connection.targetId))
+  }
+  for (const link of topology.siteLinks) {
+    if (link.enabled) addMotionEdge(link.id, `site:${link.siteAId}`, `site:${link.siteBId}`)
+  }
+  const motionFlows: MotionFlow[] = []
+  const motionColors = new Map<string, string>()
+  for (const [direction, traces] of [['forward', forwardTraces], ['return', reverseTraces]] as const) {
+    for (const trace of traces) {
+      const destinationId = `${direction}:${trace.destinationIp}`
+      motionColors.set(destinationId, direction === 'forward' ? '#059669' : '#d97706')
+      let segments: MotionSegment[] = []
+      const finish = (stopped = false) => {
+        if (segments.length) motionFlows.push({ segments, destinationId, direction, stopped })
+        segments = []
+      }
+      for (const hop of trace.hops) {
+        if (hop.action === 'dropped' || hop.action === 'loop') break
+        if (!hop.edgeId) continue
+        const edge = motionEdges.get(hop.edgeId)
+        const from = hop.vnetId ? `vnet:${hop.vnetId}` : `${hop.nodeKind}:${hop.nodeId}`
+        if (!edge || (from !== edge.from && from !== edge.to)) { finish(); continue }
+        const segment = from === edge.from ? edge : { ...edge, from, to: edge.from, start: edge.end, end: edge.start }
+        if (segments.length && segments.at(-1)!.to !== from) finish()
+        segments.push(segment)
+      }
+      finish(trace.status !== 'delivered')
+    }
+  }
 
   const viewW = 1180 / zoom
   const viewH = 790 / zoom
@@ -848,6 +925,8 @@ export function AzureNetDiagram({
             </g>
           )
         })}
+
+        <PathMotion flows={motionFlows} pixelsPerUnit={pixelsPerUnit} colors={motionColors} />
 
         {/* 6. Compound VNet Cards */}
         {topology.vnets.map((vnet) => {
