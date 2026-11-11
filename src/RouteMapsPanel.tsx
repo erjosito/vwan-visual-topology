@@ -8,7 +8,7 @@ import { CanvasOverlay } from './CanvasOverlay'
 
 const prefixes = (text: string) => text.trim() === '*' ? [] : text.split(/[,\s]+/).filter(Boolean)
 
-function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: RouteMap) => void }) {
+export function MapDefinition({ map, onSave }: { map: RouteMap; onSave: (map: RouteMap) => void }) {
   const [rules, setRules] = useState(map.rules)
   const [error, setError] = useState('')
   const save = (event: FormEvent<HTMLFormElement>) => {
