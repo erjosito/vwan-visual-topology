@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
-import type { AzDiagnosticFinding } from './diagnostics'
+import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
 import type { AzFlowTrace } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
 
@@ -252,10 +252,11 @@ export function AzureNetDiagram({
   const findingsForNode = (kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site', id: string) =>
     showDiagnosticBadges ? diagnostics.filter((finding) => {
       if (finding.severity === 'info') return false
-      const endpoints = [finding.sampleFlow?.source, finding.sampleFlow?.destination]
+      const members = finding.occurrences ?? [finding]
+      const endpoints = members.flatMap((entry) => [entry.sampleFlow?.source, entry.sampleFlow?.destination])
       if (kind === 'vnet') {
         const peering = finding.peeringId && topology.vnetPeerings.find((p) => p.id === finding.peeringId)
-        return finding.vnetId === id || (peering && (peering.vnetAId === id || peering.vnetBId === id)) ||
+        return members.some((entry) => entry.vnetId === id) || (peering && (peering.vnetAId === id || peering.vnetBId === id)) ||
           endpoints.some((ref) => ref?.kind === 'subnet' && ref.vnetId === id)
       }
       if (kind === 'site') return endpoints.some((ref) => ref?.kind === 'site' && ref.siteId === id)
@@ -1685,9 +1686,11 @@ export function AzureNetDiagram({
         {diagnosticNodes.map(({ kind, id, name, box }) => {
           const findings = findingsForNode(kind, id)
           if (!box || !findings.length) return null
-          const label = `Review ${findings.length} routing issues for ${name}`
+          const affectedPairs = azFindingFlows(findings).length
+          const label = `Review ${findings.length} routing issues for ${name}: ${findings.length} root-cause issues, ${affectedPairs} affected flow pairs`
           return <g key={`${kind}:${id}`}
             data-testid={`aznet-finding-badge-${kind === 'vnet' ? id : `${kind}-${id}`}`}
+            data-root-count={findings.length} data-affected-pairs={affectedPairs}
             role="button" tabIndex={0} aria-label={label} style={{ cursor: 'pointer' }}
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => { event.stopPropagation(); onShowIssues(findings) }}

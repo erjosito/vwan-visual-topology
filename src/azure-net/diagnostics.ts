@@ -61,6 +61,64 @@ export interface AzDiagnosticFinding {
   }
   sourceKey?: string
   destinationKey?: string
+  causeKey?: string
+  causeTitle?: string
+  occurrences?: AzDiagnosticFinding[]
+}
+
+export function groupAzNetFindings(findings: AzDiagnosticFinding[]): AzDiagnosticFinding[] {
+  const groups = new Map<string, AzDiagnosticFinding[]>()
+  for (const finding of findings) {
+    const category = finding.category === 'gateway-subnet-missing-udr' ? 'asymmetric-firewall-bypass' : finding.category
+    const key = finding.causeKey ? `${category}:${finding.causeKey}` : finding.id
+    groups.set(key, [...(groups.get(key) ?? []), ...(finding.occurrences ?? [finding])])
+  }
+  return [...groups].map<AzDiagnosticFinding>(([key, entries]) => {
+    const members = [...new Map(entries.map((entry) => [entry.id, entry])).values()]
+    const first = members.find((entry) => entry.category === 'asymmetric-firewall-bypass') ?? members[0]
+    return {
+      ...first,
+      id: first.causeKey ? `cause:${key}` : first.id,
+      title: first.causeTitle ?? first.title,
+      severity: members.some((entry) => entry.severity === 'error') ? 'error'
+        : members.some((entry) => entry.severity === 'warning') ? 'warning' : 'info',
+      remediation: members.find((entry) => entry.category === 'gateway-subnet-missing-udr')?.remediation ?? first.remediation,
+      occurrences: members,
+    }
+  })
+}
+
+export function azFindingImpact(findings: AzDiagnosticFinding[], endpoints: AzEndpointOption[]) {
+  const pairs = new Set<string>(), workloads = new Set<string>(), sites = new Set<string>(), prefixes = new Set<string>()
+  for (const finding of findings.flatMap((entry) => entry.occurrences ?? [entry])) {
+    const flow = finding.sampleFlow
+    if (!flow) continue
+    const keys = [finding.sourceKey, finding.destinationKey]
+    const refs = [flow.source, flow.destination]
+    const ips = [flow.sourceIp, flow.destinationIp]
+    const endpointKeys = refs.map((ref, index) => {
+      const endpoint = endpoints.find((entry) => keys[index] ? entry.key === keys[index]
+        : azEndpointKey(entry.ref) === azEndpointKey(ref) && contains(entry.prefix, ipv4(ips[index]) ?? -1))
+      if (ref.kind === 'subnet') workloads.add(azEndpointKey(ref))
+      if (ref.kind === 'site') sites.add(ref.siteId)
+      if (endpoint) prefixes.add(endpoint.prefix)
+      return endpoint?.key ?? `${azEndpointKey(ref)}:${ips[index]}`
+    })
+    pairs.add(endpointKeys.sort().join('|'))
+  }
+  return { pairs: pairs.size, workloads: workloads.size, sites: sites.size, prefixes: prefixes.size }
+}
+
+export function azFindingFlows(findings: AzDiagnosticFinding[]): AzDiagnosticFinding[] {
+  return [...new Map(findings.flatMap((finding) => finding.occurrences ?? [finding])
+    .filter((finding) => finding.sampleFlow)
+    .map((finding) => {
+      const flow = finding.sampleFlow!
+      return [JSON.stringify([
+        `${azEndpointKey(flow.source)}:${flow.sourceIp}`,
+        `${azEndpointKey(flow.destination)}:${flow.destinationIp}`,
+      ].sort()), finding] as const
+    })).values()]
 }
 
 export function runAzNetDiagnostics(
@@ -171,6 +229,8 @@ export function runAzNetDiagnostics(
             subnetId: gwSubnet.id,
             applianceId: hubFirewall.id,
             sampleFlow: first.sampleFlow,
+            causeKey: JSON.stringify(['inspection-return', [gwSubnet.id], [hubFirewall.id]]),
+            causeTitle: `Asymmetric stateful inspection at ${vnet.name}/GatewaySubnet`,
           })
         }
       }
@@ -936,6 +996,23 @@ export function analyzeAzNetConnectivity(
       const table = simulation.subnetTables[id]
       return `No active covering UDR to suppress VNet peering routes in ${table.vnetName}/${table.subnetName} (${table.udrTableName}); the configured peering-suppression setting alone does not steer traffic through inspection.`
     }).join(' ')
+    const bypassAppliances = [...new Set([...pair.forward.traversedApplianceIds, ...pair.reverse.traversedApplianceIds])]
+      .filter((id) => pair.forward.traversedApplianceIds.includes(id) !== pair.reverse.traversedApplianceIds.includes(id)).sort()
+    const bypassSubnets = [...new Set([...pair.forward.hops, ...pair.reverse.hops]
+      .filter((hop) => hop.matchedRoute?.nextHopType === 'VNetPeering' && hop.subnetId)
+      .map((hop) => hop.subnetId!))].sort()
+    const failuresAt = [
+      { trace: pair.forward, destination: b }, { trace: pair.reverse, destination: a },
+    ].filter(({ trace }) => trace.status !== 'delivered').map(({ trace, destination }) => {
+      const hop = trace.hops.at(-1)
+      const route = hop?.matchedRoute ?? [...trace.hops].reverse().find((entry) => entry.matchedRoute)?.matchedRoute
+      return [trace.status, hop?.nodeKind, hop?.nodeId, hop?.subnetId, hop?.edgeId,
+        route?.id, route?.source === 'User' ? route.prefix : destination.prefix]
+    }).map((cause) => JSON.stringify(cause)).sort()
+    const causeKey = failed ? JSON.stringify(['failed-routing', [...new Set(failuresAt)]])
+      : bypassSubnets.length ? JSON.stringify(['inspection-return', bypassSubnets, bypassAppliances])
+        : JSON.stringify(['inspection-path', bypassAppliances, a.key, b.key])
+    const causeTable = !failed && bypassSubnets.length === 1 ? simulation.subnetTables[bypassSubnets[0]] : undefined
     findings.push({
       id: `flow:${a.key}:${b.key}`,
       severity: failed ? 'error' : 'warning',
@@ -949,11 +1026,17 @@ export function analyzeAzNetConnectivity(
       remediation: failed
         ? 'Open Trace Flow to inspect the failed hop and matched route in each direction. Restore the required routes, gateway transit/advertisements, peering access, or appliance forwarding; verify any alternate path in both directions.'
         : 'Steer both directions through the same stateful inspection appliances.',
-      vnetId,
-      subnetId: a.ref.kind === 'subnet' ? a.ref.subnetId : b.ref.kind === 'subnet' ? b.ref.subnetId : undefined,
+      vnetId: causeTable?.vnetId ?? vnetId,
+      subnetId: causeTable?.subnetId ?? (a.ref.kind === 'subnet' ? a.ref.subnetId : b.ref.kind === 'subnet' ? b.ref.subnetId : undefined),
+      applianceId: !failed && bypassAppliances.length === 1 ? bypassAppliances[0] : undefined,
       peeringId: failed && (a.group === 'site' || b.group === 'site') ? transit?.id : undefined,
       sourceKey: a.key,
       destinationKey: b.key,
+      causeKey,
+      causeTitle: failed ? `Connectivity failure at ${[...new Set([pair.forward, pair.reverse]
+        .filter((trace) => trace.status !== 'delivered').map((trace) => trace.hops.at(-1)?.nodeName ?? 'the requested endpoint'))].join(', ')}`
+        : causeTable ? `Asymmetric stateful inspection at ${causeTable.vnetName}/${causeTable.subnetName}`
+          : `Asymmetric stateful inspection through ${pair.asymmetricBypassApplianceNames.join(', ')}`,
       sampleFlow: { source: a.ref, sourceIp: a.defaultIp, destination: b.ref, destinationIp: b.defaultIp },
     })
   }

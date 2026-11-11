@@ -6,7 +6,7 @@ import {
   importAzNetCapture,
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
-import { analyzeAzNetConnectivity, runAzNetDiagnostics } from './diagnostics'
+import { analyzeAzNetConnectivity, azFindingFlows, azFindingImpact, groupAzNetFindings, runAzNetDiagnostics } from './diagnostics'
 import { getAzNetEndpoints } from './endpoints'
 import {
   lookupSubnetEffectiveRoute,
@@ -83,7 +83,7 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(lookupSubnetEffectiveRoute(table, '10.1.2.4')?.nextHopType).toBe(suppressed ? 'VirtualAppliance' : 'VNetPeering')
   })
 
-  it('reports the real return-path asymmetry when peering suppression is configured without a UDR', () => {
+  function inspectedTransitTopology() {
     const topology = transitTopology('Vpn')
     topology.vnets[0].subnets.push({ id: 'fw-subnet', name: 'AzureFirewallSubnet', prefix: '10.0.2.0/24' })
     topology.vnets[0].appliances.push({
@@ -97,6 +97,11 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     ]
     topology.vnets[0].subnets[0].routeTableId = 'return'
     topology.vnets[1].subnets[0].routeTableId = 'outbound'
+    return topology
+  }
+
+  it('reports the real return-path asymmetry when peering suppression is configured without a UDR', () => {
+    const topology = inspectedTransitTopology()
     const simulation = simulateAzNet(topology)
     const finding = analyzeAzNetConnectivity(topology, simulation, expectedPair).findings[0]
     expect(finding).toMatchObject({ category: 'asymmetric-firewall-bypass', severity: 'warning' })
@@ -107,6 +112,49 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
       id: 'return-fw', name: 'Inspect return', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4', enabled: true,
     })
     expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings).toEqual([])
+  })
+
+  it('groups a shared return-UDR cause while retaining each flow and recomputing partial repairs', () => {
+    const topology = inspectedTransitTopology()
+    topology.vnets[1].subnets.push({ id: 'work2', name: 'Workload 2', prefix: '10.1.2.0/24', routeTableId: 'outbound' })
+    topology.sites[0].prefixes.push('172.17.0.0/24')
+    const analyze = () => {
+      const simulation = simulateAzNet(topology)
+      return groupAzNetFindings([
+        ...runAzNetDiagnostics(topology, simulation, { includePairAnalysis: false }),
+        ...analyzeAzNetConnectivity(topology, simulation, { scope: 'onprem' }).findings,
+      ]).filter((entry) => entry.category === 'asymmetric-firewall-bypass')
+    }
+    const [root] = analyze()
+    expect(analyze()).toHaveLength(1)
+    expect(azFindingImpact([root], getAzNetEndpoints(topology))).toEqual({ pairs: 4, workloads: 2, sites: 1, prefixes: 4 })
+    expect(azFindingFlows([root])).toHaveLength(4)
+    expect(root.occurrences?.every((entry) => entry.sampleFlow)).toBe(true)
+    topology.udrTables[0].routes.push({
+      id: 'partial-return', name: 'Partial repair', prefix: '10.1.1.0/24',
+      nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4', enabled: true,
+    })
+    const [remaining] = analyze()
+    expect(remaining.id).toBe(root.id)
+    expect(azFindingImpact([remaining], getAzNetEndpoints(topology)).pairs).toBe(2)
+    expect(azFindingFlows([remaining]).every((entry) => entry.sampleFlow?.source.kind === 'subnet' &&
+      entry.sampleFlow.source.subnetId === 'work2')).toBe(true)
+    topology.udrTables[0].routes[0].prefix = '10.1.0.0/16'
+    expect(analyze()).toEqual([])
+  })
+
+  it('keeps independent return-route objects and connectivity faults separate despite equal messages', () => {
+    const topology = inspectedTransitTopology()
+    const first = analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings[0]
+    topology.vnets[0].subnets[0].id = 'other-gateway-subnet'
+    const second = analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings[0]
+    expect(first.summary).toBe(second.summary)
+    expect(groupAzNetFindings([first, second])).toHaveLength(2)
+    const disconnected = transitTopology('Vpn')
+    disconnected.vpnConnections[0].enabled = false
+    const failed = analyzeAzNetConnectivity(disconnected, simulateAzNet(disconnected), expectedPair).findings[0]
+    expect(groupAzNetFindings([first, failed]).map((entry) => entry.category))
+      .toEqual(['asymmetric-firewall-bypass', 'connectivity-failure'])
   })
 
   it.each([

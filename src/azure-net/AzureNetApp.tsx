@@ -23,6 +23,9 @@ import { generateAzNetBicep } from './bicep-export'
 import {
   analyzeAzNetConnectivity,
   AZ_NET_PAIR_LIMIT,
+  azFindingImpact,
+  azFindingFlows,
+  groupAzNetFindings,
   runAzNetDiagnostics,
   type AzConnectivityScope,
   type AzDiagnosticFinding,
@@ -451,19 +454,28 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const diagnostics = useMemo(() => {
     const staticFindings = runAzNetDiagnostics(topology, simulation, { includePairAnalysis: false })
     const flowFindings = analysis?.findings ?? []
-    return [...staticFindings.filter((f) =>
-      !flowFindings.some((flow) => f.category === 'gateway-subnet-missing-udr' &&
-        f.sampleFlow && flow.sampleFlow &&
-        azEndpointKey(flow.sampleFlow.source) === azEndpointKey(f.sampleFlow.source) &&
-        azEndpointKey(flow.sampleFlow.destination) === azEndpointKey(f.sampleFlow.destination) &&
-        flow.sampleFlow.destinationIp === f.sampleFlow.destinationIp)),
-    ...flowFindings]
+    return groupAzNetFindings([...staticFindings, ...flowFindings])
   }, [topology, simulation, analysis])
   const actionableCount = diagnostics.filter((f) => f.severity !== 'info').length
   const visibleDiagnostics = reviewFindingIds
     ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics
-  const connectivityFailures = analysis?.findings.filter((f) => f.category === 'connectivity-failure').length ?? 0
-  const statefulAsymmetries = analysis?.findings.filter((f) => f.category === 'asymmetric-firewall-bypass').length ?? 0
+  const connectivityFailures = diagnostics.filter((f) => f.category === 'connectivity-failure').length
+  const statefulAsymmetries = diagnostics.filter((f) => f.category === 'asymmetric-firewall-bypass').length
+  const affectedFlowCount = azFindingImpact(diagnostics.filter((f) => f.severity !== 'info'), endpointOptions).pairs
+  const traceFinding = (finding: AzDiagnosticFinding) => {
+    const sf = finding.sampleFlow
+    if (!sf) return
+    const source = endpointOptions.find((e) => e.key === finding.sourceKey) ??
+      endpointOptions.find((e) => azEndpointKey(e.ref) === azEndpointKey(sf.source) && contains(e.prefix, ipv4(sf.sourceIp) ?? -1))
+    const destination = endpointOptions.find((e) => e.key === finding.destinationKey) ??
+      endpointOptions.find((e) => azEndpointKey(e.ref) === azEndpointKey(sf.destination) && contains(e.prefix, ipv4(sf.destinationIp) ?? -1))
+    setTraceSourceKey(source?.key ?? azEndpointKey(sf.source))
+    setTraceDestKey(destination?.key ?? azEndpointKey(sf.destination))
+    setCustomDestIp(destination?.defaultIp === sf.destinationIp ? '' : sf.destinationIp)
+    setGroupTrace(null)
+    setTraceActive(true)
+    setActiveTab('tracer')
+  }
 
   const startPath = (source: AzEndpointOption, destination: AzEndpointOption) => {
     setTraceSourceKey(source.key)
@@ -2867,6 +2879,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   : actionableCount ? 'Routing check completed.'
                     : 'No routing issues found within the checked model scope.'}</span>
             <span>{actionableCount} routing issues: {connectivityFailures} connectivity failures, {statefulAsymmetries} stateful asymmetries.
+              {' '}{actionableCount} root-cause issues affecting {affectedFlowCount} verified flow pairs.
               {' '}Checked {analysis.checked} of {analysis.total} representative pairs ({analysis.checked * 2} directional traces).
               {' '}Results update when routing changes.</span>
             <button type="button" className="aznet-btn" data-testid="aznet-review-routing-issues"
@@ -3672,19 +3685,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               <button
                                 type="button"
                                 className="aznet-btn"
-                                onClick={() => {
-                                  const sf = finding.sampleFlow!
-                                  const source = endpointOptions.find((e) => e.key === finding.sourceKey) ??
-                                    endpointOptions.find((e) => azEndpointKey(e.ref) === azEndpointKey(sf.source) && contains(e.prefix, ipv4(sf.sourceIp) ?? -1))
-                                  const destination = endpointOptions.find((e) => e.key === finding.destinationKey) ??
-                                    endpointOptions.find((e) => azEndpointKey(e.ref) === azEndpointKey(sf.destination) && contains(e.prefix, ipv4(sf.destinationIp) ?? -1))
-                                  setTraceSourceKey(source?.key ?? azEndpointKey(sf.source))
-                                  setTraceDestKey(destination?.key ?? azEndpointKey(sf.destination))
-                                  setCustomDestIp(destination?.defaultIp === sf.destinationIp ? '' : sf.destinationIp)
-                                  setGroupTrace(null)
-                                  setTraceActive(true)
-                                  setActiveTab('tracer')
-                                }}
+                                onClick={() => traceFinding(finding)}
                               >
                                 🔍 Trace Flow
                               </button>
@@ -3706,6 +3707,12 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           </div>
                         </div>
                         <h4 style={{ margin: '8px 0 4px 0', fontSize: 13 }}>{finding.title}</h4>
+                        <p data-testid="aznet-root-impact">
+                          {(() => {
+                            const impact = azFindingImpact([finding], endpointOptions)
+                            return `1 root-cause issue; ${impact.pairs} affected flow pairs, ${impact.workloads} workload subnets, ${impact.sites} sites, ${impact.prefixes} prefixes.`
+                          })()}
+                        </p>
                         <p style={{ margin: '0 0 6px 0', fontSize: 11.5, color: '#334155' }}>
                           {finding.summary}
                         </p>
@@ -3720,6 +3727,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         >
                           <strong>Remediation:</strong> {finding.remediation}
                         </div>
+                        {finding.occurrences?.some((entry) => entry.sampleFlow) && <details data-testid="aznet-affected-flows">
+                          <summary>Affected flows and directional evidence</summary>
+                          {azFindingFlows([finding]).map((entry) => <div key={entry.id}>
+                            <p>{entry.sampleFlow!.sourceIp} ↔ {entry.sampleFlow!.destinationIp}: {entry.summary}</p>
+                            <button type="button" className="aznet-btn" onClick={() => traceFinding(entry)}>Trace affected flow</button>
+                          </div>)}
+                        </details>}
                       </div>
                     ))}
                   </div>

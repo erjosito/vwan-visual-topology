@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { example, type Topology } from './model'
-import { analyzeRouting, describeEvidenceSource, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
+import { analyzeRouting, describeEvidenceSource, diagnosticFlowCount, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsProfile } from './diagnostics'
 import { azureRoutesAtSites, traceNodePath } from './paths'
 import { propagateSites } from './bgp'
@@ -54,6 +54,34 @@ describe('routing diagnostic intent and evidence', () => {
     const partial = analyzeRouting(t, deny, { automatic: true })
     expect(partial.findings.some((finding) => finding.rule === 'network-unreachable')).toBe(true)
     expect(partial.findings.filter((finding) => finding.rule === 'network-unreachable').every((finding) => !finding.sourceAddress?.startsWith('10.2.0.'))).toBe(true)
+  })
+
+  it('retains shared missing-route flow evidence, separates independent prefixes and keeps stable roots after membership changes', () => {
+    const topology = fixture()
+    topology.spokes.push(
+      { id: 'a2', name: 'Workload 2', hubId: 'h', prefixes: ['10.3.0.0/16'] },
+      { id: 'a3', name: 'Workload 3', hubId: 'h', prefixes: ['10.4.0.0/16'] },
+    )
+    topology.connections[0].learnSiteRoutes = false
+    topology.sites.push({ id: 'c', name: 'Independent destination', asn: 65003, prefixes: ['10.5.0.0/16'] })
+    topology.connections.push({
+      id: 'vpn2', name: 'Independent VPN', hubId: 'h', siteId: 'c', transport: 'VPN',
+      enabled: true, learnSiteRoutes: false, inbound: [], outbound: [],
+    })
+    const analyze = () => analyzeRouting(topology, { version: 1, intents: [], failureAnalysis: false }, { automatic: true })
+    const roots = analyze().findings.filter((finding) =>
+      ['network-unreachable', 'network-return'].includes(finding.rule) &&
+      [...finding.forward, ...finding.reverse].some((path) => path.status !== 'delivered' && path.hubs.at(-1) === 'h'))
+    expect(roots).toHaveLength(2)
+    expect(roots.map((finding) => diagnosticFlowCount([finding]))).toEqual([3, 3])
+    const root = roots.find((finding) => finding.related.some((entry) => entry.kind === 'site' && entry.id === 'b'))!
+    expect(root.related).toEqual(expect.arrayContaining([
+      { kind: 'spoke', id: 'a' }, { kind: 'spoke', id: 'a2' }, { kind: 'spoke', id: 'a3' },
+    ]))
+    expect(root.occurrences?.every((entry) => entry.forward.length && entry.reverse.length)).toBe(true)
+    topology.spokes = topology.spokes.filter((spoke) => spoke.id !== 'a')
+    const remaining = analyze().findings.find((finding) => finding.id === root.id)!
+    expect(diagnosticFlowCount([remaining])).toBe(2)
   })
 
   it('does not present unowned advertisements or exhausted automatic coverage as a healthy result', () => {
@@ -540,5 +568,7 @@ describe('typed engine coverage and shared site-plane behavior', () => {
       sourceAddress: '10.110.0.0',
       prefix: '10.10.0.0/16',
     })
+    expect(diagnosticFlowCount(asymmetric)).toBeGreaterThan(1)
+    expect(asymmetric[0].occurrences?.every((finding) => finding.forward.length && finding.reverse.length)).toBe(true)
   })
 })

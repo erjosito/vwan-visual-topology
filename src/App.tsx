@@ -30,7 +30,7 @@ import type { ComparisonSession } from './AzureComparisonPanel'
 import { FeedbackDialog } from './FeedbackDialog'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { RoutingIssuesPanel } from './RoutingIssuesPanel'
-import { routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
+import { diagnosticFlowCount, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticsFinding, DiagnosticsReport } from './diagnostics'
 import { importAzureCapture } from './azure-import'
 import { vpnRoutingMode } from './vpn-routing'
@@ -576,6 +576,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
               : 'No routing issues found within the checked model scope.')}</span>
           {currentCheck?.report && checkCoverage && <><span>{[
             t('{0} routing issues', routingIssues.length),
+            t('{0} root-cause issues affecting {1} flow pairs', routingIssues.length, diagnosticFlowCount(routingIssues)),
             ...(checkCoverage.unassignedPrefixes.length ? [checkCoverage.unassignedPrefixes.length === 1 ? t('1 unassigned advertised prefix') : t('{0} unassigned advertised prefixes', checkCoverage.unassignedPrefixes.length)] : []),
             ...(checkCoverage.unsupportedFlowCount ? [checkCoverage.unsupportedFlowCount === 1 ? t('1 model-limited flow pair') : t('{0} model-limited flow pairs', checkCoverage.unsupportedFlowCount)] : []),
             ...(checkCoverage.otherUnknownFindings.length ? [checkCoverage.otherUnknownFindings.length === 1 ? t('1 incomplete check') : t('{0} incomplete checks', checkCoverage.otherUnknownFindings.length)] : []),
