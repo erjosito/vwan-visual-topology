@@ -1721,7 +1721,7 @@ export function AzureNetDiagram({
                 ⚡ {loc.name}
               </text>
               <text x={box.x + 12} y={box.y + 44} fontSize={10} fill="var(--warning)">
-                MSEE 12076 · {loc.sku ?? 'Standard'} · GR: {loc.globalReachEnabled ? 'On' : 'Off'}
+                ASN 12076 · {loc.sku ?? 'Standard'} · GR: {loc.globalReachEnabled ? 'On' : 'Off'}
               </text>
               {loc.label?.trim() ? (
                 <g

@@ -76,7 +76,7 @@ const FLAGSHIP_BADGES: Record<string, string[]> = {
   'hub-spoke-firewall-udr': ['Hub & Spoke', 'AzFW Inspection', 'GatewaySubnet UDR', 'Private Endpoint /32'],
   'ars-sdwan-nva-coexistence': ['Azure Route Server', 'SD-WAN BGP NVA', 'ER + VPN B2B', 'BGP Propagation'],
   'dual-hub-vnra-global-peering': ['Dual-Region Hubs', 'Managed VNRA', 'Global Peering', 'Chained UDRs'],
-  'hybrid-vwan-and-hub-spoke': ['Secured vWAN Hub', 'Classic Hub-and-Spoke', 'Shared ER MSEE', 'Routing Intent'],
+  'hybrid-vwan-and-hub-spoke': ['Secured vWAN Hub', 'Classic Hub-and-Spoke', 'Shared ER location', 'Routing Intent'],
   'enterprise-vnet-all-features-showcase': ['All Features', '2 Regional Hubs', 'AzFW + ARS + SD-WAN', 'PE Policies & BGP LPM'],
 }
 
@@ -139,10 +139,10 @@ const AZURE_NET_VALIDATION_SCENARIOS: AzNetSampleCatalogEntry[] = [
   },
   {
     id: 'uc9-expressroute-hairpin-two-vnets',
-    title: 'UC9 · Cross-VNet Transit via Shared ExpressRoute MSEE',
-    summary: 'Two independent VNets (no VNet Peering) with standalone ExpressRoute Gateways linked to the same ExpressRoute circuit / MSEE (ASN 12076) exchanging routes via BGP.',
+    title: 'UC9 · Cross-VNet Transit via Shared ExpressRoute Location',
+    summary: 'Two independent VNets (no VNet Peering) with standalone ExpressRoute Gateways linked to the same ExpressRoute location (ASN 12076) exchanging routes via BGP.',
     category: 'validation',
-    badges: ['UC9 Validated', 'Shared ER MSEE', 'ASN 12076 Hairpin', 'No VNet Peering'],
+    badges: ['UC9 Validated', 'Shared ER location', 'ASN 12076 Hairpin', 'No VNet Peering'],
   },
 ]
 
@@ -968,7 +968,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     if (selected.kind === 'er-location') {
       const loc = topology.erLocations.find((l) => l.id === selected.locationId)
       return {
-        title: `ExpressRoute MSEE (ASN 12076) RIB · ${loc?.name ?? selected.locationId}`,
+        title: `ExpressRoute location (ASN 12076) RIB · ${loc?.name ?? selected.locationId}`,
         entries: simulation.erLocationRibs[selected.locationId] ?? [],
         available: Boolean(loc) && !scenario.affected[selected.locationId],
       }
@@ -1056,7 +1056,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       const idx = draft.erLocations.length + 1
       draft.erLocations.push({
         id: `erloc-custom-${idx}`,
-        name: `ER-MSEE-${idx}`,
+        name: `ER-Location-${idx}`,
         globalReachEnabled: false,
         ...(typeof x === 'number' && typeof y === 'number' ? { x, y } : {}),
       })
@@ -1416,7 +1416,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             onSelect: () => addSiteNode(target.svgX, target.svgY),
           },
           {
-            label: 'Add ExpressRoute MSEE Location here',
+            label: 'Add ExpressRoute Location here',
             onSelect: () => addErLocationNode(target.svgX, target.svgY),
           },
           {
@@ -2105,7 +2105,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       if (!loc) return null
       const currentSku: AzErCircuitSku = loc.sku ?? 'Standard'
       return {
-        title: `ExpressRoute MSEE · ${loc.name} (${currentSku})`,
+        title: `ER location · ${loc.name} (${currentSku})`,
         actions: [
           {
             label: 'Show ER Location Info & Providers...',
@@ -2119,7 +2119,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             },
           },
           {
-            label: 'Inspect ExpressRoute MSEE BGP RIB',
+            label: 'Inspect ExpressRoute Location BGP RIB',
             onSelect: () => {
               inspectRoutes({ kind: 'er-location', locationId: loc.id })
             },
@@ -2167,7 +2167,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   ),
               )
               .map((other) => ({
-                label: `ER MSEE: ${other.name}`,
+                label: `ER location: ${other.name}`,
                 onSelect: () => {
                   commitTopology((draft) => {
                     draft.erGlobalReachLinks = draft.erGlobalReachLinks ?? []
@@ -2268,7 +2268,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             ],
           },
           {
-            label: 'Delete ExpressRoute MSEE Location',
+            label: 'Delete ExpressRoute Location',
             danger: true,
             onSelect: () => deleteErLocationById(loc.id),
           },
@@ -2304,7 +2304,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     ),
                 )
                 .map((loc) => ({
-                  label: `ExpressRoute MSEE: ${loc.name}`,
+                  label: `ExpressRoute location: ${loc.name}`,
                   onSelect: () => {
                     commitTopology((draft) => {
                       draft.erLinks.push({
@@ -2757,9 +2757,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             className="aznet-btn"
             onClick={() => addErLocationNode()}
             data-testid="aznet-add-erloc-btn"
-            title="Add ExpressRoute MSEE Location"
+            title="Add ExpressRoute Location"
           >
-            + ER MSEE
+            + ER location
           </button>
 
           <button
@@ -3858,7 +3858,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         return `VNet Peering ${p?.name ?? selected.peeringId}`
                       })()}
                     {selected.kind === 'er-location' &&
-                      `ExpressRoute MSEE ${topology.erLocations.find((l) => l.id === selected.locationId)?.name ?? selected.locationId}`}
+                      `ExpressRoute location ${topology.erLocations.find((l) => l.id === selected.locationId)?.name ?? selected.locationId}`}
                     {selected.kind === 'site' &&
                       `On-Premises Site ${topology.sites.find((s) => s.id === selected.siteId)?.name ?? selected.siteId}`}
                     {selected.kind === 'vwan-hub' &&
@@ -5220,7 +5220,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                           data-testid="aznet-editor-add-erloc-btn"
                           onClick={() => addErLocationNode()}
                         >
-                          + Add ER MSEE
+                          + Add ER location
                         </button>
                       )}
                     </div>
@@ -5445,7 +5445,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               }}
                               onClick={() => deleteErLocationById(loc.id)}
                             >
-                              Delete ER MSEE
+                              Delete ER location
                             </button>
                           </div>
 
@@ -5590,7 +5590,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       .map((n) => ({ kind: 'vwanHub' as const, id: n.id, name: `vWAN Hub: ${n.name}`, label: n.label ?? '' })),
                     ...topology.erLocations
                       .filter((n) => selected.kind === 'er-location' && n.id === selected.locationId)
-                      .map((n) => ({ kind: 'erLocation' as const, id: n.id, name: `ER MSEE: ${n.name}`, label: n.label ?? '' })),
+                      .map((n) => ({ kind: 'erLocation' as const, id: n.id, name: `ER location: ${n.name}`, label: n.label ?? '' })),
                     ...topology.sites
                       .filter((n) => selected.kind === 'site' && n.id === selected.siteId)
                       .map((n) => ({ kind: 'site' as const, id: n.id, name: `Site: ${n.name}`, label: n.label ?? '' })),

@@ -52,6 +52,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
         }
       }, topology)
       await page.goto(`/?mode=${mode}`)
+      await expect(page.getByTestId('aznet-add-erloc-btn')).toHaveText('+ ER location')
+      await expect(page.getByTestId(`aznet-erloc-${location.id}`)).not.toContainText('MSEE')
       const configure = async () => {
         await openNodeMenu(page, `aznet-erloc-${location.id}`)
         await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
@@ -100,7 +102,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.getByTestId('aznet-add-erloc-btn').click()
     await openNodeMenu(page, `aznet-erloc-erloc-custom-${topology.erLocations.length + 1}`)
     await page.getByRole('menuitem', { name: 'Configure ER Location & Labels', exact: true }).click()
-    const newSelector = page.getByRole('combobox', { name: /ER peering location ER-MSEE-/ })
+    const newSelector = page.getByRole('combobox', { name: /ER peering location ER-Location-/ })
     await expect(newSelector).toHaveValue('')
     await expect(newSelector.locator('option:checked')).toHaveText('Select ER peering location')
     await newSelector.selectOption('Stockholm')
@@ -284,7 +286,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // #39: Verify Azure Firewall was added to VNet-Spoke-App via context menu
     await expect(page.getByTestId('aznet-chip-vnet-spoke-app-azfw-1')).toBeVisible()
 
-    // #42: Topbar quick-create buttons (+ Site, + ER MSEE, + VNet, + Route Table)
+    // #42: Topbar quick-create buttons (+ Site, + ER location, + VNet, + Route Table)
     await page.getByTestId('aznet-add-site-btn').click()
     await expect(page.getByTestId('aznet-site-site-custom-3')).toBeVisible()
 

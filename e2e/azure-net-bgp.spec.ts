@@ -357,7 +357,7 @@ test('all full-mode router inspectors use the same grouped table without a subne
   for (const [id, action, heading] of [
     ['aznet-chip-gw', 'Inspect Gateway BGP RIB', 'VPN gateway'],
     ['aznet-chip-ars', 'Inspect Route Server RIB (ASN 65515)', 'Route Server'],
-    ['aznet-erloc-er', 'Inspect ExpressRoute MSEE BGP RIB', 'Amsterdam'],
+    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP RIB', 'Amsterdam'],
     ['aznet-vwanhub-vhub', 'Inspect Virtual WAN Hub Effective RIB', 'Virtual hub'],
   ]) {
     await page.getByTestId(id).click({ button: 'right' })

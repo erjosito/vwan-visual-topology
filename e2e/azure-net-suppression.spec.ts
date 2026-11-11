@@ -139,7 +139,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await openEr()
     await expect(globalReach).toBeEnabled()
     await globalReach.click()
-    await page.getByRole('menuitem', { name: /^ER MSEE:/ }).click()
+    await page.getByRole('menuitem', { name: /^ER location:/ }).click()
     await openEr()
     await expect(globalReach).toBeDisabled()
   })
