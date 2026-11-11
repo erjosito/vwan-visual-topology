@@ -117,6 +117,12 @@ for (const theme of ['light', 'dark']) {
         await gatewayPrefixes.fill('10.0.0.0/8')
         await readable(page.locator('.canvas-overlay').last())
         await page.locator('.canvas-overlay').last().locator('.overlay-heading button').filter({ hasText: 'Close' }).click()
+        await page.getByTestId('aznet-site-site-munich-hq').focus()
+        await page.keyboard.press('Shift+F10')
+        await page.getByRole('menuitem', { name: 'Inspect Site BGP Route Table', exact: true }).click()
+        await expect(page.getByRole('table', { name: 'Requested router BGP table' })).toBeVisible()
+        await readable(page.locator('.canvas-overlay').last())
+        await page.locator('.canvas-overlay').last().locator('.overlay-heading button').filter({ hasText: 'Close' }).click()
       }
 
       await page.getByTestId(mode === 'vwan' ? 'vwan-topbar-er-locations-btn' : 'aznet-open-er-locations-btn').click()
