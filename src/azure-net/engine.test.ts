@@ -62,6 +62,80 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
 
+  it.each([
+    ['', true, false],
+    ['10.0.0.0/8', false, false],
+    ['192.168.0.0/16', true, false],
+    ['10.1.1.0/24', true, false],
+    ['10.0.0.0/8', true, true],
+    ['10.1.0.0/16', true, true],
+  ] as const)('suppresses peering routes only with a full active replacement (%s, enabled=%s)', (prefix, enabled, suppressed) => {
+    const topology = transitTopology()
+    topology.udrTables = [{
+      id: 'return', name: 'Return table', disableBgpRoutePropagation: false, disablePeeringRoutePropagation: true,
+      routes: prefix ? [{ id: 'replacement', name: 'Replacement', prefix, enabled, nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4' }] : [],
+    }]
+    topology.vnets[0].subnets[0].routeTableId = 'return'
+    const table = simulateAzNet(topology).subnetTables.gateway
+    expect(table.peeringPropagationDisabled).toBe(true)
+    expect(table.suppressedPeeringRoutes.length > 0).toBe(suppressed)
+    expect(table.routes.some((route) => route.active && route.nextHopType === 'VNetPeering')).toBe(!suppressed)
+    expect(lookupSubnetEffectiveRoute(table, '10.1.2.4')?.nextHopType).toBe(suppressed ? 'VirtualAppliance' : 'VNetPeering')
+  })
+
+  it('reports the real return-path asymmetry when peering suppression is configured without a UDR', () => {
+    const topology = transitTopology('Vpn')
+    topology.vnets[0].subnets.push({ id: 'fw-subnet', name: 'AzureFirewallSubnet', prefix: '10.0.2.0/24' })
+    topology.vnets[0].appliances.push({
+      id: 'fw', name: 'Inspection firewall', kind: 'azure-firewall', subnetId: 'fw-subnet',
+      privateIp: '10.0.2.4', enableIpForwarding: true, inspectsTraffic: true, staticRoutes: [],
+    })
+    topology.udrTables = [
+      { id: 'return', name: 'Return table', disableBgpRoutePropagation: false, disablePeeringRoutePropagation: true, routes: [] },
+      { id: 'outbound', name: 'Outbound table', disableBgpRoutePropagation: true,
+        routes: [{ id: 'fw-default', name: 'Inspect outbound', prefix: '0.0.0.0/0', nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4', enabled: true }] },
+    ]
+    topology.vnets[0].subnets[0].routeTableId = 'return'
+    topology.vnets[1].subnets[0].routeTableId = 'outbound'
+    const simulation = simulateAzNet(topology)
+    const finding = analyzeAzNetConnectivity(topology, simulation, expectedPair).findings[0]
+    expect(finding).toMatchObject({ category: 'asymmetric-firewall-bypass', severity: 'warning' })
+    expect(finding.summary).toContain('No active covering UDR to suppress VNet peering routes in Hub/GatewaySubnet')
+    expect(finding.summary).not.toContain('matched only the 0.0.0.0/0 Internet')
+    expect(lookupSubnetEffectiveRoute(simulation.subnetTables.gateway, '10.1.1.4')?.nextHopType).toBe('VNetPeering')
+    topology.udrTables[0].routes.push({
+      id: 'return-fw', name: 'Inspect return', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4', enabled: true,
+    })
+    expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings).toEqual([])
+  })
+
+  it.each([
+    ['Disabled', '10.1.1.20/32', true, 'InterfaceEndpoint'],
+    ['NetworkSecurityGroupEnabled', '10.1.1.20/32', true, 'InterfaceEndpoint'],
+    ['RouteTableEnabled', '', true, 'InterfaceEndpoint'],
+    ['RouteTableEnabled', '0.0.0.0/0', true, 'InterfaceEndpoint'],
+    ['RouteTableEnabled', '10.1.0.0/16', true, 'InterfaceEndpoint'],
+    ['RouteTableEnabled', '10.9.0.0/24', true, 'InterfaceEndpoint'],
+    ['RouteTableEnabled', '10.1.0.0/20', false, 'InterfaceEndpoint'],
+    ['Enabled', '10.1.0.0/20', true, 'VirtualAppliance'],
+    ['RouteTableEnabled', '10.1.1.20/32', true, 'VirtualAppliance'],
+  ] as const)('requires PE route policies and a qualifying active UDR (%s, %s, enabled=%s)', (policy, prefix, enabled, nextHopType) => {
+    const topology = transitTopology()
+    topology.vnets[1].prefixes = ['10.1.0.0/20', '10.9.0.0/16']
+    Object.assign(topology.vnets[1].subnets[0], {
+      privateEndpointNetworkPolicies: policy,
+      privateEndpoints: [{ id: 'pe', name: 'Private endpoint', ipAddress: '10.1.1.20', serviceName: 'Storage' }],
+    })
+    topology.udrTables = [{
+      id: 'pe-table', name: 'PE inspection', disableBgpRoutePropagation: false,
+      routes: prefix ? [{ id: 'pe-udr', name: 'PE next hop', prefix, enabled, nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4' }] : [],
+    }]
+    topology.vnets[0].subnets[0].routeTableId = 'pe-table'
+    const table = simulateAzNet(topology).subnetTables.gateway
+    expect(lookupSubnetEffectiveRoute(table, '10.1.1.20')?.nextHopType).toBe(nextHopType)
+    expect(table.routes.find((route) => route.nextHopType === 'InterfaceEndpoint')?.active).toBe(nextHopType === 'InterfaceEndpoint')
+  })
+
   it('checks distinct on-premises sites across their prefixes in landscape scope and clears repaired failures', () => {
     const topology = createEmptyAzNetTopology()
     topology.sites = [

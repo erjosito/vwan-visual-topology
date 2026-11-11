@@ -3134,7 +3134,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               className="aznet-badge info"
                               data-testid="aznet-peering-propagation-badge"
                             >
-                              Peering Propagation: Disabled (Preview)
+                              Peering suppression configured (Preview; requires an active covering UDR)
                             </span>
                           )}
                         </div>
@@ -3282,7 +3282,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         >
                           <strong style={{ color: '#475569' }}>
                             {inspectedSubnetTable.suppressedPeeringRoutes.length} VNetPeering
-                            route(s) suppressed by disablePeeringRoutePropagation=true (Preview):
+                            route(s) suppressed by disablePeeringRoutePropagation=true (Preview) with active covering UDRs:
                           </strong>
                           <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                             {inspectedSubnetTable.suppressedPeeringRoutes.map((sr) => (
@@ -4595,7 +4595,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                   })
                                 }}
                               />
-                              <span>Disable Peering route propagation (Preview)</span>
+                              <span>Disable Peering route propagation (Preview; requires an active covering UDR)</span>
                             </label>
                             <button
                               type="button"

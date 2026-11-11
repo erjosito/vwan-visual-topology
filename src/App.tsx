@@ -366,6 +366,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
       const prefixes = [...new Set(nodePrefixes(topology, dst))]
       return {
         label: `${other.name} (${t(other.kind)})`,
+        allowDisabledChildren: !prefixes.length,
         children: prefixes.length ? prefixes.map((prefix) => ({
           label: prefix,
           run: () => {

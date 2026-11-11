@@ -146,7 +146,7 @@ export function runAzNetDiagnostics(
             severity: 'error',
             category: 'gateway-subnet-missing-udr',
             title: `Asymmetric Firewall Bypass on ${vnet.name}/GatewaySubnet`,
-            summary: `Spoke→On-Premises traffic traverses stateful ${hubFirewall.name} (${hubFirewall.privateIp}), but return traffic arriving at ${vnet.name}/GatewaySubnet for ${missingSpokes.map((m) => `${m.spokeName} (${m.prefix})`).join(', ')} matches the System VNetPeering route directly to the spoke—bypassing ${hubFirewall.name} and causing TCP state drops.`,
+            summary: `Spoke→On-Premises traffic traverses stateful ${hubFirewall.name} (${hubFirewall.privateIp}), but return traffic arriving at ${vnet.name}/GatewaySubnet for ${missingSpokes.map((m) => `${m.spokeName} (${m.prefix})`).join(', ')} matches the System VNetPeering route directly to the spoke—bypassing ${hubFirewall.name} and causing TCP state drops.${rt?.disablePeeringRoutePropagation ? ' No active covering UDR suppresses these peering routes; the configured peering-suppression setting alone does not provide an inspection path.' : ''}`,
             remediation: `Add a UDR on ${rt ? `"${rt.name}"` : `${vnet.name}/GatewaySubnet`} for ${missingSpokes.map((m) => m.prefix).join(', ')} with NextHop = VirtualAppliance (${hubFirewall.privateIp}).`,
             vnetId: vnet.id,
             subnetId: gwSubnet.id,
@@ -424,10 +424,6 @@ export function runAzNetDiagnostics(
     for (const subnet of vnet.subnets) {
       const peList = subnet.privateEndpoints ?? []
       if (!peList.length) continue
-      const policy = subnet.privateEndpointNetworkPolicies ?? 'Disabled'
-      if (policy !== 'Disabled') continue
-
-      // Check if peered spokes or this VNet have a broader UDR (e.g. 10.0.0.0/8 or 0.0.0.0/0 -> Firewall) that covers the PE IP
       for (const pe of peList) {
         const peIpNum = ipv4(pe.ipAddress)
         if (peIpNum === undefined) continue
@@ -439,13 +435,14 @@ export function runAzNetDiagnostics(
           if (!connected) continue
           for (const srcSub of srcVnet.subnets) {
             if (srcSub.id === subnet.id || !srcSub.routeTableId) continue
+            const table = simulation.subnetTables[srcSub.id]
+            if (!table || lookupSubnetEffectiveRoute(table, pe.ipAddress)?.nextHopType !== 'InterfaceEndpoint') continue
             const rt = topology.udrTables.find((t) => t.id === srcSub.routeTableId)
             const coveringUdr = rt?.routes.find(
               (r) =>
                 r.enabled &&
                 r.nextHopType === 'VirtualAppliance' &&
                 cidr(r.prefix) &&
-                cidr(r.prefix)!.length < 32 &&
                 contains(r.prefix, peIpNum),
             )
             if (coveringUdr) {
@@ -459,9 +456,9 @@ export function runAzNetDiagnostics(
             id: `pe-bypass:${pe.id}`,
             severity: 'info',
             category: 'private-endpoint-udr-bypass',
-            title: `Private Endpoint ${pe.name} (${pe.ipAddress}/32) bypasses broader Firewall UDRs`,
-            summary: `Azure injects a /32 InterfaceEndpoint system route for ${pe.name} (${pe.ipAddress}/32) across "${vnet.name}" and its peered VNets. By Longest Prefix Match, traffic from ${bypassedSubnets.slice(0, 3).join(', ')} goes directly to the Private Endpoint instead of the broader VirtualAppliance UDR.`,
-            remediation: `This is standard Azure behavior (avoids hairpinning PaaS traffic through the firewall). If you must force inspection of traffic to ${pe.ipAddress}, set privateEndpointNetworkPolicies='RouteTableEnabled' on ${vnet.name}/${subnet.name} and add a /32 UDR.`,
+            title: `Private Endpoint ${pe.name} (${pe.ipAddress}/32) bypasses Firewall UDRs`,
+            summary: `The /32 InterfaceEndpoint system route for ${pe.name} (${pe.ipAddress}/32) remains active in ${bypassedSubnets.slice(0, 3).join(', ')}. Route-table network policies on ${vnet.name}/${subnet.name} and an active covering UDR at least as specific as the PE-hosting VNet address space are both required to override it. NSG-only policies, default routes and overly broad UDRs do not satisfy these requirements.`,
+            remediation: `If inspection is required, enable private endpoint route-table policies ('RouteTableEnabled', or 'Enabled' to retain NSG policies) on ${vnet.name}/${subnet.name} and add an active matching UDR toward the firewall/NVA. A ${pe.ipAddress}/32 UDR satisfies the prefix requirement; 0.0.0.0/0 does not.`,
             vnetId: vnet.id,
             subnetId: subnet.id,
           })
@@ -667,7 +664,7 @@ export function runAzNetDiagnostics(
         continue
       }
       const table = simulation.subnetTables[subnet.id]
-      if (!table || table.peeringPropagationDisabled) continue
+      if (!table) continue
 
       const broadApplianceUdrs = table.routes.filter(
         (r) => r.active && r.source === 'User' && r.nextHopType === 'VirtualAppliance',
@@ -716,7 +713,7 @@ export function runAzNetDiagnostics(
             category: 'peering-lpm-bypasses-udr',
             title: `Direct VNet Peering route ${peerRoute.prefix} in ${vnet.name}/${subnet.name} bypasses summary UDR ${bypassedUdr.prefix}`,
             summary: `Subnet ${vnet.name}/${subnet.name} has a summary UDR ${bypassedUdr.prefix} → VirtualAppliance (${bypassedUdr.nextHopIp ?? 'NVA'}), but also has an active direct VNetPeering system route for ${peerRoute.prefix} (${peerRoute.nextHopName ?? 'Peered VNet'}). Longest Prefix Match (LPM) causes traffic to ${peerRoute.prefix} to take the direct VNet peering and bypass the NVA/Firewall.`,
-            remediation: `Enable disablePeeringRoutePropagation (Preview) on Route Table "${table.udrTableName ?? subnet.routeTableId}", remove the direct spoke-to-spoke peering, or add a matching ${peerRoute.prefix} UDR.`,
+            remediation: `Configure disablePeeringRoutePropagation (Preview) with an active UDR covering ${peerRoute.prefix} on "${table.udrTableName ?? subnet.routeTableId}", remove the direct spoke-to-spoke peering, or add a matching ${peerRoute.prefix} UDR.`,
             vnetId: vnet.id,
             subnetId: subnet.id,
             sampleFlow: peerWorkloadSubnet
@@ -912,6 +909,14 @@ export function analyzeAzNetConnectivity(
       pair.forward.status !== 'delivered' ? `Forward (${a.defaultIp} → ${b.defaultIp}): ${pair.forward.summaryReason}` : '',
       pair.reverse.status !== 'delivered' ? `Return (${b.defaultIp} → ${a.defaultIp}): ${pair.reverse.summaryReason}` : '',
     ].filter(Boolean)
+    const unsuppressedPeeringSubnets = new Set(!failed ? [...pair.forward.hops, ...pair.reverse.hops]
+      .filter((hop) => hop.matchedRoute?.nextHopType === 'VNetPeering' && hop.subnetId &&
+        simulation.subnetTables[hop.subnetId]?.peeringPropagationDisabled)
+      .map((hop) => hop.subnetId!) : [])
+    const suppressionExplanation = [...unsuppressedPeeringSubnets].map((id) => {
+      const table = simulation.subnetTables[id]
+      return `No active covering UDR to suppress VNet peering routes in ${table.vnetName}/${table.subnetName} (${table.udrTableName}); the configured peering-suppression setting alone does not steer traffic through inspection.`
+    }).join(' ')
     findings.push({
       id: `flow:${a.key}:${b.key}`,
       severity: failed ? 'error' : 'warning',
@@ -921,7 +926,7 @@ export function analyzeAzNetConnectivity(
         ? failures.join(' ') + (transit && (a.group === 'site' || b.group === 'site')
           ? ` Peering "${transit.name}" does not exchange gateway routes (useRemoteGateways / allowGatewayTransit); check both spoke route learning and on-premises return-prefix advertisements.`
           : '')
-        : `Both directions deliver packets but only one traverses ${pair.asymmetricBypassApplianceNames.join(', ')}. Stateful inspection can drop return traffic.`,
+        : `Both directions deliver packets but only one traverses ${pair.asymmetricBypassApplianceNames.join(', ')}. Stateful inspection can drop return traffic.${suppressionExplanation ? ` ${suppressionExplanation}` : ''}`,
       remediation: failed
         ? 'Open Trace Flow to inspect the failed hop and matched route in each direction. Restore the required routes, gateway transit/advertisements, peering access, or appliance forwarding; verify any alternate path in both directions.'
         : 'Steer both directions through the same stateful inspection appliances.',

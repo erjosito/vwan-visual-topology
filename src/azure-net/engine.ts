@@ -46,6 +46,7 @@ export interface AzEffectiveRoute {
   asPath: number[]
   active: boolean
   suppressedReason?: string
+  privateEndpointRouteTableEnabled?: boolean
   weight?: number
 }
 
@@ -864,6 +865,7 @@ function compileSingleSubnetEffectiveRoutes(
   const candidates: AzEffectiveRoute[] = []
   const suppressedBgpRoutes: AzEffectiveRoute[] = []
   const suppressedPeeringRoutes: AzEffectiveRoute[] = []
+  const privateEndpointVnetPrefixes = new Map<string, string[]>()
 
   // A. System Routes: Local VNet prefixes
   for (const prefix of vnet.prefixes) {
@@ -897,8 +899,10 @@ function compileSingleSubnetEffectiveRoutes(
     for (const s of targetVnet.subnets) {
       for (const pe of s.privateEndpoints ?? []) {
         const pePolicy = s.privateEndpointNetworkPolicies ?? 'Disabled'
+        const id = `sys:pe:${subnet.id}:${pe.id}`
+        privateEndpointVnetPrefixes.set(id, targetVnet.prefixes)
         candidates.push({
-          id: `sys:pe:${subnet.id}:${pe.id}`,
+          id,
           prefix: `${pe.ipAddress}/32`,
           source: 'System',
           nextHopType: 'InterfaceEndpoint',
@@ -908,6 +912,7 @@ function compileSingleSubnetEffectiveRoutes(
           originLabel: `System · Private Endpoint ${pe.name}${viaPeeringName ? ` via ${viaPeeringName}` : ''} (NetworkPolicies: ${pePolicy})`,
           asPath: [],
           active: true,
+          privateEndpointRouteTableEnabled: pePolicy === 'RouteTableEnabled' || pePolicy === 'Enabled',
         })
       }
     }
@@ -930,16 +935,9 @@ function compileSingleSubnetEffectiveRoutes(
           nextHopName: otherVnet.name,
           originLabel: `System · VNet Peering (${rel.peering.name})`,
           asPath: [],
-          active: !peeringPropagationDisabled,
-          suppressedReason: peeringPropagationDisabled
-            ? `Suppressed by disablePeeringRoutePropagation=true (Preview) on Route Table "${udrTable?.name}"`
-            : undefined,
+          active: true,
         }
-        if (peeringPropagationDisabled) {
-          suppressedPeeringRoutes.push(peeringRoute)
-        } else {
-          candidates.push(peeringRoute)
-        }
+        candidates.push(peeringRoute)
       }
       addPeRoutesFromVnet(otherVnet, rel.peering.name)
     }
@@ -1107,7 +1105,7 @@ function compileSingleSubnetEffectiveRoutes(
     }
   }
 
-  // F. Resolve Active vs. Suppressed per Exact Prefix (`PE /32 (Disabled policy) > User (UDR) > BGP > System`)
+  // F. Resolve exact-prefix precedence; PE routes need route-table policies before UDRs can override them.
   const byPrefix = new Map<string, AzEffectiveRoute[]>()
   for (const route of candidates) {
     const group = byPrefix.get(route.prefix) ?? []
@@ -1124,9 +1122,9 @@ function compileSingleSubnetEffectiveRoutes(
     const sourceRank = (r: AzEffectiveRoute): number => {
       if (
         r.nextHopType === 'InterfaceEndpoint' &&
-        r.originLabel.includes('NetworkPolicies: Disabled')
+        !r.privateEndpointRouteTableEnabled
       ) {
-        return 0 // Beats even a /32 UDR when Private Endpoint Network Policies are Disabled
+        return 0
       }
       if (r.source === 'User') return 1
       if (r.source === 'RouteServer' || r.source === 'VirtualNetworkGateway') return 2
@@ -1155,20 +1153,43 @@ function compileSingleSubnetEffectiveRoutes(
     }
   }
 
-  // G. When PrivateEndpointNetworkPolicies is RouteTableEnabled or Enabled, ANY covering User UDR
-  // (e.g., /16, /24, or /32) invalidates the /32 InterfaceEndpoint system route in Azure SDN.
+  // Suppression needs an active replacement covering the entire peering prefix.
+  if (peeringPropagationDisabled) {
+    for (let i = resolved.length - 1; i >= 0; i--) {
+      const route = resolved[i]
+      if (route.nextHopType !== 'VNetPeering' || route.source !== 'System') continue
+      const prefix = cidr(route.prefix)
+      const replacement = prefix && resolved.find((udr) => udr.active && udr.source === 'User' &&
+        (cidr(udr.prefix)?.length ?? 33) <= prefix.length && contains(udr.prefix, prefix.network))
+      if (!replacement) continue
+      suppressedPeeringRoutes.push({
+        ...route,
+        active: false,
+        suppressedReason: `Suppressed by disablePeeringRoutePropagation=true (Preview) with active covering UDR ${replacement.prefix} (${replacement.originLabel})`,
+      })
+      resolved.splice(i, 1)
+    }
+  }
+
+  // G. PE overrides need route-table policies and a UDR at least as specific as the PE-owning VNet space.
   for (let i = 0; i < resolved.length; i++) {
     const r = resolved[i]
     if (
       r.active &&
       r.nextHopType === 'InterfaceEndpoint' &&
-      !r.originLabel.includes('NetworkPolicies: Disabled')
+      r.privateEndpointRouteTableEnabled
     ) {
       const peIpStr = r.nextHopIp ?? r.prefix.split('/')[0]
       const peIpNum = ipv4(peIpStr)
       if (peIpNum !== undefined) {
+        const ownerPrefixLengths = (privateEndpointVnetPrefixes.get(r.id) ?? [])
+          .filter((prefix) => cidr(prefix) && contains(prefix, peIpNum))
+          .map((prefix) => cidr(prefix)!.length)
+        if (!ownerPrefixLengths.length) continue
+        const ownerPrefixLength = Math.max(...ownerPrefixLengths)
         const coveringUdr = resolved.find(
-          (u) => u.active && u.source === 'User' && contains(u.prefix, peIpNum),
+          (u) => u.active && u.source === 'User' &&
+            (cidr(u.prefix)?.length ?? -1) >= ownerPrefixLength && contains(u.prefix, peIpNum),
         )
         if (coveringUdr) {
           resolved[i] = {
@@ -1244,7 +1265,7 @@ export function lookupSubnetEffectiveRoute(
 
   // If multiple active routes share the longest prefix, User > BGP > System
   const rank = (r: AzEffectiveRoute) => {
-    if (r.nextHopType === 'InterfaceEndpoint' && r.originLabel.includes('NetworkPolicies: Disabled')) return 0
+    if (r.nextHopType === 'InterfaceEndpoint' && !r.privateEndpointRouteTableEnabled) return 0
     if (r.source === 'User') return 1
     if (r.source === 'RouteServer' || r.source === 'VirtualNetworkGateway') return 2
     return 3

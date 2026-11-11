@@ -1272,7 +1272,7 @@ export function AzureNetDiagram({
                         rtTags.push('GWroutes:OFF')
                       }
                       if (rt.disablePeeringRoutePropagation) {
-                        rtTags.push('Peer:OFF')
+                        rtTags.push('PeerSuppress:ON')
                       }
                       const badgeText = rtTags.join(' · ')
                       const badgeW = Math.min(124, Math.max(54, badgeText.length * 4.8 + 10))
