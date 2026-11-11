@@ -183,6 +183,8 @@ for (const mode of ['hub-spoke', 'full']) {
     hub.routeServer!.branchToBranchTraffic = true
     await load(page, mode, topology)
     const open = async () => {
+      const routes = page.getByRole('dialog', { name: 'Effective routes', exact: true })
+      if (await routes.isVisible()) await routes.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
       await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
       await page.getByRole('menuitem', { name: 'Manage ARS Route Maps', exact: true }).click()
     }
@@ -269,6 +271,33 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(policy.getByRole('combobox', { name: 'Outbound route map', exact: true })).toHaveValue(mapId!)
   })
 
+  test(`${mode} prefers ER over shorter VPN paths in FirewallSubnet effective routes without ARS`, async ({ page }) => {
+    const topology = bgpTopology()
+    topology.vnets[0].routeServer = undefined
+    topology.vnets[0].subnets.push({ id: 'firewall', name: 'AzureFirewallSubnet', prefix: '10.0.1.0/26' })
+    topology.vnets[0].gateways.push({
+      id: 'er-gw', name: 'ExpressRoute gateway', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true,
+    })
+    topology.sites[0].asn = 65010
+    topology.sites[0].prefixes = ['172.16.10.0/24']
+    topology.vpnConnections = [topology.vpnConnections[0]]
+    topology.erLinks.push({
+      id: 'er-gateway', name: 'Gateway circuit', locationId: 'er', targetKind: 'vnet-gateway', targetId: 'er-gw', enabled: true,
+    })
+    await load(page, mode, topology)
+    await page.getByTestId('aznet-subnet-firewall').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
+    const table = page.getByTestId('aznet-effective-route-table')
+    const active = table.locator('tbody tr:not(.suppressed)').filter({ hasText: '172.16.10.0/24' })
+    await expect(active).toHaveCount(1)
+    await expect(active.getByRole('cell').nth(3)).toContainText('ExpressRoute gateway')
+    await expect(active.locator('.as-path')).toHaveText('12076 65010')
+    await expect(table.locator('tr.suppressed').filter({ hasText: '172.16.10.0/24' }).locator('.as-path')).toHaveText('65010')
+    await page.getByTestId('aznet-lpm-input').fill('172.16.10.4')
+    await expect(active).toContainText('LPM Winner')
+  })
+
   test(`${mode} separates effective-route AS paths from origins and suppression details`, async ({ page }) => {
     const topology = bgpTopology()
     topology.udrTables.push({
@@ -290,7 +319,20 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(table).not.toContainText('AS Path:')
     await expect(table.getByTestId('aznet-route-row-172.16.0.0/24-User').locator('.as-path')).toHaveText('—')
     await expect(table.getByTestId('aznet-route-row-10.0.0.0/16-System').locator('.as-path')).toHaveText('—')
+    const dialog = page.getByRole('dialog', { name: 'Effective routes', exact: true })
+    expect((await dialog.boundingBox())!.width).toBeGreaterThan(1000)
+    const scroller = table.locator('..')
+    expect(await scroller.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+    const lastHeading = table.getByRole('columnheader', { name: 'Origin / Tie-Breaker', exact: true })
+    await expect(lastHeading).toBeInViewport()
     await page.setViewportSize({ width: 640, height: 900 })
+    expect(await dialog.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      return bounds.left >= 0 && bounds.right <= window.innerWidth
+    })).toBe(true)
+    expect(await scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    await lastHeading.scrollIntoViewIfNeeded()
+    await expect(lastHeading).toBeInViewport()
     await bgp.locator('.as-path').scrollIntoViewIfNeeded()
     await expect(bgp.locator('.as-path')).toBeInViewport()
   })

@@ -65,6 +65,67 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
 
+  function coexistenceTopology() {
+    const topology = transitTopology()
+    topology.vnets[0].subnets.push({ id: 'firewall', name: 'AzureFirewallSubnet', prefix: '10.0.1.0/26' })
+    topology.vnets[0].gateways.unshift({
+      id: 'vpn-gw', name: 'VPN gateway', kind: 'Vpn', asn: 65515, enabled: true, bgpEnabled: true,
+    })
+    topology.vpnConnections = [{
+      id: 'vpn', name: 'VPN backup', siteId: 'site', targetKind: 'vnet-gateway', targetId: 'vpn-gw', enabled: true, bgpEnabled: true,
+    }]
+    topology.sites[0].asn = 65010
+    topology.sites[0].prefixes = ['172.16.10.0/24']
+    return topology
+  }
+
+  it('prefers coexisting ER over a shorter VPN path without ARS for local and gateway-transit subnets', () => {
+    const topology = coexistenceTopology()
+    const result = simulateAzNet(topology)
+    for (const id of ['firewall', 'work']) {
+      const routes = result.subnetTables[id].routes.filter((route) => route.prefix === '172.16.10.0/24')
+      expect(routes.find((route) => route.nextHopResourceId === 'gw')).toMatchObject({ active: true, asPath: [12076, 65010] })
+      expect(routes.find((route) => route.nextHopResourceId === 'vpn-gw')).toMatchObject({ active: false, asPath: [65010] })
+    }
+    const trace = traceAzNetFlow(topology, result, { kind: 'subnet', vnetId: 'hub', subnetId: 'firewall' }, '172.16.10.4')
+    expect(trace.status).toBe('delivered')
+    expect(trace.traversedEdgeIds).toContain('er-gw')
+    expect(trace.traversedEdgeIds).not.toContain('vpn')
+  })
+
+  it('keeps VPN failover, more-specific VPN routes and same-prefix UDR overrides with coexisting gateways', () => {
+    const topology = coexistenceTopology()
+    topology.vpnConnections[0].staticPrefixes = ['172.16.10.0/25']
+    topology.vpnConnections[0].bgpEnabled = false
+    let result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('vpn-gw')
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.200')?.nextHopResourceId).toBe('gw')
+    topology.vpnConnections[0].bgpEnabled = true
+    topology.erLinks.find((link) => link.id === 'er-gw')!.enabled = false
+    result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('vpn-gw')
+    topology.erLinks.find((link) => link.id === 'er-gw')!.enabled = true
+    topology.udrTables = [{
+      id: 'override', name: 'Explicit override', disableBgpRoutePropagation: false,
+      routes: [{ id: 'drop', name: 'Drop site', prefix: '172.16.10.0/24', nextHopType: 'None', enabled: true }],
+    }]
+    topology.vnets[0].subnets.find((subnet) => subnet.id === 'firewall')!.routeTableId = 'override'
+    result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')).toMatchObject({ source: 'User', nextHopType: 'None' })
+  })
+
+  it('retains explicit ARS preference and restores ER coexistence preference when ARS is disabled', () => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].routeServer = {
+      id: 'ars', name: 'ARS', enabled: true, branchToBranchTraffic: true, hubRoutingPreference: 'ASPath', peerApplianceIds: [],
+    }
+    let result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('vpn-gw')
+    topology.vnets[0].routeServer.enabled = false
+    result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('gw')
+  })
+
   function sitePolicy(topology: AzNetTopology, connectionId: string, direction: 'inboundMapId' | 'outboundMapId', rules: Partial<RouteMapRule>[]) {
     topology.routeMaps = [{
       id: 'site-map', name: 'Site policy', siteId: 'site',

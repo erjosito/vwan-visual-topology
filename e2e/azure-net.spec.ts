@@ -205,7 +205,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
 
     // 3. Active trace route highlighting (FWD / RET badges) in Effective Route Table
     await page.getByTestId('aznet-tab-routes').click()
-    await page.getByTestId('aznet-subnet-sub-app-web').click()
+    await page.getByTestId('aznet-subnet-selector').selectOption('sub-app-web')
     await expect(page.getByTestId('aznet-route-trace-badge-fwd').first()).toBeVisible()
 
     // 4. Share Link encodes topology into URL hash (#s=...) and reloads cleanly

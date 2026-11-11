@@ -3093,7 +3093,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             editor: 'Configure selected object',
             azure: 'Azure & Bicep',
           }[activeTab]}
-          className="aznet-inspector-window"
+          className={`aznet-inspector-window${activeTab === 'routes' ? ' aznet-routes-window' : ''}`}
           onClose={() => setActiveTab(null)}
         >
           <nav className="aznet-tabs">
