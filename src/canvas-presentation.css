@@ -7,7 +7,7 @@
   gap: 8px;
   flex-shrink: 0;
   margin: 10px 14px;
-  max-width: calc(100% - 28px);
+  max-width: calc(100% - 180px);
 }
 .simulator-shell .canvas-controls {
   display: flex;
@@ -42,3 +42,10 @@
   overflow: hidden;
 }
 .simulator-shell.canvas-maximized .canvas-stage { flex: 1; height: auto; min-height: 0; }
+.canvas-maximize-icon { display: none; }
+@media (max-width: 900px) {
+  .simulator-shell .canvas-controls-stack { max-width: calc(100% - 84px); }
+  .canvas-view-toggle { width: 44px; height: 44px; padding: 6px; }
+  .canvas-maximize-label { display: none; }
+  .canvas-maximize-icon { display: inline; }
+}

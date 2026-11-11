@@ -80,7 +80,9 @@ export function CanvasControls({ zoom, onZoom, onResetView, minZoom = 0.75, maxZ
 
 export function CanvasMaximizeButton() {
   const { maximized, toggleMaximized } = useCanvasPresentation()
-  return <button type="button" className="canvas-view-toggle" aria-pressed={maximized} onClick={toggleMaximized}>
-    {t(maximized ? 'Restore panels' : 'Maximize canvas')}
+  const label = t(maximized ? 'Restore panels' : 'Maximize canvas')
+  return <button type="button" className="canvas-view-toggle" aria-label={label} title={label} aria-pressed={maximized} onClick={toggleMaximized}>
+    <span className="canvas-maximize-label">{label}</span>
+    <span className="canvas-maximize-icon" aria-hidden="true">[ ]</span>
   </button>
 }

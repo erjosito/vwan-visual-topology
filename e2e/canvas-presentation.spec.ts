@@ -67,6 +67,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const controlBounds = (await controls.boundingBox())!
     expect(controlBounds.x).toBeGreaterThanOrEqual(0)
     expect(controlBounds.x + controlBounds.width).toBeLessThanOrEqual(360)
+    const maximizeBounds = (await page.getByRole('button', { name: 'Restore panels', exact: true }).boundingBox())!
+    expect(controlBounds.x + controlBounds.width).toBeLessThanOrEqual(maximizeBounds.x)
     const compactViewport = (await diagramViewport.boundingBox())!
     expect(compactViewport.y + compactViewport.height).toBeLessThanOrEqual(controlBounds.y)
     await page.getByLabel('Canvas style', { exact: true }).selectOption('grid')
