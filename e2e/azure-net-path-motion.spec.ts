@@ -89,7 +89,14 @@ for (const mode of ['hub-spoke', 'full']) {
     })
     expect(Math.max(...motion.errors)).toBeLessThan(2)
     expect(motion.trackLength).toBeCloseTo(motion.distance, 0)
-    expect(motion.fill).toBe('rgb(5, 150, 105)')
+    expect(motion.fill).toBe(await page.locator('.path-flow-circle').first().evaluate(() => {
+      const probe = document.createElement('span')
+      probe.style.color = 'var(--forward)'
+      document.body.append(probe)
+      const color = getComputedStyle(probe).color
+      probe.remove()
+      return color
+    }))
     expect(motion.pointerEvents).toBe('none')
     await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     await page.getByTitle('Zoom in', { exact: true }).click()
@@ -106,7 +113,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect.poll(async () => (await speeds(page)).every((speed) => Math.abs(speed - 200) < 0.01)).toBe(true)
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await expect(page.locator('.path-flow-circle')).toHaveCount(0)
-    await expect(page.getByTestId('aznet-erlink-er-site').locator('line')).toHaveAttribute('stroke', '#059669')
+    await expect(page.getByTestId('aznet-erlink-er-site').locator('line')).toHaveAttribute('stroke', 'var(--forward)')
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await expect(page.locator('.path-flow')).toHaveCount(2)
     await page.getByTestId('aznet-clear-highlights-btn').click()

@@ -370,7 +370,7 @@ export function AzureNetDiagram({
   for (const [direction, traces] of [['forward', forwardTraces], ['return', reverseTraces]] as const) {
     for (const trace of traces) {
       const destinationId = `${direction}:${trace.destinationIp}`
-      motionColors.set(destinationId, direction === 'forward' ? '#059669' : '#d97706')
+      motionColors.set(destinationId, direction === 'forward' ? 'var(--forward)' : 'var(--return)')
       let segments: MotionSegment[] = []
       const finish = (stopped = false) => {
         if (segments.length) motionFlows.push({ segments, destinationId, direction, stopped })
@@ -441,7 +441,7 @@ export function AzureNetDiagram({
             <path
               d="M 28 0 L 0 0 0 28"
               fill="none"
-              stroke="rgba(148, 163, 184, 0.14)"
+              stroke="var(--grid)"
               strokeWidth="1"
             />
           </pattern>
@@ -474,11 +474,11 @@ export function AzureNetDiagram({
             !peering.aToB.allowVirtualNetworkAccess ||
             !peering.bToA.allowVirtualNetworkAccess
 
-          let stroke = '#0284c7'
-          if (brokenAccess || hasFinding) stroke = '#dc2626'
-          if (inReverse) stroke = '#d97706'
-          if (inForward) stroke = '#059669'
-          if (isSelected) stroke = '#2563eb'
+          let stroke = 'var(--info)'
+          if (brokenAccess || hasFinding) stroke = 'var(--error)'
+          if (inReverse) stroke = 'var(--return)'
+          if (inForward) stroke = 'var(--forward)'
+          if (isSelected) stroke = 'var(--accent)'
 
           const flagsSummary: string[] = []
           if (peering.aToB.allowGatewayTransit || peering.bToA.allowGatewayTransit) {
@@ -542,7 +542,7 @@ export function AzureNetDiagram({
                 y2={b.cy}
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4 : 2.5}
-                strokeDasharray={brokenAccess ? '6 5' : undefined}
+                strokeDasharray={brokenAccess ? '6 5' : inReverse && !inForward ? '7 4' : undefined}
               />
               <rect
                 data-testid={`aznet-peering-pill-${peering.id}`}
@@ -551,7 +551,7 @@ export function AzureNetDiagram({
                 width={132}
                 height={22}
                 rx={6}
-                fill={brokenAccess || hasFinding ? '#fef2f2' : '#f8fafc'}
+                fill={brokenAccess || hasFinding ? 'var(--error-surface)' : 'var(--surface)'}
                 stroke={stroke}
                 strokeWidth={1.3}
               />
@@ -561,7 +561,7 @@ export function AzureNetDiagram({
                 textAnchor="middle"
                 fontSize={10}
                 fontWeight={600}
-                fill="#0f172a"
+                fill="var(--text)"
               >
                 Peer · {flagsSummary.join(' · ')}
               </text>
@@ -588,8 +588,9 @@ export function AzureNetDiagram({
                 y1={a.cy}
                 x2={b.cx}
                 y2={b.cy}
-                stroke={inForward ? '#059669' : inReverse ? '#d97706' : '#0ea5e9'}
+                stroke={inForward ? 'var(--forward)' : inReverse ? 'var(--return)' : 'var(--info)'}
                 strokeWidth={inForward || inReverse ? 4 : 2.5}
+                strokeDasharray={inReverse && !inForward ? '7 4' : undefined}
               />
             </g>
           )
@@ -622,16 +623,16 @@ export function AzureNetDiagram({
             showDiagnosticBadges &&
             diagnostics.some((d) => d.category === 'er-sku-regional-mismatch' && d.erLinkId === link.id)
           const stroke = !link.enabled
-            ? '#94a3b8'
+            ? 'var(--link)'
             : hasSkuMismatch
-              ? '#dc2626'
+              ? 'var(--error)'
               : isSelected
-                ? '#2563eb'
+                ? 'var(--accent)'
                 : inForward
-                  ? '#059669'
+                  ? 'var(--forward)'
                   : inReverse
-                    ? '#d97706'
-                    : '#b45309'
+                    ? 'var(--return)'
+                    : 'var(--warning)'
           return (
             <g
               key={link.id}
@@ -666,7 +667,7 @@ export function AzureNetDiagram({
                 y2={b.cy}
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4.2 : 2.8}
-                strokeDasharray={!link.enabled || hasSkuMismatch ? '5 4' : undefined}
+                strokeDasharray={!link.enabled || hasSkuMismatch ? '5 4' : inReverse && !inForward ? '7 4' : undefined}
               />
               <rect
                 x={midX - 48}
@@ -674,7 +675,7 @@ export function AzureNetDiagram({
                 width={96}
                 height={18}
                 rx={5}
-                fill={hasSkuMismatch ? '#fef2f2' : '#fffbeb'}
+                fill={hasSkuMismatch ? 'var(--error-surface)' : 'var(--warning-surface)'}
                 stroke={stroke}
                 strokeWidth={1.1}
               />
@@ -684,7 +685,7 @@ export function AzureNetDiagram({
                 textAnchor="middle"
                 fontSize={9}
                 fontWeight={600}
-                fill={hasSkuMismatch ? '#991b1b' : '#78350f'}
+                fill={hasSkuMismatch ? 'var(--error)' : 'var(--warning)'}
               >
                 ER{link.weight ? ` · W:${link.weight}` : ''}
                 {link.prepend?.length ? ` · +${link.prepend.length}AS` : ''}
@@ -709,14 +710,14 @@ export function AzureNetDiagram({
           const isSelected =
             selected?.kind === 'er-global-reach-link' && selected.linkId === grLink.id
           const stroke = !grLink.enabled
-            ? '#94a3b8'
+            ? 'var(--link)'
             : isSelected
-              ? '#2563eb'
+              ? 'var(--accent)'
               : inForward
-                ? '#059669'
+                ? 'var(--forward)'
                 : inReverse
-                  ? '#d97706'
-                  : '#0284c7'
+                  ? 'var(--return)'
+                  : 'var(--info)'
           return (
             <g
               key={grLink.id}
@@ -761,7 +762,7 @@ export function AzureNetDiagram({
                 width={100}
                 height={18}
                 rx={5}
-                fill="#e0f2fe"
+                fill="var(--surface-muted)"
                 stroke={stroke}
                 strokeWidth={1.1}
               />
@@ -771,7 +772,7 @@ export function AzureNetDiagram({
                 textAnchor="middle"
                 fontSize={8.5}
                 fontWeight={700}
-                fill="#0369a1"
+                fill="var(--info)"
               >
                 🌐 Global Reach{!grLink.enabled ? ' · OFF' : ''}
               </text>
@@ -807,14 +808,14 @@ export function AzureNetDiagram({
           const isSelected =
             selected?.kind === 'vpn-connection' && selected.connectionId === conn.id
           const stroke = !conn.enabled
-            ? '#94a3b8'
+            ? 'var(--link)'
             : isSelected
-              ? '#2563eb'
+              ? 'var(--accent)'
               : inForward
-                ? '#059669'
+                ? 'var(--forward)'
                 : inReverse
-                  ? '#d97706'
-                  : '#7c3aed'
+                  ? 'var(--return)'
+                  : 'var(--purple)'
           return (
             <g
               key={conn.id}
@@ -859,7 +860,7 @@ export function AzureNetDiagram({
                 width={84}
                 height={18}
                 rx={5}
-                fill="#f5f3ff"
+                fill="var(--surface-muted)"
                 stroke={stroke}
                 strokeWidth={1.1}
               />
@@ -869,7 +870,7 @@ export function AzureNetDiagram({
                 textAnchor="middle"
                 fontSize={9}
                 fontWeight={600}
-                fill="#5b21b6"
+                fill="var(--purple)"
               >
                 VPN · {conn.bgpEnabled ? 'BGP' : 'Static'}
                 {!conn.enabled ? ' · OFF' : ''}
@@ -891,14 +892,14 @@ export function AzureNetDiagram({
           const inReverse = reverseEdges.has(sLink.id)
           const isSelected = selected?.kind === 'site-link' && selected.siteLinkId === sLink.id
           const stroke = !sLink.enabled
-            ? '#94a3b8'
+            ? 'var(--link)'
             : isSelected
-              ? '#2563eb'
+              ? 'var(--accent)'
               : inForward
-                ? '#059669'
+                ? 'var(--forward)'
                 : inReverse
-                  ? '#d97706'
-                  : '#64748b'
+                  ? 'var(--return)'
+                  : 'var(--link)'
           return (
             <g
               key={sLink.id}
@@ -937,7 +938,7 @@ export function AzureNetDiagram({
                 width={76}
                 height={18}
                 rx={5}
-                fill="#f8fafc"
+                fill="var(--surface)"
                 stroke={stroke}
                 strokeWidth={1.1}
               />
@@ -947,7 +948,7 @@ export function AzureNetDiagram({
                 textAnchor="middle"
                 fontSize={8.5}
                 fontWeight={600}
-                fill="#334155"
+                fill="var(--text)"
               >
                 WAN Link{!sLink.enabled ? ' · OFF' : ''}
               </text>
@@ -1015,17 +1016,17 @@ export function AzureNetDiagram({
                 width={box.width}
                 height={box.height}
                 rx={12}
-                fill="#ffffff"
+                fill="var(--surface)"
                 stroke={
                   isVnetSelected
-                    ? '#2563eb'
+                    ? 'var(--accent)'
                     : hasError
-                      ? '#dc2626'
+                      ? 'var(--error)'
                       : hasWarning
-                        ? '#d97706'
+                        ? 'var(--warning)'
                         : isHubVnetRole(vnet.role)
-                          ? '#0369a1'
-                          : '#475569'
+                          ? 'var(--info)'
+                          : 'var(--link)'
                 }
                 strokeWidth={isVnetSelected || hasError ? 2.6 : 1.8}
               />
@@ -1039,8 +1040,8 @@ export function AzureNetDiagram({
                 rx={12}
                 fill={
                   isHubVnetRole(vnet.role)
-                    ? '#e0f2fe'
-                    : '#f1f5f9'
+                    ? 'var(--surface-muted)'
+                    : 'var(--surface-muted)'
                 }
               />
               <text
@@ -1048,7 +1049,7 @@ export function AzureNetDiagram({
                 y={box.y + 18}
                 fontSize={12.5}
                 fontWeight={700}
-                fill="#0f172a"
+                fill="var(--text)"
               >
                 {vnet.name}
               </text>
@@ -1056,7 +1057,7 @@ export function AzureNetDiagram({
                 x={box.x + 12}
                 y={box.y + 34}
                 fontSize={10.5}
-                fill="#475569"
+                fill="var(--text)"
               >
                 {vnet.prefixes.join(', ')} · {vnet.region}
               </text>
@@ -1066,7 +1067,7 @@ export function AzureNetDiagram({
                 width={56}
                 height={18}
                 rx={5}
-                fill="#0f172a"
+                fill="var(--surface-muted)"
               />
               <text
                 x={box.x + box.width - 38}
@@ -1074,7 +1075,7 @@ export function AzureNetDiagram({
                 textAnchor="middle"
                 fontSize={9.5}
                 fontWeight={700}
-                fill="#f8fafc"
+                fill="var(--text-muted)"
               >
                 {vnet.role.toUpperCase()}
               </text>
@@ -1094,8 +1095,8 @@ export function AzureNetDiagram({
                       chips.push({
                         key: gw.id,
                         label: gw.kind === 'ExpressRoute' ? 'ER GW' : 'VPN GW',
-                        bg: gw.kind === 'ExpressRoute' ? '#fef3c7' : '#ede9fe',
-                        fg: gw.kind === 'ExpressRoute' ? '#92400e' : '#5b21b6',
+                        bg: gw.kind === 'ExpressRoute' ? 'var(--warning-surface)' : 'var(--surface-muted)',
+                        fg: gw.kind === 'ExpressRoute' ? 'var(--warning)' : 'var(--purple)',
                         entity: { kind: 'gateway', vnetId: vnet.id, gatewayId: gw.id },
                       })
                     }
@@ -1103,8 +1104,8 @@ export function AzureNetDiagram({
                       chips.push({
                         key: vnet.routeServer.id,
                         label: `ARS 65515${vnet.routeServer.branchToBranchTraffic ? ' · B2B' : ''}`,
-                        bg: '#dcfce7',
-                        fg: '#166534',
+                        bg: 'var(--surface-muted)',
+                        fg: 'var(--success)',
                         entity: {
                           kind: 'route-server',
                           vnetId: vnet.id,
@@ -1123,16 +1124,16 @@ export function AzureNetDiagram({
                               : `NVA (${app.privateIp})`,
                         bg:
                           app.kind === 'azure-firewall'
-                            ? '#fee2e2'
+                            ? 'var(--surface-muted)'
                             : app.kind === 'vnra'
-                              ? '#dbeafe'
-                              : '#f3e8ff',
+                              ? 'var(--surface-muted)'
+                              : 'var(--surface-muted)',
                         fg:
                           app.kind === 'azure-firewall'
-                            ? '#991b1b'
+                            ? 'var(--error)'
                             : app.kind === 'vnra'
-                              ? '#1e40af'
-                              : '#6b21a8',
+                              ? 'var(--accent)'
+                              : 'var(--purple)',
                         entity: { kind: 'appliance', vnetId: vnet.id, applianceId: app.id },
                       })
                     }
@@ -1201,19 +1202,19 @@ export function AzureNetDiagram({
                   : undefined
                 const hasPe = (subnet.privateEndpoints?.length ?? 0) > 0
 
-                let rowFill = '#f8fafc'
-                let rowStroke = '#cbd5e1'
+                let rowFill = 'var(--surface-muted)'
+                let rowStroke = 'var(--link)'
                 if (inRev) {
-                  rowFill = '#fffbeb'
-                  rowStroke = '#d97706'
+                  rowFill = 'var(--warning-surface)'
+                  rowStroke = 'var(--return)'
                 }
                 if (inFwd) {
-                  rowFill = '#ecfdf5'
-                  rowStroke = '#059669'
+                  rowFill = 'var(--success-surface)'
+                  rowStroke = 'var(--forward)'
                 }
                 if (isSubSelected) {
-                  rowFill = '#eff6ff'
-                  rowStroke = '#2563eb'
+                  rowFill = 'var(--selection)'
+                  rowStroke = 'var(--accent)'
                 }
 
                 return (
@@ -1261,7 +1262,7 @@ export function AzureNetDiagram({
                       y={rowY + 15}
                       fontSize={10.5}
                       fontWeight={isSubSelected ? 700 : 600}
-                      fill="#0f172a"
+                      fill="var(--text)"
                     >
                       {subnet.name}
                     </text>
@@ -1269,7 +1270,7 @@ export function AzureNetDiagram({
                       x={box.x + 148}
                       y={rowY + 15}
                       fontSize={9.5}
-                      fill="#475569"
+                      fill="var(--text)"
                     >
                       {subnet.prefix}
                     </text>
@@ -1327,13 +1328,13 @@ export function AzureNetDiagram({
                             rx={4}
                             fill={
                               rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
-                                ? '#f1f5f9'
-                                : '#e0e7ff'
+                                ? 'var(--surface-muted)'
+                                : 'var(--surface-muted)'
                             }
                             stroke={
                               rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
-                                ? '#cbd5e1'
-                                : '#a5b4fc'
+                                ? 'var(--link)'
+                                : 'var(--link)'
                             }
                             strokeWidth={0.8}
                           />
@@ -1345,8 +1346,8 @@ export function AzureNetDiagram({
                             fontWeight={700}
                             fill={
                               rt.disableBgpRoutePropagation || rt.disablePeeringRoutePropagation
-                                ? '#475569'
-                                : '#3730a3'
+                                ? 'var(--text)'
+                                : 'var(--accent)'
                             }
                           >
                             {badgeText}
@@ -1362,7 +1363,7 @@ export function AzureNetDiagram({
                           width={26}
                           height={16}
                           rx={4}
-                          fill="#ccfbf1"
+                          fill="var(--surface-muted)"
                         />
                         <text
                           x={box.x + box.width - 23}
@@ -1370,7 +1371,7 @@ export function AzureNetDiagram({
                           textAnchor="middle"
                           fontSize={8.5}
                           fontWeight={700}
-                          fill="#115e59"
+                          fill="var(--info)"
                         >
                           PE
                         </text>
@@ -1391,8 +1392,8 @@ export function AzureNetDiagram({
                     width={Math.min(Math.max(vnet.label.trim().length * 5.8 + 18, 64), box.width - 8)}
                     height={19}
                     rx={9.5}
-                    fill="#fef9c3"
-                    stroke="#facc15"
+                    fill="var(--warning-surface)"
+                    stroke="var(--warning)"
                     strokeWidth={1.1}
                   />
                   <text
@@ -1401,7 +1402,7 @@ export function AzureNetDiagram({
                     textAnchor="middle"
                     fontSize={10.5}
                     fontWeight={600}
-                    fill="#713f12"
+                    fill="var(--warning)"
                   >
                     {vnet.label.trim().length > 36 ? `${vnet.label.trim().slice(0, 35)}…` : vnet.label.trim()}
                   </text>
@@ -1462,17 +1463,17 @@ export function AzureNetDiagram({
                 width={box.width}
                 height={box.height}
                 rx={12}
-                fill="#ecfeff"
-                stroke={isSelected ? '#2563eb' : '#0891b2'}
+                fill="var(--surface-muted)"
+                stroke={isSelected ? 'var(--accent)' : 'var(--info)'}
                 strokeWidth={isSelected ? 2.6 : 1.8}
               />
-              <text x={box.x + 14} y={box.y + 24} fontSize={12.5} fontWeight={700} fill="#0f172a">
+              <text x={box.x + 14} y={box.y + 24} fontSize={12.5} fontWeight={700} fill="var(--text)">
                 {hub.name}
               </text>
-              <text x={box.x + 14} y={box.y + 42} fontSize={10.5} fill="#334155">
+              <text x={box.x + 14} y={box.y + 42} fontSize={10.5} fill="var(--text)">
                 vWAN Hub ({hub.prefix}) · Pref: {hub.preference}
               </text>
-              <text x={box.x + 14} y={box.y + 60} fontSize={10} fontWeight={600} fill="#0e7490">
+              <text x={box.x + 14} y={box.y + 60} fontSize={10} fontWeight={600} fill="var(--info)">
                 Routing Intent: {hub.routingIntent.private ? 'Private ✓' : 'Private Off'} /{' '}
                 {hub.routingIntent.internet ? 'Internet ✓' : 'Internet Off'}
               </text>
@@ -1488,8 +1489,8 @@ export function AzureNetDiagram({
                     width={Math.min(Math.max(hub.label.trim().length * 5.8 + 18, 64), box.width - 8)}
                     height={19}
                     rx={9.5}
-                    fill="#fef9c3"
-                    stroke="#facc15"
+                    fill="var(--warning-surface)"
+                    stroke="var(--warning)"
                     strokeWidth={1.1}
                   />
                   <text
@@ -1498,7 +1499,7 @@ export function AzureNetDiagram({
                     textAnchor="middle"
                     fontSize={10.5}
                     fontWeight={600}
-                    fill="#713f12"
+                    fill="var(--warning)"
                   >
                     {hub.label.trim().length > 36 ? `${hub.label.trim().slice(0, 35)}…` : hub.label.trim()}
                   </text>
@@ -1559,14 +1560,14 @@ export function AzureNetDiagram({
                 width={box.width}
                 height={box.height}
                 rx={10}
-                fill="#fffbeb"
-                stroke={isSelected ? '#2563eb' : '#d97706'}
+                fill="var(--surface-muted)"
+                stroke={isSelected ? 'var(--accent)' : 'var(--warning)'}
                 strokeWidth={isSelected ? 2.5 : 1.8}
               />
-              <text x={box.x + 12} y={box.y + 24} fontSize={12} fontWeight={700} fill="#78350f">
+              <text x={box.x + 12} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--warning)">
                 ⚡ {loc.name}
               </text>
-              <text x={box.x + 12} y={box.y + 44} fontSize={10} fill="#92400e">
+              <text x={box.x + 12} y={box.y + 44} fontSize={10} fill="var(--warning)">
                 MSEE 12076 · {loc.sku ?? 'Standard'} · GR: {loc.globalReachEnabled ? 'On' : 'Off'}
               </text>
               {loc.label?.trim() ? (
@@ -1581,8 +1582,8 @@ export function AzureNetDiagram({
                     width={Math.min(Math.max(loc.label.trim().length * 5.8 + 18, 64), box.width - 8)}
                     height={19}
                     rx={9.5}
-                    fill="#fef9c3"
-                    stroke="#facc15"
+                    fill="var(--warning-surface)"
+                    stroke="var(--warning)"
                     strokeWidth={1.1}
                   />
                   <text
@@ -1591,7 +1592,7 @@ export function AzureNetDiagram({
                     textAnchor="middle"
                     fontSize={10.5}
                     fontWeight={600}
-                    fill="#713f12"
+                    fill="var(--warning)"
                   >
                     {loc.label.trim().length > 36 ? `${loc.label.trim().slice(0, 35)}…` : loc.label.trim()}
                   </text>
@@ -1652,17 +1653,17 @@ export function AzureNetDiagram({
                 width={box.width}
                 height={box.height}
                 rx={10}
-                fill="#f8fafc"
-                stroke={isSelected ? '#2563eb' : '#334155'}
+                fill="var(--surface)"
+                stroke={isSelected ? 'var(--accent)' : 'var(--link)'}
                 strokeWidth={isSelected ? 2.5 : 1.8}
               />
-              <text x={box.x + 12} y={box.y + 24} fontSize={12} fontWeight={700} fill="#0f172a">
+              <text x={box.x + 12} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--text)">
                 🏢 {site.name}
               </text>
-              <text x={box.x + 12} y={box.y + 42} fontSize={10.5} fill="#475569">
+              <text x={box.x + 12} y={box.y + 42} fontSize={10.5} fill="var(--text)">
                 ASN {site.asn} · {site.prefixes.join(', ')}
               </text>
-              <text x={box.x + 12} y={box.y + 58} fontSize={9.5} fill="#64748b">
+              <text x={box.x + 12} y={box.y + 58} fontSize={9.5} fill="var(--text-muted)">
                 On-Premises Branch / Datacenter
               </text>
               {site.label?.trim() ? (
@@ -1677,8 +1678,8 @@ export function AzureNetDiagram({
                     width={Math.min(Math.max(site.label.trim().length * 5.8 + 18, 64), box.width - 8)}
                     height={19}
                     rx={9.5}
-                    fill="#fef9c3"
-                    stroke="#facc15"
+                    fill="var(--warning-surface)"
+                    stroke="var(--warning)"
                     strokeWidth={1.1}
                   />
                   <text
@@ -1687,7 +1688,7 @@ export function AzureNetDiagram({
                     textAnchor="middle"
                     fontSize={10.5}
                     fontWeight={600}
-                    fill="#713f12"
+                    fill="var(--warning)"
                   >
                     {site.label.trim().length > 36 ? `${site.label.trim().slice(0, 35)}…` : site.label.trim()}
                   </text>
@@ -1727,10 +1728,10 @@ export function AzureNetDiagram({
             }}>
             <title>{label}: {findings.map((finding) => finding.title).join('; ')}</title>
             <circle cx={box.x + box.width - 8} cy={box.y + 6} r={11}
-              fill={findings.some((finding) => finding.severity === 'error') ? '#dc2626' : '#d97706'}
-              stroke="#ffffff" strokeWidth={2} />
+              fill={findings.some((finding) => finding.severity === 'error') ? 'var(--error)' : 'var(--warning)'}
+              stroke="var(--link)" strokeWidth={2} />
             <text x={box.x + box.width - 8} y={box.y + 10} textAnchor="middle"
-              fontSize={9} fontWeight={800} fill="#ffffff">
+              fontSize={9} fontWeight={800} fill="var(--on-accent)">
               {findings.length > 99 ? '99+' : findings.length}
             </text>
           </g>

@@ -1,18 +1,18 @@
-:root { font-family: 'DM Sans', system-ui, sans-serif; color: #23344b; background: #f3f6fa; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+:root { font-family: 'DM Sans', system-ui, sans-serif; color: var(--text); background: var(--page); font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 360px; }
 button, input, select, textarea { font: inherit; }
 button, select { cursor: pointer; }
-button, .button-link { border: 1px solid #d5deea; background: #fff; color: #344760; border-radius: 7px; padding: 9px 13px; font-size: 13px; font-weight: 600; transition: background .15s, border-color .15s; }
+button, .button-link { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 7px; padding: 9px 13px; font-size: 13px; font-weight: 600; transition: background .15s, border-color .15s; }
 .button-link { display: inline-flex; align-items: center; text-decoration: none; }
-button:hover, .button-link:hover { background: #edf3fa; border-color: #9eafc5; }
+button:hover, .button-link:hover { background: var(--surface-muted); border-color: var(--border); }
 button:disabled { opacity: .45; cursor: not-allowed; }
-button:focus-visible, .button-link:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, g:focus-visible { outline: 3px solid #4f92e9; outline-offset: 3px; }
-input, select, textarea { width: 100%; padding: 9px 10px; border: 1px solid #d4dfeb; border-radius: 6px; background: #fff; color: #253751; font-size: 13px; min-width: 0; }
+button:focus-visible, .button-link:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, g:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+input, select, textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 13px; min-width: 0; }
 textarea { resize: vertical; line-height: 1.6; }
-input:disabled { background: #f0f3f7; }
+input:disabled { background: var(--surface-muted); }
 h1, h2, h3, p { margin: 0; }
 h2 { font-size: 17px; font-weight: 650; letter-spacing: -.3px; }
 h3 { font-size: 14px; margin-bottom: 12px; }
-a { color: #2764bc; }
-summary { cursor: pointer; color: #3569af; }
+a { color: var(--accent); }
+summary { cursor: pointer; color: var(--accent); }

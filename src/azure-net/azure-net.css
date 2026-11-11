@@ -4,8 +4,8 @@
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-  background: #f1f5f9;
-  color: #0f172a;
+  background: var(--page);
+  color: var(--text);
   font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
 }
 
@@ -16,16 +16,16 @@
   gap: 12px;
   padding: 10px 18px;
   min-height: 54px;
-  background: linear-gradient(90deg, #0f172a 0%, #064e3b 100%);
-  color: #f8fafc;
-  border-bottom: 1px solid #065f46;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--success);
   flex-shrink: 0;
   box-sizing: border-box;
 }
 
 .aznet-topbar-hubspoke {
-  background: linear-gradient(90deg, #0f172a 0%, #1e1b4b 100%);
-  border-bottom-color: #312e81;
+  background: var(--surface-muted);
+  border-bottom-color: var(--border);
 }
 
 .unified-topbar-left {
@@ -50,19 +50,19 @@
   place-items: center;
   width: 34px;
   height: 34px;
-  background: linear-gradient(135deg, #10b981, #0f766e);
-  color: #ffffff;
+  background: var(--surface-muted);
+  color: var(--on-accent);
   border-radius: 9px;
   font-size: 13.5px;
   font-weight: 800;
   letter-spacing: -0.03em;
-  box-shadow: 0 3px 8px rgba(16, 185, 129, 0.3);
+  box-shadow: 0 3px 8px var(--shadow);
   flex-shrink: 0;
 }
 
 .aznet-topbar-hubspoke .aznet-brand-icon {
-  background: linear-gradient(135deg, #6366f1, #4338ca);
-  box-shadow: 0 3px 8px rgba(99, 102, 241, 0.35);
+  background: var(--surface-muted);
+  box-shadow: 0 3px 8px var(--shadow);
 }
 
 .aznet-brand h1 {
@@ -75,17 +75,17 @@
 
 .aznet-brand h1 span {
   font-weight: 500;
-  color: #a7f3d0;
+  color: var(--text-muted);
 }
 
 .aznet-topbar-hubspoke .aznet-brand h1 span {
-  color: #c7d2fe;
+  color: var(--text-muted);
 }
 
 .aznet-preview-pill {
-  background: linear-gradient(135deg, #0d9488, #047857);
-  color: #ecfdf5;
-  border: 1px solid rgba(110, 231, 183, 0.35);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border: 1px solid var(--surface);
   font-size: 10.5px;
   font-weight: 700;
   padding: 2px 8px;
@@ -96,9 +96,9 @@
 }
 
 .aznet-topbar-hubspoke .aznet-preview-pill {
-  background: linear-gradient(135deg, #4f46e5, #3730a3);
-  color: #eef2ff;
-  border-color: rgba(165, 180, 252, 0.4);
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border-color: var(--surface);
 }
 
 .aznet-topbar-controls {
@@ -112,16 +112,16 @@
 .aznet-input {
   padding: 6px 10px;
   border-radius: 6px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #0f172a;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font-size: 12.5px;
 }
 
 .aznet-topbar .aznet-select {
-  background: #1e293b;
-  color: #f8fafc;
-  border-color: #334155;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border-color: var(--border);
 }
 
 .aznet-btn {
@@ -130,9 +130,9 @@
   gap: 6px;
   padding: 6px 11px;
   border-radius: 6px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
-  color: #0f172a;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -140,31 +140,31 @@
 }
 
 .aznet-btn-gallery {
-  background: linear-gradient(135deg, #0f766e, #059669);
-  color: #ffffff;
-  border-color: #10b981;
-  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+  background: var(--surface-muted);
+  color: var(--on-accent);
+  border-color: var(--success);
+  box-shadow: 0 2px 6px var(--shadow);
 }
 
 .aznet-btn-gallery:hover {
-  background: linear-gradient(135deg, #0d9488, #10b981);
-  border-color: #34d399;
+  background: var(--surface-muted);
+  border-color: var(--success);
 }
 
 .aznet-topbar-hubspoke .aznet-btn-gallery {
-  background: linear-gradient(135deg, #4f46e5, #4338ca);
-  border-color: #6366f1;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.25);
+  background: var(--surface-muted);
+  border-color: var(--accent);
+  box-shadow: 0 2px 6px var(--shadow);
 }
 
 .aznet-topbar-hubspoke .aznet-btn-gallery:hover {
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  border-color: #818cf8;
+  background: var(--surface-muted);
+  border-color: var(--accent);
 }
 
 .aznet-btn:hover:not(:disabled) {
-  background: #f8fafc;
-  border-color: #94a3b8;
+  background: var(--surface);
+  border-color: var(--border);
 }
 
 .aznet-btn:disabled {
@@ -173,29 +173,29 @@
 }
 
 .aznet-topbar .aznet-btn {
-  background: #1e293b;
-  color: #f8fafc;
-  border-color: #334155;
+  background: var(--surface-muted);
+  color: var(--text-muted);
+  border-color: var(--border);
 }
 
 .aznet-topbar .aznet-btn:hover:not(:disabled) {
-  background: #334155;
+  background: var(--surface-muted);
 }
 
 .aznet-btn-primary {
-  background: #2563eb !important;
-  color: #ffffff !important;
-  border-color: #1d4ed8 !important;
+  background: var(--accent) !important;
+  color: var(--on-accent) !important;
+  border-color: var(--accent) !important;
 }
 
 .aznet-btn-primary:hover:not(:disabled) {
-  background: #1d4ed8 !important;
+  background: var(--accent) !important;
 }
 
 .aznet-btn-fix {
-  background: #059669 !important;
-  color: #ffffff !important;
-  border-color: #047857 !important;
+  background: var(--success) !important;
+  color: var(--on-accent) !important;
+  border-color: var(--success) !important;
 }
 
 .aznet-workspace {
@@ -220,17 +220,17 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 14px;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
   font-size: 12px;
-  color: #334155;
+  color: var(--text);
 }
 
 .aznet-canvas-shell {
   position: relative;
   flex: 1;
   min-height: 0;
-  background: #f8fafc;
+  background: var(--surface);
 }
 
 .aznet-diagram-svg {
@@ -247,32 +247,32 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.94);
+  background: var(--surface);
   padding: 6px;
   border-radius: 8px;
-  border: 1px solid #cbd5e1;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px var(--shadow);
 }
 
 .aznet-ctrl-btn {
   padding: 5px 9px;
   border-radius: 5px;
-  border: 1px solid #cbd5e1;
-  background: #ffffff;
+  border: 1px solid var(--border);
+  background: var(--surface);
   font-size: 11.5px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--text);
   cursor: pointer;
 }
 
 .aznet-ctrl-btn:hover {
-  background: #f1f5f9;
+  background: var(--page);
 }
 
 .aznet-clear-highlights-btn {
-  background: #fef2f2;
-  color: #991b1b;
-  border-color: #fecaca;
+  background: var(--surface-muted);
+  color: var(--error);
+  border-color: var(--border);
 }
 
 .canvas-overlay.aznet-inspector-window {
@@ -306,8 +306,8 @@
 .aznet-tabs {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
   flex-shrink: 0;
   position: sticky;
   top: 0;
@@ -321,14 +321,14 @@
   background: transparent;
   font-size: 12px;
   font-weight: 600;
-  color: #475569;
+  color: var(--text);
   cursor: pointer;
 }
 
 .aznet-tab.active {
-  color: #2563eb;
-  border-bottom-color: #2563eb;
-  background: #ffffff;
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  background: var(--surface);
 }
 
 .aznet-panel-body {
@@ -341,8 +341,8 @@
 }
 
 .aznet-card {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 12px;
 }
@@ -350,7 +350,7 @@
 .aznet-card h3 {
   margin: 0 0 8px 0;
   font-size: 13.5px;
-  color: #0f172a;
+  color: var(--text);
 }
 
 .aznet-route-table {
@@ -362,25 +362,25 @@
 .aznet-route-table th,
 .aznet-route-table td {
   padding: 6px 8px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
 }
 
 .aznet-route-table th {
-  background: #f1f5f9;
+  background: var(--page);
   font-weight: 700;
-  color: #334155;
+  color: var(--text);
 }
 
 .aznet-route-row.suppressed {
   opacity: 0.58;
-  background: #f8fafc;
+  background: var(--surface);
 }
 
 .aznet-route-row.lpm-winner {
-  background: #ecfdf5;
-  outline: 1.5px solid #059669;
+  background: var(--surface-muted);
+  outline: 1.5px solid var(--success);
 }
 
 .aznet-badge {
@@ -392,28 +392,28 @@
 }
 
 .aznet-badge.active {
-  background: #dcfce7;
-  color: #166534;
+  background: var(--surface-muted);
+  color: var(--success);
 }
 
 .aznet-badge.suppressed {
-  background: #f1f5f9;
-  color: #64748b;
+  background: var(--page);
+  color: var(--text-muted);
 }
 
 .aznet-badge.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--surface-muted);
+  color: var(--error);
 }
 
 .aznet-badge.warning {
-  background: #fef3c7;
-  color: #92400e;
+  background: var(--warning-surface);
+  color: var(--warning);
 }
 
 .aznet-badge.info {
-  background: #e0f2fe;
-  color: #075985;
+  background: var(--surface-muted);
+  color: var(--info);
 }
 
 .aznet-hop-list {
@@ -425,20 +425,20 @@
 .aznet-hop-item {
   padding: 8px 10px;
   border-radius: 6px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-left: 4px solid #2563eb;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
   font-size: 11.5px;
 }
 
 .aznet-hop-item.dropped {
-  border-left-color: #dc2626;
-  background: #fef2f2;
+  border-left-color: var(--error);
+  background: var(--surface-muted);
 }
 
 .aznet-hop-item.delivered {
-  border-left-color: #059669;
-  background: #ecfdf5;
+  border-left-color: var(--success);
+  background: var(--surface-muted);
 }
 
 .aznet-field-grid {
@@ -453,7 +453,7 @@
   gap: 4px;
   font-size: 11.5px;
   font-weight: 600;
-  color: #334155;
+  color: var(--text);
 }
 
 .aznet-checkbox-row {
@@ -473,21 +473,21 @@
   max-height: calc(100dvh - 16px);
   overflow-y: auto;
   padding: 6px;
-  background: #ffffff;
-  border: 1px solid #b1c6e8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 9px;
-  box-shadow: 0 8px 30px #142b4b30;
+  box-shadow: 0 8px 30px var(--shadow);
 }
 
 .topology-context-menu .context-menu-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #75859a;
+  color: var(--text-muted);
   font-size: 11px;
   padding: 9px;
   overflow-wrap: anywhere;
-  border-bottom: 1px solid #e8eef5;
+  border-bottom: 1px solid var(--border);
   margin-bottom: 4px;
 }
 
@@ -498,20 +498,20 @@
   font-size: 12px;
   padding: 10px;
   background: transparent;
-  color: #0f172a;
+  color: var(--text);
   cursor: pointer;
 }
 
 .topology-context-menu button:hover:not(:disabled) {
-  background: #f1f5f9;
+  background: var(--page);
 }
 
 .topology-context-menu button.danger {
-  color: #b91c1c;
+  color: var(--error);
 }
 
 .topology-context-menu button.danger:hover:not(:disabled) {
-  background: #fef2f2;
+  background: var(--surface-muted);
 }
 
 .topology-context-menu > button {
@@ -527,8 +527,8 @@
 }
 
 .topology-context-menu .submenu-active {
-  background: #edf4ff;
-  color: #225eac;
+  background: var(--surface-muted);
+  color: var(--accent);
 }
 
 .topology-context-menu .submenu-back {
@@ -544,15 +544,15 @@
   min-width: 280px;
   max-width: 340px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.98);
-  border: 1px solid #94a3b8;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px var(--shadow);
   display: flex;
   flex-direction: column;
   gap: 8px;
   font-size: 11.5px;
-  color: #0f172a;
+  color: var(--text);
 }
 
 .aznet-hover-popover-header {
@@ -561,12 +561,12 @@
   justify-content: space-between;
   gap: 8px;
   padding-bottom: 6px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid var(--border);
 }
 
 .aznet-hover-subtitle {
   font-size: 10.5px;
-  color: #475569;
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -576,7 +576,7 @@
   gap: 5px;
   font-size: 11px;
   font-weight: 600;
-  color: #334155;
+  color: var(--text);
 }
 
 .aznet-hover-popover-grid {
@@ -590,15 +590,15 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px;
-  background: #f8fafc;
+  background: var(--surface);
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
 }
 
 .aznet-hover-col-title {
   font-size: 10.5px;
   font-weight: 700;
-  color: #334155;
+  color: var(--text);
   margin-bottom: 2px;
 }
 
@@ -613,7 +613,7 @@
   align-items: center;
   gap: 6px;
   font-size: 11px;
-  color: #1e293b;
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -622,9 +622,9 @@
   flex-direction: column;
   gap: 4px;
   padding: 6px 8px;
-  background: #f8fafc;
+  background: var(--surface);
   border-radius: 6px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--border);
 }
 
 .aznet-hover-route-row {
@@ -637,7 +637,7 @@
 
 .aznet-hover-empty {
   font-size: 10.5px;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .aznet-hover-popover-footer {
@@ -645,7 +645,7 @@
   justify-content: flex-end;
   gap: 6px;
   padding-top: 4px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border);
 }
 
 
