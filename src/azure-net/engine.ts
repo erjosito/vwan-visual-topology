@@ -1,6 +1,7 @@
 import { cidr, contains, ipv4 } from '../validation'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzSiteRouteMap } from './route-maps'
+import { applyAzArsRouteMap, azArsPolicyLinks } from './ars-route-maps'
 import type { RouteMapDirection } from '../model'
 import type {
   AzAppliance,
@@ -68,6 +69,7 @@ export interface AzBgpRibEntry {
   forwardingRoutes?: AzBgpRibEntry[]
   routeMapTrace?: string[]
   connectionId?: string
+  protectedVnet?: boolean
 }
 
 export interface AzSubnetRouteTableResult {
@@ -89,6 +91,8 @@ export interface AzSimulationResult {
   subnetTables: Record<string, AzSubnetRouteTableResult>
   gatewayRibs: Record<string, AzBgpRibEntry[]>
   routeServerRibs: Record<string, AzBgpRibEntry[]>
+  routeServerInbound?: Record<string, Record<string, AzBgpRibEntry[]>>
+  routeServerOutbound?: Record<string, Record<string, AzBgpRibEntry[]>>
   vwanHubRibs: Record<string, AzBgpRibEntry[]>
   erLocationRibs: Record<string, AzBgpRibEntry[]>
   siteRibs: Record<string, AzBgpRibEntry[]>
@@ -283,6 +287,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
   const erLocationRibs: Record<string, AzBgpRibEntry[]> = {}
   const gatewayRibs: Record<string, AzBgpRibEntry[]> = {}
   const routeServerRibs: Record<string, AzBgpRibEntry[]> = {}
+  const routeServerInbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
+  const routeServerOutbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
   const vwanHubRibs: Record<string, AzBgpRibEntry[]> = {}
   const sitePolicy = (siteId: string, connectionId: string, direction: RouteMapDirection, routes: AzBgpRibEntry[]) => {
     const result = applyAzSiteRouteMap(topology, siteId, connectionId, direction, routes)
@@ -352,12 +358,15 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
   }
   propagateSiteLinks()
 
-  // Helper: compute what prefixes a VNet advertises through its attached Gateways
-  const advertisedVnetPrefixes = (vnet: AzVNet): { prefix: string; asPath: number[]; sourceName: string; advertisedSummaryFrom?: string }[] => {
-    let result: { prefix: string; asPath: number[]; sourceName: string; advertisedSummaryFrom?: string }[] = vnet.prefixes.map((prefix) => ({
+  type VnetAdvertisement = {
+    prefix: string; asPath: number[]; sourceName: string; advertisedSummaryFrom?: string; protectedVnet?: boolean; routeMapTrace?: string[]
+  }
+  const connectedVnetPrefixes = (vnet: AzVNet): VnetAdvertisement[] => {
+    const result: VnetAdvertisement[] = vnet.prefixes.map((prefix) => ({
       prefix,
       asPath: [65515],
       sourceName: vnet.name,
+      protectedVnet: true,
     }))
     // Include peered spokes that have allowGatewayTransit (from this hub) + useRemoteGateways (from spoke)
     // Azure rules: hub must have an enabled Gateway/ARS, and spoke cannot have its own Gateway/ARS.
@@ -391,12 +400,16 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         }
       }
     }
-    const summaries = vnet.gateways.some((g) => g.enabled) && vnet.subnets.some((s) => s.name === 'GatewaySubnet')
+    return result
+  }
+  const advertisedVnetPrefixes = (vnet: AzVNet, connectionId: string): VnetAdvertisement[] => {
+    let result = connectedVnetPrefixes(vnet)
+    const summaries = connectionId.startsWith('gateway:') && vnet.gateways.some((g) => g.enabled) && vnet.subnets.some((s) => s.name === 'GatewaySubnet')
       ? (vnet.summarizedGatewayPrefixes ?? []).filter((prefix) => typeof prefix === 'string' && cidr(prefix))
       : []
     if (summaries.length) {
       result = [
-        ...summaries.map((prefix) => ({ prefix, asPath: [65515], sourceName: `${vnet.name} (Advertised gateway summary)`, advertisedSummaryFrom: vnet.name })),
+        ...summaries.map((prefix) => ({ prefix, asPath: [65515], sourceName: `${vnet.name} (Advertised gateway summary)`, advertisedSummaryFrom: vnet.name, protectedVnet: true })),
         ...result.filter((route) => {
           const prefix = cidr(route.prefix)
           return !prefix || !summaries.some((summary) => cidr(summary)!.length <= prefix.length && contains(summary, prefix.network))
@@ -409,16 +422,15 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
       for (const peerAppId of vnet.routeServer.peerApplianceIds.slice(0, 8)) {
         const app = vnet.appliances.find((a) => a.id === peerAppId && a.bgpEnabled && a.enableIpForwarding)
         if (!app) continue
-        for (const p of app.advertisedPrefixes ?? []) {
-          result.push({
+        const received = (app.advertisedPrefixes ?? []).map((p) => ({
             prefix: p,
             asPath: [65515, app.asn ?? 65501],
             sourceName: `${app.name} (via ARS Branch-to-Branch)`,
-          })
-        }
+        }))
+        result.push(...applyAzArsRouteMap(vnet.routeServer, `nva:${app.id}`, 'inbound', received))
       }
     }
-    return result
+    return vnet.routeServer?.enabled ? applyAzArsRouteMap(vnet.routeServer, connectionId, 'outbound', result) : result
   }
 
   // 2. Populate ExpressRoute Locations (MSEE) from connected Sites, VNet ER Gateways, and vWAN Hubs
@@ -459,7 +471,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
           )
           continue
         }
-        for (const adv of advertisedVnetPrefixes(ownerVnet)) {
+        for (const adv of advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`)) {
           entries.push({
             id: `erloc:${loc.id}:vng:${link.id}:${adv.prefix}`,
             prefix: adv.prefix,
@@ -472,6 +484,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             weight: link.weight ?? 0,
             explanation: `Advertised by ${gw.name} from ${adv.sourceName}`,
             advertisedSummaryFrom: adv.advertisedSummaryFrom,
+            routeMapTrace: adv.routeMapTrace,
           })
         }
       } else if (link.targetKind === 'vwan-hub') {
@@ -652,6 +665,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
       )
     }
     const entries: AzBgpRibEntry[] = []
+    routeServerInbound[ars.id] = {}
+    routeServerOutbound[ars.id] = {}
     for (const appId of ars.peerApplianceIds.slice(0, 8)) {
       const app = vnet.appliances.find((a) => a.id === appId)
       if (!app || !app.bgpEnabled || !app.enableIpForwarding) continue
@@ -662,8 +677,9 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         )
         continue
       }
+      const peerEntries: AzBgpRibEntry[] = []
       for (const prefix of app.advertisedPrefixes ?? []) {
-        entries.push({
+        peerEntries.push({
           id: `ars:${ars.id}:nva:${app.id}:${prefix}`,
           prefix,
           asPath: [appAsn],
@@ -683,8 +699,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         const site = topology.sites.find((s) => s.id === conn.siteId)
         if (!site) continue
         for (const sr of sitePolicy(site.id, conn.id, 'outbound', (siteRibs[site.id] ?? []).filter((r) => r.preferred))) {
-          if (entries.some((e) => e.prefix === sr.prefix && e.nextHopId === app.id)) continue
-          entries.push({
+          if (peerEntries.some((e) => e.prefix === sr.prefix && e.nextHopId === app.id)) continue
+          peerEntries.push({
             ...sr,
             id: `ars:${ars.id}:nva-vpn:${app.id}:${conn.id}:${sr.prefix}`,
             connectionId: conn.id,
@@ -700,15 +716,17 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
           })
         }
       }
+      const received = applyAzArsRouteMap(ars, `nva:${app.id}`, 'inbound', peerEntries)
+      routeServerInbound[ars.id][`nva:${app.id}`] = received
+      entries.push(...received)
     }
 
     if (ars.branchToBranchTraffic) {
-      const nvaEntries = [...entries]
       for (const gw of vnet.gateways.filter((g) => g.enabled && g.bgpEnabled)) {
-        for (const gRoute of (gatewayRibs[gw.id] ?? []).filter((r) => r.preferred)) {
-          entries.push({
+        const received = applyAzArsRouteMap(ars, `gateway:${gw.id}`, 'inbound',
+          (gatewayRibs[gw.id] ?? []).filter((r) => r.preferred).map((gRoute): AzBgpRibEntry => ({
             ...gRoute,
-            id: `ars:${ars.id}:gw:${gw.id}:${gRoute.prefix}`,
+            id: `ars:${ars.id}:gw:${gw.id}:${gRoute.id}`,
             prefix: gRoute.prefix,
             asPath: gRoute.asPath,
             nextHopName: `${gw.name} (Branch-to-Branch)`,
@@ -718,10 +736,31 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             preferred: true,
             weight: gRoute.weight,
             explanation: `Exchanged with ${gw.name} via ARS Branch-to-Branch`,
-          })
-        }
+          })))
+        routeServerInbound[ars.id][`gateway:${gw.id}`] = received
+        entries.push(...received)
+      }
+    }
+
+    routeServerRibs[ars.id] = chooseBgpWinners(entries, ars.hubRoutingPreference)
+    const connected: AzBgpRibEntry[] = connectedVnetPrefixes(vnet).map((route) => ({
+      ...route, id: `ars:${ars.id}:connected:${route.prefix}`, nextHopName: route.sourceName,
+      nextHopKind: 'local', nextHopId: vnet.id, originProtocol: 'VNet', preferred: true,
+      explanation: 'Connected virtual network advertisement',
+    }))
+    for (const link of azArsPolicyLinks(vnet)) {
+      const isGateway = link.id.startsWith('gateway:')
+      if (isGateway && !vnet.gateways.some((gateway) => gateway.id === link.targetId && gateway.enabled && gateway.bgpEnabled)) continue
+      if (!isGateway && !vnet.appliances.some((app) => app.id === link.targetId && app.bgpEnabled && app.enableIpForwarding && app.asn !== 65515 && app.asn !== 12076)) continue
+      const candidates = routeServerRibs[ars.id].filter((route) => route.preferred && route.nextHopId !== link.targetId &&
+        (!isGateway || ars.branchToBranchTraffic && route.nextHopKind === 'appliance'))
+      const advertised = applyAzArsRouteMap(ars, link.id, 'outbound', [...connected, ...candidates])
+      routeServerOutbound[ars.id][link.id] = advertised
+      if (isGateway && ars.branchToBranchTraffic) {
+        const gw = vnet.gateways.find((gateway) => gateway.id === link.targetId && gateway.enabled && gateway.bgpEnabled)
+        if (!gw) continue
         const gwEntries = [...(gatewayRibs[gw.id] ?? [])]
-        for (const nvaRoute of nvaEntries) {
+        for (const nvaRoute of advertised.filter((route) => route.nextHopKind === 'appliance')) {
           gwEntries.push({
             ...nvaRoute,
             id: `gw:${gw.id}:ars:${ars.id}:${nvaRoute.id}`,
@@ -739,8 +778,6 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         gatewayRibs[gw.id] = chooseBgpWinners(gwEntries, 'ASPath')
       }
     }
-
-    routeServerRibs[ars.id] = chooseBgpWinners(entries, ars.hubRoutingPreference)
   }
 
   // 5. Populate Virtual WAN Hubs (for Hybrid topologies)
@@ -849,7 +886,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         const ownerVnet = topology.vnets.find((v) => v.gateways.some((g) => g.id === conn.targetId && g.enabled))
         const gw = ownerVnet?.gateways.find((g) => g.id === conn.targetId)
         if (!ownerVnet || !gw) continue
-        const received = advertisedVnetPrefixes(ownerVnet).map((adv): AzBgpRibEntry => ({
+        const received = advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`).map((adv): AzBgpRibEntry => ({
             id: `site:${site.id}:vpn:${conn.id}:${adv.prefix}`,
             connectionId: conn.id,
             prefix: adv.prefix,
@@ -861,17 +898,19 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             preferred: false,
             explanation: `Learned from ${gw.name} over S2S VPN ${conn.name} from ${adv.sourceName}`,
             advertisedSummaryFrom: adv.advertisedSummaryFrom,
+            routeMapTrace: adv.routeMapTrace,
         }))
         learnedFromAzure.push(...sitePolicy(site.id, conn.id, 'inbound', received))
       } else if (conn.bgpEnabled && conn.targetKind === 'appliance') {
         const ownerVnet = topology.vnets.find((vnet) => vnet.appliances.some((app) => app.id === conn.targetId))
         const app = ownerVnet?.appliances.find((app) => app.id === conn.targetId && app.bgpEnabled && app.enableIpForwarding)
         if (!ownerVnet || !app) continue
-        const received = advertisedVnetPrefixes(ownerVnet).map((adv): AzBgpRibEntry => ({
+        const received = advertisedVnetPrefixes(ownerVnet, `nva:${app.id}`).map((adv): AzBgpRibEntry => ({
           id: `site:${site.id}:nva:${conn.id}:${adv.prefix}`, connectionId: conn.id,
           prefix: adv.prefix, asPath: [...(conn.outboundPrepend ?? []), app.asn ?? 65501, ...adv.asPath],
           nextHopName: `${app.name} (${conn.name})`, nextHopKind: 'appliance', nextHopId: app.id,
           originProtocol: 'VPN', preferred: false, explanation: `Learned from BGP NVA ${app.name} over ${conn.name}`,
+          routeMapTrace: adv.routeMapTrace,
         }))
         learnedFromAzure.push(...sitePolicy(site.id, conn.id, 'inbound', received))
       } else if (conn.bgpEnabled && conn.targetKind === 'vwan-hub') {
@@ -911,6 +950,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     subnetTables,
     gatewayRibs,
     routeServerRibs,
+    routeServerInbound,
+    routeServerOutbound,
     vwanHubRibs,
     erLocationRibs,
     siteRibs,

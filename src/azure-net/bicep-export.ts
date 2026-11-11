@@ -41,6 +41,9 @@ export function generateAzNetBicep(
   if (topology.routeMaps?.length) {
     warnings.push('On-premises site route maps are simulation/device policies and are not deployed by this Azure Bicep export. Configure the corresponding site routers separately.')
   }
+  if (topology.vnets.some((vnet) => vnet.routeServer?.routeMaps?.length)) {
+    warnings.push('Azure Route Server route maps are simulated but are not included in this Bicep starter. Configure ARS maps and connection assignments separately; advanced AS-path/community and peered-spoke connection policies are not modeled.')
+  }
   let resourceCount = 0
   const usedSymbolicNames = new Set<string>()
 
