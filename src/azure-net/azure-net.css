@@ -124,6 +124,12 @@
   border-color: var(--border);
 }
 
+.aznet-topbar .aznet-sample-select {
+  width: 180px;
+  max-width: 100%;
+  text-overflow: ellipsis;
+}
+
 .aznet-btn {
   display: inline-flex;
   align-items: center;
