@@ -2,11 +2,41 @@ import { useState } from 'react'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { MapDefinition } from '../RouteMapsPanel'
 import type { RouteMap, RouteMapDirection } from '../model'
-import type { AzNetTopology } from './model'
+import type { AzAppliance, AzNetTopology } from './model'
+import { parseAsPath } from '../validation'
 import { azSitePolicyLinks, pruneAzSiteRouteMaps, validateAzSiteRouteMaps } from './route-maps'
-import { azArsPolicyLinks, parseArsPrependAsPath, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
+import { azArsPolicyLinks, azArsSpokes, parseArsPrependAsPath, parseBgpCommunities, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
 import { BgpRouteTable } from './BgpRouteTable'
 import type { AzBgpRibEntry } from './engine'
+
+function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave: (attributes: AzAppliance['advertisedRouteAttributes']) => void }) {
+  const [error, setError] = useState('')
+  if (!app.advertisedPrefixes?.length) return null
+  return <details><summary>Advertised route attributes · {app.name}</summary>
+    <p className="muted">AS-path suffixes follow the peer ASN. These are source advertisements, before inbound ARS policies.</p>
+    <form onSubmit={(event) => {
+      event.preventDefault()
+      try {
+        const data = new FormData(event.currentTarget)
+        onSave(app.advertisedPrefixes!.map((prefix, index) => ({
+          prefix, asPath: parseAsPath(String(data.get(`path-${index}`) ?? '')),
+          communities: parseBgpCommunities(String(data.get(`communities-${index}`) ?? '')),
+        })))
+        setError('')
+      } catch (error) { setError(error instanceof Error ? error.message : 'Invalid route attributes.') }
+    }}>
+      {app.advertisedPrefixes.map((prefix, index) => {
+        const attributes = app.advertisedRouteAttributes?.find((attributes) => attributes.prefix === prefix)
+        return <fieldset key={prefix}><legend>{prefix}</legend>
+          <label className="field"><span>AS-path suffix</span><input name={`path-${index}`} aria-label={`${app.name} ${prefix} AS-path suffix`} defaultValue={attributes?.asPath?.join(' ') ?? ''} /></label>
+          <label className="field"><span>Communities</span><input name={`communities-${index}`} aria-label={`${app.name} ${prefix} communities`} defaultValue={attributes?.communities?.join(' ') ?? ''} /></label>
+        </fieldset>
+      })}
+      <button>Save peer route attributes</button>
+      {error && <p role="alert" className="notice error">{error}</p>}
+    </form>
+  </details>
+}
 
 export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, outbound, initialConnectionId, initialDirection, onSave, onClose }: {
   topology: AzNetTopology; siteId?: string; routeServerId?: string;
@@ -27,7 +57,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
   if (!site) return null
   const maps = ars ? ars.routeMaps ?? [] : topology.routeMaps?.filter((map) => map.siteId === siteId) ?? []
   const map = draft ?? maps.find((map) => map.id === mapId)
-  const links = ars && arsVnet ? azArsPolicyLinks(arsVnet) : azSitePolicyLinks(topology, site.id)
+  const links = ars && arsVnet ? azArsPolicyLinks(arsVnet, topology) : azSitePolicyLinks(topology, site.id)
   const link = links.find((link) => link.id === connectionId) ?? links[0]
   const binding = site.routeMapAssignments?.find((assignment) => assignment.connectionId === link?.id)
   const commit = (next: AzNetTopology) => {
@@ -52,6 +82,25 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
   }
   return <CanvasOverlay title={`Route maps · ${site.name}`} className="route-map-panel" onClose={onClose}>
     <p className="muted">Policies belong to this {ars ? 'Azure Route Server' : 'site'}, with independent assignments on each connection. Inbound means learned by {site.name}; outbound means advertised by it. Unmatched routes are allowed.</p>
+    {ars && arsVnet && <details><summary>BGP peers (local or gateway-transit peered spokes)</summary>
+      <p className="muted">Remote NVA policies belong to the spoke virtual network connection, not a local BGP-peer association. Enabling a peering here does not create virtual network peering or packet connectivity.</p>
+      {[arsVnet, ...azArsSpokes(arsVnet, topology).map((spoke) => spoke.vnet)].flatMap((host) => host.appliances.filter((app) => app.bgpEnabled).map((app) => <div key={app.id}><label className="aznet-hover-toggle">
+        <input type="checkbox" aria-label={`BGP peer ${host.name} / ${app.name}`}
+          checked={ars.peerApplianceIds.includes(app.id)} disabled={!ars.peerApplianceIds.includes(app.id) && ars.peerApplianceIds.length >= 8}
+          onChange={(event) => {
+            try {
+              const next = structuredClone(topology)
+              const target = next.vnets.find((vnet) => vnet.id === arsVnet.id)!.routeServer!
+              target.peerApplianceIds = event.target.checked ? [...target.peerApplianceIds, app.id] : target.peerApplianceIds.filter((id) => id !== app.id)
+              pruneAzArsRouteMaps(next); commit(next)
+            } catch (error) { setError(error instanceof Error ? error.message : 'Invalid BGP peer.') }
+          }} />{host.name} / {app.name}
+      </label><PeerRouteAttributes app={app} onSave={(attributes) => {
+        const next = structuredClone(topology)
+        next.vnets.find((vnet) => vnet.id === host.id)!.appliances.find((peer) => peer.id === app.id)!.advertisedRouteAttributes = attributes
+        commit(next)
+      }} /></div>))}
+    </details>}
     <button onClick={() => {
       setDraft({ id: crypto.randomUUID(), name: 'New route map', ...(ars ? {} : { siteId }), rules: [] })
       setMapId(''); setConfirmDelete(false)
@@ -78,7 +127,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
         const directions = [assignment.inboundMapId === map.id ? 'Inbound' : '', assignment.outboundMapId === map.id ? 'Outbound' : ''].filter(Boolean)
         return directions.length ? [`${links.find((link) => link.id === assignment.connectionId)?.name ?? assignment.connectionId} (${directions.join(', ')})`] : []
       }).join(' · ') || 'No connections'}</p>}
-      <MapDefinition key={map.id} map={map} parsePrepend={ars ? parseArsPrependAsPath : undefined} onSave={(value) => {
+      <MapDefinition key={map.id} map={map} advanced={!!ars} parsePrepend={ars ? parseArsPrependAsPath : undefined} onSave={(value) => {
         const next = structuredClone(topology)
         if (ars) {
           const target = next.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)!.routeServer!
@@ -109,7 +158,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
       <BgpRouteTable key={link.id} entries={outbound[link.id] ?? []} available={ars.enabled} />
     </details>}
     <p className="muted">{ars
-      ? 'ARS maps support prefix matching, permit/drop, summarization and 2-byte AS-path prepend, excluding Azure-reserved ASNs. Inbound policies run before ARS selection; outbound policies change advertisements only, not the ARS best path. The ARS VNet address space remains advertised unchanged. Private prepends do not survive ExpressRoute private-AS stripping. AS-path/community matching, attribute replacement and peered-spoke connection maps are not modeled in this release.'
+      ? 'ARS maps support prefix, AS-path and community conditions combined with AND; AS-path add/replace/clear; community add/replace/remove/clear; and summarization with attribute stripping. Only 2-byte ASNs are supported; modifications exclude Azure-reserved ASNs and preserve Azure-reserved communities. Inbound policies precede ARS selection. Outbound policies change advertisements only. Peered-spoke policies require allowGatewayTransit/useRemoteGateways and no local gateway/ARS in the spoke. Local On-link routes remain even when propagation is filtered. ARS own-VNet advertisements stay protected. Private ASNs are stripped over ExpressRoute. Policies are not packet ACLs and do not fill aggregate holes.'
       : 'Uses the same ordered prefix matching, permit, drop, summarize and AS-path prepend rules as VWAN site policies. Site policies accept private and 32-bit ASNs. Summaries do not create reachability in aggregate holes.'}
       {ars && <> <a href="https://learn.microsoft.com/azure/route-server/route-maps-about" target="_blank" rel="noreferrer">Microsoft ARS route-map capabilities and limits</a></>}
     </p>

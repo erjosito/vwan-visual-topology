@@ -21,9 +21,9 @@ export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]
     <p className="route-legend"><strong>* Preferred</strong> · Candidates are grouped by prefix; subnet forwarding routes are inspected separately.</p>
     <div className="table-scroll">
       <table className="aznet-route-table" aria-label="Requested router BGP table">
-        <thead><tr><th className="route-state" aria-label="Preferred route">*</th><th>Next hop / source</th><th>AS path</th></tr></thead>
+        <thead><tr><th className="route-state" aria-label="Preferred route">*</th><th>Next hop / source</th><th>AS path</th><th>Communities</th></tr></thead>
         {visible.map(([prefix, candidates]) => <tbody key={prefix}>
-          <tr data-reason-prefix={prefix}><th scope="rowgroup" colSpan={3} className="route-prefix-heading" style={{ whiteSpace: 'normal' }}>
+          <tr data-reason-prefix={prefix}><th scope="rowgroup" colSpan={4} className="route-prefix-heading" style={{ whiteSpace: 'normal' }}>
             <code>{prefix}</code>{' '}
             <span className="selection-reason">{[...new Set(candidates.map((entry) => entry.explanation))].join(' ')}</span>
           </th></tr>
@@ -32,6 +32,7 @@ export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]
             <td className="route-state" aria-label={entry.preferred ? 'Preferred' : 'Alternative'}>{entry.preferred ? '*' : ''}</td>
             <td><strong>{entry.nextHopName}</strong><small>{entry.nextHopKind === 'local' ? 'Local origin' : entry.originProtocol}</small></td>
             <td className="as-path">{entry.asPath.join(' ') || '-'}</td>
+            <td>{entry.communities?.join(' ') || '-'}</td>
           </tr>)}
         </tbody>)}
       </table>

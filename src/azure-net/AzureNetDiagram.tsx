@@ -89,18 +89,18 @@ interface BoxPosition {
   height: number
 }
 
-function mappedArsLinks(vnet: AzVNet) {
-  return azArsPolicyLinks(vnet).filter((link) => {
+function mappedArsLinks(vnet: AzVNet, topology: AzNetTopology) {
+  return azArsPolicyLinks(vnet, topology).filter((link) => {
     const binding = vnet.routeServer?.routeMapAssignments?.find((assignment) => assignment.connectionId === link.id)
     return [binding?.inboundMapId, binding?.outboundMapId].some((id) => id && vnet.routeServer?.routeMaps?.some((map) => map.id === id))
   })
 }
 
-function getVnetBoxHeight(vnet: AzVNet): number {
+function getVnetBoxHeight(vnet: AzVNet, topology: AzNetTopology): number {
   const headerH = 44
   const controlStripH = vnet.gateways.length > 0 || vnet.routeServer || vnet.appliances.length > 0 ? 30 : 0
   const subnetsH = Math.max(1, vnet.subnets.length) * 28 + 14
-  return headerH + controlStripH + mappedArsLinks(vnet).length * 44 + subnetsH
+  return headerH + controlStripH + mappedArsLinks(vnet, topology).length * 44 + subnetsH
 }
 
 function isHubVnetRole(role: string): boolean {
@@ -123,7 +123,7 @@ function computePositions(topology: AzNetTopology): {
 
   spokes.forEach((v, idx) => {
     const w = 285
-    const h = getVnetBoxHeight(v)
+    const h = getVnetBoxHeight(v, topology)
     vnets[v.id] = {
       x: v.x ?? 80 + idx * 330,
       y: v.y ?? 45,
@@ -134,7 +134,7 @@ function computePositions(topology: AzNetTopology): {
 
   hubs.forEach((v, idx) => {
     const w = 315
-    const h = getVnetBoxHeight(v)
+    const h = getVnetBoxHeight(v, topology)
     vnets[v.id] = {
       x: v.x ?? 260 + idx * 380,
       y: v.y ?? 275,
@@ -452,14 +452,14 @@ export function AzureNetDiagram({
     const ars = vnet.routeServer
     if (!ars) continue
     const box = positions.vnets[vnet.id]
-    mappedArsLinks(vnet).forEach((link, index) => {
+    mappedArsLinks(vnet, topology).forEach((link, index) => {
       const y = box.y + 82 + index * 44
       const peer = vnet.appliances.find((app) => app.id === link.targetId)
       const gateway = vnet.gateways.find((gateway) => gateway.id === link.targetId)
       addPolicyMarkers({ kind: 'route-server', vnetId: vnet.id, routeServerId: ars.id }, ars.name, link.id, link.name,
         ars.routeMaps ?? [], ars.routeMapAssignments ?? [],
         Boolean(ars.enabled && link.bgp && !faults[vnet.id] && !faults[link.targetId] &&
-          (peer ? peer.enableIpForwarding && peer.asn !== 65515 && peer.asn !== 12076 : gateway?.enabled && ars.branchToBranchTraffic)),
+          (link.id.startsWith('vnet:') ? true : peer ? peer.enableIpForwarding && peer.asn !== 65515 && peer.asn !== 12076 : gateway?.enabled && ars.branchToBranchTraffic)),
         diagramCurve({ x: box.x + 40, y }, { x: box.x + box.width - 106, y }, { x: 1, y: 1 }, { x: 1, y: 1 }, 0), 18, true)
     })
   }
@@ -1087,7 +1087,7 @@ export function AzureNetDiagram({
 
           const hasControlRow =
             vnet.gateways.length > 0 || Boolean(vnet.routeServer) || vnet.appliances.length > 0
-          const arsLinks = mappedArsLinks(vnet)
+          const arsLinks = mappedArsLinks(vnet, topology)
           const subnetStartY = box.y + 44 + (hasControlRow ? 30 : 0) + arsLinks.length * 44 + 6
 
           return (
@@ -1267,6 +1267,10 @@ export function AzureNetDiagram({
                         <g
                           key={chip.key}
                           data-testid={`aznet-chip-${chip.key}`}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Select ${chip.label}`}
+                          onKeyDown={(event) => openKeyboardContext(event, chip.entity)}
                           onClick={(e) => {
                             e.stopPropagation()
                             onSelect(chip.entity)

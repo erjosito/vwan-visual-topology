@@ -214,6 +214,7 @@ export function validateTopology(input: unknown): Topology {
       ...(map.hubId === undefined ? { siteId: map.siteId as string } : { hubId: map.hubId as string }),
       rules: array(map.rules, 20, 'Route-map rules').map((value): RouteMapRule => {
         const rule = record(value)
+        if (rule.matchConditions !== undefined || rule.modifications !== undefined) fail('Advanced attribute conditions and modifications are supported only on Azure Route Server route maps.')
         if (!['equals', 'contains'].includes(rule.match as string)) fail('Invalid prefix match mode.')
         if (!['permit', 'drop', 'summarize', 'prepend'].includes(rule.action as string)) fail('Invalid route-map action.')
         if (!['continue', 'terminate'].includes(rule.nextStep as string)) fail('Invalid route-map next step.')

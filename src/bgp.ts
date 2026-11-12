@@ -34,27 +34,63 @@ export function routerMapRules(topology: Topology, router: RouterSelection, conn
 export interface RouteMapAdvertisement {
   prefix: string
   asPath: number[]
+  communities?: string[]
   forwardingRoutes?: RouteMapAdvertisement[]
 }
+
+export const azureReservedCommunities = new Set([
+  '65517:12001', '65517:12002', '65517:12003', '65517:12005', '65517:12006',
+  '65518:65518', '65517:65517', '65517:12076', '65518:12076', '65515:10000', '65515:20000',
+])
 
 export function applyRouteMapRules<T extends RouteMapAdvertisement>(routes: T[], rules: RouteMapRule[]): T[] {
   const process = (route: T, index: number): T[] => {
     if (index >= rules.length) return [route]
     const rule = rules[index]
     const parsed = cidr(route.prefix)!
-    const matches = !rule.prefixes.length || rule.prefixes.some((prefix) => rule.match === 'equals'
+    const matchesPrefix = !rule.prefixes.length || rule.prefixes.some((prefix) => rule.match === 'equals'
       ? prefix === route.prefix
       : cidr(prefix)!.length <= parsed.length && contains(prefix, parsed.network))
+    const matches = matchesPrefix && (rule.matchConditions ?? []).every((condition) => {
+      if (condition.property === 'prefix') return condition.values.some((prefix) => condition.match === 'equals'
+        ? prefix === route.prefix : cidr(prefix)!.length <= parsed.length && contains(prefix, parsed.network))
+      if (condition.property === 'asPath') return condition.match === 'equals'
+        ? condition.values.length === route.asPath.length && condition.values.every((asn, index) => Number(asn) === route.asPath[index])
+        : condition.values.some((asn) => route.asPath.includes(Number(asn)))
+      return condition.match === 'equals'
+        ? condition.values.every((community) => route.communities?.includes(community))
+        : condition.values.some((community) => route.communities?.includes(community))
+    })
     if (!matches) return process(route, index + 1)
     if (rule.action === 'drop') return []
     let modified = [route]
-    if (rule.action === 'prepend') modified = [{ ...route, asPath: [...rule.prepend, ...route.asPath] }]
+    for (const action of ['replace', 'add', 'remove'] as const) {
+      if (action === 'add' && rule.action === 'prepend') modified = modified.map((route) => ({ ...route, asPath: [...rule.prepend, ...route.asPath] }))
+      const modifications = (rule.modifications ?? []).filter((modification) => modification.action === action)
+        .sort((a, b) => JSON.stringify([a.property, a.action, a.values]).localeCompare(JSON.stringify([b.property, b.action, b.values])))
+      for (const modification of modifications) {
+        modified = modified.map((route) => {
+          if (modification.property === 'asPath') {
+            const values = modification.values.map(Number)
+            return { ...route, asPath: action === 'replace' ? values : [...values, ...route.asPath] }
+          }
+          const reserved = (route.communities ?? []).filter((community) => azureReservedCommunities.has(community))
+          const communities = action === 'replace' ? modification.values
+            : action === 'add' ? [...(route.communities ?? []), ...modification.values]
+              : (route.communities ?? []).filter((community) => !modification.values.includes(community))
+          return { ...route, communities: [...new Set([...reserved, ...communities])] }
+        })
+      }
+    }
     if (rule.action === 'summarize') {
+      const attributeModified = modified
       // Only covering aggregates may replace an advertisement, never more-specific or unrelated prefixes.
       modified = rule.summaryPrefixes.filter((prefix) =>
         cidr(prefix)!.length <= parsed.length && contains(prefix, parsed.network),
-      ).map((prefix) => ({ ...route, prefix, asPath: [], forwardingRoutes: route.forwardingRoutes ?? [route] }))
-      if (!modified.length) modified = [route]
+      ).map((prefix) => ({ ...route, prefix, asPath: [],
+        ...(route.communities !== undefined || rule.modifications?.some((modification) => modification.property === 'community') ? { communities: [] } : {}),
+        forwardingRoutes: route.forwardingRoutes ?? [route] }))
+      if (!modified.length) modified = attributeModified
     }
     return rule.nextStep === 'continue' ? modified.flatMap((next) => process(next, index + 1)) : modified
   }
@@ -62,13 +98,14 @@ export function applyRouteMapRules<T extends RouteMapAdvertisement>(routes: T[],
   const aggregates = new Map<string, T>()
   for (const route of routes.flatMap((route) => process({
     ...route, asPath: [...route.asPath],
+    ...(route.communities ? { communities: [...route.communities] } : {}),
     ...(route.forwardingRoutes ? { forwardingRoutes: [...route.forwardingRoutes] } : {}),
   }, 0))) {
     if (!route.forwardingRoutes) {
       result.push(route)
       continue
     }
-    const key = `${route.prefix}:${route.asPath.join(',')}`
+    const key = `${route.prefix}:${route.asPath.join(',')}:${[...(route.communities ?? [])].sort().join(',')}`
     const existing = aggregates.get(key)
     if (existing) existing.forwardingRoutes = [...new Set([...existing.forwardingRoutes!, ...route.forwardingRoutes])]
     else {
