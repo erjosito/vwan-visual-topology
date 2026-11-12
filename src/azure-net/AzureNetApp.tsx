@@ -2962,6 +2962,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
           <AzureNetDiagram
             topology={topology}
+            onResetLayout={() => commitTopology((next) => {
+              for (const node of [...next.vnets, ...next.vwanHubs, ...next.erLocations, ...next.sites]) {
+                delete node.x; delete node.y
+              }
+            })}
             onShowRouteMapRules={openRouteMapRules}
             faults={scenario.affected}
             risks={risks}

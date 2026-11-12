@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { example } from '../src/model'
+import { sampleHybridVwanAndHubSpoke } from '../src/azure-net/model'
 
 const styleKey = 'aznet-canvas-style:v1'
 
@@ -42,6 +43,26 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.getByRole('button', { name: 'Reset view', exact: true }).click()
     await expect(page.getByLabel('Canvas zoom')).toHaveValue('1')
     await expect(svg).toHaveAttribute('viewBox', /^0 0 /)
+    const originalPaths = await svg.locator(mode === 'vwan' ? '.network-link' : '.aznet-edge-path').evaluateAll((edges) => edges.map((edge) => edge.getAttribute('d')))
+    await page.getByLabel('Connection style', { exact: true }).selectOption(mode === 'vwan' ? 'straight' : 'curved')
+    await expect.poll(() => svg.locator(mode === 'vwan' ? '.network-link' : '.aznet-edge-path').evaluateAll((edges) => edges.map((edge) => edge.getAttribute('d')))).not.toEqual(originalPaths)
+    await expect(svg.locator('.node-icon image').first()).toBeVisible()
+    await page.getByRole('button', { name: 'Fit view', exact: true }).click()
+    const fittedBox = await svg.getAttribute('viewBox')
+    await expect(svg).not.toHaveAttribute('viewBox', /^0 0 /)
+    const fitErrors = await svg.evaluate((node) => {
+      const svgBounds = node.getBoundingClientRect()
+      return [...node.querySelectorAll<SVGGElement>('g[role="button"][data-testid]')]
+        .filter((element) => /^(?:node-|aznet-(?:vnet|vwan-hub|erloc|site)-)/.test(element.dataset.testid ?? ''))
+        .map((element) => element.getBoundingClientRect())
+        .filter((box) => box.x < svgBounds.x - 1 || box.y < svgBounds.y - 1 ||
+          box.right > svgBounds.right + 1 || box.bottom > svgBounds.bottom + 1).length
+    })
+    expect(fitErrors).toBe(0)
+    expect(await page.evaluate((key) => localStorage.getItem(key), topologyKey)).toBe(original)
+    await page.getByRole('button', { name: 'Reset view', exact: true }).click()
+    await expect(svg).not.toHaveAttribute('viewBox', fittedBox!)
+    await expect(svg).toHaveAttribute('viewBox', /^0 0 /)
 
     for (const theme of ['light', 'dark']) {
       await page.getByLabel('Theme', { exact: true }).selectOption(theme)
@@ -59,6 +80,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.reload()
     await expect(shell).toHaveAttribute('data-canvas-style', 'dots')
     await expect(page.getByLabel('Canvas style', { exact: true })).toHaveValue('dots')
+    await expect(page.getByLabel('Connection style', { exact: true })).toHaveValue(mode === 'vwan' ? 'straight' : 'curved')
     expect(await page.evaluate((key) => localStorage.getItem(key), topologyKey)).toBe(original)
     await page.getByRole('button', { name: 'Maximize canvas', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Restore panels', exact: true })).toBeVisible()
@@ -82,22 +104,30 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
 test('canvas style survives mode changes and synchronizes tabs without sharing transient maximization', async ({ page, context }) => {
   await page.goto('/?mode=vwan')
   await page.getByLabel('Canvas style', { exact: true }).selectOption('dots')
+  await page.getByLabel('Connection style', { exact: true }).selectOption('straight')
   for (const mode of ['hub-spoke', 'full', 'vwan']) {
     await page.getByTestId(`simulator-mode-${mode}`).click()
     await expect(page.getByLabel('Canvas style', { exact: true })).toHaveValue('dots')
+    await expect(page.getByLabel('Connection style', { exact: true })).toHaveValue('straight')
     await expect(page.locator('[data-canvas-pattern="dots"] circle')).toHaveCount(1)
   }
   const second = await context.newPage()
   await second.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
   await expect(second.getByLabel('Canvas style', { exact: true })).toHaveValue('dots')
+  await expect(second.getByLabel('Connection style', { exact: true })).toHaveValue('straight')
+  await second.getByLabel('Connection style', { exact: true }).selectOption('curved')
+  await expect(page.getByLabel('Connection style', { exact: true })).toHaveValue('curved')
   await page.getByRole('button', { name: 'Maximize canvas', exact: true }).click()
   await expect(second.getByRole('button', { name: 'Maximize canvas', exact: true })).toBeVisible()
   await second.getByLabel('Canvas style', { exact: true }).selectOption('grid')
   await expect(page.getByLabel('Canvas style', { exact: true })).toHaveValue('grid')
+  await expect(page.getByLabel('Connection style', { exact: true })).toHaveValue('curved')
   await second.getByLabel('Canvas style', { exact: true }).selectOption('dots')
   await expect(page.getByLabel('Canvas style', { exact: true })).toHaveValue('dots')
   await second.evaluate((key) => { localStorage.removeItem(key) }, styleKey)
   await expect(page.locator('.simulator-shell')).toHaveAttribute('data-canvas-style', 'grid')
+  await second.evaluate(() => localStorage.removeItem('aznet-connection-style:v1'))
+  await expect(page.getByLabel('Connection style', { exact: true })).toHaveValue('default')
 })
 
 test('invalid preferences and unavailable storage safely fall back to grid while allowing in-session changes', async ({ page }) => {
@@ -111,6 +141,8 @@ test('invalid preferences and unavailable storage safely fall back to grid while
     Storage.prototype.setItem = () => { throw new Error('Storage unavailable') }
   })
   await page.getByLabel('Canvas style', { exact: true }).selectOption('dots')
+  await page.getByLabel('Connection style', { exact: true }).selectOption('straight')
+  await expect(page.getByLabel('Connection style', { exact: true })).toHaveValue('straight')
   await expect(page.locator('.simulator-shell')).toHaveAttribute('data-canvas-style', 'dots')
   await page.addInitScript(() => {
     Storage.prototype.getItem = () => { throw new Error('Storage unavailable') }
@@ -118,4 +150,27 @@ test('invalid preferences and unavailable storage safely fall back to grid while
   })
   await page.reload()
   await expect(page.getByLabel('Canvas style', { exact: true })).toHaveValue('grid')
+})
+
+test('Full Hybrid fits off-screen saved nodes and resets only layout in one undoable edit', async ({ page }) => {
+  const topology = structuredClone(sampleHybridVwanAndHubSpoke)
+  topology.vnets[0].x = 1800
+  topology.vnets[0].y = 1200
+  await page.addInitScript((value) => localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value })), topology)
+  await page.goto('/?mode=full')
+  const key = 'aznet-visual-topology:v1'
+  const before = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).topology, key)
+  await page.getByRole('button', { name: 'Fit view', exact: true }).click()
+  const visible = await page.getByTestId('aznet-vnet-' + topology.vnets[0].id).boundingBox()
+  const viewport = await page.getByTestId('aznet-diagram-svg').boundingBox()
+  expect(visible!.x).toBeGreaterThanOrEqual(viewport!.x)
+  expect(visible!.y + visible!.height).toBeLessThanOrEqual(viewport!.y + viewport!.height)
+  await page.getByRole('button', { name: 'Reset layout', exact: true }).click()
+  const expected = structuredClone(before)
+  for (const node of [...expected.vnets, ...expected.vwanHubs, ...expected.erLocations, ...expected.sites]) {
+    delete node.x; delete node.y
+  }
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).topology, key)).toEqual(expected)
+  await page.getByTitle('Undo', { exact: true }).click()
+  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).topology, key)).toEqual(before)
 })

@@ -2,6 +2,12 @@
 export const ja: Record<string, string> = {
   'Canvas controls': 'キャンバス コントロール',
   'Canvas style': 'キャンバスのスタイル',
+  'Connection style': '接続線のスタイル',
+  'Mode-default links': 'モード既定の接続線',
+  'Curved links': '曲線',
+  'Straight links': '直線',
+  'Parallel connections stay separated in every style.': '並行接続はすべてのスタイルで区別して表示します。',
+  'Fit view': '全体を表示',
   'Grid / edge-to-edge': 'グリッド / 全幅',
   'Dots / framed': 'ドット / 枠付き',
   'Reset view': '表示をリセット',
