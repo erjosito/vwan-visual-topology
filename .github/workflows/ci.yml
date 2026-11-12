@@ -26,6 +26,7 @@ jobs:
           az bicep install --version v0.40.2
           az bicep build --file test-artifacts/azure-files/bicep/main.bicep --stdout > test-artifacts/azure-files/bicep/main.json
           az bicep build --file test-artifacts/azure-files/bicep/single-hub.bicep --stdout > test-artifacts/azure-files/bicep/single-hub.json
+          az bicep build --file test-artifacts/azure-files/bicep/ars-policies.bicep --stdout > test-artifacts/azure-files/bicep/ars-policies.json
       - run: npm run build
         env:
           VITE_APP_REVISION: ${{ github.sha }}

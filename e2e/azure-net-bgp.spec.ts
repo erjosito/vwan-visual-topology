@@ -49,6 +49,121 @@ async function inspectSite(page: Page, id: string) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} edits advanced ARS AND conditions and attributes without losing rows and round-trips source communities`, async ({ page }) => {
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('same key')) errors.push(message.text()) })
+    const topology = bgpTopology()
+    const hub = topology.vnets[0]
+    hub.subnets.push({ id: 'nvas', name: 'NVAs', prefix: '10.0.2.0/24' })
+    hub.appliances = ['one', 'two'].map((id, index) => ({
+      id, name: `NVA ${id}`, kind: 'nva-vm', subnetId: 'nvas', privateIp: `10.0.2.${4 + index}`,
+      asn: 65010 + index, bgpEnabled: true, enableIpForwarding: true, advertisedPrefixes: ['192.168.10.0/24'], staticRoutes: [],
+    }))
+    hub.routeServer!.peerApplianceIds = ['one', 'two']
+    await load(page, mode, topology)
+    const open = async () => {
+      await page.getByTestId('aznet-chip-ars').focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'Manage ARS Route Maps', exact: true }).click()
+    }
+    await open()
+    const policy = page.getByRole('dialog', { name: 'Route maps · Route Server', exact: true })
+    await policy.getByText('BGP peers (local or gateway-transit peered spokes)', { exact: true }).click()
+    await policy.getByText('Advertised route attributes · NVA one', { exact: true }).click()
+    await policy.getByRole('textbox', { name: 'NVA one 192.168.10.0/24 AS-path suffix', exact: true }).fill('65020')
+    await policy.getByRole('textbox', { name: 'NVA one 192.168.10.0/24 communities', exact: true }).fill('65001:100 65001:200 65517:12001')
+    await policy.getByRole('button', { name: 'Save peer route attributes', exact: true }).first().click()
+    await policy.getByRole('button', { name: 'Create route map', exact: true }).click()
+    await policy.getByRole('textbox', { name: 'Route map name', exact: true }).fill('Advanced ARS attributes')
+    await policy.getByRole('button', { name: 'Add rule', exact: true }).click()
+    await policy.getByRole('textbox', { name: 'Rule 1 prefixes', exact: true }).fill('192.168.10.0/24')
+    for (let index = 0; index < 3; index++) await policy.getByRole('button', { name: 'Add match condition', exact: true }).click()
+    await policy.getByRole('textbox', { name: 'Rule 1 condition 1 values', exact: true }).fill('65099')
+    await policy.getByRole('textbox', { name: 'Rule 1 condition 2 values', exact: true }).fill('65010 65020')
+    await policy.getByRole('combobox', { name: 'Rule 1 condition 3 property', exact: true }).selectOption('community')
+    await policy.getByRole('textbox', { name: 'Rule 1 condition 3 values', exact: true }).fill('65001:100 65001:200')
+    await policy.getByRole('button', { name: 'Remove condition 1', exact: true }).click()
+    await expect(policy.getByRole('textbox', { name: 'Rule 1 condition 1 values', exact: true })).toHaveValue('65010 65020')
+    await expect(policy.getByRole('textbox', { name: 'Rule 1 condition 2 values', exact: true })).toHaveValue('65001:100 65001:200')
+    for (let index = 0; index < 4; index++) await policy.getByRole('button', { name: 'Add modification', exact: true }).click()
+    await policy.getByRole('combobox', { name: 'Rule 1 modification 1 property', exact: true }).selectOption('asPath')
+    await policy.getByRole('textbox', { name: 'Rule 1 modification 1 values', exact: true }).fill('64501')
+    await policy.getByRole('combobox', { name: 'Rule 1 modification 2 action', exact: true }).selectOption('replace')
+    await policy.getByRole('textbox', { name: 'Rule 1 modification 2 values', exact: true }).fill('65001:300')
+    await policy.getByRole('textbox', { name: 'Rule 1 modification 3 values', exact: true }).fill('65001:400')
+    await policy.getByRole('combobox', { name: 'Rule 1 modification 4 action', exact: true }).selectOption('remove')
+    await policy.getByRole('textbox', { name: 'Rule 1 modification 4 values', exact: true }).fill('65001:300')
+    await policy.getByRole('button', { name: 'Save route map', exact: true }).click()
+    await expect(policy.getByRole('alert')).toHaveCount(0)
+    const mapId = await policy.getByRole('combobox', { name: 'Inbound route map', exact: true }).locator('option', { hasText: 'Advanced ARS attributes' }).getAttribute('value')
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('nva:one')
+    await policy.getByRole('combobox', { name: 'Inbound route map', exact: true }).selectOption(mapId!)
+    await policy.getByTestId('aznet-policy-inbound').locator('summary').click()
+    const received = policy.getByTestId('aznet-policy-inbound').locator('[data-prefix="192.168.10.0/24"]')
+    await expect(received.locator('td').nth(2)).toHaveText('64501')
+    await expect(received.locator('td').nth(3)).toContainText('65517:12001')
+    await expect(received.locator('td').nth(3)).toContainText('65001:400')
+    await expect(received).not.toContainText('65001:300')
+    await page.reload()
+    await open()
+    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue(mapId!)
+    await policy.getByRole('button', { name: /Advanced ARS attributes/ }).click()
+    await expect(policy.getByRole('textbox', { name: 'Rule 1 condition 1 values', exact: true })).toHaveValue('65010 65020')
+    await expect(policy.getByRole('textbox', { name: 'Rule 1 modification 4 values', exact: true })).toHaveValue('65001:300')
+    await policy.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
+    await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+    await expect(page.getByTestId('aznet-control-rib-card').locator('[data-prefix="192.168.10.0/24"]', { hasText: 'NVA one' }).locator('td').nth(2)).toHaveText('64501')
+    expect(errors).toEqual([])
+  })
+
+  test(`${mode} selects remote NVA peers and scopes peered-spoke maps without removing local On-link routes`, async ({ page }) => {
+    const topology = bgpTopology()
+    const hub = topology.vnets[0]
+    topology.vnets.push({
+      id: 'remote', name: 'Remote spoke', role: 'spoke', region: hub.region, prefixes: ['10.1.0.0/16'],
+      subnets: [{ id: 'remote-work', name: 'Workload', prefix: '10.1.1.0/24' }], gateways: [],
+      appliances: [{ id: 'remote-nva', name: 'Remote NVA', kind: 'nva-vm', subnetId: 'remote-work', privateIp: '10.1.1.4',
+        asn: 65010, bgpEnabled: true, enableIpForwarding: true, advertisedPrefixes: ['192.168.20.0/24'], staticRoutes: [] }],
+    })
+    topology.vnetPeerings.push({ id: 'remote-peering', name: 'Gateway transit', vnetAId: 'hub', vnetBId: 'remote', enabled: true,
+      aToB: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: true, useRemoteGateways: false },
+      bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: true } })
+    hub.routeServer!.routeMaps = [{ id: 'remote-filter', name: 'Remote propagation filter', rules: [{
+      id: 'remote-rule', prefixes: ['10.1.0.0/16', '192.168.20.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate',
+    }] }]
+    await load(page, mode, topology)
+    const open = async () => {
+      await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
+      await page.getByRole('menuitem', { name: 'Manage ARS Route Maps', exact: true }).click()
+    }
+    await open()
+    const policy = page.getByRole('dialog', { name: 'Route maps · Route Server', exact: true })
+    await policy.getByText('BGP peers (local or gateway-transit peered spokes)', { exact: true }).click()
+    await policy.getByRole('checkbox', { name: 'BGP peer Remote spoke / Remote NVA', exact: true }).check()
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('vnet:remote')
+    await policy.getByTestId('aznet-policy-inbound').locator('summary').click()
+    await expect(policy.getByTestId('aznet-policy-inbound').locator('[data-prefix="192.168.20.0/24"]')).toHaveCount(1)
+    await policy.getByRole('combobox', { name: 'Inbound route map', exact: true }).selectOption('remote-filter')
+    await expect(policy.getByTestId('aznet-policy-inbound').locator('tbody tr[data-prefix]')).toHaveCount(0)
+    await policy.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
+    await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+    const rib = page.getByTestId('aznet-control-rib-card')
+    await expect(rib.locator('[data-prefix="10.1.0.0/16"]')).toContainText('On-link')
+    await expect(rib.locator('[data-prefix="192.168.20.0/24"]')).toHaveCount(0)
+    await page.reload()
+    await open()
+    await policy.getByText('BGP peers (local or gateway-transit peered spokes)', { exact: true }).click()
+    await expect(policy.getByRole('checkbox', { name: 'BGP peer Remote spoke / Remote NVA', exact: true })).toBeChecked()
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('vnet:remote')
+    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue('remote-filter')
+    await policy.getByRole('combobox', { name: 'Inbound route map', exact: true }).selectOption('')
+    await policy.getByTestId('aznet-policy-inbound').locator('summary').click()
+    await expect(policy.getByTestId('aznet-policy-inbound').locator('[data-prefix="192.168.20.0/24"]')).toHaveCount(1)
+  })
+
   test(`${mode} keeps subnet pills compact and reveals prefixes and route-table settings on demand`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 650 })
     const topology = bgpTopology()
@@ -376,7 +491,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(page.getByRole('searchbox', { name: 'Filter BGP prefixes' })).toHaveValue('')
     await expect(page.getByTestId('aznet-subnet-routes-card')).toHaveCount(0)
     await expect(page.getByTestId('aznet-lpm-input')).toHaveCount(0)
-    await expect(rib.locator('thead th')).toHaveText(['*', 'Next hop / source', 'AS path'])
+    await expect(rib.locator('thead th')).toHaveText(['*', 'Next hop / source', 'AS path', 'Communities'])
     await expect(rib.locator('[data-reason-prefix="10.0.0.0/16"]')).toHaveCount(1)
     const preferred = rib.locator('[data-prefix="10.0.0.0/16"][data-preferred="true"]')
     const alternative = rib.locator('[data-prefix="10.0.0.0/16"][data-preferred="false"]')
@@ -430,7 +545,7 @@ test('all full-mode router inspectors use the same grouped table without a subne
     await page.getByRole('menuitem', { name: action, exact: true }).click()
     const rib = page.getByTestId('aznet-control-rib-card')
     await expect(rib.getByRole('heading')).toContainText(heading)
-    await expect(rib.locator('thead th')).toHaveText(['*', 'Next hop / source', 'AS path'])
+    await expect(rib.locator('thead th')).toHaveText(['*', 'Next hop / source', 'AS path', 'Communities'])
     await expect(page.getByTestId('aznet-subnet-routes-card')).toHaveCount(0)
     await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
   }

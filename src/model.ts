@@ -60,6 +60,20 @@ export interface PrependRule {
   prepend: number[]
 }
 
+export interface RouteMapCondition {
+  id?: string
+  property: 'prefix' | 'asPath' | 'community'
+  match: 'equals' | 'contains'
+  values: string[]
+}
+
+export interface RouteMapModification {
+  id?: string
+  property: 'asPath' | 'community'
+  action: 'add' | 'replace' | 'remove'
+  values: string[]
+}
+
 export interface RouteMapRule {
   id: string
   prefixes: string[]
@@ -68,6 +82,8 @@ export interface RouteMapRule {
   summaryPrefixes: string[]
   prepend: number[]
   nextStep: 'continue' | 'terminate'
+  matchConditions?: RouteMapCondition[]
+  modifications?: RouteMapModification[]
 }
 
 export interface RouteMap {

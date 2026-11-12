@@ -105,6 +105,7 @@ export interface AzAppliance {
   enableIpForwarding: boolean
   inspectsTraffic?: boolean
   advertisedPrefixes?: string[]
+  advertisedRouteAttributes?: { prefix: string; asPath?: number[]; communities?: string[] }[]
   staticRoutes: AzApplianceStaticRoute[]
 }
 

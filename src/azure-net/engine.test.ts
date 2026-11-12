@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
@@ -6,6 +6,8 @@ import {
   importAzNetCapture,
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
+import { applyAzArsRouteMap } from './ars-route-maps'
+import type { RouteMapAdvertisement } from '../bgp'
 import { analyzeAzNetConnectivity, azFindingFlows, azFindingImpact, groupAzNetFindings, runAzNetDiagnostics } from './diagnostics'
 import { getAzNetEndpoints } from './endpoints'
 import {
@@ -169,6 +171,246 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(result.routeServerRibs.ars.find((route) => route.nextHopId === 'two')?.preferred).toBe(true)
   })
 
+  it('combines AS-path/community conditions with AND and applies multiple order-independent modifications before selection', () => {
+    const topology = arsTopology()
+    const ars = topology.vnets[0].routeServer!
+    const base = { ...ars.routeMaps![0].rules[0], action: 'permit' as const, nextStep: 'continue' as const }
+    ars.routeMaps![0].rules = [
+      { ...base, id: 'tag', matchConditions: [{ property: 'asPath', match: 'contains', values: ['64501', '65010'] }],
+        modifications: [{ property: 'community', action: 'add', values: ['65001:100', '65001:200'] }] },
+      { ...base, id: 'replace', nextStep: 'terminate', matchConditions: [
+        { property: 'asPath', match: 'equals', values: ['65010'] },
+        { property: 'community', match: 'equals', values: ['65001:100'] },
+        { property: 'community', match: 'contains', values: ['65001:200', '65001:999'] },
+      ], modifications: [
+        { property: 'asPath', action: 'replace', values: ['64501', '64502'] },
+        { property: 'community', action: 'add', values: ['65001:300'] },
+        { property: 'community', action: 'remove', values: ['65001:200'] },
+      ] },
+    ]
+    ars.routeMapAssignments = [{ connectionId: 'nva:one', inboundMapId: 'ars-map' }]
+    expect(validateAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual([])
+    const result = simulateAzNet(topology)
+    const route = result.routeServerRibs.ars.find((route) => route.nextHopId === 'one')!
+    expect(route.asPath).toEqual([64501, 64502])
+    expect(route.communities).toEqual(['65001:100', '65001:300'])
+    expect(route.preferred).toBe(false)
+    expect(result.routeServerRibs.ars.find((route) => route.nextHopId === 'two')?.preferred).toBe(true)
+    ars.routeMaps![0].rules[1].modifications!.reverse()
+    expect(simulateAzNet(topology).routeServerRibs.ars).toEqual(result.routeServerRibs.ars)
+    ars.routeMaps![0].rules[1].matchConditions![0].values = ['65010', '64501']
+    const unmatched = simulateAzNet(topology).routeServerRibs.ars.find((route) => route.nextHopId === 'one')!
+    expect(unmatched.asPath).toEqual([65010])
+    expect(unmatched.communities).toEqual(['65001:100', '65001:200'])
+  })
+
+  it('clears replaceable attributes, protects Azure communities and strips same-rule attributes from summaries without changing inputs', () => {
+    const topology = arsTopology()
+    const ars = topology.vnets[0].routeServer!
+    ars.routeMapAssignments = [{ connectionId: 'nva:one', inboundMapId: 'ars-map' }]
+    const rule = ars.routeMaps![0].rules[0]
+    rule.action = 'permit'
+    rule.modifications = [
+      { property: 'asPath', action: 'replace', values: [] },
+      { property: 'community', action: 'replace', values: [] },
+    ]
+    const input: RouteMapAdvertisement[] = [{ prefix: '192.168.10.0/24', asPath: [65010], communities: ['65001:100', '65517:12001'] }]
+    const original = structuredClone(input)
+    expect(applyAzArsRouteMap(ars, 'nva:one', 'inbound', input)[0]).toMatchObject({ asPath: [], communities: ['65517:12001'] })
+    rule.action = 'summarize'; rule.summaryPrefixes = ['192.168.0.0/16']
+    rule.modifications[0].values = ['64510']
+    rule.modifications[1].values = ['65001:300']
+    const summary = applyAzArsRouteMap(ars, 'nva:one', 'inbound', input)[0]
+    expect(summary).toMatchObject({ prefix: '192.168.0.0/16', asPath: [], communities: [] })
+    expect(summary.forwardingRoutes).toEqual(original)
+    expect(input).toEqual(original)
+    rule.modifications = [{ property: 'community', action: 'remove', values: ['65517:12001'] }]
+    expect(validateAzNetTopology(topology).join(' ')).toContain('cannot remove Azure-reserved communities')
+    rule.modifications = [{ property: 'asPath', action: 'replace', values: ['65515'] }]
+    expect(validateAzNetTopology(topology).join(' ')).toContain('Azure-reserved')
+  })
+
+  it('uses peer source attributes before policy, preserves them in JSON and rejects AS loops before modifications', () => {
+    const topology = arsTopology()
+    const app = topology.vnets[0].appliances[0]
+    app.advertisedRouteAttributes = [{ prefix: '192.168.10.0/24', asPath: [65020], communities: ['65001:100'] }]
+    const ars = topology.vnets[0].routeServer!
+    const rule = ars.routeMaps![0].rules[0]
+    rule.action = 'permit'
+    rule.matchConditions = [{ property: 'asPath', match: 'equals', values: ['65010', '65020'] },
+      { property: 'community', match: 'equals', values: ['65001:100'] }]
+    rule.modifications = [{ property: 'asPath', action: 'replace', values: [] }]
+    ars.routeMapAssignments = [{ connectionId: 'nva:one', inboundMapId: 'ars-map' }]
+    const roundTrip = JSON.parse(JSON.stringify(topology))
+    expect(validateAzNetTopology(roundTrip)).toEqual([])
+    expect(simulateAzNet(roundTrip).routeServerRibs.ars.find((route) => route.nextHopId === 'one')).toMatchObject({
+      asPath: [], communities: ['65001:100'], preferred: true,
+    })
+    app.advertisedRouteAttributes[0].asPath = [65515]
+    expect(simulateAzNet(topology).routeServerRibs.ars.some((route) => route.nextHopId === 'one')).toBe(false)
+    app.advertisedRouteAttributes[0].asPath = [65020]
+    topology.vnets[0].appliances[1].advertisedPrefixes = []
+    ars.routeMapAssignments = []
+    expect(simulateAzNet(topology).routeServerOutbound!.ars['nva:two'].some((route) => route.prefix === '192.168.10.0/24')).toBe(true)
+    ars.routeMapAssignments = [{ connectionId: 'nva:two', outboundMapId: 'ars-map' }]
+    rule.modifications = [{ property: 'asPath', action: 'replace', values: ['65011'] }]
+    expect(simulateAzNet(topology).routeServerOutbound!.ars['nva:two'].some((route) => route.prefix === '192.168.10.0/24')).toBe(false)
+    app.advertisedRouteAttributes[0].communities = ['65001:100 65001:200']
+    expect(validateAzNetTopology(topology).join(' ')).toContain('one community each')
+  })
+
+  it('does not let editor IDs or modification ordering change attribute results', () => {
+    const topology = arsTopology()
+    const ars = topology.vnets[0].routeServer!
+    ars.routeMapAssignments = [{ connectionId: 'nva:one', inboundMapId: 'ars-map' }]
+    const rule = ars.routeMaps![0].rules[0]
+    rule.action = 'permit'
+    rule.modifications = [
+      { id: 'a', property: 'asPath', action: 'add', values: ['64510'] },
+      { id: 'z', property: 'asPath', action: 'add', values: ['64520'] },
+    ]
+    const before = simulateAzNet(topology).routeServerRibs.ars
+    rule.modifications.reverse()
+    rule.modifications[0].id = 'a'; rule.modifications[1].id = 'z'
+    expect(simulateAzNet(topology).routeServerRibs.ars).toEqual(before)
+    rule.modifications[0].id = 'z'
+    expect(validateAzNetTopology(topology).join(' ')).toContain('Duplicate ARS')
+  })
+
+  it.each([
+    { property: 'community', values: ['65536:1'], expected: '2-byte ASN:value' },
+    { property: 'community', values: ['65001:1,'], expected: 'one community each' },
+    { property: 'asPath', values: ['4200000001'], expected: '2-byte ASNs' },
+  ] as const)('rejects invalid $property match values $values', ({ property, values, expected }) => {
+    const topology = arsTopology()
+    topology.vnets[0].routeServer!.routeMaps![0].rules[0].matchConditions = [{ property, match: 'equals', values: [...values] }]
+    expect(validateAzNetTopology(topology).join(' ')).toContain(expected)
+  })
+
+  function remoteArsTopology() {
+    const topology = arsTopology()
+    const [hub, spoke] = topology.vnets
+    const remote = hub.appliances.shift()!
+    spoke.appliances.push({ ...remote, subnetId: spoke.subnets[0].id, privateIp: '10.1.1.4' })
+    hub.appliances[0].advertisedPrefixes = ['192.168.20.0/24']
+    hub.routeServer!.routeMapAssignments = [{ connectionId: `vnet:${spoke.id}`, inboundMapId: 'ars-map' }]
+    return topology
+  }
+
+  it('filters remote NVA/spoke propagation without removing local On-link routes or the source advertisements', () => {
+    const topology = remoteArsTopology()
+    const [hub, spoke] = topology.vnets
+    const ars = hub.routeServer!
+    ars.routeMaps![0].rules[0].prefixes.push(spoke.prefixes[0])
+    expect(validateAzNetTopology(topology)).toEqual([])
+    const result = simulateAzNet(topology)
+    expect(result.routeServerRibs.ars.some((route) => route.prefix === '192.168.10.0/24')).toBe(false)
+    expect(result.routeServerRibs.ars.find((route) => route.prefix === spoke.prefixes[0])?.nextHopName).toContain('On-link')
+    expect(result.routeServerInbound!.ars[`vnet:${spoke.id}`]).toEqual([])
+    expect(result.routeServerOutbound!.ars['nva:two'].some((route) => route.prefix === spoke.prefixes[0])).toBe(false)
+    expect(result.siteRibs.site.some((route) => route.prefix === spoke.prefixes[0] || route.prefix === '192.168.10.0/24')).toBe(false)
+    expect(spoke.appliances[0].advertisedPrefixes).toEqual(['192.168.10.0/24'])
+    expect(result.subnetTables[spoke.subnets[0].id].routes.some((route) => route.prefix === spoke.prefixes[0] && route.nextHopType === 'VnetLocal')).toBe(true)
+    ars.routeMaps![0].rules[0].action = 'permit'
+    const restored = simulateAzNet(topology)
+    expect(restored.routeServerRibs.ars.find((route) => route.prefix === '192.168.10.0/24')?.nextHopId).toBe('one')
+    topology.vnetPeerings[0].enabled = false
+    expect(simulateAzNet(topology).routeServerRibs.ars.some((route) => route.prefix === '192.168.10.0/24')).toBe(false)
+  })
+
+  it('applies spoke outbound maps only to that spoke, retaining ARS best paths and branch-to-branch gates', () => {
+    const topology = remoteArsTopology()
+    const [hub, spoke] = topology.vnets
+    const ars = hub.routeServer!
+    ars.routeMaps![0].rules[0].prefixes = ['192.168.20.0/24']
+    ars.routeMapAssignments = [{ connectionId: `vnet:${spoke.id}`, outboundMapId: 'ars-map' }]
+    const result = simulateAzNet(topology)
+    expect(result.routeServerRibs.ars.find((route) => route.prefix === '192.168.20.0/24')?.preferred).toBe(true)
+    expect(result.routeServerOutbound!.ars[`vnet:${spoke.id}`].some((route) => route.prefix === '192.168.20.0/24')).toBe(false)
+    expect(result.subnetTables[spoke.subnets[0].id].routes.some((route) => route.prefix === '192.168.20.0/24')).toBe(false)
+    expect(result.subnetTables[hub.subnets[0].id].routes.some((route) => route.prefix === '192.168.20.0/24')).toBe(true)
+    expect(result.siteRibs.site.some((route) => route.prefix === '192.168.20.0/24')).toBe(true)
+    ars.branchToBranchTraffic = false
+    expect(simulateAzNet(topology).siteRibs.site.some((route) => route.prefix === '192.168.20.0/24')).toBe(false)
+    topology.vnetPeerings[0].aToB.allowGatewayTransit = false
+    expect(validateAzNetTopology(topology).join(' ')).toContain('eligible gateway-transit peered spoke')
+  })
+
+  it('does not reintroduce scoped outbound gateway routes through the remote-gateway fallback', () => {
+    const topology = remoteArsTopology()
+    const [hub, spoke] = topology.vnets
+    const ars = hub.routeServer!
+    ars.routeMapAssignments = []
+    expect(simulateAzNet(topology).subnetTables[spoke.subnets[0].id].routes.some((route) => route.prefix === '172.16.0.0/24')).toBe(true)
+    ars.routeMaps![0].rules[0].prefixes = ['172.16.0.0/24']
+    ars.routeMapAssignments = [{ connectionId: `vnet:${spoke.id}`, outboundMapId: 'ars-map' }]
+    const result = simulateAzNet(topology)
+    expect(result.routeServerRibs.ars.some((route) => route.prefix === '172.16.0.0/24' && route.preferred)).toBe(true)
+    expect(result.subnetTables[spoke.subnets[0].id].routes.some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+    expect(result.subnetTables[hub.subnets[0].id].routes.some((route) => route.prefix === '172.16.0.0/24')).toBe(true)
+  })
+
+  it('traces remote NVA summary destinations across real peering without filling aggregate holes', () => {
+    const topology = remoteArsTopology()
+    const ars = topology.vnets[0].routeServer!
+    const rule = ars.routeMaps![0].rules[0]
+    rule.action = 'summarize'; rule.summaryPrefixes = ['192.168.0.0/16']
+    rule.modifications = [{ property: 'asPath', action: 'replace', values: ['64510'] },
+      { property: 'community', action: 'add', values: ['65001:100'] }]
+    const result = simulateAzNet(topology)
+    const summary = result.routeServerRibs.ars.find((route) => route.prefix === '192.168.0.0/16')!
+    expect(summary).toMatchObject({ asPath: [], communities: [] })
+    const source = { kind: 'subnet', vnetId: 'hub', subnetId: 'gateway' } as const
+    const real = traceAzNetFlow(topology, result, source, '192.168.10.4')
+    expect(real.status).toBe('delivered')
+    expect(real.traversedEdgeIds).toContain('peer')
+    expect(traceAzNetFlow(topology, result, source, '192.168.99.4').status).not.toBe('delivered')
+  })
+
+  it.each(['ExpressRoute', 'Vpn'] as const)('matches original ARS outbound attributes before %s adds its transport ASNs', (transport) => {
+    const topology = arsTopology(transport)
+    const hub = topology.vnets[0]
+    hub.appliances[1].advertisedPrefixes = []
+    hub.appliances[0].advertisedRouteAttributes = [{ prefix: '192.168.10.0/24', communities: ['65001:100'] }]
+    const ars = hub.routeServer!
+    const rule = ars.routeMaps![0].rules[0]
+    rule.action = 'permit'
+    rule.matchConditions = [{ property: 'asPath', match: 'equals', values: ['65010'] },
+      { property: 'community', match: 'equals', values: ['65001:100'] }]
+    rule.modifications = [{ property: 'asPath', action: 'replace', values: ['64510'] },
+      { property: 'community', action: 'replace', values: ['65001:300'] }]
+    ars.routeMapAssignments = [{ connectionId: 'gateway:gw', outboundMapId: 'ars-map' }]
+    const result = simulateAzNet(topology)
+    expect(result.routeServerOutbound!.ars['gateway:gw'].find((route) => route.prefix === '192.168.10.0/24')).toMatchObject({
+      asPath: [64510], communities: ['65001:300'],
+    })
+    expect(result.siteRibs.site.find((route) => route.prefix === '192.168.10.0/24')).toMatchObject({
+      asPath: transport === 'Vpn' ? [65515, 64510] : [12076, 64510], communities: ['65001:300'],
+    })
+  })
+
+  it('exports advanced ARS definitions, local and peered-spoke associations with explicit manual-gateway warnings', () => {
+    const topology = remoteArsTopology()
+    topology.vnets[0].subnets.push({ id: 'ars-subnet', name: 'RouteServerSubnet', prefix: '10.0.254.0/27' })
+    const ars = topology.vnets[0].routeServer!
+    ars.routeMapAssignments!.push({ connectionId: 'nva:two', outboundMapId: 'ars-map' }, { connectionId: 'gateway:gw', inboundMapId: 'ars-map' })
+    const rule = ars.routeMaps![0].rules[0]
+    rule.action = 'permit'
+    rule.matchConditions = [{ property: 'asPath', match: 'contains', values: ['65010'] }, { property: 'community', match: 'equals', values: ['65001:100'] }]
+    rule.modifications = [{ property: 'asPath', action: 'replace', values: [] }, { property: 'community', action: 'replace', values: ['65001:300'] }]
+    expect(validateAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual([])
+    const exported = generateAzNetBicep(topology)
+    expect(exported.text).toContain("matchCondition: 'Contains', asPath: [ '65010' ]")
+    expect(exported.text).toContain("type: 'Replace', parameters: [ { asPath: [  ] } ]")
+    expect(exported.text).toContain('hubVirtualNetworkConnection: { id: ars_spoke_ars_spoke.id }')
+    expect(exported.text).toContain('outboundRouteMap: { id: ars_map_ars_ars_map.id }')
+    expect(exported.warnings.join(' ')).toContain('requires manual configuration in the Azure portal')
+    const directory = resolve('test-artifacts', 'azure-files', 'bicep')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(resolve(directory, 'ars-policies.bicep'), exported.text)
+    expect(generateAzNetBicep(topology, { includeRouteServers: false }).warnings.join(' ')).toContain('omitted because Route Server deployment is disabled')
+  })
+
   it.each(['ExpressRoute', 'Vpn'] as const)('keeps ARS outbound gateway filtering separate from ARS selection over %s', (transport) => {
     const topology = arsTopology(transport)
     const ars = topology.vnets[0].routeServer!
@@ -265,7 +507,7 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     const advanced = structuredClone(topology)
     Object.assign(advanced.vnets[0].routeServer!.routeMaps![0].rules[0], { communityMatch: ['65001:100'] })
     expect(validateAzNetTopology(advanced).join(' ')).toContain('not modeled')
-    ars.routeMapAssignments[0].connectionId = 'vnet:spoke'
+    ars.routeMapAssignments[0].connectionId = 'vnet:missing'
     expect(validateAzNetTopology(topology).join(' ')).toContain('local BGP peer or gateway')
     ars.routeMapAssignments[0].connectionId = 'nva:one'
     ars.peerApplianceIds = ['two']
@@ -275,7 +517,7 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     ars.routeMaps = []
     pruneAzArsRouteMaps(topology)
     expect(ars.routeMapAssignments).toEqual([])
-    expect(generateAzNetBicep(arsTopology()).warnings.join(' ')).toContain('Configure ARS maps')
+    expect(generateAzNetBicep(arsTopology()).warnings.join(' ')).toContain('skipped because no RouteServerSubnet')
   })
 
   it.each(['ExpressRoute', 'Vpn'] as const)('applies site-owned outbound and inbound drop policies independently over %s', (transport) => {
