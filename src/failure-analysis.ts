@@ -222,7 +222,8 @@ export function analyzeVwanResilience(topology: Topology, intents: DiagnosticInt
       'Virtual WAN SD-WAN vendor ranking, own-AS/default-propagation parity and imported unobserved controls remain model limitations. Stateful firewall waypoint sets are compared in both directions.'], budget, totalPairs)
 }
 
-export function analyzeAzResilience(topology: AzNetTopology, budget: ResilienceBudget = {}): ResilienceReport {
+// Display-token projections use validation of their original admitted design.
+export function analyzeAzResilience(topology: AzNetTopology, budget: ResilienceBudget = {}, validationErrors = validateAzNetTopology(topology)): ResilienceReport {
   const endpoints = getAzNetEndpoints(topology).filter((e) => e.group === 'workload' || e.group === 'site')
   const pairs: RequiredPair[] = []
   let totalPairs = 0
@@ -253,7 +254,7 @@ export function analyzeAzResilience(topology: AzNetTopology, budget: ResilienceB
   const report = evaluate(topology, pairs, projectAzFailures, simulateAzNet,
     ['No declared connectivity exclusions in this mode: full landscape connectivity assumed for workload subnets and distinct site prefixes. Intentional isolation is a baseline fault under this assumption, not an N-1 gap.',
       'Infrastructure-only subnets and Internet endpoints are excluded. Effective routes/UDRs and independently traced return paths are checked. Stateless path differences alone are not faults; modeled stateful inspection must be symmetric.'], budget, totalPairs)
-  const errors = validateAzNetTopology(topology)
+  const errors = validationErrors
   if (errors.length) { report.complete = false; report.limitations.push(`Invalid baseline configuration: ${errors.join(' ')}`) }
   return report
 }

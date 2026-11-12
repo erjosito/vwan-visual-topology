@@ -3,13 +3,15 @@ import { failureKey, failureLabel, type FailureDomain } from './failures'
 import { groupResilienceGaps, type ResilienceReport } from './failure-analysis'
 import './failures.css'
 
-export function FailurePanel({ faults, unassessed, onRestore, onRestoreAll, analyze, onSimulate, revision, onReport, focusEndpoint }: {
+export function FailurePanel({ faults, unassessed, onRestore, onRestoreAll, analyze, onSimulate, revision, onReport, focusEndpoint, presentReport }: {
   faults: FailureDomain[]; unassessed: string[]; onRestore: (fault: FailureDomain) => void; onRestoreAll: () => void
   analyze: () => ResilienceReport; onSimulate: (fault: FailureDomain) => void; revision: string
   onReport?: (report: ResilienceReport) => void; focusEndpoint?: string
+  presentReport?: (report: ResilienceReport) => ResilienceReport
 }) {
   const [result, setResult] = useState<{ revision: string; report: ResilienceReport }>()
-  const report = result?.revision === revision ? result.report : undefined
+  const rawReport = result?.revision === revision ? result.report : undefined
+  const report = rawReport && presentReport ? presentReport(rawReport) : rawReport
   const findings = groupResilienceGaps(report?.gaps ?? [])
   return <section className="failure-controls" aria-label="Offline failure and resilience analysis">
     {!!faults.length && <div role="status" className="active-faults" data-testid="active-faults">

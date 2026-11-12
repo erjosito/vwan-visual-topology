@@ -2,6 +2,7 @@ import type { LayoutMode, NodePosition, Preference, RouteMap, RouteMapAssignment
 import { cidr, contains, ipv4 } from '../validation'
 import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
+import { parseAzNetTopology } from './admission'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -1209,11 +1210,14 @@ export function validateAdvertisedGatewayPrefixes(value: unknown): string[] {
 }
 
 export function validateAzNetTopology(input: unknown): string[] {
+  let topology: AzNetTopology
+  try { topology = parseAzNetTopology(input) }
+  catch (error) { return [error instanceof Error ? error.message : 'Invalid topology.'] }
   const errors: string[] = []
   if (!input || typeof input !== 'object') {
     return ['Topology must be a JSON object.']
   }
-  const candidate = input as Partial<AzNetTopology>
+  const candidate = topology
   if (candidate.kind !== 'azure-network-topology' || candidate.version !== 2) {
     errors.push('Expected an Azure Network Topology v2 file (kind: "azure-network-topology", version: 2).')
   }

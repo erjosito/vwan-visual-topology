@@ -30,6 +30,10 @@ import {
 import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
 import type { RouteMapRule } from '../model'
+import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
+import { AZNET_STORAGE_KEY, loadAzWorkspace } from './workspace'
+import { azDisplayResult, azRoutingInput } from './routing-input'
+import { analyzeAzResilience } from '../failure-analysis'
 
 describe('Azure Networking Simulator Engine & Diagnostics', () => {
   function transitTopology(transport: 'ExpressRoute' | 'Vpn' = 'ExpressRoute'): AzNetTopology {
@@ -66,6 +70,109 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
   }
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
+
+  it('totally admits bounded v2 shapes and rejects malformed, duplicate and dangling inputs', () => {
+    const valid = transitTopology()
+    const bad: unknown[] = [null, [], 42, { ...valid, vnets: [null] }, { ...valid, siteLinks: undefined },
+      { ...valid, vnetPeerings: [{ ...valid.vnetPeerings[0], aToB: null }] },
+      { ...valid, sites: [{ ...valid.sites[0], asn: '65001' }] },
+      { ...valid, erLinks: [{ ...valid.erLinks[0], targetKind: 'mystery' }] },
+      { ...valid, vnets: [...valid.vnets, valid.vnets[0]] },
+      { ...valid, erLinks: [{ ...valid.erLinks[0], targetId: 'missing' }] },
+      { ...valid, name: 'x'.repeat(4097) },
+      { ...valid, sites: [{ ...valid.sites[0], prefixes: Array(4097).fill('10.0.0.0/24') }] },
+      { ...valid, extension: Array(130).fill('x'.repeat(16_384)) },
+      { ...valid, extension: Array.from({ length: 30 }, () => Array(4096).fill(null)) },
+      { ...valid, vnets: [{ ...valid.vnets[0], x: Infinity }] },
+      { ...valid, udrTables: [{ id: 'table', name: 'Table', disableBgpRoutePropagation: false }] },
+      { ...valid, sites: [{ ...valid.sites[0], routeMapAssignments: [{ connectionId: 'missing' }] }] },
+    ]
+    for (const candidate of bad) {
+      expect(() => parseAzNetTopology(candidate)).toThrow()
+      expect(() => validateAzNetTopology(candidate)).not.toThrow()
+      expect(validateAzNetTopology(candidate).length).toBeGreaterThan(0)
+    }
+    expect(() => parseAzNetJson(' '.repeat(AZNET_MAX_JSON_LENGTH + 1))).toThrow('4 MB')
+    const incomplete = structuredClone(valid)
+    incomplete.vnets[1].subnets[0].prefix = ''
+    expect(parseAzNetTopology(incomplete)).toEqual(incomplete)
+    expect(validateAzNetTopology(incomplete).join(' ')).toContain('invalid CIDR')
+    const extended = { ...valid, futureObservation: { status: 'new-status', routes: [] } }
+    expect(parseAzNetTopology(extended)).toEqual(extended)
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(valid)))).toEqual(valid)
+  })
+
+  it('preserves unreadable workspace and snapshot originals without writing during admission', () => {
+    const raw = '{ damaged workspace'
+    const loaded = loadAzWorkspace({ getItem: () => raw }, '#s=not-valid-json')
+    expect(loaded.topology).toEqual(createEmptyAzNetTopology())
+    expect(loaded.recovery.map((r) => r.raw)).toEqual([raw, '#s=not-valid-json'])
+    const inaccessible = loadAzWorkspace({ getItem: () => { throw new Error('Access denied') } }, '')
+    expect(inaccessible.recovery[0].message).toContain('Access denied')
+    const restored = loadAzWorkspace({ getItem: (key) => key === AZNET_STORAGE_KEY ? JSON.stringify({ topology: transitTopology() }) : null }, '')
+    expect(restored.topology).toEqual(transitTopology())
+    expect(restored.recovery).toEqual([])
+  })
+
+  it('keeps canonical routing output identical on small fixtures and rebinds duplicate and changed names', () => {
+    const advanced = arsTopology()
+    const ars = advanced.vnets[0].routeServer!
+    ars.routeMapAssignments = [{ connectionId: 'nva:one', inboundMapId: 'ars-map' }]
+    ars.routeMaps![0].rules[0] = { ...ars.routeMaps![0].rules[0], action: 'permit',
+      matchConditions: [{ property: 'asPath', match: 'contains', values: ['65010'] }],
+      modifications: [{ property: 'community', action: 'add', values: ['65001:9'] }] }
+    advanced.vnets[0].appliances[0].advertisedRouteAttributes = [{ prefix: '192.168.10.0/24', asPath: [64501], communities: ['65001:1'] }]
+    sitePolicy(advanced, 'vpn', 'inboundMapId', [{ action: 'prepend', prepend: [65001] }])
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(advanced)))).toEqual(advanced)
+    for (const original of [transitTopology(), advanced, remoteArsTopology(), ...AZURE_NET_SAMPLES.map((s) => s.topology)]) {
+      const { routing, names } = azRoutingInput(original)
+      const rawSim = simulateAzNet(routing)
+      const sim = simulateAzNet(original)
+      expect(azDisplayResult(rawSim, names)).toEqual(sim)
+      const request = { scope: 'landscape' as const }
+      expect(azDisplayResult(analyzeAzNetConnectivity(routing, rawSim, request), names))
+        .toEqual(analyzeAzNetConnectivity(original, sim, request))
+      expect(azDisplayResult(runAzNetDiagnostics(routing, rawSim, { includePairAnalysis: false }), names))
+        .toEqual(runAzNetDiagnostics(original, sim, { includePairAnalysis: false }))
+    }
+    const original = transitTopology()
+    original.vnets[0].name = 'Duplicate name'
+    original.vnets[1].name = 'Duplicate name'
+    const before = azRoutingInput(original)
+    const cachedSimulation = simulateAzNet(before.routing)
+    const cachedPair = traceAzNetPair(before.routing, cachedSimulation,
+      { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '10.1.1.4', { kind: 'site', siteId: 'site' }, '172.16.0.4')
+    original.vnets[1].name = 'Renamed workload'
+    original.vnets[1].x = 800
+    original.vnets[1].label = 'Decoration'
+    const after = azRoutingInput(original)
+    expect(after.revision).toBe(before.revision)
+    expect(azDisplayResult(cachedSimulation, after.names)).toEqual(simulateAzNet(original))
+    expect(azDisplayResult(cachedPair, after.names)).toEqual(traceAzNetPair(original, simulateAzNet(original),
+      { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '10.1.1.4', { kind: 'site', siteId: 'site' }, '172.16.0.4'))
+    const budget = { maxMillis: 10_000 }
+    const cachedFailure = analyzeAzResilience(before.routing, budget, validateAzNetTopology(original))
+    expect(azDisplayResult(cachedFailure, after.names)).toEqual(analyzeAzResilience(original, budget))
+  })
+
+  it('invalidates every representative routing-sensitive edit, not just collection identity', () => {
+    const base = transitTopology()
+    const revision = azRoutingInput(base).revision
+    const edits: ((t: AzNetTopology) => void)[] = [
+      (t) => { t.vnets[0].region = 'eastus' },
+      (t) => { t.vnetPeerings[0].enabled = false },
+      (t) => { t.erLinks[0].targetId = 'another-gateway' },
+      (t) => { t.vnets[0].subnets[0].name = 'renamed-infrastructure' },
+      (t) => { t.vnets[1].subnets[0].name = 'AzureFirewallSubnet' },
+      (t) => { delete t.erLocations[0].peeringLocation; t.erLocations[0].name = 'London' },
+      (t) => { t.vpnConnections.push({ id: 'vpn', name: 'VPN', siteId: 'site', targetKind: 'vnet-gateway', targetId: 'gw', enabled: true, bgpEnabled: false, staticPrefixes: ['10.0.0.0/8'] }) },
+      (t) => { t.routeMaps = [{ id: 'policy', name: 'Policy', siteId: 'site', rules: [{ id: 'rule', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate', modifications: [{ property: 'community', action: 'add', values: ['65001:9'] }] }] }] },
+    ]
+    for (const edit of edits) {
+      const next = structuredClone(base); edit(next)
+      expect(azRoutingInput(next).revision).not.toBe(revision)
+    }
+  })
 
   function coexistenceTopology() {
     const topology = transitTopology()

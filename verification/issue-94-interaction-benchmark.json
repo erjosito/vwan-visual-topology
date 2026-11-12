@@ -1,0 +1,118 @@
+{
+  "issues": [93, 94],
+  "base_commit": "1c14f64b0765cc19ec3ff4ae313bfd387b178cb7",
+  "branch": "fix/93-94-workspace-interactions",
+  "recorded_at": "2026-11-12T14:04:04.711Z",
+  "environment": {
+    "os": "Windows",
+    "node": "v22.23.5",
+    "browser": "Playwright Chromium, Desktop Chrome profile",
+    "build": "npm run build; npm run preview -- --host 127.0.0.1 --port 4180 --strictPort",
+    "workers": 2,
+    "instrumentation": "Opt-in window.__AZNET_METRICS__; bounded local counters/timings only, no telemetry."
+  },
+  "validation": {
+    "unit_command": "npm test -- src\\azure-net\\engine.test.ts src\\failures.test.ts",
+    "unit_files": 2,
+    "unit_passed": 115,
+    "build_command": "npm run build",
+    "build_exit_code": 0,
+    "build_warning": "Existing bundle size warning (>500 kB). Generated-date version convention unchanged.",
+    "lint_command": "npm run lint",
+    "lint_exit_code": 0,
+    "lint_warning": "One pre-existing ErLocationInfoModal set-state-in-effect warning remains. Browser-storage synchronization has a scoped, explained exception.",
+    "browser_environment": {
+      "PLAYWRIGHT_BASE_URL": "http://127.0.0.1:4180",
+      "PLAYWRIGHT_JSON_OUTPUT_NAME": "test-artifacts\\issue-93-94-playwright.json"
+    },
+    "browser_command": "npx playwright test azure-net.spec.ts azure-net-bgp.spec.ts azure-net-routing-check.spec.ts canvas-presentation.spec.ts failures.spec.ts azure-net-path-motion.spec.ts azure-net-gateway-prefixes.spec.ts azure-comparison.spec.ts --workers=2 --reporter=list,json",
+    "browser_passed": 74,
+    "browser_failed": 0,
+    "browser_flaky": 0,
+    "browser_skipped": 0,
+    "browser_duration_ms": 107844.731,
+    "small_model_parity": "Exact simulation, landscape analysis and diagnostic output equality for all five shipped flagship samples plus transit, advanced ARS/site-map and remote-ARS models; exact renamed trace and failure-report equality, including duplicate original VNet names.",
+    "additional_assertions": [
+      "Malformed/missing collections, wrong scalar/enum shapes, duplicate/dangling IDs, excessive text/collections/aggregate values and nonfinite coordinates are rejected.",
+      "All existing Azure Networking JSON fixtures remain admitted; optional advanced ARS attributes and bounded unknown observations round-trip.",
+      "Unreadable originals are preserved/exportable until acknowledgement; failed imports and quota failure retain the active design.",
+      "Share/edit/reload and same-document shared-link imports consume snapshots once; explicit samples still supersede previously saved shared metadata.",
+      "Cancel, lost capture and Escape discard preview; keyboard moves, one-step undo/redo and reload persistence remain correct.",
+      "Parallel ER geometry and policy anchors move live without losing link IDs.",
+      "Presentation edits retain cached simulation, connectivity, trace, diagnostics and N-1 evidence, with current names in prose/Bicep; region edits invalidate routing.",
+      "Existing gateway summaries, advanced ARS/site maps, route/failure evidence, motion alignment, fit/reset and presentation controls pass browser regressions."
+    ]
+  },
+  "method": {
+    "models": "Flagship hub/spoke topology expanded to 21 or 61 VNets, respectively 100 or 500 on-premises prefixes, hub transit peerings and active bounded landscape analysis.",
+    "gesture": "One 16-step real mouse drag per model; capture actual simulation/analysis/diagnostic/persistence counters before preview, during preview and after pointer-up. Verify live edge geometry, saved coordinates, single undo, redo and reload.",
+    "latency": "Elapsed performance.now() from the SVG pointermove listener to a nested requestAnimationFrame callback. This is a browser next-frame proxy, not physical display latency.",
+    "p95": "Nearest-rank percentile across 16 samples; p95 is therefore the maximum in these bounded runs.",
+    "durable_counts_exclude": "Initial load, subsequent undo/redo and reload.",
+    "reference_only": "Issue #91 quoted ~217 ms simulation and ~1.15 s active pair analysis for a 61-VNet/500-prefix synthetic model. These runs measure a bounded landscape check, not an identical routing microbenchmark."
+  },
+  "measurements": [
+    {
+      "vnets": 21,
+      "site_prefixes": 100,
+      "mode": "hub-spoke",
+      "pointer_samples_ms": [18.4, 28.3, 12.6, 12.5, 9.0, 10.8, 13.1, 10.6, 10.0, 10.8, 7.3, 9.6, 6.6, 6.2, 7.3, 9.1],
+      "pointer_median_ms": 10.3,
+      "pointer_p95_ms": 28.3,
+      "initial_simulation_ms": 33.6,
+      "active_landscape_analysis_ms": 354.7,
+      "commit_work_ms": 0.4,
+      "preview_simulations": 0,
+      "preview_connectivity_analyses": 0,
+      "preview_diagnostic_runs": 0,
+      "preview_commits": 0,
+      "preview_saves": 0,
+      "pointer_completion_commits": 1,
+      "pointer_completion_saves": 1,
+      "pointer_completion_reroutes": 0
+    },
+    {
+      "vnets": 61,
+      "site_prefixes": 500,
+      "mode": "full",
+      "pointer_samples_ms": [39.3, 30.2, 38.1, 36.7, 30.4, 25.3, 25.5, 39.8, 25.2, 27.5, 20.9, 18.2, 23.0, 28.3, 25.1, 31.6],
+      "pointer_median_ms": 27.9,
+      "pointer_p95_ms": 39.8,
+      "initial_simulation_ms": 238.9,
+      "active_landscape_analysis_ms": 1625.4,
+      "commit_work_ms": 1.1,
+      "preview_simulations": 0,
+      "preview_connectivity_analyses": 0,
+      "preview_diagnostic_runs": 0,
+      "preview_commits": 0,
+      "preview_saves": 0,
+      "pointer_completion_commits": 1,
+      "pointer_completion_saves": 1,
+      "pointer_completion_reroutes": 0
+    }
+  ],
+  "limitations": [
+    "Single bounded gesture per synthetic model with concurrent two-worker browser load; timings vary with scheduling/JIT/DOM size and are not a 60 FPS guarantee.",
+    "This removes repeated routing work from interactions; it does not merge or optimize the underlying routing engines or rewrite the renderer.",
+    "If browser storage access itself is denied, inaccessible original bytes cannot be exported; automatic overwrite remains blocked until explicit acknowledgement.",
+    "Semantic routing problems remain editable warnings. Native admission guarantees bounded structural completeness/references, not a fully routable or deployable design.",
+    "No cloud operations, deployments, push, PR, merge or provider orders were performed. Full CI and production-host release checks remain with the parent."
+  ],
+  "changed_files": [
+    "README.md",
+    "e2e\\azure-net.spec.ts",
+    "e2e\\azure-net-gateway-prefixes.spec.ts",
+    "e2e\\canvas-presentation.spec.ts",
+    "src\\FailurePanel.tsx",
+    "src\\failure-analysis.ts",
+    "src\\azure-net\\AzureNetApp.tsx",
+    "src\\azure-net\\AzureNetDiagram.tsx",
+    "src\\azure-net\\admission.ts",
+    "src\\azure-net\\workspace.ts",
+    "src\\azure-net\\routing-input.ts",
+    "src\\azure-net\\performance.ts",
+    "src\\azure-net\\model.ts",
+    "src\\azure-net\\engine.test.ts",
+    "verification\\issue-94-interaction-benchmark.json"
+  ]
+}
