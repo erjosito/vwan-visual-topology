@@ -1144,7 +1144,7 @@ test('either routing policy secures the existing hub icon in both layouts and di
     const secured = privateTraffic || internetTraffic
     for (const layout of ['layered', 'constellation']) {
       await page.getByLabel('Visualization mode', { exact: true }).selectOption(layout)
-      await expect(hub.locator('.node-kind')).toHaveText(secured ? 'SECURED VIRTUAL HUB' : 'VIRTUAL HUB')
+      await expect(hub.locator('.network-node-badge text')).toHaveText(secured ? 'SECURED VIRTUAL HUB' : 'VIRTUAL HUB')
       await expect(hub.locator('.node-icon.secured')).toHaveCount(secured ? 1 : 0)
       await expect(page.locator('.firewall-node')).toHaveCount(0)
       await expect(page.locator('.hub-node')).toHaveCount(example.hubs.length)
@@ -1161,7 +1161,7 @@ test('either routing policy secures the existing hub icon in both layouts and di
           const image = new Image(); image.src = url!; await image.decode()
           return image.naturalWidth > 0 && image.naturalHeight > 0
         }, currentIcon)).toBe(true)
-        await expect(hub.locator('title')).toContainText('Azure Firewall')
+        await expect(hub.locator(':scope > title')).toContainText('Azure Firewall')
       } else expect(currentIcon).toBe(originalIcon)
     }
     if (internetTraffic) {
@@ -1198,7 +1198,7 @@ test('routing intent stays on hubs, with separate overlay tables and firewall pa
   await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
   await expect(page.locator('.flow-result')).toContainText('Azure Firewall')
   await expect(page.getByLabel('Select hub Europe hub', { exact: true })).toHaveClass(/firewall-active/)
-  await expect(page.getByLabel('Select hub Europe hub', { exact: true }).locator('title')).toContainText('Active path traverses Azure Firewall')
+  await expect(page.getByLabel('Select hub Europe hub', { exact: true }).locator(':scope > title')).toContainText('Active path traverses Azure Firewall')
   expect((await readTopology(page)).hubs[0].routingIntent.private).toBe(true)
 })
 
@@ -1256,7 +1256,7 @@ test('creates nodes through canvas menus, validates prefixes and confirms cascad
   await site.getByLabel('Originated prefix', { exact: true }).fill('10.91.0.0/16, 10.92.0.0/16')
   await site.getByLabel('Transport', { exact: true }).selectOption('VPN')
   await site.getByRole('button', { name: 'Create object', exact: true }).click()
-  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16 +1')
+  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes > text')).toHaveText('10.91.0.0/16 +1')
   await showRoutes(page, 'Lab hub')
   await expect(page.locator('.effective-routes table')).toContainText('10.91.0.0/16')
   await expect(page.locator('.effective-routes table')).toContainText('10.92.0.0/16')
@@ -1266,7 +1266,7 @@ test('creates nodes through canvas menus, validates prefixes and confirms cascad
   expect((await readTopology(page)).hubs).toHaveLength(0)
   expect((await readTopology(page)).sites).toHaveLength(1)
   await page.reload()
-  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes')).toHaveText('10.91.0.0/16 +1')
+  await expect(page.getByLabel('Select site Lab branch', { exact: true }).locator('.node-prefixes > text')).toHaveText('10.91.0.0/16 +1')
 })
 
 test('advanced path explorer calculates forward and reverse BGP paths independently', async ({ page }) => {
@@ -1655,7 +1655,7 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   await expect(page.getByTestId('peer-link-ac')).not.toHaveClass(/preferred-link/)
   await expect.poll(() => motionDirections(page, 'ab')).toEqual([{ from: 'a', to: 'b' }])
   await expect.poll(() => motionDirections(page, 'ac')).toEqual([])
-  await expect(page.getByLabel('Select site Site B', { exact: true }).locator('.node-prefixes')).toHaveText('10.80.0.0/16')
+  await expect(page.getByLabel('Select site Site B', { exact: true }).locator('.node-prefixes > text')).toHaveText('10.80.0.0/16')
   await page.getByLabel('Filter by prefix', { exact: true }).fill('/24')
   await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(0)
   await page.getByLabel('Filter by prefix', { exact: true }).fill('10.80')

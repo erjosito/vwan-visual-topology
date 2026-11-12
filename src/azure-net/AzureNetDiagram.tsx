@@ -4,6 +4,7 @@ import { t } from '../i18n'
 import { CanvasBackground, CanvasControls } from '../CanvasPresentation'
 import { centerOfBox, connectionBend, fitDiagram, reverseCurve } from '../connection-geometry'
 import { NetworkNodeIcon } from '../NetworkNodeIcon'
+import { DiagramNodeBadge, DiagramNodeText } from '../DiagramNodeLabels'
 import { useCanvasPresentation } from '../useCanvasPresentation'
 import type { RouteMap, RouteMapAssignment, RouteMapDirection } from '../model'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
@@ -96,9 +97,47 @@ function mappedArsLinks(vnet: AzVNet, topology: AzNetTopology) {
   })
 }
 
+function deviceChips(vnet: AzVNet, width: number) {
+  const chips: { key: string; label: string; title: string; disabled: boolean; tone: 'warning' | 'purple' | 'success' | 'info'; entity: AzSelectedEntity }[] = [
+    ...vnet.gateways.map((gw) => ({
+      key: gw.id,
+      label: `${gw.kind === 'ExpressRoute' ? 'ER GW' : 'VPN GW'}${gw.enabled ? '' : ' · OFF'}`,
+      title: `${gw.name} · ASN ${gw.asn} · ${gw.enabled ? 'Enabled' : 'Disabled'}`,
+      disabled: !gw.enabled,
+      tone: gw.kind === 'ExpressRoute' ? 'warning' as const : 'purple' as const,
+      entity: { kind: 'gateway' as const, vnetId: vnet.id, gatewayId: gw.id },
+    })),
+    ...(vnet.routeServer ? [{
+      key: vnet.routeServer.id,
+      label: `ARS 65515${vnet.routeServer.enabled ? vnet.routeServer.branchToBranchTraffic ? ' · B2B' : '' : ' · OFF'}`,
+      title: `${vnet.routeServer.name} · ASN 65515 · ${vnet.routeServer.enabled ? 'Enabled' : 'Disabled'}`,
+      disabled: !vnet.routeServer.enabled,
+      tone: 'success' as const,
+      entity: { kind: 'route-server' as const, vnetId: vnet.id, routeServerId: vnet.routeServer.id },
+    }] : []),
+    ...vnet.appliances.map((app) => ({
+      key: app.id,
+      label: app.kind === 'azure-firewall' ? 'AzFirewall' : app.kind === 'vnra' ? 'VNRA 100G' : `NVA (${app.privateIp})`,
+      title: `${app.name} · ${app.privateIp} · IP forwarding ${app.enableIpForwarding ? 'On' : 'Off'}`,
+      disabled: false,
+      tone: app.kind === 'azure-firewall' ? 'warning' as const : app.kind === 'vnra' ? 'info' as const : 'purple' as const,
+      entity: { kind: 'appliance' as const, vnetId: vnet.id, applianceId: app.id },
+    })),
+  ]
+  let x = 10, y = 0
+  return chips.map((chip) => {
+    const chipWidth = Math.min(108, Math.max(58, chip.label.length * 5.7 + 12))
+    if (x + chipWidth > width - 10) { x = 10; y += 26 }
+    const position = { x, y, width: chipWidth }
+    x += chipWidth + 5
+    return { ...chip, ...position }
+  })
+}
+
 function getVnetBoxHeight(vnet: AzVNet, topology: AzNetTopology): number {
   const headerH = 44
-  const controlStripH = vnet.gateways.length > 0 || vnet.routeServer || vnet.appliances.length > 0 ? 30 : 0
+  const chips = deviceChips(vnet, isHubVnetRole(vnet.role) ? 315 : 285)
+  const controlStripH = chips.length ? chips[chips.length - 1].y + 30 : 0
   const subnetsH = Math.max(1, vnet.subnets.length) * 28 + 14
   return headerH + controlStripH + mappedArsLinks(vnet, topology).length * 44 + subnetsH
 }
@@ -157,7 +196,7 @@ function computePositions(topology: AzNetTopology): {
       x: loc.x ?? 380 + idx * 320,
       y: loc.y ?? 530,
       width: 225,
-      height: 66,
+      height: 82,
     }
   })
 
@@ -1085,10 +1124,11 @@ export function AzureNetDiagram({
           const hasError = vnetFindings.some((f) => f.severity === 'error')
           const hasWarning = vnetFindings.some((f) => f.severity === 'warning')
 
-          const hasControlRow =
-            vnet.gateways.length > 0 || Boolean(vnet.routeServer) || vnet.appliances.length > 0
+          const chips = deviceChips(vnet, box.width)
+          const controlStripH = chips.length ? chips[chips.length - 1].y + 30 : 0
+          const roleWidth = Math.min(104, Math.max(58, vnet.role.length * 6 + 12))
           const arsLinks = mappedArsLinks(vnet, topology)
-          const subnetStartY = box.y + 44 + (hasControlRow ? 30 : 0) + arsLinks.length * 44 + 6
+          const subnetStartY = box.y + 44 + controlStripH + arsLinks.length * 44 + 6
 
           return (
             <g
@@ -1097,6 +1137,8 @@ export function AzureNetDiagram({
               data-simulated-failed={faults[vnet.id] ? 'true' : undefined}
               tabIndex={0}
               role="button"
+              className="network-node"
+              aria-pressed={isVnetSelected}
               aria-label={`VNet ${vnet.name}${faults[vnet.id] ? ` — Simulated failure: ${faults[vnet.id].map((f) => f.name).join(', ')}` : ''}`}
               onKeyDown={(e) => openKeyboardContext(e, { kind: 'vnet', vnetId: vnet.id })}
               onPointerDown={(e) => {
@@ -1130,6 +1172,7 @@ export function AzureNetDiagram({
               style={{ cursor: 'grab' }}
             >
               <rect
+                className="network-node-frame"
                 x={box.x}
                 y={box.y}
                 width={box.width}
@@ -1152,9 +1195,9 @@ export function AzureNetDiagram({
 
               {/* VNet Header */}
               <rect
-                x={box.x}
-                y={box.y}
-                width={box.width}
+                x={box.x + 2}
+                y={box.y + 2}
+                width={box.width - 4}
                 height={42}
                 rx={12}
                 fill={
@@ -1164,112 +1207,23 @@ export function AzureNetDiagram({
                 }
               />
               <NetworkNodeIcon kind="spoke" x={box.x + 23} y={box.y + 17} size={22} />
-              <text
-                x={box.x + 40}
-                y={box.y + 18}
-                fontSize={12.5}
-                fontWeight={700}
-                fill="var(--text)"
-              >
-                <title>{vnet.name}</title>
-                {vnet.name.length > Math.floor((box.width - 114) / 7) ? `${vnet.name.slice(0, Math.floor((box.width - 114) / 7) - 1)}…` : vnet.name}
-              </text>
-              <text
-                x={box.x + 12}
-                y={box.y + 34}
-                fontSize={10.5}
-                fill="var(--text)"
-              >
-                {vnet.prefixes.join(', ')} · {vnet.region}
-              </text>
-              <rect
-                x={box.x + box.width - 66}
-                y={box.y + 8}
-                width={56}
-                height={18}
-                rx={5}
-                fill="var(--surface-muted)"
-              />
-              <text
-                x={box.x + box.width - 38}
-                y={box.y + 20}
-                textAnchor="middle"
-                fontSize={9.5}
-                fontWeight={700}
-                fill="var(--text-muted)"
-              >
-                {vnet.role.toUpperCase()}
-              </text>
+              <DiagramNodeText text={vnet.name} x={box.x + 40} y={box.y + 18} width={box.width - roleWidth - 60} weight={700} />
+              <DiagramNodeText text={`${vnet.prefixes.join(', ')} · ${vnet.region}`} x={box.x + 12} y={box.y + 34} width={box.width - 24} fontSize={10.5} weight={400} />
+              <DiagramNodeBadge label={vnet.role.toUpperCase()} x={box.x + box.width - roleWidth - 10} y={box.y + 6} width={roleWidth} tone={isHubVnetRole(vnet.role) ? 'info' : 'muted'} />
 
               {/* Control Plane / Appliances Strip */}
-              {hasControlRow && (
+              {chips.length > 0 && (
                 <g>
-                  {(() => {
-                    const chips: {
-                      key: string
-                      label: string
-                      bg: string
-                      fg: string
-                      entity: AzSelectedEntity
-                    }[] = []
-                    for (const gw of vnet.gateways) {
-                      chips.push({
-                        key: gw.id,
-                        label: gw.kind === 'ExpressRoute' ? 'ER GW' : 'VPN GW',
-                        bg: gw.kind === 'ExpressRoute' ? 'var(--warning-surface)' : 'var(--surface-muted)',
-                        fg: gw.kind === 'ExpressRoute' ? 'var(--warning)' : 'var(--purple)',
-                        entity: { kind: 'gateway', vnetId: vnet.id, gatewayId: gw.id },
-                      })
-                    }
-                    if (vnet.routeServer?.enabled) {
-                      chips.push({
-                        key: vnet.routeServer.id,
-                        label: `ARS 65515${vnet.routeServer.branchToBranchTraffic ? ' · B2B' : ''}`,
-                        bg: 'var(--surface-muted)',
-                        fg: 'var(--success)',
-                        entity: {
-                          kind: 'route-server',
-                          vnetId: vnet.id,
-                          routeServerId: vnet.routeServer.id,
-                        },
-                      })
-                    }
-                    for (const app of vnet.appliances) {
-                      chips.push({
-                        key: app.id,
-                        label:
-                          app.kind === 'azure-firewall'
-                            ? 'AzFirewall'
-                            : app.kind === 'vnra'
-                              ? 'VNRA 100G'
-                              : `NVA (${app.privateIp})`,
-                        bg:
-                          app.kind === 'azure-firewall'
-                            ? 'var(--surface-muted)'
-                            : app.kind === 'vnra'
-                              ? 'var(--surface-muted)'
-                              : 'var(--surface-muted)',
-                        fg:
-                          app.kind === 'azure-firewall'
-                            ? 'var(--error)'
-                            : app.kind === 'vnra'
-                              ? 'var(--accent)'
-                              : 'var(--purple)',
-                        entity: { kind: 'appliance', vnetId: vnet.id, applianceId: app.id },
-                      })
-                    }
-                    let offsetX = box.x + 10
-                    return chips.slice(0, 4).map((chip) => {
-                      const chipW = Math.min(92, Math.max(58, chip.label.length * 6.2 + 12))
-                      const currX = offsetX
-                      offsetX += chipW + 5
+                  {chips.map((chip) => {
                       return (
                         <g
                           key={chip.key}
                           data-testid={`aznet-chip-${chip.key}`}
+                          className="network-device-chip"
+                          data-disabled={chip.disabled ? 'true' : undefined}
                           role="button"
                           tabIndex={0}
-                          aria-label={`Select ${chip.label}`}
+                          aria-label={`Select ${chip.label} · ${chip.title}`}
                           onKeyDown={(event) => openKeyboardContext(event, chip.entity)}
                           onClick={(e) => {
                             e.stopPropagation()
@@ -1288,35 +1242,15 @@ export function AzureNetDiagram({
                           }}
                           style={{ cursor: 'pointer' }}
                         >
-                          <rect
-                            x={currX}
-                            y={box.y + 47}
-                            width={chipW}
-                            height={20}
-                            rx={5}
-                            fill={chip.bg}
-                            stroke={chip.fg}
-                            strokeWidth={1}
-                          />
-                          <text
-                            x={currX + chipW / 2}
-                            y={box.y + 60}
-                            textAnchor="middle"
-                            fontSize={9.5}
-                            fontWeight={700}
-                            fill={chip.fg}
-                          >
-                            {chip.label}
-                          </text>
+                          <DiagramNodeBadge label={chip.label} title={chip.title} x={box.x + chip.x} y={box.y + 47 + chip.y} width={chip.width} tone={chip.disabled ? 'muted' : chip.tone} />
                         </g>
                       )
-                    })
-                  })()}
+                  })}
                 </g>
               )}
 
               {arsLinks.map((link, index) => {
-                const y = box.y + 82 + index * 44
+                const y = box.y + 44 + controlStripH + 8 + index * 44
                 return <g key={link.id} data-testid={`aznet-ars-session-${vnet.routeServer!.id}-${link.id}`}>
                   <title>{vnet.routeServer!.name} · {link.name}</title>
                   <line x1={box.x + 40} y1={y} x2={box.x + box.width - 106} y2={y} stroke="var(--link)" strokeDasharray="3 3" />
@@ -1554,6 +1488,8 @@ export function AzureNetDiagram({
             <g
               key={hub.id}
               data-testid={`aznet-vwanhub-${hub.id}`}
+              className="network-node"
+              aria-pressed={isSelected}
               data-simulated-failed={faults[hub.id] ? 'true' : undefined}
               role="button"
               tabIndex={0}
@@ -1591,6 +1527,7 @@ export function AzureNetDiagram({
               style={{ cursor: 'grab' }}
             >
               <rect
+                className="network-node-frame"
                 x={box.x}
                 y={box.y}
                 width={box.width}
@@ -1601,16 +1538,9 @@ export function AzureNetDiagram({
                 strokeWidth={isSelected ? 2.6 : 1.8}
               />
               <NetworkNodeIcon kind="hub" secured={hub.routingIntent.private || hub.routingIntent.internet} x={box.x + 25} y={box.y + 20} size={24} />
-              <text x={box.x + 43} y={box.y + 24} fontSize={12.5} fontWeight={700} fill="var(--text)">
-                {hub.name}
-              </text>
-              <text x={box.x + 14} y={box.y + 42} fontSize={10.5} fill="var(--text)">
-                vWAN Hub ({hub.prefix}) · Pref: {hub.preference}
-              </text>
-              <text x={box.x + 14} y={box.y + 60} fontSize={10} fontWeight={600} fill="var(--info)">
-                Routing Intent: {hub.routingIntent.private ? 'Private ✓' : 'Private Off'} /{' '}
-                {hub.routingIntent.internet ? 'Internet ✓' : 'Internet Off'}
-              </text>
+              <DiagramNodeText text={hub.name} x={box.x + 43} y={box.y + 24} width={box.width - 55} weight={700} />
+              <DiagramNodeText text={`vWAN Hub${hub.prefix ? ` (${hub.prefix})` : ''} · Pref: ${hub.preference}`} x={box.x + 14} y={box.y + 42} width={box.width - 28} fontSize={10.5} weight={400} />
+              <DiagramNodeText text={`Private: ${hub.routingIntent.private ? 'On' : 'Off'} · Internet: ${hub.routingIntent.internet ? 'On' : 'Off'}`} title={`Routing Intent: Private ${hub.routingIntent.private ? 'On' : 'Off'} / Internet ${hub.routingIntent.internet ? 'On' : 'Off'}`} x={box.x + 14} y={box.y + 60} width={box.width - 28} fontSize={10} fill="var(--info)" />
               {hub.label?.trim() ? (
                 <g
                   data-testid={`aznet-node-label-${hub.id}`}
@@ -1652,6 +1582,8 @@ export function AzureNetDiagram({
             <g
               key={loc.id}
               data-testid={`aznet-erloc-${loc.id}`}
+              className="network-node"
+              aria-pressed={isSelected}
               data-simulated-failed={faults[loc.id] ? 'true' : undefined}
               role="button"
               tabIndex={0}
@@ -1689,22 +1621,20 @@ export function AzureNetDiagram({
               style={{ cursor: 'grab' }}
             >
               <rect
+                className="network-node-frame"
                 x={box.x}
                 y={box.y}
                 width={box.width}
                 height={box.height}
-                rx={10}
+                rx={12}
                 fill="var(--surface-muted)"
                 stroke={isSelected ? 'var(--accent)' : 'var(--warning)'}
                 strokeWidth={isSelected ? 2.5 : 1.8}
               />
               <NetworkNodeIcon kind="erLocation" x={box.x + 25} y={box.y + 20} size={24} />
-              <text x={box.x + 43} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--warning)">
-                {loc.name}
-              </text>
-              <text x={box.x + 12} y={box.y + 44} fontSize={10} fill="var(--warning)">
-                ASN 12076 · {loc.sku ?? 'Standard'} · GR: {loc.globalReachEnabled ? 'On' : 'Off'}
-              </text>
+              <DiagramNodeText text={loc.name} x={box.x + 43} y={box.y + 24} width={box.width - 55} fontSize={12} weight={700} fill="var(--warning)" />
+              <DiagramNodeText text={`ASN 12076 · ${loc.sku ?? 'Standard'} · GR: ${loc.globalReachEnabled ? 'On' : 'Off'}`} x={box.x + 12} y={box.y + 44} width={box.width - 24} fontSize={10} fill="var(--warning)" weight={400} />
+              <DiagramNodeBadge label="ER LOCATION" x={box.x + 12} y={box.y + 52} width={86} tone="purple" />
               {loc.label?.trim() ? (
                 <g
                   data-testid={`aznet-node-label-${loc.id}`}
@@ -1746,6 +1676,8 @@ export function AzureNetDiagram({
             <g
               key={site.id}
               data-testid={`aznet-site-${site.id}`}
+              className="network-node"
+              aria-pressed={isSelected}
               data-simulated-failed={faults[site.id] ? 'true' : undefined}
               tabIndex={0}
               role="button"
@@ -1783,25 +1715,20 @@ export function AzureNetDiagram({
               style={{ cursor: 'grab' }}
             >
               <rect
+                className="network-node-frame"
                 x={box.x}
                 y={box.y}
                 width={box.width}
                 height={box.height}
-                rx={10}
+                rx={12}
                 fill="var(--surface)"
                 stroke={isSelected ? 'var(--accent)' : 'var(--link)'}
                 strokeWidth={isSelected ? 2.5 : 1.8}
               />
               <NetworkNodeIcon kind="site" x={box.x + 25} y={box.y + 20} size={24} />
-              <text x={box.x + 43} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--text)">
-                {site.name}
-              </text>
-              <text x={box.x + 12} y={box.y + 42} fontSize={10.5} fill="var(--text)">
-                ASN {site.asn} · {site.prefixes.join(', ')}
-              </text>
-              <text x={box.x + 12} y={box.y + 58} fontSize={9.5} fill="var(--text-muted)">
-                On-Premises Branch / Datacenter
-              </text>
+              <DiagramNodeText text={site.name} x={box.x + 43} y={box.y + 24} width={box.width - 55} fontSize={12} weight={700} />
+              <DiagramNodeText text={`ASN ${site.asn} · ${site.prefixes.join(', ')}`} x={box.x + 12} y={box.y + 42} width={box.width - 24} fontSize={10.5} weight={400} />
+              <DiagramNodeBadge label="ON-PREMISES" title="On-Premises Branch / Datacenter" x={box.x + 12} y={box.y + 48} width={108} />
               {site.label?.trim() ? (
                 <g
                   data-testid={`aznet-node-label-${site.id}`}
