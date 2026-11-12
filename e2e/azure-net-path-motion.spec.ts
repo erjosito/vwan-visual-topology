@@ -67,7 +67,9 @@ for (const mode of ['hub-spoke', 'full']) {
       { id: 'peer', from: 'vnet:hub', to: 'vnet:spoke' },
     ])
     expect(await page.locator('.path-flow-circle').count()).toBeGreaterThan(2)
-    const motion = await forward.evaluate(async (flow) => {
+    for (const style of ['default', 'curved', 'straight']) {
+      await page.getByLabel('Connection style', { exact: true }).selectOption(style)
+      const motion = await forward.evaluate(async (flow) => {
       const svg = flow.ownerSVGElement!
       const track = flow.querySelector<SVGPathElement>('.path-flow-track')!
       const circle = flow.querySelector('circle')!
@@ -82,8 +84,17 @@ for (const mode of ['hub-spoke', 'full']) {
         const expected = track.getPointAtLength(track.getTotalLength() * fraction).matrixTransform(track.getScreenCTM()!)
         errors.push(Math.hypot(actual.x - expected.x, actual.y - expected.y))
       }
-      const distance = ['aznet-peering-peer', 'aznet-erlink-er-gateway', 'aznet-erlink-er-site'].reduce((sum, id) =>
-        sum + svg.querySelector<SVGLineElement>(`[data-testid="${id}"] line`)!.getTotalLength(), 0)
+      const edges = ['aznet-peering-peer', 'aznet-erlink-er-gateway', 'aznet-erlink-er-site'].map((id) =>
+        svg.querySelector<SVGPathElement>(`[data-testid="${id}"] .aznet-edge-path`)!)
+      let previous: DOMPoint | undefined
+      const distance = edges.reduce((sum, edge, index) => {
+        const length = edge.getTotalLength()
+        const from = edge.getPointAtLength(index < 2 ? length : 0)
+        const to = edge.getPointAtLength(index < 2 ? 0 : length)
+        const join = previous ? Math.hypot(previous.x - from.x, previous.y - from.y) : 0
+        previous = to
+        return sum + length + join
+      }, 0)
       svg.unpauseAnimations()
       return { errors, distance, trackLength: track.getTotalLength(), fill: getComputedStyle(circle).fill, pointerEvents: getComputedStyle(circle).pointerEvents }
     })
@@ -98,6 +109,7 @@ for (const mode of ['hub-spoke', 'full']) {
       return color
     }))
     expect(motion.pointerEvents).toBe('none')
+    }
     await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     await page.getByTitle('Zoom in', { exact: true }).click()
     await expect.poll(async () => (await speeds(page)).every((speed) => Math.abs(speed - 200) < 0.01)).toBe(true)
@@ -113,7 +125,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect.poll(async () => (await speeds(page)).every((speed) => Math.abs(speed - 200) < 0.01)).toBe(true)
     await page.emulateMedia({ reducedMotion: 'reduce' })
     await expect(page.locator('.path-flow-circle')).toHaveCount(0)
-    await expect(page.getByTestId('aznet-erlink-er-site').locator('line')).toHaveAttribute('stroke', 'var(--forward)')
+    await expect(page.getByTestId('aznet-erlink-er-site').locator('.aznet-edge-path')).toHaveAttribute('stroke', 'var(--forward)')
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await expect(page.locator('.path-flow')).toHaveCount(2)
     await page.getByTestId('aznet-clear-highlights-btn').click()

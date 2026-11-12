@@ -9,11 +9,10 @@ import { isolationLinkName } from './resilience'
 import type { Candidate } from './routing'
 import type { GroupPath, NodePath } from './paths'
 import type { SiteRoute } from './bgp'
-import { diagramCurve, diagramLayout } from './diagram-layout'
-import virtualWanHubIcon from './assets/azure/virtual-wan-hub.svg'
-import securedHubIcon from './assets/azure/secured-virtual-hub.png'
-import virtualNetworkIcon from './assets/azure/virtual-network.svg'
-import expressRouteIcon from './assets/azure/expressroute.svg'
+import { diagramCurve as baseDiagramCurve, diagramLayout } from './diagram-layout'
+import { connectionBend, fitDiagram } from './connection-geometry'
+import { useCanvasPresentation } from './useCanvasPresentation'
+import { NetworkNodeIcon as NodeIcon } from './NetworkNodeIcon'
 import { RouteMapPreview } from './RouteMapPreview'
 import { PathMotion } from './PathMotion'
 import type { MotionFlow, MotionSegment } from './PathMotion'
@@ -44,13 +43,6 @@ interface Props {
   canvasStatus?: ReactNode
 }
 
-function NodeIcon({ kind, secured = false }: { kind: 'hub' | 'spoke' | 'site' | 'erLocation'; secured?: boolean }) {
-  return <g className={`node-icon ${kind}${secured ? ' secured' : ''}`} aria-hidden="true" transform="translate(-79,-21)">
-    {kind === 'site' ? <><circle r="13" /><path d="M -7 7 V -7 H 2 V -2 H 7 V 7 Z M -3 -3 H -1 M -3 1 H -1 M -3 5 H -1 M 3 2 H 5" /></>
-      : <image href={kind === 'hub' ? secured ? securedHubIcon : virtualWanHubIcon : kind === 'erLocation' ? expressRouteIcon : virtualNetworkIcon} x="-14" y="-14" width="28" height="28" preserveAspectRatio="xMidYMid meet" />}
-  </g>
-}
-
 function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
   return <g className="node-icon spoke-nva-icon" data-testid={`spoke-nva-icon-${spokeId}`} aria-hidden="true" transform="translate(-79,17)">
     <circle r="12" />
@@ -59,9 +51,13 @@ function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
 }
 
 export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, layoutControls, canvasStatus }: Props) {
+  const { connectionStyle } = useCanvasPresentation()
+  const diagramCurve = (a: NodePosition, b: NodePosition, aSize: NodePosition, bSize: NodePosition, bend = 0, index = 0, count = 1, reversed = false) =>
+    baseDiagramCurve(a, b, aSize, bSize, connectionBend(connectionStyle, bend, index, count) * (reversed && connectionStyle !== 'default' ? -1 : 1))
   const svg = useRef<SVGSVGElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
+  const [fitting, setFitting] = useState(false)
   const [preview, setPreview] = useState<{ owner: RouterSelection; connectionId: string; direction: RouteMapDirection; anchor: SVGGElement }>()
   const previewId = useId()
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -90,7 +86,6 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
   const pixelWidth = Math.max(viewport.width, Math.min(layoutWidth, 1200))
   const pixelHeight = Math.max(viewport.height, 560)
   const scale = Math.min(pixelWidth / layoutWidth, pixelHeight / layoutHeight)
-  const width = pixelWidth / scale, height = pixelHeight / scale
   if (moving) {
     positions.set(moving.id, moving.position)
     for (const [siteId, spokeId] of nvaSiteMap) {
@@ -99,6 +94,10 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
   }
   const point = (id: string) => positions.get(id)!
   const hubSize = { x: 112, y: 48 }, nodeSize = { x: 94, y: 44 }
+  const fitted = fitting ? fitDiagram([...positions.values()].map(({ x, y }) => ({
+    x: x - 112, y: y - 70, width: 224, height: 140,
+  })), (viewport.width || pixelWidth) / (viewport.height || pixelHeight)) : undefined
+  const width = fitted?.width ?? pixelWidth / scale, height = fitted?.height ?? pixelHeight / scale
   const exitsHub = (path: NodePath) => path.termination !== 'summary-hole'
   const activeConnections = new Set(tracing ? [...paths.filter(exitsHub).map((p) => p.connectionId).filter(Boolean), ...sourceConnectionIds] : selected.map((r) => r.connectionId))
   const activeErLinks = new Set(tracing ? [...paths.filter(exitsHub).flatMap((path) => path.erLinkIds ?? []), ...sourceErLinkIds] : selected.flatMap((route) => [route.erHubLinkId, route.erSiteLinkId].filter(Boolean)))
@@ -113,7 +112,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       }
       const siblings = topology.connections.filter((c) => c.transport !== 'SpokeNVA' && c.hubId === connection.hubId && c.siteId === connection.siteId)
       const bend = siblings.length === 1 ? 18 : (siblings.findIndex((c) => c.id === connection.id) - (siblings.length - 1) / 2) * 85
-      return { ...connection, curve: diagramCurve(point(connection.hubId), point(connection.siteId), hubSize, nodeSize, bend), side: bend < 0 ? -1 : 1,
+      return { ...connection, curve: diagramCurve(point(connection.hubId), point(connection.siteId), hubSize, nodeSize, bend, siblings.indexOf(connection), siblings.length), side: bend < 0 ? -1 : 1,
         endpoints: [{ kind: 'hub', id: connection.hubId }, { kind: 'site', id: connection.siteId }] as RouterSelection[] }
     }),
     ...topology.spokes.filter((spoke): spoke is typeof spoke & { hubId: string } => Boolean(spoke.hubId)).map((spoke) => ({
@@ -123,14 +122,14 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     ...topology.siteLinks.map((link) => {
       const siblings = topology.siteLinks.filter((l) => edgeKey(visualId(l.a), visualId(l.b)) === edgeKey(visualId(link.a), visualId(link.b)))
       const bend = 65 + siblings.findIndex((l) => l.id === link.id) * 60
-      return { ...link, curve: diagramCurve(point(link.a), point(link.b), nodeSize, nodeSize, bend), side: 1,
+      return { ...link, curve: diagramCurve(point(link.a), point(link.b), nodeSize, nodeSize, bend, siblings.indexOf(link), siblings.length, visualId(link.a) > visualId(link.b)), side: 1,
         endpoints: [{ kind: 'site', id: link.a }, { kind: 'site', id: link.b }] as RouterSelection[] }
     }),
     ...(topology.erLinks ?? []).map((link) => {
       const owner: RouterSelection = link.hubId ? { kind: 'hub', id: link.hubId } : { kind: 'site', id: link.siteId! }
       const siblings = (topology.erLinks ?? []).filter((other) => other.locationId === link.locationId && other.hubId === link.hubId && other.siteId === link.siteId)
       const bend = 18 + siblings.findIndex((other) => other.id === link.id) * 65
-      return { ...link, curve: diagramCurve(point(owner.id), point(link.locationId), link.hubId ? hubSize : nodeSize, nodeSize, bend), side: 1, endpoints: [owner] }
+      return { ...link, curve: diagramCurve(point(owner.id), point(link.locationId), link.hubId ? hubSize : nodeSize, nodeSize, bend, siblings.indexOf(link), siblings.length), side: 1, endpoints: [owner] }
     }),
   ]
   const curves = new Map(policyLinks.map((link) => [link.id, link.curve]))
@@ -337,7 +336,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     if (panDrag.current?.pointerId !== event.pointerId) return
     panDrag.current = undefined; setPanning(false)
   }
-  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x} ${pan.y} ${width} ${height}`} style={{ width: pixelWidth * zoom, height: pixelHeight * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} onPointerDownCapture={closePreview}
+  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} onPointerDownCapture={closePreview}
     onPointerDown={(event) => {
       if (event.pointerType !== 'mouse' || event.button !== 0 || !event.isPrimary
         || (event.target as Element).closest('g[role="button"], .network-link, .edge-badge, .policy-guide, .routing-path-stop')) return
@@ -372,7 +371,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     <defs>
       <linearGradient id="hub-card" x2="0" y2="1"><stop stopColor="var(--surface)" /><stop offset="1" stopColor="var(--surface-muted)" /></linearGradient>
     </defs>
-    <CanvasBackground x={pan.x} y={pan.y} width={width} height={height} />
+    <CanvasBackground x={pan.x + (fitted?.x ?? 0)} y={pan.y + (fitted?.y ?? 0)} width={width} height={height} />
     {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">{t("AZURE SPOKE NETWORKS")}</text><text x="24" y="225" className="diagram-caption">{t("MICROSOFT GLOBAL BACKBONE")}</text><text x="24" y="465" className="diagram-caption">{topology.erLocations?.length ? t("EXPRESSROUTE LOCATIONS") : t("ON-PREMISES SITES")}</text>{!!topology.erLocations?.length && <text x="24" y="700" className="diagram-caption">{t("ON-PREMISES SITES")}</text>}</g>
       : <g className="constellation-orbits" aria-hidden="true"><ellipse cx={width / 2} cy={height / 2} rx={width / 2 - 130} ry={height / 2 - 80} /><ellipse cx={width / 2} cy={height / 2} rx={Math.max(180, topology.hubs.length * 130)} ry="145" /><text x="24" y="30" className="diagram-caption">{t("VIRTUAL WAN · NETWORK CONSTELLATION")}</text></g>}
     {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).map((other) => {
@@ -419,14 +418,12 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
         if (!peer) return null
         const p1 = point(loc.id)
         const p2 = point(peer.id)
-        const midX = (p1.x + p2.x) / 2
-        const midY = (p1.y + p2.y) / 2 - 22
-        const d = `M ${p1.x} ${p1.y} Q ${midX} ${midY} ${p2.x} ${p2.y}`
+        const curve = diagramCurve(p1, p2, nodeSize, nodeSize, -22)
         return (
           <g key={`gr-loc:${loc.id}:${peer.id}`} data-testid={`vwan-global-reach-link-${loc.id}-${peer.id}`}>
             <title>{loc.name} ↔ {peer.name} · ExpressRoute Global Reach (MSEE 12076)</title>
-            <path d={d} fill="none" stroke="var(--purple)" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.88" />
-            {badge('Global Reach', { x: midX, y: midY })}
+            <path d={curve.d} fill="none" stroke="var(--purple)" strokeWidth="2.5" strokeDasharray="6 4" opacity="0.88" />
+            {badge('Global Reach', curve.label)}
           </g>
         )
       })
@@ -542,8 +539,10 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     })}
   </svg>{preview && previewNode && previewLink && previewMap && !faults[preview.owner.id] && !faults[preview.connectionId] && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
     <CanvasControls zoom={zoom} onZoom={onZoom} status={canvasStatus} onResetView={() => {
-      setPan({ x: 0, y: 0 }); onZoom(1)
+      setFitting(false); setPan({ x: 0, y: 0 }); onZoom(1)
       scroll.current?.scrollTo(0, 0)
+    }} onFitView={() => {
+      setFitting(true); setPan({ x: 0, y: 0 }); onZoom(1); scroll.current?.scrollTo(0, 0)
     }}>{layoutControls}</CanvasControls>
   </>
 }

@@ -2,6 +2,9 @@ import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type Key
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
 import { CanvasBackground, CanvasControls } from '../CanvasPresentation'
+import { centerOfBox, connectionBend, fitDiagram, reverseCurve } from '../connection-geometry'
+import { NetworkNodeIcon } from '../NetworkNodeIcon'
+import { useCanvasPresentation } from '../useCanvasPresentation'
 import type { RouteMap, RouteMapAssignment, RouteMapDirection } from '../model'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
 import { RouteMapPreview } from '../RouteMapPreview'
@@ -50,6 +53,7 @@ interface AzureNetDiagramProps {
     x: number,
     y: number,
   ) => void
+  onResetLayout?: () => void
   onTogglePeeringEnabled?: (peeringId: string, enabled: boolean) => void
   onUpdatePeeringFlag?: (
     peeringId: string,
@@ -178,6 +182,7 @@ export function AzureNetDiagram({
   onSelect,
   onContextMenu,
   onMoveNode,
+  onResetLayout,
   onTogglePeeringEnabled,
   onUpdatePeeringFlag,
   onUpdateRouteTable,
@@ -193,6 +198,7 @@ export function AzureNetDiagram({
   onShowIssues,
   onClearHighlights,
 }: AzureNetDiagramProps) {
+  const { connectionStyle } = useCanvasPresentation()
   const shellRef = useRef<HTMLDivElement | null>(null)
   const svgRef = useRef<SVGSVGElement | null>(null)
   const hoverTimerRef = useRef<number | null>(null)
@@ -350,9 +356,6 @@ export function AzureNetDiagram({
     setDragState(null)
   }
 
-  const centerOf = (box?: BoxPosition) =>
-    box ? { cx: box.x + box.width / 2, cy: box.y + box.height / 2 } : { cx: 0, cy: 0 }
-
   const [pixelsPerUnit, setPixelsPerUnit] = useState(1)
   useLayoutEffect(() => {
     const svg = svgRef.current!
@@ -377,6 +380,27 @@ export function AzureNetDiagram({
   ))
   const targetKey = (kind: string, id: string) =>
     kind === 'site' || kind === 'vwan-hub' ? `${kind}:${id}` : deviceOwners.get(id)
+  const connections = [
+    ...topology.vnetPeerings.map((link) => ({ id: link.id, from: `vnet:${link.vnetAId}`, to: `vnet:${link.vnetBId}` })),
+    ...topology.vnets.flatMap((vnet) => vnet.vwanHubAttachment?.enabled ? [{
+      id: `vhub-attach:${vnet.id}:${vnet.vwanHubAttachment.hubId}`, from: `vnet:${vnet.id}`, to: `vwan-hub:${vnet.vwanHubAttachment.hubId}`,
+    }] : []),
+    ...topology.erLinks.map((link) => ({ id: link.id, from: `er-location:${link.locationId}`, to: targetKey(link.targetKind, link.targetId) })),
+    ...(topology.erGlobalReachLinks ?? []).map((link) => ({ id: link.id, from: `er-location:${link.locationAId}`, to: `er-location:${link.locationBId}` })),
+    ...topology.vpnConnections.map((link) => ({ id: link.id, from: `site:${link.siteId}`, to: targetKey(link.targetKind, link.targetId) })),
+    ...topology.siteLinks.map((link) => ({ id: link.id, from: `site:${link.siteAId}`, to: `site:${link.siteBId}` })),
+  ]
+  const pairKey = (from: string, to?: string) => JSON.stringify([from, to].sort())
+  const connectionCurves = new Map(connections.flatMap((link) => {
+    const a = motionBoxes.get(link.from), b = link.to && motionBoxes.get(link.to)
+    if (!a || !b || !link.to) return []
+    const siblings = connections.filter((other) => pairKey(other.from, other.to) === pairKey(link.from, link.to))
+    const index = siblings.indexOf(link)
+    const parallelBend = siblings.length > 1 ? (index - (siblings.length - 1) / 2) * 70 : 0
+    const bend = connectionBend(connectionStyle, parallelBend, index, siblings.length) * (link.from < link.to ? 1 : -1)
+    return [[link.id, { from: link.from, to: link.to, curve: diagramCurve(centerOfBox(a), centerOfBox(b),
+      { x: a.width / 2, y: a.height / 2 }, { x: b.width / 2, y: b.height / 2 }, bend) }] as const]
+  }))
   const policyMarkers: {
     id: string; selection: AzRouteMapSelection; ownerName: string; connectionName: string; map: RouteMap; enabled: boolean
     point: { x: number; y: number }; position: { x: number; y: number }; angle: number
@@ -402,7 +426,6 @@ export function AzureNetDiagram({
     })
   }
   for (const site of topology.sites) {
-    const box = positions.sites[site.id]
     const slots = new Map<string, number>()
     for (const link of azSitePolicyLinks(topology, site.id)) {
       if (!site.routeMapAssignments?.some((assignment) => assignment.connectionId === link.id)) continue
@@ -415,11 +438,9 @@ export function AzureNetDiagram({
       if (!other || !target) continue
       const slot = slots.get(target) ?? 0
       slots.set(target, slot + 1)
-      const curve = diagramCurve(
-        { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-        { x: other.x + other.width / 2, y: other.y + other.height / 2 },
-        { x: box.width / 2, y: box.height / 2 }, { x: other.width / 2, y: other.height / 2 }, 0,
-      )
+      const edge = connectionCurves.get(link.id)
+      if (!edge) continue
+      const curve = edge.from === `site:${site.id}` ? edge.curve : reverseCurve(edge.curve)
       const gateway = vpn?.targetKind === 'vnet-gateway' ? topology.vnets.flatMap((vnet) => vnet.gateways).find((gateway) => gateway.id === vpn.targetId) : undefined
       addPolicyMarkers({ kind: 'site', siteId: site.id }, site.name, link.id, link.name,
         topology.routeMaps?.filter((map) => map.siteId === site.id) ?? [], site.routeMapAssignments ?? [],
@@ -484,11 +505,10 @@ export function AzureNetDiagram({
   }
   const motionEdges = new Map<string, MotionSegment>()
   const addMotionEdge = (id: string, from: string | undefined, to: string | undefined) => {
-    const a = from && motionBoxes.get(from), b = to && motionBoxes.get(to)
-    if (!a || !b || !from || !to) return
-    const start = { x: a.x + a.width / 2, y: a.y + a.height / 2 }
-    const end = { x: b.x + b.width / 2, y: b.y + b.height / 2 }
-    motionEdges.set(id, { id, from, to, start, end, control: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } })
+    const edge = connectionCurves.get(id)
+    if (!edge || !from || !to) return
+    const curve = edge.from === from ? edge.curve : reverseCurve(edge.curve)
+    motionEdges.set(id, { id, from, to, start: curve.start, end: curve.end, control: curve.control })
   }
   for (const peering of topology.vnetPeerings) {
     if (peering.enabled) addMotionEdge(peering.id, `vnet:${peering.vnetAId}`, `vnet:${peering.vnetBId}`)
@@ -593,10 +613,8 @@ export function AzureNetDiagram({
           const boxA = positions.vnets[peering.vnetAId]
           const boxB = positions.vnets[peering.vnetBId]
           if (!boxA || !boxB) return null
-          const a = centerOf(boxA)
-          const b = centerOf(boxB)
-          const midX = (a.cx + b.cx) / 2
-          const midY = (a.cy + b.cy) / 2
+          const curve = connectionCurves.get(peering.id)!.curve
+          const { x: midX, y: midY } = curve.label
           const isSelected = selected?.kind === 'peering' && selected.peeringId === peering.id
           const inForward = forwardEdges.has(peering.id)
           const inReverse = reverseEdges.has(peering.id)
@@ -668,11 +686,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
-              <line
-                x1={a.cx}
-                y1={a.cy}
-                x2={b.cx}
-                y2={b.cy}
+              <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4 : 2.5}
                 strokeDasharray={brokenAccess ? '6 5' : inReverse && !inForward ? '7 4' : undefined}
@@ -709,18 +723,13 @@ export function AzureNetDiagram({
           const vBox = positions.vnets[vnet.id]
           const hBox = positions.vwanHubs[att.hubId]
           if (!vBox || !hBox) return null
-          const a = centerOf(vBox)
-          const b = centerOf(hBox)
           const edgeId = `vhub-attach:${vnet.id}:${att.hubId}`
+          const curve = connectionCurves.get(edgeId)!.curve
           const inForward = forwardEdges.has(edgeId)
           const inReverse = reverseEdges.has(edgeId)
           return (
             <g key={edgeId}>
-              <line
-                x1={a.cx}
-                y1={a.cy}
-                x2={b.cx}
-                y2={b.cy}
+              <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={inForward ? 'var(--forward)' : inReverse ? 'var(--return)' : 'var(--info)'}
                 strokeWidth={inForward || inReverse ? 4 : 2.5}
                 strokeDasharray={inReverse && !inForward ? '7 4' : undefined}
@@ -745,10 +754,8 @@ export function AzureNetDiagram({
             if (ownerVnet) targetBox = positions.vnets[ownerVnet.id]
           }
           if (!targetBox) return null
-          const a = centerOf(locBox)
-          const b = centerOf(targetBox)
-          const midX = (a.cx + b.cx) / 2
-          const midY = (a.cy + b.cy) / 2
+          const curve = connectionCurves.get(link.id)!.curve
+          const { x: midX, y: midY } = curve.label
           const inForward = forwardEdges.has(link.id)
           const inReverse = reverseEdges.has(link.id)
           const isSelected = selected?.kind === 'er-link' && selected.linkId === link.id
@@ -793,11 +800,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
-              <line
-                x1={a.cx}
-                y1={a.cy}
-                x2={b.cx}
-                y2={b.cy}
+              <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4.2 : 2.8}
                 strokeDasharray={!link.enabled || hasSkuMismatch ? '5 4' : inReverse && !inForward ? '7 4' : undefined}
@@ -834,10 +837,8 @@ export function AzureNetDiagram({
           const boxA = positions.erLocations[grLink.locationAId]
           const boxB = positions.erLocations[grLink.locationBId]
           if (!boxA || !boxB) return null
-          const a = centerOf(boxA)
-          const b = centerOf(boxB)
-          const midX = (a.cx + b.cx) / 2
-          const midY = (a.cy + b.cy) / 2
+          const curve = connectionCurves.get(grLink.id)!.curve
+          const { x: midX, y: midY } = curve.label
           const inForward = forwardEdges.has(grLink.id)
           const inReverse = reverseEdges.has(grLink.id)
           const isSelected =
@@ -880,11 +881,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
-              <line
-                x1={a.cx}
-                y1={a.cy}
-                x2={b.cx}
-                y2={b.cy}
+              <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4 : 2.6}
                 strokeDasharray="6 3"
@@ -932,10 +929,8 @@ export function AzureNetDiagram({
             if (ownerVnet) targetBox = positions.vnets[ownerVnet.id]
           }
           if (!targetBox) return null
-          const a = centerOf(siteBox)
-          const b = centerOf(targetBox)
-          const midX = (a.cx + b.cx) / 2
-          const midY = (a.cy + b.cy) / 2
+          const curve = connectionCurves.get(conn.id)!.curve
+          const { x: midX, y: midY } = curve.label
           const inForward = forwardEdges.has(conn.id)
           const inReverse = reverseEdges.has(conn.id)
           const isSelected =
@@ -978,11 +973,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
-              <line
-                x1={a.cx}
-                y1={a.cy}
-                x2={b.cx}
-                y2={b.cy}
+              <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 3.8 : 2.2}
                 strokeDasharray="6 4"
@@ -1017,10 +1008,8 @@ export function AzureNetDiagram({
           const boxA = positions.sites[sLink.siteAId]
           const boxB = positions.sites[sLink.siteBId]
           if (!boxA || !boxB) return null
-          const a = centerOf(boxA)
-          const b = centerOf(boxB)
-          const midX = (a.cx + b.cx) / 2
-          const midY = (a.cy + b.cy) / 2
+          const curve = connectionCurves.get(sLink.id)!.curve
+          const { x: midX, y: midY } = curve.label
           const inForward = forwardEdges.has(sLink.id)
           const inReverse = reverseEdges.has(sLink.id)
           const isSelected = selected?.kind === 'site-link' && selected.siteLinkId === sLink.id
@@ -1056,11 +1045,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
-              <line
-                x1={a.cx}
-                y1={a.cy}
-                x2={b.cx}
-                y2={b.cy}
+              <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 3.6 : 2}
                 strokeDasharray="4 4"
@@ -1178,14 +1163,16 @@ export function AzureNetDiagram({
                     : 'var(--surface-muted)'
                 }
               />
+              <NetworkNodeIcon kind="spoke" x={box.x + 23} y={box.y + 17} size={22} />
               <text
-                x={box.x + 12}
+                x={box.x + 40}
                 y={box.y + 18}
                 fontSize={12.5}
                 fontWeight={700}
                 fill="var(--text)"
               >
-                {vnet.name}
+                <title>{vnet.name}</title>
+                {vnet.name.length > Math.floor((box.width - 114) / 7) ? `${vnet.name.slice(0, Math.floor((box.width - 114) / 7) - 1)}…` : vnet.name}
               </text>
               <text
                 x={box.x + 12}
@@ -1609,7 +1596,8 @@ export function AzureNetDiagram({
                 stroke={isSelected ? 'var(--accent)' : 'var(--info)'}
                 strokeWidth={isSelected ? 2.6 : 1.8}
               />
-              <text x={box.x + 14} y={box.y + 24} fontSize={12.5} fontWeight={700} fill="var(--text)">
+              <NetworkNodeIcon kind="hub" secured={hub.routingIntent.private || hub.routingIntent.internet} x={box.x + 25} y={box.y + 20} size={24} />
+              <text x={box.x + 43} y={box.y + 24} fontSize={12.5} fontWeight={700} fill="var(--text)">
                 {hub.name}
               </text>
               <text x={box.x + 14} y={box.y + 42} fontSize={10.5} fill="var(--text)">
@@ -1706,8 +1694,9 @@ export function AzureNetDiagram({
                 stroke={isSelected ? 'var(--accent)' : 'var(--warning)'}
                 strokeWidth={isSelected ? 2.5 : 1.8}
               />
-              <text x={box.x + 12} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--warning)">
-                ⚡ {loc.name}
+              <NetworkNodeIcon kind="erLocation" x={box.x + 25} y={box.y + 20} size={24} />
+              <text x={box.x + 43} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--warning)">
+                {loc.name}
               </text>
               <text x={box.x + 12} y={box.y + 44} fontSize={10} fill="var(--warning)">
                 ASN 12076 · {loc.sku ?? 'Standard'} · GR: {loc.globalReachEnabled ? 'On' : 'Off'}
@@ -1799,8 +1788,9 @@ export function AzureNetDiagram({
                 stroke={isSelected ? 'var(--accent)' : 'var(--link)'}
                 strokeWidth={isSelected ? 2.5 : 1.8}
               />
-              <text x={box.x + 12} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--text)">
-                🏢 {site.name}
+              <NetworkNodeIcon kind="site" x={box.x + 25} y={box.y + 20} size={24} />
+              <text x={box.x + 43} y={box.y + 24} fontSize={12} fontWeight={700} fill="var(--text)">
+                {site.name}
               </text>
               <text x={box.x + 12} y={box.y + 42} fontSize={10.5} fill="var(--text)">
                 ASN {site.asn} · {site.prefixes.join(', ')}
@@ -2130,7 +2120,12 @@ export function AzureNetDiagram({
       })()}
 
       <CanvasControls zoom={zoom} onZoom={setZoom} minZoom={0.65} maxZoom={1.6} zoomStep={0.15}
+        onFitView={() => {
+          const bounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
+          setZoom(1180 / bounds.width); setPan({ x: bounds.x, y: bounds.y })
+        }}
         onResetView={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>
+        {onResetLayout && <button type="button" onClick={onResetLayout}>{t('Reset layout')}</button>}
         {hasActiveHighlights && (
           <button
             type="button"

@@ -124,6 +124,29 @@ for (const mode of ['hub-spoke', 'full']) {
     const markers = page.locator('.policy-marker')
     const marker = (owner: string, connection: string, direction: string) => page.locator(`.policy-marker[data-router-id="${owner}"][data-connection-id="${connection}"][data-direction="${direction}"]`)
     await expect(markers).toHaveCount(10)
+    for (const style of ['default', 'curved', 'straight']) {
+      await page.getByLabel('Connection style', { exact: true }).selectOption(style)
+      const primary = page.getByTestId('aznet-vpnconn-primary').locator('.aznet-edge-path')
+      const backup = page.getByTestId('aznet-vpnconn-backup').locator('.aznet-edge-path')
+      expect(await primary.getAttribute('d')).not.toBe(await backup.getAttribute('d'))
+      const alignment = await marker('a', 'primary', 'outbound').evaluate((element) => {
+        const path = element.ownerSVGElement!.querySelector<SVGPathElement>('[data-testid="aznet-vpnconn-primary"] .aznet-edge-path')!
+        const arrow = element.previousElementSibling!.querySelector<SVGPathElement>('.policy-arrow')!
+        const matrix = arrow.transform.baseVal.consolidate()!.matrix
+        let distance = Infinity, at = 0
+        for (let index = 0; index <= 1000; index++) {
+          const length = path.getTotalLength() * index / 1000
+          const point = path.getPointAtLength(length)
+          const error = Math.hypot(point.x - matrix.e, point.y - matrix.f)
+          if (error < distance) { distance = error; at = length }
+        }
+        const a = path.getPointAtLength(at - 1), b = path.getPointAtLength(at + 1)
+        const dx = b.x - a.x, dy = b.y - a.y
+        return { distance, direction: (dx * matrix.a + dy * matrix.b) / Math.hypot(dx, dy) }
+      })
+      expect(alignment.distance).toBeLessThan(1)
+      expect(alignment.direction).toBeGreaterThan(0.99)
+    }
     await page.getByTestId('aznet-canvas-shell').screenshot({ path: test.info().outputPath('policy-markers.png') })
     const inbound = marker('a', 'primary', 'inbound')
     await inbound.hover()
