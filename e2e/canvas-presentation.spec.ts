@@ -1,8 +1,78 @@
 import { expect, test } from '@playwright/test'
 import { example } from '../src/model'
-import { sampleHybridVwanAndHubSpoke } from '../src/azure-net/model'
+import { sampleHybridVwanAndHubSpoke, sampleArsSdwanNvaCoexistence } from '../src/azure-net/model'
 
 const styleKey = 'aznet-canvas-style:v1'
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  test(`${mode} keeps long node headers inside shared badges and label bounds`, async ({ page }, testInfo) => {
+    const topology = mode === 'vwan' ? structuredClone(example) : structuredClone(sampleHybridVwanAndHubSpoke)
+    const nodes = 'hubs' in topology ? [...topology.hubs, ...topology.spokes, ...topology.sites, ...(topology.erLocations ?? [])] :
+      [...topology.vnets, ...topology.vwanHubs, ...topology.sites, ...topology.erLocations]
+    for (const node of nodes) node.name = 'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW' + ' 長い名前'
+    const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    await page.addInitScript(({ key, value }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(value))
+    }, { key, value: mode === 'vwan' ? topology : { sampleId: '', topology } })
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.goto(`/?mode=${mode}`)
+    const svg = page.locator(mode === 'vwan' ? 'svg.diagram' : '[data-testid="aznet-diagram-svg"]')
+    await expect(svg.locator('.network-node-badge').first()).toBeVisible()
+    const original = await page.evaluate((key) => localStorage.getItem(key), key)
+    await page.getByRole('button', { name: 'Fit view', exact: true }).click()
+    const labels = svg.locator('.network-node-label')
+    expect(await labels.count()).toBeGreaterThan(5)
+    expect(await labels.evaluateAll((elements) => elements.filter((element) => {
+      const text = element.querySelector('text')!
+      const clip = element.querySelector('clipPath rect') as SVGRectElement
+      return text.getComputedTextLength() > clip.width.baseVal.value + 1
+    }).map((element) => element.textContent))).toEqual([])
+    const nameLabel = labels.filter({ hasText: '長い名前' }).first()
+    await expect(nameLabel.locator('text')).toContainText('…')
+    expect(await nameLabel.locator('title').textContent()).toContain('長い名前')
+    for (const theme of ['light', 'dark']) {
+      await page.getByLabel('Theme', { exact: true }).selectOption(theme)
+      await page.screenshot({ path: testInfo.outputPath(`${mode}-${theme}-node-labels.png`), fullPage: true })
+    }
+    expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
+  })
+}
+
+test('wrapped device badges expose every appliance and disabled ARS without covering subnets', async ({ page }) => {
+  const topology = structuredClone(sampleArsSdwanNvaCoexistence)
+  const hub = topology.vnets.find((vnet) => vnet.routeServer)!
+  hub.routeServer!.enabled = false
+  const appliance = hub.appliances[0]
+  hub.appliances = Array.from({ length: 7 }, (_, index) => ({ ...appliance, id: `badge-nva-${index}`, name: `Device ${index}`, privateIp: `10.0.2.${index + 10}` }))
+  hub.routeServer!.peerApplianceIds = []
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.goto('/?mode=hub-spoke')
+  const card = page.getByTestId(`aznet-vnet-${hub.id}`)
+  const chips = card.locator('.network-device-chip')
+  await expect(chips).toHaveCount(hub.gateways.length + 8)
+  await expect(page.getByTestId(`aznet-chip-${hub.routeServer!.id}`)).toHaveAttribute('data-disabled', 'true')
+  const geometry = await card.evaluate((node) => {
+    const frame = node.querySelector(':scope > rect')!.getBoundingClientRect()
+    const badges = [...node.querySelectorAll('.network-device-chip > g > rect')].map((badge) => badge.getBoundingClientRect())
+    const subnets = [...node.querySelectorAll('[data-testid^="aznet-subnet-"] > rect')].map((row) => row.getBoundingClientRect())
+    return {
+      outside: badges.some((badge) => badge.left < frame.left || badge.right > frame.right || badge.bottom > frame.bottom),
+      overlap: badges.some((badge) => subnets.some((row) => badge.top < row.bottom && badge.bottom > row.top)),
+      rows: new Set(badges.map((badge) => badge.top)).size,
+    }
+  })
+  expect(geometry.outside).toBe(false)
+  expect(geometry.overlap).toBe(false)
+  expect(geometry.rows).toBeGreaterThan(1)
+  const last = page.getByTestId('aznet-chip-badge-nva-6')
+  await last.focus()
+  await expect(last).toBeFocused()
+  await page.keyboard.press('Shift+F10')
+  await expect(page.getByRole('menu')).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'Inspect Appliance Subnet Effective Routes', exact: true })).toBeVisible()
+})
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode} shares canvas presets, restores its viewport and keeps presentation out of topology JSON`, async ({ page }, testInfo) => {
