@@ -1,0 +1,1409 @@
+{
+  "issue": 98,
+  "lab": "disable-peering-route-propagation",
+  "repository": "erjosito/net-lab-builder",
+  "commit": "c14b2bd94787a0645392eb000cdd3cfbd9b59e7d",
+  "mode": "hub-spoke",
+  "scope": "S1 summary and S2 explicit-/16 workaround NIC route-selection cut. 32 hub-probe route facts plus 3 S1 spoke next-hop dependency facts. Not a complete hybrid or stateful forwarding replay.",
+  "dateContext": "Feature-registration request is 2026-10-22T11:20:47Z. NIC text outputs lack capture timestamps, exact commands and API versions; S1/S2 names and report establish scenario order, not an atomic snapshot.",
+  "reconstruction": [
+    "All ten observed spoke prefixes, local hub prefixes, NVA next-hop address and rt-gw summary/explicit route sets retained. rt-gw is associated to both GatewaySubnet and snet-hub-probe.",
+    "Subnets and directional gateway-transit flags come from the deployment script and report; no native all-resource S1 dump is present. Script reflects later S4 too, so later SD-WAN/ER additions are not mixed into this cut.",
+    "rt-spoke1 contains only its two S1 observed UDRs with BGP propagation disabled; no unobserved route-table associations on other spokes are invented.",
+    "One logical BGP VPN branch retains the observed /16 context. Native LNG connected host /32 and its public-IP next-hop representation are not modeled/asserted, and the fixture does not certify complete VPN RIB equivalence.",
+    "The later rt-nva SD-WAN UDR and ER/SD-WAN branches are outside the S1/S2 cut; no preview disablePeeringRoute control is enabled."
+  ],
+  "exclusions": [
+    "Preview suppression was rejected as UnauthorizedClientApplication and registration remained Pending. No Azure-validated preview behavior.",
+    "Only selected independent NIC prefix/source/active/next-hop facts are compared; not entire tables or public VPN next-hop IP equality.",
+    "Stateful NVA counters and actual session outcomes remain archived context, not validated conntrack/firewall emulation. No forwarding certification for this cut.",
+    "Later S4 three-hybrid ER/VPN/SD-WAN BGP and packet-path assertions are still queued, not completed by these two exports.",
+    "Cloud/account/provider IDs, public management addresses and credentials are omitted. No live resources queried or changed."
+  ],
+  "sources": {
+    "configuration": {
+      "path": "labs/disable-peering-route-propagation/deploy/deploy.ps1",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/disable-peering-route-propagation/deploy/deploy.ps1",
+      "sha256": "b269566a08256e2e507a1daefddcd3774c156868d48a704a82eb4bdb3f754ea3",
+      "layer": "configuration intent; later expanded script, not a contemporaneous S1 resource dump",
+      "capturedAt": null
+    },
+    "report": {
+      "path": "labs/disable-peering-route-propagation/validation.md",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/disable-peering-route-propagation/validation.md",
+      "sha256": "1e6defcb76ce42bc1b4222eb8d285c7e160c8d78ec3f4576ca54ec35b596ad4a",
+      "layer": "historical interpretation; separates S1/S2 from later S4",
+      "capturedAt": null
+    },
+    "preview-error": {
+      "path": "labs/disable-peering-route-propagation/show-output/s2-disable-peering-route-error.txt",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/disable-peering-route-propagation/show-output/s2-disable-peering-route-error.txt",
+      "sha256": "41e65eb3279219e0942bd7d9df9572243477db6cf55eb509aa17a625288d4ab8",
+      "layer": "native failed feature update, not successful preview behavior",
+      "capturedAt": null
+    },
+    "preview-registration": {
+      "path": "labs/disable-peering-route-propagation/show-output/s2-feature-registration-status.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/disable-peering-route-propagation/show-output/s2-feature-registration-status.json",
+      "sha256": "b967e2123ea9c625287726767c52e5471f37e719423a0c8ef277da5267a27f27",
+      "layer": "native feature registration",
+      "capturedAt": null
+    },
+    "summary-nic": {
+      "path": "labs/disable-peering-route-propagation/show-output/s1-nic-vm-hub-probe-routes.txt",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/disable-peering-route-propagation/show-output/s1-nic-vm-hub-probe-routes.txt",
+      "sha256": "68912a6db0b6ea0839d4ab5e1676f0627babbd1350d21286edff4320f68d6146",
+      "layer": "native NIC effective-route text",
+      "capturedAt": null
+    },
+    "explicit-nic": {
+      "path": "labs/disable-peering-route-propagation/show-output/s2-workaround-nic-vm-hub-probe-routes.txt",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/disable-peering-route-propagation/show-output/s2-workaround-nic-vm-hub-probe-routes.txt",
+      "sha256": "c91ac174ffc88b29538edce9acf5e21ace87a1a0691abd11b7c08e8ee80783f2",
+      "layer": "native NIC effective-route text",
+      "capturedAt": null
+    },
+    "spoke-nic": {
+      "path": "labs/disable-peering-route-propagation/show-output/s1-nic-vm-spoke1-routes.txt",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/disable-peering-route-propagation/show-output/s1-nic-vm-spoke1-routes.txt",
+      "sha256": "801551e52f34dc1c1bd2a96a946d0b7c401335a2dda85d467ba10a5ae6e20d4b",
+      "layer": "native NIC effective-route text",
+      "capturedAt": null
+    }
+  },
+  "spokeRoutes": [
+    {
+      "nativeSource": "Default",
+      "nativeState": "Active",
+      "prefix": "10.0.0.0/16",
+      "nextHopType": "VNetPeering",
+      "nextHopIp": null
+    },
+    {
+      "nativeSource": "User",
+      "nativeState": "Active",
+      "prefix": "172.16.0.0/16",
+      "nextHopType": "VirtualAppliance",
+      "nextHopIp": "10.0.1.4"
+    },
+    {
+      "nativeSource": "User",
+      "nativeState": "Active",
+      "prefix": "10.0.0.0/8",
+      "nextHopType": "VirtualAppliance",
+      "nextHopIp": "10.0.1.4"
+    }
+  ],
+  "cases": [
+    {
+      "id": "summary-only",
+      "exportFile": "simulator-topology.json",
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "Recorded UDR comparison - summary only (S1 route cut)",
+        "subtitle": "Ten peering /16s beat a /8 UDR. NIC route-selection cut, not stateful session or three-hybrid certification.",
+        "vnets": [
+          {
+            "id": "vnet-hub",
+            "name": "vnet-hub",
+            "role": "hub-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.0.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.0.0.0/24",
+                "routeTableId": "rt-gw"
+              },
+              {
+                "id": "nva",
+                "name": "snet-nva",
+                "prefix": "10.0.1.0/24"
+              },
+              {
+                "id": "probe",
+                "name": "snet-hub-probe",
+                "prefix": "10.0.2.0/24",
+                "routeTableId": "rt-gw"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "vpngw-hub",
+                "name": "vpngw-hub",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": [
+              {
+                "id": "vm-hub-nva",
+                "name": "vm-hub-nva",
+                "kind": "nva-vm",
+                "subnetId": "nva",
+                "privateIp": "10.0.1.4",
+                "enableIpForwarding": true,
+                "inspectsTraffic": true,
+                "staticRoutes": []
+              }
+            ]
+          },
+          {
+            "id": "vnet-spoke1",
+            "name": "vnet-spoke1",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.1.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work1",
+                "name": "snet-workload",
+                "prefix": "10.1.1.0/24",
+                "routeTableId": "rt-spoke1"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke2",
+            "name": "vnet-spoke2",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.2.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work2",
+                "name": "snet-workload",
+                "prefix": "10.2.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke3",
+            "name": "vnet-spoke3",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.3.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work3",
+                "name": "snet-workload",
+                "prefix": "10.3.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke4",
+            "name": "vnet-spoke4",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.4.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work4",
+                "name": "snet-workload",
+                "prefix": "10.4.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke5",
+            "name": "vnet-spoke5",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.5.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work5",
+                "name": "snet-workload",
+                "prefix": "10.5.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke6",
+            "name": "vnet-spoke6",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.6.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work6",
+                "name": "snet-workload",
+                "prefix": "10.6.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke7",
+            "name": "vnet-spoke7",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.7.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work7",
+                "name": "snet-workload",
+                "prefix": "10.7.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke8",
+            "name": "vnet-spoke8",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.8.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work8",
+                "name": "snet-workload",
+                "prefix": "10.8.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke9",
+            "name": "vnet-spoke9",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.9.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work9",
+                "name": "snet-workload",
+                "prefix": "10.9.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke10",
+            "name": "vnet-spoke10",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.10.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work10",
+                "name": "snet-workload",
+                "prefix": "10.10.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          }
+        ],
+        "vnetPeerings": [
+          {
+            "id": "peer1",
+            "name": "Hub / spoke1",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke1",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer2",
+            "name": "Hub / spoke2",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke2",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer3",
+            "name": "Hub / spoke3",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke3",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer4",
+            "name": "Hub / spoke4",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke4",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer5",
+            "name": "Hub / spoke5",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke5",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer6",
+            "name": "Hub / spoke6",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke6",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer7",
+            "name": "Hub / spoke7",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke7",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer8",
+            "name": "Hub / spoke8",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke8",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer9",
+            "name": "Hub / spoke9",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke9",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer10",
+            "name": "Hub / spoke10",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke10",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          }
+        ],
+        "udrTables": [
+          {
+            "id": "rt-gw",
+            "name": "rt-gw",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "to-spokes-summary",
+                "name": "to-spokes-summary",
+                "prefix": "10.0.0.0/8",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-spoke1",
+            "name": "rt-spoke1",
+            "disableBgpRoutePropagation": true,
+            "routes": [
+              {
+                "id": "to-onprem",
+                "name": "to-onprem",
+                "prefix": "172.16.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "to-spokes-summary-return",
+                "name": "to-spokes-summary-return",
+                "prefix": "10.0.0.0/8",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              }
+            ]
+          }
+        ],
+        "vwanHubs": [],
+        "erLocations": [],
+        "erLinks": [],
+        "sites": [
+          {
+            "id": "onprem",
+            "name": "S1/S2 VPN on-prem",
+            "asn": 65010,
+            "prefixes": [
+              "172.16.0.0/16"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "conn-hub-onprem",
+            "name": "conn-hub-onprem",
+            "siteId": "onprem",
+            "targetKind": "vnet-gateway",
+            "targetId": "vpngw-hub",
+            "bgpEnabled": true,
+            "enabled": true
+          }
+        ],
+        "siteLinks": []
+      },
+      "evidence": "summary-nic",
+      "routes": [
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.1.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.2.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.3.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.4.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.5.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.6.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.7.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.8.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.9.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Active",
+          "prefix": "10.10.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.0.0.0/8",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        }
+      ]
+    },
+    {
+      "id": "explicit-spokes",
+      "exportFile": "simulator-topology-explicit-spokes.json",
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "Recorded UDR comparison - explicit /16 workaround (S2 route cut)",
+        "subtitle": "Equal-prefix user routes override all ten peering /16s. Preview suppression remains disabled and unvalidated.",
+        "vnets": [
+          {
+            "id": "vnet-hub",
+            "name": "vnet-hub",
+            "role": "hub-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.0.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.0.0.0/24",
+                "routeTableId": "rt-gw"
+              },
+              {
+                "id": "nva",
+                "name": "snet-nva",
+                "prefix": "10.0.1.0/24"
+              },
+              {
+                "id": "probe",
+                "name": "snet-hub-probe",
+                "prefix": "10.0.2.0/24",
+                "routeTableId": "rt-gw"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "vpngw-hub",
+                "name": "vpngw-hub",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": [
+              {
+                "id": "vm-hub-nva",
+                "name": "vm-hub-nva",
+                "kind": "nva-vm",
+                "subnetId": "nva",
+                "privateIp": "10.0.1.4",
+                "enableIpForwarding": true,
+                "inspectsTraffic": true,
+                "staticRoutes": []
+              }
+            ]
+          },
+          {
+            "id": "vnet-spoke1",
+            "name": "vnet-spoke1",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.1.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work1",
+                "name": "snet-workload",
+                "prefix": "10.1.1.0/24",
+                "routeTableId": "rt-spoke1"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke2",
+            "name": "vnet-spoke2",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.2.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work2",
+                "name": "snet-workload",
+                "prefix": "10.2.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke3",
+            "name": "vnet-spoke3",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.3.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work3",
+                "name": "snet-workload",
+                "prefix": "10.3.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke4",
+            "name": "vnet-spoke4",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.4.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work4",
+                "name": "snet-workload",
+                "prefix": "10.4.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke5",
+            "name": "vnet-spoke5",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.5.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work5",
+                "name": "snet-workload",
+                "prefix": "10.5.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke6",
+            "name": "vnet-spoke6",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.6.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work6",
+                "name": "snet-workload",
+                "prefix": "10.6.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke7",
+            "name": "vnet-spoke7",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.7.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work7",
+                "name": "snet-workload",
+                "prefix": "10.7.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke8",
+            "name": "vnet-spoke8",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.8.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work8",
+                "name": "snet-workload",
+                "prefix": "10.8.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke9",
+            "name": "vnet-spoke9",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.9.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work9",
+                "name": "snet-workload",
+                "prefix": "10.9.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "vnet-spoke10",
+            "name": "vnet-spoke10",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.10.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "work10",
+                "name": "snet-workload",
+                "prefix": "10.10.1.0/24"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          }
+        ],
+        "vnetPeerings": [
+          {
+            "id": "peer1",
+            "name": "Hub / spoke1",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke1",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer2",
+            "name": "Hub / spoke2",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke2",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer3",
+            "name": "Hub / spoke3",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke3",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer4",
+            "name": "Hub / spoke4",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke4",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer5",
+            "name": "Hub / spoke5",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke5",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer6",
+            "name": "Hub / spoke6",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke6",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer7",
+            "name": "Hub / spoke7",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke7",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer8",
+            "name": "Hub / spoke8",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke8",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer9",
+            "name": "Hub / spoke9",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke9",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          },
+          {
+            "id": "peer10",
+            "name": "Hub / spoke10",
+            "vnetAId": "vnet-hub",
+            "vnetBId": "vnet-spoke10",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": true,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": true
+            }
+          }
+        ],
+        "udrTables": [
+          {
+            "id": "rt-gw",
+            "name": "rt-gw",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "to-spokes-summary",
+                "name": "to-spokes-summary",
+                "prefix": "10.0.0.0/8",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke1",
+                "name": "route-spoke1",
+                "prefix": "10.1.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke2",
+                "name": "route-spoke2",
+                "prefix": "10.2.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke3",
+                "name": "route-spoke3",
+                "prefix": "10.3.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke4",
+                "name": "route-spoke4",
+                "prefix": "10.4.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke5",
+                "name": "route-spoke5",
+                "prefix": "10.5.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke6",
+                "name": "route-spoke6",
+                "prefix": "10.6.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke7",
+                "name": "route-spoke7",
+                "prefix": "10.7.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke8",
+                "name": "route-spoke8",
+                "prefix": "10.8.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke9",
+                "name": "route-spoke9",
+                "prefix": "10.9.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "route-spoke10",
+                "name": "route-spoke10",
+                "prefix": "10.10.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-spoke1",
+            "name": "rt-spoke1",
+            "disableBgpRoutePropagation": true,
+            "routes": [
+              {
+                "id": "to-onprem",
+                "name": "to-onprem",
+                "prefix": "172.16.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              },
+              {
+                "id": "to-spokes-summary-return",
+                "name": "to-spokes-summary-return",
+                "prefix": "10.0.0.0/8",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.0.1.4",
+                "enabled": true
+              }
+            ]
+          }
+        ],
+        "vwanHubs": [],
+        "erLocations": [],
+        "erLinks": [],
+        "sites": [
+          {
+            "id": "onprem",
+            "name": "S1/S2 VPN on-prem",
+            "asn": 65010,
+            "prefixes": [
+              "172.16.0.0/16"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "conn-hub-onprem",
+            "name": "conn-hub-onprem",
+            "siteId": "onprem",
+            "targetKind": "vnet-gateway",
+            "targetId": "vpngw-hub",
+            "bgpEnabled": true,
+            "enabled": true
+          }
+        ],
+        "siteLinks": []
+      },
+      "evidence": "explicit-nic",
+      "routes": [
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.10.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.1.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.2.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.3.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.4.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.5.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.6.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.7.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.8.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "Default",
+          "nativeState": "Invalid",
+          "prefix": "10.9.0.0/16",
+          "nextHopType": "VNetPeering",
+          "nextHopIp": null
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.0.0.0/8",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.1.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.2.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.3.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.4.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.5.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.6.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.7.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.8.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.9.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        },
+        {
+          "nativeSource": "User",
+          "nativeState": "Active",
+          "prefix": "10.10.0.0/16",
+          "nextHopType": "VirtualAppliance",
+          "nextHopIp": "10.0.1.4"
+        }
+      ]
+    }
+  ]
+}

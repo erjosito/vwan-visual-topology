@@ -1061,21 +1061,22 @@ function compileSingleSubnetEffectiveRoutes(
     if (otherVnet.id === vnet.id) continue
     const rel = getActivePeeringBetween(topology, vnet.id, otherVnet.id)
     if (!rel) continue
-    if (rel.forwardFlags.allowVirtualNetworkAccess && rel.reverseFlags.allowVirtualNetworkAccess) {
-      for (const prefix of otherVnet.prefixes) {
-        const peeringRoute: AzEffectiveRoute = {
-          id: `sys:peering:${subnet.id}:${rel.peering.id}:${prefix}`,
-          prefix,
-          source: 'System',
-          nextHopType: 'VNetPeering',
-          nextHopResourceId: otherVnet.id,
-          nextHopName: otherVnet.name,
-          originLabel: `System · VNet Peering (${rel.peering.name})`,
-          asPath: [],
-          active: true,
-        }
-        candidates.push(peeringRoute)
+    // Connected peerings retain address-space routes even when access blocks forwarding.
+    for (const prefix of otherVnet.prefixes) {
+      const peeringRoute: AzEffectiveRoute = {
+        id: `sys:peering:${subnet.id}:${rel.peering.id}:${prefix}`,
+        prefix,
+        source: 'System',
+        nextHopType: 'VNetPeering',
+        nextHopResourceId: otherVnet.id,
+        nextHopName: otherVnet.name,
+        originLabel: `System · VNet Peering (${rel.peering.name})`,
+        asPath: [],
+        active: true,
       }
+      candidates.push(peeringRoute)
+    }
+    if (rel.forwardFlags.allowVirtualNetworkAccess && rel.reverseFlags.allowVirtualNetworkAccess) {
       addPeRoutesFromVnet(otherVnet, rel.peering.name)
     }
   }
