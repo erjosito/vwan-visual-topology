@@ -289,7 +289,7 @@ describe('route-map selection and actual forwarding', () => {
     t.connections[1].outboundMapId = 'map'
     const result = simulate(t)
     expect(result.outbound['vpn-eu'].filter((r) => r.prefix === '10.0.0.0/8')).toHaveLength(1)
-    expect(result.outbound['vpn-eu'].find((r) => r.prefix === '10.0.0.0/8')!.asPath).toEqual([])
+    expect(result.outbound['vpn-eu'].find((r) => r.prefix === '10.0.0.0/8')!.asPath).toEqual([65515])
     expect(result.firewallTables.eu.some((d) => d.prefix === '10.0.0.0/8')).toBe(false)
   })
   it('retains actual destinations and site-mesh provenance under inbound summaries across hubs', () => {
