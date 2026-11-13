@@ -1219,10 +1219,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target) return
       target.appliances = target.appliances.filter((a) => a.id !== applianceId)
-      if (target.routeServer) {
-        target.routeServer.peerApplianceIds = target.routeServer.peerApplianceIds.filter(
-          (id) => id !== applianceId,
-        )
+      for (const vnet of draft.vnets) {
+        if (vnet.routeServer) vnet.routeServer.peerApplianceIds = vnet.routeServer.peerApplianceIds.filter((id) => id !== applianceId)
       }
       draft.vpnConnections = draft.vpnConnections.filter(
         (c) => !(c.targetKind === 'appliance' && c.targetId === applianceId),

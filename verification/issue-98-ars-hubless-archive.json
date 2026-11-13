@@ -1,0 +1,131 @@
+{
+  "issue": 98,
+  "lab": "dual-hub-hubless-region-ars",
+  "repository": "erjosito/net-lab-builder",
+  "commit": "5ba98831d8244eef162e6dbb2cc12a5b58f02e74",
+  "mode": "full",
+  "consistency": "Dated pre-Delta3 and post-BIRD-Delta3 route/next-hop observations agree with validation.md. Its later final certification and Poland retirement are separate dated states, not contradictory baseline claims.",
+  "dateContext": "Baseline peer captures 2026-08-03T17:57+02:00; baseline NIC is explicitly a deploy-time copy. Post-BIRD files have no embedded per-file timestamp; report final certification 2026-08-04T09:39+02:00.",
+  "reconstruction": [
+    "Bounded Poland ARS/default-selection cut only: preserve the two NVA host VNets, their own ARS/VPN gateways, Poland ARS, c1 workload subnet and five relevant bidirectional peerings from the deployment template.",
+    "NVA advertisements are the observed stripped source paths. Delta1 BIRD ASN rewriting is not simulated as an Azure route map. Delta3 is an NVA2 source AS-path suffix of two extra 65002 hops on default only.",
+    "Direct NVA-host/Poland BGP-underlay peerings have access/forwarding enabled, but both gateway-transit flags false. Only Poland-to-c1 permits remote Route Server injection.",
+    "Native NIC VirtualNetworkGateway source/nextHopType with NVA next-hop IPs is represented as RouteServer/VirtualAppliance in the simulator. Compare the active default next-hop set, not literal enum equality.",
+    "Two ARS instances and their duplicate rows collapse to one logical ARS. Nine distinct observations: six baseline peer prefix/path facts, one changed NVA2 default path and the two state-specific NIC default next-hop sets.",
+    "The cut uses ASPath preference with only NVA candidates; no captured ARS preference is asserted. Unobserved broader hub/VPN route exchange is excluded."
+  ],
+  "exclusions": [
+    "No VPN/on-premises route exchange, full lab reproduction, c2 scale, packet delivery/loss, conntrack, convergence time, BIRD daemon or PSK behavior claim.",
+    "ARS route-map activation failed historically; the validated policy is the documented BIRD prepend fallback, not successful Azure route-map deployment.",
+    "Summarized ping-matrix output is not treated as native per-probe packet evidence.",
+    "Native route observations are not evidence of exact ECMP hashing or session affinity. No live resources queried or created.",
+    "Management IDs, subscription/tenant context, credentials and tags omitted. Unobserved flow endpoints and missing broader topology are not invented."
+  ],
+  "sources": {
+    "report": {
+      "path": "labs/dual-hub-hubless-region-ars/validation.md",
+      "sha256": "71ef68785ebeb091d90eaefdd178ca33619f8fd48392232ab5d9835d0c2795e3",
+      "quality": "Explicitly separated baseline, BIRD fallback, final certification and later retirement."
+    },
+    "configuration": {
+      "path": "labs/dual-hub-hubless-region-ars/deploy/templates/main.bicep",
+      "sha256": "5f0a9d1681d36647bd818e3ceef57729cc07b4228e9b1733f144faca04440f23",
+      "quality": "Deployment intent for VNet/subnet/NVA addresses, ARS/VPN presence and peerings; not an atomic native resource snapshot."
+    },
+    "baselineNva1": {
+      "path": "labs/dual-hub-hubless-region-ars/show-output/baseline-pre-delta3/08-ars-poland-peer-nva1-learned.json",
+      "sha256": "cdca8650f2099f7ebd07a6e394bf57a0ca41442aba6fada42698827f15928fca",
+      "quality": "Command/timestamp header and six ARS-instance rows; three distinct peer prefix/path facts."
+    },
+    "baselineNva2": {
+      "path": "labs/dual-hub-hubless-region-ars/show-output/baseline-pre-delta3/09-ars-poland-peer-nva2-learned.json",
+      "sha256": "eddddde01f8e96ab2f69c9f86847150041e9eda3edfd42e8bdc2fd9cc2687831",
+      "quality": "Command/timestamp header and six ARS-instance rows; three distinct peer prefix/path facts."
+    },
+    "baselineNic": {
+      "path": "labs/dual-hub-hubless-region-ars/show-output/baseline-pre-delta3/15-effective-routes-c1-ep.json",
+      "sha256": "a3295801fcf8f6f888a5bcd0e3b1202bc5abc51a4f11a9b3e76d710787cd32d7",
+      "quality": "Explicit deploy-time NIC copy: active default has both NVA next-hop IPs."
+    },
+    "postNva1": {
+      "path": "labs/dual-hub-hubless-region-ars/show-output/delta3-bird/01-post-ars-poland-peer-nva1-learned.json",
+      "sha256": "23474475cd99492a639ea69c4e78f19e9d69c6cfea9b1efa55938f51fdbd30db",
+      "quality": "Native instance rows corroborate unchanged NVA1 paths; no embedded timestamp."
+    },
+    "postNva2": {
+      "path": "labs/dual-hub-hubless-region-ars/show-output/delta3-bird/01-post-ars-poland-peer-nva2-learned.json",
+      "sha256": "f54e103fa4e42046f58dd847fe9194314252b8eca3e000ce439af86d505bae75",
+      "quality": "Native instance rows show only default changed to 65002-65002-65002."
+    },
+    "postNic": {
+      "path": "labs/dual-hub-hubless-region-ars/show-output/delta3-bird/01-post-c1-ep-effective-routes.json",
+      "sha256": "2a5a664791a1350085d1c16d8cde283122bb68cd8e333c35434087030467a27c",
+      "quality": "Native active default contains NVA1 only; no embedded timestamp."
+    }
+  },
+  "learned": [
+    { "peerId": "nva1", "prefix": "0.0.0.0/0", "asPath": [65001] },
+    { "peerId": "nva1", "prefix": "10.10.1.0/27", "asPath": [65001] },
+    { "peerId": "nva1", "prefix": "10.10.0.64/27", "asPath": [65001] },
+    { "peerId": "nva2", "prefix": "0.0.0.0/0", "asPath": [65002] },
+    { "peerId": "nva2", "prefix": "10.20.1.0/27", "asPath": [65002] },
+    { "peerId": "nva2", "prefix": "10.20.0.64/27", "asPath": [65002] }
+  ],
+  "cases": [
+    { "id": "baseline-ecmp", "exportFile": "simulator-topology.json", "nva2DefaultSuffix": [], "nva2DefaultAsPath": [65002], "defaultNextHops": ["10.10.1.4", "10.20.1.4"] },
+    { "id": "bird-default-prepend", "exportFile": "simulator-topology-default-preferred.json", "nva2DefaultSuffix": [65002, 65002], "nva2DefaultAsPath": [65002, 65002, 65002], "defaultNextHops": ["10.10.1.4"] }
+  ],
+  "topology": {
+    "version": 2,
+    "kind": "azure-network-topology",
+    "name": "Archived hubless Poland ARS: remote NVA default selection",
+    "subtitle": "Bounded ARS/NIC route cut; VPN, packet forwarding and convergence are not validated.",
+    "vnets": [
+      {
+        "id": "hub1", "name": "vnet-hub1", "region": "swedencentral", "role": "hub", "prefixes": ["10.10.0.0/16"],
+        "subnets": [
+          { "id": "hub1-ars", "name": "RouteServerSubnet", "prefix": "10.10.0.64/27" },
+          { "id": "hub1-gw", "name": "GatewaySubnet", "prefix": "10.10.0.0/27" },
+          { "id": "hub1-nva", "name": "snet-nva", "prefix": "10.10.1.0/27" }
+        ],
+        "gateways": [{ "id": "vpn1", "name": "vpngw-hub1", "kind": "Vpn", "asn": 65515, "bgpEnabled": true, "enabled": true }],
+        "routeServer": { "id": "ars-hub1", "name": "ars-hub1", "subnetId": "hub1-ars", "enabled": true, "branchToBranchTraffic": true, "hubRoutingPreference": "ASPath", "peerApplianceIds": ["nva1"] },
+        "appliances": [
+          { "id": "nva1", "name": "NVA1", "kind": "nva-vm", "subnetId": "hub1-nva", "privateIp": "10.10.1.4", "asn": 65001, "bgpEnabled": true, "enableIpForwarding": true, "advertisedPrefixes": ["0.0.0.0/0", "10.10.1.0/27", "10.10.0.64/27"], "staticRoutes": [] }
+        ]
+      },
+      {
+        "id": "hub2", "name": "vnet-hub2", "region": "switzerlandnorth", "role": "hub", "prefixes": ["10.20.0.0/16"],
+        "subnets": [
+          { "id": "hub2-ars", "name": "RouteServerSubnet", "prefix": "10.20.0.64/27" },
+          { "id": "hub2-gw", "name": "GatewaySubnet", "prefix": "10.20.0.0/27" },
+          { "id": "hub2-nva", "name": "snet-nva", "prefix": "10.20.1.0/27" }
+        ],
+        "gateways": [{ "id": "vpn2", "name": "vpngw-hub2", "kind": "Vpn", "asn": 65515, "bgpEnabled": true, "enabled": true }],
+        "routeServer": { "id": "ars-hub2", "name": "ars-hub2", "subnetId": "hub2-ars", "enabled": true, "branchToBranchTraffic": true, "hubRoutingPreference": "ASPath", "peerApplianceIds": ["nva2"] },
+        "appliances": [
+          { "id": "nva2", "name": "NVA2", "kind": "nva-vm", "subnetId": "hub2-nva", "privateIp": "10.20.1.4", "asn": 65002, "bgpEnabled": true, "enableIpForwarding": true, "advertisedPrefixes": ["0.0.0.0/0", "10.20.1.0/27", "10.20.0.64/27"], "advertisedRouteAttributes": [{ "prefix": "0.0.0.0/0", "asPath": [] }], "staticRoutes": [] }
+        ]
+      },
+      {
+        "id": "poland", "name": "vnet-poland-ars", "region": "polandcentral", "role": "transit", "prefixes": ["10.30.0.0/24"],
+        "subnets": [{ "id": "poland-ars", "name": "RouteServerSubnet", "prefix": "10.30.0.0/27" }],
+        "gateways": [], "appliances": [],
+        "routeServer": { "id": "ars-poland", "name": "ars-poland", "subnetId": "poland-ars", "enabled": true, "branchToBranchTraffic": false, "hubRoutingPreference": "ASPath", "peerApplianceIds": ["nva1", "nva2"] }
+      },
+      {
+        "id": "c1", "name": "vnet-spoke-c1", "region": "polandcentral", "role": "spoke", "prefixes": ["10.31.0.0/24"],
+        "subnets": [{ "id": "c1-work", "name": "snet-workload", "prefix": "10.31.0.0/25" }],
+        "gateways": [], "appliances": []
+      }
+    ],
+    "vnetPeerings": [
+      { "id": "poland-hub1", "name": "Poland / hub1 BGP underlay", "vnetAId": "poland", "vnetBId": "hub1", "enabled": true, "aToB": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false }, "bToA": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false } },
+      { "id": "poland-hub2", "name": "Poland / hub2 BGP underlay", "vnetAId": "poland", "vnetBId": "hub2", "enabled": true, "aToB": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false }, "bToA": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false } },
+      { "id": "poland-c1", "name": "Poland ARS injection / c1", "vnetAId": "poland", "vnetBId": "c1", "enabled": true, "aToB": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": true, "useRemoteGateways": false }, "bToA": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": true } },
+      { "id": "c1-hub1", "name": "c1 / hub1 data plane", "vnetAId": "c1", "vnetBId": "hub1", "enabled": true, "aToB": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false }, "bToA": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false } },
+      { "id": "c1-hub2", "name": "c1 / hub2 data plane", "vnetAId": "c1", "vnetBId": "hub2", "enabled": true, "aToB": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false }, "bToA": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": true, "allowGatewayTransit": false, "useRemoteGateways": false } }
+    ],
+    "udrTables": [], "vwanHubs": [], "erLocations": [], "erLinks": [], "sites": [], "vpnConnections": [], "siteLinks": []
+  }
+}

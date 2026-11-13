@@ -31,8 +31,18 @@ export function azArsSpokes(vnet: AzVNet, topology?: AzNetTopology) {
   })
 }
 
+export function azArsPeerHosts(vnet: AzVNet, topology?: AzNetTopology) {
+  const remote = (topology?.vnetPeerings ?? []).flatMap((peering) => {
+    if (!peering.enabled || !peering.aToB.allowVirtualNetworkAccess || !peering.bToA.allowVirtualNetworkAccess) return []
+    const remoteId = peering.vnetAId === vnet.id ? peering.vnetBId : peering.vnetBId === vnet.id ? peering.vnetAId : undefined
+    const host = topology!.vnets.find((candidate) => candidate.id === remoteId)
+    return host ? [host] : []
+  })
+  return [vnet, ...remote]
+}
+
 export function azArsPeers(vnet: AzVNet, topology?: AzNetTopology) {
-  const hosts = [vnet, ...azArsSpokes(vnet, topology).filter((spoke) => spoke.active).map((spoke) => spoke.vnet)]
+  const hosts = azArsPeerHosts(vnet, topology)
   return (vnet.routeServer?.peerApplianceIds ?? []).slice(0, 8).flatMap((id) => {
     const host = hosts.find((host) => host.appliances.some((app) => app.id === id))
     const peer = host?.appliances.find((app) => app.id === id)

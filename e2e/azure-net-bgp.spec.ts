@@ -69,7 +69,7 @@ for (const mode of ['hub-spoke', 'full']) {
     }
     await open()
     const policy = page.getByRole('dialog', { name: 'Route maps · Route Server', exact: true })
-    await policy.getByText('BGP peers (local or gateway-transit peered spokes)', { exact: true }).click()
+    await policy.getByText('BGP peers (local or directly peered VNets)', { exact: true }).click()
     await policy.getByText('Advertised route attributes · NVA one', { exact: true }).click()
     await policy.getByRole('textbox', { name: 'NVA one 192.168.10.0/24 AS-path suffix', exact: true }).fill('65020')
     await policy.getByRole('textbox', { name: 'NVA one 192.168.10.0/24 communities', exact: true }).fill('65001:100 65001:200 65517:12001')
@@ -140,7 +140,7 @@ for (const mode of ['hub-spoke', 'full']) {
     }
     await open()
     const policy = page.getByRole('dialog', { name: 'Route maps · Route Server', exact: true })
-    await policy.getByText('BGP peers (local or gateway-transit peered spokes)', { exact: true }).click()
+    await policy.getByText('BGP peers (local or directly peered VNets)', { exact: true }).click()
     await policy.getByRole('checkbox', { name: 'BGP peer Remote spoke / Remote NVA', exact: true }).check()
     await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('vnet:remote')
     await policy.getByTestId('aznet-policy-inbound').locator('summary').click()
@@ -155,7 +155,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(rib.locator('[data-prefix="192.168.20.0/24"]')).toHaveCount(0)
     await page.reload()
     await open()
-    await policy.getByText('BGP peers (local or gateway-transit peered spokes)', { exact: true }).click()
+    await policy.getByText('BGP peers (local or directly peered VNets)', { exact: true }).click()
     await expect(policy.getByRole('checkbox', { name: 'BGP peer Remote spoke / Remote NVA', exact: true })).toBeChecked()
     await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('vnet:remote')
     await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue('remote-filter')
