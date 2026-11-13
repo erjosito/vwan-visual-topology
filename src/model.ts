@@ -84,6 +84,7 @@ export interface RouteMapRule {
   nextStep: 'continue' | 'terminate'
   matchConditions?: RouteMapCondition[]
   modifications?: RouteMapModification[]
+  localPreference?: number
 }
 
 export interface RouteMap {

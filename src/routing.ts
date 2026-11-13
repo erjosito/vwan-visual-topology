@@ -1,7 +1,8 @@
 import type { Connection, ErLink, Hub, RouteKind, RouteMapDirection, RouterSelection, Topology, Transport } from './model'
 import { cidr, contains, ipv4 } from './validation'
 import { applyRouteMapRules, connectionMapRules, propagateSites, routerMapRules, siteExports } from './bgp'
-import type { SiteRoute } from './bgp'
+import type { SiteRoute, SiteRouting } from './bgp'
+import { azureRoutesAtSites } from './site-routing'
 import { downstreamSpokesForNvaSpoke, downstreamVnetForAddress, resolveAttachment } from './topology-graph'
 import { evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
 
@@ -21,6 +22,7 @@ export interface Candidate {
   key: string
   prefix: string
   asPath: number[]
+  localPreference?: number
   kind: RouteKind | 'system' | 'policy'
   transport: Transport | 'VNet' | 'Firewall' | 'Internet'
   connectionId: string
@@ -138,7 +140,27 @@ function hubSummaryExport(route: Candidate): Candidate {
 }
 
 export function simulate(topology: Topology): Simulation {
+  let result = simulateHubRoutes(topology)
+  const preferenceMaps = new Set(topology.routeMaps?.filter((map) => map.siteId && map.rules.some((rule) => rule.localPreference !== undefined)).map((map) => map.id))
+  if (!topology.sites.some((site) => site.routeMapAssignments?.some((assignment) => preferenceMaps.has(assignment.inboundMapId ?? '')))) return result
+  const signature = (simulation: Simulation) => JSON.stringify([simulation.bgpTables, simulation.outbound])
+  const seen = new Set([signature(result)])
+  for (let round = 0; round < 64 && result.converged; round++) {
+    const sites = azureRoutesAtSites(topology, result)
+    if (!sites.converged || !sites.selectionComplete) break
+    const next = simulateHubRoutes(topology, sites)
+    const nextSignature = signature(next)
+    if (nextSignature === signature(result)) return next
+    if (seen.has(nextSignature)) break
+    seen.add(nextSignature)
+    result = next
+  }
+  return { ...result, converged: false, warnings: [...result.warnings, 'Site local-preference and Azure export selection did not converge completely; paths are unavailable.'] }
+}
+
+function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting): Simulation {
   const siteRouting = propagateSites(topology)
+  const exports = siteExportsOverride ?? siteRouting
   const routePolicies: RoutePolicySnapshot[] = []
   const policy = (router: RouterSelection, connectionId: string, direction: RouteMapDirection, before: Candidate[], after: Candidate[]) => {
     routePolicies.push({ router, connectionId, direction, before, after })
@@ -193,7 +215,7 @@ export function simulate(topology: Topology): Simulation {
       ...(route.forwardingRoutes ? { forwardingRoutes: route.forwardingRoutes.map(candidate) } : {}),
     })
     const routes = link.learnSiteRoutes
-      ? siteRouting.tables[site.id]
+      ? exports.tables[site.id]
           .filter((route) => !route.key.startsWith(`${link.id}:`) && !route.asPath.includes(12076))
           .map(candidate)
       : []
@@ -226,7 +248,7 @@ export function simulate(topology: Topology): Simulation {
       ...erImports(hub.id),
       ...topology.connections.filter((c) => c.enabled && c.hubId === hub.id && c.transport !== 'SpokeNVA').flatMap((connection) => mapRoutes(connection, fromSite(connection, [
         ...localRoutes(connection, topology),
-        ...(connection.learnSiteRoutes ? siteRouting.tables[connection.siteId].map((route) => learnedRoute(connection, route)) : []),
+        ...(connection.learnSiteRoutes ? exports.tables[connection.siteId].map((route) => learnedRoute(connection, route)) : []),
       ]), 'inbound')),
       ...topology.spokes.filter((s) => s.hubId === hub.id).flatMap((spoke) => {
         const routes: Candidate[] = [
@@ -237,7 +259,7 @@ export function simulate(topology: Topology): Simulation {
           ...topology.connections.filter((connection) => connection.enabled && connection.transport === 'SpokeNVA' && connection.spokeId === spoke.id)
             .flatMap((connection) => fromSite(connection, [
               ...localRoutes(connection, topology),
-              ...siteRouting.tables[connection.siteId]
+              ...exports.tables[connection.siteId]
                 .filter((route) => !route.key.startsWith(`${connection.id}:`) && (connection.learnSiteRoutes
                   || downstreamSpokesForNvaSpoke(topology, spoke.id).some((s) => route.key.startsWith(`${s.id}:`))))
                 .map((route) => learnedRoute(connection, route)),

@@ -1851,6 +1851,100 @@ for (const id of ['as-path-drop', 'as-path-drop-summary', 'b2b-off-mixed-summary
   })
 }
 
+for (const id of ['c2-primary-up', 'c2-primary-down', 'c2-restored']) {
+  test(`recorded dual ER C2 advertisements round-trip without changing ER availability: ${id}`, async ({ page }, testInfo) => {
+    const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-dual-er-archive.json'), 'utf8')) as {
+      topology: Topology
+      prefixes: string[]
+      paths: { peer: string; asPath: number[] }[]
+      cases: { id: string; primaryEnabled: boolean; peers: string[]; exportFile: string }[]
+    }
+    const entry = archive.cases.find((entry) => entry.id === id)!
+    const topology = structuredClone(archive.topology)
+    topology.siteLinks[0].enabled = entry.primaryEnabled
+    topology.name += ` - ${id}`
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto('/?mode=vwan')
+    await importTopology(page, topology)
+    await action(page, 'Select site CE advertisement observation (not GCP best-path model)', 'Learned routes')
+    for (const expected of archive.paths) {
+      await page.getByLabel('Neighbor', { exact: true }).selectOption(expected.peer)
+      for (const prefix of archive.prefixes) {
+        const path = page.locator(`.effective-routes tr[data-prefix="${prefix}"] .as-path`)
+        if (entry.peers.includes(expected.peer)) await expect(path).toHaveText(expected.asPath.join(' '))
+        else await expect(path).toHaveCount(0)
+      }
+    }
+    const before = await readTopology(page)
+    expect(before.connections.every((connection) => connection.enabled)).toBe(true)
+    const exported = await downloadTopology(page)
+    expect(exported).toEqual(before)
+    await writeFile(testInfo.outputPath(entry.exportFile), JSON.stringify(exported, null, 2) + '\n')
+    await importTopology(page, exported)
+    await page.reload()
+    expect(await readTopology(page)).toEqual(exported)
+    expect(errors).toEqual([])
+  })
+}
+
+for (const id of ['policy-a', 'policy-b2', 'aspath-seed', 'er-japan-first', 'er-nva-first', 'vpn-japan-first', 'vpn-nva-first']) {
+  test(`recorded three hub frozen firewall winners and native round-trip: ${id}`, async ({ page }, testInfo) => {
+    const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-three-hub-archive.json'), 'utf8')) as {
+      topology: Topology
+      expected: { hub: string; prefix: string; asPath: number[] }[]
+      seedOverrides: { hub: string; prefix: string; asPath: number[] }[]
+      cases: { id: string; preference: Topology['hubs'][number]['preference']; exportFile: string; overrides?: Partial<Topology>; expected?: { hub: string; prefix: string; asPath: number[] }[];
+        siteExports?: { site: string; connectionId: string; prefixes: string[] }[] }[]
+    }
+    const entry = archive.cases.find((entry) => entry.id === id)!
+    const topology = structuredClone(archive.topology)
+    Object.assign(topology, structuredClone(entry.overrides ?? {}))
+    topology.name += ` - ${id}`
+    for (const hub of topology.hubs) hub.preference = entry.preference
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto('/?mode=vwan')
+    await importTopology(page, topology)
+    for (const hub of topology.hubs) {
+      await action(page, `Select hub ${hub.name}`, 'Show firewall routes')
+      await expect(page.getByLabel('Route view', { exact: true })).toHaveValue('firewall')
+      for (const common of archive.expected.filter((row) => row.hub === hub.id)) {
+        const expected = (entry.expected ?? (entry.id === 'aspath-seed' ? archive.seedOverrides : [])).find((row) => row.hub === common.hub && row.prefix === common.prefix) ?? common
+        await expect(page.locator(`.effective-routes tr[data-prefix="${expected.prefix}"][data-preferred="true"] .as-path`))
+          .toHaveText(expected.asPath.join(' '))
+      }
+    }
+    for (const exported of entry.siteExports ?? []) {
+      await action(page, `Select hub hub-${exported.site}`, 'Learned routes')
+      await page.getByLabel('Neighbor', { exact: true }).selectOption(exported.connectionId)
+      for (const prefix of [...new Set(archive.expected.map((row) => row.prefix))]) {
+        await expect(page.locator(`.effective-routes tr[data-prefix="${prefix}"]`)).toHaveCount(exported.prefixes.includes(prefix) ? 1 : 0)
+      }
+    }
+    if (id === 'policy-a') {
+      await action(page, 'Select site router-jp', 'BGP table')
+      await expect(page.locator('.effective-routes tr[data-prefix="10.110.0.0/24"][data-preferred="true"] .local-preference')).toHaveText('400')
+      await action(page, 'Select site router-jp', 'Route maps')
+      await page.getByRole('button', { name: /^JP prefer Azure foreign DC/ }).click()
+      await expect(page.getByLabel('Rule 1 local preference', { exact: true })).toHaveValue('400')
+      await page.getByLabel('Rule 1 local preference', { exact: true }).fill('350')
+      await page.getByRole('button', { name: 'Save route map', exact: true }).click()
+      expect((await readTopology(page)).routeMaps!.find((map) => map.id === 'jp-import')!.rules[0].localPreference).toBe(350)
+      await page.getByLabel('Rule 1 local preference', { exact: true }).fill('400')
+      await page.getByRole('button', { name: 'Save route map', exact: true }).click()
+      await page.getByRole('button', { name: 'Close Route maps · router-jp', exact: true }).click()
+    }
+    const exported = await downloadTopology(page)
+    expect(exported).toEqual(await readTopology(page))
+    await writeFile(testInfo.outputPath(entry.exportFile), JSON.stringify(exported, null, 2) + '\n')
+    await importTopology(page, exported)
+    await page.reload()
+    expect(await readTopology(page)).toEqual(exported)
+    expect(errors).toEqual([])
+  })
+}
+
 for (const id of ['b2b-on-baseline', 'er-only-summary']) {
   test(`recorded summarization pilot imports, displays native BGP observations and round-trips: ${id}`, async ({ page }) => {
     const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-routemap-archive.json'), 'utf8')) as {

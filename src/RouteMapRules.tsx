@@ -21,7 +21,7 @@ export function RouteMapRules({ map, label }: { map: RouteMap; label: string }) 
       <td>{!rule.prefixes.length ? t("All prefixes") : <>{rule.match === 'equals' ? t("Equals") : t("Contains (including more specific)")}{rule.prefixes.map((prefix) => <code key={prefix}>{prefix}</code>)}</>}
         {rule.matchConditions?.map((condition, index) => <div key={index}>AND · {t(condition.property === 'asPath' ? 'AS path' : condition.property === 'community' ? 'Communities' : 'Prefix')} · {t(condition.match === 'equals' ? 'Equals' : 'Contains')}
           <code>{condition.values.join(' ')}</code></div>)}</td>
-      <td><RuleAction rule={rule} /></td>
+      <td><RuleAction rule={rule} />{rule.action !== 'drop' && rule.localPreference !== undefined && <div>{t("Local preference")}<code>{rule.localPreference}</code></div>}</td>
       <td>{rule.action === 'drop' ? t("Stop (drop)") : rule.nextStep === 'continue' ? t("Continue") : t("Stop")}</td>
     </tr>)}</tbody>
   </table></div> : <p className="muted">{t("No rules; all routes pass unchanged.")}</p>

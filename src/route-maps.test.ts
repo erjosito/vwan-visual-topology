@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyRouteMapRules } from './bgp'
+import { applyRouteMapRules, propagateSites } from './bgp'
 import { example } from './model'
 import type { RouteMap, RouteMapRule, Topology } from './model'
 import { simulate, traceFlow } from './routing'
@@ -23,6 +23,62 @@ const network = (): Topology => {
 }
 
 describe('ordered first-class route-map rules', () => {
+  it('prefers a longer inbound site path by local preference without sending preference to the next AS', () => {
+    const topology: Topology = {
+      version: 1, name: 'Site preference', hubs: [], spokes: [], connections: [],
+      sites: ['a', 'b', 'receiver', 'downstream'].map((id, index) => ({ id, name: id, asn: 65001 + index, prefixes: index < 2 ? ['10.1.0.0/24'] : [],
+        ...(id === 'receiver' ? { routeMapAssignments: [{ connectionId: 'a-receiver', inboundMapId: 'prefer-a' }] } : {}) })),
+      siteLinks: [['a', 'receiver'], ['b', 'receiver'], ['receiver', 'downstream'], ['b', 'downstream']].map(([a, b]) => ({
+        id: `${a}-${b}`, name: `${a}-${b}`, a, b, enabled: true,
+        aToB: { prefixes: [], prepend: a === 'a' ? [65001, 65001] : [] }, bToA: { prefixes: [], prepend: [] },
+      })),
+      routeMaps: [{ id: 'prefer-a', name: 'Prefer longer path', siteId: 'receiver', rules: [rule({ localPreference: 400 })] }],
+    }
+    const result = propagateSites(validateTopology(topology))
+    expect(result.converged).toBe(true)
+    expect(result.tables.receiver).toEqual([expect.objectContaining({ asPath: [65001, 65001, 65001], localPreference: 400 })])
+    expect(result.tables.downstream).toEqual([expect.objectContaining({ asPath: [65002] })])
+    expect(result.candidates.downstream.find((route) => route.sitePath.includes('receiver'))!.localPreference).toBeUndefined()
+  })
+
+  it('preserves bounded site preference and rejects unsupported owners and outbound assignments', () => {
+    const topology = network()
+    const policy = { id: 'site-map', name: 'Local preference', siteId: topology.sites[0].id, rules: [rule({ localPreference: 0 })] }
+    topology.routeMaps = [policy]
+    topology.sites[0].routeMapAssignments = [{ connectionId: topology.connections[0].id, inboundMapId: policy.id }]
+    for (const localPreference of [0, 400, 4294967295]) {
+      policy.rules[0].localPreference = localPreference
+      expect(validateTopology(topology).routeMaps![0].rules[0].localPreference).toBe(localPreference)
+    }
+    for (const value of [-1, 0.5, 4294967296, '400', null]) {
+      policy.rules[0].localPreference = value as number
+      expect(() => validateTopology(topology)).toThrow('Local preference')
+    }
+    policy.rules[0].localPreference = 400
+    topology.sites[0].routeMapAssignments = [{ connectionId: topology.connections[0].id, outboundMapId: policy.id }]
+    expect(() => validateTopology(topology)).toThrow('site inbound attribute')
+    topology.sites[0].routeMapAssignments = []
+    topology.routeMaps = [map([rule({ localPreference: 400 })])]
+    expect(() => validateTopology(topology)).toThrow('requires a site route map')
+  })
+
+  it('does not report converged policy feedback or flow success after site ECMP truncation', () => {
+    const topology: Topology = {
+      version: 1, name: 'Incomplete site selection', hubs: [], spokes: [], connections: [],
+      sites: [
+        { id: 'receiver', name: 'Receiver', asn: 65000, prefixes: [], routeMapAssignments: [{ connectionId: 'wire-0', inboundMapId: 'prefer' }] },
+        ...Array.from({ length: 33 }, (_, index) => ({ id: `origin-${index}`, name: `Origin ${index}`, asn: 65001 + index, prefixes: ['10.1.0.0/24'] })),
+      ],
+      siteLinks: Array.from({ length: 33 }, (_, index) => ({ id: `wire-${index}`, name: `Wire ${index}`, a: 'receiver', b: `origin-${index}`,
+        enabled: true, aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } })),
+      routeMaps: [{ id: 'prefer', name: 'Default preference', siteId: 'receiver', rules: [rule({ localPreference: 100 })] }],
+    }
+    const result = simulate(validateTopology(topology))
+    expect(result.converged).toBe(false)
+    expect(result.warnings).toContain('Site local-preference and Azure export selection did not converge completely; paths are unavailable.')
+    expect(traceNodePath(topology, result, { kind: 'site', id: 'receiver' }, '10.1.0.1')).toEqual([])
+  })
+
   it('admits AS-path conditions with prefix/condition AND, ASN-list OR and exact ordered Equals', () => {
     const t = network()
     t.routeMaps = [map([rule({ action: 'drop', prefixes: ['10.0.0.0/8'], match: 'contains',

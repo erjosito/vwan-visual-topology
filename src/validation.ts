@@ -216,6 +216,10 @@ export function validateTopology(input: unknown): Topology {
       rules: array(map.rules, 20, 'Route-map rules').map((value): RouteMapRule => {
         const rule = record(value)
         if (rule.modifications !== undefined) fail('Attribute modifications are supported only on Azure Route Server route maps.')
+        if (rule.localPreference !== undefined && (map.siteId === undefined || !Number.isInteger(rule.localPreference)
+          || (rule.localPreference as number) < 0 || (rule.localPreference as number) > 4294967295)) {
+          fail('Local preference requires a site route map and an integer from 0 to 4294967295.')
+        }
         const conditionIds = new Set<string>()
         const matchConditions = rule.matchConditions === undefined ? undefined
           : array(rule.matchConditions, 40, 'Route-map match conditions').map((value) => {
@@ -254,7 +258,8 @@ export function validateTopology(input: unknown): Topology {
         }
         return { id: id(rule.id), prefixes: matchPrefixes, match: rule.match as RouteMapRule['match'],
           action: rule.action as RouteMapRule['action'], summaryPrefixes, prepend, nextStep: rule.nextStep as RouteMapRule['nextStep'],
-          ...(matchConditions === undefined ? {} : { matchConditions }) }
+          ...(matchConditions === undefined ? {} : { matchConditions }),
+          ...(rule.localPreference === undefined ? {} : { localPreference: rule.localPreference as number }) }
       }),
     }
   })
@@ -431,6 +436,9 @@ export function validateTopology(input: unknown): Topology {
         const map = routeMaps.find((m) => m.id === reference)
         if (!map) fail('Router assignment references a missing route map.')
         if ((isHub ? map!.hubId : map!.siteId) !== router.id) fail('Route map must belong to the same hub or site as the assignment.')
+        if (reference === assignment.outboundMapId && map!.rules.some((rule) => rule.localPreference !== undefined)) {
+          fail('Local preference is a site inbound attribute; do not assign it to an outbound route map.')
+        }
       }
     }
   }
