@@ -1,5 +1,9 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Allow branch-to-branch traffic (WAN-wide)': 'ブランチ間通信を許可 (WAN 全体)',
+  'Prefix and AS-path conditions must all match (AND). AS-path Equals matches the complete ordered path; Contains matches any listed ASN. Matching Azure-reserved ASNs is allowed; prepend restrictions do not apply to matches.': 'プレフィックスと AS パスのすべての条件を満たす必要があります (AND)。Equals は順序を含む AS パス全体、Contains は指定 ASN のいずれかに一致します。Azure 予約 ASN との一致は許可され、プリペンドの制限は一致条件には適用されません。',
+  'NVA advertisements start with the NVA ASN. To model downstream networks and return routing, add sites or VNets with owned prefixes and link them to this NVA. Default association/propagation is assumed; branch exchange follows the WAN branch-to-branch setting. Apply hub route maps to the hosting VNet connection.': 'NVA のアドバタイズは NVA ASN から開始します。下流ネットワークと戻り経路をモデル化するには、所有プレフィックスを持つサイトまたは VNet を追加し、この NVA に接続します。Default への関連付けと伝達を前提とし、ブランチ間の経路交換には WAN 全体のブランチ間設定が適用されます。ハブのルート マップは配置先の VNet 接続に適用します。',
+  'Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515) and Default association/propagation. Branch exchange follows the WAN branch-to-branch setting. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.': 'スポーク BGP NVA では、両方の Azure ハブ ルーター (AS65515) への同一アドバタイズを 1 つの論理ピアリングとして表し、Default への関連付けと伝達を前提とします。ブランチ間の経路交換には WAN 全体のブランチ間設定が適用されます。NIC の到達性、UDR、セッション、ベンダー ポリシー、ロード バランサーのネクストホップおよび物理的冗長性は検証されません。直接接続するローカル VNet アドレス空間内のアドバタイズは抑制され、そのネットワークにはシステム ルートが使用されます。',
   'Canvas controls': 'キャンバス コントロール',
   'Canvas style': 'キャンバスのスタイル',
   'Connection style': '接続線のスタイル',

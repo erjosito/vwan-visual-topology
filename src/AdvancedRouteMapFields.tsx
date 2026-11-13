@@ -1,15 +1,17 @@
 import { t } from './i18n'
 import type { RouteMapCondition, RouteMapModification, RouteMapRule } from './model'
 
-export function AdvancedRouteMapFields({ rule, index, onChange }: { rule: RouteMapRule; index: number; onChange: (rule: RouteMapRule) => void }) {
+export function AdvancedRouteMapFields({ rule, index, onChange, asPathOnly = false }: { rule: RouteMapRule; index: number; onChange: (rule: RouteMapRule) => void; asPathOnly?: boolean }) {
   const conditions = rule.matchConditions ?? []
   const modifications = rule.modifications ?? []
   return <section aria-label={t('Rule {0} advanced attributes', index)}>
-    <p className="muted">{t('All match conditions must match (AND). Community Equals requires all listed communities; Contains requires any. AS-path Equals matches the ordered path; Contains matches any listed ASN.')}</p>
+    <p className="muted">{t(asPathOnly
+      ? 'Prefix and AS-path conditions must all match (AND). AS-path Equals matches the complete ordered path; Contains matches any listed ASN. Matching Azure-reserved ASNs is allowed; prepend restrictions do not apply to matches.'
+      : 'All match conditions must match (AND). Community Equals requires all listed communities; Contains requires any. AS-path Equals matches the ordered path; Contains matches any listed ASN.')}</p>
     {conditions.map((condition, row) => <div className="form-grid" key={condition.id}>
       <label className="field"><span>{t('Match property')}</span><select aria-label={t('Rule {0} condition {1} property', index, row + 1)}
         value={condition.property} onChange={(event) => onChange({ ...rule, matchConditions: conditions.map((entry, i) => i === row ? { ...entry, property: event.target.value as RouteMapCondition['property'], values: [] } : entry) })}>
-        <option value="prefix">{t('Prefix')}</option><option value="asPath">{t('AS path')}</option><option value="community">{t('Communities')}</option>
+        {!asPathOnly && <option value="prefix">{t('Prefix')}</option>}<option value="asPath">{t('AS path')}</option>{!asPathOnly && <option value="community">{t('Communities')}</option>}
       </select></label>
       <label className="field"><span>{t('Match mode')}</span><select aria-label={t('Rule {0} condition {1} match', index, row + 1)}
         value={condition.match} onChange={(event) => onChange({ ...rule, matchConditions: conditions.map((entry, i) => i === row ? { ...entry, match: event.target.value as RouteMapCondition['match'] } : entry) })}>
@@ -20,7 +22,7 @@ export function AdvancedRouteMapFields({ rule, index, onChange }: { rule: RouteM
       <button type="button" onClick={() => onChange({ ...rule, matchConditions: conditions.filter((_, i) => i !== row) })}>{t('Remove condition')} {row + 1}</button>
     </div>)}
     <button type="button" disabled={conditions.length >= 40} onClick={() => onChange({ ...rule, matchConditions: [...conditions, { id: crypto.randomUUID(), property: 'asPath', match: 'equals', values: [] }] })}>{t('Add match condition')}</button>
-    {rule.action !== 'drop' && <>
+    {!asPathOnly && rule.action !== 'drop' && <>
       <p className="muted">{t('Multiple attribute modifications may accompany prefix summarization or prepend. Replace with an empty value clears the attribute; Azure-reserved communities are preserved. Summarization strips AS paths and communities, including same-rule modifications.')}</p>
       {modifications.map((modification, row) => <div className="form-grid" key={modification.id}>
         <label className="field"><span>{t('Modify property')}</span><select aria-label={t('Rule {0} modification {1} property', index, row + 1)}

@@ -22,6 +22,17 @@ function capture() {
 }
 
 describe('offline Azure capture import', () => {
+  it('preserves disabled branch transit in native import and generated Bicep', () => {
+    const input = capture()
+    input.wan.allowBranchToBranchTraffic = false
+    const imported = importAzureCapture(input)
+    expect(imported.allowBranchToBranchTraffic).toBe(false)
+    expect(imported.azureImport?.warnings.join(' ')).not.toContain('WAN transit flags differ')
+    expect(generateBicep(imported, bicepDefaults(imported)).text).toContain('allowBranchToBranchTraffic: false')
+    expect(generateBicep(importAzureCapture(capture()), bicepDefaults(imported)).text).toContain('allowBranchToBranchTraffic: true')
+    expect(() => importAzureCapture({ ...input, wan: { ...input.wan, allowBranchToBranchTraffic: 'false' } })).toThrow(/boolean/)
+  })
+
   it('maps case-insensitive ARM associations, preserves provenance, and never invents on-premises routes', () => {
     const input = capture()
     input.hubs[0].virtualWanId = input.wan.id.toUpperCase()

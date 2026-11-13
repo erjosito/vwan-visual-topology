@@ -5,8 +5,8 @@
   "observationPoint": "nva1 received BGP routes on cx-nva1",
   "scope": "Round 2, B2B enabled: pre-mitigation baseline and ER-only outbound summary. Assertions come from archived observations, not simulator output.",
   "exclusions": [
-    "B2B disabled: the VWAN model has no corresponding control. Do not equate this pilot with Cases A/B.",
-    "AS-path-matching mitigation rules are not admitted for VWAN route maps; not replaced by a prefix-filter lookalike.",
+    "B2B disabled: outside this original two-case pilot. Additional recorded cuts are in issue-101-routemap-archive.json.",
+    "AS-path-matching mitigation: outside this original two-case pilot; real attribute conditions are exercised in issue-101-routemap-archive.json.",
     "No community assertions, full RIB equality, physical tunnel/session counts, convergence timing or packet-forwarding validation.",
     "Intermittent mixed-origin summary disappearance was not reproduced in the archive and is not certified absent by these snapshots.",
     "The MCR is a logical on-premises site and each circuit an ER-location abstraction; provider forwarding and redundancy are not modeled.",

@@ -60,13 +60,15 @@ export function importAzureCapture(input: unknown): Topology {
   if (wan.type !== 'Standard') throw new Error('Only Standard Virtual WAN captures are supported.')
   const globalLimitations: string[] = []
   if (!root.complete) globalLimitations.push('Capture is incomplete; configuration reads failed or were unavailable.')
-  if (wan.allowBranchToBranchTraffic !== true || wan.allowVnetToVnetTraffic !== true) globalLimitations.push('WAN transit flags differ from, or cannot confirm, the simulator full-mesh defaults.')
+  if (wan.allowBranchToBranchTraffic !== undefined && typeof wan.allowBranchToBranchTraffic !== 'boolean') throw new Error('WAN branch-to-branch traffic must be a boolean.')
+  if (wan.allowBranchToBranchTraffic === undefined || wan.allowVnetToVnetTraffic !== true) globalLimitations.push('WAN transit flags differ from, or cannot confirm, the simulator full-mesh defaults.')
   const warnings = new Set([
     'Structural Azure import, not a production routing replica. ER/on-premises connectivity, gateway advertisements, route maps, custom propagation and firewall enforcement are not reconstructed.',
     'Spoke NVA BGP peers, interface IPs and downstream routing are not reconstructed. Configure them manually after structural import.',
     ...messages(root.warnings), ...globalLimitations,
   ])
   const topology: Topology = { version: 1, name: text(wan.name, 'WAN name'), hubs: [], spokes: [], sites: [], connections: [], siteLinks: [] }
+  if (typeof wan.allowBranchToBranchTraffic === 'boolean') topology.allowBranchToBranchTraffic = wan.allowBranchToBranchTraffic
   const sources: AzureImportInfo['hubs'] = []
   const seen = new Set<string>([wanId.toLowerCase()])
   const seenVnets = new Set<string>()

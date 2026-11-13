@@ -1,5 +1,16 @@
 // Presentation-only equivalents of engine diagnostics. The engine's English API is unchanged.
 export const diagnosticJa: Record<string, string> = {
+  'WAN branch-to-branch traffic must be a boolean.': 'WAN のブランチ間通信には真偽値を指定してください。',
+  'Attribute modifications are supported only on Azure Route Server route maps.': '属性変更は Azure Route Server のルート マップでのみサポートされます。',
+  'Unknown route-map match-condition fields.': 'ルート マップの一致条件に不明なフィールドがあります。',
+  'VWAN and site attribute conditions support AS-path matching only.': 'VWAN とサイトの属性条件は AS パスの一致のみをサポートします。',
+  'AS-path conditions require equals or contains.': 'AS パス条件には equals または contains を指定してください。',
+  'Site AS-path conditions require ASN strings (1-4294967294).': 'サイトの AS パス条件には ASN の文字列 (1-4294967294) を指定してください。',
+  'VWAN AS-path conditions require 2-byte ASN strings (1-65534).': 'VWAN の AS パス条件には 2 バイト ASN の文字列 (1-65534) を指定してください。',
+  'An AS-path match condition requires values; remove the condition to match all routes.': 'AS パスの一致条件には値が必要です。すべてのルートに一致させるには条件を削除してください。',
+  'Duplicate route-map condition ID.': 'ルート マップの条件 ID が重複しています。',
+  'Route maps model IPv4 prefix and AS-path conditions with permit, drop, summarize, and prepend actions. Community matching, NAT interactions, and other attribute modifications are not simulated.': 'ルート マップでは IPv4 プレフィックスと AS パスの条件、および許可、破棄、集約、プリペンドをモデル化します。コミュニティの一致、NAT との相互作用、その他の属性変更はシミュレーションしません。',
+  'WAN branch-to-branch is disabled: branch-origin routes are not exported to other branches, including spoke BGP NVAs. Hub learning and VNet connectivity remain enabled. This is route-propagation control, not a firewall or packet-filtering guarantee; summaries and default routes require path inspection. On-premises links and ExpressRoute Global Reach are independent.': 'WAN のブランチ間通信は無効です。スポーク BGP NVA を含む他のブランチには、ブランチ起点のルートを広告しません。ハブの経路学習と VNet 接続は引き続き有効です。これはルート伝達の制御であり、ファイアウォールやパケット フィルターの保証ではありません。集約と既定のルートにはパスの確認が必要です。オンプレミス リンクと ExpressRoute Global Reach は独立しています。',
   'Hubs': 'ハブ',
   'Sites': 'サイト',
   'Spokes': 'スポーク',
