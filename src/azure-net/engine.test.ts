@@ -235,6 +235,59 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('gw')
   })
 
+  const coexistenceEvidence = JSON.parse(readFileSync(resolve('verification', 'issue-81-coexistence.json'), 'utf8')) as {
+    cases: {
+      name: string
+      topology: AzNetTopology
+      forwarding: Record<string, { transport: string }>
+      native: Record<string, { prefix: string; asPath: number[]; origin?: string }[]>
+    }[]
+  }
+  it.each(coexistenceEvidence.cases)('matches independent Azure coexistence forwarding and BGP evidence: $name', ({ topology, forwarding, native }) => {
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual(topology)
+    const result = simulateAzNet(topology)
+    for (const [address, observed] of Object.entries(forwarding)) {
+      const route = lookupSubnetEffectiveRoute(result.subnetTables['dut-workload'], address)
+      if (observed.transport === 'none') {
+        expect(route?.nextHopType).toBe('None')
+        expect(traceAzNetFlow(topology, result, { kind: 'subnet', vnetId: 'dut', subnetId: 'dut-workload' }, address).status).toBe('dropped-blackhole')
+      } else {
+        expect(route?.nextHopResourceId).toBe(observed.transport === 'ER' ? 'dut-er' : 'dut-vpn')
+      }
+    }
+    for (const [layer, gateway] of [['dut-er-learned', 'dut-er'], ['dut-vpn-learned', 'dut-vpn']] as const) {
+      for (const observed of native[layer].filter((route) => route.origin === 'EBgp')) {
+        expect(result.gatewayRibs[gateway].find((route) => route.prefix === observed.prefix)?.asPath).toEqual(observed.asPath)
+      }
+    }
+    for (const observed of native['circuit-primary-routes']) {
+      expect(result.erLocationRibs.circuit.find((route) => route.prefix === observed.prefix)?.asPath).toEqual(observed.asPath)
+    }
+  })
+
+  it('discards withdrawn benchmark routes instead of sending them to Internet, while preserving explicit default steering', () => {
+    const topology = coexistenceTopology()
+    topology.sites[0].prefixes = ['198.18.81.0/24']
+    let result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '198.18.81.1')?.nextHopResourceId).toBe('gw')
+    topology.udrTables = [{ id: 'policy', name: 'Workload policy', disableBgpRoutePropagation: true, routes: [] }]
+    topology.vnets[0].subnets.find((subnet) => subnet.id === 'firewall')!.routeTableId = 'policy'
+    result = simulateAzNet(topology)
+    expect(result.gatewayRibs.gw.some((route) => route.prefix === '198.18.81.0/24')).toBe(true)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '198.18.81.1')).toMatchObject({
+      prefix: '198.18.0.0/15', source: 'System', nextHopType: 'None',
+    })
+    expect(traceAzNetFlow(topology, result, { kind: 'subnet', vnetId: 'hub', subnetId: 'firewall' }, '198.18.81.1').status).toBe('dropped-blackhole')
+    topology.udrTables[0].routes = [{
+      id: 'default', name: 'Explicit NVA default', prefix: '0.0.0.0/0',
+      nextHopType: 'VirtualAppliance', nextHopIp: '10.0.1.4', enabled: true,
+    }]
+    result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '198.18.81.1')).toMatchObject({
+      prefix: '0.0.0.0/0', source: 'User', nextHopType: 'VirtualAppliance',
+    })
+  })
+
   function sitePolicy(topology: AzNetTopology, connectionId: string, direction: 'inboundMapId' | 'outboundMapId', rules: Partial<RouteMapRule>[]) {
     topology.routeMaps = [{
       id: 'site-map', name: 'Site policy', siteId: 'site',
@@ -918,13 +971,13 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     const topology = transitTopology(transport)
     topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/8']
     let simulation = simulateAzNet(topology)
-    expect(simulation.subnetTables.gateway.routes.some((r) => r.prefix === '10.0.0.0/8')).toBe(false)
+    expect(simulation.subnetTables.gateway.routes.some((r) => r.prefix === '10.0.0.0/8' && r.nextHopType !== 'None')).toBe(false)
     const hole = traceAzNetFlow(topology, simulation, { kind: 'site', siteId: 'site' }, '10.99.1.4')
-    expect(hole.status).toBe('dropped-no-route')
+    expect(hole.status).toBe('dropped-blackhole')
     expect(hole.hops.some((h) => h.nodeKind === 'vnet-gateway')).toBe(true)
     topology.vnets[0].summarizedGatewayPrefixes.push('198.18.0.0/15')
     simulation = simulateAzNet(topology)
-    expect(traceAzNetFlow(topology, simulation, { kind: 'site', siteId: 'site' }, '198.18.1.4').status).toBe('dropped-no-route')
+    expect(traceAzNetFlow(topology, simulation, { kind: 'site', siteId: 'site' }, '198.18.1.4').status).toBe('dropped-blackhole')
     topology.vnetPeerings[0].aToB.allowGatewayTransit = false
     topology.vnetPeerings[0].bToA.useRemoteGateways = false
     simulation = simulateAzNet(topology)
@@ -1282,7 +1335,7 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
       { kind: 'subnet', vnetId: 'vnet-spoke-erp', subnetId: 'sub-sap-db' },
       '192.168.100.10',
     )
-    expect(brokenTrace.status).toBe('dropped-no-route')
+    expect(brokenTrace.status).toBe('dropped-blackhole')
 
     const findings = runAzNetDiagnostics(topo, sim)
     expect(findings).toContainEqual(expect.objectContaining({ category: 'bgp-routes-suppressed', severity: 'info' }))

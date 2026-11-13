@@ -956,6 +956,9 @@ export function compareAzNetWithObservations(
     // Also flag any active simulator route that was completely absent from Azure's effective routes
     for (const sr of simRoutes) {
       if (sr.active && !matchedSimRouteIds.has(sr.id)) {
+        if (sr.source === 'System' && isIgnorableAzureSystemPurposeRoute(sr.prefix, sr.nextHopType, 'Default', siteBgpPeerHostPrefixes)) {
+          continue
+        }
         const isRemoteHubArsConfirmedOnHub =
           sr.source === 'RouteServer' &&
           sr.originLabel.startsWith('BGP · Remote Hub ') &&

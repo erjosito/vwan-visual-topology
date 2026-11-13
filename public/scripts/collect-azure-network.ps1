@@ -81,7 +81,7 @@ foreach ($rs in $rawRouteServers) {
         $subnetId = [string]$rs.ipConfigurations[0].subnet.id
     }
     if ([string]::IsNullOrWhiteSpace($subnetId)) {
-        foreach ($v in $rawVnets) {
+        foreach ($v in $vnets) {
             if ($null -eq $v -or -not $v.subnets) { continue }
             foreach ($s in $v.subnets) {
                 if ($s.name -eq 'RouteServerSubnet' -and $s.ipConfigurations) {
@@ -189,7 +189,7 @@ Write-Host "[5/6] Assembling v2 capture envelope..."
 $capture = [ordered]@{
     kind               = 'azure-network-capture'
     version            = 2
-    collectorVersion   = '2026.11.03.1'
+    collectorVersion   = '2026.11.13.1'
     capturedAt         = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     subscriptionId     = $resolvedSubId
     resourceGroup      = $ResourceGroupName
