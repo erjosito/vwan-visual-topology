@@ -3,7 +3,7 @@
 Archived output is independent evidence, not a simulator-generated expected snapshot.
 Native topology JSONs are published in each original
 [net-lab-builder lab folder](https://github.com/erjosito/net-lab-builder/tree/main/labs).
-All new H&S evidence below is pinned to source revision
+The VNRA and S1/S2 H&S evidence below is pinned to source revision
 `c14b2bd94787a0645392eb000cdd3cfbd9b59e7d`; the earlier pilot keeps its own
 `5ba98831d8244eef162e6dbb2cc12a5b58f02e74` provenance.
 Fixture `sources` entries record exact paths, Git-blob SHA-256 hashes, observation
@@ -21,7 +21,7 @@ apparently usable rows from the inconsistent lab.
 | [dual-hub-hubless-region-ars](https://github.com/erjosito/net-lab-builder/tree/main/labs/dual-hub-hubless-region-ars): pre-Delta3 ECMP / BIRD default prepend | Full Hybrid; [fixture](issue-98-ars-hubless-archive.json), nine distinct ARS prefix/path and NIC default-next-hop observations | **PASS after remote-BGP peer and ARS ECMP fixes**; `simulator-topology.json`, `simulator-topology-default-preferred.json`. Direct peering BGP reachability is separate from spoke route injection. No VPN, packet, convergence or successful Azure route-map activation claim. |
 | [dual-hub-interconnect-ars-route-policy](https://github.com/erjosito/net-lab-builder/tree/main/labs/dual-hub-interconnect-ars-route-policy) | Report/evidence admission audit at `efe260c688733dfc647bdb6cd0d2fccfd9c740e0` | **INCONCLUSIVE / EXCLUDED FROM VALIDATION**. `validation.md:25` says U3 completed and rolled back, but `validation.md:70,311-312` and `README.md:122,352` say it was not run and its prerequisite association remains active (`README.md:309,320`). The selected Aug 8 Linux replacement folder contains only a certification narrative, not its native route/probe/configuration bundle. Do not mix Aug 6, Aug 7, Aug 8 and Aug 10 states, cherry-pick older rows, or manufacture a native validation export. Reconcile execution status and publish the matching native Linux snapshot before re-admission. |
 | [vwan-dual-er-symmetric](https://github.com/erjosito/net-lab-builder/tree/main/labs/vwan-dual-er-symmetric): C2 primary-up/down/restored four-spoke cut | VWAN; [fixture](issue-98-dual-er-archive.json), eight peer prefix/path facts plus four primary-peer withdrawal absences | **PASS** for received advertisements, including standby paths and restored baseline. Native exports `simulator-topology-c2.json`, `simulator-topology-c2-primary-down.json`, `simulator-topology-c2-restored.json`. CE export allowlists preserve the captured two on-prem prefixes and prevent an invented Azure-route feedback loop. Only the MCR-to-CE link is disabled, not ER. No GCP best-path, timing or firewall-session claim. |
-| Same dual-ER lab: C1 exact complete AS paths | Consistent native C1 paths include asymmetric retention of `65520 65520` after the public prepend | **BLOCKED (reconstruction evidence)**. Matching intermediate/provider rewrite configuration is absent. No speculative universal AS-removal change, invented MCR rewrite policy or exact C1 validation export. The report's standard-CE symmetry prediction is not an observed GCP outcome. |
+| Same dual-ER lab: C1 exact complete AS paths | Native C1 customer-side paths retain the normal inter-hub `65520 65520` segment in only one remote direction | **DEFERRED / NOT ADMITTED as an exact-path regression** by user disposition in #98: treat the asymmetric retention as a suspected MSEE private-AS-stripping glitch, not a confirmed platform bug or a missing customer rewrite setting. Azure map definitions are captured; both preserve the intended prefix rules/associations and the documented `23456` to `64496` update. The user will investigate MSEE behavior. No speculative AS-removal change, invented rewrite policy or exact C1 validation export; accepted C2 coverage is unchanged. |
 | [vwan-sdwan-three-hub](https://github.com/erjosito/net-lab-builder/tree/main/labs/vwan-sdwan-three-hub): frozen A, B2, ASPath seed and four completed HRP resets | VWAN; [fixture](issue-98-three-hub-archive.json) pinned to `efe260c688733dfc647bdb6cd0d2fccfd9c740e0`; 27 distinct firewall prefix/path/local-vs-remote facts, corroborated by 168 native rows in 42 samples; 12 A source-export presence/absence facts across paired BIRD peers | **PASS after site local-preference/export-feedback fix**. Seven native exports: `simulator-topology-policy-a.json`, `simulator-topology-policy-b2.json`, `simulator-topology-aspath-seed.json`, `simulator-topology-er-japan-first.json`, `simulator-topology-er-nva-first.json`, `simulator-topology-vpn-japan-first.json`, `simulator-topology-vpn-nva-first.json`. All 12 DC winners per state and A's withdrawal of foreign-DC mesh exports match. Mesh senders retain their own-prefix allowlists; A's inbound preference 400 and nonlocal source prepends are retained. No workload-prefix, packet, history or reset-causality claim. |
 | [dual-hub-vnra-udr-transit](https://github.com/erjosito/net-lab-builder/tree/main/labs/dual-hub-vnra-udr-transit): access disabled | H&S; [fixture](issue-98-vnra-archive.json), six pre-fix NIC routes, two Network Watcher next hops and two guest ICMP failures | **PASS after route-visibility fix**; `simulator-topology-access-disabled.json`. Active peering/UDR routes coexist with forwarding denied by peering access. |
 | Same VNRA lab: access corrected | H&S; two native guest probes, each 10/10 received; all-six corrected peering flags | **PASS** for logical bidirectional reachability; `simulator-topology.json`. Configured two-VNRA path is a model assertion, not a packet TTL/hop observation. |
@@ -71,10 +71,13 @@ were created, queried or modified for this batch.
 
 ## Queue
 
-All selected sequential labs/cuts have now received an admission audit and bounded
-replay or explicit excluded/blocked disposition. Current batch publication and
-exact-revision production checks are tracked in [#98](https://github.com/erjosito/vwan-visual-topology/issues/98).
+All selected sequential labs/cuts have received an admission audit and bounded
+replay or explicit excluded/deferred disposition. All 22 admitted native exports
+are published with adjacent lab documentation; regression, publication and
+exact-revision production receipts are tracked in [#98](https://github.com/erjosito/vwan-visual-topology/issues/98).
 The three excluded labs above require evidence/report reconciliation before re-admission.
-The dual-ER C1 exact-path cut additionally requires the missing intermediate rewrite evidence.
+The dual-ER C1 exact-path anomaly is deferred to the user's MSEE investigation
+and does not block completion of the admitted archive-validation scopes.
+The historical preview feature gate remains unvalidated, not an enabled-preview pass.
 The VNRA negative/positive pair and UDR LPM pair are educational sample candidates;
 neither is added automatically to the built-in gallery.

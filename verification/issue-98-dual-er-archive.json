@@ -6,7 +6,7 @@
   "consistency": "The dated C1/C2 verdicts agree with their native route tuples and retain the GCP unequal-AS-path ECMP caveat. The root validation.md is explicitly a pre-deploy plan, not a results report.",
   "exclusions": [
     "No standard-CE best-path prediction is asserted as an observed GCP installed route. Compare each peer's received advertisements, including longer paths.",
-    "C1 exact-path replay is blocked: its MCR1 remote paths retain 65520 twice, while corresponding MCR2 paths do not; matching provider/intermediate rewrite configuration is not captured. Do not invent a policy or change universal private-AS stripping to fit one path.",
+    "C1 exact-path replay is deferred and not admitted as a regression by user disposition in #98: MCR1 remote paths retain the normal inter-hub 65520 segment twice, while corresponding MCR2 paths do not. Treat this as a suspected MSEE private-AS-stripping glitch, not a confirmed platform bug or a known missing customer rewrite. The Azure map definitions are captured; both retain the intended rules/associations and documented 23456-to-64496 update. The user will investigate MSEE behavior. Do not invent a policy or change universal private-AS stripping to fit one path.",
     "Hub address-space aggregates and peering /30s are outside the four-spoke cut; the native model has no VWAN hub-address-prefix field.",
     "No packet success ratio, firewall sessions, GCP priority/MED ranking, ECMP hashing, failure-detection timer or 54.2s/45.4s convergence claim.",
     "MCR-to-CE withdrawal is not an ER circuit failure. Azure gateway availability is not disabled to imitate that fault.",
