@@ -1,0 +1,95 @@
+{
+  "issue": 98,
+  "lab": "disable-peering-route-propagation",
+  "commit": "efe260c688733dfc647bdb6cd0d2fccfd9c740e0",
+  "baseFixture": "issue-98-udr-archive.json",
+  "baseCase": "summary-only",
+  "exportFile": "simulator-topology-s4-hybrid.json",
+  "scope": "Later S4 three-hybrid configuration, SD-WAN static-origin BGP advertisements, MSEE Azure-prefix paths, ER gateway customer paths, selected NIC routes and VPN/SD-WAN asymmetric inspection. Not stateful firewall emulation.",
+  "consistency": "Dated scenario labels distinguish S1/S2/S4. V8-V10 agree with native BIRD, MSEE, ER gateway, NIC, ping/HTTP body and NVA counters. MSEE secondary has additional alternate paths; these are not mistaken for selected Azure paths. ER forwarding is inferred configuration only, not a captured packet test.",
+  "limitations": [
+    "Text captures lack full command/timestamp metadata and an atomic native configuration dump. Configuration intent comes from design/deploy plus matching NIC and BGP output.",
+    "S4 filenames start s3; the report explicitly identifies them as the later S4 cut. Earlier conntrack drops and successful S2 explicit-route workaround are not mixed into S4.",
+    "BIRD originates all eleven Azure /16s using static_azure. These are local NVA BGP origins, not routes learned from ARS; no ARS exists in this topology.",
+    "BIRD's default route listing reports the terminal AS65002i, not a full AS_PATH dump. The one-AS SD-WAN path follows the captured local static origins and eBGP sender; it is not counted as eleven independently measured complete AS paths.",
+    "Paired ER physical sessions collapse to logical links. Gateway native 172.18 paths retain 12076-65030; public gateway next-hop addresses, MCR interface /30s and extra MSEE secondary alternates are outside comparison.",
+    "The 172.18.1.0/30 MCR segment is retained because it appears on the selected NIC and gateway cuts. VPN LNG connected /32 is not modeled.",
+    "Native counters establish bypass direction, not packet timing, throughput, NAT or session enforcement. Only captured VPN/SD-WAN flows are validated; ER reachability/asymmetry is not independently packet-validated.",
+    "No preview peering suppression is enabled. No cloud/provider resources are queried, deployed or changed."
+  ],
+  "sourceBlobs": {
+    "validation.md": "caad9dd197dae1d711820fb204066c29372295dc",
+    "design.md": "9c35fd3de88968d97c5ef39b7379b5dd96b9faf5",
+    "deploy/deploy.ps1": "8ecf520adbb6d4ab2653b532b046502aced9d44e",
+    "show-output/s3-sdwan-hub-probe-status.txt": "eed4d9010a306242652b160685e1a60a096316b3",
+    "show-output/s3-sdwan-onprem-status.txt": "e002c545cc7cb34a80062e745c7cd87ac2c9b8b0",
+    "show-output/s3-er-circuit-routes-primary.txt": "35f81888ca2659f4bcc2de681a47ec09dbf5e36d",
+    "show-output/s3-er-circuit-routes-secondary.txt": "07011f5b1b68144a5b201c81416fef2cdea9ee3e",
+    "show-output/s3-ergw-learned-routes.txt": "b0e15ed5bf6fc891cc0884d333f5e1e3af0be1f9",
+    "show-output/s3-nic-vm-hub-probe-routes.txt": "a011dc8731b8d5e5532f9d8eda8761d5f8ea90f1",
+    "show-output/s3-nic-vm-spoke1-routes.txt": "4cae75d7d1c2e909d2d7ad2904fb5d16df62ef59",
+    "show-output/s3-nva-asymmetric-counters.txt": "e978debe586078e82d3a6cdb343cac67ccb746f0",
+    "show-output/s3-s2s-vpn-to-spoke1-test.txt": "084ad967c3cbec04bab4e0b944999d24d10217af",
+    "show-output/s3-sdwan-to-spoke1-test.txt": "819e2168b139db711288e3b402f41c5de290ce2d"
+  },
+  "azurePrefixes": ["10.0.0.0/16","10.1.0.0/16","10.2.0.0/16","10.3.0.0/16","10.4.0.0/16","10.5.0.0/16","10.6.0.0/16","10.7.0.0/16","10.8.0.0/16","10.9.0.0/16","10.10.0.0/16"],
+  "sdwanAsPath": [65002],
+  "mseeAsPath": [65515],
+  "erGatewayRoutes": [
+    { "prefix": "172.18.0.0/16", "asPath": [12076,65030] },
+    { "prefix": "172.18.1.0/30", "asPath": [12076,65030] }
+  ],
+  "probes": [
+    { "site": "onprem", "sourceIp": "172.16.1.4", "destinationIp": "10.1.1.4", "transmitted": 3, "received": 3, "forwardPackets": 0, "returnPackets": 8 },
+    { "site": "sdwan", "sourceIp": "172.17.1.4", "destinationIp": "10.1.1.4", "transmitted": 3, "received": 3, "forwardPackets": 0, "returnPackets": 8 }
+  ],
+  "hub": {
+    "id": "vnet-hub", "name": "vnet-hub", "role": "hub-vnet", "region": "swedencentral", "prefixes": ["10.0.0.0/16"],
+    "subnets": [
+      { "id": "gateway", "name": "GatewaySubnet", "prefix": "10.0.0.0/24", "routeTableId": "rt-gw" },
+      { "id": "nva", "name": "snet-nva", "prefix": "10.0.1.0/24", "routeTableId": "rt-nva" },
+      { "id": "probe", "name": "snet-hub-probe", "prefix": "10.0.2.0/24", "routeTableId": "rt-gw" }
+    ],
+    "gateways": [
+      { "id": "vpngw-hub", "name": "vpngw-hub", "kind": "Vpn", "asn": 65515, "enabled": true, "bgpEnabled": true },
+      { "id": "ergw-hub", "name": "ergw-hub", "kind": "ExpressRoute", "asn": 65515, "enabled": true, "bgpEnabled": true }
+    ],
+    "appliances": [
+      { "id": "vm-hub-nva", "name": "vm-hub-nva", "kind": "nva-vm", "subnetId": "nva", "privateIp": "10.0.1.4", "enableIpForwarding": true, "inspectsTraffic": true, "staticRoutes": [] },
+      { "id": "vm-hub-probe", "name": "vm-hub-probe SD-WAN", "kind": "nva-vm", "subnetId": "probe", "privateIp": "10.0.2.4", "asn": 65002, "bgpEnabled": true, "enableIpForwarding": true, "inspectsTraffic": false,
+        "advertisedPrefixes": ["10.0.0.0/16","10.1.0.0/16","10.2.0.0/16","10.3.0.0/16","10.4.0.0/16","10.5.0.0/16","10.6.0.0/16","10.7.0.0/16","10.8.0.0/16","10.9.0.0/16","10.10.0.0/16"], "staticRoutes": [] }
+    ]
+  },
+  "overlay": {
+    "name": "Archived S4 hybrid UDR asymmetry",
+    "subtitle": "Native SD-WAN/ER BGP and VPN/SD-WAN asymmetric firewall bypass; no conntrack emulation or ER packet claim.",
+    "udrTables": [
+      { "id": "rt-gw", "name": "rt-gw", "disableBgpRoutePropagation": false, "routes": [
+        { "id": "to-spokes-summary", "name": "to-spokes-summary", "prefix": "10.0.0.0/8", "nextHopType": "VirtualAppliance", "nextHopIp": "10.0.1.4", "enabled": true }
+      ] },
+      { "id": "rt-spoke1", "name": "rt-spoke1", "disableBgpRoutePropagation": true, "routes": [
+        { "id": "to-onprem", "name": "to-onprem", "prefix": "172.16.0.0/16", "nextHopType": "VirtualAppliance", "nextHopIp": "10.0.1.4", "enabled": true },
+        { "id": "to-spokes-summary-return", "name": "to-spokes-summary-return", "prefix": "10.0.0.0/8", "nextHopType": "VirtualAppliance", "nextHopIp": "10.0.1.4", "enabled": true },
+        { "id": "to-sdwan", "name": "to-sdwan", "prefix": "172.17.0.0/16", "nextHopType": "VirtualAppliance", "nextHopIp": "10.0.1.4", "enabled": true },
+        { "id": "to-er", "name": "to-er", "prefix": "172.18.0.0/16", "nextHopType": "VirtualAppliance", "nextHopIp": "10.0.1.4", "enabled": true }
+      ] },
+      { "id": "rt-nva", "name": "rt-nva", "disableBgpRoutePropagation": false, "routes": [
+        { "id": "to-sdwan-overlay", "name": "to-sdwan-overlay", "prefix": "172.17.0.0/16", "nextHopType": "VirtualAppliance", "nextHopIp": "10.0.2.4", "enabled": true }
+      ] }
+    ],
+    "sites": [
+      { "id": "onprem", "name": "VPN on-prem", "asn": 65010, "prefixes": ["172.16.0.0/16"] },
+      { "id": "sdwan", "name": "SD-WAN on-prem", "asn": 65020, "prefixes": ["172.17.0.0/16"] },
+      { "id": "mcr", "name": "MCR ER branch", "asn": 65030, "prefixes": ["172.18.0.0/16","172.18.1.0/30"] }
+    ],
+    "vpnConnections": [
+      { "id": "conn-hub-onprem", "name": "conn-hub-onprem", "siteId": "onprem", "targetKind": "vnet-gateway", "targetId": "vpngw-hub", "bgpEnabled": true, "enabled": true },
+      { "id": "sdwan-overlay", "name": "SD-WAN IPsec overlay", "siteId": "sdwan", "targetKind": "appliance", "targetId": "vm-hub-probe", "bgpEnabled": true, "enabled": true }
+    ],
+    "erLocations": [{ "id": "er", "name": "Stockholm", "peeringLocation": "Stockholm", "sku": "Standard" }],
+    "erLinks": [
+      { "id": "er-gw", "name": "ER gateway circuit", "locationId": "er", "targetKind": "vnet-gateway", "targetId": "ergw-hub", "enabled": true },
+      { "id": "er-mcr", "name": "MCR private peering", "locationId": "er", "targetKind": "site", "targetId": "mcr", "enabled": true }
+    ]
+  }
+}

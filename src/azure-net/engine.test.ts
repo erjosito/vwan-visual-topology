@@ -1451,6 +1451,73 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     }
   })
 
+  const s4Archive = JSON.parse(readFileSync(resolve('verification', 'issue-98-udr-s4-archive.json'), 'utf8')) as {
+    hub: AzNetTopology['vnets'][number]; overlay: Partial<AzNetTopology>; baseCase: string
+    azurePrefixes: string[]; sdwanAsPath: number[]; mseeAsPath: number[]
+    erGatewayRoutes: { prefix: string; asPath: number[] }[]
+    probes: { site: string; sourceIp: string; destinationIp: string; received: number; forwardPackets: number; returnPackets: number }[]
+  }
+  const s4Topology = () => {
+    const topology = structuredClone(udrArchive.cases.find((entry) => entry.id === s4Archive.baseCase)!.topology)
+    topology.vnets[0] = structuredClone(s4Archive.hub)
+    return Object.assign(topology, structuredClone(s4Archive.overlay))
+  }
+  it('matches recorded S4 SD-WAN local-origin, MSEE and ER gateway BGP paths', () => {
+    const topology = s4Topology()
+    expect(validateAzNetTopology(topology)).toEqual([])
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual(topology)
+    const result = simulateAzNet(topology)
+    for (const prefix of s4Archive.azurePrefixes) {
+      expect(result.siteRibs.sdwan.filter((route) => route.prefix === prefix && route.preferred))
+        .toEqual([expect.objectContaining({ prefix, asPath: s4Archive.sdwanAsPath })])
+      expect(result.erLocationRibs.er).toContainEqual(expect.objectContaining({ prefix, asPath: s4Archive.mseeAsPath, preferred: true }))
+    }
+    for (const observed of s4Archive.erGatewayRoutes) {
+      expect(result.gatewayRibs['ergw-hub']).toContainEqual(expect.objectContaining({ ...observed, preferred: true }))
+    }
+  })
+  it('matches recorded S4 NIC routes and retains summary-bypass LPM without preview suppression', () => {
+    const result = simulateAzNet(s4Topology())
+    for (const observed of udrArchive.cases[0].routes) {
+      expect(result.subnetTables.probe.routes).toContainEqual(expect.objectContaining({
+        prefix: observed.prefix, source: observed.nativeSource === 'Default' ? 'System' : observed.nativeSource,
+        active: observed.nativeState === 'Active', nextHopType: observed.nextHopType,
+        ...(observed.nextHopIp ? { nextHopIp: observed.nextHopIp } : {}),
+      }))
+    }
+    for (const prefix of ['172.16.0.0/16', ...s4Archive.erGatewayRoutes.map((route) => route.prefix)]) {
+      expect(result.subnetTables.probe.routes).toContainEqual(expect.objectContaining({ prefix, source: 'VirtualNetworkGateway', active: true, nextHopType: 'VirtualNetworkGateway' }))
+    }
+    expect(result.subnetTables.probe.routes).toContainEqual(expect.objectContaining({ prefix: '10.0.0.0/16', source: 'System', active: true, nextHopType: 'VnetLocal' }))
+    for (const route of [
+      { prefix: '10.1.0.0/16', source: 'System', nextHopType: 'VnetLocal' },
+      { prefix: '10.0.0.0/16', source: 'System', nextHopType: 'VNetPeering' },
+      { prefix: '10.0.0.0/8', source: 'User', nextHopType: 'VirtualAppliance', nextHopIp: '10.0.1.4' },
+    ]) expect(result.subnetTables.work1.routes).toContainEqual(expect.objectContaining({ ...route, active: true }))
+    for (const prefix of ['172.16.0.0/16', '172.17.0.0/16', '172.18.0.0/16']) {
+      expect(lookupSubnetEffectiveRoute(result.subnetTables.work1, prefix.replace('0.0/16', '1.4'))).toMatchObject({ prefix, source: 'User', nextHopIp: '10.0.1.4' })
+    }
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.probe, '10.1.1.4')).toMatchObject({ prefix: '10.1.0.0/16', source: 'System', nextHopType: 'VNetPeering' })
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.nva, '172.17.1.4')).toMatchObject({ prefix: '172.17.0.0/16', source: 'User', nextHopIp: '10.0.2.4' })
+  })
+  it.each(s4Archive.probes)('detects recorded S4 asymmetric inspection without emulating conntrack: $site', (probe) => {
+    const topology = s4Topology()
+    const pair = traceAzNetPair(topology, simulateAzNet(topology), { kind: 'site', siteId: probe.site }, probe.sourceIp,
+      { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'work1' }, probe.destinationIp)
+    expect(pair.forward.status).toBe('delivered')
+    expect(pair.reverse.status).toBe('delivered')
+    expect(pair.forward.traversedApplianceIds).not.toContain('vm-hub-nva')
+    expect(pair.reverse.traversedApplianceIds).toContain('vm-hub-nva')
+    expect(pair.symmetricInspection).toBe(false)
+    expect(pair.asymmetricBypassApplianceNames).toContain('vm-hub-nva (vnet-hub)')
+    if (probe.site === 'sdwan') {
+      topology.vpnConnections.find((connection) => connection.id === 'sdwan-overlay')!.enabled = false
+      const disabled = traceAzNetPair(topology, simulateAzNet(topology), { kind: 'site', siteId: probe.site }, probe.sourceIp,
+        { kind: 'subnet', vnetId: 'vnet-spoke1', subnetId: 'work1' }, probe.destinationIp)
+      expect(disabled.reverse.status).toBe('dropped-no-route')
+    }
+  })
+
   const hublessArchive = JSON.parse(readFileSync(resolve('verification', 'issue-98-ars-hubless-archive.json'), 'utf8')) as {
     topology: AzNetTopology
     learned: { peerId: string; prefix: string; asPath: number[] }[]

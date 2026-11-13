@@ -928,7 +928,14 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         const ownerVnet = topology.vnets.find((vnet) => vnet.appliances.some((app) => app.id === conn.targetId))
         const app = ownerVnet?.appliances.find((app) => app.id === conn.targetId && app.bgpEnabled && app.enableIpForwarding)
         if (!ownerVnet || !app) continue
-        const received = advertisedVnetPrefixes(ownerVnet, `nva:${app.id}`).map((adv): AzBgpRibEntry => ({
+        const originated = (app.advertisedPrefixes ?? []).map((prefix): VnetAdvertisement => {
+          const attributes = app.advertisedRouteAttributes?.find((route) => route.prefix === prefix)
+          return { prefix, asPath: attributes?.asPath ?? [], communities: attributes?.communities, sourceName: app.name }
+        })
+        const received = [
+          ...originated,
+          ...advertisedVnetPrefixes(ownerVnet, `nva:${app.id}`).filter((route) => !originated.some((origin) => origin.prefix === route.prefix)),
+        ].map((adv): AzBgpRibEntry => ({
           id: `site:${site.id}:nva:${conn.id}:${adv.prefix}`, connectionId: conn.id,
           prefix: adv.prefix, asPath: [...(conn.outboundPrepend ?? []), app.asn ?? 65501, ...adv.asPath],
           nextHopName: `${app.name} (${conn.name})`, nextHopKind: 'appliance', nextHopId: app.id,
@@ -2529,6 +2536,20 @@ export function traceAzNetFlow(
           }
         : undefined
       const nextRoute = filteredAppTable ? lookupSubnetEffectiveRoute(filteredAppTable, destinationIp) : undefined
+      if (nextRoute?.nextHopType === 'VirtualAppliance') {
+        const target = findApplianceByIp(topology, nextRoute.nextHopIp)
+        const transition = target && target.vnet.id !== vnet.id
+          ? validatePeeringTransition(vnet, target.vnet, true, app.kind === 'vnra' || target.appliance.kind === 'vnra') : undefined
+        if (target && (!transition || transition.ok)) {
+          pushHop({
+            nodeKind: 'appliance', nodeId: app.id, vnetId: vnet.id, nodeName: app.name, subnetId: app.subnetId,
+            action: actionKind, matchedRoute: nextRoute, edgeId: transition?.ok ? transition.peering.id : undefined,
+            detail: `${app.name} forwards using subnet route ${nextRoute.prefix} to ${target.appliance.name} (${target.appliance.privateIp})`,
+          })
+          cursor = { kind: 'appliance', vnetId: target.vnet.id, applianceId: target.appliance.id }
+          continue
+        }
+      }
       if (nextRoute?.nextHopType === 'VirtualNetworkGateway' && nextRoute.nextHopResourceId) {
         const gw = vnet.gateways.find((g) => g.id === nextRoute.nextHopResourceId)
         if (gw) {

@@ -1,7 +1,62 @@
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { expect, test } from '@playwright/test'
 import type { AzNetTopology } from '../src/azure-net/model'
+
+test('recorded S4 hybrid BGP origins, asymmetric inspection and native round-trip', async ({ page }, testInfo) => {
+  const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-udr-s4-archive.json'), 'utf8')) as {
+    hub: AzNetTopology['vnets'][number]; overlay: Partial<AzNetTopology>; baseCase: string; baseFixture: string; exportFile: string
+    azurePrefixes: string[]; sdwanAsPath: number[]; mseeAsPath: number[]
+    erGatewayRoutes: { prefix: string; asPath: number[] }[]
+    probes: { site: string; destinationIp: string }[]
+  }
+  const base = JSON.parse(await readFile(resolve('verification', archive.baseFixture), 'utf8')) as { cases: { id: string; topology: AzNetTopology }[] }
+  const topology = structuredClone(base.cases.find((entry) => entry.id === archive.baseCase)!.topology)
+  topology.vnets[0] = structuredClone(archive.hub)
+  Object.assign(topology, archive.overlay)
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/?mode=full')
+  const importFile = page.locator('input[type="file"]').first()
+  await importFile.setInputFiles({ name: archive.exportFile, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)) })
+  for (const [node, menu, observations] of [
+    ['aznet-site-sdwan', 'Inspect Site BGP Route Table', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.sdwanAsPath }))],
+    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP RIB', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.mseeAsPath }))],
+    ['aznet-chip-ergw-hub', 'Inspect Gateway BGP RIB', archive.erGatewayRoutes],
+  ] as const) {
+    await page.getByTestId(node).focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: menu, exact: true }).click()
+    for (const observed of observations) {
+      await expect(page.getByTestId('aznet-control-rib-card').locator(`tr[data-prefix="${observed.prefix}"] .as-path`)).toHaveText(observed.asPath.join(' '))
+    }
+    await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+  }
+  await page.getByTestId('aznet-subnet-work1').focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
+  for (const probe of archive.probes) {
+    await page.getByTestId('aznet-trace-source-select').selectOption(`site:${probe.site}:${probe.site === 'onprem' ? '172.16.0.0/16' : '172.17.0.0/16'}`)
+    await page.getByTestId('aznet-trace-dest-select').selectOption('subnet:vnet-spoke1:work1')
+    await page.getByTestId('aznet-trace-custom-ip').fill(probe.destinationIp)
+    await page.getByTestId('aznet-run-trace-btn').click()
+    await expect(page.getByTestId('aznet-symmetry-verdict')).toContainText('Asymmetric Firewall Bypass Detected')
+    await expect(page.getByTestId('aznet-forward-hops').locator('.delivered')).toHaveCount(1)
+    await expect(page.getByTestId('aznet-reverse-hops').locator('.delivered')).toHaveCount(1)
+    await expect(page.getByTestId('aznet-forward-hops')).not.toContainText('vm-hub-nva')
+    await expect(page.getByTestId('aznet-reverse-hops')).toContainText('vm-hub-nva')
+  }
+  await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+  const downloadPromise = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Export JSON/ }).click()
+  const exported = JSON.parse(await readFile((await (await downloadPromise).path())!, 'utf8'))
+  expect(exported).toEqual(topology)
+  await writeFile(testInfo.outputPath(archive.exportFile), JSON.stringify(exported, null, 2) + '\n')
+  await importFile.setInputFiles({ name: 'round-trip.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) })
+  await page.reload()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(exported)
+  expect(errors).toEqual([])
+})
 
 for (const id of ['access-disabled', 'access-corrected']) {
   test(`recorded VNRA archive imports, distinguishes route visibility from forwarding and round-trips: ${id}`, async ({ page }) => {

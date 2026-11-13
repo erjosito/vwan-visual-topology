@@ -28,7 +28,7 @@ apparently usable rows from the inconsistent lab.
 | [disable-peering-route-propagation](https://github.com/erjosito/net-lab-builder/tree/main/labs/disable-peering-route-propagation): S1 summary-only NIC cut | H&S; [fixture](issue-98-udr-archive.json), 11 hub-probe route facts plus three spoke next-hop dependency facts | **PASS** for selected effective routes; `simulator-topology.json`. Ten active peering `/16`s beat `/8` by LPM. |
 | Same UDR lab: S2 explicit-spoke workaround NIC cut | H&S; 21 hub-probe route facts | **PASS** for selected effective routes; `simulator-topology-explicit-spokes.json`. Ten User `/16`s override equal-prefix peering routes, which remain visible as Invalid. |
 | Same UDR lab: actual preview suppression | Failed feature-update output and Pending/ApprovalRequired registration | **BLOCKED (historical Azure feature gate)**. No enabled-preview export or positive Azure-validation claim. |
-| Same UDR lab: later S4 ER/VPN/SD-WAN and stateful packet behavior | Separate captures, not the S1/S2 route cuts | **NOT VALIDATED in this batch**. Conntrack enforcement is outside the simulator; later applicable routing/BGP evidence remains queued. |
+| Same UDR lab: later S4 three-hybrid routing/BGP and VPN/SD-WAN asymmetry | Full Hybrid; [fixture](issue-98-udr-s4-archive.json), source Git blobs pinned to `efe260c688733dfc647bdb6cd0d2fccfd9c740e0`; 21 selected NIC rows, 11 SD-WAN prefixes/terminal ASNs, 11 exact MSEE prefix/paths and two ER gateway prefix/paths; native two-way probes and directional NVA counters | **PASS after static-origin overlay and subnet-UDR NVA chaining fixes**. `simulator-topology-s4-hybrid.json`. Both VPN/SD-WAN forward paths bypass the firewall and return paths traverse it; asymmetric inspection is detected without conntrack enforcement. SD-WAN's full one-AS path is reconstructed from captured static origins/sender, not a full native AS_PATH dump. Paired physical ER paths collapse to logical links; ER packet forwarding, timing and stateful drops are not asserted. |
 
 ## Reproducible checks
 
@@ -71,8 +71,9 @@ were created, queried or modified for this batch.
 
 ## Queue
 
-Only the uncompleted S4 hybrid cut remains in the selected sequential audit queue,
-with admission/evidence gates in [#98](https://github.com/erjosito/vwan-visual-topology/issues/98).
+All selected sequential labs/cuts have now received an admission audit and bounded
+replay or explicit excluded/blocked disposition. Current batch publication and
+exact-revision production checks are tracked in [#98](https://github.com/erjosito/vwan-visual-topology/issues/98).
 The three excluded labs above require evidence/report reconciliation before re-admission.
 The dual-ER C1 exact-path cut additionally requires the missing intermediate rewrite evidence.
 The VNRA negative/positive pair and UDR LPM pair are educational sample candidates;
