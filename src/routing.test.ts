@@ -892,6 +892,36 @@ describe('recorded dual ER C2 advertisements', () => {
   })
 })
 
+describe('recorded three hub frozen firewall RIBs', () => {
+  const archive = JSON.parse(readFileSync(resolve('verification', 'issue-98-three-hub-archive.json'), 'utf8')) as {
+    topology: Topology
+    expected: { hub: string; prefix: string; asPath: number[]; connectionId: string; remote: boolean }[]
+    seedOverrides: { hub: string; prefix: string; asPath: number[]; connectionId: string; remote: boolean }[]
+    cases: { id: string; preference: Hub['preference']; overrides?: Partial<Topology>; expected?: typeof archive.expected;
+      siteExports?: { site: string; connectionId: string; prefixes: string[] }[] }[]
+  }
+  it.each(archive.cases)('matches all twelve frozen DC-prefix firewall winners: $id', (entry) => {
+    const topology = structuredClone(archive.topology)
+    Object.assign(topology, structuredClone(entry.overrides ?? {}))
+    for (const hub of topology.hubs) hub.preference = entry.preference
+    const admitted = validateTopology(topology)
+    expect(validateTopology(JSON.parse(JSON.stringify(admitted)))).toEqual(admitted)
+    const simulation = simulate(admitted)
+    expect(simulation.converged).toBe(true)
+    for (const exported of entry.siteExports ?? []) {
+      const peer = neighborRoutes(admitted, simulation, { kind: 'site', id: `router-${exported.site}` }, 'advertised')
+        .find((peer) => peer.id === exported.connectionId)!
+      expect(peer.after.map((route) => route.prefix).filter((prefix) => archive.expected.some((row) => row.prefix === prefix)).sort())
+        .toEqual([...exported.prefixes].sort())
+    }
+    for (const common of archive.expected) {
+      const expected = (entry.expected ?? (entry.id === 'aspath-seed' ? archive.seedOverrides : [])).find((row) => row.hub === common.hub && row.prefix === common.prefix) ?? common
+      expect(simulation.firewallTables[expected.hub].find((row) => row.prefix === expected.prefix)!.selected)
+        .toEqual([expect.objectContaining({ prefix: expected.prefix, asPath: expected.asPath, connectionId: expected.connectionId, remote: expected.remote })])
+    }
+  })
+})
+
 describe('topology and input validation', () => {
   it('accepts zero, one, or multiple site prefixes up to 30 and preserves role without mutating input', () => {
     const topology = structuredClone(example)

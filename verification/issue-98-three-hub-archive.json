@@ -1,0 +1,178 @@
+{
+  "issue": 98,
+  "lab": "vwan-sdwan-three-hub",
+  "commit": "efe260c688733dfc647bdb6cd0d2fccfd9c740e0",
+  "scope": "Four DC prefixes in three hub firewall RIBs: frozen A and B2 policies, ASPath seed, then four consistent completed BGP-only-reset controls. Observation is prefix/path/local-vs-remote attachment, not workload-prefix selection, packets, history or reset causality.",
+  "consistency": "Root README and dated reset summary explicitly distinguish old forwarding failures, unsuccessful VPN attempt, corrected Japan workload, complete resets and both establishment orders. Selected report rows agree with matching native firewall samples.",
+  "report": "labs/vwan-sdwan-three-hub/show-output/hrp-reset-summary-20261019/README.md",
+  "baseDirectory": "labs/vwan-sdwan-three-hub/show-output",
+  "scenarioSha256": {
+    "policy-a": "7486385c0e681a300df5c9208bc0d21c41a5bf888a0374368cd79db396e51bfb",
+    "policy-b2": "88f27aad4124adebb6dd9e0ee680c1407b2ed1897515a0237d36ac0abbf2fe6c",
+    "aspath-seed": "5a75c944732fbbce8f3bf6febfce77832e5f5eec97c722f298b44970ade5be22",
+    "er-japan-first": "662b3f1514e0048f787f8e61cf1c251588143ecfa44978b1767f4eb15752e3cf",
+    "er-nva-first": "2091cc22f2020161979aa96da2c12397d44191ca9dc1610be458163f458987b9",
+    "vpn-japan-first": "2c3e2fcbdddc549005ac4dce0ae9748e428d3e48440ae9aa0ea1887dd1195eec",
+    "vpn-nva-first": "0323b548b4f540bd7f57136ddf9a65848fc097a51c73422e5db9a5012c6bd5eb"
+  },
+  "exclusions": [
+    "No HRP-only history-dependent state is relabeled as the nominal converged result for identical input. No BIRD/session/reset/timer simulation or universal recovery claim.",
+    "No packet/forwarding replay: Japan's three-workload UDR is material to the recorded 24/24 outcome but is outside this VWAN control-plane cut. Neither 24/24 nor the older 18/24 is asserted from this reconstruction.",
+    "Workload Azure-prefix imports use local preference 300 and community/protocol predicates outside this DC-only cut. A's foreign-DC Azure import preference 400 is retained; no workload-prefix winner is asserted.",
+    "Two Azure-facing peer instances collapse to one logical connection. Each mesh sender exports only its own DC prefix, as in mesh_export. In A, source outbound AS-path rejection of 65515/65520 represents azure_export's own_dc/mesh-only predicate within this DC-only cut; it is not a general BIRD protocol/community evaluator. Source nonlocal prepends and preference 400 are retained where configured.",
+    "WAN branch-to-branch is enabled; per-hub native branch flags are all enabled. No equivalence between the two controls is inferred.",
+    "Both reset establishment orders repeat the same static input and winners. Repeated route tuples are corroboration, not extra distinct observations."
+  ],
+  "expected": [
+    { "hub": "eu", "prefix": "10.110.0.0/24", "asPath": [65011], "connectionId": "cx-eu", "remote": false },
+    { "hub": "eu", "prefix": "10.120.0.0/24", "asPath": [65011,65011,65011,65011,65012], "connectionId": "cx-eu", "remote": false },
+    { "hub": "eu", "prefix": "10.130.0.0/24", "asPath": [65011,65011,65011,65011,65013], "connectionId": "cx-eu", "remote": false },
+    { "hub": "eu", "prefix": "10.140.0.0/24", "asPath": [65011,65011,65011,65011,65014], "connectionId": "cx-eu", "remote": false },
+    { "hub": "us", "prefix": "10.110.0.0/24", "asPath": [65012,65012,65012,65012,65011], "connectionId": "cx-us", "remote": false },
+    { "hub": "us", "prefix": "10.120.0.0/24", "asPath": [65012], "connectionId": "cx-us", "remote": false },
+    { "hub": "us", "prefix": "10.130.0.0/24", "asPath": [65012,65012,65012,65012,65013], "connectionId": "cx-us", "remote": false },
+    { "hub": "us", "prefix": "10.140.0.0/24", "asPath": [65012,65012,65012,65012,65014], "connectionId": "cx-us", "remote": false },
+    { "hub": "jp", "prefix": "10.110.0.0/24", "asPath": [65013,65011], "connectionId": "cx-jp", "remote": false },
+    { "hub": "jp", "prefix": "10.120.0.0/24", "asPath": [65013,65012], "connectionId": "cx-jp", "remote": false },
+    { "hub": "jp", "prefix": "10.130.0.0/24", "asPath": [65013], "connectionId": "cx-jp", "remote": false },
+    { "hub": "jp", "prefix": "10.140.0.0/24", "asPath": [65013,65014], "connectionId": "cx-jp", "remote": false }
+  ],
+  "seedOverrides": [
+    { "hub": "eu", "prefix": "10.120.0.0/24", "asPath": [65520,65520,65012], "connectionId": "cx-us", "remote": true },
+    { "hub": "eu", "prefix": "10.130.0.0/24", "asPath": [65520,65520,65013], "connectionId": "cx-jp", "remote": true },
+    { "hub": "eu", "prefix": "10.140.0.0/24", "asPath": [65520,65520,65013,65014], "connectionId": "cx-jp", "remote": true },
+    { "hub": "us", "prefix": "10.110.0.0/24", "asPath": [65520,65520,65011], "connectionId": "cx-eu", "remote": true },
+    { "hub": "us", "prefix": "10.130.0.0/24", "asPath": [65520,65520,65013], "connectionId": "cx-jp", "remote": true },
+    { "hub": "us", "prefix": "10.140.0.0/24", "asPath": [65520,65520,65013,65014], "connectionId": "cx-jp", "remote": true }
+  ],
+  "cases": [
+    { "id": "policy-a", "preference": "ASPath", "directory": "b2b-A-20261017/A-workload-UDR", "samplePrefix": "A-workload-UDR", "exportFile": "simulator-topology-policy-a.json",
+      "siteExports": [
+        { "site": "eu", "connectionId": "cx-eu", "prefixes": ["10.110.0.0/24","10.140.0.0/24"] },
+        { "site": "us", "connectionId": "cx-us", "prefixes": ["10.120.0.0/24","10.140.0.0/24"] },
+        { "site": "jp", "connectionId": "cx-jp", "prefixes": ["10.130.0.0/24","10.140.0.0/24"] }
+      ],
+      "expected": [
+        { "hub": "eu", "prefix": "10.120.0.0/24", "asPath": [65520,65520,65012], "connectionId": "cx-us", "remote": true },
+        { "hub": "eu", "prefix": "10.130.0.0/24", "asPath": [65520,65520,65013], "connectionId": "cx-jp", "remote": true },
+        { "hub": "us", "prefix": "10.110.0.0/24", "asPath": [65520,65520,65011], "connectionId": "cx-eu", "remote": true },
+        { "hub": "us", "prefix": "10.130.0.0/24", "asPath": [65520,65520,65013], "connectionId": "cx-jp", "remote": true },
+        { "hub": "jp", "prefix": "10.110.0.0/24", "asPath": [65520,65520,65011], "connectionId": "cx-eu", "remote": true },
+        { "hub": "jp", "prefix": "10.120.0.0/24", "asPath": [65520,65520,65012], "connectionId": "cx-us", "remote": true },
+        { "hub": "jp", "prefix": "10.140.0.0/24", "asPath": [65013,65013,65013,65013,65014], "connectionId": "cx-jp", "remote": false }
+      ],
+      "overrides": {
+        "sites": [
+          { "id": "router-eu", "name": "router-eu", "asn": 65011, "prefixes": ["10.110.0.0/24"], "role": "spoke-nva", "routeMapAssignments": [{ "connectionId": "cx-eu", "outboundMapId": "eu-export", "inboundMapId": "eu-import" }] },
+          { "id": "router-us", "name": "router-us", "asn": 65012, "prefixes": ["10.120.0.0/24"], "role": "spoke-nva", "routeMapAssignments": [{ "connectionId": "cx-us", "outboundMapId": "us-export", "inboundMapId": "us-import" }] },
+          { "id": "router-jp", "name": "router-jp", "asn": 65013, "prefixes": ["10.130.0.0/24"], "routeMapAssignments": [{ "connectionId": "cx-jp", "outboundMapId": "jp-export", "inboundMapId": "jp-import" }] },
+          { "id": "router-cn", "name": "router-cn", "asn": 65014, "prefixes": ["10.140.0.0/24"] }
+        ],
+        "routeMaps": [
+          { "id": "eu-export", "name": "EU nonlocal DC source prepend", "siteId": "router-eu", "rules": [
+            { "id": "eu-no-azure", "prefixes": [], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate", "matchConditions": [{ "property": "asPath", "match": "contains", "values": ["65515","65520"] }] },
+            { "id": "eu-prepend", "prefixes": ["10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "prepend", "summaryPrefixes": [], "prepend": [65011,65011,65011], "nextStep": "terminate" }
+          ] },
+          { "id": "us-export", "name": "US nonlocal DC source prepend", "siteId": "router-us", "rules": [
+            { "id": "us-no-azure", "prefixes": [], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate", "matchConditions": [{ "property": "asPath", "match": "contains", "values": ["65515","65520"] }] },
+            { "id": "us-prepend", "prefixes": ["10.110.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "prepend", "summaryPrefixes": [], "prepend": [65012,65012,65012], "nextStep": "terminate" }
+          ] },
+          { "id": "jp-export", "name": "JP nonlocal DC source prepend", "siteId": "router-jp", "rules": [
+            { "id": "jp-no-azure", "prefixes": [], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate", "matchConditions": [{ "property": "asPath", "match": "contains", "values": ["65515","65520"] }] },
+            { "id": "jp-prepend", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.140.0.0/24"], "match": "equals", "action": "prepend", "summaryPrefixes": [], "prepend": [65013,65013,65013], "nextStep": "terminate" }
+          ] },
+          { "id": "eu-import", "name": "EU prefer Azure foreign DC", "siteId": "router-eu", "rules": [
+            { "id": "eu-prefer", "prefixes": ["10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "permit", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate", "localPreference": 400 }
+          ] },
+          { "id": "us-import", "name": "US prefer Azure foreign DC", "siteId": "router-us", "rules": [
+            { "id": "us-prefer", "prefixes": ["10.110.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "permit", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate", "localPreference": 400 }
+          ] },
+          { "id": "jp-import", "name": "JP prefer Azure foreign DC", "siteId": "router-jp", "rules": [
+            { "id": "jp-prefer", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.140.0.0/24"], "match": "equals", "action": "permit", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate", "localPreference": 400 }
+          ] }
+        ]
+      }
+    },
+    { "id": "policy-b2", "preference": "ASPath", "directory": "b2b-B2-20261017/B2", "samplePrefix": "B2", "exportFile": "simulator-topology-policy-b2.json",
+      "expected": [
+        { "hub": "eu", "prefix": "10.120.0.0/24", "asPath": [65011,65012], "connectionId": "cx-eu", "remote": false },
+        { "hub": "eu", "prefix": "10.130.0.0/24", "asPath": [65011,65013], "connectionId": "cx-eu", "remote": false },
+        { "hub": "eu", "prefix": "10.140.0.0/24", "asPath": [65011,65014], "connectionId": "cx-eu", "remote": false },
+        { "hub": "us", "prefix": "10.110.0.0/24", "asPath": [65012,65011], "connectionId": "cx-us", "remote": false },
+        { "hub": "us", "prefix": "10.130.0.0/24", "asPath": [65012,65013], "connectionId": "cx-us", "remote": false },
+        { "hub": "us", "prefix": "10.140.0.0/24", "asPath": [65012,65014], "connectionId": "cx-us", "remote": false }
+      ],
+      "overrides": { "routeMaps": [
+        { "id": "eu-export", "name": "EU DC export without extra prepend", "siteId": "router-eu", "rules": [] },
+        { "id": "us-export", "name": "US DC export without extra prepend", "siteId": "router-us", "rules": [] },
+        { "id": "eu-import", "name": "EU reject Azure DC imports", "siteId": "router-eu", "rules": [
+          { "id": "eu-block-dc", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate" }
+        ] },
+        { "id": "us-import", "name": "US reject Azure DC imports", "siteId": "router-us", "rules": [
+          { "id": "us-block-dc", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate" }
+        ] },
+        { "id": "jp-import", "name": "JP reject Azure DC imports", "siteId": "router-jp", "rules": [
+          { "id": "jp-block-dc", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate" }
+        ] }
+      ] }
+    },
+    { "id": "aspath-seed", "preference": "ASPath", "directory": "hrp-reset-expressroute-japan-first-20261019/ASPath-seed", "samplePrefix": "ASPath-seed", "exportFile": "simulator-topology-aspath-seed.json" },
+    { "id": "er-japan-first", "preference": "ExpressRoute", "directory": "hrp-reset-expressroute-japan-first-20261019/after-reset", "samplePrefix": "after-reset", "exportFile": "simulator-topology-er-japan-first.json" },
+    { "id": "er-nva-first", "preference": "ExpressRoute", "directory": "hrp-reset-expressroute-nva-first-20261019/after-reset", "samplePrefix": "after-reset", "exportFile": "simulator-topology-er-nva-first.json" },
+    { "id": "vpn-japan-first", "preference": "VPN", "directory": "hrp-reset-vpngateway-japan-first-retry-20261019/after-reset", "samplePrefix": "after-reset", "exportFile": "simulator-topology-vpn-japan-first.json" },
+    { "id": "vpn-nva-first", "preference": "VPN", "directory": "hrp-reset-vpngateway-nva-first-20261019/after-reset", "samplePrefix": "after-reset", "exportFile": "simulator-topology-vpn-nva-first.json" }
+  ],
+  "topology": {
+    "version": 1,
+    "name": "Archived three-hub DC firewall control plane (not forwarding)",
+    "allowBranchToBranchTraffic": true,
+    "hubs": [
+      { "id": "eu", "name": "hub-eu", "region": "westeurope", "preference": "ExpressRoute", "routingIntent": { "private": true, "internet": false, "privatePrefixes": [] } },
+      { "id": "us", "name": "hub-us", "region": "northcentralus", "preference": "ExpressRoute", "routingIntent": { "private": true, "internet": false, "privatePrefixes": [] } },
+      { "id": "jp", "name": "hub-jp", "region": "japaneast", "preference": "ExpressRoute", "routingIntent": { "private": true, "internet": false, "privatePrefixes": [] } }
+    ],
+    "sites": [
+      { "id": "router-eu", "name": "router-eu", "asn": 65011, "prefixes": ["10.110.0.0/24"], "role": "spoke-nva", "routeMapAssignments": [{ "connectionId": "cx-eu", "outboundMapId": "eu-export", "inboundMapId": "eu-import" }] },
+      { "id": "router-us", "name": "router-us", "asn": 65012, "prefixes": ["10.120.0.0/24"], "role": "spoke-nva", "routeMapAssignments": [{ "connectionId": "cx-us", "outboundMapId": "us-export", "inboundMapId": "us-import" }] },
+      { "id": "router-jp", "name": "router-jp", "asn": 65013, "prefixes": ["10.130.0.0/24"], "routeMapAssignments": [{ "connectionId": "cx-jp", "inboundMapId": "jp-import" }] },
+      { "id": "router-cn", "name": "router-cn", "asn": 65014, "prefixes": ["10.140.0.0/24"] }
+    ],
+    "spokes": [
+      { "id": "work-eu", "name": "spoke-eu", "hubId": "eu", "prefixes": ["10.10.0.0/24"] },
+      { "id": "work-us", "name": "spoke-us", "hubId": "us", "prefixes": ["10.20.0.0/24"] },
+      { "id": "work-jp", "name": "spoke-jp", "hubId": "jp", "prefixes": ["10.30.0.0/24"] },
+      { "id": "nva-eu", "name": "NVA host EU", "hubId": "eu", "prefixes": ["10.210.0.0/24"] },
+      { "id": "nva-us", "name": "NVA host US", "hubId": "us", "prefixes": ["10.220.0.0/24"] }
+    ],
+    "connections": [
+      { "id": "cx-eu", "name": "EU spoke NVA BGP", "hubId": "eu", "siteId": "router-eu", "transport": "SpokeNVA", "spokeId": "nva-eu", "peerIp": "10.210.0.4", "enabled": true, "learnSiteRoutes": true, "inbound": [], "outbound": [] },
+      { "id": "cx-us", "name": "US spoke NVA BGP", "hubId": "us", "siteId": "router-us", "transport": "SpokeNVA", "spokeId": "nva-us", "peerIp": "10.220.0.4", "enabled": true, "learnSiteRoutes": true, "inbound": [], "outbound": [] },
+      { "id": "cx-jp", "name": "Japan S2S VPN", "hubId": "jp", "siteId": "router-jp", "transport": "VPN", "enabled": true, "learnSiteRoutes": true, "inbound": [], "outbound": [] }
+    ],
+    "siteLinks": [
+      { "id": "eu-us", "name": "EU-US mesh", "a": "router-eu", "b": "router-us", "enabled": true, "aToB": { "prefixes": ["10.110.0.0/24"], "prepend": [] }, "bToA": { "prefixes": ["10.120.0.0/24"], "prepend": [] } },
+      { "id": "eu-jp", "name": "EU-JP mesh", "a": "router-eu", "b": "router-jp", "enabled": true, "aToB": { "prefixes": ["10.110.0.0/24"], "prepend": [] }, "bToA": { "prefixes": ["10.130.0.0/24"], "prepend": [] } },
+      { "id": "eu-cn", "name": "EU-CN mesh", "a": "router-eu", "b": "router-cn", "enabled": true, "aToB": { "prefixes": ["10.110.0.0/24"], "prepend": [] }, "bToA": { "prefixes": ["10.140.0.0/24"], "prepend": [] } },
+      { "id": "us-jp", "name": "US-JP mesh", "a": "router-us", "b": "router-jp", "enabled": true, "aToB": { "prefixes": ["10.120.0.0/24"], "prepend": [] }, "bToA": { "prefixes": ["10.130.0.0/24"], "prepend": [] } },
+      { "id": "us-cn", "name": "US-CN mesh", "a": "router-us", "b": "router-cn", "enabled": true, "aToB": { "prefixes": ["10.120.0.0/24"], "prepend": [] }, "bToA": { "prefixes": ["10.140.0.0/24"], "prepend": [] } },
+      { "id": "jp-cn", "name": "JP-CN mesh", "a": "router-jp", "b": "router-cn", "enabled": true, "aToB": { "prefixes": ["10.130.0.0/24"], "prepend": [] }, "bToA": { "prefixes": ["10.140.0.0/24"], "prepend": [] } }
+    ],
+    "routeMaps": [
+      { "id": "eu-export", "name": "EU nonlocal DC source prepend", "siteId": "router-eu", "rules": [
+        { "id": "eu-prepend", "prefixes": ["10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "prepend", "summaryPrefixes": [], "prepend": [65011,65011,65011], "nextStep": "terminate" }
+      ] },
+      { "id": "us-export", "name": "US nonlocal DC source prepend", "siteId": "router-us", "rules": [
+        { "id": "us-prepend", "prefixes": ["10.110.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "prepend", "summaryPrefixes": [], "prepend": [65012,65012,65012], "nextStep": "terminate" }
+      ] },
+      { "id": "eu-import", "name": "EU reject Azure DC imports", "siteId": "router-eu", "rules": [
+        { "id": "eu-block-dc", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate" }
+      ] },
+      { "id": "us-import", "name": "US reject Azure DC imports", "siteId": "router-us", "rules": [
+        { "id": "us-block-dc", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate" }
+      ] },
+      { "id": "jp-import", "name": "JP reject Azure DC imports", "siteId": "router-jp", "rules": [
+        { "id": "jp-block-dc", "prefixes": ["10.110.0.0/24","10.120.0.0/24","10.130.0.0/24","10.140.0.0/24"], "match": "equals", "action": "drop", "summaryPrefixes": [], "prepend": [], "nextStep": "terminate" }
+      ] }
+    ]
+  }
+}

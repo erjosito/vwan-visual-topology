@@ -9,8 +9,8 @@ import { AdvancedRouteMapFields } from './AdvancedRouteMapFields'
 
 const prefixes = (text: string) => text.trim() === '*' ? [] : text.split(/[,\s]+/).filter(Boolean)
 
-export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asPathMatching = false }: {
-  map: RouteMap; onSave: (map: RouteMap) => void; parsePrepend?: (value: string) => number[]; advanced?: boolean; asPathMatching?: boolean
+export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asPathMatching = false, siteLocalPreference = false }: {
+  map: RouteMap; onSave: (map: RouteMap) => void; parsePrepend?: (value: string) => number[]; advanced?: boolean; asPathMatching?: boolean; siteLocalPreference?: boolean
 }) {
   const [rules, setRules] = useState(() => advanced || asPathMatching ? map.rules.map((rule) => ({
     ...rule,
@@ -30,6 +30,7 @@ export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asP
           action: r.action, summaryPrefixes: r.action === 'summarize' ? prefixes(text(`${r.id}-summary`)) : [],
           prepend: r.action === 'prepend' ? (parsePrepend ?? (map.hubId ? parseHubPrependAsPath : parseAsPath))(text(`${r.id}-prepend`)) : [],
           nextStep: text(`${r.id}-next`) as RouteMapRule['nextStep'],
+          ...(siteLocalPreference && map.siteId && r.action !== 'drop' && text(`${r.id}-local-preference`) !== '' ? { localPreference: Number(text(`${r.id}-local-preference`)) } : {}),
           ...((advanced || asPathMatching) && r.matchConditions?.length ? { matchConditions: r.matchConditions.map((condition, index) => ({ ...condition, values: text(`${r.id}-condition-${index}`).split(/[,\s]+/).filter(Boolean) })) } : {}),
           ...(advanced && r.action !== 'drop' && r.modifications?.length ? { modifications: r.modifications.map((modification, index) => ({ ...modification, values: text(`${r.id}-modification-${index}`).split(/[,\s]+/).filter(Boolean) })) } : {}),
         })),
@@ -50,6 +51,7 @@ export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asP
           {' '}<a href="https://www.iana.org/assignments/iana-as-numbers-special-registry/" target="_blank" rel="noreferrer">{t('IANA special-purpose ASN registry')}</a></p>}
       </>}
       {(advanced || asPathMatching) && <AdvancedRouteMapFields rule={r} index={index + 1} asPathOnly={!advanced} onChange={(next) => setRules((rules) => rules.map((rule) => rule.id === r.id ? next : rule))} />}
+      {siteLocalPreference && map.siteId && r.action !== 'drop' && <label className="field"><span>{t("Inbound local preference (default 100)")}</span><input type="number" min={0} max={4294967295} step={1} aria-label={t("Rule {0} local preference", index + 1)} name={`${r.id}-local-preference`} defaultValue={r.localPreference ?? ''} /></label>}
       <label className="field"><span>{t("After a match")}</span><select aria-label={t("Rule {0} next step", index + 1)} name={`${r.id}-next`} defaultValue={r.nextStep}><option value="terminate">{t("Terminate")}</option><option value="continue">{t("Continue to next rule")}</option></select></label>
       <div className="row"><button type="button" disabled={index === 0} onClick={() => setRules((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next })}>{t("Move rule")} {index + 1}  {t("up")}</button><button type="button" className="danger" onClick={() => setRules(rules.filter((rule) => rule.id !== r.id))}>{t("Remove rule")} {index + 1}</button></div>
     </fieldset>)}
@@ -122,7 +124,7 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
             : t("Not applied to any connection on this router.")}
         </p>
       )}
-      <MapDefinition key={map.id} map={map} asPathMatching onSave={(value) => {
+      <MapDefinition key={map.id} map={map} asPathMatching siteLocalPreference onSave={(value) => {
       const next = structuredClone(topology)
       next.routeMaps ??= []
       const index = next.routeMaps.findIndex((m) => m.id === value.id)

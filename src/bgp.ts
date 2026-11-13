@@ -34,6 +34,7 @@ export function routerMapRules(topology: Topology, router: RouterSelection, conn
 export interface RouteMapAdvertisement {
   prefix: string
   asPath: number[]
+  localPreference?: number
   communities?: string[]
   forwardingRoutes?: RouteMapAdvertisement[]
 }
@@ -92,6 +93,7 @@ export function applyRouteMapRules<T extends RouteMapAdvertisement>(routes: T[],
         forwardingRoutes: route.forwardingRoutes ?? [route] }))
       if (!modified.length) modified = attributeModified
     }
+    if (rule.localPreference !== undefined) modified = modified.map((route) => ({ ...route, localPreference: rule.localPreference }))
     return rule.nextStep === 'continue' ? modified.flatMap((next) => process(next, index + 1)) : modified
   }
   const result: T[] = []
@@ -105,7 +107,7 @@ export function applyRouteMapRules<T extends RouteMapAdvertisement>(routes: T[],
       result.push(route)
       continue
     }
-    const key = `${route.prefix}:${route.asPath.join(',')}:${[...(route.communities ?? [])].sort().join(',')}`
+    const key = `${route.prefix}:${route.asPath.join(',')}:${[...(route.communities ?? [])].sort().join(',')}:${route.localPreference ?? 100}`
     const existing = aggregates.get(key)
     if (existing) existing.forwardingRoutes = [...new Set([...existing.forwardingRoutes!, ...route.forwardingRoutes])]
     else {
@@ -120,6 +122,7 @@ export interface SiteRoute {
   key: string
   prefix: string
   asPath: number[]
+  localPreference?: number
   sitePath: string[]
   siteLinkIds?: string[]
   erLinkIds?: string[]
@@ -161,6 +164,7 @@ export function advertiseSiteRoutes<T extends SiteRoute>(topology: Topology, rec
   const policy = link.a === senderId ? link.aToB : link.bToA
   const transit = (route: T): T => ({
     ...route, key: `${link.id}:${route.key}`,
+    ...(route.localPreference === undefined ? {} : { localPreference: undefined }),
     // Both site planes contain already-normalized local origins; Azure-learned paths still need the sender ASN.
     asPath: [...policy.prepend, ...(route.asPath[0] === sender.asn ? route.asPath : [sender.asn, ...route.asPath])],
     sitePath: [receiver.id, ...route.sitePath], siteLinkIds: [link.id, ...(route.siteLinkIds ?? [])],
@@ -215,8 +219,12 @@ export function propagateSites<T extends SiteRoute = SiteRoute>(
           return matching.filter((r) => rank(r) === minRank)
         })()
       : matching
-    const shortest = Math.min(...preferred.map((r) => r.asPath.length))
-    const shortestMatches = preferred.filter((r) => r.asPath.length === shortest)
+    const local = preferred.filter((route) => !route.asPath.length)
+    const preferenceCandidates = local.length ? local : preferred
+    const highest = Math.max(...preferenceCandidates.map((route) => route.localPreference ?? 100))
+    const highestMatches = preferenceCandidates.filter((route) => (route.localPreference ?? 100) === highest)
+    const shortest = Math.min(...highestMatches.map((r) => r.asPath.length))
+    const shortestMatches = highestMatches.filter((r) => r.asPath.length === shortest)
     if (options?.sortByKey) {
       if (shortestMatches.length > 32) selectionComplete = false
       return [...shortestMatches].sort((a, b) => a.key.localeCompare(b.key)).slice(0, 32)
@@ -251,6 +259,7 @@ export function propagateSites<T extends SiteRoute = SiteRoute>(
               const sender = topology.sites.find((s) => s.id === senderId)!
               const transit = (route: T): T => ({
                 ...route,
+                ...(route.localPreference === undefined ? {} : { localPreference: undefined }),
                 key: `gr:${receiverErLink.id}:${senderErLink.id}:${route.key}`,
                 asPath: route.asPath[0] === sender.asn ? route.asPath : [sender.asn, ...route.asPath],
                 sitePath: [receiver.id, ...route.sitePath],

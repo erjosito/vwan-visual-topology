@@ -18,6 +18,9 @@ export function azSitePolicyLinks(topology: AzNetTopology, siteId: string) {
 }
 
 export function validateAzSiteRouteMaps(topology: AzNetTopology) {
+  if (topology.routeMaps?.some((map) => map.rules?.some((rule) => rule.localPreference !== undefined))) {
+    throw new Error('Site local preference is supported only in VWAN mode.')
+  }
   // Validate policy definitions with the same owner, rule and ASN constraints as VWAN.
   validateTopology({
     version: 1, name: topology.name, hubs: [], spokes: [], connections: [], siteLinks: [],
