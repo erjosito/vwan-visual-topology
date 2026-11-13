@@ -1,5 +1,7 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'ExpressRoute AS-path uncertainty': 'ExpressRoute AS パスの不確実性',
+  'The simulator assumes all private ASNs are removed at the customer boundary. When non-private ASNs are also present, actual removal can depend on the MSEE implementation and configuration. Customer-visible paths may retain private ASNs, including 65520, affecting on-premises route selection. Verify against customer-router observations.': 'このシミュレーターは、お客様との境界ですべてのプライベート ASN が削除されると仮定します。非プライベート ASN も存在する場合、実際の削除動作は MSEE の実装と設定によって異なる可能性があります。お客様側で観測されるパスには 65520 などのプライベート ASN が残り、オンプレミスの経路選択に影響することがあります。お客様のルーターでの観測結果を確認してください。',
   'BGP peers (local or directly peered VNets)': 'BGP ピア (ローカルまたは直接ピアリングされた VNet)',
   'BGP peering requires VNet access, not gateway transit. Injecting routes into spokes still requires gateway-transit settings. Remote policy assignments remain limited to eligible spoke virtual network connections. Enabling a BGP peer here does not create VNet peering or packet connectivity.': 'BGP ピアリングには VNet アクセスが必要ですが、ゲートウェイ転送は不要です。スポークへの経路注入には引き続きゲートウェイ転送の設定が必要です。リモート ポリシーの割り当ては対応するスポーク仮想ネットワーク接続に限られます。BGP ピアを有効にしても VNet ピアリングやパケット接続は作成されません。',
   'Allow branch-to-branch traffic (WAN-wide)': 'ブランチ間通信を許可 (WAN 全体)',

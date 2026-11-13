@@ -3,7 +3,7 @@ import { example } from './model'
 import type { RouteMapRule, RouterSelection, Topology } from './model'
 import { simulate } from './routing'
 import { azureRoutesAtSites } from './paths'
-import { erLocationBgpTable, neighborRoutes } from './route-views'
+import { erExportHasMixedAsPath, erLocationBgpTable, neighborRoutes } from './route-views'
 
 const rule = (prefix: string, action: RouteMapRule['action']): RouteMapRule => ({
   id: prefix, prefixes: [prefix], match: 'equals', action, summaryPrefixes: ['10.0.0.0/8'], prepend: [64496], nextStep: 'terminate',
@@ -84,6 +84,56 @@ function assign(t: Topology, owner: RouterSelection, connectionId: string, direc
 }
 
 describe('route inspection stages', () => {
+  it.each(['legacy', 'location'])('warns on mixed post-policy %s ER exports without changing paths', (representation) => {
+    const t = structuredClone(example)
+    const id = representation === 'legacy' ? 'er-eu' : 'hub-er'
+    if (representation === 'location') {
+      t.connections = t.connections.filter((connection) => connection.transport !== 'ExpressRoute')
+      t.erLocations = [{ id: 'er', name: 'ER location' }]
+      t.erLinks = [
+        { id, name: 'Hub attachment', locationId: 'er', hubId: 'eu', enabled: true, learnSiteRoutes: false },
+        { id: 'customer', name: 'Customer circuit', locationId: 'er', siteId: 'dc', enabled: true, learnSiteRoutes: true },
+      ]
+    }
+    assign(t, { kind: 'hub', id: 'eu' }, id, 'outbound', [
+      { ...rule('10.2.0.0/16', 'prepend'), prepend: [64496, 64496, 64496] },
+    ])
+    const simulation = simulate(t)
+    const original = JSON.stringify({ t, simulation })
+    const router = { kind: 'hub' as const, id: 'eu' }
+    const peer = neighborRoutes(t, simulation, router, 'advertised').find((peer) => peer.id === id)!
+    const remote = peer.after.find((route) => route.prefix === '10.2.0.0/16')!
+    expect(remote.asPath).toEqual([64496, 64496, 64496, 65520, 65520])
+    expect(erExportHasMixedAsPath(t, simulation, router, id, remote)).toBe(true)
+    expect(erExportHasMixedAsPath(t, simulation, router, id, peer.before.find((route) => route.prefix === remote.prefix)!)).toBe(false)
+    expect(simulation.outbound[id].find((route) => route.prefix === remote.prefix)!.asPath).toEqual([12076, 64496, 64496, 64496])
+    const local = peer.after.find((route) => route.prefix === '10.1.0.0/16')!
+    expect(erExportHasMixedAsPath(t, simulation, router, id, local)).toBe(false)
+    expect(erExportHasMixedAsPath(t, simulation, router, 'vpn-eu', remote)).toBe(false)
+    expect(erExportHasMixedAsPath(t, simulation, router, 'interhub:us', remote)).toBe(false)
+    expect(erExportHasMixedAsPath(t, simulation, { kind: 'site', id: 'dc' }, id, remote)).toBe(false)
+    if (representation === 'location') {
+      const location = { kind: 'erLocation' as const, id: 'er' }
+      const customer = neighborRoutes(t, simulation, location, 'advertised').find((peer) => peer.id === 'customer')!
+      const wire = customer.after.find((route) => route.prefix === remote.prefix)!
+      expect(wire.asPath).not.toContain(65520)
+      expect(erExportHasMixedAsPath(t, simulation, location, 'customer', wire)).toBe(true)
+      expect(erExportHasMixedAsPath(t, simulation, location, id, wire)).toBe(false)
+      expect(erExportHasMixedAsPath(t, simulation, location, 'customer', customer.after.find((route) => route.prefix === '10.1.0.0/16')!)).toBe(false)
+    }
+    expect(JSON.stringify({ t, simulation })).toBe(original)
+  })
+
+  it.each([
+    [[64496, 64512], true], [[64511, 65534], true], [[64496, 4200000000], true], [[64496, 4294967294], true],
+    [[65515, 65520, 65001], false], [[4200000000, 4294967294], false], [[64496, 64500, 64511], false], [[], false],
+  ] as [number[], boolean][])('classifies a pre-removal path %j without treating documentation ASNs as private', (asPath, expected) => {
+    const t = structuredClone(example), simulation = simulate(t)
+    const router = { kind: 'hub' as const, id: 'eu' }
+    const route = neighborRoutes(t, simulation, router, 'advertised').find((peer) => peer.id === 'er-eu')!.after[0]
+    expect(erExportHasMixedAsPath(t, simulation, router, 'er-eu', { ...route, asPath })).toBe(expected)
+  })
+
   it('keeps the hub BGP table distinct from routing-intent and firewall forwarding entries', () => {
     const t = structuredClone(example)
     t.hubs[0].routingIntent = { private: true, internet: true, privatePrefixes: ['100.64.0.0/10'] }
