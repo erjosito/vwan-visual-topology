@@ -1371,6 +1371,86 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(findings.some((f) => f.category === 'vnra-peering-access-disabled')).toBe(true)
   })
 
+  const vnraArchive = JSON.parse(readFileSync(resolve('verification', 'issue-98-vnra-archive.json'), 'utf8')) as {
+    nicRoutes: { subnetId: string; prefix: string; nativeSource: string; nativeState: string; nextHopType: string; nextHopIp: string | null }[]
+    nextHops: { subnetId: string; destinationIp: string; nextHopType: string; nextHopIp: string }[]
+    cases: {
+      id: string
+      topology: AzNetTopology
+      probes: {
+        sourceVnetId: string; sourceSubnetId: string; sourceIp: string
+        destinationVnetId: string; destinationSubnetId: string; destinationIp: string; received: number
+      }[]
+    }[]
+  }
+
+  it('matches recorded VNRA pre-fix NIC routes and next hops even while peering access blocks forwarding', () => {
+    const result = simulateAzNet(vnraArchive.cases[0].topology)
+    for (const observed of vnraArchive.nicRoutes) {
+      expect(result.subnetTables[observed.subnetId].routes).toContainEqual(expect.objectContaining({
+        prefix: observed.prefix, source: observed.nativeSource === 'Default' ? 'System' : observed.nativeSource,
+        nextHopType: observed.nextHopType, active: observed.nativeState === 'Active',
+        ...(observed.nextHopIp ? { nextHopIp: observed.nextHopIp } : {}),
+      }))
+    }
+    for (const observed of vnraArchive.nextHops) {
+      expect(lookupSubnetEffectiveRoute(result.subnetTables[observed.subnetId], observed.destinationIp)).toMatchObject({
+        nextHopType: observed.nextHopType, nextHopIp: observed.nextHopIp,
+      })
+    }
+    const disconnected = structuredClone(vnraArchive.cases[0].topology)
+    disconnected.vnetPeerings.forEach((peering) => { peering.enabled = false })
+    expect(simulateAzNet(disconnected).subnetTables['spoke1-vnet-vm-subnet'].routes.some((route) => route.nextHopType === 'VNetPeering')).toBe(false)
+  })
+
+  it.each(vnraArchive.cases)('replays recorded VNRA bidirectional reachability: $id', ({ topology, probes }) => {
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual(topology)
+    expect(validateAzNetTopology(topology)).toEqual([])
+    const result = simulateAzNet(topology)
+    for (const observed of probes) {
+      const pair = traceAzNetPair(topology, result,
+        { kind: 'subnet', vnetId: observed.sourceVnetId, subnetId: observed.sourceSubnetId }, observed.sourceIp,
+        { kind: 'subnet', vnetId: observed.destinationVnetId, subnetId: observed.destinationSubnetId }, observed.destinationIp)
+      expect(pair.forward.status).toBe(observed.received ? 'delivered' : 'dropped-peering-access')
+      expect(pair.reverse.status).toBe(observed.received ? 'delivered' : 'dropped-peering-access')
+      if (observed.received) {
+        const order = observed.sourceVnetId === 'spoke1-vnet' ? ['vnra1', 'vnra2'] : ['vnra2', 'vnra1']
+        expect(pair.forward.traversedApplianceIds).toEqual(order)
+        expect(pair.reverse.traversedApplianceIds).toEqual([...order].reverse())
+      }
+    }
+  })
+
+  const udrArchive = JSON.parse(readFileSync(resolve('verification', 'issue-98-udr-archive.json'), 'utf8')) as {
+    spokeRoutes: { prefix: string; nativeSource: string; nativeState: string; nextHopType: string; nextHopIp: string | null }[]
+    cases: {
+      id: string; topology: AzNetTopology
+      routes: { prefix: string; nativeSource: string; nativeState: string; nextHopType: string; nextHopIp: string | null }[]
+    }[]
+  }
+
+  it.each(udrArchive.cases)('matches recorded summary/explicit UDR selection without enabling the blocked preview feature: $id', ({ topology, routes }) => {
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual(topology)
+    expect(validateAzNetTopology(topology)).toEqual([])
+    const result = simulateAzNet(topology)
+    for (const [subnetId, observedRoutes] of [['probe', routes], ['work1', udrArchive.spokeRoutes]] as const) {
+      for (const observed of observedRoutes) {
+        expect(result.subnetTables[subnetId].routes).toContainEqual(expect.objectContaining({
+          prefix: observed.prefix, source: observed.nativeSource === 'Default' ? 'System' : observed.nativeSource,
+          active: observed.nativeState === 'Active', nextHopType: observed.nextHopType,
+          ...(observed.nextHopIp ? { nextHopIp: observed.nextHopIp } : {}),
+        }))
+      }
+    }
+    for (let n = 1; n <= 10; n++) {
+      const observedWinner = routes.find((r) => r.prefix === `10.${n}.0.0/16` && r.nativeState === 'Active')!
+      expect(lookupSubnetEffectiveRoute(result.subnetTables.probe, `10.${n}.1.4`)).toMatchObject({
+        prefix: observedWinner.prefix, source: observedWinner.nativeSource === 'Default' ? 'System' : 'User',
+        nextHopType: observedWinner.nextHopType,
+      })
+    }
+  })
+
   it('models Hybrid Secured vWAN Hub and Classic Hub-and-Spoke coexistence in Sample 4', () => {
     const topo = AZURE_NET_SAMPLES[3].topology
     const sim = simulateAzNet(topo)

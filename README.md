@@ -8,6 +8,8 @@ A browser-based Azure Virtual WAN topology designer and **explainable planning s
 
 **Recorded-lab validation:** the [Round 2 VWAN summarization pilot](https://github.com/erjosito/net-lab-builder/tree/main/labs/vwan-routemap-summarization) replays archived VPN-branch prefix/AS-path observations without redeploying Azure. The [pinned evidence fixture and native topologies](verification/issue-98-routemap-archive.json) cover the B2B-on/no-map baseline and ER-only outbound summarization. This exposed and corrected an empty summary AS path: non-ER hub exports now retain the originating `65515` while stripping contributor ASNs. This is scoped BGP-advertisement validation, not proof of forwarding, convergence, B2B-disabled behavior, or the AS-path-filtering mitigation.
 
+The [archive validation matrix](verification/issue-98-archive-validation.md) also covers two Hub & Spoke pairs: managed-VNRA transit before/after peering-access correction, and summary `/8` versus explicit `/16` UDRs. Their native JSON exports live in the original lab folders. The VNRA replay corrected route visibility: connected peering address-space routes remain active with access disabled, while forwarding still fails. Preview peering-route suppression, stateful session enforcement and later three-hybrid captures are not certified by these replays.
+
 ## Features
 
 - **Unified 3-way architecture mode switcher (`Full Hybrid Mode`, `Hub & Spoke-Only`, `Virtual WAN-Only`)**: Switch seamlessly in the top header bar (`?mode=full`, `?mode=hub-spoke`, or `?mode=vwan`) between standalone Hub-and-Spoke VNet routing (UDRs, Azure Firewall, NVAs, Azure Route Server, VNet Peering, Private Endpoints), Virtual WAN-Only, or Full Hybrid designs.

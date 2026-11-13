@@ -1,0 +1,756 @@
+{
+  "issue": 98,
+  "lab": "dual-hub-vnra-udr-transit",
+  "mode": "hub-spoke",
+  "repository": "erjosito/net-lab-builder",
+  "commit": "c14b2bd94787a0645392eb000cdd3cfbd9b59e7d",
+  "dateContext": "Lab report dated 2026-08-19; retry directory identifies 20260819T185118+0200, not precise per-file capture timestamps. Commands/API versions are not embedded in most native outputs.",
+  "reconstruction": [
+    "Four exact VNet/subnet prefixes, VNRA primary addresses, route-table associations and configured routes retained.",
+    "Three bidirectional peering objects represent six native directional objects. Pre-fix all-six access=false comes from the report; raw pre-fix objects directly corroborate only two hub1 directions. All-six post-fix flags are native.",
+    "Forwarded-traffic/gateway flags remain those captured after correction; report says only access permission changed. No gateway, BGP or appliance static routes are invented.",
+    "Managed VNRA forwarding is enabled in the logical model; throughput SKU and secondary reserved IPs are not simulated.",
+    "NIC/Network Watcher observations precede correction; post-fix route stability is a model regression, not another native NIC measurement."
+  ],
+  "exclusions": [
+    "No VNRA-subnet effective-route observation: archived API calls returned 404, not empty RIBs.",
+    "No packet TTL, traceroute-hop count, latency, throughput, ICMP loss-rate distribution, NSG/session engine or post-fix Monitor metrics certification.",
+    "Logical VNRA hop sequence follows the captured UDR configuration; tracepath does not independently observe those managed appliance hops.",
+    "No S1 detached-route-table experiment or unrelated deployment/cleanup validation.",
+    "Subscription/resource GUIDs, tenant/account context, tags and management-plane resource IDs omitted; topology-local IDs preserve relationships."
+  ],
+  "sources": {
+    "vnets": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/deployment/02-vnets.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/deployment/02-vnets.json",
+      "sha256": "24c4b686e1eb1db7fcf711aa514c49bd2c3cc19fe6f8078481148b2a08918508",
+      "layer": "configuration",
+      "quality": "Native VNet/subnet GET output.",
+      "capturedAt": null
+    },
+    "routes": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/deployment/09-routes-final.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/deployment/09-routes-final.json",
+      "sha256": "be8de13cc2f383f6674de78585efed26bd940c88c9f1fcac659be2703d22d492",
+      "layer": "configuration",
+      "quality": "Native configured routes, not effective VNRA routes.",
+      "capturedAt": null
+    },
+    "associations": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/03-route-table-associations.txt",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/03-route-table-associations.txt",
+      "sha256": "191e6e35cf10dabbd4797c5a879edaa99da1c754c764b1806c8ec8699398629f",
+      "layer": "configuration",
+      "quality": "Four observed subnet-to-route-table associations.",
+      "capturedAt": null
+    },
+    "vnra1": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/01-vnra1-state.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/01-vnra1-state.json",
+      "sha256": "1cd1130bee3ef18cad75f18f48a2a3d5ca735bac9d723174474a0c7b2c23098d",
+      "layer": "configuration",
+      "quality": "Native appliance GET; primary private IP retained, not secondary IP reservation behavior.",
+      "capturedAt": null
+    },
+    "vnra2": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/02-vnra2-state.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/02-vnra2-state.json",
+      "sha256": "6c94c6a6bb56926fa14c1356a13ba491cce5384d22df1b0eec46e7883e2a54cc",
+      "layer": "configuration",
+      "quality": "Native appliance GET; primary private IP retained, not secondary IP reservation behavior.",
+      "capturedAt": null
+    },
+    "peering-before": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/deployment/04-peerings.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/deployment/04-peerings.json",
+      "sha256": "7726a94b06a213737b765298f960325781f292cafb54a8e2dfe50f0825da1646",
+      "layer": "configuration",
+      "quality": "Native pre-fix hub1 peering objects only. Other pre-fix directions are reported in validation.md, not present in the abbreviated retry peering snapshots.",
+      "capturedAt": null
+    },
+    "peering-after": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/10-peering-access-correction.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/10-peering-access-correction.json",
+      "sha256": "dfd21df3a20304d371c0d89921c3575e434c8c3a226a1328054e0b702b6a940b",
+      "layer": "configuration",
+      "quality": "Native corrected peering objects for all six directions.",
+      "capturedAt": null
+    },
+    "peering-verified": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/11-peering-access-verified.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/11-peering-access-verified.json",
+      "sha256": "f97897e15f528d144379424561ecd82adc0d1632734773b9de1c152c42f414c5",
+      "layer": "configuration",
+      "quality": "Condensed all-six post-fix verification.",
+      "capturedAt": null
+    },
+    "report": {
+      "path": "labs/dual-hub-vnra-udr-transit/validation.md",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/validation.md",
+      "sha256": "1151612cf9ef1450b87ecfe1eb3a6a26e92b7208ae00e1a929398558b3a727af",
+      "layer": "interpretation",
+      "quality": "Historical report supplies all-six pre-fix access=false state and association continuity; it is not an independent raw peering dump.",
+      "capturedAt": null
+    },
+    "nic1": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/s3-test1-effective-routes.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/s3-test1-effective-routes.json",
+      "sha256": "14108146e697a9d43d65e698c6f4e01c797dc1245708db3950f8cf976097b04f",
+      "layer": "NIC effective routes (pre-fix)",
+      "quality": "Native effective route rows; retain local, directly peered hub and remote-spoke UDR only, not full table equality.",
+      "capturedAt": null
+    },
+    "next-hop1": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/s4-nw-nexthop-test1-to-test2.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/s4-nw-nexthop-test1-to-test2.json",
+      "sha256": "6fd32ad760f565c78e349c23fc64cc3fd67c33b70016a3e2387245d1d6cf5ae6",
+      "layer": "Network Watcher next hop (pre-fix)",
+      "quality": "Native SDN next-hop observation; not an end-to-end forwarding observation.",
+      "capturedAt": null
+    },
+    "nic2": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/s3-test2-effective-routes.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/s3-test2-effective-routes.json",
+      "sha256": "db2e8f9cb08ba4023732c8a6444bb9a636d58b0097863426adb18c4cffa0b597",
+      "layer": "NIC effective routes (pre-fix)",
+      "quality": "Native effective route rows; retain local, directly peered hub and remote-spoke UDR only, not full table equality.",
+      "capturedAt": null
+    },
+    "next-hop2": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/s4-nw-nexthop-test2-to-test1.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/s4-nw-nexthop-test2-to-test1.json",
+      "sha256": "e88dbce5f9b4a470f0ff4d78626f85d87e7b85d3fd4c9e207283e747cefae77e",
+      "layer": "Network Watcher next hop (pre-fix)",
+      "quality": "Native SDN next-hop observation; not an end-to-end forwarding observation.",
+      "capturedAt": null
+    },
+    "access-disabled-probe1": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/06-test1-to-test2.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/06-test1-to-test2.json",
+      "sha256": "753f69b882015a71d8996ad213e98120163087709c320213a7db2fcf3f3ae727",
+      "layer": "guest ICMP end-to-end reachability",
+      "quality": "Native RunCommand stdout: actual ping counts, not ProvisioningState/succeeded. Logical reachability only; no timing, TTL, capacity or per-hop packet-path assertion.",
+      "capturedAt": null
+    },
+    "access-disabled-probe2": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/07-test2-to-test1.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/07-test2-to-test1.json",
+      "sha256": "3b02ae5e1b10d68c71b7164659b96a2c10031d675278fe2dadfdddd7ef61832a",
+      "layer": "guest ICMP end-to-end reachability",
+      "quality": "Native RunCommand stdout: actual ping counts, not ProvisioningState/succeeded. Logical reachability only; no timing, TTL, capacity or per-hop packet-path assertion.",
+      "capturedAt": null
+    },
+    "access-corrected-probe1": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/12-after-fix-test1-to-test2.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/12-after-fix-test1-to-test2.json",
+      "sha256": "42914bf0c9112568ac1bf69e3fd285ad485732e1d1daf933a5c749da04803823",
+      "layer": "guest ICMP end-to-end reachability",
+      "quality": "Native RunCommand stdout: actual ping counts, not ProvisioningState/succeeded. Logical reachability only; no timing, TTL, capacity or per-hop packet-path assertion.",
+      "capturedAt": null
+    },
+    "access-corrected-probe2": {
+      "path": "labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/13-after-fix-test2-to-test1.json",
+      "url": "https://github.com/erjosito/net-lab-builder/blob/c14b2bd94787a0645392eb000cdd3cfbd9b59e7d/labs/dual-hub-vnra-udr-transit/show-output/validation/retry-20260819T185118+0200/13-after-fix-test2-to-test1.json",
+      "sha256": "512c4d160c45a121e9cd8898d9ca2d6c7bc8b46de4e82bee3a4a436bc452957a",
+      "layer": "guest ICMP end-to-end reachability",
+      "quality": "Native RunCommand stdout: actual ping counts, not ProvisioningState/succeeded. Logical reachability only; no timing, TTL, capacity or per-hop packet-path assertion.",
+      "capturedAt": null
+    }
+  },
+  "nicRoutes": [
+    {
+      "evidence": "nic1",
+      "subnetId": "spoke1-vnet-vm-subnet",
+      "prefix": "10.10.0.0/16",
+      "nativeSource": "Default",
+      "nativeState": "Active",
+      "nextHopType": "VnetLocal",
+      "nextHopIp": null
+    },
+    {
+      "evidence": "nic1",
+      "subnetId": "spoke1-vnet-vm-subnet",
+      "prefix": "10.1.0.0/16",
+      "nativeSource": "Default",
+      "nativeState": "Active",
+      "nextHopType": "VNetPeering",
+      "nextHopIp": null
+    },
+    {
+      "evidence": "nic1",
+      "subnetId": "spoke1-vnet-vm-subnet",
+      "prefix": "10.20.0.0/16",
+      "nativeSource": "User",
+      "nativeState": "Active",
+      "nextHopType": "VirtualAppliance",
+      "nextHopIp": "10.1.0.4"
+    },
+    {
+      "evidence": "nic2",
+      "subnetId": "spoke2-vnet-vm-subnet",
+      "prefix": "10.20.0.0/16",
+      "nativeSource": "Default",
+      "nativeState": "Active",
+      "nextHopType": "VnetLocal",
+      "nextHopIp": null
+    },
+    {
+      "evidence": "nic2",
+      "subnetId": "spoke2-vnet-vm-subnet",
+      "prefix": "10.2.0.0/16",
+      "nativeSource": "Default",
+      "nativeState": "Active",
+      "nextHopType": "VNetPeering",
+      "nextHopIp": null
+    },
+    {
+      "evidence": "nic2",
+      "subnetId": "spoke2-vnet-vm-subnet",
+      "prefix": "10.10.0.0/16",
+      "nativeSource": "User",
+      "nativeState": "Active",
+      "nextHopType": "VirtualAppliance",
+      "nextHopIp": "10.2.0.4"
+    }
+  ],
+  "nextHops": [
+    {
+      "evidence": "next-hop1",
+      "subnetId": "spoke1-vnet-vm-subnet",
+      "destinationIp": "10.20.1.4",
+      "nextHopType": "VirtualAppliance",
+      "nextHopIp": "10.1.0.4"
+    },
+    {
+      "evidence": "next-hop2",
+      "subnetId": "spoke2-vnet-vm-subnet",
+      "destinationIp": "10.10.1.4",
+      "nextHopType": "VirtualAppliance",
+      "nextHopIp": "10.2.0.4"
+    }
+  ],
+  "cases": [
+    {
+      "id": "access-disabled",
+      "exportFile": "simulator-topology-access-disabled.json",
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "Recorded VNRA transit - peering access disabled",
+        "subtitle": "2026-08-19 archived negative state; active UDRs do not imply forwarding permission.",
+        "vnets": [
+          {
+            "id": "hub2-vnet",
+            "name": "hub2-vnet",
+            "role": "hub-vnet",
+            "region": "northeurope",
+            "prefixes": [
+              "10.2.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "hub2-vnet-VirtualNetworkApplianceSubnet",
+                "name": "VirtualNetworkApplianceSubnet",
+                "prefix": "10.2.0.0/24",
+                "routeTableId": "rt-hub2-vnra"
+              }
+            ],
+            "gateways": [],
+            "appliances": [
+              {
+                "id": "vnra2",
+                "name": "vnra2",
+                "kind": "vnra",
+                "subnetId": "hub2-vnet-VirtualNetworkApplianceSubnet",
+                "privateIp": "10.2.0.4",
+                "enableIpForwarding": true,
+                "staticRoutes": []
+              }
+            ]
+          },
+          {
+            "id": "spoke2-vnet",
+            "name": "spoke2-vnet",
+            "role": "spoke-vnet",
+            "region": "northeurope",
+            "prefixes": [
+              "10.20.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "spoke2-vnet-vm-subnet",
+                "name": "vm-subnet",
+                "prefix": "10.20.1.0/24",
+                "routeTableId": "rt-spoke2"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "hub1-vnet",
+            "name": "hub1-vnet",
+            "role": "hub-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.1.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "hub1-vnet-VirtualNetworkApplianceSubnet",
+                "name": "VirtualNetworkApplianceSubnet",
+                "prefix": "10.1.0.0/24",
+                "routeTableId": "rt-hub1-vnra"
+              }
+            ],
+            "gateways": [],
+            "appliances": [
+              {
+                "id": "vnra1",
+                "name": "vnra1",
+                "kind": "vnra",
+                "subnetId": "hub1-vnet-VirtualNetworkApplianceSubnet",
+                "privateIp": "10.1.0.4",
+                "enableIpForwarding": true,
+                "staticRoutes": []
+              }
+            ]
+          },
+          {
+            "id": "spoke1-vnet",
+            "name": "spoke1-vnet",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.10.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "spoke1-vnet-vm-subnet",
+                "name": "vm-subnet",
+                "prefix": "10.10.1.0/24",
+                "routeTableId": "rt-spoke1"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          }
+        ],
+        "vnetPeerings": [
+          {
+            "id": "hub1-vnet-spoke1-vnet",
+            "name": "hub1-vnet / spoke1-vnet",
+            "vnetAId": "hub1-vnet",
+            "vnetBId": "spoke1-vnet",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": false,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": false,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            }
+          },
+          {
+            "id": "hub1-vnet-hub2-vnet",
+            "name": "hub1-vnet / hub2-vnet",
+            "vnetAId": "hub1-vnet",
+            "vnetBId": "hub2-vnet",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": false,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": false,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            }
+          },
+          {
+            "id": "hub2-vnet-spoke2-vnet",
+            "name": "hub2-vnet / spoke2-vnet",
+            "vnetAId": "hub2-vnet",
+            "vnetBId": "spoke2-vnet",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": false,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": false,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            }
+          }
+        ],
+        "udrTables": [
+          {
+            "id": "rt-hub2-vnra",
+            "name": "rt-hub2-vnra",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-hub2-vnra-0",
+                "name": "To 10.10.0.0/16",
+                "prefix": "10.10.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.1.0.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-spoke2",
+            "name": "rt-spoke2",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-spoke2-0",
+                "name": "To 10.10.0.0/16",
+                "prefix": "10.10.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.2.0.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-hub1-vnra",
+            "name": "rt-hub1-vnra",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-hub1-vnra-0",
+                "name": "To 10.20.0.0/16",
+                "prefix": "10.20.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.2.0.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-spoke1",
+            "name": "rt-spoke1",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-spoke1-0",
+                "name": "To 10.20.0.0/16",
+                "prefix": "10.20.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.1.0.4",
+                "enabled": true
+              }
+            ]
+          }
+        ],
+        "vwanHubs": [],
+        "erLocations": [],
+        "erLinks": [],
+        "sites": [],
+        "vpnConnections": [],
+        "siteLinks": []
+      },
+      "probes": [
+        {
+          "evidence": "access-disabled-probe1",
+          "sourceVnetId": "spoke1-vnet",
+          "sourceSubnetId": "spoke1-vnet-vm-subnet",
+          "sourceIp": "10.10.1.4",
+          "destinationVnetId": "spoke2-vnet",
+          "destinationSubnetId": "spoke2-vnet-vm-subnet",
+          "destinationIp": "10.20.1.4",
+          "transmitted": 10,
+          "received": 0,
+          "lossPercent": 100
+        },
+        {
+          "evidence": "access-disabled-probe2",
+          "sourceVnetId": "spoke2-vnet",
+          "sourceSubnetId": "spoke2-vnet-vm-subnet",
+          "sourceIp": "10.20.1.4",
+          "destinationVnetId": "spoke1-vnet",
+          "destinationSubnetId": "spoke1-vnet-vm-subnet",
+          "destinationIp": "10.10.1.4",
+          "transmitted": 10,
+          "received": 0,
+          "lossPercent": 100
+        }
+      ]
+    },
+    {
+      "id": "access-corrected",
+      "exportFile": "simulator-topology.json",
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "Recorded VNRA transit - corrected peering access",
+        "subtitle": "2026-08-19 archived positive state; two managed VNRAs and four associated UDR tables.",
+        "vnets": [
+          {
+            "id": "hub2-vnet",
+            "name": "hub2-vnet",
+            "role": "hub-vnet",
+            "region": "northeurope",
+            "prefixes": [
+              "10.2.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "hub2-vnet-VirtualNetworkApplianceSubnet",
+                "name": "VirtualNetworkApplianceSubnet",
+                "prefix": "10.2.0.0/24",
+                "routeTableId": "rt-hub2-vnra"
+              }
+            ],
+            "gateways": [],
+            "appliances": [
+              {
+                "id": "vnra2",
+                "name": "vnra2",
+                "kind": "vnra",
+                "subnetId": "hub2-vnet-VirtualNetworkApplianceSubnet",
+                "privateIp": "10.2.0.4",
+                "enableIpForwarding": true,
+                "staticRoutes": []
+              }
+            ]
+          },
+          {
+            "id": "spoke2-vnet",
+            "name": "spoke2-vnet",
+            "role": "spoke-vnet",
+            "region": "northeurope",
+            "prefixes": [
+              "10.20.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "spoke2-vnet-vm-subnet",
+                "name": "vm-subnet",
+                "prefix": "10.20.1.0/24",
+                "routeTableId": "rt-spoke2"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          },
+          {
+            "id": "hub1-vnet",
+            "name": "hub1-vnet",
+            "role": "hub-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.1.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "hub1-vnet-VirtualNetworkApplianceSubnet",
+                "name": "VirtualNetworkApplianceSubnet",
+                "prefix": "10.1.0.0/24",
+                "routeTableId": "rt-hub1-vnra"
+              }
+            ],
+            "gateways": [],
+            "appliances": [
+              {
+                "id": "vnra1",
+                "name": "vnra1",
+                "kind": "vnra",
+                "subnetId": "hub1-vnet-VirtualNetworkApplianceSubnet",
+                "privateIp": "10.1.0.4",
+                "enableIpForwarding": true,
+                "staticRoutes": []
+              }
+            ]
+          },
+          {
+            "id": "spoke1-vnet",
+            "name": "spoke1-vnet",
+            "role": "spoke-vnet",
+            "region": "swedencentral",
+            "prefixes": [
+              "10.10.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "spoke1-vnet-vm-subnet",
+                "name": "vm-subnet",
+                "prefix": "10.10.1.0/24",
+                "routeTableId": "rt-spoke1"
+              }
+            ],
+            "gateways": [],
+            "appliances": []
+          }
+        ],
+        "vnetPeerings": [
+          {
+            "id": "hub1-vnet-spoke1-vnet",
+            "name": "hub1-vnet / spoke1-vnet",
+            "vnetAId": "hub1-vnet",
+            "vnetBId": "spoke1-vnet",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            }
+          },
+          {
+            "id": "hub1-vnet-hub2-vnet",
+            "name": "hub1-vnet / hub2-vnet",
+            "vnetAId": "hub1-vnet",
+            "vnetBId": "hub2-vnet",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            }
+          },
+          {
+            "id": "hub2-vnet-spoke2-vnet",
+            "name": "hub2-vnet / spoke2-vnet",
+            "vnetAId": "hub2-vnet",
+            "vnetBId": "spoke2-vnet",
+            "enabled": true,
+            "aToB": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            },
+            "bToA": {
+              "allowVirtualNetworkAccess": true,
+              "allowForwardedTraffic": true,
+              "allowGatewayTransit": false,
+              "useRemoteGateways": false
+            }
+          }
+        ],
+        "udrTables": [
+          {
+            "id": "rt-hub2-vnra",
+            "name": "rt-hub2-vnra",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-hub2-vnra-0",
+                "name": "To 10.10.0.0/16",
+                "prefix": "10.10.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.1.0.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-spoke2",
+            "name": "rt-spoke2",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-spoke2-0",
+                "name": "To 10.10.0.0/16",
+                "prefix": "10.10.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.2.0.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-hub1-vnra",
+            "name": "rt-hub1-vnra",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-hub1-vnra-0",
+                "name": "To 10.20.0.0/16",
+                "prefix": "10.20.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.2.0.4",
+                "enabled": true
+              }
+            ]
+          },
+          {
+            "id": "rt-spoke1",
+            "name": "rt-spoke1",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "rt-spoke1-0",
+                "name": "To 10.20.0.0/16",
+                "prefix": "10.20.0.0/16",
+                "nextHopType": "VirtualAppliance",
+                "nextHopIp": "10.1.0.4",
+                "enabled": true
+              }
+            ]
+          }
+        ],
+        "vwanHubs": [],
+        "erLocations": [],
+        "erLinks": [],
+        "sites": [],
+        "vpnConnections": [],
+        "siteLinks": []
+      },
+      "probes": [
+        {
+          "evidence": "access-corrected-probe1",
+          "sourceVnetId": "spoke1-vnet",
+          "sourceSubnetId": "spoke1-vnet-vm-subnet",
+          "sourceIp": "10.10.1.4",
+          "destinationVnetId": "spoke2-vnet",
+          "destinationSubnetId": "spoke2-vnet-vm-subnet",
+          "destinationIp": "10.20.1.4",
+          "transmitted": 10,
+          "received": 10,
+          "lossPercent": 0
+        },
+        {
+          "evidence": "access-corrected-probe2",
+          "sourceVnetId": "spoke2-vnet",
+          "sourceSubnetId": "spoke2-vnet-vm-subnet",
+          "sourceIp": "10.20.1.4",
+          "destinationVnetId": "spoke1-vnet",
+          "destinationSubnetId": "spoke1-vnet-vm-subnet",
+          "destinationIp": "10.10.1.4",
+          "transmitted": 10,
+          "received": 10,
+          "lossPercent": 0
+        }
+      ]
+    }
+  ]
+}
