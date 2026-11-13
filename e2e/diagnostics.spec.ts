@@ -83,10 +83,83 @@ test('worker analysis can be cancelled and mobile reports stay within the viewpo
   await panel(page).getByRole('button', { name: 'Cancel analysis', exact: true }).click()
   await expect(panel(page).getByRole('button', { name: 'Run diagnostics', exact: true })).toBeEnabled()
   await expect(panel(page).getByRole('region', { name: 'Diagnostic results' })).toHaveCount(0)
+  await expect(panel(page)).toContainText('Analysis cancelled; unassessed cases remain unverified.')
   const bounds = await panel(page).boundingBox()
   expect(bounds!.x).toBeGreaterThanOrEqual(0)
   expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(391)
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+})
+
+test('resumable diagnostics preserve every address cell across batches and invalidate edited requirements', async ({ page }) => {
+  test.setTimeout(120000)
+  const large = structuredClone(topology)
+  large.spokes = Array.from({ length: 3 }, (_, i) => ({
+    id: `spoke-${i}`, name: `Workload ${i}`, hubId: 'h',
+    prefixes: [...Array.from({ length: 28 }, (_, j) => `10.${i + 1}.${j}.0/24`), `10.${i + 1}.28.0/22`],
+  }))
+  large.sites = []
+  const profile = {
+    version: 1, failureAnalysis: false,
+    intents: large.spokes.flatMap((source, i) => large.spokes.slice(i + 1).map((target, j) => ({
+      id: `${source.id}-${target.id}`, source: { kind: 'spoke', id: source.id }, target: { kind: 'spoke', id: target.id },
+      sourcePrefix: `10.${i + 1}.0.0/19`, destinationPrefix: `10.${i + j + 2}.0.0/19`, expectation: 'allow',
+    }))),
+  }
+  await page.addInitScript(({ topology, profile }) => {
+    localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
+    localStorage.setItem('vwan-visual-topology:diagnostics:v1', JSON.stringify(profile))
+  }, { topology: large, profile })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await page.getByRole('button', { name: 'Advanced checks', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await panel(page).getByRole('button', { name: 'Run diagnostics', exact: true }).click()
+  const proceed = panel(page).getByRole('button', { name: 'Continue analysis', exact: true })
+  await expect(proceed).toBeVisible({ timeout: 30000 })
+  const first = await downloadedJson(page, 'Export diagnostic report')
+  expect(first.report.complete).toBe(false)
+  expect(first.report.continuation.status).toBe('paused')
+  expect(first.report.continuation.remainingCells).toBeGreaterThan(0)
+  for (let batch = 0; batch < 12; batch++) {
+    await proceed.click()
+    await expect(panel(page).getByRole('button', { name: 'Run diagnostics', exact: true })).toBeEnabled({ timeout: 30000 })
+    if (!await proceed.isVisible()) break
+  }
+  const finished = await downloadedJson(page, 'Export diagnostic report')
+  expect(finished.report.continuation.status).toBe('complete')
+  expect(finished.report.continuation.remainingCells).toBe(0)
+  expect(finished.report.cells).toBe(3 * 29 * 29)
+  expect(finished.report.cells).toBeGreaterThan(first.report.cells)
+  expect(finished.report.findings.filter((finding: { severity: string }) => finding.severity === 'error')).toEqual([])
+  await panel(page).getByLabel('Check single-link failures on a model copy (bounded; no Azure changes)').check()
+  await expect(panel(page).getByRole('region', { name: 'Diagnostic results' })).toHaveCount(0)
+  await expect(proceed).toHaveCount(0)
+})
+
+test('resumable automatic routing checks finish the whole declared mesh rather than certify the first batch', async ({ page }) => {
+  test.setTimeout(120000)
+  const large = structuredClone(topology)
+  large.sites = []
+  large.spokes = Array.from({ length: 20 }, (_, i) => ({
+    id: `spoke-${i}`, name: `Workload ${i}`, hubId: 'h',
+    prefixes: [...Array.from({ length: 24 }, (_, j) => `10.${i + 1}.${j}.0/24`), `10.${i + 1}.24.0/21`],
+  }))
+  await page.addInitScript((value) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(value)), large)
+  await page.goto('/')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  const proceed = page.getByRole('button', { name: 'Continue analysis', exact: true })
+  await expect(proceed).toBeVisible({ timeout: 30000 })
+  const status = page.locator('.routing-check-status')
+  await expect(status).toContainText('118750 baseline address cells')
+  for (let batch = 0; batch < 12; batch++) {
+    await proceed.click()
+    await expect(page.getByRole('button', { name: 'Check routing', exact: true })).toBeEnabled({ timeout: 30000 })
+    if (!await proceed.isVisible()) break
+  }
+  await expect(status).toContainText('Assessed 118750 of 118750 baseline address cells; 0 remain.')
+  await expect(proceed).toHaveCount(0)
+  await expect(page.locator('.routing-issue-marker')).toHaveCount(0)
 })
 
 test('one click marks shared root issues and selecting a sign explains and animates that issue only', async ({ page }) => {

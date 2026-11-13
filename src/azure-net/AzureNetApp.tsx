@@ -6,7 +6,8 @@ import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
-import { measureAzWork } from './performance'
+import { measureAzWork, recordAzWork } from './performance'
+import { t } from '../i18n'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { CanvasOverlay } from '../CanvasOverlay'
@@ -34,13 +35,13 @@ import { AzRouteMapsPanel } from './RouteMapsPanel'
 import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
 import {
-  analyzeAzNetConnectivity,
   AZ_NET_PAIR_LIMIT,
   azFindingImpact,
   azFindingFlows,
   groupAzNetFindings,
   runAzNetDiagnostics,
   type AzConnectivityScope,
+  type AzConnectivityReport,
   type AzDiagnosticFinding,
 } from './diagnostics'
 import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
@@ -384,6 +385,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   } | null>(null)
   const [analysisScope, setAnalysisScope] = useState<AzConnectivityScope['scope']>('pair')
   const [analysisRequest, setAnalysisRequest] = useState<AzConnectivityScope | null>(null)
+  const [analysisRun, setAnalysisRun] = useState<{
+    topology: AzNetTopology; request: AzConnectivityScope
+    status: 'running' | 'ready' | 'cancelled' | 'failed'; report?: AzConnectivityReport
+  }>()
+  const analysisWorker = useRef<Worker | undefined>(undefined)
   const [reviewFindingIds, setReviewFindingIds] = useState<string[] | null>(null)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
   const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null)
@@ -474,9 +480,51 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }, [traceActive, groupTrace, rawEndpointOptions, activeTopology, rawSimulation])
   const groupedPaths = useMemo(() => azDisplayResult(rawGroupedPaths, displayNames), [rawGroupedPaths, displayNames])
 
-  const rawAnalysis = useMemo(() => analysisRequest
-    ? measureAzWork('connectivity', () => analyzeAzNetConnectivity(activeTopology, rawSimulation, analysisRequest)) : null,
-  [analysisRequest, activeTopology, rawSimulation])
+  useEffect(() => {
+    if (!analysisRequest) return
+    let next: Worker | undefined
+    let disposed = false
+    const failed = () => {
+      if (disposed || (next && analysisWorker.current !== next)) return
+      setAnalysisRun({ topology: activeTopology, request: analysisRequest, status: 'failed' })
+      next?.terminate(); analysisWorker.current = undefined
+    }
+    try {
+      next = new Worker(new URL('./diagnostics-worker.ts', import.meta.url), { type: 'module' })
+      const current = next
+      analysisWorker.current = current
+      current.onmessage = ({ data }: MessageEvent<{ report?: AzConnectivityReport; elapsedMillis?: number }>) => {
+        if (analysisWorker.current !== current) return
+        if (!data.report) { failed(); return }
+        if (typeof data.elapsedMillis === 'number') recordAzWork('connectivity', data.elapsedMillis)
+        setAnalysisRun({ topology: activeTopology, request: analysisRequest, status: 'ready', report: data.report })
+        if (data.report.continuation.status !== 'paused') { current.terminate(); analysisWorker.current = undefined }
+      }
+      current.onerror = failed
+      current.postMessage({ type: 'start', topology: activeTopology, scope: analysisRequest })
+    } catch { queueMicrotask(failed) }
+    return () => {
+      disposed = true
+      next?.terminate()
+      if (analysisWorker.current === next) analysisWorker.current = undefined
+    }
+  }, [analysisRequest, activeTopology])
+  const currentAnalysisRun = analysisRun?.topology === activeTopology && analysisRun.request === analysisRequest ? analysisRun : undefined
+  const rawAnalysis = currentAnalysisRun?.report ?? null
+  const analysisRunning = Boolean(analysisRequest && (!currentAnalysisRun || currentAnalysisRun.status === 'running'))
+  const continueAnalysis = () => {
+    if (!analysisWorker.current || !currentAnalysisRun || analysisRunning || rawAnalysis?.continuation.status !== 'paused') return
+    setAnalysisRun({ ...currentAnalysisRun, status: 'running' })
+    analysisWorker.current.postMessage({ type: 'continue' })
+  }
+  const cancelAnalysis = () => {
+    analysisWorker.current?.terminate(); analysisWorker.current = undefined
+    if (!analysisRequest) return
+    setAnalysisRun({
+      topology: activeTopology, request: analysisRequest, status: 'cancelled',
+      report: rawAnalysis ? { ...rawAnalysis, complete: false, continuation: { ...rawAnalysis.continuation, status: 'cancelled' } } : undefined,
+    })
+  }
   const analysis = useMemo(() => azDisplayResult(rawAnalysis, displayNames), [rawAnalysis, displayNames])
   const rawDiagnostics = useMemo(() => {
     const staticFindings = measureAzWork('diagnostics', () => runAzNetDiagnostics(activeTopology, rawSimulation, { includePairAnalysis: false }))
@@ -2948,8 +2996,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             </div>
           </div>
 
+          {!analysis && analysisRequest && <div className="routing-check-status" role="status">
+            {t(analysisRunning ? 'Checking all modeled networks…' : currentAnalysisRun?.status === 'cancelled'
+              ? 'Analysis cancelled; unassessed cases remain unverified.' : 'Routing check failed. No complete result is available.')}
+            {analysisRunning && <button type="button" className="aznet-btn" onClick={cancelAnalysis}>{t('Cancel analysis')}</button>}
+          </div>}
           {analysis && <div className="routing-check-status" data-testid="aznet-routing-check-status" role="status">
-            <span>{validationErrors.length ? 'Routing check incomplete: fix topology validation errors.'
+            <span>{analysisRunning ? t('Checking all modeled networks…') : analysis.continuation.status === 'cancelled'
+              ? t('Analysis cancelled; unassessed cases remain unverified.') : validationErrors.length ? 'Routing check incomplete: fix topology validation errors.'
               : !analysis.checked ? 'No eligible endpoint pairs were checked; connectivity has not been verified.'
                 : !analysis.complete ? 'Routing check incomplete; unchecked pairs are not verified.'
                   : actionableCount ? 'Routing check completed.'
@@ -2958,6 +3012,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               {' '}{actionableCount} root-cause issue{actionableCount === 1 ? '' : 's'} affecting {affectedFlowCount} sampled flow pairs.
               {' '}Checked {analysis.checked} of {analysis.total} representative pairs ({analysis.checked * 2} directional traces).
               {' '}Results update when routing changes.</span>
+            <span>{t('{0} representative pairs remain unassessed.', analysis.continuation.remainingPairs)}
+              {analysis.limitsReached.length > 0 && ` ${t('Reached limit: {0}', analysis.limitsReached.map((limit) => t(limit === 'maxPairs' ? 'Representative pairs per batch' : limit === 'maxMillis' ? 'Elapsed time' : 'Stored findings')).join(', '))}`}</span>
+            {analysis.continuation.status === 'capacity' && <span>{t('Stored evidence capacity reached. Narrow the scope before starting another run.')}</span>}
+            {!analysisRunning && analysis.continuation.status === 'paused' && <button type="button" className="aznet-btn" data-testid="aznet-continue-routing-check" onClick={continueAnalysis}>{t('Continue analysis')}</button>}
+            {(analysisRunning || analysis.continuation.status === 'paused') && <button type="button" className="aznet-btn" onClick={cancelAnalysis}>{t('Cancel analysis')}</button>}
             <button type="button" className="aznet-btn" data-testid="aznet-review-routing-issues"
               onClick={() => { setReviewFindingIds(null); setActiveTab('diagnostics'); setShowDiagnosticBadges(true) }}>
               Review routing issues
@@ -2969,7 +3028,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             }}>Clear routing check</button>
             {analysisRequest?.scope === 'landscape' && <p>
               Assumes connectivity is required between all workload subnets and distinct on-premises sites; intentional isolation may appear as disconnected pairs.
-              {' '}One representative IP per subnet/site prefix, at most {AZ_NET_PAIR_LIMIT} pairs. Infrastructure-only subnets, Internet availability,
+              {' '}One representative IP per subnet/site prefix, at most {AZ_NET_PAIR_LIMIT} pairs per batch. Infrastructure-only subnets, Internet availability,
               exhaustive address-space/ECMP coverage, firewall rules, NSGs and host/service availability are not verified.
             </p>}
           </div>}
@@ -3657,6 +3716,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       resolvedSourceOpt.group === 'internet' || resolvedDestOpt.group === 'internet' ||
                       azEndpointKey(resolvedSourceOpt.ref) === azEndpointKey(resolvedDestOpt.ref))}
                     onClick={startAnalysis}>Analyze expected connectivity</button>
+                  {!analysisRunning && analysis?.continuation.status === 'paused' && <button type="button" className="aznet-btn" data-testid="aznet-continue-connectivity" onClick={continueAnalysis}>{t('Continue analysis')}</button>}
+                  {(analysisRunning || analysis?.continuation.status === 'paused') && <button type="button" className="aznet-btn" onClick={cancelAnalysis}>{t('Cancel analysis')}</button>}
                   {analysis && <button type="button" className="aznet-btn" onClick={() => setAnalysisRequest(null)}>Clear analysis scope</button>}
                 </div>
                 {analysis ? <div data-testid="aznet-analysis-coverage" role="status">
@@ -3666,10 +3727,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       : analysisRequest?.scope === 'landscape' ? 'Whole landscape, including distinct on-premises site pairs'
                         : 'All workload and on-premises pairs'}.</p>
                   {analysis.complete && !validationErrors.length ? 'Analysis complete' : 'Analysis incomplete'}: checked {analysis.checked} of {analysis.total} representative pairs
-                  {' '}({analysis.checked * 2} directional traces; limit {AZ_NET_PAIR_LIMIT} pairs).
+                  {' '}({analysis.checked * 2} directional traces; limit {AZ_NET_PAIR_LIMIT} pairs per batch).
                   {analysis.checked === 0 ? ' No eligible endpoint pairs were checked; connectivity has not been verified.' :
                     analysis.findings.length === 0 && analysis.complete && !validationErrors.length ? ' No connectivity failures or stateful-inspection asymmetry found in this scope.' : ''}
-                  {!analysis.complete && ' Narrow the scope or choose an individual pair; unchecked pairs are not verified.'}
+                  {analysis.continuation.status === 'paused' && t('Continue analysis or narrow the scope; unchecked pairs are not verified.')}
+                  {analysis.continuation.status === 'cancelled' && <p>{t('Analysis cancelled; unassessed cases remain unverified.')}</p>}
+                  <p>{t('{0} representative pairs remain unassessed.', analysis.continuation.remainingPairs)}</p>
+                  {analysis.continuation.status === 'capacity' && <p>{t('Stored evidence capacity reached. Narrow the scope before starting another run.')}</p>}
                   <p>One representative IP per subnet/site prefix. Not exhaustive address-space or ECMP coverage; firewall rules, NSGs, and host/service availability are outside this routing model.</p>
                 </div> : <p data-testid="aznet-analysis-not-run">Connectivity has not been analyzed. Configuration information below does not prove a connectivity failure.</p>}
                 {validationErrors.length > 0 && (

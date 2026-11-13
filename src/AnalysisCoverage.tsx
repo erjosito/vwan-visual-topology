@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { DiagnosticsReport } from './diagnostics'
-import { describeEvidenceSource, summarizeCoverage } from './diagnostics'
+import { describeDiagnosticsProgress, describeEvidenceSource, summarizeCoverage } from './diagnostics'
 import { t } from './i18n'
 import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
@@ -14,11 +14,15 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
   const [visibleCount, setVisibleCount] = useState(50)
   const coverage = summarizeCoverage(report)
   const name = (node?: ObjectSelection) => node ? topologyObject(topology, node)?.name ?? node.id : ''
-  const budgetLabels: Record<string, string> = { maxCells: 'Address cells', maxProbes: 'Uncached path traces', maxFindings: 'Findings', maxFailureCases: 'Routing failure scenarios', maxMillis: 'Elapsed time' }
+  const budgetLabels: Record<string, string> = {
+    maxCells: 'Address cells', maxProbes: 'Uncached path traces', maxFindings: 'Findings', maxFailureCases: 'Routing failure scenarios', maxMillis: 'Elapsed time',
+    maxStoredFindings: 'Stored findings', maxStoredCells: 'Stored address evidence', maxPendingCells: 'Pending address evidence', maxFailureBaselines: 'Stored failure baselines',
+  }
   if (!coverage.hasNotes) return null
   return <details className="analysis-coverage" open={initiallyOpen}>
     <summary>{t('Analysis coverage and model limitations')}</summary>
     <p>{t('These are coverage notes, not detected routing faults. Missing prefix ownership can be updated in the topology; model scope boundaries describe features outside the current simulator.')}</p>
+    {report.continuation && <p>{describeDiagnosticsProgress(report)}</p>}
     {report.budget && <p>{t('Limits: {0} address cells · {1} uncached path traces · {2} findings · {3} seconds', report.budget.maxCells, report.budget.maxProbes, report.budget.maxFindings, report.budget.maxMillis / 1000)}</p>}
     {report.budget && <p>{t('Optional route-recomputation limit: {0} failure scenarios', report.budget.maxFailureCases)}</p>}
     {coverage.scanIncomplete && <section className="coverage-section">

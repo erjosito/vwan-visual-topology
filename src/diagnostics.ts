@@ -55,6 +55,17 @@ export interface DiagnosticsFinding {
 export interface DiagnosticsReport {
   budget?: { maxProbes: number; maxCells: number; maxFindings: number; maxFailureCases: number; maxMillis: number }
   limitsReached?: string[]
+  continuation?: {
+    status: 'paused' | 'complete' | 'cancelled' | 'capacity'
+    phase: 'preparing' | 'ownership' | 'planning' | 'flows' | 'exports' | 'failures' | 'finished'
+    baseCells: number | null
+    assessedBaseCells: number
+    failureCells: number | null
+    assessedFailureCells: number
+    exportChecks: number
+    assessedExportChecks: number
+    remainingCells: number | null
+  }
   revision: string
   findings: DiagnosticsFinding[]
   probes: number
@@ -717,8 +728,7 @@ function suppressCascadingAutomaticFindings(findings: DiagnosticsFinding[]): Dia
   return [...nonFlow, ...kept]
 }
 
-export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, options: DiagnosticsOptions = {}): DiagnosticsReport {
-  const profile = validateDiagnosticsProfile(input)
+function diagnosticsBudget(options: DiagnosticsOptions) {
   if (!options || typeof options !== 'object' || Array.isArray(options)) throw new Error(budgetError)
   const defaults = { maxProbes: 4096, maxCells: 2048, maxFindings: 500, maxFailureCases: 24, maxMillis: 5000 }
   const ceilings = { maxProbes: 100000, maxCells: 50000, maxFindings: 10000, maxFailureCases: 240, maxMillis: 60000 }
@@ -734,46 +744,131 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     if (!Number.isSafeInteger(value) || value < 0 || value > ceilings[key as keyof typeof ceilings]) throw new Error(budgetError)
     budget[key as keyof typeof budget] = value
   }
-  const started = Date.now()
-  const report: DiagnosticsReport = { revision: routingRevision(topology), findings: [], probes: 0, cells: 0, failureCases: 0, complete: true, limitations: [], budget: { ...budget }, limitsReached: [] }
+  return budget
+}
+
+type DiagnosticStep = { limit?: 'maxProbes' | 'maxCells' | 'maxFindings' | 'maxFailureCases' }
+class DiagnosticsCapacityError extends Error {}
+
+export function createRoutingAnalysis(topology: Topology, input: DiagnosticsProfile, options: DiagnosticsOptions = {}) {
+  const profile = validateDiagnosticsProfile(input)
+  const budget = diagnosticsBudget(options)
+  const automatic = options.automatic === true
+  const report: DiagnosticsReport = {
+    revision: routingRevision(topology), findings: [], probes: 0, cells: 0, failureCases: 0, complete: true, limitations: [],
+    continuation: {
+      status: 'paused', phase: 'preparing', baseCells: null, assessedBaseCells: 0,
+      failureCells: profile.failureAnalysis ? null : 0, assessedFailureCells: 0,
+      exportChecks: profile.exportConstraints?.length ?? 0, assessedExportChecks: 0, remainingCells: null,
+    },
+  }
+  const iterator = routingAnalysisSteps(structuredClone(topology), structuredClone(profile), { automatic }, report)
+  let pending = iterator.next()
+  let capacity: string | undefined
+  const snapshot = (batch: typeof budget, reached: string[] = []) => {
+    const result = structuredClone(report)
+    if (automatic) result.findings = suppressCascadingAutomaticFindings(result.findings)
+    result.findings.sort((a, b) => a.id.localeCompare(b.id))
+    result.budget = { ...batch }
+    result.limitsReached = capacity ? [capacity] : reached
+    const progress = result.continuation!
+    progress.remainingCells = progress.baseCells === null || progress.failureCells === null ? null
+      : progress.baseCells - progress.assessedBaseCells + progress.failureCells - progress.assessedFailureCells
+    if (!pending.done || progress.status === 'cancelled' || capacity) {
+      result.complete = false
+      result.limitations.push(limits.budget)
+    }
+    result.limitations = [...new Set(result.limitations)].sort()
+    return result
+  }
+  return {
+    advance(overrides: DiagnosticsOptions = {}): DiagnosticsReport {
+      if (overrides.automatic !== undefined && Boolean(overrides.automatic) !== automatic) throw new Error(budgetError)
+      const batch = diagnosticsBudget({ ...budget, ...overrides })
+      if (pending.done || capacity) return snapshot(batch)
+      const started = Date.now()
+      const initial = { maxProbes: report.probes, maxCells: report.cells, maxFindings: report.findings.length, maxFailureCases: report.failureCases }
+      while (!pending.done) {
+        const reached: string[] = []
+        if (Date.now() - started >= batch.maxMillis) reached.push('maxMillis')
+        const key = pending.value.limit
+        const current = { maxProbes: report.probes, maxCells: report.cells, maxFindings: report.findings.length, maxFailureCases: report.failureCases }
+        if (key && current[key] - initial[key] >= batch[key]) reached.push(key)
+        if (reached.length) return snapshot(batch, reached)
+        try { pending = iterator.next() }
+        catch (error) {
+          if (!(error instanceof DiagnosticsCapacityError)) throw error
+          capacity = error.message
+          report.continuation!.status = 'capacity'
+          iterator.return(report)
+          break
+        }
+      }
+      if (!capacity) {
+        report.continuation!.status = 'complete'
+        report.continuation!.phase = 'finished'
+      }
+      return snapshot(batch)
+    },
+    cancel(): DiagnosticsReport {
+      if (!pending.done && !capacity) {
+        report.continuation!.status = 'cancelled'
+        pending = iterator.return(report)
+      }
+      return snapshot(budget)
+    },
+  }
+}
+
+export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, options: DiagnosticsOptions = {}): DiagnosticsReport {
+  return createRoutingAnalysis(topology, input, options).advance()
+}
+
+export function describeDiagnosticsProgress(report: DiagnosticsReport): string {
+  const progress = report.continuation
+  if (!progress) return ''
+  if (progress.baseCells === null) return t('Analysis scope is still being prepared.')
+  return [
+    t('Assessed {0} of {1} baseline address cells; {2} remain.', progress.assessedBaseCells, progress.baseCells, progress.baseCells - progress.assessedBaseCells),
+    progress.failureCells === null ? t('Failure scope will be known after baseline checks.')
+      : t('Assessed {0} of {1} failure address cells; {2} remain.', progress.assessedFailureCells, progress.failureCells, progress.failureCells - progress.assessedFailureCells),
+    t('Assessed {0} of {1} route requirements.', progress.assessedExportChecks, progress.exportChecks),
+    ...(progress.status === 'capacity' ? [t('Stored evidence capacity reached. Narrow the scope before starting another run.')] : []),
+  ].join(' ')
+}
+
+function* routingAnalysisSteps(topology: Topology, profile: DiagnosticsProfile, options: DiagnosticsOptions,
+  report: DiagnosticsReport): Generator<DiagnosticStep, DiagnosticsReport> {
   const limited = (message: string) => {
     report.complete = false
     if (!report.limitations.includes(message)) report.limitations.push(message)
   }
-  const time = () => Date.now() - started < budget.maxMillis
-  const exhausted = (...keys: (keyof typeof budget)[]) => {
-    limited(limits.budget)
-    for (const key of keys) if (!report.limitsReached!.includes(key)) report.limitsReached!.push(key)
-  }
-  const room = () => {
-    if (time() && report.cells < budget.maxCells && report.findings.length < budget.maxFindings) return true
-    const reached = [
-      ...(!time() ? ['maxMillis' as const] : []),
-      ...(report.cells >= budget.maxCells ? ['maxCells' as const] : []),
-      ...(report.findings.length >= budget.maxFindings ? ['maxFindings' as const] : []),
-    ]
-    if (reached.length) { exhausted(...reached); return false }
-    return true
-  }
   type Rule = keyof typeof messages
-  const add = (rule: Rule, severity: DiagnosticsFinding['severity'], scope: string, fields: Partial<DiagnosticsFinding> = {}) => {
-    if (report.findings.length >= budget.maxFindings) { exhausted('maxFindings'); return }
+  let storedCells = 0
+  const add = function* (rule: Rule, severity: DiagnosticsFinding['severity'], scope: string,
+    fields: Partial<DiagnosticsFinding> = {}): Generator<DiagnosticStep, void> {
     const finding: DiagnosticsFinding = {
       id: `${rule}:${hash(scope)}`, rule, severity, confidence: severity === 'unknown' ? 'unknown' : severity === 'warning' ? 'risk' : 'modeled',
       title: messages[rule][0], detail: messages[rule][1], related: [], forward: [], reverse: [], evidence: [], ...fields,
     }
     finding.related = [...new Map(finding.related.map((object) => [`${object.kind}:${object.id}`, object])).values()].sort((a, b) => `${a.kind}:${a.id}`.localeCompare(`${b.kind}:${b.id}`))
-    if (!report.findings.some((f) => f.id === finding.id)) report.findings.push(finding)
+    if (!report.findings.some((f) => f.id === finding.id)) {
+      yield { limit: 'maxFindings' }
+      if (report.findings.length >= 10000) throw new DiagnosticsCapacityError('maxStoredFindings')
+      storedCells += fields.occurrences?.length ?? 1
+      if (storedCells > 50000) throw new DiagnosticsCapacityError('maxStoredCells')
+      report.findings.push(finding)
+    }
   }
-  if (!time()) { exhausted('maxMillis'); return report }
+  yield {}
   const base = scenario(topology)
   for (const limitation of base.limitations) limited(limitation)
   for (const link of topology.erLinks ?? []) {
     if (!link.enabled || !link.hubId) continue
-    if (!room()) break
+    yield {}
     const compat = checkErHubLinkCompatibility(topology, link)
     if (!compat.allowed) {
-      add('er-sku-region', 'error', link.id, {
+      yield* add('er-sku-region', 'error', link.id, {
         related: [
           { kind: 'erLink', id: link.id },
           { kind: 'erLocation', id: link.locationId },
@@ -797,7 +892,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       return allOwners.some((owner) => owner.parsedPrefixes.some((container) => container.start <= range.start && container.end >= range.end))
     }
     for (const site of topology.sites) {
-      if (!room()) break
+      yield {}
       const unownedSources = (site.vpnStaticRoutes ?? [])
         .filter((route) => topology.connections.some((link) => link.id === route.connectionId && link.enabled) && !isOwnedPrefix(route.prefix))
         .map((route) => ({
@@ -809,7 +904,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       const prefixes = [...new Set(unownedSources.map((entry) => entry.prefix))]
       if (prefixes.length) {
         limited(limits.ownership)
-        add('unowned-advertisement', 'unknown', site.id, {
+        yield* add('unowned-advertisement', 'unknown', site.id, {
           related: [{ kind: 'site', id: site.id }], prefix: prefixes.join(', '),
           evidence: unownedSources,
         })
@@ -824,35 +919,35 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
     }
     base.boundaries = [...new Set(base.boundaries)].sort((a, b) => a - b)
   }
+  report.continuation!.phase = 'ownership'
   for (let i = 0; i < allOwners.length; i++) {
     for (let j = i + 1; j < allOwners.length; j++) {
-      if (!time()) { exhausted('maxMillis'); break }
+      yield {}
       const overlaps = allOwners[i].parsedPrefixes.flatMap((a) =>
         allOwners[j].parsedPrefixes
           .filter((b) => a.start < b.end && b.start < a.end)
           .map((b) => (a.length >= b.length ? a.prefix : b.prefix)),
       )
-      if (overlaps.length) add('ownership', 'warning', stable([allOwners[i].node, allOwners[j].node]), {
+      if (overlaps.length) yield* add('ownership', 'warning', stable([allOwners[i].node, allOwners[j].node]), {
         related: [allOwners[i].node, allOwners[j].node], prefix: overlaps.sort()[0],
         evidence: [...new Set(overlaps)].sort().map((prefix) => ({ code: 'declared-overlap', prefix })),
       })
     }
   }
-  const trace = (state: Scenario, node: PathNode, destination: string): NodePath[] | undefined => {
+  const trace = function* (state: Scenario, node: PathNode, destination: string): Generator<DiagnosticStep, NodePath[]> {
     const key = `${node.kind}:${node.id}:${destination}`
     const cached = state.cache.get(key)
     if (cached) return cached
-    if (!time()) { exhausted('maxMillis'); return undefined }
-    if (report.probes >= budget.maxProbes) { exhausted('maxProbes'); return undefined }
+    yield { limit: 'maxProbes' }
     report.probes++
     const paths = traceNodePath(state.topology, state.simulation, node, destination, state.learned)
     state.cache.set(key, paths)
+    if (state.cache.size > 20000) state.cache.delete(state.cache.keys().next().value!)
     return paths
   }
-  const evaluate = (state: Scenario, intent: DiagnosticIntent, sourceCell: Cell, targetCell: Cell) => {
-    const forward = trace(state, intent.source, targetCell.address)
-    const reverse = intent.expectation === 'allow' ? trace(state, intent.target, sourceCell.address) : []
-    if (!forward || !reverse) return undefined
+  const evaluate = function* (state: Scenario, intent: DiagnosticIntent, sourceCell: Cell, targetCell: Cell) {
+    const forward = yield* trace(state, intent.source, targetCell.address)
+    const reverse = intent.expectation === 'allow' ? yield* trace(state, intent.target, sourceCell.address) : []
     const reasons = [...state.limitations, ...modelLimits(state, intent.source, targetCell.address, forward),
       ...(intent.expectation === 'allow' ? modelLimits(state, intent.target, sourceCell.address, reverse) : [])]
     if (!owned(state, intent.source, sourceCell.address) || !owned(state, intent.target, targetCell.address)) reasons.push(limits.ownership)
@@ -866,6 +961,10 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   }
   type Baseline = { intent: DiagnosticIntent; source: Cell; target: Cell }
   const healthy: Baseline[] = []
+  const rememberHealthy = (intent: DiagnosticIntent, source: Cell, target: Cell) => {
+    if (healthy.length >= 50000) throw new DiagnosticsCapacityError('maxFailureBaselines')
+    healthy.push({ intent, source, target })
+  }
   const pathSignatures = new WeakMap<NodePath[], { forward: string; reverse: string }>()
   const signature = (paths: NodePath[], source: PathNode, reverse = false) => {
     let cached = pathSignatures.get(paths)
@@ -911,12 +1010,26 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   const partitionCached = (prefix: string) => {
     let cells = partitionCache.get(prefix)
     if (!cells) {
-      cells = partition(prefix, base.boundaries, budget.maxCells + 1)
+      cells = partition(prefix, base.boundaries, base.boundaries.length + 1)
       partitionCache.set(prefix, cells)
     }
     return cells
   }
-  intents: for (const intent of intents()) {
+  const ignored = (intent: DiagnosticIntent & { automatic?: true }, source: Cell, target: Cell) =>
+    Boolean(intent.automatic && profile.intents.some((requirement) =>
+      same(requirement.source, intent.source) && same(requirement.target, intent.target) && covers(requirement.sourcePrefix, source) && covers(requirement.destinationPrefix, target)
+      || same(requirement.source, intent.target) && same(requirement.target, intent.source) && covers(requirement.sourcePrefix, target) && covers(requirement.destinationPrefix, source)))
+  report.continuation!.phase = 'planning'
+  let baseCells = 0
+  for (const intent of intents()) {
+    for (const source of partitionCached(intent.sourcePrefix)) {
+      yield {}
+      for (const target of partitionCached(intent.destinationPrefix)) if (!ignored(intent, source, target)) baseCells++
+    }
+  }
+  report.continuation!.baseCells = baseCells
+  report.continuation!.phase = 'flows'
+  for (const intent of intents()) {
     const sources = partitionCached(intent.sourcePrefix)
     const targets = partitionCached(intent.destinationPrefix)
     const pending: PendingCellFinding[] = []
@@ -928,20 +1041,19 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       fields: Partial<DiagnosticsFinding>,
       groupKey: string = rule,
     ) => {
+      if (pending.length >= 50000) throw new DiagnosticsCapacityError('maxPendingCells')
       pending.push({ rule, severity, source, target, fields, groupKey })
     }
     for (const source of sources) {
       for (const target of targets) {
-        if (!room()) break intents
-        if (intent.automatic && profile.intents.some((requirement) =>
-          same(requirement.source, intent.source) && same(requirement.target, intent.target) && covers(requirement.sourcePrefix, source) && covers(requirement.destinationPrefix, target)
-          || same(requirement.source, intent.target) && same(requirement.target, intent.source) && covers(requirement.sourcePrefix, target) && covers(requirement.destinationPrefix, source))) continue
+        if (ignored(intent, source, target)) continue
+        yield { limit: 'maxCells' }
         report.cells++
-        const result = evaluate(base, intent, source, target)
-        if (!result) break intents
+        const result = yield* evaluate(base, intent, source, target)
+        report.continuation!.assessedBaseCells++
         const { forward, reverse, reasons, f, r, inspection } = result
         if (intent.automatic && !reasons.length && result.success && signature(forward, intent.source) === signature(reverse, intent.target, true)) {
-          if (profile.failureAnalysis) healthy.push({ intent, source, target })
+          if (profile.failureAnalysis) rememberHealthy(intent, source, target)
           continue
         }
         const fields: Partial<DiagnosticsFinding> = {
@@ -988,7 +1100,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
         }
         if (result.success) {
           if (!intent.automatic) queue('reachable', 'info', source, target, fields, `reachable:${signature(forward, intent.source)}:${signature(reverse, intent.target, true)}`)
-          if (profile.failureAnalysis) healthy.push({ intent, source, target })
+          if (profile.failureAnalysis) rememberHealthy(intent, source, target)
         }
       }
     }
@@ -1014,7 +1126,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
             ? { ...entry, prefix: mergedTarget.prefix }
             : entry,
       )
-      add(first.rule, first.severity, scope, {
+      yield* add(first.rule, first.severity, scope, {
         ...first.fields,
         sourceAddress: mergedSource.address,
         destinationAddress: mergedTarget.address,
@@ -1029,8 +1141,9 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       })
     }
   }
+  report.continuation!.phase = 'exports'
   for (const constraint of [...(profile.exportConstraints ?? [])].sort((a, b) => a.id.localeCompare(b.id))) {
-    if (!room()) break
+    yield {}
     let snapshot: { before: { prefix: string }[]; after: { prefix: string }[] } | undefined = base.simulation.routePolicies.find((item) => item.router.kind === constraint.router.kind && item.router.id === constraint.router.id && item.connectionId === constraint.connectionId && item.direction === constraint.direction)
     const site = constraint.router.kind === 'site' ? topology.sites.find((node) => node.id === constraint.router.id) : undefined
     const link = topology.siteLinks.find((link) => link.id === constraint.connectionId && (link.a === site?.id || link.b === site?.id))
@@ -1062,42 +1175,45 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       (attachment?.transport === 'ExpressRoute' || topology.erLinks?.some((link) => link.id === constraint.connectionId)))
     if (!snapshot || base.limitations.length || unsupported) {
       limited(limits.policy)
-      add('unknown', 'unknown', stable(constraint), fields)
+      yield* add('unknown', 'unknown', stable(constraint), fields)
     } else {
       const present = snapshot.after.some((route) => route.prefix === constraint.prefix)
       const matches = present === (constraint.expectation === 'present')
-      add(matches ? 'export-ok' : 'export', matches ? 'info' : 'error', stable(constraint), fields)
+      yield* add(matches ? 'export-ok' : 'export', matches ? 'info' : 'error', stable(constraint), fields)
     }
+    report.continuation!.assessedExportChecks++
   }
   if (options.automatic) {
     for (const isolation of singleLinkIsolation(topology)) {
-      if (!room()) break
-      add('link-isolation', 'warning', stable([isolation.object, isolation.linkId]), {
+      yield {}
+      yield* add('link-isolation', 'warning', stable([isolation.object, isolation.linkId]), {
         isolation, related: [...(isolation.object ? [isolation.object] : []), ...isolation.groups.flat()],
         evidence: [{ code: 'structural-bridge', connectionId: isolation.linkId }],
       })
     }
   }
+  report.continuation!.phase = 'failures'
+  report.continuation!.failureCells = 0
   if (profile.failureAnalysis && healthy.length) {
     const links = [...topology.connections.map((link) => ({ kind: 'connection' as const, link })),
       ...topology.siteLinks.map((link) => ({ kind: 'siteLink' as const, link })),
       ...(topology.erLinks ?? []).map((link) => ({ kind: 'erLink' as const, link }))].filter(({ link }) => link.enabled)
       .sort((a, b) => `${a.kind}:${a.link.id}`.localeCompare(`${b.kind}:${b.link.id}`))
-    failures: for (const { kind, link } of links) {
-      if (!room()) break
-      if (report.failureCases >= budget.maxFailureCases) { exhausted('maxFailureCases'); break }
+    report.continuation!.failureCells = healthy.length * links.length
+    for (const { kind, link } of links) {
+      yield { limit: 'maxFailureCases' }
       report.failureCases++
       const clone = structuredClone(topology)
       const collection = kind === 'connection' ? clone.connections : kind === 'siteLink' ? clone.siteLinks : clone.erLinks!
       collection.find((item) => item.id === link.id)!.enabled = false
       const failed = scenario(clone)
       for (const { intent, source, target } of healthy) {
-        if (!room()) break failures
+        yield { limit: 'maxCells' }
         report.cells++
-        const result = evaluate(failed, intent, source, target)
-        if (!result) break failures
+        const result = yield* evaluate(failed, intent, source, target)
+        report.continuation!.assessedFailureCells++
         if (result.reasons.length) result.reasons.forEach(limited)
-        if (!result.success || result.reasons.length) add(result.reasons.length ? 'failure-unknown' : 'failure', result.reasons.length ? 'unknown' : 'warning', stable([kind, link.id, intent, source.prefix, target.prefix]), {
+        if (!result.success || result.reasons.length) yield* add(result.reasons.length ? 'failure-unknown' : 'failure', result.reasons.length ? 'unknown' : 'warning', stable([kind, link.id, intent, source.prefix, target.prefix]), {
           source: intent.source, target: intent.target, sourceAddress: source.address, destinationAddress: target.address, prefix: target.prefix,
           related: [{ kind, id: link.id }, intent.source, intent.target, ...pathObjects([...result.forward, ...result.reverse])],
           forward: result.forward, reverse: result.reverse, evidence: [
@@ -1111,12 +1227,6 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
       }
     }
   }
-  if (options.automatic) {
-    report.findings = suppressCascadingAutomaticFindings(report.findings)
-  }
-  if (!time()) exhausted('maxMillis')
-  report.findings.sort((a, b) => a.id.localeCompare(b.id))
-  report.limitations.sort()
   return report
 }
 

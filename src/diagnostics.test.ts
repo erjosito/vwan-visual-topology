@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { example, type Topology } from './model'
-import { analyzeRouting, describeEvidenceSource, diagnosticFlowCount, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
+import { analyzeRouting, createRoutingAnalysis, describeEvidenceSource, diagnosticFlowCount, diagnosticMessages, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsProfile } from './diagnostics'
 import { azureRoutesAtSites, traceNodePath } from './paths'
 import { propagateSites } from './bgp'
@@ -29,6 +29,82 @@ function dropReturn(t: Topology) {
 }
 
 describe('routing diagnostic intent and evidence', () => {
+  it.each([false, true])('resumes inside traces and grouped address cells without missing or repeating findings (automatic=%s)', (automatic) => {
+    const topology = fixture()
+    topology.sites[0].prefixes.push('10.2.1.0/24')
+    topology.connections.push({ ...structuredClone(topology.connections[0]), id: 'backup' })
+    const requirements = profile(flow({ sourcePrefix: '10.1.0.0/16', destinationPrefix: '10.2.0.0/16' }), true)
+    const expected = analyzeRouting(topology, requirements, { automatic, maxMillis: 15000 })
+    const run = createRoutingAnalysis(topology, requirements, {
+      automatic, maxCells: 1, maxProbes: 1, maxFindings: 1, maxFailureCases: 1, maxMillis: 15000,
+    })
+    let report = run.advance()
+    let batches = 1
+    expect(report.complete).toBe(false)
+    expect(report.probes).toBe(1)
+    expect(report.continuation).toMatchObject({ status: 'paused', assessedBaseCells: 0 })
+    while (report.continuation?.status === 'paused' && batches < 300) {
+      const previous = report
+      report = run.advance()
+      expect(report.probes - previous.probes).toBeLessThanOrEqual(1)
+      expect(report.cells - previous.cells).toBeLessThanOrEqual(1)
+      expect(report.failureCases - previous.failureCases).toBeLessThanOrEqual(1)
+      batches++
+    }
+    expect(batches).toBeGreaterThan(2)
+    expect(report).toEqual({ ...expected, budget: report.budget })
+    expect(report.continuation).toMatchObject({ status: 'complete', remainingCells: 0 })
+    expect(report.limitations).not.toContain('Analysis budget reached; some declared cases were not assessed.')
+    expect(new Set(report.findings.map((finding) => finding.id)).size).toBe(report.findings.length)
+  })
+
+  it('preserves pending finding groups and reports the exact remaining base address cells', () => {
+    const topology = fixture()
+    topology.sites[0].prefixes.push('10.2.1.0/24')
+    dropReturn(topology)
+    const requirements = profile(flow({ sourcePrefix: '10.1.0.0/16', destinationPrefix: '10.2.0.0/16' }))
+    const expected = analyzeRouting(topology, requirements)
+    const run = createRoutingAnalysis(topology, requirements, { maxCells: 1 })
+    let report = run.advance()
+    expect(report.continuation).toMatchObject({
+      status: 'paused', baseCells: expected.cells, assessedBaseCells: 1, remainingCells: expected.cells - 1,
+    })
+    for (let i = 0; i < expected.cells + 1 && report.continuation?.status === 'paused'; i++) report = run.advance()
+    expect(report.findings).toEqual(expected.findings)
+    expect(report.continuation).toMatchObject({ status: 'complete', remainingCells: 0 })
+    expect(diagnosticFlowCount(report.findings)).toBe(diagnosticFlowCount(expected.findings))
+  })
+
+  it('freezes routing and profile inputs and supports cancellation without certifying partial work', () => {
+    const topology = fixture(), requirements = profile(), options = { automatic: false, maxProbes: 1 }
+    const expectedRevision = routingRevision(topology)
+    const run = createRoutingAnalysis(topology, requirements, options)
+    topology.connections[0].enabled = false
+    requirements.intents[0].expectation = 'deny'
+    options.automatic = true
+    expect(run.advance().continuation?.status).toBe('paused')
+    const cancelled = run.cancel()
+    expect(cancelled).toMatchObject({ revision: expectedRevision, complete: false, continuation: { status: 'cancelled' } })
+    expect(run.advance()).toEqual(cancelled)
+    const finished = createRoutingAnalysis(fixture(), profile()).advance()
+    expect(finished.findings.map((finding) => finding.rule)).toEqual(['reachable'])
+  })
+
+  it('pauses on elapsed time and can continue without carrying pause-only limitations into the final result', () => {
+    let clock = 0
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock++)
+    try {
+      const run = createRoutingAnalysis(fixture(), profile())
+      const paused = run.advance({ maxMillis: 1 })
+      expect(paused).toMatchObject({ complete: false, limitsReached: ['maxMillis'], continuation: { status: 'paused' } })
+      expect(run.advance({ maxMillis: 10000 })).toMatchObject({
+        complete: true, limitsReached: [], limitations: [], continuation: { status: 'complete', remainingCells: 0 },
+      })
+      expect(() => run.advance({ maxCells: NaN })).toThrow('Invalid diagnostics budget.')
+      expect(() => run.advance({ automatic: true })).toThrow('Invalid diagnostics budget.')
+    } finally { now.mockRestore() }
+  })
+
   it('automatically checks all assigned endpoint networks without a configured flow profile', () => {
     const t = fixture(), empty: DiagnosticsProfile = { version: 1, intents: [], failureAnalysis: false }
     const original = JSON.stringify(t)

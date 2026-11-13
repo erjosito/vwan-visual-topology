@@ -4,7 +4,7 @@ import { CanvasOverlay } from './CanvasOverlay'
 import { AnalysisCoverage } from './AnalysisCoverage'
 import { FindingFlows } from './FindingFlows'
 import { localizeDiagnostic, t } from './i18n'
-import { describeEvidenceSource, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
+import { describeDiagnosticsProgress, describeEvidenceSource, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticIntent, DiagnosticsFinding, DiagnosticsProfile, DiagnosticsReport, ExportConstraint } from './diagnostics'
 import type { PathNode } from './paths'
 import { nodePrefixes } from './paths'
@@ -57,6 +57,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   const [constraintExpectation, setConstraintExpectation] = useState<'present' | 'absent'>('present')
   const [report, setReport] = useState<DiagnosticsReport>()
   const [reportProfile, setReportProfile] = useState('')
+  const [cancelled, setCancelled] = useState(false)
   const [runScope, setRunScope] = useState<{ revision: string; profileRevision: string }>()
   const [severity, setSeverity] = useState('')
   const [category, setCategory] = useState('')
@@ -78,7 +79,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
       onProfileChange?.()
       importRequest.current++
       onClearHighlight()
-      setProfile(valid); setReport(undefined); setError('')
+      setProfile(valid); setReport(undefined); setError(''); setCancelled(false)
       try { localStorage.setItem(storageKey, JSON.stringify(valid)) }
       catch { setError('Browser storage is unavailable or full. Export the analysis profile to preserve it.') }
     } catch { setError('Invalid analysis profile. Use canonical IPv4 addresses or network prefixes and valid flow requirements.') }
@@ -110,6 +111,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   }
   const run = () => {
     worker.current?.terminate()
+    setCancelled(false)
     onClearHighlight()
     try {
       const next = new Worker(new URL('./diagnostics-worker.ts', import.meta.url), { type: 'module' })
@@ -118,7 +120,8 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
         if (worker.current !== next) return
         if (data.report) { setReport(data.report); setReportProfile(profileRevision) }
         else setError(data.error ?? 'Diagnostics could not be completed. Review the analysis profile and model limitations.')
-        next.terminate(); worker.current = undefined; setRunScope(undefined)
+        if (data.report?.continuation?.status !== 'paused') { next.terminate(); worker.current = undefined }
+        setRunScope(undefined)
       }
       next.onerror = () => {
         if (worker.current !== next) return
@@ -129,6 +132,11 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
     } catch { setRunScope(undefined); setError('Diagnostics could not be completed. Review the analysis profile and model limitations.') }
   }
   const currentReport = report?.revision === revision && reportProfile === profileRevision ? report : undefined
+  const resume = () => {
+    if (!worker.current || currentReport?.continuation?.status !== 'paused' || running) return
+    setRunScope({ revision, profileRevision })
+    worker.current.postMessage({ type: 'continue' })
+  }
   const name = (node?: PathNode) => node ? topologyObject(topology, node)?.name ?? node.id : ''
   const visible = currentReport?.findings.filter((finding) => finding.severity !== 'unknown' &&
     (!severity || finding.severity === severity) && (!category || finding.rule === category)
@@ -172,7 +180,13 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
       <ul className="analysis-requirements">{profile.exportConstraints?.map((constraint) => <li key={constraint.id}><span>{name(constraint.router)} · {constraint.connectionId} · {t(constraint.direction === 'inbound' ? 'Inbound' : 'Outbound')} · {constraint.prefix} · {t(constraint.expectation === 'present' ? 'Must be present' : 'Must be absent')}</span><button aria-label={t('Remove route requirement {0}', constraint.prefix)} onClick={() => change({ ...profile, exportConstraints: profile.exportConstraints?.filter((entry) => entry.id !== constraint.id) })}>{t('Remove')}</button></li>)}</ul>
     </details>
     <label className="checkbox-field"><input type="checkbox" checked={profile.failureAnalysis} onChange={(event) => change({ ...profile, failureAnalysis: event.target.checked })} />{t('Check single-link failures on a model copy (bounded; no Azure changes)')}</label>
-    <div className="row dialog-actions"><button onClick={() => download(profile, 'vwan-analysis-profile.json')}>{t('Export analysis profile')}</button><button onClick={() => importer.current?.click()}>{t('Import analysis profile')}</button><button disabled={running || (!profile.intents.length && !profile.exportConstraints?.length)} className="primary" onClick={run}>{t('Run diagnostics')}</button>{running && <button onClick={() => { worker.current?.terminate(); worker.current = undefined; setRunScope(undefined) }}>{t('Cancel analysis')}</button>}</div>
+    <div className="row dialog-actions"><button onClick={() => download(profile, 'vwan-analysis-profile.json')}>{t('Export analysis profile')}</button><button onClick={() => importer.current?.click()}>{t('Import analysis profile')}</button><button disabled={running || (!profile.intents.length && !profile.exportConstraints?.length)} className="primary" onClick={run}>{t('Run diagnostics')}</button>
+      {!running && currentReport?.continuation?.status === 'paused' && <button className="primary" onClick={resume}>{t('Continue analysis')}</button>}
+      {(running || currentReport?.continuation?.status === 'paused') && <button onClick={() => {
+        worker.current?.terminate(); worker.current = undefined; setRunScope(undefined)
+        setCancelled(true)
+        setReport((previous) => previous?.continuation ? { ...previous, complete: false, continuation: { ...previous.continuation, status: 'cancelled' } } : previous)
+      }}>{t('Cancel analysis')}</button>}</div>
     <input ref={importer} hidden type="file" accept=".json,application/json" aria-label={t('Import analysis profile file')} onChange={async (event) => {
       const file = event.target.files?.[0]; event.target.value = ''; if (!file) return
       const request = ++importRequest.current
@@ -184,6 +198,8 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
     }} />
     {error && <p className="notice error" role="alert">{t(error)}</p>}
     {running && <p role="status">{t('Analyzing routing in a local worker. You can cancel or continue editing the topology.')}</p>}
+    {cancelled && <p role="status">{t('Analysis cancelled; unassessed cases remain unverified.')}</p>}
+    {currentReport?.continuation && <p role="status">{describeDiagnosticsProgress(currentReport)}</p>}
     {report && !currentReport && <p className="notice" role="status">{t('The routing configuration changed. Run diagnostics again; previous results are stale.')}</p>}
     {currentReport && (() => {
       const coverage = summarizeCoverage(currentReport)
