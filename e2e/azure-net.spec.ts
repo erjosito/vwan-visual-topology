@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { AZURE_NET_SAMPLES, type AzNetTopology } from '../src/azure-net/model'
+import { AZURE_NET_SAMPLES, createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
 
 async function openNodeMenu(page: Page, testId: string) {
   await page.getByTestId(testId).focus()
@@ -19,6 +19,34 @@ async function loadTopology(page: Page, topology: AzNetTopology) {
   }, topology)
   await page.goto('/?mode=hub-spoke')
 }
+
+test('resumable routing checks retain pair coverage, cancel honestly and invalidate edited topology', async ({ page }) => {
+  const topology = createEmptyAzNetTopology()
+  topology.sites = Array.from({ length: 22 }, (_, i) => ({
+    id: `site-${i}`, name: `Site ${i}`, asn: 65000 + i, prefixes: [`10.${i}.0.0/24`],
+  }))
+  await loadTopology(page, topology)
+  await page.getByTestId('aznet-check-routing-btn').click()
+  const status = page.getByTestId('aznet-routing-check-status')
+  await expect(status).toContainText('Checked 200 of 231')
+  await expect(status).toContainText('31 representative pairs remain unassessed.')
+  await status.getByRole('button', { name: 'Cancel analysis', exact: true }).click()
+  await expect(status).toContainText('Analysis cancelled')
+  await expect(status.getByRole('button', { name: 'Continue analysis', exact: true })).toHaveCount(0)
+  await page.getByTestId('aznet-check-routing-btn').click()
+  await expect(status).toContainText('Checked 200 of 231')
+  await page.getByTestId('aznet-continue-routing-check').click()
+  await expect(status).toContainText('Checked 231 of 231')
+  await expect(status).toContainText('0 representative pairs remain unassessed.')
+  await page.getByTestId('aznet-check-routing-btn').click()
+  await expect(page.getByTestId('aznet-continue-routing-check')).toBeVisible()
+  await openNodeMenu(page, 'aznet-site-site-21')
+  await page.getByRole('menuitem', { name: 'Delete On-Premises Site', exact: true }).click()
+  await expect(status).toContainText('Checked 200 of 210')
+  await expect(status).not.toContainText('231')
+  await page.getByTestId('aznet-continue-routing-check').click()
+  await expect(status).toContainText('Checked 210 of 210')
+})
 
 test.describe('AzNet bounded workspace and durable gestures', () => {
   const storageKey = 'aznet-visual-topology:v1'
@@ -206,7 +234,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     const beforeRegion = await counts(page)
     await page.getByTestId('aznet-vnet-region-vnet-spoke-data').fill('eastus')
     await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeRegion.simulation)
-    expect((await counts(page)).connectivity).toBeGreaterThan(beforeRegion.connectivity)
+    await expect.poll(async () => (await counts(page)).connectivity).toBeGreaterThan(beforeRegion.connectivity)
   })
 
   for (const [mode, size, prefixCount] of [['hub-spoke', 21, 100], ['full', 61, 500]] as const) {

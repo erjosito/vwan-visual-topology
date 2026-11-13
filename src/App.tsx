@@ -30,7 +30,7 @@ import type { ComparisonSession } from './AzureComparisonPanel'
 import { FeedbackDialog } from './FeedbackDialog'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { RoutingIssuesPanel } from './RoutingIssuesPanel'
-import { diagnosticFlowCount, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
+import { describeDiagnosticsProgress, diagnosticFlowCount, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
 import type { DiagnosticsFinding, DiagnosticsReport } from './diagnostics'
 import { importAzureCapture } from './azure-import'
 import { vpnRoutingMode } from './vpn-routing'
@@ -219,7 +219,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
           data.report.limitations.push('Saved requirements could not be read. Automatic checks ran without them.')
         }
         setRoutingCheck({ revision: targetRevision, status: data.report ? 'complete' : 'failed', report: data.report })
-        next.terminate(); checkWorker.current = undefined
+        if (data.report?.continuation?.status !== 'paused') { next.terminate(); checkWorker.current = undefined }
       }
       next.onerror = () => {
         if (checkWorker.current?.worker !== next) return
@@ -233,6 +233,11 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     }
   }
   const checkRouting = () => runRoutingCheck(activeTopology, false)
+  const continueRoutingCheck = () => {
+    if (!checkWorker.current || checkWorker.current.revision !== routingKey || currentCheck?.status === 'running' || currentCheck?.report?.continuation?.status !== 'paused') return
+    setRoutingCheck({ ...currentCheck, status: 'running' })
+    checkWorker.current.worker.postMessage({ type: 'continue' })
+  }
   const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
   const [routeView, setRouteView] = useState<'bgp' | 'hub' | 'firewall'>('bgp')
@@ -623,7 +628,9 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
           ].join(' · ')}</span>
             <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(false); setPanel('issues') }}>{t('Review routing issues')}</button>
             {checkCoverage.hasNotes && <button onClick={() => { setRoutingIssueId(undefined); setReviewCoverage(true); setPanel('issues') }}>{t('Review analysis coverage')}</button>}</>}
-          {currentCheck?.status === 'running' && <button onClick={() => { checkWorker.current?.worker.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
+          {currentCheck?.report?.continuation && <span>{describeDiagnosticsProgress(currentCheck.report)}</span>}
+          {currentCheck?.status !== 'running' && currentCheck?.report?.continuation?.status === 'paused' && <button onClick={continueRoutingCheck}>{t('Continue analysis')}</button>}
+          {(currentCheck?.status === 'running' || currentCheck?.report?.continuation?.status === 'paused') && <button onClick={() => { checkWorker.current?.worker.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
           <button onClick={openDiagnostics}>{t('Advanced checks')}</button>
         </div>}
         <div className="canvas-stage">

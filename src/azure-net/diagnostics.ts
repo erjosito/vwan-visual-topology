@@ -951,22 +951,36 @@ export type AzConnectivityScope =
 
 export const AZ_NET_PAIR_LIMIT = 200
 
+export interface AzConnectivityReport {
+  findings: AzDiagnosticFinding[]
+  checked: number
+  total: number
+  complete: boolean
+  limitsReached: string[]
+  continuation: { status: 'paused' | 'complete' | 'cancelled' | 'capacity' | 'unavailable'; remainingPairs: number }
+}
+
 export function analyzeAzNetConnectivity(
   topology: AzNetTopology,
   simulation: AzSimulationResult,
   scope: AzConnectivityScope,
   limit = AZ_NET_PAIR_LIMIT,
-): { findings: AzDiagnosticFinding[]; checked: number; total: number; complete: boolean } {
+): AzConnectivityReport {
+  return createAzNetConnectivityAnalysis(topology, simulation, scope).advance({ maxPairs: limit })
+}
+
+export function createAzNetConnectivityAnalysis(
+  input: AzNetTopology, inputSimulation: AzSimulationResult, inputScope: AzConnectivityScope,
+) {
+  const { topology, simulation, scope } = structuredClone({ topology: input, simulation: inputSimulation, scope: inputScope })
   const endpoints = getAzNetEndpoints(topology)
   const workloads = endpoints.filter((e) => e.group === 'workload')
   const sites = endpoints.filter((e) => e.group === 'site')
   const findings: AzDiagnosticFinding[] = []
   let total = 0
   let checked = 0
-  const budget = Math.min(AZ_NET_PAIR_LIMIT, Math.max(0, Math.floor(limit)))
 
   const check = (a: AzEndpointOption, b: AzEndpointOption) => {
-    if (checked >= budget) return
     checked++
     const pair = traceAzNetPair(topology, simulation, a.ref, a.defaultIp, b.ref, b.defaultIp)
     const failed = pair.forward.status !== 'delivered' || pair.reverse.status !== 'delivered'
@@ -1041,45 +1055,76 @@ export function analyzeAzNetConnectivity(
     })
   }
 
-  if (scope.scope === 'pair') {
-    const a = endpoints.find((e) => e.key === scope.sourceKey)
-    const b = endpoints.find((e) => e.key === scope.destinationKey)
-    if (!a || !b || azEndpointKey(a.ref) === azEndpointKey(b.ref) || a.group === 'internet' || b.group === 'internet') {
-      return { findings, checked: 0, total: 1, complete: false }
+  const includeWorkloadPairs = scope.scope !== 'onprem'
+  const siteCounts = new Map<string, number>()
+  for (const site of sites) {
+    const key = azEndpointKey(site.ref)
+    siteCounts.set(key, (siteCounts.get(key) ?? 0) + 1)
+  }
+  const sitePairCount = scope.scope === 'landscape'
+    ? (sites.length * (sites.length - 1) - [...siteCounts.values()].reduce((sum, count) => sum + count * (count - 1), 0)) / 2
+    : 0
+  total = scope.scope === 'pair' ? 1 : workloads.length * sites.length +
+    (includeWorkloadPairs ? workloads.length * (workloads.length - 1) / 2 : 0) + sitePairCount
+  function* pairs(): Generator<[AzEndpointOption, AzEndpointOption]> {
+    if (scope.scope === 'pair') {
+      const a = endpoints.find((e) => e.key === scope.sourceKey)
+      const b = endpoints.find((e) => e.key === scope.destinationKey)
+      if (a && b && azEndpointKey(a.ref) !== azEndpointKey(b.ref) && a.group !== 'internet' && b.group !== 'internet') yield [a, b]
+      return
     }
-    total = 1
-    check(a, b)
-  } else {
-    const includeWorkloadPairs = scope.scope !== 'onprem'
-    const siteCounts = new Map<string, number>()
-    for (const site of sites) {
-      const key = azEndpointKey(site.ref)
-      siteCounts.set(key, (siteCounts.get(key) ?? 0) + 1)
-    }
-    const sitePairCount = scope.scope === 'landscape'
-      ? (sites.length * (sites.length - 1) - [...siteCounts.values()].reduce((sum, count) => sum + count * (count - 1), 0)) / 2
-      : 0
-    total = workloads.length * sites.length +
-      (includeWorkloadPairs ? workloads.length * (workloads.length - 1) / 2 : 0) + sitePairCount
     for (let i = 0; i < workloads.length; i++) {
-      if (checked >= budget) break
       if (includeWorkloadPairs) {
-        for (let j = i + 1; j < workloads.length && checked < budget; j++) {
-          check(workloads[i], workloads[j])
-        }
+        for (let j = i + 1; j < workloads.length; j++) yield [workloads[i], workloads[j]]
       }
-      for (const site of sites) {
-        if (checked >= budget) break
-        check(workloads[i], site)
-      }
+      for (const site of sites) yield [workloads[i], site]
     }
     if (sitePairCount > 0) {
-      for (let i = 0; i < sites.length && checked < budget; i++) {
-        for (let j = i + 1; j < sites.length && checked < budget; j++) {
-          if (azEndpointKey(sites[i].ref) !== azEndpointKey(sites[j].ref)) check(sites[i], sites[j])
+      for (let i = 0; i < sites.length; i++) {
+        for (let j = i + 1; j < sites.length; j++) {
+          if (azEndpointKey(sites[i].ref) !== azEndpointKey(sites[j].ref)) yield [sites[i], sites[j]]
         }
       }
     }
   }
-  return { findings, checked, total, complete: checked === total }
+  const iterator = pairs()
+  let pending = iterator.next()
+  let cancelled = false
+  const snapshot = (limitsReached: string[] = []): AzConnectivityReport => ({
+    findings: structuredClone(findings), checked, total, complete: checked === total && !cancelled,
+    limitsReached,
+    continuation: {
+      status: cancelled ? 'cancelled' : limitsReached.includes('maxStoredFindings') ? 'capacity'
+        : !pending.done ? 'paused' : checked === total ? 'complete' : 'unavailable',
+      remainingPairs: total - checked,
+    },
+  })
+  return {
+    advance(options: { maxPairs?: number; maxMillis?: number } = {}): AzConnectivityReport {
+      const maxPairs = options.maxPairs ?? AZ_NET_PAIR_LIMIT, maxMillis = options.maxMillis ?? 5000
+      if (!Number.isSafeInteger(maxPairs) || maxPairs < 0 || !Number.isSafeInteger(maxMillis) || maxMillis < 0 || maxMillis > 60000) {
+        throw new Error('Invalid connectivity analysis budget.')
+      }
+      if (cancelled) return snapshot()
+      const started = Date.now(), initial = checked, batch = Math.min(AZ_NET_PAIR_LIMIT, maxPairs)
+      while (!pending.done) {
+        const reached = [
+          ...(checked - initial >= batch ? ['maxPairs'] : []),
+          ...(Date.now() - started >= maxMillis ? ['maxMillis'] : []),
+          ...(findings.length >= 10000 ? ['maxStoredFindings'] : []),
+        ]
+        if (reached.length) return snapshot(reached)
+        check(...pending.value)
+        pending = iterator.next()
+      }
+      return snapshot()
+    },
+    cancel(): AzConnectivityReport {
+      if (!pending.done) {
+        cancelled = true
+        pending = iterator.return(undefined)
+      }
+      return snapshot()
+    },
+  }
 }

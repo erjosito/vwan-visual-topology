@@ -8,7 +8,7 @@ import {
 import { generateAzNetBicep } from './bicep-export'
 import { applyAzArsRouteMap } from './ars-route-maps'
 import type { RouteMapAdvertisement } from '../bgp'
-import { analyzeAzNetConnectivity, azFindingFlows, azFindingImpact, groupAzNetFindings, runAzNetDiagnostics } from './diagnostics'
+import { analyzeAzNetConnectivity, createAzNetConnectivityAnalysis, azFindingFlows, azFindingImpact, groupAzNetFindings, runAzNetDiagnostics } from './diagnostics'
 import { getAzNetEndpoints } from './endpoints'
 import {
   lookupSubnetEffectiveRoute,
@@ -1079,6 +1079,64 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     const report = analyzeAzNetConnectivity(topology, simulateAzNet(topology), { scope: 'landscape' })
     expect(report).toMatchObject({ checked: 200, total: 231, complete: false })
     expect(report.findings).toHaveLength(200)
+  })
+
+  it('continues the exact landscape beyond the pair cap without repeating or omitting flow evidence', () => {
+    const topology = createEmptyAzNetTopology()
+    topology.sites = Array.from({ length: 22 }, (_, i) => ({
+      id: `site-${i}`, name: `Site ${i}`, asn: 65000 + i, prefixes: [`10.${i}.0.0/24`],
+    }))
+    const simulation = simulateAzNet(topology)
+    const endpoints = getAzNetEndpoints(topology).filter((endpoint) => endpoint.group === 'site')
+    const pairs = endpoints.flatMap((a, i) => endpoints.slice(i + 1).map((b) => [a, b]))
+    const expected = [
+      ...analyzeAzNetConnectivity(topology, simulation, { scope: 'landscape' }).findings,
+      ...pairs.slice(200).flatMap(([a, b]) => analyzeAzNetConnectivity(topology, simulation, {
+        scope: 'pair', sourceKey: a.key, destinationKey: b.key,
+      }).findings),
+    ]
+    const run = createAzNetConnectivityAnalysis(topology, simulation, { scope: 'landscape' })
+    topology.sites[0].prefixes.push('192.0.2.0/24')
+    let report = run.advance({ maxPairs: 17 })
+    expect(report).toMatchObject({
+      checked: 17, total: 231, complete: false, limitsReached: ['maxPairs'],
+      continuation: { status: 'paused', remainingPairs: 214 },
+    })
+    while (report.continuation.status === 'paused' && report.checked < 231) {
+      const previous = report.checked
+      report = run.advance({ maxPairs: 17 })
+      expect(report.checked - previous).toBeLessThanOrEqual(17)
+      expect(report.continuation.remainingPairs).toBe(231 - report.checked)
+    }
+    expect(report).toMatchObject({ checked: 231, total: 231, complete: true, limitsReached: [], continuation: { status: 'complete', remainingPairs: 0 } })
+    expect(report.findings).toEqual(expected)
+    expect(new Set(report.findings.map((finding) => finding.id)).size).toBe(231)
+  })
+
+  it('supports zero-time pauses, bounded continuation and cancellation without treating unassessed pairs as healthy', () => {
+    const topology = transitTopology()
+    const run = createAzNetConnectivityAnalysis(topology, simulateAzNet(topology), expectedPair)
+    expect(run.advance({ maxMillis: 0 })).toMatchObject({
+      checked: 0, total: 1, complete: false, limitsReached: ['maxMillis'], continuation: { status: 'paused', remainingPairs: 1 },
+    })
+    const cancelled = run.cancel()
+    expect(cancelled).toMatchObject({ checked: 0, complete: false, continuation: { status: 'cancelled', remainingPairs: 1 } })
+    expect(run.advance()).toEqual(cancelled)
+    expect(() => run.advance({ maxPairs: NaN })).toThrow('Invalid connectivity analysis budget.')
+    const completed = createAzNetConnectivityAnalysis(topology, simulateAzNet(topology), expectedPair).advance({ maxPairs: 1 })
+    expect(completed).toMatchObject({ checked: 1, complete: true, continuation: { status: 'complete', remainingPairs: 0 } })
+  })
+
+  it('does not expose missing selected endpoints as healthy or resumable pairs', () => {
+    const topology = transitTopology()
+    const run = createAzNetConnectivityAnalysis(topology, simulateAzNet(topology), {
+      scope: 'pair', sourceKey: 'removed-source', destinationKey: 'removed-destination',
+    })
+    const report = run.advance()
+    expect(report).toMatchObject({
+      checked: 0, total: 1, complete: false, continuation: { status: 'unavailable', remainingPairs: 1 },
+    })
+    expect(run.advance()).toEqual(report)
   })
 
   it.each(['ExpressRoute', 'Vpn'] as const)('analyzes %s transit loss in both directions and clears findings after repair', (transport) => {
