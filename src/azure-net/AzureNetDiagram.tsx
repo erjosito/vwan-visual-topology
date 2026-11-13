@@ -307,8 +307,47 @@ export function AzureNetDiagram({
     | null
   >(null)
 
+  const [preview, setPreview] = useState<{ kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site'; id: string; x: number; y: number } | null>(null)
+  const dragPointerId = useRef<number | null>(null)
+  const clearDrag = (event?: { pointerId: number }) => {
+    if (event && event.pointerId !== dragPointerId.current) return
+    dragPointerId.current = null
+    setPreview(null)
+    setDragState(null)
+  }
+  useEffect(() => {
+    if (!dragState) return
+    const cancel = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') { dragPointerId.current = null; setPreview(null); setDragState(null) }
+    }
+    window.addEventListener('keydown', cancel)
+    return () => window.removeEventListener('keydown', cancel)
+  }, [dragState])
   const positions = computePositions(topology)
+  if (preview) {
+    const collection = preview.kind === 'vnet' ? positions.vnets : preview.kind === 'vwan-hub' ? positions.vwanHubs : preview.kind === 'er-location' ? positions.erLocations : positions.sites
+    if (collection[preview.id]) collection[preview.id] = { ...collection[preview.id], x: preview.x, y: preview.y }
+  }
   const openKeyboardContext = (event: KeyboardEvent<SVGGElement>, entity: AzSelectedEntity) => {
+    if (event.key === 'Escape' && dragState) {
+      event.preventDefault()
+      clearDrag()
+      return
+    }
+    if (event.target === event.currentTarget && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+      const node = entity.kind === 'vnet' ? { kind: 'vnet' as const, id: entity.vnetId, box: positions.vnets[entity.vnetId] }
+        : entity.kind === 'vwan-hub' ? { kind: 'vwan-hub' as const, id: entity.hubId, box: positions.vwanHubs[entity.hubId] }
+          : entity.kind === 'er-location' ? { kind: 'er-location' as const, id: entity.locationId, box: positions.erLocations[entity.locationId] }
+            : entity.kind === 'site' ? { kind: 'site' as const, id: entity.siteId, box: positions.sites[entity.siteId] } : null
+      if (node && !dragState) {
+        event.preventDefault()
+        event.stopPropagation()
+        const step = event.shiftKey ? 20 : 5
+        onMoveNode(node.kind, node.id, node.box.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0),
+          node.box.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0))
+      }
+      return
+    }
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       event.stopPropagation()
@@ -370,7 +409,7 @@ export function AzureNetDiagram({
   }
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!dragState) return
+    if (!dragState || e.pointerId !== dragPointerId.current) return
     if (dragState.mode === 'pan') {
       const { dx, dy } = clientToSvgDelta(
         e.clientX - dragState.startMouseX,
@@ -382,17 +421,20 @@ export function AzureNetDiagram({
         e.clientX - dragState.startMouseX,
         e.clientY - dragState.startMouseY,
       )
-      onMoveNode(
-        dragState.nodeKind,
-        dragState.nodeId,
-        Math.round(dragState.origX + dx),
-        Math.round(dragState.origY + dy),
-      )
+      const next = { kind: dragState.nodeKind, id: dragState.nodeId, x: Math.round(dragState.origX + dx), y: Math.round(dragState.origY + dy) }
+      setPreview(next)
     }
   }
 
-  const handlePointerUp = () => {
-    setDragState(null)
+  const handlePointerUp = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.pointerId !== dragPointerId.current) return
+    // Include the completion event, even when the browser coalesced the last pointermove.
+    if (dragState?.mode === 'node') {
+      const { dx, dy } = clientToSvgDelta(event.clientX - dragState.startMouseX, event.clientY - dragState.startMouseY)
+      const x = Math.round(dragState.origX + dx), y = Math.round(dragState.origY + dy)
+      if (x !== dragState.origX || y !== dragState.origY) onMoveNode(dragState.nodeKind, dragState.nodeId, x, y)
+    }
+    clearDrag()
   }
 
   const [pixelsPerUnit, setPixelsPerUnit] = useState(1)
@@ -603,10 +645,18 @@ export function AzureNetDiagram({
         className="aznet-diagram-svg"
         data-testid="aznet-diagram-svg"
         viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
-        onPointerDownCapture={closePolicyPreview}
+        onPointerDownCapture={(event) => {
+          closePolicyPreview()
+          if (event.button !== 0 || dragPointerId.current !== null) {
+            if (event.button !== 2) { event.preventDefault(); event.stopPropagation() }
+            return
+          }
+          dragPointerId.current = event.pointerId
+          if (event.target instanceof Element) event.target.setPointerCapture(event.pointerId)
+        }}
         onPointerDown={(e) => {
           setHoverPopover(null)
-          if (e.target === svgRef.current) {
+          if (e.button === 0 && e.target === svgRef.current) {
             setDragState({
               mode: 'pan',
               startMouseX: e.clientX,
@@ -618,6 +668,9 @@ export function AzureNetDiagram({
         }}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
+        onPointerCancel={clearDrag}
+        onLostPointerCapture={clearDrag}
+        onKeyDown={(event) => { if (event.key === 'Escape') clearDrag() }}
         onContextMenu={(e) => {
           if (!onContextMenu) return
           e.preventDefault()

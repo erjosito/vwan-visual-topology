@@ -20,6 +20,274 @@ async function loadTopology(page: Page, topology: AzNetTopology) {
   await page.goto('/?mode=hub-spoke')
 }
 
+test.describe('AzNet bounded workspace and durable gestures', () => {
+  const storageKey = 'aznet-visual-topology:v1'
+  const stored = (page: Page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).topology as AzNetTopology, storageKey)
+  const instrument = async (page: Page) => page.addInitScript(() => {
+    window.__AZNET_METRICS__ = { counts: {}, durations: {} }
+  })
+  const counts = (page: Page) => page.evaluate(() => ({ ...window.__AZNET_METRICS__!.counts }))
+
+  test('preserves unreadable originals through edits and exports until recovery is acknowledged', async ({ page }) => {
+    const raw = '{"topology":{"version":2,"vnets":[null]}}'
+    await page.addInitScript(({ key, raw }) => {
+      if (!sessionStorage.getItem('seeded-recovery')) {
+        localStorage.setItem(key, raw)
+        sessionStorage.setItem('seeded-recovery', 'yes')
+      }
+    }, { key: storageKey, raw })
+    await page.goto('/?mode=hub-spoke')
+    await expect(page.getByTestId('aznet-recovery-notice')).toContainText('Originals have not been overwritten')
+    await page.getByTestId('aznet-add-vnet-btn').click()
+    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(raw)
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Export original browser workspace', exact: true }).click()
+    expect((await download).suggestedFilename()).toBe('aznet-recovery-0.json')
+    await page.getByRole('button', { name: 'Acknowledge recovery and enable saving' }).click()
+    await expect.poll(async () => (await stored(page)).vnets.length).toBe(1)
+    await page.reload()
+    await expect(page.getByTestId('aznet-vnet-vnet-custom-1')).toBeVisible()
+    await expect(page.getByTestId('aznet-recovery-notice')).toHaveCount(0)
+  })
+
+  test('reports rejected imports and quota failure while preserving the active design and export', async ({ page }) => {
+    await page.addInitScript(() => {
+      const set = Storage.prototype.setItem
+      Storage.prototype.setItem = function (key, value) {
+        if (key === 'aznet-visual-topology:v1') throw new DOMException('Test quota exhausted', 'QuotaExceededError')
+        return set.call(this, key, value)
+      }
+    })
+    await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
+    await expect(page.getByTestId('aznet-save-error')).toContainText('Export JSON')
+    const node = page.getByTestId('aznet-vnet-vnet-hub-weu')
+    const input = page.locator('input[type=file]').first()
+    for (const body of ['null', '{"version":2,"kind":"azure-network-topology","name":"Broken","vnets":[]}']) {
+      await input.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from(body) })
+      await expect(page.getByTestId('aznet-workspace-notice')).toContainText('Import rejected; the active design is unchanged')
+      await expect(node).toBeVisible()
+    }
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: '⬇ Export JSON', exact: true }).click()
+    expect((await download).suggestedFilename()).toMatch(/\.json$/)
+  })
+
+  test('consumes shared snapshots once and reloads newer edits without uploading a topology', async ({ page }) => {
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
+    const uploads: string[] = []
+    page.on('request', (request) => { if (!['GET', 'HEAD'].includes(request.method())) uploads.push(request.url()) })
+    await page.getByTestId('aznet-share-url-btn').click()
+    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('✓ Link Copied')
+    await expect(page.getByTestId('aznet-share-url-btn')).toHaveAttribute('title', /full design.*Not encrypted or redacted/)
+    const link = await page.evaluate(() => navigator.clipboard.readText())
+    expect(link).toContain('#s=')
+    expect(new URL(page.url()).hash).toBe('')
+    await page.goto(link)
+    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
+    await expect.poll(() => new URL(page.url()).hash).toBe('')
+    await page.getByTestId('aznet-add-vnet-btn').click()
+    const added = page.locator('[data-testid^="aznet-vnet-vnet-custom-"]')
+    await expect(added).toHaveCount(1)
+    await page.reload()
+    await expect(added).toHaveCount(1)
+    await page.goto('/?mode=hub-spoke&sample=ars-sdwan-nva-coexistence')
+    await expect(page.getByTestId(`aznet-vnet-${AZURE_NET_SAMPLES[1].topology.vnets[0].id}`)).toBeVisible()
+    expect(uploads).toEqual([])
+  })
+
+  test('cancels preview on pointercancel, lost capture and Escape; keyboard moves remain undoable', async ({ page }) => {
+    await instrument(page)
+    await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
+    const node = page.getByTestId('aznet-vnet-vnet-spoke-app')
+    const frame = node.locator(':scope > rect').first()
+    const original = { x: await frame.getAttribute('x'), y: await frame.getAttribute('y') }
+    const start = await counts(page)
+    for (const cancel of ['pointercancel', 'lostpointercapture', 'Escape']) {
+      const box = (await frame.boundingBox())!
+      await page.mouse.move(box.x + 30, box.y + 15)
+      await page.mouse.down()
+      await page.mouse.move(box.x + 75, box.y + 35, { steps: 4 })
+      await expect(frame).not.toHaveAttribute('x', original.x!)
+      if (cancel === 'Escape') await page.keyboard.press('Escape')
+      else await frame.dispatchEvent(cancel, { pointerId: 1 })
+      await page.mouse.up()
+      await expect(frame).toHaveAttribute('x', original.x!)
+      await expect(frame).toHaveAttribute('y', original.y!)
+    }
+    expect((await counts(page)).commit ?? 0).toBe(start.commit ?? 0)
+    expect((await counts(page)).simulation).toBe(start.simulation)
+    await expect(page.getByRole('button', { name: '↶ Undo', exact: true })).toBeDisabled()
+    await node.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(frame).toHaveAttribute('x', String(Number(original.x) + 5))
+    await page.keyboard.press('Shift+ArrowDown')
+    await expect(frame).toHaveAttribute('y', String(Number(original.y) + 20))
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect(frame).toHaveAttribute('y', original.y!)
+    await expect(frame).toHaveAttribute('x', String(Number(original.x) + 5))
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect(frame).toHaveAttribute('x', original.x!)
+    expect((await counts(page)).simulation).toBe(start.simulation)
+    await page.getByRole('combobox', { name: 'Canvas zoom', exact: true }).selectOption('1.25')
+    await page.getByRole('combobox', { name: 'Connection style', exact: true }).selectOption('straight')
+    await node.click({ position: { x: 30, y: 15 } })
+    expect((await counts(page)).simulation).toBe(start.simulation)
+  })
+
+  test('moves parallel ER links and policy anchors live without losing link identity', async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES[0].topology)
+    const site = topology.sites[0]
+    const circuit = topology.erLinks.find((link) => link.targetKind === 'site' && link.targetId === site.id)!
+    topology.erLinks.push({ ...circuit, id: 'parallel-circuit', name: 'Parallel circuit' })
+    topology.routeMaps = [{ id: 'site-policy', name: 'Site policy', siteId: site.id, rules: [{
+      id: 'rule', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate',
+    }] }]
+    site.routeMapAssignments = [{ connectionId: circuit.id, inboundMapId: 'site-policy' }]
+    await instrument(page)
+    await loadTopology(page, topology)
+    const node = page.getByTestId(`aznet-site-${site.id}`)
+    const marker = page.locator(`.policy-marker[data-router-id="${site.id}"][data-connection-id="${circuit.id}"]`)
+    const anchorBefore = await marker.getAttribute('transform')
+    const links = [page.getByTestId(`aznet-erlink-${circuit.id}`).locator('path').first(), page.getByTestId('aznet-erlink-parallel-circuit').locator('path').first()]
+    const beforePaths = await Promise.all(links.map((link) => link.getAttribute('d')))
+    expect(beforePaths[0]).not.toBe(beforePaths[1])
+    const before = await counts(page)
+    const box = (await node.boundingBox())!
+    await page.mouse.move(box.x + 20, box.y + 15)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 80, box.y + 35, { steps: 4 })
+    await expect(marker).not.toHaveAttribute('transform', anchorBefore!)
+    const afterPaths = await Promise.all(links.map((link) => link.getAttribute('d')))
+    expect(afterPaths[0]).not.toBe(beforePaths[0])
+    expect(afterPaths[1]).not.toBe(beforePaths[1])
+    expect(afterPaths[0]).not.toBe(afterPaths[1])
+    expect(await counts(page)).toEqual(before)
+    await page.mouse.up()
+    expect((await counts(page)).commit).toBe((before.commit ?? 0) + 1)
+  })
+
+  test('keeps active routing and traces cached for presentation edits but refreshes names and invalidates region edits', async ({ page }) => {
+    await instrument(page)
+    await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
+    await page.getByTestId('aznet-check-routing-btn').click()
+    await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible()
+    await page.getByText('Failure-domain resilience analysis (N-1)', { exact: true }).click()
+    await page.getByRole('button', { name: 'Analyze N-1 resilience', exact: true }).click()
+    await expect(page.getByTestId('resilience-results')).toBeVisible()
+    await openNodeMenu(page, 'aznet-subnet-sub-data-db')
+    await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
+    await page.getByTestId('aznet-trace-source-select').selectOption('subnet:vnet-spoke-data:sub-data-db')
+    await page.getByTestId('aznet-trace-dest-select').selectOption('site:site-munich-hq:172.16.10.0/24')
+    await expect(page.getByTestId('aznet-forward-hops')).toContainText('VNet-Spoke-Data')
+    await openNodeMenu(page, 'aznet-vnet-vnet-spoke-data')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    const before = await counts(page)
+    await page.getByRole('textbox', { name: 'VNet name VNet-Spoke-Data', exact: true }).fill('Renamed data workload')
+    await page.getByTestId('aznet-node-label-input-vnet-spoke-data').fill('Display only label')
+    const renamed = await counts(page)
+    for (const kind of ['simulation', 'connectivity', 'trace', 'diagnostics', 'resilience']) expect(renamed[kind]).toBe(before[kind])
+    await expect(page.getByTestId('resilience-results')).toBeVisible()
+    await page.getByTestId('aznet-vnet-vnet-spoke-data').focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(page.getByTestId('resilience-results')).toBeVisible()
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect(page.getByTestId('resilience-results')).toBeVisible()
+    expect((await counts(page)).resilience).toBe(before.resilience)
+    await page.getByTestId('aznet-tab-tracer').click()
+    await expect(page.getByTestId('aznet-forward-hops')).toContainText('Renamed data workload')
+    await expect(page.getByTestId('aznet-forward-hops')).not.toContainText('VNet-Spoke-Data')
+    await page.getByTestId('aznet-tab-diagnostics').click()
+    await expect(page.getByTestId('aznet-diagnostics-panel')).toContainText('Renamed data workload')
+    await page.getByTestId('aznet-open-azure-tab-btn').click()
+    await expect(page.getByTestId('aznet-bicep-code')).toContainText('Renamed data workload')
+    await openNodeMenu(page, 'aznet-vnet-vnet-spoke-data')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    const beforeRegion = await counts(page)
+    await page.getByTestId('aznet-vnet-region-vnet-spoke-data').fill('eastus')
+    await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeRegion.simulation)
+    expect((await counts(page)).connectivity).toBeGreaterThan(beforeRegion.connectivity)
+  })
+
+  for (const [mode, size, prefixCount] of [['hub-spoke', 21, 100], ['full', 61, 500]] as const) {
+    test(`benchmarks ${size}-VNet/${prefixCount}-prefix ${mode} drag with live geometry and one durable undo step`, async ({ page }, testInfo) => {
+      test.setTimeout(120_000)
+      const topology = structuredClone(AZURE_NET_SAMPLES[0].topology)
+      const template = topology.vnets[1]
+      topology.vnets = [topology.vnets[0], ...Array.from({ length: size - 1 }, (_, index) => ({
+        ...structuredClone(template), id: `bench-vnet-${index}`, name: `Benchmark spoke ${index}`,
+        prefixes: [`10.${index + 20}.0.0/16`], x: index === 0 ? 80 : 1600 + index * 320, y: 45,
+        subnets: [{ id: `bench-subnet-${index}`, name: 'workload', prefix: `10.${index + 20}.1.0/24` }],
+      }))]
+      const peering = topology.vnetPeerings.find((p) => p.vnetAId === topology.vnets[0].id)!
+      topology.vnetPeerings = topology.vnets.slice(1).map((vnet, index) => ({
+        ...structuredClone(peering), id: `bench-peer-${index}`, vnetAId: topology.vnets[0].id, vnetBId: vnet.id,
+      }))
+      topology.sites = [topology.sites[0]]
+      topology.sites[0].prefixes = Array.from({ length: prefixCount }, (_, index) => `172.${16 + Math.floor(index / 256)}.${index % 256}.0/24`)
+      topology.erLinks = topology.erLinks.filter((l) => l.targetKind !== 'site' || l.targetId === topology.sites[0].id)
+      topology.vpnConnections = topology.vpnConnections.filter((l) => l.siteId === topology.sites[0].id)
+      topology.siteLinks = []
+      await instrument(page)
+      await page.addInitScript((value) => {
+        if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ topology: value }))
+      }, topology)
+      await page.goto(`/?mode=${mode}`)
+      await page.getByTestId('aznet-check-routing-btn').click()
+      await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible()
+      const node = page.getByTestId('aznet-vnet-bench-vnet-0')
+      const frame = node.locator(':scope > rect').first()
+      const originalX = await frame.getAttribute('x')
+      const originalY = await frame.getAttribute('y')
+      const edge = page.getByTestId('aznet-peering-bench-peer-0').locator('path').first()
+      const edgeBefore = await edge.getAttribute('d')
+      const before = await counts(page)
+      await page.evaluate(() => {
+        window.__AZNET_METRICS__!.durations.pointerToPaint = []
+        document.querySelector('[data-testid="aznet-diagram-svg"]')!.addEventListener('pointermove', (event) => {
+          if (!(event as PointerEvent).buttons) return
+          const start = performance.now()
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            window.__AZNET_METRICS__!.durations.pointerToPaint.push(performance.now() - start)
+          }))
+        })
+      })
+      const box = (await frame.boundingBox())!
+      await page.mouse.move(box.x + 30, box.y + 15)
+      await page.mouse.down()
+      await page.mouse.move(box.x + 135, box.y + 65, { steps: 16 })
+      await expect(frame).not.toHaveAttribute('x', originalX!)
+      await expect(edge).not.toHaveAttribute('d', edgeBefore!)
+      const previewCounts = await counts(page)
+      expect(previewCounts).toEqual(before)
+      expect((await stored(page)).vnets[1].x).toBe(80)
+      await page.mouse.up()
+      await expect.poll(async () => (await counts(page)).commit).toBe((before.commit ?? 0) + 1)
+      const after = await counts(page)
+      expect(after.simulation).toBe(before.simulation)
+      expect(after.connectivity).toBe(before.connectivity)
+      expect(after.diagnostics).toBe(before.diagnostics)
+      expect(after.persist).toBe(before.persist + 1)
+      const x = await frame.getAttribute('x')
+      await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+      await expect(frame).toHaveAttribute('x', originalX!)
+      await expect(frame).toHaveAttribute('y', originalY!)
+      await expect(edge).toHaveAttribute('d', edgeBefore!)
+      await expect(page.getByRole('button', { name: '↶ Undo', exact: true })).toBeDisabled()
+      await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+      await expect(frame).toHaveAttribute('x', x!)
+      const gestureEvidence = await page.evaluate(() => window.__AZNET_METRICS__)
+      await page.reload()
+      await expect(frame).toHaveAttribute('x', x!)
+      const evidence = await page.evaluate(() => window.__AZNET_METRICS__)
+      // Reload resets counters, so record the actual gesture counters separately.
+      const report = { size, prefixCount, before, previewCounts, after, gesture: gestureEvidence, reload: evidence }
+      await testInfo.attach('interaction-benchmark', { body: JSON.stringify(report, null, 2), contentType: 'application/json' })
+      console.log('AZNET_BENCHMARK', JSON.stringify(report))
+    })
+  }
+})
+
 test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   for (const [hostname, defaultMode] of [['aznet-simulator.com', 'hub-spoke'], ['vwan-simulator.com', 'vwan']]) {
     test(`defaults ${hostname} to ${defaultMode} without overriding explicit modes or reloads`, async ({ page, baseURL }) => {
@@ -238,9 +506,12 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.getByTestId('aznet-subnet-selector').selectOption('sub-app-web')
     await expect(page.getByTestId('aznet-route-trace-badge-fwd').first()).toBeVisible()
 
-    // 4. Share Link encodes topology into URL hash (#s=...) and reloads cleanly
+    // Sharing copies a snapshot without installing a stale override in this workspace's URL.
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.getByTestId('aznet-share-url-btn').click()
-    await expect(page).toHaveURL(/#s=/)
+    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('✓ Link Copied')
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('#s=')
+    expect(new URL(page.url()).hash).not.toContain('s=')
 
     // 5. Optional diagram node labels in AzNet Configure tab & vWAN mode (#47 scoped to selected node)
     await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')

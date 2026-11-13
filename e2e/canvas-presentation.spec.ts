@@ -44,6 +44,9 @@ test('wrapped device badges expose every appliance and disabled ARS without cove
   hub.routeServer!.enabled = false
   const appliance = hub.appliances[0]
   hub.appliances = Array.from({ length: 7 }, (_, index) => ({ ...appliance, id: `badge-nva-${index}`, name: `Device ${index}`, privateIp: `10.0.2.${index + 10}` }))
+  for (const connection of topology.vpnConnections) {
+    if (connection.targetKind === 'appliance' && connection.targetId === appliance.id) connection.targetId = hub.appliances[0].id
+  }
   hub.routeServer!.peerApplianceIds = []
   await page.addInitScript((topology) => {
     if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))

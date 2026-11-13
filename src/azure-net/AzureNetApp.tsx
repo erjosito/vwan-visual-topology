@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
 import './azure-net.css'
+import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
+import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
+import { azDisplayResult, azRoutingInput } from './routing-input'
+import { measureAzWork } from './performance'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { CanvasOverlay } from '../CanvasOverlay'
@@ -167,52 +171,6 @@ function encodeTopologyToUrlHash(topology: AzNetTopology): string {
   return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
-function decodeTopologyFromUrlHash(hash: string): AzNetTopology | null {
-  const m = hash.match(/[#&]s=([A-Za-z0-9_-]+)/)
-  if (!m) return null
-  try {
-    let b64 = m[1].replace(/-/g, '+').replace(/_/g, '/')
-    while (b64.length % 4 !== 0) b64 += '='
-    const binary = atob(b64)
-    const bytes = new Uint8Array(binary.length)
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i)
-    }
-    const json = new TextDecoder().decode(bytes)
-    const parsed = JSON.parse(json) as AzNetTopology
-    if (validateAzNetTopology(parsed).length === 0) {
-      return parsed
-    }
-  } catch {
-    // ignore malformed hash
-  }
-  return null
-}
-
-const AZNET_STORAGE_KEY = 'aznet-visual-topology:v1'
-
-function loadStoredAzNetState(): { sampleId: string; topology: AzNetTopology } | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(AZNET_STORAGE_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as unknown
-    if (parsed && typeof parsed === 'object' && 'topology' in parsed) {
-      const record = parsed as { sampleId?: string; topology?: AzNetTopology }
-      const candidate = record.topology
-      if (candidate && Array.isArray(candidate.vnets) && validateAzNetTopology(candidate).length === 0) {
-        return {
-          sampleId: typeof record.sampleId === 'string' ? record.sampleId : '',
-          topology: candidate,
-        }
-      }
-    }
-  } catch {
-    // ignore malformed localStorage
-  }
-  return null
-}
-
 function resolveInitialUrlSample() {
   if (typeof window === 'undefined') return null
   const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
@@ -260,25 +218,28 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 
 export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: AzureNetAppProps = {}) {
   const initialResolved = useMemo(() => {
-    const hashTopo = typeof window !== 'undefined' ? decodeTopologyFromUrlHash(window.location.hash) : null
-    if (hashTopo) {
-      return { sampleId: 'shared-topology', topology: cloneAzNetTopology(hashTopo) }
-    }
+    // Access localStorage inside loadAzWorkspace's try/catch (the getter itself may throw).
+    const stored = loadAzWorkspace({ getItem: (key) => window.localStorage.getItem(key) }, window.location.hash)
+    if (stored.snapshotImported) return stored
     const urlSample = resolveInitialUrlSample()
     if (urlSample) {
-      return { sampleId: urlSample.id, topology: cloneAzNetTopology(urlSample.topology) }
+      return { ...stored, sampleId: urlSample.id, topology: parseAzNetTopology(urlSample.topology) }
     }
-    const stored = loadStoredAzNetState()
-    if (stored) {
-      return { sampleId: stored.sampleId, topology: cloneAzNetTopology(stored.topology) }
-    }
-    return { sampleId: '', topology: createEmptyAzNetTopology() }
+    return stored
   }, [])
 
   const [sampleId, setSampleId] = useState<string>(initialResolved.sampleId)
   const [topology, setTopology] = useState<AzNetTopology>(initialResolved.topology)
   const [history, setHistory] = useState<AzNetTopology[]>([])
   const [future, setFuture] = useState<AzNetTopology[]>([])
+  const [recoveryEntries, setRecoveryEntries] = useState(initialResolved.recovery)
+  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(initialResolved.recovery.length === 0)
+  const [saveError, setSaveError] = useState('')
+  const [workspaceNotice, setWorkspaceNotice] = useState('')
+  const [pendingUrlSample, setPendingUrlSample] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get('sample') ?? ''
+    return !initialResolved.snapshotImported && /^[a-z0-9-]+$/.test(requested) && !resolveInitialUrlSample() ? requested : ''
+  })
   const [activeTab, setActiveTab] = useState<InspectorTab | null>(null)
   const [selected, setInspectedEntity] = useState<AzSelectedEntity>(() =>
     defaultSelected(initialResolved.topology),
@@ -329,16 +290,25 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     targetLocationId?: string
   }>({ open: false })
 
-  useEffect(() => {
+  const persistCurrentWorkspace = useEffectEvent(() => {
+    if (!recoveryAcknowledged || pendingUrlSample) return
     try {
-      window.localStorage.setItem(
+      parseAzNetTopology(topology)
+      measureAzWork('persist', () => window.localStorage.setItem(
         AZNET_STORAGE_KEY,
         JSON.stringify({ sampleId, topology }),
-      )
-    } catch {
-      // ignore storage quota errors
+      ))
+      setSaveError('')
+      consumeAzSnapshotUrl()
+    } catch (error) {
+      setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Export JSON to preserve this design; saved originals and URL snapshots have not been overwritten.`)
     }
-  }, [sampleId, topology])
+  })
+  useEffect(() => {
+    // Report the outcome of synchronizing external browser storage, including quota failures.
+    // oxlint-disable-next-line react/set-state-in-effect
+    persistCurrentWorkspace()
+  }, [sampleId, topology, recoveryAcknowledged, pendingUrlSample])
 
   const [testIpQuery, setTestIpQuery] = useState<string>('')
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
@@ -350,10 +320,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const commitTopology = (updater: (draft: AzNetTopology) => void) => {
     setHistory((prev) => [...prev.slice(-24), cloneAzNetTopology(topology)])
     setFuture([])
-    const next = cloneAzNetTopology(topology)
-    updater(next)
-    pruneAzSiteRouteMaps(next)
-    pruneAzArsRouteMaps(next)
+    const next = measureAzWork('commit', () => {
+      const draft = cloneAzNetTopology(topology)
+      updater(draft)
+      pruneAzSiteRouteMaps(draft)
+      pruneAzArsRouteMaps(draft)
+      return draft
+    })
     setTopology(next)
   }
 
@@ -376,9 +349,15 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [faults, setFaults] = useState<FailureDomain[]>([])
   const [resilience, setResilience] = useState<{ revision: string; report: ResilienceReport }>()
   const [resilienceEndpoint, setResilienceEndpoint] = useState<string>()
-  const baselineRevision = JSON.stringify(topology)
+  const routingInput = useMemo(() => azRoutingInput(topology), [topology])
+  const baselineRevision = routingInput.revision
   const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
-  const scenario = useMemo(() => projectAzFailures(topology, faults), [topology, faults])
+  // The revision is deliberately exhaustive except the documented presentation fields.
+  const routingTopology = useMemo(() => JSON.parse(routingInput.revision) as AzNetTopology, [routingInput.revision])
+  const displayNames = useMemo(() => JSON.parse(routingInput.nameRevision) as string[], [routingInput.nameRevision])
+  const scenario = useMemo(() => projectAzFailures(routingTopology, faults), [routingTopology, faults])
+  const unassessedFailures = useMemo(() => azDisplayResult(scenario.unassessed, displayNames), [scenario.unassessed, displayNames])
+  const failureDomains = useMemo(() => azDisplayResult(scenario.domains, displayNames), [scenario.domains, displayNames])
   const activeTopology = scenario.active
   const addFault = (fault: FailureDomain) => {
     setFaults((current) => [...current.filter((f) => failureKey(f) !== failureKey(fault)), fault])
@@ -386,11 +365,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     setDeleteTarget(null)
   }
   const restoreFault = (fault: FailureDomain) => setFaults((current) => current.filter((f) => failureKey(f) !== failureKey(fault)))
-  const simulation = useMemo(() => simulateAzNet(activeTopology), [activeTopology])
+  const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulateAzNet(activeTopology)), [activeTopology])
+  const simulation = useMemo(() => azDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
   const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
   const bicepExport = useMemo(() => generateAzNetBicep(topology), [topology])
 
-  const endpointOptions = useMemo(() => getAzNetEndpoints(topology), [topology])
+  const rawEndpointOptions = useMemo(() => getAzNetEndpoints(routingTopology), [routingTopology])
+  const endpointOptions = useMemo(() => azDisplayResult(rawEndpointOptions, displayNames), [rawEndpointOptions, displayNames])
 
   const [traceSourceKey, setTraceSourceKey] = useState<string>('')
   const [traceDestKey, setTraceDestKey] = useState<string>('')
@@ -422,74 +403,87 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
   const handleShareUrl = () => {
     try {
+      parseAzNetTopology(topology)
       const encoded = encodeTopologyToUrlHash(topology)
       const url = new URL(window.location.href)
       url.hash = `s=${encoded}`
-      window.history.replaceState(null, '', url.toString())
+      // Do not install a snapshot in the active address: reload must restore newer local edits.
       if (navigator.clipboard?.writeText) {
-        void navigator.clipboard.writeText(url.toString()).catch(() => {})
+        void navigator.clipboard.writeText(url.toString()).then(() => {
+          setShareCopied(true)
+          setWorkspaceNotice('Share link copied: it contains the full design, without encryption or redaction. Anyone with the link can read it. No topology was uploaded. Reload restores local edits; opening the copied link imports that snapshot once.')
+        }).catch((error) => {
+          setWorkspaceNotice(`Could not copy share link: ${workspaceError(error)}. Export JSON instead.`)
+        })
+      } else {
+        setWorkspaceNotice('Clipboard is unavailable. Export JSON to share this design.')
       }
-      setShareCopied(true)
       window.setTimeout(() => setShareCopied(false), 2500)
-    } catch {
-      // ignore clipboard errors
+    } catch (error) {
+      setWorkspaceNotice(`Could not share topology: ${workspaceError(error)}`)
     }
   }
 
-  const resolvedSourceOpt =
-    traceSourceKey ? endpointOptions.find((o) => o.key === traceSourceKey) : endpointOptions.find((o) => o.group === 'workload') ?? endpointOptions[0]
-  const resolvedDestOpt =
-    traceDestKey ? endpointOptions.find((o) => o.key === traceDestKey) :
-    endpointOptions[endpointOptions.length - 1] ??
-    endpointOptions[0]
+  const rawSourceOpt =
+    traceSourceKey ? rawEndpointOptions.find((o) => o.key === traceSourceKey) : rawEndpointOptions.find((o) => o.group === 'workload') ?? rawEndpointOptions[0]
+  const rawDestOpt =
+    traceDestKey ? rawEndpointOptions.find((o) => o.key === traceDestKey) :
+    rawEndpointOptions[rawEndpointOptions.length - 1] ?? rawEndpointOptions[0]
+  const resolvedSourceOpt = endpointOptions.find((o) => o.key === rawSourceOpt?.key)
+  const resolvedDestOpt = endpointOptions.find((o) => o.key === rawDestOpt?.key)
 
   const customIpNumber = customDestIp.trim() ? ipv4(customDestIp.trim()) : undefined
   const hasInvalidCustomIp = Boolean(customDestIp.trim()) && customIpNumber === undefined
   const customIpInEndpoint = Boolean(resolvedDestOpt && customIpNumber !== undefined &&
     contains(resolvedDestOpt.prefix, customIpNumber))
 
-  const pairAnalysis = useMemo(() => {
-    if (!traceActive || groupTrace || hasInvalidCustomIp || !resolvedSourceOpt || !resolvedDestOpt) return null
-    const destIp = customDestIp.trim() || resolvedDestOpt.defaultIp
-    return traceAzNetPair(
+  const rawPairAnalysis = useMemo(() => {
+    if (!traceActive || groupTrace || hasInvalidCustomIp || !rawSourceOpt || !rawDestOpt) return null
+    const destIp = customDestIp.trim() || rawDestOpt.defaultIp
+    return measureAzWork('trace', () => traceAzNetPair(
       activeTopology,
-      simulation,
-      resolvedSourceOpt.ref,
-      resolvedSourceOpt.defaultIp,
-      resolvedDestOpt.ref,
+      rawSimulation,
+      rawSourceOpt.ref,
+      rawSourceOpt.defaultIp,
+      rawDestOpt.ref,
       destIp,
-    )
-  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, activeTopology, simulation])
+    ))
+  }, [traceActive, groupTrace, hasInvalidCustomIp, rawSourceOpt, rawDestOpt, customDestIp, activeTopology, rawSimulation])
+  const pairAnalysis = useMemo(() => azDisplayResult(rawPairAnalysis, displayNames), [rawPairAnalysis, displayNames])
 
-  const singleFlowForCustomIp = useMemo(() => {
-    if (!traceActive || groupTrace || hasInvalidCustomIp || !resolvedSourceOpt || !resolvedDestOpt || !customDestIp.trim() || customIpInEndpoint) return null
-    return traceAzNetFlow(activeTopology, simulation, resolvedSourceOpt.ref, customDestIp.trim())
-  }, [traceActive, groupTrace, hasInvalidCustomIp, resolvedSourceOpt, resolvedDestOpt, customDestIp, customIpInEndpoint, activeTopology, simulation])
+  const rawSingleFlow = useMemo(() => {
+    if (!traceActive || groupTrace || hasInvalidCustomIp || !rawSourceOpt || !rawDestOpt || !customDestIp.trim() || customIpInEndpoint) return null
+    return measureAzWork('trace', () => traceAzNetFlow(activeTopology, rawSimulation, rawSourceOpt.ref, customDestIp.trim()))
+  }, [traceActive, groupTrace, hasInvalidCustomIp, rawSourceOpt, rawDestOpt, customDestIp, customIpInEndpoint, activeTopology, rawSimulation])
+  const singleFlowForCustomIp = useMemo(() => azDisplayResult(rawSingleFlow, displayNames), [rawSingleFlow, displayNames])
 
-  const groupedPaths = useMemo(() => {
+  const rawGroupedPaths = useMemo(() => {
     if (!traceActive || !groupTrace) return null
-    const anchor = endpointOptions.find((e) => e.key === groupTrace.anchorKey)
+    const anchor = rawEndpointOptions.find((e) => e.key === groupTrace.anchorKey)
     if (!anchor) return { paths: [], total: 0 }
-    const others = endpointOptions.filter((e) => e.group === groupTrace.group &&
+    const others = rawEndpointOptions.filter((e) => e.group === groupTrace.group &&
       azEndpointKey(e.ref) !== azEndpointKey(anchor.ref))
     return {
       total: others.length,
       paths: others.slice(0, AZ_NET_PAIR_LIMIT).map((other) => {
         const source = groupTrace.direction === 'to' ? anchor : other
         const destination = groupTrace.direction === 'to' ? other : anchor
-        return { source, destination, pair: traceAzNetPair(activeTopology, simulation, source.ref, source.defaultIp, destination.ref, destination.defaultIp) }
+        return { source, destination, pair: measureAzWork('trace', () => traceAzNetPair(activeTopology, rawSimulation, source.ref, source.defaultIp, destination.ref, destination.defaultIp)) }
       }),
     }
-  }, [traceActive, groupTrace, endpointOptions, activeTopology, simulation])
+  }, [traceActive, groupTrace, rawEndpointOptions, activeTopology, rawSimulation])
+  const groupedPaths = useMemo(() => azDisplayResult(rawGroupedPaths, displayNames), [rawGroupedPaths, displayNames])
 
-  const analysis = useMemo(() => analysisRequest
-    ? analyzeAzNetConnectivity(activeTopology, simulation, analysisRequest) : null,
-  [analysisRequest, activeTopology, simulation])
-  const diagnostics = useMemo(() => {
-    const staticFindings = runAzNetDiagnostics(activeTopology, simulation, { includePairAnalysis: false })
-    const flowFindings = analysis?.findings ?? []
+  const rawAnalysis = useMemo(() => analysisRequest
+    ? measureAzWork('connectivity', () => analyzeAzNetConnectivity(activeTopology, rawSimulation, analysisRequest)) : null,
+  [analysisRequest, activeTopology, rawSimulation])
+  const analysis = useMemo(() => azDisplayResult(rawAnalysis, displayNames), [rawAnalysis, displayNames])
+  const rawDiagnostics = useMemo(() => {
+    const staticFindings = measureAzWork('diagnostics', () => runAzNetDiagnostics(activeTopology, rawSimulation, { includePairAnalysis: false }))
+    const flowFindings = rawAnalysis?.findings ?? []
     return groupAzNetFindings([...staticFindings, ...flowFindings])
-  }, [activeTopology, simulation, analysis])
+  }, [activeTopology, rawSimulation, rawAnalysis])
+  const diagnostics = useMemo(() => azDisplayResult(rawDiagnostics, displayNames), [rawDiagnostics, displayNames])
   const actionableCount = diagnostics.filter((f) => f.severity !== 'info').length
   const visibleDiagnostics = reviewFindingIds
     ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics
@@ -540,6 +534,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
+    nextTopology = parseAzNetTopology(nextTopology)
     setSampleId(id)
     setTopology(nextTopology)
     setHistory([])
@@ -561,6 +556,24 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     }
   }
 
+  const importLiveSnapshot = useEffectEvent(() => {
+    if (!/(?:#|&)s=/.test(window.location.hash)) return
+    const loaded = loadAzWorkspace({ getItem: () => null }, window.location.hash)
+    if (loaded.recovery.length) {
+      setRecoveryEntries((entries) => [...entries, ...loaded.recovery].slice(-8))
+      setRecoveryAcknowledged(false)
+      setWorkspaceNotice('Shared snapshot rejected; the active design is unchanged. Export the original URL snapshot from recovery.')
+      return
+    }
+    applyLoadedTopology('shared-topology', loaded.topology)
+    setWorkspaceNotice('Shared snapshot imported once. It contains full design data without encryption or redaction; subsequent reloads restore saved local edits.')
+  })
+  useEffect(() => {
+    const onHashChange = () => importLiveSnapshot()
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
+
   const loadSample = (id: string) => {
     if (!id) {
       applyLoadedTopology('', createEmptyAzNetTopology())
@@ -576,15 +589,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     void fetch(`/docs/samples/azure-net/${id}.json`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`Sample "${id}" not found.`)
-        return (await res.json()) as AzNetTopology
+        return parseAzNetJson(await res.text())
       })
       .then((loaded) => {
-        const errs = validateAzNetTopology(loaded)
-        if (errs.length > 0) throw new Error(errs.join('; '))
-        applyLoadedTopology(id, loaded)
+        applyLoadedTopology(id, parseAzNetTopology(loaded))
       })
-      .catch(() => {
-        // Ignore invalid or unreachable sample fetch
+      .catch((error) => {
+        setWorkspaceNotice(`Sample rejected: ${workspaceError(error)}`)
       })
       .finally(() => {
         setSampleLoadingId(null)
@@ -608,7 +619,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
   useEffect(() => {
     if (urlSampleLoaded.current) return
-    const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
+    const requested = pendingUrlSample
     if (!/^[a-z0-9-]+$/.test(requested)) return
     urlSampleLoaded.current = true
     if (AZURE_NET_SAMPLES.some((s) => s.id === requested)) {
@@ -617,11 +628,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     void fetch(`/docs/samples/azure-net/${requested}.json`)
       .then(async (res) => {
         if (!res.ok) throw new Error(`Sample "${requested}" not found.`)
-        return (await res.json()) as AzNetTopology
+        return parseAzNetJson(await res.text())
       })
       .then((loaded) => {
-        const errs = validateAzNetTopology(loaded)
-        if (errs.length > 0) throw new Error(errs.join(' '))
+        loaded = parseAzNetTopology(loaded)
         setSampleId(requested)
         setTopology(loaded)
         setHistory([])
@@ -636,9 +646,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         }
       })
       .catch((err) => {
-        setCaptureNotices([err instanceof Error ? err.message : String(err)])
+        setWorkspaceNotice(`Sample rejected: ${workspaceError(err)}`)
       })
-  }, [])
+      .finally(() => setPendingUrlSample(''))
+  }, [pendingUrlSample])
 
   // One-click Auto-Remediation for diagnostic findings
   const applyAutoFix = (finding: AzDiagnosticFinding) => {
@@ -2579,7 +2590,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       label: `Restore ${failureLabel(fault)}`, onSelect: () => restoreFault(fault),
     })) }
     const ordinary = getOrdinaryContextMenuSpec(target)
-    const domain = scenario.domains.find((f) =>
+    const domain = failureDomains.find((f) =>
       (f.kind === 'site' && target.kind === 'site' || f.kind === 'er-location' && target.kind === 'er-location') && f.id === id ||
       f.kind === 'region' && ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) &&
         f.id === regionKey([...topology.vnets, ...topology.vwanHubs].find((n) => n.id === id)?.region))
@@ -2612,8 +2623,22 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
   return (
     <div className="aznet-app" data-testid="aznet-app">
-      <FailurePanel faults={faults} unassessed={scenario.unassessed} onRestore={restoreFault} onRestoreAll={() => setFaults([])}
-        revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={() => analyzeAzResilience(topology)} />
+      {!recoveryAcknowledged && <div role="alert" data-testid="aznet-recovery-notice">
+        <strong>Saved input could not be loaded. Originals have not been overwritten.</strong>
+        {recoveryEntries.map((entry, index) => <div key={index}>
+          {entry.source}: {entry.message}
+          {entry.raw && <button type="button" onClick={() => downloadAzText(entry.raw, `aznet-recovery-${index}.json`)}>Export original {entry.source}</button>}
+        </div>)}
+        <button type="button" onClick={() => setRecoveryAcknowledged(true)}>Acknowledge recovery and enable saving</button>
+      </div>}
+      {saveError && <div role="alert" data-testid="aznet-save-error">{saveError}</div>}
+      {workspaceNotice && <div role="alert" data-testid="aznet-workspace-notice">{workspaceNotice}
+        <button type="button" onClick={() => setWorkspaceNotice('')}>Dismiss</button>
+      </div>}
+      <FailurePanel faults={faults} unassessed={unassessedFailures} onRestore={restoreFault} onRestoreAll={() => setFaults([])}
+        revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault}
+        presentReport={(report) => azDisplayResult(report, displayNames)}
+        analyze={() => measureAzWork('resilience', () => analyzeAzResilience(routingTopology, {}, validationErrors))} />
       {/* Top Navigation & Actions Bar */}
       <header
         className={`aznet-topbar ${
@@ -2831,7 +2856,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             className="aznet-btn"
             data-testid="aznet-share-url-btn"
             onClick={handleShareUrl}
-            title="Encode current topology into URL #s=... and copy shareable link"
+            title="Copies a snapshot containing the full design. Not encrypted or redacted. Anyone with the link can read it. No topology is uploaded."
           >
             {shareCopied ? '✓ Link Copied' : '🔗 Share Link'}
           </button>
@@ -2853,39 +2878,28 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             style={{ display: 'none' }}
             onChange={async (e) => {
               const file = e.target.files?.[0]
+              e.target.value = ''
               if (!file) return
               try {
-                const raw = JSON.parse(await file.text()) as Record<string, unknown>
-                if (raw.kind === 'azure-network-capture') {
+                if (file.size > AZNET_MAX_JSON_LENGTH) throw new Error('JSON exceeds 4 MB limit.')
+                const text = await file.text()
+                const raw: unknown = JSON.parse(text)
+                if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-network-capture') {
                   const imported = importAzNetCapture(raw)
-                  setTopology(imported.topology)
-                  setHistory([])
-                  setFuture([])
+                  const admitted = parseAzNetTopology(imported.topology)
+                  const importedComparison = imported.observations
+                    ? compareAzNetWithObservations(admitted, simulateAzNet(admitted), imported.observations) : null
+                  applyLoadedTopology('', admitted)
                   setCaptureNotices(imported.warnings)
-                  if (imported.observations) {
-                    const importedSim = simulateAzNet(imported.topology)
-                    setCaptureComparison(
-                      compareAzNetWithObservations(
-                        imported.topology,
-                        importedSim,
-                        imported.observations,
-                      ),
-                    )
-                  } else {
-                    setCaptureComparison(null)
-                  }
+                  setCaptureComparison(importedComparison)
+                  setWorkspaceNotice('')
                   setActiveTab('azure')
                   return
                 }
-                const parsed = raw as unknown as AzNetTopology
-                const errs = validateAzNetTopology(parsed)
-                if (errs.length === 0) {
-                  setTopology(parsed)
-                  setHistory([])
-                  setFuture([])
-                }
-              } catch {
-                // ignore invalid json
+                applyLoadedTopology('', parseAzNetJson(text))
+                setWorkspaceNotice('')
+              } catch (error) {
+                setWorkspaceNotice(`Import rejected; the active design is unchanged. ${workspaceError(error)}`)
               }
             }}
           />
@@ -2896,8 +2910,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             style={{ display: 'none' }}
             onChange={async (e) => {
               const file = e.target.files?.[0]
+              e.target.value = ''
               if (!file) return
               try {
+                if (file.size > AZNET_MAX_JSON_LENGTH) throw new Error('JSON exceeds 4 MB limit.')
                 const raw = JSON.parse(await file.text()) as Record<string, unknown>
                 if (raw.kind === 'azure-network-capture') {
                   const imported = importAzNetCapture(raw)
@@ -2912,8 +2928,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     setActiveTab('azure')
                   }
                 }
-              } catch {
-                // ignore invalid json
+              } catch (error) {
+                setWorkspaceNotice(`Comparison import rejected: ${workspaceError(error)}`)
               }
             }}
           />
@@ -2976,8 +2992,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               setCanvasSelection(entity)
             }}
             onMoveNode={(nodeKind, nodeId, x, y) => {
-              setTopology((prev) => {
-                const next = cloneAzNetTopology(prev)
+              commitTopology((next) => {
                 if (nodeKind === 'vnet') {
                   const v = next.vnets.find((n) => n.id === nodeId)
                   if (v) {
@@ -3003,7 +3018,6 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     s.y = y
                   }
                 }
-                return next
               })
             }}
             forwardTrace={singleFlowForCustomIp ?? pairAnalysis?.forward ?? null}
