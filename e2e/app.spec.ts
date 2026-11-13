@@ -1759,10 +1759,13 @@ test('site route views inspect Azure policies and highlight Azure-learned BGP pa
 test('WAN branch transit and AS-path editor controls preserve routes, history and native round-trip', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
+  await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/?mode=vwan')
   const toggle = page.getByRole('checkbox', { name: 'Allow branch-to-branch traffic (WAN-wide)', exact: true })
   await expect(toggle).toBeChecked()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
   await toggle.uncheck()
+  await page.setViewportSize({ width: 1440, height: 1000 })
   await action(page, 'Select site London datacenter', 'Learned routes')
   await page.getByLabel('Neighbor', { exact: true }).selectOption('vpn-eu')
   await expect(page.locator('.effective-routes tr[data-prefix="10.40.0.0/16"]')).toHaveCount(0)
