@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { example } from './model'
 import type { Connection, Hub, Topology, Transport } from './model'
@@ -723,6 +725,43 @@ describe('route maps and on-premises transit', () => {
     expect(ownAsSim.bgpTables['us'].some((d) => d.prefix === '10.30.0.0/16')).toBe(false)
     expect(ownAsSim.bgpTables['eu'].some((d) => d.prefix === '10.20.10.0/24')).toBe(false)
     expect(ownAsSim.bgpTables['eu'].some((d) => d.prefix === '10.20.0.0/16')).toBe(true)
+  })
+})
+
+describe('recorded net-lab-builder summarization pilot', () => {
+  const archive = JSON.parse(readFileSync(resolve('verification', 'issue-98-routemap-archive.json'), 'utf8')) as {
+    cases: { id: string; topology: unknown; present: { prefix: string; asPath: number[] }[]; absent: string[] }[]
+  }
+
+  it.each(archive.cases)('matches archived VPN-branch prefix and AS-path observations: $id', (entry) => {
+    const topology = validateTopology(entry.topology)
+    expect(validateTopology(JSON.parse(JSON.stringify(topology)))).toEqual(topology)
+    const simulation = simulate(topology)
+    expect(simulation.converged).toBe(true)
+    const received = neighborRoutes(topology, simulation, { kind: 'site', id: 'nva1' }, 'learned')
+      .find((peer) => peer.id === 'cx-nva1')!.after
+    const advertised = neighborRoutes(topology, simulation, { kind: 'hub', id: 'hub-eu1' }, 'advertised')
+      .find((peer) => peer.id === 'cx-nva1')!.after
+    for (const routes of [received, advertised]) {
+      for (const expected of entry.present) expect(routes).toContainEqual(expect.objectContaining(expected))
+      for (const prefix of entry.absent) expect(routes.some((route) => route.prefix === prefix)).toBe(false)
+    }
+  })
+
+  it('also retains hub origination on summarized spoke-NVA exports and policy snapshots', () => {
+    const topology = validateTopology(archive.cases.find((entry) => entry.id === 'er-only-summary')!.topology)
+    topology.spokes = [{ id: 'nva-host', name: 'NVA host', hubId: 'hub-eu1', prefixes: ['10.100.0.0/24'] }]
+    topology.connections[0] = { ...topology.connections[0], transport: 'SpokeNVA', spokeId: 'nva-host', peerIp: '10.100.0.4' }
+    topology.hubs[0].routeMapAssignments![0].connectionId = 'nva-host'
+    const simulation = simulate(validateTopology(topology))
+    for (const routes of [
+      simulation.outbound['cx-nva1'], simulation.outbound['nva-host'],
+      neighborRoutes(topology, simulation, { kind: 'hub', id: 'hub-eu1' }, 'advertised')
+        .find((peer) => peer.id === 'cx-nva1')!.after,
+    ]) {
+      expect(routes).toContainEqual(expect.objectContaining({ prefix: '10.0.0.0/16', asPath: [65515] }))
+      expect(routes.some((route) => ['10.0.1.0/24', '10.0.2.0/24', '10.0.3.0/24'].includes(route.prefix))).toBe(false)
+    }
   })
 })
 

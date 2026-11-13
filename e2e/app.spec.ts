@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import type { Page } from '@playwright/test'
 import { example } from '../src/model'
 import type { Topology } from '../src/model'
@@ -1754,6 +1755,43 @@ test('site route views inspect Azure policies and highlight Azure-learned BGP pa
   await expect.poll(() => motionDirections(page, 'vpn-eu')).toEqual([{ from: 'dc', to: 'eu' }])
   expect(await readTopology(page)).toEqual(original)
 })
+
+for (const id of ['b2b-on-baseline', 'er-only-summary']) {
+  test(`recorded summarization pilot imports, displays native BGP observations and round-trips: ${id}`, async ({ page }) => {
+    const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-routemap-archive.json'), 'utf8')) as {
+      cases: { id: string; topology: Topology; present: { prefix: string; asPath: number[] }[]; absent: string[] }[]
+    }
+    const entry = archive.cases.find((entry) => entry.id === id)!
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto('/?mode=vwan')
+    await importTopology(page, entry.topology)
+    await expect(page.getByLabel('Topology name')).toHaveValue(entry.topology.name)
+    for (const [object, command] of [
+      ['Select site nva1 - VPN observation branch', 'Learned routes'],
+      ['Select hub hub-eu1', 'Advertised routes'],
+    ]) {
+      await action(page, object, command)
+      await page.getByLabel('Neighbor', { exact: true }).selectOption('cx-nva1')
+      for (const expected of entry.present) {
+        await expect(page.locator(`.effective-routes tr[data-prefix="${expected.prefix}"] .as-path`).first())
+          .toHaveText(expected.asPath.join(' '))
+      }
+      for (const prefix of entry.absent) {
+        await expect(page.locator(`.effective-routes tr[data-prefix="${prefix}"]`)).toHaveCount(0)
+      }
+    }
+    const before = await readTopology(page)
+    const downloading = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+    const exported = JSON.parse(await readFile((await (await downloading).path())!, 'utf8')) as Topology
+    expect(exported).toEqual(before)
+    await importTopology(page, exported)
+    await page.reload()
+    expect(await readTopology(page)).toEqual(exported)
+    expect(errors).toEqual([])
+  })
+}
 
 test('JSON import/export, mobile overlays and Escape preserve user data', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })

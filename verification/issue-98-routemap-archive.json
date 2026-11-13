@@ -1,0 +1,379 @@
+{
+  "issue": 98,
+  "lab": "vwan-routemap-summarization",
+  "mode": "vwan",
+  "observationPoint": "nva1 received BGP routes on cx-nva1",
+  "scope": "Round 2, B2B enabled: pre-mitigation baseline and ER-only outbound summary. Assertions come from archived observations, not simulator output.",
+  "exclusions": [
+    "B2B disabled: the VWAN model has no corresponding control. Do not equate this pilot with Cases A/B.",
+    "AS-path-matching mitigation rules are not admitted for VWAN route maps; not replaced by a prefix-filter lookalike.",
+    "No community assertions, full RIB equality, physical tunnel/session counts, convergence timing or packet-forwarding validation.",
+    "Intermittent mixed-origin summary disappearance was not reproduced in the archive and is not certified absent by these snapshots.",
+    "The MCR is a logical on-premises site and each circuit an ER-location abstraction; provider forwarding and redundancy are not modeled.",
+    "Hub preference is modeled as ExpressRoute/default; these excerpts do not record its explicit setting and do not test preference competition."
+  ],
+  "cases": [
+    {
+      "id": "b2b-on-baseline",
+      "exportFile": "simulator-topology.json",
+      "topology": {
+        "version": 1,
+        "name": "Recorded VWAN summarization - B2B-on baseline",
+        "hubs": [
+          {
+            "id": "hub-eu1",
+            "name": "hub-eu1",
+            "region": "Sweden Central",
+            "preference": "ExpressRoute",
+            "routingIntent": {
+              "private": false,
+              "internet": false,
+              "privatePrefixes": []
+            }
+          },
+          {
+            "id": "hub-eu2",
+            "name": "hub-eu2",
+            "region": "West Europe",
+            "preference": "ExpressRoute",
+            "routingIntent": {
+              "private": false,
+              "internet": false,
+              "privatePrefixes": []
+            }
+          }
+        ],
+        "sites": [
+          {
+            "id": "mcr",
+            "name": "MCR - ER contributors",
+            "asn": 133937,
+            "prefixes": [
+              "10.0.1.0/24",
+              "10.0.2.0/24",
+              "10.0.3.0/24"
+            ]
+          },
+          {
+            "id": "nva1",
+            "name": "nva1 - VPN observation branch",
+            "asn": 65001,
+            "prefixes": []
+          }
+        ],
+        "spokes": [
+          {
+            "id": "spoke-eu1",
+            "name": "VNet contributor",
+            "hubId": "hub-eu1",
+            "prefixes": [
+              "10.0.128.0/24"
+            ]
+          }
+        ],
+        "connections": [
+          {
+            "id": "cx-nva1",
+            "name": "nva1 BGP VPN",
+            "hubId": "hub-eu1",
+            "siteId": "nva1",
+            "transport": "VPN",
+            "enabled": true,
+            "inbound": [],
+            "outbound": [],
+            "learnSiteRoutes": true
+          }
+        ],
+        "siteLinks": [],
+        "routeMaps": [],
+        "erLocations": [
+          {
+            "id": "er-eu1",
+            "name": "er-eu1 - Frankfurt",
+            "peeringLocation": "Frankfurt"
+          },
+          {
+            "id": "er-eu2",
+            "name": "er-eu2 - Amsterdam",
+            "peeringLocation": "Amsterdam"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "er-eu1-hub-eu1",
+            "name": "er-eu1 to hub-eu1",
+            "locationId": "er-eu1",
+            "hubId": "hub-eu1",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu1-hub-eu2",
+            "name": "er-eu1 to hub-eu2",
+            "locationId": "er-eu1",
+            "hubId": "hub-eu2",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu1-mcr",
+            "name": "er-eu1 to MCR",
+            "locationId": "er-eu1",
+            "siteId": "mcr",
+            "enabled": true,
+            "learnSiteRoutes": true
+          },
+          {
+            "id": "er-eu2-hub-eu1",
+            "name": "er-eu2 to hub-eu1",
+            "locationId": "er-eu2",
+            "hubId": "hub-eu1",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu2-hub-eu2",
+            "name": "er-eu2 to hub-eu2",
+            "locationId": "er-eu2",
+            "hubId": "hub-eu2",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu2-mcr",
+            "name": "er-eu2 to MCR",
+            "locationId": "er-eu2",
+            "siteId": "mcr",
+            "enabled": true,
+            "learnSiteRoutes": true
+          }
+        ]
+      },
+      "evidence": {
+        "repository": "erjosito/net-lab-builder",
+        "commit": "5ba98831d8244eef162e6dbb2cc12a5b58f02e74",
+        "path": "labs/vwan-routemap-summarization/show-output/round2/65-vpnbranch-mitigation-validation.txt",
+        "section": "(1) PRE-MITIGATION BASELINE",
+        "quality": "Curated observed VPN-branch prefix/AS-path listing; not a complete native RIB dump.",
+        "url": "https://github.com/erjosito/net-lab-builder/blob/5ba98831d8244eef162e6dbb2cc12a5b58f02e74/labs/vwan-routemap-summarization/show-output/round2/65-vpnbranch-mitigation-validation.txt",
+        "sha256": "70affeef94adce9ee811f09df0660ccee52a3f82c76571291c6cebdba720a696",
+        "capturedAt": null,
+        "dateContext": "Round 2 is dated 2026-08-18 in the lab README; these excerpts lack a full per-state timestamp."
+      },
+      "present": [
+        {
+          "prefix": "10.0.128.0/24",
+          "asPath": [
+            65515
+          ]
+        },
+        {
+          "prefix": "10.0.1.0/24",
+          "asPath": [
+            65515,
+            12076,
+            133937
+          ]
+        },
+        {
+          "prefix": "10.0.2.0/24",
+          "asPath": [
+            65515,
+            12076,
+            133937
+          ]
+        },
+        {
+          "prefix": "10.0.3.0/24",
+          "asPath": [
+            65515,
+            12076,
+            133937
+          ]
+        }
+      ],
+      "absent": [
+        "10.0.0.0/16"
+      ]
+    },
+    {
+      "id": "er-only-summary",
+      "exportFile": "simulator-topology-er-only-summary.json",
+      "topology": {
+        "version": 1,
+        "name": "Recorded VWAN summarization - ER-only summary (Case D-prime)",
+        "hubs": [
+          {
+            "id": "hub-eu1",
+            "name": "hub-eu1",
+            "region": "Sweden Central",
+            "preference": "ExpressRoute",
+            "routingIntent": {
+              "private": false,
+              "internet": false,
+              "privatePrefixes": []
+            },
+            "routeMapAssignments": [
+              {
+                "connectionId": "cx-nva1",
+                "outboundMapId": "summarize-out"
+              }
+            ]
+          },
+          {
+            "id": "hub-eu2",
+            "name": "hub-eu2",
+            "region": "West Europe",
+            "preference": "ExpressRoute",
+            "routingIntent": {
+              "private": false,
+              "internet": false,
+              "privatePrefixes": []
+            }
+          }
+        ],
+        "sites": [
+          {
+            "id": "mcr",
+            "name": "MCR - ER contributors",
+            "asn": 133937,
+            "prefixes": [
+              "10.0.1.0/24",
+              "10.0.2.0/24",
+              "10.0.3.0/24"
+            ]
+          },
+          {
+            "id": "nva1",
+            "name": "nva1 - VPN observation branch",
+            "asn": 65001,
+            "prefixes": []
+          }
+        ],
+        "spokes": [],
+        "connections": [
+          {
+            "id": "cx-nva1",
+            "name": "nva1 BGP VPN",
+            "hubId": "hub-eu1",
+            "siteId": "nva1",
+            "transport": "VPN",
+            "enabled": true,
+            "inbound": [],
+            "outbound": [],
+            "learnSiteRoutes": true
+          }
+        ],
+        "siteLinks": [],
+        "routeMaps": [
+          {
+            "id": "summarize-out",
+            "name": "summarize-out",
+            "hubId": "hub-eu1",
+            "rules": [
+              {
+                "id": "sum1",
+                "prefixes": [
+                  "10.0.0.0/16"
+                ],
+                "match": "contains",
+                "action": "summarize",
+                "summaryPrefixes": [
+                  "10.0.0.0/16"
+                ],
+                "prepend": [],
+                "nextStep": "terminate"
+              }
+            ]
+          }
+        ],
+        "erLocations": [
+          {
+            "id": "er-eu1",
+            "name": "er-eu1 - Frankfurt",
+            "peeringLocation": "Frankfurt"
+          },
+          {
+            "id": "er-eu2",
+            "name": "er-eu2 - Amsterdam",
+            "peeringLocation": "Amsterdam"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "er-eu1-hub-eu1",
+            "name": "er-eu1 to hub-eu1",
+            "locationId": "er-eu1",
+            "hubId": "hub-eu1",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu1-hub-eu2",
+            "name": "er-eu1 to hub-eu2",
+            "locationId": "er-eu1",
+            "hubId": "hub-eu2",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu1-mcr",
+            "name": "er-eu1 to MCR",
+            "locationId": "er-eu1",
+            "siteId": "mcr",
+            "enabled": true,
+            "learnSiteRoutes": true
+          },
+          {
+            "id": "er-eu2-hub-eu1",
+            "name": "er-eu2 to hub-eu1",
+            "locationId": "er-eu2",
+            "hubId": "hub-eu1",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu2-hub-eu2",
+            "name": "er-eu2 to hub-eu2",
+            "locationId": "er-eu2",
+            "hubId": "hub-eu2",
+            "enabled": true,
+            "learnSiteRoutes": false
+          },
+          {
+            "id": "er-eu2-mcr",
+            "name": "er-eu2 to MCR",
+            "locationId": "er-eu2",
+            "siteId": "mcr",
+            "enabled": true,
+            "learnSiteRoutes": true
+          }
+        ]
+      },
+      "evidence": {
+        "repository": "erjosito/net-lab-builder",
+        "commit": "5ba98831d8244eef162e6dbb2cc12a5b58f02e74",
+        "path": "labs/vwan-routemap-summarization/show-output/round2/64-vpnbranch-caseD-only-ER-b2b-on.txt",
+        "section": "CASE D' / birdc show route all (10.0.0.0/16)",
+        "quality": "Native two-peer BIRD route excerpt, 10:06:49.631/632, plus explicit per-prefix absence observations.",
+        "url": "https://github.com/erjosito/net-lab-builder/blob/5ba98831d8244eef162e6dbb2cc12a5b58f02e74/labs/vwan-routemap-summarization/show-output/round2/64-vpnbranch-caseD-only-ER-b2b-on.txt",
+        "sha256": "9826539d2ce0257fbb6c0227ba63bb13f04fb71b7082dfb8c4e2f3fbc4671948",
+        "capturedAt": null,
+        "dateContext": "Round 2 is dated 2026-08-18 in the lab README; these excerpts lack a full per-state timestamp."
+      },
+      "present": [
+        {
+          "prefix": "10.0.0.0/16",
+          "asPath": [
+            65515
+          ]
+        }
+      ],
+      "absent": [
+        "10.0.1.0/24",
+        "10.0.2.0/24",
+        "10.0.3.0/24"
+      ]
+    }
+  ]
+}

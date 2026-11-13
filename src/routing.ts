@@ -131,6 +131,12 @@ function erCustomerExport(route: Candidate): Candidate {
     !(asn >= 64512 && asn <= 65534) && !(asn >= 4200000000 && asn <= 4294967294))] }
 }
 
+function hubSummaryExport(route: Candidate): Candidate {
+  // Replace clears contributor AS paths; the aggregate still originates in hub AS65515.
+  return route.forwardingRoutes && !route.asPath.includes(65515)
+    ? { ...route, asPath: [65515, ...route.asPath] } : route
+}
+
 export function simulate(topology: Topology): Simulation {
   const siteRouting = propagateSites(topology)
   const routePolicies: RoutePolicySnapshot[] = []
@@ -143,7 +149,8 @@ export function simulate(topology: Topology): Simulation {
     const wireRoutes = direction === 'inbound' ? routes.filter((route) => route.kind === 'vpn-static' || !hasHubOwnAsn(route.asPath)) : routes
     const after = [
       ...applyRouteMapRules(wireRoutes.filter((route) => route.kind !== 'vpn-static'), connectionMapRules(topology, connection, direction))
-        .filter((route) => direction !== 'inbound' || !hasHubOwnAsn(route.asPath)),
+        .filter((route) => direction !== 'inbound' || !hasHubOwnAsn(route.asPath))
+        .map((route) => direction === 'outbound' && connection.transport !== 'ExpressRoute' ? hubSummaryExport(route) : route),
       ...wireRoutes.filter((route) => route.kind === 'vpn-static'),
     ]
     return policy({ kind: 'hub', id: connection.hubId }, connection.id, direction, wireRoutes, after)
@@ -341,7 +348,7 @@ export function simulate(topology: Topology): Simulation {
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
       .map((r) => ({ ...r, asPath: connection.transport === 'ExpressRoute' ? r.asPath : [65515, ...r.asPath] }))
     const routes = connection.transport === 'SpokeNVA'
-      ? applyRouteMapRules(before, routerMapRules(topology, { kind: 'hub', id: connection.hubId }, connection.spokeId!, 'outbound'))
+      ? applyRouteMapRules(before, routerMapRules(topology, { kind: 'hub', id: connection.hubId }, connection.spokeId!, 'outbound')).map(hubSummaryExport)
       : mapRoutes(connection, before, 'outbound')
     return [connection.id, connection.transport === 'ExpressRoute' ? routes.map(erCustomerExport) : routes]
   }))
@@ -356,7 +363,7 @@ export function simulate(topology: Topology): Simulation {
       .filter((route) => route.connectionId !== spoke.id)
       .map((route) => ({ ...route, asPath: [65515, ...route.asPath] }))
     const after = policy({ kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound', before,
-      applyRouteMapRules(before, routerMapRules(topology, { kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound')))
+      applyRouteMapRules(before, routerMapRules(topology, { kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound')).map(hubSummaryExport))
     outbound[spoke.id] = after
   }
   if (topology.connections.some((connection) => connection.transport === 'SpokeNVA')) {
