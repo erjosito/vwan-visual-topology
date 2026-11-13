@@ -5,7 +5,7 @@ import type { RouteMap, RouteMapDirection } from '../model'
 import type { AzAppliance, AzNetTopology } from './model'
 import { parseAsPath } from '../validation'
 import { azSitePolicyLinks, pruneAzSiteRouteMaps, validateAzSiteRouteMaps } from './route-maps'
-import { azArsPolicyLinks, azArsSpokes, parseArsPrependAsPath, parseBgpCommunities, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
+import { azArsPeerHosts, azArsPolicyLinks, parseArsPrependAsPath, parseBgpCommunities, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
 import { BgpRouteTable } from './BgpRouteTable'
 import type { AzBgpRibEntry } from './engine'
 
@@ -82,9 +82,9 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
   }
   return <CanvasOverlay title={`Route maps · ${site.name}`} className="route-map-panel" onClose={onClose}>
     <p className="muted">Policies belong to this {ars ? 'Azure Route Server' : 'site'}, with independent assignments on each connection. Inbound means learned by {site.name}; outbound means advertised by it. Unmatched routes are allowed.</p>
-    {ars && arsVnet && <details><summary>BGP peers (local or gateway-transit peered spokes)</summary>
-      <p className="muted">Remote NVA policies belong to the spoke virtual network connection, not a local BGP-peer association. Enabling a peering here does not create virtual network peering or packet connectivity.</p>
-      {[arsVnet, ...azArsSpokes(arsVnet, topology).map((spoke) => spoke.vnet)].flatMap((host) => host.appliances.filter((app) => app.bgpEnabled).map((app) => <div key={app.id}><label className="aznet-hover-toggle">
+    {ars && arsVnet && <details><summary>BGP peers (local or directly peered VNets)</summary>
+      <p className="muted">BGP peering requires VNet access, not gateway transit. Injecting routes into spokes still requires gateway-transit settings. Remote policy assignments remain limited to eligible spoke virtual network connections. Enabling a BGP peer here does not create VNet peering or packet connectivity.</p>
+      {azArsPeerHosts(arsVnet, topology).flatMap((host) => host.appliances.filter((app) => app.bgpEnabled).map((app) => <div key={app.id}><label className="aznet-hover-toggle">
         <input type="checkbox" aria-label={`BGP peer ${host.name} / ${app.name}`}
           checked={ars.peerApplianceIds.includes(app.id)} disabled={!ars.peerApplianceIds.includes(app.id) && ars.peerApplianceIds.length >= 8}
           onChange={(event) => {

@@ -1293,12 +1293,12 @@ function compileSingleSubnetEffectiveRoutes(
     const minRank = Math.min(...group.map(sourceRank))
     const topRanked = group.filter((r) => sourceRank(r) === minRank && !vpnCoexistenceBackups.has(r.id))
     const minAsPath = Math.min(...topRanked.map((r) => r.asPath.length || 999))
-    const winnerIds = new Set(
-      topRanked
-        .filter((r) => (r.asPath.length || 999) === minAsPath)
-        .slice(0, 1)
-        .map((r) => r.id),
-    )
+    const shortest = topRanked.filter((r) => (r.asPath.length || 999) === minAsPath)
+    // ARS installs all equal-cost NVA next hops; retain other sources' existing tie handling.
+    const winners = shortest[0]?.source === 'RouteServer' && shortest[0].nextHopType === 'VirtualAppliance'
+      ? shortest.filter((r) => r.source === 'RouteServer' && r.nextHopType === 'VirtualAppliance')
+      : shortest.slice(0, 1)
+    const winnerIds = new Set(winners.map((r) => r.id))
     const winner = group.find((r) => winnerIds.has(r.id))!
     for (const r of group) {
       if (winnerIds.has(r.id)) {

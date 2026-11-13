@@ -1451,6 +1451,44 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     }
   })
 
+  const hublessArchive = JSON.parse(readFileSync(resolve('verification', 'issue-98-ars-hubless-archive.json'), 'utf8')) as {
+    topology: AzNetTopology
+    learned: { peerId: string; prefix: string; asPath: number[] }[]
+    cases: { id: string; nva2DefaultSuffix: number[]; nva2DefaultAsPath: number[]; defaultNextHops: string[] }[]
+  }
+
+  it.each(hublessArchive.cases)('matches recorded hubless ARS remote-peer paths and NIC default selection: $id', (entry) => {
+    const topology = structuredClone(hublessArchive.topology)
+    topology.vnets[1].appliances[0].advertisedRouteAttributes![0].asPath = entry.nva2DefaultSuffix
+    expect(parseAzNetTopology(JSON.parse(JSON.stringify(topology)))).toEqual(topology)
+    const result = simulateAzNet(topology)
+    for (const observed of hublessArchive.learned) {
+      const asPath = observed.peerId === 'nva2' && observed.prefix === '0.0.0.0/0' ? entry.nva2DefaultAsPath : observed.asPath
+      expect(result.routeServerRibs['ars-poland']).toContainEqual(expect.objectContaining({
+        prefix: observed.prefix, nextHopId: observed.peerId, asPath,
+      }))
+    }
+    expect(result.subnetTables['c1-work'].routes.filter((route) => route.active && route.prefix === '0.0.0.0/0')
+      .map((route) => route.nextHopIp).sort()).toEqual(entry.defaultNextHops)
+  })
+
+  it('keeps remote BGP reachability separate from spoke route injection and rejects disabled or one-way-access peerings', () => {
+    for (const fault of ['disabled', 'access-denied'] as const) {
+      const topology = structuredClone(hublessArchive.topology)
+      if (fault === 'disabled') topology.vnetPeerings[0].enabled = false
+      else topology.vnetPeerings[0].bToA.allowVirtualNetworkAccess = false
+      const result = simulateAzNet(topology)
+      expect(result.routeServerRibs['ars-poland'].some((route) => route.nextHopId === 'nva1')).toBe(false)
+      expect(result.subnetTables['c1-work'].routes.filter((route) => route.active && route.prefix === '0.0.0.0/0')
+        .map((route) => route.nextHopIp)).toEqual(['10.20.1.4'])
+    }
+    const topology = structuredClone(hublessArchive.topology)
+    topology.vnetPeerings[2].bToA.useRemoteGateways = false
+    const result = simulateAzNet(topology)
+    expect(result.routeServerRibs['ars-poland'].filter((route) => route.prefix === '0.0.0.0/0')).toHaveLength(2)
+    expect(result.subnetTables['c1-work'].routes.some((route) => route.source === 'RouteServer')).toBe(false)
+  })
+
   it('models Hybrid Secured vWAN Hub and Classic Hub-and-Spoke coexistence in Sample 4', () => {
     const topo = AZURE_NET_SAMPLES[3].topology
     const sim = simulateAzNet(topo)
