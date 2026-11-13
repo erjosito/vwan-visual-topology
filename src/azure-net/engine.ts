@@ -171,6 +171,12 @@ export function stripPrivateAsnsForMsee(asPath: number[]): number[] {
   return asPath.filter((asn) => !isPrivateAsn(asn))
 }
 
+function mseeAdvertisedAsPath(route: AzBgpRibEntry, standaloneGateway = false): number[] {
+  if (route.nextHopKind !== 'vnet-gateway') return route.asPath
+  // Azure-originated routes retain 65515 at MSEE; standalone gateway hairpins add two 12076 hops.
+  return [...(standaloneGateway ? [12076, 12076] : [12076]), ...stripPrivateAsnsForMsee(route.asPath)]
+}
+
 export function firstUsableIp(prefix: string): string {
   const parsed = cidr(prefix)
   if (!parsed) return '0.0.0.0'
@@ -527,7 +533,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
           entries.push({
             id: `erloc:${loc.id}:vng:${link.id}:${adv.prefix}`,
             prefix: adv.prefix,
-            asPath: [12076, ...stripPrivateAsnsForMsee(adv.asPath)],
+            asPath: adv.asPath,
             nextHopName: `${gw.name} (${ownerVnet.name})`,
             nextHopKind: 'vnet-gateway',
             nextHopId: gw.id,
@@ -648,7 +654,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
               id: `gw:${gw.id}:er:${link.id}:${lr.prefix}:${lr.nextHopId}`,
               connectionId: link.id,
               prefix: lr.prefix,
-              asPath: lr.asPath,
+              asPath: mseeAdvertisedAsPath(lr, true),
               nextHopName: `${loc.name} → ${lr.nextHopName}`,
               nextHopKind: lr.nextHopKind,
               nextHopId: lr.nextHopId,
@@ -833,7 +839,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
           id: `vhub:${hub.id}:er:${link.id}:${lr.prefix}:${lr.nextHopId}`,
           connectionId: link.id,
           prefix: lr.prefix,
-          asPath: lr.asPath,
+          asPath: mseeAdvertisedAsPath(lr),
           nextHopName: `${loc.name} → ${lr.nextHopName}`,
           nextHopKind: lr.nextHopKind,
           nextHopId: lr.nextHopId,
@@ -886,7 +892,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
           id: `site:${site.id}:er:${link.id}:${lr.prefix}`,
           connectionId: link.id,
           prefix: lr.prefix,
-          asPath: lr.asPath,
+          asPath: mseeAdvertisedAsPath(lr),
           nextHopName: `${loc.name} (${link.name})`,
           nextHopKind: 'er-location',
           nextHopId: loc.id,
@@ -1241,6 +1247,19 @@ function compileSingleSubnetEffectiveRoutes(
         originLabel: `User · UDR "${udr.name}" in ${udrTable.name}`,
         asPath: [],
         active: true,
+      })
+    }
+  }
+
+  const overridesReservedDefaults = candidates.some((route) =>
+    route.prefix === '0.0.0.0/0' && (route.source === 'User' || route.nextHopType === 'VirtualNetworkGateway'))
+  if (!overridesReservedDefaults) {
+    for (const prefix of ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '127.0.0.0/8', '198.18.0.0/15']) {
+      const reserved = cidr(prefix)!
+      if (vnet.prefixes.some((local) => (cidr(local)?.length ?? 33) <= reserved.length && contains(local, reserved.network))) continue
+      candidates.push({
+        id: `sys:reserved:${subnet.id}:${prefix}`, prefix, source: 'System', nextHopType: 'None',
+        nextHopName: 'Discard', originLabel: 'System · Reserved address space', asPath: [], active: true,
       })
     }
   }

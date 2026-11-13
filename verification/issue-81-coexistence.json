@@ -1,0 +1,3778 @@
+{
+  "source": "Issue #81 controlled Azure/Megaport lab, 2026-11-13; no ARS in DUT.",
+  "evidence": "Native CLI gateway/MSEE/ARS BGP output and two rounds of five ICMP requests classified by source eth0 versus decrypted vti81 ingress.",
+  "normalization": "ASNs parsed from space- or hyphen-delimited native paths; redundant gateway instances deduplicated. No Azure resource IDs, public IPs, vault or provider account data.",
+  "report": "https://github.com/erjosito/lab-er-vpn-coexistence-20261113",
+  "limitations": [
+    "Single shared circuit with one primary provider VXC; not redundant-path certification.",
+    "Forward ingress only; guest return routing is deliberately asymmetric.",
+    "Platform-internal iBGP copies are retained as observations, not modeled as independent transport advertisements.",
+    "LNG peerWeight is not modeled. The requested weight-100 experiment retained native weight 32768; configured-weight activation was not independently captured, so weight effects remain inconclusive."
+  ],
+  "cases": [
+    {
+      "name": "overlap-restored",
+      "configuration": {
+        "name": "overlap-restored"
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - overlap-restored",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T12:26:52.247482+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "equal-observed-length",
+      "configuration": {
+        "name": "equal-observed-length",
+        "er": 0,
+        "vpn": 2
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - equal-observed-length",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": [
+              64494,
+              64494
+            ]
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T12:55:10.625391+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "er-longer",
+      "configuration": {
+        "name": "er-longer",
+        "er": 5
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - er-longer",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": [
+                      64495,
+                      64495,
+                      64495,
+                      64495,
+                      64495
+                    ]
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": [
+                      64495,
+                      64495,
+                      64495,
+                      64495,
+                      64495
+                    ]
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T12:38:02.740654+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495,
+              64495,
+              64495,
+              64495,
+              64495,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "er-only-shared",
+      "configuration": {
+        "name": "er-only-shared",
+        "withdraw_vpn": true
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - er-only-shared",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T12:10:26.589906+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "final-restored",
+      "configuration": {
+        "name": "final-restored"
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - final-restored",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T13:45:26.558916+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "pre-udr-restored",
+      "configuration": {
+        "name": "pre-udr-restored"
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - pre-udr-restored",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T13:11:38.719213+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "vpn-longer",
+      "configuration": {
+        "name": "vpn-longer",
+        "vpn": 5
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - vpn-longer",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": [
+              64494,
+              64494,
+              64494,
+              64494,
+              64494
+            ]
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T12:48:55.110822+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494,
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494,
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494,
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494,
+              64494,
+              64494,
+              64494,
+              64494,
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "vpn-more-specific",
+      "configuration": {
+        "name": "vpn-more-specific",
+        "specific": true
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - vpn-more-specific",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24",
+              "198.18.81.0/25"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T13:05:29.283421+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/25",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/25",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "vpn-only-shared",
+      "configuration": {
+        "name": "vpn-only-shared",
+        "withdraw_er": true
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - vpn-only-shared",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T12:18:12.364608+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        },
+        "198.18.81.129": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "vpn-peer-weight-100",
+      "configuration": {
+        "name": "vpn-peer-weight-100"
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - vpn-peer-weight-100",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T13:00:19.887465+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "workload-bgp-disabled",
+      "configuration": {
+        "name": "workload-bgp-disabled",
+        "controlsSuppressed": true
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - workload-bgp-disabled",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24",
+                "routeTableId": "workload-policy"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [
+          {
+            "id": "workload-policy",
+            "name": "Workload only",
+            "disableBgpRoutePropagation": true,
+            "routes": []
+          }
+        ],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T13:38:40.890006+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "none",
+          "counts": {
+            "eth0": 0,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "none",
+          "counts": {
+            "eth0": 0,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "none",
+          "counts": {
+            "eth0": 0,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "none",
+          "counts": {
+            "eth0": 0,
+            "vti81": 0
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    },
+    {
+      "name": "workload-udr-drop",
+      "configuration": {
+        "name": "workload-udr-drop"
+      },
+      "topology": {
+        "version": 2,
+        "kind": "azure-network-topology",
+        "name": "ER/VPN coexistence without DUT Route Server - workload-udr-drop",
+        "vnets": [
+          {
+            "id": "dut",
+            "name": "DUT - ER + VPN, no ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.81.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "dut-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.81.255.0/26"
+              },
+              {
+                "id": "dut-workload",
+                "name": "Workload",
+                "prefix": "10.81.1.0/24",
+                "routeTableId": "workload-policy"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "dut-er",
+                "name": "DUT ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              },
+              {
+                "id": "dut-vpn",
+                "name": "DUT VPN gateway",
+                "kind": "Vpn",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "appliances": []
+          },
+          {
+            "id": "source",
+            "name": "Source - ER + source-only ARS",
+            "region": "Sweden Central",
+            "role": "hub-vnet",
+            "prefixes": [
+              "10.82.0.0/16"
+            ],
+            "subnets": [
+              {
+                "id": "source-gateway",
+                "name": "GatewaySubnet",
+                "prefix": "10.82.255.0/26"
+              },
+              {
+                "id": "source-nvas",
+                "name": "NVA",
+                "prefix": "10.82.1.0/24"
+              },
+              {
+                "id": "source-ars-subnet",
+                "name": "RouteServerSubnet",
+                "prefix": "10.82.254.0/26"
+              }
+            ],
+            "gateways": [
+              {
+                "id": "source-er",
+                "name": "Source ExpressRoute gateway",
+                "kind": "ExpressRoute",
+                "asn": 65515,
+                "enabled": true,
+                "bgpEnabled": true
+              }
+            ],
+            "routeServer": {
+              "id": "source-ars",
+              "name": "Source-only ARS",
+              "subnetId": "source-ars-subnet",
+              "enabled": true,
+              "branchToBranchTraffic": true,
+              "hubRoutingPreference": "ExpressRoute",
+              "peerApplianceIds": [
+                "source-nva"
+              ]
+            },
+            "appliances": [
+              {
+                "id": "source-nva",
+                "name": "Source BIRD - ARS role",
+                "kind": "nva-vm",
+                "subnetId": "source-nvas",
+                "privateIp": "10.82.1.4",
+                "asn": 64495,
+                "bgpEnabled": true,
+                "enableIpForwarding": true,
+                "advertisedPrefixes": [
+                  "198.18.82.0/24",
+                  "198.18.81.0/24"
+                ],
+                "advertisedRouteAttributes": [
+                  {
+                    "prefix": "198.18.82.0/24",
+                    "asPath": []
+                  },
+                  {
+                    "prefix": "198.18.81.0/24",
+                    "asPath": []
+                  }
+                ],
+                "staticRoutes": []
+              }
+            ]
+          }
+        ],
+        "vnetPeerings": [],
+        "udrTables": [
+          {
+            "id": "workload-policy",
+            "name": "Workload only",
+            "disableBgpRoutePropagation": false,
+            "routes": [
+              {
+                "id": "drop-shared",
+                "name": "Drop shared /24",
+                "prefix": "198.18.81.0/24",
+                "nextHopType": "None",
+                "enabled": true
+              }
+            ]
+          }
+        ],
+        "vwanHubs": [],
+        "erLocations": [
+          {
+            "id": "circuit",
+            "name": "Shared 50-Mbps circuit",
+            "peeringLocation": "Stockholm",
+            "sku": "Standard"
+          }
+        ],
+        "erLinks": [
+          {
+            "id": "dut-er-connection",
+            "name": "dut-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-er",
+            "enabled": true
+          },
+          {
+            "id": "source-er-connection",
+            "name": "source-er connection",
+            "locationId": "circuit",
+            "targetKind": "vnet-gateway",
+            "targetId": "source-er",
+            "enabled": true
+          }
+        ],
+        "erGlobalReachLinks": [],
+        "sites": [
+          {
+            "id": "vpn-role",
+            "name": "Same source VM - VPN role",
+            "asn": 64494,
+            "prefixes": [
+              "198.18.83.0/24",
+              "198.18.81.0/24"
+            ]
+          }
+        ],
+        "vpnConnections": [
+          {
+            "id": "vpn-connection",
+            "name": "BGP S2S - source VTI",
+            "siteId": "vpn-role",
+            "targetKind": "vnet-gateway",
+            "targetId": "dut-vpn",
+            "bgpEnabled": true,
+            "enabled": true,
+            "inboundPrepend": []
+          }
+        ],
+        "siteLinks": [],
+        "subtitle": "Source VM has ARS-facing ASN 64495 and VPN-facing ASN 64494. ARS is source-only; the DUT has none. Validate forward ingress, not the asymmetric guest return path."
+      },
+      "observedAt": "2026-11-13T13:31:19.089598+00:00",
+      "forwarding": {
+        "198.18.81.1": {
+          "transport": "none",
+          "counts": {
+            "eth0": 0,
+            "vti81": 0
+          }
+        },
+        "198.18.81.129": {
+          "transport": "none",
+          "counts": {
+            "eth0": 0,
+            "vti81": 0
+          }
+        },
+        "198.18.82.1": {
+          "transport": "ER",
+          "counts": {
+            "eth0": 10,
+            "vti81": 0
+          }
+        },
+        "198.18.83.1": {
+          "transport": "VPN",
+          "counts": {
+            "eth0": 0,
+            "vti81": 10
+          }
+        }
+      },
+      "native": {
+        "dut-er-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              12076,
+              12076,
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32769
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "IBgp",
+            "weight": 32768
+          }
+        ],
+        "dut-vpn-learned": [
+          {
+            "prefix": "198.18.83.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64494
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ],
+        "circuit-primary-routes": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              65515,
+              64495
+            ],
+            "weight": 0
+          }
+        ],
+        "ars-learned": [
+          {
+            "prefix": "198.18.81.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          },
+          {
+            "prefix": "198.18.82.0/24",
+            "asPath": [
+              64495
+            ],
+            "origin": "EBgp",
+            "weight": 32768
+          }
+        ]
+      }
+    }
+  ]
+}
