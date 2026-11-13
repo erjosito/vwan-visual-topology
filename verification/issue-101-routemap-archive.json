@@ -1,0 +1,108 @@
+{
+  "issue": 101,
+  "lab": "vwan-routemap-summarization",
+  "baseFixture": "issue-98-routemap-archive.json",
+  "baseCase": "b2b-on-baseline",
+  "scope": "Additional VPN-branch advertisement cuts: AS12076 drop-only, drop before summary, and B2B-off mixed-contributor summary. Each case overlays the original native baseline with the recorded WAN setting and hub outbound rules.",
+  "exclusions": [
+    "Advertisement observations do not establish forwarding, tunnel redundancy or convergence.",
+    "No aggregate origin-classification flags or intermittent summary race are inferred from AS65515.",
+    "B2B suppression uses configured branch-route provenance before outbound policy; the native aggregate observation does not prove Azure's internal pipeline ordering.",
+    "A full per-state timestamp, command metadata and independent JSON route-map configuration are not present in these excerpts. Rule semantics and settings are transcribed from their recorded descriptions.",
+    "Community conditions/modifications and firewall session enforcement remain outside this VWAN model."
+  ],
+  "sources": [
+    {
+      "id": "mitigation",
+      "repository": "erjosito/net-lab-builder",
+      "commit": "5ba98831d8244eef162e6dbb2cc12a5b58f02e74",
+      "path": "labs/vwan-routemap-summarization/show-output/round2/65-vpnbranch-mitigation-validation.txt",
+      "sha256": "70affeef94adce9ee811f09df0660ccee52a3f82c76571291c6cebdba720a696",
+      "quality": "Sections (2)/(3) record prefix presence/absence; (3) also includes native BIRD summary output for both VPN peers at 10:27:38.310/323. No full date per capture."
+    },
+    {
+      "id": "b2b-off",
+      "repository": "erjosito/net-lab-builder",
+      "commit": "5ba98831d8244eef162e6dbb2cc12a5b58f02e74",
+      "path": "labs/vwan-routemap-summarization/show-output/round2/62-vpnbranch-caseA-both-contributors-b2b-off.txt",
+      "sha256": "b821afcf6596ac1d283d6599740f8efc02a9e331441276bb38b9efd669b12738",
+      "quality": "Native BIRD summary output for both VPN peers at 09:40:12.022/025. Specific-prefix suppression and WAN/rule settings are reported in the adjacent observation text, not a full native RIB/configuration dump."
+    }
+  ],
+  "cases": [
+    {
+      "id": "as-path-drop",
+      "name": "Recorded VWAN - AS12076 drop only",
+      "exportFile": "simulator-topology-as-path-drop.json",
+      "source": "mitigation",
+      "section": "(2) MITIGATION - DROP-ONLY",
+      "allowBranchToBranchTraffic": true,
+      "rules": [
+        {
+          "id": "drop-er-12076",
+          "prefixes": [],
+          "match": "equals",
+          "action": "drop",
+          "summaryPrefixes": [],
+          "prepend": [],
+          "nextStep": "terminate",
+          "matchConditions": [{ "property": "asPath", "match": "contains", "values": ["12076"] }]
+        }
+      ],
+      "present": [{ "prefix": "10.0.128.0/24", "asPath": [65515] }],
+      "absent": ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+    },
+    {
+      "id": "as-path-drop-summary",
+      "name": "Recorded VWAN - AS12076 drop before summary",
+      "exportFile": "simulator-topology-as-path-drop-summary.json",
+      "source": "mitigation",
+      "section": "(3) MITIGATION - FULL",
+      "allowBranchToBranchTraffic": true,
+      "rules": [
+        {
+          "id": "drop-er-12076",
+          "prefixes": [],
+          "match": "equals",
+          "action": "drop",
+          "summaryPrefixes": [],
+          "prepend": [],
+          "nextStep": "terminate",
+          "matchConditions": [{ "property": "asPath", "match": "contains", "values": ["12076"] }]
+        },
+        {
+          "id": "summarize-vnet",
+          "prefixes": ["10.0.0.0/16"],
+          "match": "contains",
+          "action": "summarize",
+          "summaryPrefixes": ["10.0.0.0/16"],
+          "prepend": [],
+          "nextStep": "terminate"
+        }
+      ],
+      "present": [{ "prefix": "10.0.0.0/16", "asPath": [65515] }],
+      "absent": ["10.0.128.0/24", "10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+    },
+    {
+      "id": "b2b-off-mixed-summary",
+      "name": "Recorded VWAN - B2B off mixed contributors",
+      "exportFile": "simulator-topology-b2b-off-summary.json",
+      "source": "b2b-off",
+      "section": "CASE A - native summary and reported suppressed contributors",
+      "allowBranchToBranchTraffic": false,
+      "rules": [
+        {
+          "id": "summarize-vnet",
+          "prefixes": ["10.0.0.0/16"],
+          "match": "contains",
+          "action": "summarize",
+          "summaryPrefixes": ["10.0.0.0/16"],
+          "prepend": [],
+          "nextStep": "terminate"
+        }
+      ],
+      "present": [{ "prefix": "10.0.0.0/16", "asPath": [65515] }],
+      "absent": ["10.0.128.0/24", "10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+    }
+  ]
+}

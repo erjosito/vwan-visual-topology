@@ -23,6 +23,69 @@ const network = (): Topology => {
 }
 
 describe('ordered first-class route-map rules', () => {
+  it('admits AS-path conditions with prefix/condition AND, ASN-list OR and exact ordered Equals', () => {
+    const t = network()
+    t.routeMaps = [map([rule({ action: 'drop', prefixes: ['10.0.0.0/8'], match: 'contains',
+      matchConditions: [{ property: 'asPath', match: 'contains', values: ['12076', '64496'] },
+        { property: 'asPath', match: 'equals', values: ['65515', '12076', '65001'] }] })])]
+    const admitted = validateTopology(t)
+    expect(validateTopology(JSON.parse(JSON.stringify(admitted)))).toEqual(admitted)
+    const matching = route('10.20.0.0/16', [65515, 12076, 65001])
+    const reversed = route('10.20.0.0/16', [65001, 12076, 65515])
+    const outside = route('192.168.0.0/16', matching.asPath)
+    const differentAsn = route('10.20.0.0/16', [65515, 1207, 65001])
+    expect(applyRouteMapRules([matching, reversed, outside, differentAsn], admitted.routeMaps![0].rules))
+      .toEqual([reversed, outside, differentAsn])
+    expect(applyRouteMapRules([route(undefined, [120760])], [rule({ action: 'drop',
+      matchConditions: [{ property: 'asPath', match: 'contains', values: ['12076'] }] })])).toHaveLength(1)
+  })
+
+  it('matches modified AS paths on Continue and allows unmatched routes despite Terminate', () => {
+    const input = [route()]
+    expect(applyRouteMapRules(input, [
+      rule({ action: 'drop', matchConditions: [{ property: 'asPath', match: 'contains', values: ['12076'] }] }),
+      rule({ id: 'prepend', action: 'prepend', prepend: [64496], nextStep: 'continue' }),
+      rule({ id: 'drop-prepended', action: 'drop', matchConditions: [{ property: 'asPath', match: 'equals', values: ['64496', '65001'] }] }),
+    ])).toEqual([])
+    expect(input).toEqual([route()])
+  })
+
+  it('filters hub imports before selection and exports after selection using actual AS paths', () => {
+    const t = network()
+    t.routeMaps = [map([rule({ action: 'drop', matchConditions: [{ property: 'asPath', match: 'contains', values: ['12076'] }] })])]
+    t.hubs[0].routeMapAssignments = [{ connectionId: 'vpn-eu', outboundMapId: 'map' }]
+    let result = simulate(validateTopology(t))
+    expect(result.bgpTables.eu.find((d) => d.prefix === '10.20.0.0/16')!.selected[0].transport).toBe('ExpressRoute')
+    expect(result.outbound['vpn-eu'].some((r) => r.prefix === '10.20.0.0/16')).toBe(false)
+    t.hubs[0].routeMapAssignments.push({ connectionId: 'er-eu', inboundMapId: 'map' })
+    result = simulate(validateTopology(t))
+    expect(result.bgpTables.eu.find((d) => d.prefix === '10.20.0.0/16')!.selected[0].transport).toBe('VPN')
+  })
+
+  it('rejects malformed or unsupported VWAN attributes without silently discarding them', () => {
+    const t = network()
+    for (const condition of [
+      null, { property: 'community', match: 'contains', values: ['65001:1'] },
+      { property: 'asPath', match: 'regex', values: ['12076'] },
+      ...[[], ['0'], ['01'], ['65535'], ['133937'], ['12076 65001'], [12076], null]
+        .map((values) => ({ property: 'asPath', match: 'contains', values })),
+      { property: 'asPath', match: 'contains', values: ['12076'], regex: true },
+    ]) {
+      t.routeMaps = [map([rule({ matchConditions: [condition] as RouteMapRule['matchConditions'] })])]
+      expect(() => validateTopology(t)).toThrow()
+    }
+    t.routeMaps = [map([rule({ matchConditions: [
+      { id: 'duplicate', property: 'asPath', match: 'contains', values: ['12076'] },
+      { id: 'duplicate', property: 'asPath', match: 'equals', values: ['65515'] },
+    ] })])]
+    expect(() => validateTopology(t)).toThrow(/Duplicate/)
+    t.routeMaps = [map([rule({ modifications: [{ property: 'asPath', action: 'replace', values: ['64496'] }] })])]
+    expect(() => validateTopology(t)).toThrow(/only on Azure Route Server/)
+    t.routeMaps = [{ ...map([rule({ matchConditions: [{ property: 'asPath', match: 'contains', values: ['133937'] }] })]),
+      hubId: undefined, siteId: 'dc' }]
+    expect(validateTopology(t).routeMaps![0].rules[0].matchConditions![0].values).toEqual(['133937'])
+  })
+
   it('allows unmatched routes and uses OR within prefix lists without matching less-specific prefixes', () => {
     const rules = [rule({ prefixes: ['10.0.0.0/8', '172.16.0.0/12'], match: 'contains', action: 'drop' })]
     expect(applyRouteMapRules([route(), route('172.16.1.0/24'), route('0.0.0.0/0'), route('192.168.0.0/16')], rules))

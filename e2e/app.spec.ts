@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Page } from '@playwright/test'
 import { example } from '../src/model'
-import type { Topology } from '../src/model'
+import type { RouteMapRule, Topology } from '../src/model'
 
 const readTopology = (page: Page): Promise<Topology> => page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))
 interface MotionEdge { id: string; from: string; to: string }
@@ -1755,6 +1755,98 @@ test('site route views inspect Azure policies and highlight Azure-learned BGP pa
   await expect.poll(() => motionDirections(page, 'vpn-eu')).toEqual([{ from: 'dc', to: 'eu' }])
   expect(await readTopology(page)).toEqual(original)
 })
+
+test('WAN branch transit and AS-path editor controls preserve routes, history and native round-trip', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/?mode=vwan')
+  const toggle = page.getByRole('checkbox', { name: 'Allow branch-to-branch traffic (WAN-wide)', exact: true })
+  await expect(toggle).toBeChecked()
+  await toggle.uncheck()
+  await action(page, 'Select site London datacenter', 'Learned routes')
+  await page.getByLabel('Neighbor', { exact: true }).selectOption('vpn-eu')
+  await expect(page.locator('.effective-routes tr[data-prefix="10.40.0.0/16"]')).toHaveCount(0)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.1.0.0/16"]')).toHaveCount(1)
+  await showRoutes(page)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.40.0.0/16"]')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect(toggle).toBeChecked()
+  await page.getByRole('button', { name: 'Redo', exact: true }).click()
+  await expect(toggle).not.toBeChecked()
+  await toggle.check()
+  await action(page, 'Select hub Europe hub', 'Route maps')
+  await createMap(page, 'AS-path import filter')
+  await page.getByRole('button', { name: 'Add rule', exact: true }).click()
+  await page.getByRole('button', { name: 'Add match condition', exact: true }).click()
+  await page.getByLabel('Rule 1 condition 1 match', { exact: true }).selectOption('contains')
+  await page.getByLabel('Rule 1 condition 1 values', { exact: true }).fill('12076')
+  await page.getByLabel('Rule 1 action', { exact: true }).selectOption('drop')
+  await expect(page.getByRole('button', { name: 'Add modification', exact: true })).toHaveCount(0)
+  await expect(page.getByLabel('Rule 1 condition 1 property', { exact: true }).locator('option')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Save route map', exact: true }).click()
+  const mapId = (await readTopology(page)).routeMaps![0].id
+  await page.getByLabel('Inbound route map', { exact: true }).selectOption(mapId)
+  await showRoutes(page)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]').filter({ hasText: 'London primary' })).toHaveCount(0)
+  await expect(page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]').filter({ hasText: 'London backup' })).toHaveCount(1)
+  await action(page, 'Select hub Europe hub', 'Route maps')
+  await page.getByRole('button', { name: /AS-path import filter/ }).click()
+  await expect(page.getByLabel('Rule 1 condition 1 values', { exact: true })).toHaveValue('12076')
+  await page.getByLabel('Rule 1 condition 1 values', { exact: true }).fill('133937')
+  await page.getByRole('button', { name: 'Save route map', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('2-byte ASN')
+  await page.getByLabel('Rule 1 condition 1 values', { exact: true }).fill('12076')
+  await page.getByRole('button', { name: 'Save route map', exact: true }).click()
+  await toggle.uncheck()
+  const exported = await downloadTopology(page)
+  expect(exported.allowBranchToBranchTraffic).toBe(false)
+  expect(exported.routeMaps![0].rules[0].matchConditions![0]).toMatchObject({ property: 'asPath', match: 'contains', values: ['12076'] })
+  await importTopology(page, exported)
+  await page.reload()
+  await expect(toggle).not.toBeChecked()
+  expect(await readTopology(page)).toEqual(exported)
+  expect(errors).toEqual([])
+})
+
+for (const id of ['as-path-drop', 'as-path-drop-summary', 'b2b-off-mixed-summary']) {
+  test(`recorded VWAN B2B and AS-path policy imports and round-trips: ${id}`, async ({ page }, testInfo) => {
+    const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-routemap-archive.json'), 'utf8')) as {
+      cases: { id: string; topology: Topology }[]
+    }
+    const extensions = JSON.parse(await readFile(resolve('verification', 'issue-101-routemap-archive.json'), 'utf8')) as {
+      baseCase: string; cases: { id: string; name: string; exportFile: string; allowBranchToBranchTraffic: boolean; rules: RouteMapRule[]; present: { prefix: string; asPath: number[] }[]; absent: string[] }[]
+    }
+    const entry = extensions.cases.find((entry) => entry.id === id)!
+    const topology = structuredClone(archive.cases.find((c) => c.id === extensions.baseCase)!.topology)
+    topology.name = entry.name
+    topology.allowBranchToBranchTraffic = entry.allowBranchToBranchTraffic
+    topology.routeMaps = [{ id: 'archive-policy', name: entry.name, hubId: 'hub-eu1', rules: entry.rules }]
+    topology.hubs.find((h) => h.id === 'hub-eu1')!.routeMapAssignments = [{ connectionId: 'cx-nva1', outboundMapId: 'archive-policy' }]
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto('/?mode=vwan')
+    await importTopology(page, topology)
+    await expect(page.getByRole('checkbox', { name: 'Allow branch-to-branch traffic (WAN-wide)', exact: true }))
+      .toBeChecked({ checked: entry.allowBranchToBranchTraffic })
+    for (const [object, command] of [
+      ['Select site nva1 - VPN observation branch', 'Learned routes'],
+      ['Select hub hub-eu1', 'Advertised routes'],
+    ]) {
+      await action(page, object, command)
+      await page.getByLabel('Neighbor', { exact: true }).selectOption('cx-nva1')
+      for (const expected of entry.present) await expect(page.locator(`.effective-routes tr[data-prefix="${expected.prefix}"] .as-path`).first()).toHaveText(expected.asPath.join(' '))
+      for (const absent of entry.absent) await expect(page.locator(`.effective-routes tr[data-prefix="${absent}"]`)).toHaveCount(0)
+    }
+    const before = await readTopology(page)
+    const exported = await downloadTopology(page)
+    expect(exported).toEqual(before)
+    await writeFile(testInfo.outputPath(entry.exportFile), JSON.stringify(exported, null, 2) + '\n')
+    await importTopology(page, exported)
+    await page.reload()
+    expect(await readTopology(page)).toEqual(exported)
+    expect(errors).toEqual([])
+  })
+}
 
 for (const id of ['b2b-on-baseline', 'er-only-summary']) {
   test(`recorded summarization pilot imports, displays native BGP observations and round-trips: ${id}`, async ({ page }) => {

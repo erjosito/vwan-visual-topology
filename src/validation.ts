@@ -89,6 +89,7 @@ export function validateTopology(input: unknown): Topology {
   }
   const root = record(input)
   if (root.version !== 1) fail('Unsupported topology version (expected 1).')
+  if (root.allowBranchToBranchTraffic !== undefined && typeof root.allowBranchToBranchTraffic !== 'boolean') fail('WAN branch-to-branch traffic must be a boolean.')
   const prefixes = (value: unknown, label: string) => array(value, 100, label).map((value) => {
     const prefix = text(value, label)
     if (!cidr(prefix)) fail(`Invalid IPv4 network CIDR: ${prefix}`)
@@ -214,7 +215,28 @@ export function validateTopology(input: unknown): Topology {
       ...(map.hubId === undefined ? { siteId: map.siteId as string } : { hubId: map.hubId as string }),
       rules: array(map.rules, 20, 'Route-map rules').map((value): RouteMapRule => {
         const rule = record(value)
-        if (rule.matchConditions !== undefined || rule.modifications !== undefined) fail('Advanced attribute conditions and modifications are supported only on Azure Route Server route maps.')
+        if (rule.modifications !== undefined) fail('Attribute modifications are supported only on Azure Route Server route maps.')
+        const conditionIds = new Set<string>()
+        const matchConditions = rule.matchConditions === undefined ? undefined
+          : array(rule.matchConditions, 40, 'Route-map match conditions').map((value) => {
+            const condition = record(value)
+            if (Object.keys(condition).some((key) => !['id', 'property', 'match', 'values'].includes(key))) fail('Unknown route-map match-condition fields.')
+            if (condition.property !== 'asPath') fail('VWAN and site attribute conditions support AS-path matching only.')
+            if (!['equals', 'contains'].includes(condition.match as string)) fail('AS-path conditions require equals or contains.')
+            const values = array(condition.values, 100, 'AS-path match values').map((value) => {
+              const max = map.hubId === undefined ? 4294967294 : 65534
+              if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value) || Number(value) > max) fail(map.hubId === undefined
+                ? 'Site AS-path conditions require ASN strings (1-4294967294).'
+                : 'VWAN AS-path conditions require 2-byte ASN strings (1-65534).')
+              return value as string
+            })
+            if (!values.length) fail('An AS-path match condition requires values; remove the condition to match all routes.')
+            const conditionId = condition.id === undefined ? undefined : text(condition.id, 'Condition ID')
+            if (conditionId !== undefined && conditionIds.has(conditionId)) fail('Duplicate route-map condition ID.')
+            if (conditionId !== undefined) conditionIds.add(conditionId)
+            return { ...(conditionId === undefined ? {} : { id: conditionId }), property: 'asPath' as const,
+              match: condition.match as 'equals' | 'contains', values }
+          })
         if (!['equals', 'contains'].includes(rule.match as string)) fail('Invalid prefix match mode.')
         if (!['permit', 'drop', 'summarize', 'prepend'].includes(rule.action as string)) fail('Invalid route-map action.')
         if (!['continue', 'terminate'].includes(rule.nextStep as string)) fail('Invalid route-map next step.')
@@ -231,7 +253,8 @@ export function validateTopology(input: unknown): Topology {
           }
         }
         return { id: id(rule.id), prefixes: matchPrefixes, match: rule.match as RouteMapRule['match'],
-          action: rule.action as RouteMapRule['action'], summaryPrefixes, prepend, nextStep: rule.nextStep as RouteMapRule['nextStep'] }
+          action: rule.action as RouteMapRule['action'], summaryPrefixes, prepend, nextStep: rule.nextStep as RouteMapRule['nextStep'],
+          ...(matchConditions === undefined ? {} : { matchConditions }) }
       }),
     }
   })
@@ -526,5 +549,6 @@ export function validateTopology(input: unknown): Topology {
     }
   }
   return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,
+    ...(root.allowBranchToBranchTraffic === undefined ? {} : { allowBranchToBranchTraffic: root.allowBranchToBranchTraffic as boolean }),
     ...(root.erLocations === undefined && root.erLinks === undefined ? {} : { erLocations, erLinks }), ...(layout ? { layout } : {}), ...(azureImport ? { azureImport } : {}) }
 }

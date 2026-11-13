@@ -274,7 +274,7 @@ export function simulate(topology: Topology): Simulation {
   }
   if (!converged) warnings.push('The best-path advertisement model did not converge. Tables are provisional; flow tracing is disabled.')
   if (topology.routeMaps?.length || topology.connections.some((c) => c.inbound.length || c.outbound.length)) {
-    warnings.push('Route maps model IPv4 prefix conditions and permit, drop, summarize, and prepend actions only. Community and AS-path matching, NAT interactions, and other attribute modifications are not simulated.')
+    warnings.push('Route maps model IPv4 prefix and AS-path conditions with permit, drop, summarize, and prepend actions. Community matching, NAT interactions, and other attribute modifications are not simulated.')
   }
   if (Object.values(tables).some((table) => table.some((d) => d.candidates.some((r) => r.forwardingRoutes)))) {
     warnings.push('Summary forwarding retains known contributing destinations only; aggregate holes are reported as unreachable. Gateway discard-route behavior is not simulated.')
@@ -330,8 +330,14 @@ export function simulate(topology: Topology): Simulation {
     }
     return [hub.id, effective.length || intent.private ? effective : tables[hub.id]]
   }))
-  const branchExportEligible = (route: Candidate) => route.transport !== 'SpokeNVA' || !topology.spokes.some((spoke) =>
-    spoke.prefixes.some((prefix) => cidr(prefix)!.length < cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))
+  // Use route provenance, not AS-path contents: summaries can clear contributor ASNs.
+  const branchExportEligible = (route: Candidate): boolean =>
+    (topology.allowBranchToBranchTraffic !== false || route.transport === 'VNet' || route.kind === 'policy')
+    && (route.transport !== 'SpokeNVA' || !topology.spokes.some((spoke) =>
+      spoke.prefixes.some((prefix) => cidr(prefix)!.length < cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network))))
+  if (topology.allowBranchToBranchTraffic === false) {
+    warnings.push('WAN branch-to-branch is disabled: branch-origin routes are not exported to other branches, including spoke BGP NVAs. Hub learning and VNet connectivity remain enabled. This is route-propagation control, not a firewall or packet-filtering guarantee; summaries and default routes require path inspection. On-premises links and ExpressRoute Global Reach are independent.')
+  }
   const hubOutboundCandidates = (hubId: string, propagateDefaultRoute?: boolean): Candidate[] => {
     const hub = topology.hubs.find((h) => h.id === hubId)!
     const selected = tables[hubId].flatMap((decision) => decision.selected)
@@ -367,7 +373,7 @@ export function simulate(topology: Topology): Simulation {
     outbound[spoke.id] = after
   }
   if (topology.connections.some((connection) => connection.transport === 'SpokeNVA')) {
-    warnings.push('Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515), Default association/propagation and branch-to-branch enabled. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.')
+    warnings.push('Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515) and Default association/propagation. Branch exchange follows the WAN branch-to-branch setting. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.')
   }
   for (const link of erLinks.filter((link) => link.hubId)) {
     if (!checkErHubLinkCompatibility(topology, link).allowed) {

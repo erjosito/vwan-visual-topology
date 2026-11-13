@@ -227,6 +227,24 @@ describe('routing diagnostic intent and evidence', () => {
     expect(report.findings.some((f) => f.severity === 'error')).toBe(false)
   })
 
+  it('detects AS-path-policy-induced inspection asymmetry without simulating firewall state', () => {
+    const t = fixture()
+    t.hubs[0].routingIntent.private = true
+    t.hubs.push({ ...structuredClone(t.hubs[0]), id: 'other', name: 'Other hub' })
+    t.connections.push({ ...t.connections[0], id: 'return', name: 'Return via other hub', hubId: 'other' })
+    t.routeMaps = [{ id: 'return-policy', name: 'Asymmetric return', hubId: 'h', rules: [{
+      id: 'drop-hub-as', prefixes: ['10.1.0.0/16'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate',
+      matchConditions: [{ property: 'asPath', match: 'contains', values: ['65515'] }],
+    }] }]
+    t.hubs[0].routeMapAssignments = [{ connectionId: 'vpn', outboundMapId: 'return-policy' }]
+    const report = analyzeRouting(t, profile())
+    const asymmetry = report.findings.find((finding) => finding.rule === 'asymmetric')!
+    expect(asymmetry).toMatchObject({ severity: 'warning', confidence: 'risk' })
+    expect(asymmetry.forward.every((path) => path.status === 'delivered')).toBe(true)
+    expect(asymmetry.reverse.every((path) => path.status === 'delivered')).toBe(true)
+    expect(asymmetry.forward[0].firewalls).not.toEqual([...asymmetry.reverse[0].firewalls!].reverse())
+  })
+
   it('retains both physical ER legs and exact parallel hub attachments when comparing path sets', () => {
     const t = fixture()
     t.connections = []

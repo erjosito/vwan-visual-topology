@@ -173,6 +173,7 @@ export interface AzureImportInfo {
 export interface Topology {
   version: 1
   name: string
+  allowBranchToBranchTraffic?: boolean
   hubs: Hub[]
   sites: Site[]
   spokes: Spoke[]

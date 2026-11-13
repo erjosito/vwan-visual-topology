@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { example } from './model'
-import type { Connection, Hub, Topology, Transport } from './model'
+import type { Connection, Hub, RouteMapRule, Topology, Transport } from './model'
 import { simulate, traceFlow } from './routing'
 import { applyRouteMap, propagateSites } from './bgp'
 import { cidr, contains, ipv4, parseAsPath, validateTopology } from './validation'
@@ -64,6 +64,78 @@ const topology = (hubs: Hub[], connections: TestLink[]): Topology => {
 }
 const selected = (t: Topology, hubId = 'a', prefix = '10.20.0.0/16') =>
   simulate(t).firewallTables[hubId].find((d) => d.prefix === prefix)?.selected ?? []
+
+describe('WAN-wide branch-to-branch routing', () => {
+  it.each<Transport>(['VPN', 'ExpressRoute', 'SDWAN', 'SpokeNVA'])('gates %s origins locally and across hubs without breaking VNet connectivity', (origin) => {
+    for (const receiver of ['VPN', 'ExpressRoute', 'SDWAN', 'SpokeNVA'] as Transport[]) {
+      for (const remote of [false, true]) {
+        const t = topology([hub('a'), hub('b')], [
+          link('origin', 'a', origin, [65001]),
+          link('receiver', remote ? 'b' : 'a', receiver, [65002], '10.30.0.0/16'),
+        ])
+        t.spokes = [{ id: 'workload', name: 'Workload', hubId: 'b', prefixes: ['10.1.0.0/16'] }]
+        for (const [index, connection] of t.connections.entries()) {
+          if (connection.transport !== 'SpokeNVA') continue
+          connection.spokeId = `host-${connection.id}`
+          connection.peerIp = `10.200.${index}.4`
+          t.spokes.push({ id: connection.spokeId, name: connection.spokeId, hubId: connection.hubId, prefixes: [`10.200.${index}.0/24`] })
+        }
+        const admitted = validateTopology(t)
+        const enabled = simulate(admitted)
+        expect(enabled.outbound.receiver.some((r) => r.prefix === '10.20.0.0/16'))
+          .toBe(origin !== 'ExpressRoute' || receiver !== 'ExpressRoute')
+        expect(simulate({ ...admitted, allowBranchToBranchTraffic: true })).toEqual(enabled)
+        const disabled = validateTopology({ ...admitted, allowBranchToBranchTraffic: false })
+        expect(validateTopology(JSON.parse(JSON.stringify(disabled)))).toEqual(disabled)
+        const result = simulate(disabled)
+        expect(result.bgpTables.b.some((d) => d.prefix === '10.20.0.0/16')).toBe(true)
+        expect(result.outbound.receiver.some((r) => r.prefix === '10.20.0.0/16')).toBe(false)
+        expect(traceNodePath(disabled, result, { kind: 'site', id: 'receiver-site' }, '10.20.0.1')[0].status).toBe('unreachable')
+        expect(traceNodePath(disabled, result, { kind: 'site', id: 'receiver-site' }, '10.1.0.1')[0].status).toBe('delivered')
+        expect(traceNodePath(disabled, result, { kind: 'spoke', id: 'workload' }, '10.20.0.1')[0].status).toBe('delivered')
+        expect(result.outbound.workload.some((r) => r.prefix === '10.20.0.0/16')).toBe(true)
+      }
+    }
+  })
+
+  it('suppresses static VPN and summarized branch origins before outbound policies, not hub learning', () => {
+    const t = topology([hub('a')], [
+      link('static', 'a', 'VPN', [], '10.40.0.0/16'),
+      link('origin', 'a', 'VPN', [65001]),
+      link('receiver', 'a', 'VPN', [65002], '10.30.0.0/16'),
+    ])
+    t.allowBranchToBranchTraffic = false
+    t.routeMaps = [{ id: 'summarize', name: 'Inbound summary', hubId: 'a', rules: [{
+      id: 'sum', prefixes: ['10.20.0.0/16'], match: 'equals', action: 'summarize',
+      summaryPrefixes: ['10.0.0.0/8'], prepend: [], nextStep: 'terminate',
+    }] }]
+    t.hubs[0].routeMapAssignments = [{ connectionId: 'origin', inboundMapId: 'summarize' }]
+    const result = simulate(validateTopology(t))
+    expect(result.bgpTables.a.map((d) => d.prefix)).toEqual(expect.arrayContaining(['10.40.0.0/16', '10.0.0.0/8']))
+    expect(result.outbound.receiver).toEqual([])
+  })
+
+  it('leaves independent on-premises and Global Reach transit available', () => {
+    const t = topology([hub('a')], [
+      link('origin', 'a', 'VPN', [65001]), link('receiver', 'a', 'VPN', [65002], '10.30.0.0/16'),
+    ])
+    t.allowBranchToBranchTraffic = false
+    t.siteLinks = [{ id: 'wan', name: 'Private WAN', a: 'origin-site', b: 'receiver-site', enabled: true,
+      aToB: { prefixes: [], prepend: [] }, bToA: { prefixes: [], prepend: [] } }]
+    expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'receiver-site' }, '10.20.0.1')[0])
+      .toMatchObject({ status: 'delivered', hubs: [], siteLinkIds: ['wan'] })
+    t.siteLinks = []
+    t.erLocations = [{ id: 'location', name: 'Frankfurt', globalReachEnabled: true }]
+    t.erLinks = t.sites.map((site) => ({ id: `er-${site.id}`, name: site.name, siteId: site.id, locationId: 'location', enabled: true, learnSiteRoutes: true }))
+    expect(traceNodePath(t, simulate(t), { kind: 'site', id: 'receiver-site' }, '10.20.0.1')[0])
+      .toMatchObject({ status: 'delivered', hubs: [], sourceErLinkIds: ['er-receiver-site', 'er-origin-site'] })
+  })
+
+  it('rejects non-boolean WAN controls instead of reverting silently to enabled', () => {
+    for (const value of ['false', 0, null, {}, []]) expect(() => validateTopology({ ...example, allowBranchToBranchTraffic: value })).toThrow(/boolean/)
+    expect(validateTopology(example)).not.toHaveProperty('allowBranchToBranchTraffic')
+  })
+})
 
 describe('spoke NVA BGP peering', () => {
   const network = (): Topology => ({
@@ -745,6 +817,35 @@ describe('recorded net-lab-builder summarization pilot', () => {
     for (const routes of [received, advertised]) {
       for (const expected of entry.present) expect(routes).toContainEqual(expect.objectContaining(expected))
       for (const prefix of entry.absent) expect(routes.some((route) => route.prefix === prefix)).toBe(false)
+    }
+  })
+
+  const extensions = JSON.parse(readFileSync(resolve('verification', 'issue-101-routemap-archive.json'), 'utf8')) as {
+    baseCase: string
+    cases: { id: string; name: string; allowBranchToBranchTraffic: boolean; rules: RouteMapRule[]; present: { prefix: string; asPath: number[] }[]; absent: string[] }[]
+  }
+  it.each(extensions.cases)('replays archived B2B/AS-path policy advertisements without losing hub routes: $id', (entry) => {
+    const base = validateTopology(archive.cases.find((c) => c.id === extensions.baseCase)!.topology)
+    base.name = entry.name
+    base.allowBranchToBranchTraffic = entry.allowBranchToBranchTraffic
+    base.routeMaps = [{ id: 'archive-policy', name: entry.name, hubId: 'hub-eu1', rules: entry.rules }]
+    base.hubs.find((h) => h.id === 'hub-eu1')!.routeMapAssignments = [{ connectionId: 'cx-nva1', outboundMapId: 'archive-policy' }]
+    const admitted = validateTopology(base)
+    expect(validateTopology(JSON.parse(JSON.stringify(admitted)))).toEqual(admitted)
+    const simulation = simulate(admitted)
+    expect(simulation.converged).toBe(true)
+    for (const kind of ['hub', 'site'] as const) {
+      const routes = neighborRoutes(admitted, simulation, { kind, id: kind === 'hub' ? 'hub-eu1' : 'nva1' }, kind === 'hub' ? 'advertised' : 'learned')
+        .find((peer) => peer.id === 'cx-nva1')!.after
+      for (const present of entry.present) expect(routes).toContainEqual(expect.objectContaining(present))
+      for (const absent of entry.absent) expect(routes.some((route) => route.prefix === absent)).toBe(false)
+    }
+    for (const prefix of ['10.0.1.0/24', '10.0.2.0/24', '10.0.3.0/24']) {
+      expect(simulation.bgpTables['hub-eu1'].find((d) => d.prefix === prefix)!.selected[0].asPath).toEqual([12076, 133937])
+    }
+    if (entry.id !== 'as-path-drop') {
+      const summary = simulation.outbound['cx-nva1'].find((r) => r.prefix === '10.0.0.0/16')!
+      expect(summary.forwardingRoutes!.map((r) => r.prefix)).toEqual(['10.0.128.0/24'])
     }
   })
 

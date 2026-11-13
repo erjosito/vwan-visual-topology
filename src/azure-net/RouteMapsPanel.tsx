@@ -127,7 +127,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
         const directions = [assignment.inboundMapId === map.id ? 'Inbound' : '', assignment.outboundMapId === map.id ? 'Outbound' : ''].filter(Boolean)
         return directions.length ? [`${links.find((link) => link.id === assignment.connectionId)?.name ?? assignment.connectionId} (${directions.join(', ')})`] : []
       }).join(' · ') || 'No connections'}</p>}
-      <MapDefinition key={map.id} map={map} advanced={!!ars} parsePrepend={ars ? parseArsPrependAsPath : undefined} onSave={(value) => {
+      <MapDefinition key={map.id} map={map} advanced={!!ars} asPathMatching={!ars} parsePrepend={ars ? parseArsPrependAsPath : undefined} onSave={(value) => {
         const next = structuredClone(topology)
         if (ars) {
           const target = next.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)!.routeServer!

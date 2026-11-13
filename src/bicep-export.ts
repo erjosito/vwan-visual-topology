@@ -306,7 +306,7 @@ resource wan 'Microsoft.Network/virtualWans@${apiVersion}' = {
   location: wanLocation
   properties: {
     type: 'Standard'
-    allowBranchToBranchTraffic: true
+    allowBranchToBranchTraffic: ${topology.allowBranchToBranchTraffic !== false}
     allowVnetToVnetTraffic: true
     disableVpnEncryption: false
   }
