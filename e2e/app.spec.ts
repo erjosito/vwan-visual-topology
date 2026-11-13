@@ -1851,6 +1851,43 @@ for (const id of ['as-path-drop', 'as-path-drop-summary', 'b2b-off-mixed-summary
   })
 }
 
+for (const id of ['c2-primary-up', 'c2-primary-down', 'c2-restored']) {
+  test(`recorded dual ER C2 advertisements round-trip without changing ER availability: ${id}`, async ({ page }, testInfo) => {
+    const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-dual-er-archive.json'), 'utf8')) as {
+      topology: Topology
+      prefixes: string[]
+      paths: { peer: string; asPath: number[] }[]
+      cases: { id: string; primaryEnabled: boolean; peers: string[]; exportFile: string }[]
+    }
+    const entry = archive.cases.find((entry) => entry.id === id)!
+    const topology = structuredClone(archive.topology)
+    topology.siteLinks[0].enabled = entry.primaryEnabled
+    topology.name += ` - ${id}`
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.goto('/?mode=vwan')
+    await importTopology(page, topology)
+    await action(page, 'Select site CE advertisement observation (not GCP best-path model)', 'Learned routes')
+    for (const expected of archive.paths) {
+      await page.getByLabel('Neighbor', { exact: true }).selectOption(expected.peer)
+      for (const prefix of archive.prefixes) {
+        const path = page.locator(`.effective-routes tr[data-prefix="${prefix}"] .as-path`)
+        if (entry.peers.includes(expected.peer)) await expect(path).toHaveText(expected.asPath.join(' '))
+        else await expect(path).toHaveCount(0)
+      }
+    }
+    const before = await readTopology(page)
+    expect(before.connections.every((connection) => connection.enabled)).toBe(true)
+    const exported = await downloadTopology(page)
+    expect(exported).toEqual(before)
+    await writeFile(testInfo.outputPath(entry.exportFile), JSON.stringify(exported, null, 2) + '\n')
+    await importTopology(page, exported)
+    await page.reload()
+    expect(await readTopology(page)).toEqual(exported)
+    expect(errors).toEqual([])
+  })
+}
+
 for (const id of ['b2b-on-baseline', 'er-only-summary']) {
   test(`recorded summarization pilot imports, displays native BGP observations and round-trips: ${id}`, async ({ page }) => {
     const archive = JSON.parse(await readFile(resolve('verification', 'issue-98-routemap-archive.json'), 'utf8')) as {

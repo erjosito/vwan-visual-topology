@@ -866,6 +866,32 @@ describe('recorded net-lab-builder summarization pilot', () => {
   })
 })
 
+describe('recorded dual ER C2 advertisements', () => {
+  const archive = JSON.parse(readFileSync(resolve('verification', 'issue-98-dual-er-archive.json'), 'utf8')) as {
+    topology: Topology
+    prefixes: string[]
+    paths: { peer: string; asPath: number[] }[]
+    cases: { id: string; primaryEnabled: boolean; peers: string[] }[]
+  }
+  it.each(archive.cases)('matches received paths without replacing the CE-link fault with an ER failure: $id', (entry) => {
+    const topology = structuredClone(archive.topology)
+    topology.siteLinks[0].enabled = entry.primaryEnabled
+    const admitted = validateTopology(topology)
+    expect(validateTopology(JSON.parse(JSON.stringify(admitted)))).toEqual(admitted)
+    const simulation = simulate(admitted)
+    expect(simulation.converged).toBe(true)
+    const neighbors = neighborRoutes(admitted, simulation, { kind: 'site', id: 'ce' }, 'learned')
+    for (const expected of archive.paths) {
+      const routes = neighbors.find((neighbor) => neighbor.id === expected.peer)!.after
+      for (const prefix of archive.prefixes) {
+        expect(routes.filter((route) => route.prefix === prefix).map((route) => route.asPath))
+          .toEqual(entry.peers.includes(expected.peer) ? [expected.asPath] : [])
+      }
+    }
+    expect(admitted.connections.every((connection) => connection.enabled)).toBe(true)
+  })
+})
+
 describe('topology and input validation', () => {
   it('accepts zero, one, or multiple site prefixes up to 30 and preserves role without mutating input', () => {
     const topology = structuredClone(example)

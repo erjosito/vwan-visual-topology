@@ -1,0 +1,78 @@
+{
+  "issue": 98,
+  "lab": "vwan-dual-er-symmetric",
+  "commit": "efe260c688733dfc647bdb6cd0d2fccfd9c740e0",
+  "scope": "C2 four-spoke advertisement/withdrawal cut at the CE-facing MCR links, not GCP installed-best-route selection. Both MCR/ER uplinks remain enabled when the primary MCR-to-CE BGP link is disabled.",
+  "consistency": "The dated C1/C2 verdicts agree with their native route tuples and retain the GCP unequal-AS-path ECMP caveat. The root validation.md is explicitly a pre-deploy plan, not a results report.",
+  "exclusions": [
+    "No standard-CE best-path prediction is asserted as an observed GCP installed route. Compare each peer's received advertisements, including longer paths.",
+    "C1 exact-path replay is blocked: its MCR1 remote paths retain 65520 twice, while corresponding MCR2 paths do not; matching provider/intermediate rewrite configuration is not captured. Do not invent a policy or change universal private-AS stripping to fit one path.",
+    "Hub address-space aggregates and peering /30s are outside the four-spoke cut; the native model has no VWAN hub-address-prefix field.",
+    "No packet success ratio, firewall sessions, GCP priority/MED ranking, ECMP hashing, failure-detection timer or 54.2s/45.4s convergence claim.",
+    "MCR-to-CE withdrawal is not an ER circuit failure. Azure gateway availability is not disabled to imitate that fault.",
+    "C2 inbound/outbound prepend magnitude is recorded in its dated verdict; the association capture names the maps but does not contain full rule bodies. Policy is reconstructed only for the observed spoke/on-premises prefix cut."
+  ],
+  "sourceDirectory": "labs/vwan-dual-er-symmetric/show-output/design-c-mechC2-symmetric-2026-06-16",
+  "sourceFiles": [
+    "01-gcp-cr-beststatus.json",
+    "03-azure-c2-config.txt",
+    "12-failover-before-primary-up.json",
+    "13-failover-during-primary-down.json",
+    "14-failover-after-primary-restored.json",
+    "15-verdict.md"
+  ],
+  "sha256": {
+    "01-gcp-cr-beststatus.json": "816d02f865314a16ef77d3920c5faf8960503dd9872340fa060f90996bd6ee8f",
+    "03-azure-c2-config.txt": "cb20690f9f52f4a16382226270fcc4020b821a581065f89833c2b2c7a1bf86ad",
+    "12-failover-before-primary-up.json": "aefdb5b7e3702a1a4b07ab03ed143cc6bc691e55b8cd4b8a349bbf4eee6518f7",
+    "13-failover-during-primary-down.json": "b37462d4667eb2e8ea6e30ccbbcf88e4a83ae355b8ef5f29958081a69265abf6",
+    "14-failover-after-primary-restored.json": "2271168b927d4a75aa9575dbbd8cc9ac28602827ee64d1ba633bb523716150b7",
+    "15-verdict.md": "123d27d0b93aa6caba6cfed6d3f64eb203eb7958af4536a711b04ab30976b8a3"
+  },
+  "prefixes": ["10.11.0.0/24", "10.12.0.0/24", "10.21.0.0/24", "10.22.0.0/24"],
+  "paths": [
+    { "peer": "ce-mcr1", "asPath": [65001, 12076] },
+    { "peer": "ce-mcr2", "asPath": [65002, 12076, 64496, 64496, 64496, 64496, 64496] }
+  ],
+  "cases": [
+    { "id": "c2-primary-up", "primaryEnabled": true, "peers": ["ce-mcr1", "ce-mcr2"], "exportFile": "simulator-topology-c2.json" },
+    { "id": "c2-primary-down", "primaryEnabled": false, "peers": ["ce-mcr2"], "exportFile": "simulator-topology-c2-primary-down.json" },
+    { "id": "c2-restored", "primaryEnabled": true, "peers": ["ce-mcr1", "ce-mcr2"], "exportFile": "simulator-topology-c2-restored.json" }
+  ],
+  "topology": {
+    "version": 1,
+    "name": "Archived dual ER C2: CE-facing advertisements",
+    "allowBranchToBranchTraffic": true,
+    "hubs": [
+      { "id": "hub1", "name": "hub1-swedencentral", "region": "swedencentral", "preference": "ASPath", "routingIntent": { "private": true, "internet": false, "privatePrefixes": [] } },
+      { "id": "hub2", "name": "hub2-northeurope", "region": "northeurope", "preference": "ASPath", "routingIntent": { "private": true, "internet": false, "privatePrefixes": [] } }
+    ],
+    "spokes": [
+      { "id": "spoke1", "name": "Spoke1", "hubId": "hub1", "prefixes": ["10.11.0.0/24"] },
+      { "id": "spoke2", "name": "Spoke2", "hubId": "hub1", "prefixes": ["10.12.0.0/24"] },
+      { "id": "spoke3", "name": "Spoke3", "hubId": "hub2", "prefixes": ["10.21.0.0/24"] },
+      { "id": "spoke4", "name": "Spoke4", "hubId": "hub2", "prefixes": ["10.22.0.0/24"] }
+    ],
+    "sites": [
+      { "id": "mcr1", "name": "MCR1", "asn": 65001, "prefixes": [] },
+      { "id": "mcr2", "name": "MCR2", "asn": 65002, "prefixes": [] },
+      { "id": "ce", "name": "CE advertisement observation (not GCP best-path model)", "asn": 16550, "prefixes": ["10.50.1.0/24", "10.50.2.0/24"] }
+    ],
+    "connections": [
+      { "id": "er1", "name": "ER1", "hubId": "hub1", "siteId": "mcr1", "transport": "ExpressRoute", "enabled": true, "learnSiteRoutes": true, "inbound": [], "outbound": [] },
+      { "id": "er2", "name": "ER2", "hubId": "hub2", "siteId": "mcr2", "transport": "ExpressRoute", "enabled": true, "learnSiteRoutes": true, "inbound": [], "outbound": [], "inboundMapId": "c2-in", "outboundMapId": "c2-out" }
+    ],
+    "siteLinks": [
+      { "id": "ce-mcr1", "name": "MCR1 to CE BGP", "a": "mcr1", "b": "ce", "enabled": true, "aToB": { "prefixes": [], "prepend": [] }, "bToA": { "prefixes": ["10.50.1.0/24", "10.50.2.0/24"], "prepend": [] } },
+      { "id": "ce-mcr2", "name": "MCR2 to CE BGP", "a": "mcr2", "b": "ce", "enabled": true, "aToB": { "prefixes": [], "prepend": [] }, "bToA": { "prefixes": ["10.50.1.0/24", "10.50.2.0/24"], "prepend": [] } }
+    ],
+    "routeMaps": [
+      { "id": "c2-in", "name": "hub2-in-depref-gcp (bounded)", "hubId": "hub2", "rules": [
+        { "id": "in", "prefixes": ["10.50.1.0/24", "10.50.2.0/24"], "match": "equals", "action": "prepend", "summaryPrefixes": [], "prepend": [64496, 64496, 64496, 64496, 64496], "nextStep": "terminate" }
+      ] },
+      { "id": "c2-out", "name": "hub2-out-blanket-depref (spoke cut)", "hubId": "hub2", "rules": [
+        { "id": "out", "prefixes": ["10.11.0.0/24", "10.12.0.0/24", "10.21.0.0/24", "10.22.0.0/24"], "match": "equals", "action": "prepend", "summaryPrefixes": [], "prepend": [64496, 64496, 64496, 64496, 64496], "nextStep": "terminate" }
+      ] }
+    ]
+  }
+}
