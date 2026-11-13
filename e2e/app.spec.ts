@@ -1663,6 +1663,59 @@ test('site BGP view retains alternatives, with route commands restricted to rout
   await expect(page.locator('.effective-routes tr[data-prefix]')).toHaveCount(2)
 })
 
+for (const representation of ['legacy', 'location']) {
+  test(`MSEE mixed-path warning is contextual for ${representation} ER advertisements`, async ({ page }) => {
+    const topology = structuredClone(example)
+    const id = representation === 'legacy' ? 'er-eu' : 'warning-hub-er'
+    if (representation === 'location') {
+      topology.connections = topology.connections.filter((connection) => connection.transport !== 'ExpressRoute')
+      topology.erLocations = [{ id: 'warning-er', name: 'Warning ER location' }]
+      topology.erLinks = [
+        { id, name: 'Warning hub attachment', locationId: 'warning-er', hubId: 'eu', enabled: true, learnSiteRoutes: false },
+        { id: 'warning-site-er', name: 'Warning customer circuit', locationId: 'warning-er', siteId: 'dc', enabled: true, learnSiteRoutes: true },
+      ]
+    }
+    topology.routeMaps = [{
+      id: 'mixed', name: 'Mixed remote export', hubId: 'eu', rules: [{
+        id: 'public', prefixes: ['10.2.0.0/16'], match: 'equals', action: 'prepend',
+        prepend: [64496, 64496, 64496], summaryPrefixes: [], nextStep: 'terminate',
+      }],
+    }]
+    topology.hubs[0].routeMapAssignments = [{ connectionId: id, outboundMapId: 'mixed' }]
+    await page.goto('/?mode=vwan'); await importTopology(page, topology)
+    const original = await readTopology(page)
+    await action(page, 'Select hub Europe hub', 'Advertised routes')
+    await page.getByLabel('Neighbor', { exact: true }).selectOption(id)
+    await page.getByLabel('Filter by prefix', { exact: true }).fill('10.2.0.0/16')
+    const warning = page.locator('.effective-routes .er-export-warning')
+    await expect(warning).toHaveCount(1)
+    await warning.getByText('ExpressRoute AS-path uncertainty', { exact: true }).click()
+    await expect(warning).toContainText('Verify against customer-router observations.')
+    await expect(page.locator('.effective-routes .as-path')).toHaveText('64496 64496 64496 65520 65520')
+    await page.getByLabel('Route-map stage', { exact: true }).selectOption('before')
+    await expect(warning).toHaveCount(0)
+    await page.getByLabel('Route-map stage', { exact: true }).selectOption('after')
+    await expect(warning).toHaveCount(1)
+    await page.getByLabel('Filter by prefix', { exact: true }).fill('10.1.0.0/16')
+    await expect(warning).toHaveCount(0)
+    await page.getByLabel('Filter by prefix', { exact: true }).fill('10.2.0.0/16')
+    await page.getByLabel('Neighbor', { exact: true }).selectOption('vpn-eu')
+    await expect(warning).toHaveCount(0)
+    if (representation === 'location') {
+      await action(page, 'Select ER location Warning ER location', 'Advertised routes')
+      await page.getByLabel('Neighbor', { exact: true }).selectOption('warning-site-er')
+      await page.getByLabel('Filter by prefix', { exact: true }).fill('10.2.0.0/16')
+      await expect(warning).toHaveCount(1)
+      await expect(page.locator('.effective-routes .as-path')).toHaveText('12076 64496 64496 64496')
+      await page.getByLabel('Neighbor', { exact: true }).selectOption(id)
+      await expect(warning).toHaveCount(0)
+    }
+    await showRoutes(page)
+    await expect(warning).toHaveCount(0)
+    expect(await readTopology(page)).toEqual(original)
+  })
+}
+
 test('learned and advertised route views default after maps and retain neighbor and prefix filters before maps', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   const t = structuredClone(example)

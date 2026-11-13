@@ -14,10 +14,10 @@ import {
 } from './azure-observation'
 import type { ObservedSnapshotLookupSession } from './azure-observation'
 import { azureRoutesAtSites } from './paths'
-import { erLocationBgpTable, neighborRoutes } from './route-views'
+import { erExportHasMixedAsPath, erLocationBgpTable, neighborRoutes } from './route-views'
 import type { RouteMode, RouteStage } from './route-views'
 
-interface Row { key: string; asPath: number[]; localPreference?: number; preferred: boolean; nextHop?: string; via?: string; source: string }
+interface Row { key: string; asPath: number[]; localPreference?: number; preferred: boolean; nextHop?: string; via?: string; source: string; erExportUncertain?: boolean }
 interface Group { prefix: string; candidates: Row[]; explanation: string[] }
 
 export function RouteInspector({ topology, simulation, comparisonSession, router, view, mode, onRouter, onView, onPreference, onPrefix, onClose }: {
@@ -107,6 +107,8 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
   const rows = peers.filter((peer) => !neighbor || peer.id === neighbor).flatMap((peer) => peer[stage].map((route, index) => ({
     prefix: route.prefix, key: `${peer.id}:${route.key}:${index}`, asPath: route.asPath, localPreference: route.localPreference, preferred: false,
     nextHop: peerName(peer), source: 'transport' in route ? label(route) : t("On-premises BGP"),
+    erExportUncertain: mode === 'advertised' && (location || stage === 'after')
+      ? erExportHasMixedAsPath(topology, simulation, router, peer.id, route) : false,
   })))
   const groups: Group[] = (mode === 'bgp' ? bgpGroups : [...new Set(rows.map((row) => row.prefix))]
     .sort((a, b) => cidr(a)!.network - cidr(b)!.network || cidr(a)!.length - cidr(b)!.length)
@@ -165,7 +167,10 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
         <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={(mode === 'bgp' ? 3 : 2) + (showLocalPreference ? 1 : 0)} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" onClick={() => onPrefix(d.prefix)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span></th></tr>
         {[...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((r) => <tr key={r.key} data-prefix={d.prefix} data-preferred={mode === 'bgp' ? r.preferred : undefined} className={mode === 'bgp' ? r.preferred ? 'preferred-route' : 'alternative-route' : undefined}>
         {mode === 'bgp' && <td className="route-state" aria-label={r.preferred ? t("Preferred") : t("Alternative")}>{r.preferred ? '*' : ''}</td>}
-        <td>{r.nextHop}{r.via && <small>{t("Via")} {r.via}</small>}<small>{r.source}</small></td>
+        <td>{r.nextHop}{r.via && <small>{t("Via")} {r.via}</small>}<small>{r.source}</small>{r.erExportUncertain && <details className="er-export-warning notice">
+          <summary>{t("ExpressRoute AS-path uncertainty")}</summary>
+          <p>{t("The simulator assumes all private ASNs are removed at the customer boundary. When non-private ASNs are also present, actual removal can depend on the MSEE implementation and configuration. Customer-visible paths may retain private ASNs, including 65520, affecting on-premises route selection. Verify against customer-router observations.")}</p>
+        </details>}</td>
         <td className="as-path">{r.asPath.join(' ') || '—'}</td>
         {showLocalPreference && <td className="local-preference">{r.localPreference ?? 100}</td>}
       </tr>)}</tbody>)}

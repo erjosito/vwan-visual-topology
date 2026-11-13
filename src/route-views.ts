@@ -15,6 +15,29 @@ export interface NeighborRoutes {
   after: (Candidate | SiteRoute)[]
 }
 
+export function erExportHasMixedAsPath(topology: Topology, simulation: Simulation, router: ObjectSelection,
+  neighborId: string, route: Candidate | SiteRoute): boolean {
+  const mixed = (path: number[]) => {
+    const privateAs = (asn: number) => (asn >= 64512 && asn <= 65534) || (asn >= 4200000000 && asn <= 4294967294)
+    return path.some(privateAs) && path.some((asn) => !privateAs(asn))
+  }
+  if (router.kind === 'hub') {
+    const boundary = topology.connections.some((connection) =>
+      connection.enabled && connection.id === neighborId && connection.hubId === router.id && connection.transport === 'ExpressRoute')
+      || topology.erLinks?.some((link) => link.enabled && link.id === neighborId && link.hubId === router.id)
+    return Boolean(boundary && mixed(route.asPath))
+  }
+  if (router.kind !== 'erLocation' || !('erHubLinkId' in route) || !route.erHubLinkId) return false
+  const customer = topology.erLinks?.find((link) => link.enabled && link.id === neighborId && link.locationId === router.id && link.siteId)
+  const source = topology.erLinks?.find((link) => link.enabled && link.id === route.erHubLinkId && link.locationId === router.id && link.hubId)
+  if (!customer || !source) return false
+  const beforeRemoval = simulation.routePolicies.find((policy) =>
+    policy.router.kind === 'hub' && policy.router.id === source.hubId
+    && policy.connectionId === source.id && policy.direction === 'outbound')
+    ?.after.find((candidate) => candidate.key === route.key && candidate.prefix === route.prefix)
+  return Boolean(beforeRemoval && mixed(beforeRemoval.asPath))
+}
+
 export function erLocationBgpTable(topology: Topology, simulation: Simulation, locationId: string): Decision[] {
   const candidates = neighborRoutes(topology, simulation, { kind: 'erLocation', id: locationId }, 'learned')
     .flatMap((peer) => {
