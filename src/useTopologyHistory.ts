@@ -5,6 +5,7 @@ import { validateTopology } from './validation'
 
 export interface UseTopologyHistoryOptions {
   storageKey: string
+  initialTopology?: Topology
   maxHistory?: number
   onBeforeUndoRedo?: (next: Topology) => void
   onAfterChange?: (next: Topology) => void
@@ -14,6 +15,7 @@ const errorMessage = (error: unknown) => (error instanceof Error ? error.message
 
 export function useTopologyHistory({
   storageKey,
+  initialTopology = example,
   maxHistory = 40,
   onBeforeUndoRedo,
   onAfterChange,
@@ -23,13 +25,13 @@ export function useTopologyHistory({
     try {
       saved = localStorage.getItem(storageKey)
       return {
-        topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(example)),
+        topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(initialTopology)),
         error: '',
         backup: '',
       }
     } catch (error) {
       return {
-        topology: validateTopology(structuredClone(example)),
+        topology: validateTopology(structuredClone(initialTopology)),
         error: `Saved topology could not be loaded: ${errorMessage(error)}. The saved data has not been overwritten.`,
         backup: saved ?? '',
       }

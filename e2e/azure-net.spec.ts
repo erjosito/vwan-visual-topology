@@ -325,7 +325,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
       })
       await page.goto(`https://${hostname}/`)
       await expect(page.getByTestId(`simulator-mode-${defaultMode}`)).toHaveAttribute('aria-pressed', 'true')
-      await page.getByTestId('simulator-mode-full').click()
+      await expect(page.getByTestId('simulator-mode-full')).toBeDisabled()
+      await page.goto(`https://${hostname}/?mode=full`)
       await page.reload()
       await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('aria-pressed', 'true')
       await page.goto(`https://${hostname}/?mode=hub-spoke&sample=hub-spoke-firewall-udr`)
@@ -514,11 +515,12 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
       .allTextContents()
     expect(sampleOptions.some((t) => t.includes('Hybrid Secured vWAN Hub'))).toBe(false)
 
-    // Switch to vWAN-Only mode and back to Full Hybrid mode
+    // Switch to vWAN-Only; Full Hybrid remains available through an explicit link.
     await page.getByTestId('simulator-mode-vwan').click()
     await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
     await expect(page.getByTestId('unified-mode-pill')).toHaveText('Virtual WAN')
-    await page.getByTestId('simulator-mode-full').click()
+    await expect(page.getByTestId('simulator-mode-full')).toBeDisabled()
+    await page.goto('/?mode=full')
     await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
     await expect(page.getByTestId('unified-mode-pill')).toHaveText('Full Hybrid')
 
@@ -570,7 +572,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // #35: Mode switcher stays at a fixed position across all 3 modes
     const switchBoxHubSpoke = await page.getByTestId('simulator-mode-switch').boundingBox()
     expect(switchBoxHubSpoke).not.toBeNull()
-    await page.getByTestId('simulator-mode-full').click()
+    await page.goto('/?mode=full')
     const switchBoxFull = await page.getByTestId('simulator-mode-switch').boundingBox()
     expect(switchBoxFull).not.toBeNull()
     expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxFull?.x ?? 0))).toBeLessThanOrEqual(4)

@@ -49,11 +49,12 @@ void app.whenReady().then(async () => {
   })
   window = new BrowserWindow({
     width: 1440, height: 1000, show: false,
+    icon: join(site, 'desktop-icon.png'),
     webPreferences: { preload: join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false },
   })
   window.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('app://simulator/docs/')) {
-      const documentation = new BrowserWindow({ width: 1100, height: 900, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false } })
+      const documentation = new BrowserWindow({ width: 1100, height: 900, icon: join(site, 'desktop-icon.png'), webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false } })
       documentation.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
       documentation.webContents.on('will-navigate', (event, destination) => {
         if (!destination.startsWith('app://simulator/docs/')) event.preventDefault()

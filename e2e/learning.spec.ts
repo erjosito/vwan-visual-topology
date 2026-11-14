@@ -103,7 +103,7 @@ test('an edited draft invalidates the displayed result and storage failures rema
 test('learning remains contained on narrow dark screens and cannot retain another mode result', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 760 })
   await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
-  await page.goto('/?mode=hub-spoke')
+  await page.goto('/?mode=full')
   await page.getByTestId('learning-open').click()
   const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
@@ -113,11 +113,11 @@ test('learning remains contained on narrow dark screens and cannot retain anothe
   await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
   await expect(dialog.getByTestId('practice-result')).toBeVisible()
   await page.keyboard.press('Escape')
-  await page.getByTestId('simulator-mode-full').click()
+  await page.getByTestId('simulator-mode-hub-spoke').click()
   await page.getByTestId('learning-open').click()
   await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
   await expect(dialog.getByTestId('practice-result')).toHaveCount(0)
-  await expect(dialog).toContainText('Connect workloads in Full Hybrid')
+  await expect(dialog.getByLabel('Choose an exercise', { exact: true })).toHaveValue('peering-connect')
 })
 
 test('the course picker keeps foreign-mode drafts independent and grades their actual mode', async ({ page }) => {

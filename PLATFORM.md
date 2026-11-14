@@ -8,6 +8,17 @@ remain the source of routing behavior. There is no separate desktop engine.
 Identity, cloud progress, verified awards and resource-deployment APIs remain
 outside this implementation.
 
+The Windows app starts VWAN with an empty topology when there is no saved
+workspace; explicit samples/imports and saved work still load normally.
+Damaged saved data remains available for recovery, not silently overwritten.
+Window/executable/installer icons derive from the web's `public/favicon.svg`;
+Windows resource editing is enabled, but code signing remains disabled.
+
+Full Hybrid is temporarily paused **in the normal mode selector** while #85
+unifies VWAN/Hub & Spoke interactions. Explicit `?mode=full`/`?mode=azure-net`
+links, existing files, simulation engines and all three practice assessments
+remain supported. This is not removal of mixed VWAN/classic networking.
+
 ## On-demand explanations and local practice
 
 **Learn & practice** opens an optional, keyboard-accessible EN/JA panel in all

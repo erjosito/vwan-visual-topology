@@ -1,4 +1,5 @@
 import { ThemeSelector } from './ThemeSelector'
+import { t } from './i18n'
 
 export type SimulatorMode = 'full' | 'hub-spoke' | 'vwan'
 
@@ -37,12 +38,14 @@ export function SimulatorModeSwitch({ mode, onChange }: SimulatorModeSwitchProps
       </button>
       <button
         type="button"
+        disabled
         aria-pressed={mode === 'full'}
         data-testid="simulator-mode-full"
         onClick={() => onChange('full')}
-        title="Full Hybrid Mode (VNets, Peerings, UDRs, Route Server, NVAs + Virtual WAN Hubs)"
+        title={t("Full Hybrid is temporarily disabled in the mode selector while VWAN and Hub & Spoke interactions are unified. Explicit Full Hybrid links and files still work.")}
+        aria-description={t("Full Hybrid is temporarily disabled in the mode selector while VWAN and Hub & Spoke interactions are unified. Explicit Full Hybrid links and files still work.")}
       >
-        Full Hybrid Mode
+        {t("Full Hybrid Mode (paused)")}
       </button>
     </div>
     <ThemeSelector />
