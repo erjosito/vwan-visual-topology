@@ -3,8 +3,69 @@
 P0/P1/P2A/P2B of #112 add a browser-independent contract and local clients.
 The existing React UI, native JSON formats, validators and TypeScript engines
 remain the source of routing behavior. There is no separate desktop engine.
-#114 tracks P0, #115 P1, #116 P2A, and #106 desktop/P2B. No P3/P4 training,
-identity, cloud progress, badges or resource-deployment API is implemented.
+#114 tracks P0, #115 P1, #116 P2A, and #106 desktop/P2B.
+#119/P3A and #120/P3B add on-demand explanations and local practice.
+Identity, cloud progress, verified awards and resource-deployment APIs remain
+outside this implementation.
+
+## On-demand explanations and local practice
+
+**Learn & practice** opens an optional, keyboard-accessible EN/JA panel in all
+three modes. Concept help also appears as collapsed **Explain this** disclosures
+beside hub preference, route decisions and diagnostics. Curated concepts live
+in `src/learning/content.ts`; result-specific disclosures display the existing
+engine's reasons, not AI-inferred causes. Help does not change configuration
+or silently enable a learning mode. References load only after deliberate
+selection; external references remain blocked by the desktop host.
+
+Three exercises in `src/learning/exercises.ts` cover Virtual WAN, VNet peering
+and Full Hybrid connectivity. The course picker can assess/resume any exercise
+without changing the normal workspace; visual editing/copying requires its
+matching architecture mode. Each pins its rubric version, owned endpoint
+IDs/addresses, requirements, preparation, concept links and hints. The VWAN
+starter intentionally has unassessable propagation scope; absence is not
+taught as verified isolation. Tests accept a one-hub or multi-hub repair,
+direct peering or NVA transit, and hub attachments or direct peering respectively.
+There is no reference-topology equality check.
+
+Practice JSON is an **independent draft**, saved locally on edits. **Open draft
+in visual editor** validates it using the shared worker and requires explicit
+replacement confirmation; export a normal design first. After visual editing,
+reopen learning and **Copy workspace configuration into practice** before
+assessment. Copying does not include temporary failure overlays. **Assess
+practice draft** grades that exact snapshot using the P1 browser-worker adapter;
+editing cancels pending work and visibly invalidates earlier displayed evidence.
+Changing architecture mode cannot display a previous mode's assessment.
+
+Local progress uses `aznet-simulator:practice:v1` in localStorage, independently
+of normal topology saves: at most three 200,000-character drafts, twenty recent
+attempts per exercise and a retained latest practice achievement. Attempts
+include rubric/grader versions, timestamp, engine revision fingerprint and hint
+use. Partial, unknown, malformed, mismatched or cancelled evaluations cannot
+award a practice pass. Historical achievements remain explicitly unverified;
+older rubric/grader awards request reassessment rather than becoming current
+certification. Finishing later unsuccessful attempts does not erase a prior
+practice achievement.
+
+Progress is per browser origin or Electron profile, **not encrypted,
+account-backed or synchronized**; simultaneous tabs use last-write-wins saves.
+Storage corruption is preserved until deliberate reset; unavailable/full
+storage is reported as session-only. Reset requires confirmation and does not
+touch the visual workspace. No exercises/results are uploaded, no Azure
+resources are created and basic help/grading requires no AI subscription.
+Account-backed progress and server-verified awards remain P4.
+
+### Small-corpus authoring rules
+
+Keep concept IDs stable and source content independently authored with concise
+EN/JA text, scope/uncertainty and references. Increment the content version when
+its meaning changes. Exercise revisions must identify learning objectives,
+owned endpoints, explicit supported assertions, preparation and hints; increment
+the rubric version when requirements change. Never add an interpretive goal as
+if the engine can grade it. Add focused tests with an unmet or unassessable
+starter, materially different passing designs, and failures/unknown coverage.
+Review content and assistance policy before expanding the corpus; local hints
+are permitted and recorded, not grounds for a trusted certification claim.
 
 ## Clients and data flow
 

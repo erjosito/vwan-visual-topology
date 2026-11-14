@@ -8,6 +8,8 @@ import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspac
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
 import { t } from '../i18n'
+import { LearningTools } from '../learning/LearningTools'
+import { Explain } from '../learning/Explain'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { CanvasOverlay } from '../CanvasOverlay'
@@ -2712,7 +2714,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         </div>
 
         <div className="aznet-topbar-controls">
-
+          <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
+            onOpen={(document) => { if (document.mode !== 'vwan') applyLoadedTopology('practice', document.topology) }} />
           <button
             type="button"
             className="aznet-btn aznet-btn-gallery"
@@ -3826,6 +3829,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                         <p style={{ margin: '0 0 6px 0', fontSize: 11.5, color: 'var(--text)' }}>
                           {finding.summary}
                         </p>
+                        <Explain concept="coverage" evidence={[finding.summary]} />
                         <div
                           style={{
                             fontSize: 11.5,

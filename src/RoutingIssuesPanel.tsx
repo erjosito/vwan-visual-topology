@@ -8,6 +8,7 @@ import { describeEvidenceSource, summarizeCoverage } from './diagnostics'
 import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
+import { Explain } from './learning/Explain'
 
 export function RoutingIssuesPanel({ topology, report, findingId, selectedFindingId, coverageOpen, onFinding, onShowAll, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, onClose }: {
   topology: Topology; report: DiagnosticsReport; findingId?: string; selectedFindingId?: string; coverageOpen?: boolean
@@ -36,6 +37,7 @@ export function RoutingIssuesPanel({ topology, report, findingId, selectedFindin
     <div className="flow-results">{findings.slice(0, visibleCount).map((finding) => <article key={finding.id} className={`diagnostic-finding ${finding.severity}`}>
       <div className="row"><span className="diagnostic-severity">{t(severity[finding.severity])}</span><button className="finding-title" aria-pressed={selectedFindingId === finding.id} onClick={() => onFinding(finding)}>{t(finding.title)}</button></div>
       <p>{t(finding.detail)}</p>
+      <Explain concept="coverage" evidence={[t(finding.detail), ...finding.forward.flatMap((path) => path.steps), ...finding.reverse.flatMap((path) => path.steps)]} />
       <FindingFlows finding={finding} topology={topology} onFinding={onFinding} />
       {!finding.source && <p>{t('Affected objects: {0}', finding.related.map(name).join(', '))}</p>}
       {finding.isolation && <div className="isolation-groups"><p>{t('Link: {0}', isolationLinkName(topology, finding.isolation))}</p>
