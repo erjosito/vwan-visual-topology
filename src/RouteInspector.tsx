@@ -16,6 +16,7 @@ import type { ObservedSnapshotLookupSession } from './azure-observation'
 import { azureRoutesAtSites } from './paths'
 import { erExportHasMixedAsPath, erLocationBgpTable, neighborRoutes } from './route-views'
 import type { RouteMode, RouteStage } from './route-views'
+import { DEFAULT_HUB_TABLE, hubRouteTables, hubRoutingCoverageMessage } from './hub-routing'
 
 interface Row { key: string; asPath: number[]; localPreference?: number; preferred: boolean; nextHop?: string; via?: string; source: string; erExportUncertain?: boolean }
 interface Group { prefix: string; candidates: Row[]; explanation: string[] }
@@ -23,31 +24,29 @@ interface Group { prefix: string; candidates: Row[]; explanation: string[] }
 export function RouteInspector({ topology, simulation, comparisonSession, router, view, mode, onRouter, onView, onPreference, onPrefix, onClose }: {
   topology: Topology; simulation: Simulation; comparisonSession?: ObservedSnapshotLookupSession; router: ObjectSelection; view: 'bgp' | 'hub' | 'firewall'; mode: RouteMode
   onRouter: (router: ObjectSelection) => void; onView: (view: 'bgp' | 'hub' | 'firewall') => void
-  onPreference: (preference: Preference) => void; onPrefix: (prefix: string) => void; onClose: () => void
+  onPreference: (preference: Preference) => void; onPrefix: (prefix: string, tableId?: string) => void; onClose: () => void
 }) {
   const [filter, setFilter] = useState('')
   const [neighbor, setNeighbor] = useState('')
   const [stage, setStage] = useState<RouteStage>('after')
   const [tableSource, setTableSource] = useState<'simulated' | 'azure'>('simulated')
+  const [selectedTableId, setSelectedTableId] = useState(DEFAULT_HUB_TABLE)
   const site = router.kind === 'site' ? topology.sites.find((s) => s.id === router.id) : undefined
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
+  const tableChoices = hub ? hubRouteTables(hub) : []
+  const tableId = tableChoices.some((table) => table.id === selectedTableId) ? selectedTableId : DEFAULT_HUB_TABLE
+  const contextKnown = !hub || simulation.hubTableCoverage?.[hub.id]?.[tableId]?.complete !== false
   const location = router.kind === 'erLocation' ? topology.erLocations?.find((node) => node.id === router.id) : undefined
   const showLocalPreference = Boolean(site && topology.routeMaps?.some((map) => map.rules.some((rule) => rule.localPreference !== undefined)))
-  const observedSnapshot = useMemo(
-    () => hub && mode === 'bgp' ? resolveObservedHubSnapshot(topology, hub.id, comparisonSession) : undefined,
-    [topology, hub, mode, comparisonSession],
-  )
+  const observedSnapshot = hub && mode === 'bgp' ? resolveObservedHubSnapshot(topology, hub.id, comparisonSession, tableId) : undefined
   const activeSource = observedSnapshot && tableSource === 'azure' ? 'azure' : 'simulated'
-  const filteredObservedRoutes = useMemo(() => {
-    const routes = observedSnapshot?.table?.routes ?? []
-    const query = filter.trim().toLowerCase()
-    if (!query) return routes
-    return routes.filter((route) =>
-      (!route.addressPrefixes.length && t('No prefix reported').toLowerCase().includes(query))
+  const observedRoutes = observedSnapshot?.table?.routes ?? []
+  const observedQuery = filter.trim().toLowerCase()
+  const filteredObservedRoutes = !observedQuery ? observedRoutes : observedRoutes.filter((route) =>
+      (!route.addressPrefixes.length && t('No prefix reported').toLowerCase().includes(observedQuery))
       || route.addressPrefixes.some((prefix) =>
-        prefix.toLowerCase().includes(query)
-        || (normalizeObservedPrefix(prefix)?.toLowerCase().includes(query) ?? false)))
-  }, [observedSnapshot, filter])
+        prefix.toLowerCase().includes(observedQuery)
+        || (normalizeObservedPrefix(prefix)?.toLowerCase().includes(observedQuery) ?? false)))
   const siteRouting = useMemo(() => site ? azureRoutesAtSites(topology, simulation) : undefined, [topology, simulation, site])
   const erRouting = useMemo(() => location && mode === 'bgp' ? erLocationBgpTable(topology, simulation, location.id) : [],
     [topology, simulation, location, mode])
@@ -90,7 +89,8 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
           ...(preferred.length > 1 ? [t("{0} equal-cost paths remain (maximum 32).", preferred.length)] : []),
         ],
       }
-    }) : (location ? erRouting : (view === 'bgp' ? simulation.bgpTables : view === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []).map((d) => ({
+    }) : (location ? erRouting : hub && tableId !== DEFAULT_HUB_TABLE ? simulation.hubTables?.[hub.id]?.[tableId] ?? []
+      : (view === 'bgp' ? simulation.bgpTables : view === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []).map((d) => ({
       prefix: d.prefix, explanation: d.explanation,
       candidates: d.candidates.map((r) => {
         const exit = (topology.connections.find((c) => c.id === r.connectionId) ?? topology.spokes.find((s) => s.id === r.connectionId) ?? topology.erLinks?.find((link) => link.id === r.connectionId))?.name
@@ -123,14 +123,17 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
         onRouter({ kind, id: e.target.value.slice(kind.length + 1) })
       }}><optgroup label={t("Virtual hubs")}>{topology.hubs.map((h) => <option key={h.id} value={`hub:${h.id}`}>{h.name}</option>)}</optgroup><optgroup label={t("On-premises sites")}>{topology.sites.filter((s) => s.role !== 'spoke-nva' && !topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)).map((s) => <option key={s.id} value={`site:${s.id}`}>{s.name}</option>)}</optgroup>{topology.sites.some((s) => s.role === 'spoke-nva' || topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)) && <optgroup label={t("Spoke BGP NVAs")}>{topology.sites.filter((s) => s.role === 'spoke-nva' || topology.connections.some((c) => c.transport === 'SpokeNVA' && c.siteId === s.id)).map((s) => <option key={s.id} value={`site:${s.id}`}>{s.name}</option>)}</optgroup>}<optgroup label={t("ER locations")}>{topology.erLocations?.map((node) => <option key={node.id} value={`erLocation:${node.id}`}>{node.name}</option>)}</optgroup></select></label>
       <label className="field"><span>{t("Filter by prefix")}</span><input type="search" aria-label={t("Filter by prefix")} placeholder={t("e.g. 10.80 or /24")} value={filter} onChange={(e) => setFilter(e.target.value)} /></label>
+      {hub && mode === 'bgp' && <label className="field"><span>{t('Hub route table')}</span><select aria-label={t('Hub route table')} value={tableId} onChange={(event) => { setSelectedTableId(event.target.value); onView(view) }}>{tableChoices.map((table) => <option key={table.id} value={table.id}>{table.name} · {table.id}</option>)}</select></label>}
       {mode !== 'bgp' && <>
         <label className="field"><span>{t("Neighbor")}</span><select aria-label={t("Neighbor")} value={neighbor} onChange={(e) => setNeighbor(e.target.value)}><option value="">{t("All neighbors")}</option>{peers.map((peer) => <option key={peer.id} value={peer.id}>{peerName(peer)}</option>)}</select></label>
         {!location && <label className="field"><span>{t("Route-map stage")}</span><select aria-label={t("Route-map stage")} value={stage} onChange={(e) => setStage(e.target.value as RouteStage)}><option value="after">{t('After {0} route maps', t(mode === 'learned' ? 'inbound' : 'outbound'))}</option><option value="before">{t('Before {0} route maps', t(mode === 'learned' ? 'inbound' : 'outbound'))}</option></select></label>}
       </>}
       {hub && mode === 'bgp' && observedSnapshot && <div className="field"><span>{t("Route table source")}</span><div className="segmented-toggle" role="group" aria-label={t("Route table source")}><button type="button" className={activeSource === 'simulated' ? 'primary' : undefined} aria-pressed={activeSource === 'simulated'} onClick={() => setTableSource('simulated')}>{t("Simulated")}</button><button type="button" className={activeSource === 'azure' ? 'primary' : undefined} aria-pressed={activeSource === 'azure'} onClick={() => setTableSource('azure')}>{t("Azure snapshot")}</button></div></div>}
       {hub && mode === 'bgp' && activeSource === 'simulated' && <><label className="field"><span>{t("Hub routing preference")}</span><select aria-label={t("Hub routing preference")} value={hub.preference} onChange={(e) => onPreference(e.target.value as Preference)}>{Object.entries(preferenceLabels).map(([v, name]) => <option key={v} value={v}>{t(name)}</option>)}</select></label>
-        <label className="field"><span>{t("Route view")}</span><select aria-label={t("Route view")} value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">{t("BGP table (before routing intent)")}</option><option value="hub">{t("Hub forwarding table")}</option><option value="firewall" disabled={!hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label></>}
+        {tableId === DEFAULT_HUB_TABLE && <label className="field"><span>{t("Route view")}</span><select aria-label={t("Route view")} value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">{t("BGP table (before routing intent)")}</option><option value="hub">{t("Hub forwarding table")}</option><option value="firewall" disabled={!hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label>}</>}
     </div>
+    {hub && mode === 'bgp' && <p className="muted">{t('Table labels')}: <code>{tableChoices.find((table) => table.id === tableId)?.labels.join(', ') || '—'}</code></p>}
+    {hub && mode === 'bgp' && !contextKnown && <p className="notice">{t(hubRoutingCoverageMessage)} <a href="https://github.com/erjosito/vwan-visual-topology/issues/22" target="_blank" rel="noreferrer">#22</a></p>}
     {activeSource === 'azure' && hub && observedSnapshot ? <>
       <p className="muted inspector-note"><strong>{t("Observed Azure effective routes")}</strong> · {t("Captured")} {observedSnapshot.capturedAt || t("unknown")} · {t("Status")}: <strong>{observedSnapshot.table?.status ?? 'missing'}</strong>{observedSnapshot.table ? <> · API {observedSnapshot.table.apiVersion}</> : null} · {t("collector")} {observedSnapshot.collectorVersion}</p>
       {observedSnapshot.table && <p className="azure-resource-id">{observedSnapshot.table.resourceId} ({observedSnapshot.table.resourceType})</p>}
@@ -164,7 +167,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
     {location && <p className="muted inspector-note">{t("Circuit export rules still apply. Global Reach and shared-circuit hub reflection are not modeled.")}{mode !== 'bgp' && t(" Routes are shown from the ER location's perspective; it has no configurable route maps.")}</p>}
     <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th>{showLocalPreference && <th>{t("Local preference")}</th>}</tr></thead>
       {groups.map((d) => <tbody key={d.prefix}>
-        <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={(mode === 'bgp' ? 3 : 2) + (showLocalPreference ? 1 : 0)} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" onClick={() => onPrefix(d.prefix)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span></th></tr>
+        <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={(mode === 'bgp' ? 3 : 2) + (showLocalPreference ? 1 : 0)} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span></th></tr>
         {[...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((r) => <tr key={r.key} data-prefix={d.prefix} data-preferred={mode === 'bgp' ? r.preferred : undefined} className={mode === 'bgp' ? r.preferred ? 'preferred-route' : 'alternative-route' : undefined}>
         {mode === 'bgp' && <td className="route-state" aria-label={r.preferred ? t("Preferred") : t("Alternative")}>{r.preferred ? '*' : ''}</td>}
         <td>{r.nextHop}{r.via && <small>{t("Via")} {r.via}</small>}<small>{r.source}</small>{r.erExportUncertain && <details className="er-export-warning notice">

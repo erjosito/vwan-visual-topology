@@ -5,6 +5,7 @@ import type { SiteRoute, SiteRouting } from './bgp'
 import { azureRoutesAtSites } from './site-routing'
 import { downstreamSpokesForNvaSpoke, downstreamVnetForAddress, resolveAttachment } from './topology-graph'
 import { evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
+import { attachmentHubRouting, DEFAULT_HUB_TABLE, hubRouteTables, hubTableCoverage, propagatesLocally, propagatesRemotely } from './hub-routing'
 
 export function checkErHubLinkCompatibility(topology: Topology, hubLink: ErLink) {
   const hub = hubLink.hubId ? topology.hubs.find((h) => h.id === hubLink.hubId) : undefined
@@ -28,6 +29,7 @@ export interface Candidate {
   connectionId: string
   siteId: string
   originHubId: string
+  originTableId?: string
   remote: boolean
   sitePath?: string[]
   siteLinkIds?: string[]
@@ -58,6 +60,8 @@ export interface Simulation {
   converged: boolean
   warnings: string[]
   siteSelectionComplete?: boolean
+  hubTables?: Record<string, Record<string, Decision[]>>
+  hubTableCoverage?: ReturnType<typeof hubTableCoverage>
 }
 
 export interface RoutePolicySnapshot {
@@ -143,7 +147,7 @@ export function simulate(topology: Topology): Simulation {
   let result = simulateHubRoutes(topology)
   const preferenceMaps = new Set(topology.routeMaps?.filter((map) => map.siteId && map.rules.some((rule) => rule.localPreference !== undefined)).map((map) => map.id))
   if (!topology.sites.some((site) => site.routeMapAssignments?.some((assignment) => preferenceMaps.has(assignment.inboundMapId ?? '')))) return result
-  const signature = (simulation: Simulation) => JSON.stringify([simulation.bgpTables, simulation.outbound])
+  const signature = (simulation: Simulation) => JSON.stringify([simulation.hubTables ?? simulation.bgpTables, simulation.outbound])
   const seen = new Set([signature(result)])
   for (let round = 0; round < 64 && result.converged; round++) {
     const sites = azureRoutesAtSites(topology, result)
@@ -272,27 +276,55 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
       }),
     ],
   ]))
-  let tables = Object.fromEntries(topology.hubs.map((hub) => [hub.id, decide(hub, local[hub.id])]))
-  const signature = (value: typeof tables) => JSON.stringify(topology.hubs.map((hub) =>
-    value[hub.id].map((d) => [d.prefix, d.selected.map((r) => r.key).sort()]),
+  const contexts = Object.fromEntries(topology.hubs.map((hub) => [hub.id, hubRouteTables(hub)]))
+  const localContexts = Object.fromEntries(topology.hubs.map((hub) => [hub.id, Object.fromEntries(contexts[hub.id].map((table) =>
+    [table.id, local[hub.id].filter((route) => propagatesLocally(attachmentHubRouting(topology, route.connectionId), table))]))]))
+  let hubTables = Object.fromEntries(topology.hubs.map((hub) => [hub.id, Object.fromEntries(contexts[hub.id].map((table) =>
+    [table.id, decide(hub, localContexts[hub.id][table.id])]))]))
+  const signature = (value: typeof hubTables) => JSON.stringify(topology.hubs.map((hub) =>
+    contexts[hub.id].map((table) => value[hub.id][table.id].map((d) => [d.prefix, d.selected.map((r) => r.key).sort()])),
   ))
-  const seen = new Set([signature(tables)])
+  const seen = new Set([signature(hubTables)])
   let converged = topology.hubs.length < 2
   for (let round = 0; round < 64 && !converged; round++) {
-    const next = Object.fromEntries(topology.hubs.map((hub) => {
-      const remote = topology.hubs.filter((h) => h.id !== hub.id).flatMap((origin) =>
-        tables[origin.id].flatMap((d) => d.selected)
-          .filter((r) => !r.remote && r.prefix !== '0.0.0.0/0')
-          .map((r) => ({ ...r, asPath: [65520, 65520, ...r.asPath], remote: true, secureOrigin: origin.routingIntent.private })),
-      )
-      return [hub.id, decide(hub, [...local[hub.id], ...remote])]
-    }))
-    const previousSignature = signature(tables)
+    const next = Object.fromEntries(topology.hubs.map((hub) => [hub.id, Object.fromEntries(contexts[hub.id].map((table) => {
+      const remote = topology.hubs.filter((h) => h.id !== hub.id).flatMap((origin) => contexts[origin.id].flatMap((originTable) =>
+        hubTables[origin.id][originTable.id].flatMap((decision) => decision.selected)
+          .filter((route) => !route.remote && route.prefix !== '0.0.0.0/0'
+            && propagatesRemotely(attachmentHubRouting(topology, route.connectionId), originTable, table, contexts[origin.id]))
+          .map((route) => ({
+            ...route, asPath: [65520, 65520, ...route.asPath], remote: true, secureOrigin: origin.routingIntent.private,
+            ...(originTable.id === DEFAULT_HUB_TABLE ? {} : { key: `${route.key}:table:${originTable.id}`, originTableId: originTable.id }),
+          })),
+      ))
+      return [table.id, decide(hub, [...localContexts[hub.id][table.id], ...remote])]
+    }))]))
+    const previousSignature = signature(hubTables)
     const nextSignature = signature(next)
-    tables = next
+    hubTables = next
     if (nextSignature === previousSignature) converged = true
     else if (seen.has(nextSignature)) break
     seen.add(nextSignature)
+  }
+  const tables = Object.fromEntries(topology.hubs.map((hub) => [hub.id, hubTables[hub.id][DEFAULT_HUB_TABLE]]))
+  const tableCoverage = hubTableCoverage(topology)
+  for (const hub of topology.hubs) for (const table of contexts[hub.id]) {
+    for (const decision of hubTables[hub.id][table.id]) {
+      const byOrigin = new Map<string, Map<string, Set<string>>>()
+      for (const route of decision.candidates.filter((route) => route.remote)) {
+        const origins = byOrigin.get(route.originHubId) ?? new Map<string, Set<string>>()
+        const context = route.originTableId ?? DEFAULT_HUB_TABLE
+        const keys = origins.get(context) ?? new Set<string>()
+        keys.add(route.originTableId ? route.key.slice(0, -`:table:${route.originTableId}`.length) : route.key)
+        origins.set(context, keys); byOrigin.set(route.originHubId, origins)
+      }
+      if ([...byOrigin.values()].some((origins) => new Set([...origins.values()].map((keys) => JSON.stringify([...keys].sort()))).size > 1)) {
+        tableCoverage[hub.id][table.id] = { complete: false, limitations: ['Hub route-table configuration is unknown or unsupported; reachability is not established. See #22.'] }
+      }
+    }
+  }
+  if (Object.values(tableCoverage).some((tables) => Object.values(tables).some((context) => !context.complete))) {
+    warnings.push('Hub route-table configuration is unknown or unsupported; reachability is not established. See #22.')
   }
   if (!converged) warnings.push('The best-path advertisement model did not converge. Tables are provisional; flow tracing is disabled.')
   if (topology.routeMaps?.length || topology.connections.some((c) => c.inbound.length || c.outbound.length)) {
@@ -360,9 +392,10 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   if (topology.allowBranchToBranchTraffic === false) {
     warnings.push('WAN branch-to-branch is disabled: branch-origin routes are not exported to other branches, including spoke BGP NVAs. Hub learning and VNet connectivity remain enabled. This is route-propagation control, not a firewall or packet-filtering guarantee; summaries and default routes require path inspection. On-premises links and ExpressRoute Global Reach are independent.')
   }
-  const hubOutboundCandidates = (hubId: string, propagateDefaultRoute?: boolean): Candidate[] => {
+  const hubOutboundCandidates = (hubId: string, propagateDefaultRoute?: boolean, attachmentId?: string): Candidate[] => {
     const hub = topology.hubs.find((h) => h.id === hubId)!
-    const selected = tables[hubId].flatMap((decision) => decision.selected)
+    const tableId = attachmentId ? attachmentHubRouting(topology, attachmentId).associatedTableId : DEFAULT_HUB_TABLE
+    const selected = (hubTables[hubId][tableId ?? ''] ?? []).flatMap((decision) => decision.selected)
     if (!propagateDefaultRoute) return selected.filter((route) => route.prefix !== '0.0.0.0/0')
     if (!hub.routingIntent.internet) return selected
     return [policyRoute(hub, '0.0.0.0/0'), ...selected.filter((route) => route.prefix !== '0.0.0.0/0')]
@@ -371,7 +404,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
     if (!connection.enabled) return [connection.id, []]
     const hostingSpoke = connection.spokeId ? topology.spokes.find((s) => s.id === connection.spokeId) : undefined
     const propagateDefault = Boolean(connection.propagateDefaultRoute || hostingSpoke?.propagateDefaultRoute)
-    const before = hubOutboundCandidates(connection.hubId, propagateDefault)
+    const before = hubOutboundCandidates(connection.hubId, propagateDefault, connection.id)
       .filter((r) => branchExportEligible(r) && r.connectionId !== connection.id && !r.sitePath?.includes(connection.siteId)
         && !(connection.transport === 'ExpressRoute' && r.transport === 'ExpressRoute'))
       .map((r) => ({ ...r, asPath: connection.transport === 'ExpressRoute' ? r.asPath : [65515, ...r.asPath] }))
@@ -387,7 +420,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
     }
     const propagateDefault = Boolean(spoke.propagateDefaultRoute
       || topology.connections.some((c) => c.enabled && c.transport === 'SpokeNVA' && c.spokeId === spoke.id && c.propagateDefaultRoute))
-    const before = hubOutboundCandidates(spoke.hubId, propagateDefault)
+    const before = hubOutboundCandidates(spoke.hubId, propagateDefault, spoke.id)
       .filter((route) => route.connectionId !== spoke.id)
       .map((route) => ({ ...route, asPath: [65515, ...route.asPath] }))
     const after = policy({ kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound', before,
@@ -395,7 +428,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
     outbound[spoke.id] = after
   }
   if (topology.connections.some((connection) => connection.transport === 'SpokeNVA')) {
-    warnings.push('Spoke BGP NVAs use one logical peering representing identical advertisements to both Azure hub router instances (AS65515) and Default association/propagation. Branch exchange follows the WAN branch-to-branch setting. NIC reachability, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements contained in directly attached local VNet address spaces are suppressed; those networks use system routes.')
+    warnings.push('Spoke BGP NVAs inherit association and propagation from their hosting VNet connection. One logical peering represents identical advertisements to both hub router instances (AS65515). Branch exchange follows the WAN setting. NICs, UDRs, sessions, vendor policies, load-balancer next hops and physical redundancy are not verified. Advertisements inside directly attached local VNet address spaces are suppressed.')
   }
   for (const link of erLinks.filter((link) => link.hubId)) {
     if (!checkErHubLinkCompatibility(topology, link).allowed) {
@@ -403,7 +436,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
       erAdvertisements[link.id] = []
       continue
     }
-    const routes = hubOutboundCandidates(link.hubId!, link.propagateDefaultRoute)
+    const routes = hubOutboundCandidates(link.hubId!, link.propagateDefaultRoute, link.id)
       .filter((route) => branchExportEligible(route) && route.transport !== 'ExpressRoute')
     const mapped = policy({ kind: 'hub', id: link.hubId! }, link.id, 'outbound', routes, [
       ...applyRouteMapRules(routes.filter((route) => route.kind !== 'vpn-static'), routerMapRules(topology, { kind: 'hub', id: link.hubId! }, link.id, 'outbound')),
@@ -419,7 +452,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
       .filter((route) => !route.sitePath?.includes(link.siteId!))
   }
   if ((topology.erLocations ?? []).length) warnings.push('ER locations group private-peering attachments: each site attachment is an independent circuit. Azure advertises selected VNet, VPN and NVA routes, but not ER-learned routes, to those circuits. Global Reach, shared-circuit hub-to-hub reflection, redundant MSEE sessions, circuit bandwidth and gateway limits are not simulated.')
-  return { bgpTables: tables, tables: forwardingTables, firewallTables, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, erAdvertisements, routePolicies, converged, warnings, siteSelectionComplete: siteRouting.selectionComplete }
+  return { bgpTables: tables, tables: forwardingTables, firewallTables, hubTables, hubTableCoverage: tableCoverage, siteTables: siteRouting.tables, siteCandidates: siteRouting.candidates, outbound, erAdvertisements, routePolicies, converged, warnings, siteSelectionComplete: siteRouting.selectionComplete }
 }
 
 export interface FlowPath {
@@ -431,41 +464,50 @@ export interface FlowPath {
   siteHops?: string[]
   siteLinkIds?: string[]
   erLinkIds?: string[]
-  status: 'delivered' | 'unreachable' | 'loop'
-  termination?: 'owner' | 'internet' | 'no-route' | 'firewall-no-route' | 'summary-hole' | 'attachment-unavailable' | 'downstream-no-route' | 'loop' | 'nonconverged'
+  status: 'delivered' | 'unreachable' | 'loop' | 'unknown'
+  termination?: 'owner' | 'internet' | 'no-route' | 'firewall-no-route' | 'summary-hole' | 'attachment-unavailable' | 'downstream-no-route' | 'loop' | 'nonconverged' | 'unknown-context'
   terminalKind?: 'spoke' | 'site'
   traceComplete?: boolean
   lookupPrefix?: string
   nvaSpokeId?: string
+  hubContexts?: { hubId: string; tableId: string }[]
 }
 
-export function traceFlow(topology: Topology, simulation: Simulation, hubId: string, destination: string): FlowPath[] {
+export function traceFlow(topology: Topology, simulation: Simulation, hubId: string, destination: string, tableId = DEFAULT_HUB_TABLE): FlowPath[] {
   const address = ipv4(destination)
   if (address === undefined || !topology.hubs.some((h) => h.id === hubId) || !simulation.converged) return []
   const paths: FlowPath[] = []
   let traceComplete = true
-  const walk = (current: string, visited: string[], steps: string[], firewalls: string[]) => {
+  const walk = (current: string, visited: string[], steps: string[], firewalls: string[], contextId: string, contexts: NonNullable<FlowPath['hubContexts']>) => {
+    const hubContexts = [...contexts, { hubId: current, tableId: contextId }]
+    const append = (path: FlowPath) => paths.push({ ...path, hubContexts })
     const name = topology.hubs.find((h) => h.id === current)!.name
+    const coverage = simulation.hubTableCoverage?.[current]?.[contextId]
+    if (coverage?.complete === false || (simulation.hubTables && !simulation.hubTables[current]?.[contextId])) {
+      append({ hubs: [...visited, current], firewalls, status: 'unknown', termination: 'unknown-context', traceComplete: false,
+        steps: [...steps, `${name}: ${contextId}`, 'Hub route-table configuration is unknown or unsupported; reachability is not established. See #22.'] })
+      return
+    }
     if (visited.includes(current)) {
-      paths.push({ hubs: [...visited, current], firewalls, steps: [...steps, `Forwarding loop at ${name}.`], status: 'loop', termination: 'loop' })
+      append({ hubs: [...visited, current], firewalls, steps: [...steps, `Forwarding loop at ${name}.`], status: 'loop', termination: 'loop' })
       return
     }
     const hubs = [...visited, current]
     const lookup = (table: Decision[]) => table.filter((d) => contains(d.prefix, address))
       .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
-    let decision = lookup(simulation.tables[current])
+    let decision = lookup(contextId === DEFAULT_HUB_TABLE ? simulation.tables[current] : simulation.hubTables?.[current]?.[contextId] ?? [])
     if (!decision) {
-      paths.push({ hubs, firewalls, steps: [...steps, `${name}: no matching hub route for ${destination}. Check routing-intent private prefixes if enabled.`], status: 'unreachable', termination: 'no-route' })
+      append({ hubs, firewalls, steps: [...steps, `${name}: no matching hub route for ${destination}. Check routing-intent private prefixes if enabled.`], status: 'unreachable', termination: 'no-route' })
       return
     }
-    const details = [...steps, `${name}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`]
+    const details = [...steps, `${name}${contextId === DEFAULT_HUB_TABLE ? '' : ` [${contextId}]`}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`]
     let inspected = firewalls
     if (decision.selected[0]?.transport === 'Firewall') {
       inspected = [...firewalls, current]
       const policyPrefix = decision.prefix
       decision = lookup(simulation.firewallTables[current])
       if (!decision) {
-        paths.push({ hubs, firewalls: inspected, steps: [...details, `Azure Firewall in ${name}: no matching forwarding route.`], status: 'unreachable', termination: 'firewall-no-route', lookupPrefix: policyPrefix })
+        append({ hubs, firewalls: inspected, steps: [...details, `Azure Firewall in ${name}: no matching forwarding route.`], status: 'unreachable', termination: 'firewall-no-route', lookupPrefix: policyPrefix })
         return
       }
       details.push(`Azure Firewall in ${name}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`)
@@ -480,17 +522,17 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
       const resolved = resolve(route)
       if (!resolved.length) {
         if (paths.length >= 128) traceComplete = false
-        else paths.push({ hubs, firewalls: inspected, connectionId: route.connectionId,
+        else append({ hubs, firewalls: inspected, connectionId: route.connectionId,
           steps: [...details, 'The summary has no contributing route for this destination.'], status: 'unreachable', termination: 'summary-hole', lookupPrefix: decision.prefix })
       }
       return resolved
     })
     for (const route of forwarding) {
       if (paths.length >= 128) { traceComplete = false; return }
-      if (route.remote) walk(route.originHubId, hubs, details, inspected)
+      if (route.remote) walk(route.originHubId, hubs, details, inspected, route.originTableId ?? DEFAULT_HUB_TABLE, hubContexts)
       else if (route.transport === 'Internet') {
         const privateDestination = RFC1918_PREFIXES.some((prefix) => contains(prefix, address))
-        paths.push({ hubs, firewalls: inspected,
+        append({ hubs, firewalls: inspected,
           steps: [...details, privateDestination
             ? 'Internet egress does not provide reachability to an RFC1918 destination without a private forwarding route.'
             : 'Direct Internet egress. Firewall allow/deny and SNAT policies are not simulated.'],
@@ -508,7 +550,7 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
           const terminalSiteId = tail.sitePath?.[tail.sitePath.length - 1] ?? route.siteId
           const downstreamHit = downstreamVnetForAddress(topology, terminalSiteId, address)
           const downstreamVnet = downstreamHit?.spoke
-          paths.push({ hubs, firewalls: inspected, siteHops: tail.sitePath, siteLinkIds: tail.siteLinkIds,
+          append({ hubs, firewalls: inspected, siteHops: tail.sitePath, siteLinkIds: tail.siteLinkIds,
             connectionId: route.connectionId, siteId: downstreamVnet?.id ?? terminalSiteId,
             ...(route.erHubLinkId && route.erSiteLinkId ? { erLinkIds: [route.erHubLinkId, route.erSiteLinkId] } : {}),
             ...(route.nvaSpokeId ? { nvaSpokeId: route.nvaSpokeId } : {}),
@@ -524,6 +566,6 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
       }
     }
   }
-  walk(hubId, [], [], [])
-  return paths.map((path) => ({ ...path, traceComplete }))
+  walk(hubId, [], [], [], tableId, [])
+  return paths.map((path) => ({ ...path, traceComplete: path.traceComplete ?? traceComplete }))
 }

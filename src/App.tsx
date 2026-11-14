@@ -36,6 +36,7 @@ import { importAzureCapture } from './azure-import'
 import { vpnRoutingMode } from './vpn-routing'
 import type { VpnRoutingMode } from './vpn-routing'
 import { azureRoutesAtSites, nodePrefixes, traceGroupedPaths, traceNodePath } from './paths'
+import { DEFAULT_HUB_TABLE, hubRouteTables } from './hub-routing'
 import type { GroupPath, NodePath, PathDirection, PathGroup, PathNode } from './paths'
 import { embeddedSpokeNvaSiteIds } from './topology-graph'
 import { assignSitePrefixes } from './topology-mutations'
@@ -246,10 +247,12 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const [mapDirection, setMapDirection] = useState<RouteMapDirection>()
   const [mapConnectionId, setMapConnectionId] = useState<string>()
   const [prefix, setPrefix] = useState('')
+  const [highlightTableId, setHighlightTableId] = useState(DEFAULT_HUB_TABLE)
   const [highlighting, setHighlighting] = useState(false)
   const layout = topology.layout?.mode ?? 'layered'
   const [zoom, setZoom] = useState(1)
   const [source, setSource] = useState('')
+  const [sourceTableId, setSourceTableId] = useState(DEFAULT_HUB_TABLE)
   const [target, setTarget] = useState('')
   const [destination, setDestination] = useState('')
   const [destinationPrefix, setDestinationPrefix] = useState('')
@@ -265,18 +268,22 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     ...topology.sites.filter((n) => !nvaSiteIds.has(n.id)).map((n) => ({ kind: 'site' as const, id: n.id, name: n.name })),
   ]
   const sourceNode = nodes.find((n) => nodeKey(n) === source)
+  const sourceHub = sourceNode?.kind === 'hub' ? topology.hubs.find((hub) => hub.id === sourceNode.id) : undefined
+  const sourceTables = sourceHub ? hubRouteTables(sourceHub).filter((table) => table.id !== 'noneRouteTable') : []
+  const sourceContextId = sourceTables.some((table) => table.id === sourceTableId) ? sourceTableId : DEFAULT_HUB_TABLE
   const targetNode = nodes.find((n) => nodeKey(n) === target)
   const paths: (NodePath | GroupPath)[] = useMemo(() => {
     if (!tracing) return []
     if (groupTrace) return traceGroupedPaths(activeTopology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
-    return source && topologyObject(activeTopology, parseNode(source)) ? traceNodePath(activeTopology, simulation, parseNode(source), destination) : []
-  }, [tracing, source, target, activeTopology, simulation, destination, groupTrace])
+    return source && topologyObject(activeTopology, parseNode(source)) ? traceNodePath(activeTopology, simulation, parseNode(source), destination, undefined, sourceContextId) : []
+  }, [tracing, source, target, activeTopology, simulation, destination, groupTrace, sourceContextId])
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
   const activeView = routeView === 'firewall' && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView
   const erRouting = useMemo(() => router.kind === 'erLocation' ? erLocationBgpTable(activeTopology, simulation, router.id) : [],
     [activeTopology, simulation, router.kind, router.id])
   const decisions = router.kind === 'erLocation' ? erRouting
+    : router.kind === 'hub' && highlightTableId !== DEFAULT_HUB_TABLE ? simulation.hubTables?.[router.id]?.[highlightTableId] ?? []
     : (activeView === 'bgp' ? simulation.bgpTables : activeView === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []
   const selectedRoutes = highlighting && (router.kind === 'hub' || router.kind === 'erLocation') ? [
     ...decisions.filter((d) => !prefix || d.prefix === prefix).flatMap((d) => d.selected),
@@ -353,7 +360,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
       })
       .catch((err) => setError(`Sample load failed: ${message(err)}`))
   }, [clearHistory, save, setError])
-  const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlighting(false) }
+  const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlightTableId(DEFAULT_HUB_TABLE); setHighlighting(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
   const openStaticRouting = (value: RouterSelection) => { setMapRouter(value); setEditorRequest(undefined); setPanel('static') }
@@ -408,7 +415,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
       }
     }) : [{ label: t("No other nodes available"), disabled: true }])]
   }
-  const pathStatus = !paths.length ? t("No trace available") : paths.every((path) => path.status === 'delivered') ? t("Reachable")
+  const pathStatus = !paths.length ? t("No trace available") : paths.some((path) => path.status === 'unknown') ? t("Not assessed") : paths.every((path) => path.status === 'delivered') ? t("Reachable")
     : paths.some((path) => path.status === 'delivered') ? t("Partially reachable")
       : paths.some((path) => path.status === 'loop') ? t("Forwarding loop") : t("No route")
   const groupLabel = t(pathGroups.find(({ group }) => group === groupTrace?.group)?.label ?? '')
@@ -647,7 +654,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
               <button disabled={!Object.keys(topology.layout?.positions[layout] ?? {}).length} title={t("Restore automatic positions in the current visualization only")} onClick={() => update((next) => { if (next.layout) delete next.layout.positions[layout] })}>{t("Reset layout")}</button>
             </>}
             issues={routingIssues} onShowIssues={(finding) => { setRoutingIssueId(finding.id); setReviewCoverage(false); setPanel('issues'); showDiagnostic(finding) }} hubId={highlighting && router.kind === 'hub' ? router.id : ''} erLocationId={highlighting && router.kind === 'erLocation' ? router.id : undefined} selected={selectedRoutes} selectedSiteRoutes={highlighting && router.kind === 'site' ? simulation.siteTables[router.id]?.filter((r) => !prefix || r.prefix === prefix) : undefined} sourceConnectionIds={diagramPaths.flatMap((p) => p.sourceConnectionId ? [p.sourceConnectionId] : [])} sourceSiteLinkIds={diagramPaths.flatMap((p) => p.sourceSiteLinkIds ?? [])} sourceErLinkIds={diagramPaths.flatMap((path) => path.sourceErLinkIds ?? [])} paths={diagramPaths} sourceSpokeIds={diagramPaths.flatMap((path) => path.sourceSpokeId ? [path.sourceSpokeId] : [])} tracing={tracing || siteHighlight.length > 0 || !!diagnosticPaths?.length} layout={layout} zoom={zoom} selection={selection} onObjectClick={selectObject} onShowRouteMapRules={showRouteMapRules} onNodeMove={(id, position) => update((next) => { next.layout ??= { mode: layout, positions: {} }; next.layout.positions[layout] ??= {}; next.layout.positions[layout]![id] = position })} onObjectContextMenu={(value) => { if (value.selection) selectObject(value.selection); setContextMenu(value) }} />
-          {panel === 'routes' && inspected && !scenario.affected[router.id] && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={activeTopology} simulation={simulation} comparisonSession={comparisonSession} router={router} view={activeView} mode={routeMode} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix(''); setHighlighting(false) }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value) => { setPrefix(value); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
+          {panel === 'routes' && inspected && !scenario.affected[router.id] && <RouteInspector key={`${router.kind}:${router.id}:${routeMode}`} topology={activeTopology} simulation={simulation} comparisonSession={comparisonSession} router={router} view={activeView} mode={routeMode} onRouter={selectRouter} onView={(view) => { setRouteView(view); setPrefix(''); setHighlighting(false) }} onPreference={(preference) => update((next) => { next.hubs.find((h) => h.id === router.id)!.preference = preference })} onPrefix={(value, tableId) => { setPrefix(value); setHighlightTableId(tableId ?? DEFAULT_HUB_TABLE); setHighlighting(true); setTracing(false) }} onClose={closePanel} />}
           {panel === 'maps' && <RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} />}
           {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
           {panel === 'static' && mapRouter && <StaticRoutingPanel key={nodeKey(mapRouter)} topology={topology} router={mapRouter} onSave={save} onClose={closePanel} />}
@@ -656,14 +663,15 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
             {tracing && groupTrace && <p><strong>{groupSummary}</strong>{t(". Each source is traced independently to the destination prefixes; reverse-path symmetry is not assumed.")}</p>}
             <p className="muted">{t("Longest-prefix forwarding and preferred BGP paths, not shortest graphical distance. ECMP paths remain highlighted together. Hub destinations use attached-spoke prefixes. Sites without assigned prefixes offer explicit connection advertisements as destination choices; these can be transit prefixes.")}</p>
             <form className="path-form" onSubmit={submitPath}><div className="form-grid"><label className="field"><span>{t("Source node")}</span><select aria-label={t("Source node")} value={source} onChange={(e) => { setSource(e.target.value); setTracing(false) }}><option value="">{t("Select source")}</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({t(n.kind)})</option>)}</select></label><label className="field"><span>{t("Destination node")}</span><select aria-label={t("Destination node")} value={target} onChange={(e) => { const prefixes = nodePrefixes(topology, parseNode(e.target.value)); setTarget(e.target.value); setDestination(prefixes[0]?.split('/')[0] ?? ''); setDestinationPrefix(prefixes[0] ?? ''); setTracing(false) }}><option value="">{t("Select destination")}</option>{nodes.map((n) => <option key={nodeKey(n)} value={nodeKey(n)}>{n.name} ({t(n.kind)})</option>)}</select></label></div>
+              {sourceHub && !groupTrace && <label className="field"><span>{t('Source hub route table')}</span><select aria-label={t('Source hub route table')} value={sourceContextId} onChange={(event) => { setSourceTableId(event.target.value); setTracing(false) }}>{sourceTables.map((table) => <option key={table.id} value={table.id}>{table.name} · {table.id}</option>)}</select></label>}
               <label className="field"><span>{t("Destination prefix")}</span><select aria-label={t("Destination prefix")} value={destinationPrefix} onChange={(e) => { setDestinationPrefix(e.target.value); setDestination(e.target.value.split('/')[0]); setTracing(false) }}><option value="">{t("Custom IPv4 address")}</option>{targetNode && nodePrefixes(topology, targetNode).map((p) => <option key={p}>{p}</option>)}</select></label>
               {!destinationPrefix && <label className="field"><span>{t("Destination IPv4")}</span><input aria-label={t("Destination IPv4")} value={destination} onChange={(e) => { setDestination(e.target.value); setTracing(false) }} required /></label>}<p className="muted">{t("A prefix selection traces its network address. Choose Custom IPv4 address to test a more-specific destination within that range.")}</p><button className="primary" disabled={!sourceNode || !targetNode || ipv4(destination) === undefined || !simulation.converged}>{t("Show preferred path")}</button>
             </form>
             <p className="muted">{t("Routes may terminate at another advertiser of the same prefix. Reverse paths are calculated independently; symmetry, firewall permissions and host reachability are not assumed. Site ingress uses advertised AS paths.")}</p>
-            {tracing && <div className="flow-results" aria-live="polite">{paths.map((path, i) => <article key={i} className={`flow-result ${path.status}`}><strong>{'destinationPrefix' in path && `${path.sourceName} → ${path.destinationName} · ${path.destinationPrefix} · `}{path.status === 'delivered' ? t("Reachable") : path.status === 'loop' ? t("Forwarding loop") : t("No route")}{paths.length > 1 ? t(" · path {0}", i + 1) : ''}</strong><p>{pathTitle(path)}</p><details><summary>{t("Why this path?")}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details></article>)}{!paths.length && <p className="empty">{groupTrace ? t("No matching sources or destination prefixes configured.") : t("No trace available for this source or provisional routing state.")}</p>}</div>}
+            {tracing && <div className="flow-results" aria-live="polite">{paths.map((path, i) => <article key={i} className={`flow-result ${path.status}`}><strong>{'destinationPrefix' in path && `${path.sourceName} → ${path.destinationName} · ${path.destinationPrefix} · `}{path.status === 'unknown' ? t("Not assessed") : path.status === 'delivered' ? t("Reachable") : path.status === 'loop' ? t("Forwarding loop") : t("No route")}{paths.length > 1 ? t(" · path {0}", i + 1) : ''}</strong><p>{pathTitle(path)}</p><details><summary>{t("Why this path?")}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details></article>)}{!paths.length && <p className="empty">{groupTrace ? t("No matching sources or destination prefixes configured.") : t("No trace available for this source or provisional routing state.")}</p>}</div>}
           </CanvasOverlay>}
           {panel === 'notes' && <CanvasOverlay title={t("Model notes and warnings")} className="model-notes" onClose={closePanel}>
-            <h3>{t("Planning model, not an Azure control plane")}</h3><p>{t("One Standard Virtual WAN, fully meshed hubs and Default propagation. HRP follows Microsoft's documented local/remote, transport and AS-path ordering. Hub-table static overrides are not configurable; VPN site static routes do not get hub-static precedence.")}</p><p>{t("Routing intent uses separate hub policy and firewall forwarding tables. Firewall rules, SNAT, return-flow symmetry, custom route tables, communities, MED, Global Reach, shared-circuit reflection and arrival/failback timing are not simulated.")}</p>
+            <h3>{t("Planning model, not an Azure control plane")}</h3><p>{t("One Standard Virtual WAN with table-local route selection and connection association/propagation. Legacy authored designs use Default. Labels are case-sensitive; unsupported static and ambiguous contexts remain unassessed. See #22.")} <a href="https://github.com/erjosito/vwan-visual-topology/issues/22" target="_blank" rel="noreferrer">#22</a></p><p>{t("Routing intent uses separate hub policy and firewall forwarding tables. Firewall rules, NAT, sessions, communities, MED, Global Reach, shared-circuit reflection and arrival/failback timing are not simulated. Custom contexts involving secured hubs remain unassessed.")}</p>
             {simulation.warnings.map((warning) => <p className="notice" key={warning}>{localizeDiagnostic(warning)}</p>)}
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">{t("Microsoft hub routing preference")}</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">{t("Microsoft route-map behavior and limitations")}</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>{t("Load example (replaces workspace)")}</button>

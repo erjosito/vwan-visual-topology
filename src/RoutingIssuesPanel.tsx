@@ -52,7 +52,7 @@ export function RoutingIssuesPanel({ topology, report, findingId, selectedFindin
       <details><summary>{t('Evidence and investigation')}</summary>
         <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{evidence.code}</code> {evidence.prefix} {describeEvidenceSource(topology, evidence)}</li>)}</ul>
         {([['Forward', finding.forward], ['Return', finding.reverse]] as const).map(([direction, paths]) => <div key={direction}>
-          <h4>{t(direction)}</h4>{paths.map((path, index) => <details key={index}><summary>{t(path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route')} · {index + 1}</summary>
+          <h4>{t(direction)}</h4>{paths.map((path, index) => <details key={index}><summary>{t(path.status === 'unknown' ? 'Not assessed' : path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route')} · {index + 1}</summary>
             <ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol>
           </details>)}
         </div>)}

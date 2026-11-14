@@ -1,0 +1,515 @@
+{
+  "wan": {
+    "type": "Standard",
+    "name": "wan-e-4cf83e09",
+    "location": "swedencentral",
+    "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualWans/wan-e-4cf83e09",
+    "allowBranchToBranchTraffic": true,
+    "allowVnetToVnetTraffic": null
+  },
+  "warnings": [],
+  "collectorVersion": "2",
+  "context": {
+    "subscriptionId": "11b71798-1dd8-5c6b-85da-428e0b71ed2d",
+    "cloud": "AzureCloud",
+    "azureCliVersion": "2.92.0",
+    "tenantId": "09e6421b-0bb9-50d6-b955-b8d8b181aaea"
+  },
+  "routingContextVersion": 1,
+  "kind": "azure-vwan-capture",
+  "complete": true,
+  "observations": {
+    "startedAt": "2026-11-14T12:37:49.0198840Z",
+    "completedAt": "2026-11-14T12:41:33.9341263Z",
+    "tables": [
+      {
+        "status": "complete",
+        "warnings": [],
+        "capturedAt": "2026-11-14T12:38:31.9238254Z",
+        "routes": [
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+            ],
+            "addressPrefixes": [
+              "10.61.2.0/24"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+            "asPath": "65012-65012-65012-65012-65012-65012-65012-65012-65012-65012",
+            "nextHopType": "VPN_S2S_Gateway"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+            ],
+            "addressPrefixes": [
+              "10.230.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se",
+            "asPath": "65520-65520-12076-12076-12076",
+            "nextHopType": "Remote Hub"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+            ],
+            "addressPrefixes": [
+              "10.60.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se",
+            "asPath": "65520-65520-12076-133937",
+            "nextHopType": "Remote Hub"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+            ],
+            "addressPrefixes": [
+              "10.61.1.0/24"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se",
+            "asPath": "65520-65520-65011-65011-65011-65011",
+            "nextHopType": "Remote Hub"
+          }
+        ],
+        "resourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable",
+        "resourceType": "RouteTable",
+        "apiVersion": "az network vhub get-effective-routes",
+        "hubResourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne"
+      },
+      {
+        "status": "complete",
+        "warnings": [],
+        "capturedAt": "2026-11-14T12:38:55.2490137Z",
+        "routes": [
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-isolated-ne"
+            ],
+            "addressPrefixes": [
+              "10.213.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-isolated-ne",
+            "asPath": "",
+            "nextHopType": "Virtual Network Connection"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+            ],
+            "addressPrefixes": [
+              "10.210.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se",
+            "asPath": "65520-65520",
+            "nextHopType": "Remote Hub"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+            ],
+            "addressPrefixes": [
+              "10.212.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se",
+            "asPath": "65520-65520",
+            "nextHopType": "Remote Hub"
+          }
+        ],
+        "resourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/blue",
+        "resourceType": "RouteTable",
+        "apiVersion": "az network vhub get-effective-routes",
+        "hubResourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne"
+      },
+      {
+        "status": "complete",
+        "warnings": [],
+        "capturedAt": "2026-11-14T12:39:17.6835082Z",
+        "routes": [
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-spoke-ne"
+            ],
+            "addressPrefixes": [
+              "10.211.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-spoke-ne",
+            "asPath": "",
+            "nextHopType": "Virtual Network Connection"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+            ],
+            "addressPrefixes": [
+              "10.210.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se",
+            "asPath": "65520-65520",
+            "nextHopType": "Remote Hub"
+          }
+        ],
+        "resourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/red",
+        "resourceType": "RouteTable",
+        "apiVersion": "az network vhub get-effective-routes",
+        "hubResourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne"
+      },
+      {
+        "status": "complete",
+        "warnings": [],
+        "capturedAt": "2026-11-14T12:40:16.9575253Z",
+        "routes": [
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+            ],
+            "addressPrefixes": [
+              "10.60.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+            "asPath": "12076-133937",
+            "nextHopType": "ExpressRouteGateway"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+            ],
+            "addressPrefixes": [
+              "10.230.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+            "asPath": "12076-12076-12076",
+            "nextHopType": "ExpressRouteGateway"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/vpnGateways/vpngw-se"
+            ],
+            "addressPrefixes": [
+              "10.61.1.0/24"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/vpnGateways/vpngw-se",
+            "asPath": "65011-65011-65011-65011",
+            "nextHopType": "VPN_S2S_Gateway"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+            ],
+            "addressPrefixes": [
+              "10.210.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+            "asPath": "",
+            "nextHopType": "ExpressRouteGateway"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+            ],
+            "addressPrefixes": [
+              "10.212.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+            "asPath": "",
+            "nextHopType": "ExpressRouteGateway"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne"
+            ],
+            "addressPrefixes": [
+              "10.61.2.0/24"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne",
+            "asPath": "65520-65520-65012-65012-65012-65012-65012-65012-65012-65012-65012-65012",
+            "nextHopType": "Remote Hub"
+          }
+        ],
+        "resourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable",
+        "resourceType": "RouteTable",
+        "apiVersion": "az network vhub get-effective-routes",
+        "hubResourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+      },
+      {
+        "status": "complete",
+        "warnings": [],
+        "capturedAt": "2026-11-14T12:40:41.5233303Z",
+        "routes": [
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se"
+            ],
+            "addressPrefixes": [
+              "10.210.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se",
+            "asPath": "",
+            "nextHopType": "Virtual Network Connection"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-isolated-se"
+            ],
+            "addressPrefixes": [
+              "10.212.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-isolated-se",
+            "asPath": "",
+            "nextHopType": "Virtual Network Connection"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne"
+            ],
+            "addressPrefixes": [
+              "10.213.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne",
+            "asPath": "65520-65520",
+            "nextHopType": "Remote Hub"
+          }
+        ],
+        "resourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/blue",
+        "resourceType": "RouteTable",
+        "apiVersion": "az network vhub get-effective-routes",
+        "hubResourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+      },
+      {
+        "status": "complete",
+        "warnings": [],
+        "capturedAt": "2026-11-14T12:41:04.0129279Z",
+        "routes": [
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se"
+            ],
+            "addressPrefixes": [
+              "10.210.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se",
+            "asPath": "",
+            "nextHopType": "Virtual Network Connection"
+          },
+          {
+            "nextHops": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne"
+            ],
+            "addressPrefixes": [
+              "10.211.0.0/16"
+            ],
+            "routeOrigin": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne",
+            "asPath": "65520-65520",
+            "nextHopType": "Remote Hub"
+          }
+        ],
+        "resourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/red",
+        "resourceType": "RouteTable",
+        "apiVersion": "az network vhub get-effective-routes",
+        "hubResourceId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se"
+      }
+    ],
+    "version": 1
+  },
+  "version": 2,
+  "hubs": [
+    {
+      "routingPolicies": [],
+      "connections": [
+        {
+          "defaultRouting": false,
+          "enableInternetSecurity": false,
+          "name": "vnet-spoke-ne",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-spoke-ne",
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/red"
+            ],
+            "associatedTableId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/red",
+            "unsupportedControls": [],
+            "labels": [
+              "red"
+            ],
+            "status": "captured"
+          },
+          "virtualNetworkId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualNetworks/vnet-spoke-ne",
+          "addressPrefixes": [
+            "10.211.0.0/16"
+          ]
+        },
+        {
+          "defaultRouting": false,
+          "enableInternetSecurity": false,
+          "name": "vnet-isolated-ne",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-isolated-ne",
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/blue"
+            ],
+            "associatedTableId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/blue",
+            "unsupportedControls": [],
+            "labels": [
+              "blue"
+            ],
+            "status": "captured"
+          },
+          "virtualNetworkId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualNetworks/vnet-isolated-ne",
+          "addressPrefixes": [
+            "10.213.0.0/16"
+          ]
+        }
+      ],
+      "hubRoutingPreference": "ASPath",
+      "unsupportedFeatures": [
+        "Hub branch-to-branch transit is disabled."
+      ],
+      "routeTablesStatus": "captured",
+      "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne",
+      "addressPrefix": "10.250.4.0/22",
+      "location": "northeurope",
+      "routeTables": [
+        {
+          "staticRoutes": [],
+          "labels": [
+            "default",
+            "Default"
+          ],
+          "name": "defaultRouteTable",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "none"
+          ],
+          "name": "noneRouteTable",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/noneRouteTable"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "red",
+            "shared"
+          ],
+          "name": "red",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/red"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "blue",
+            "shared"
+          ],
+          "name": "blue",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/blue"
+        }
+      ],
+      "branchRoutingStatus": "unknown",
+      "virtualWanId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualWans/wan-e-4cf83e09",
+      "gatewayTypes": [
+        "VPN"
+      ],
+      "name": "hub-ne"
+    },
+    {
+      "routingPolicies": [],
+      "connections": [
+        {
+          "defaultRouting": false,
+          "enableInternetSecurity": false,
+          "name": "vnet-spoke-se",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se",
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/red"
+            ],
+            "associatedTableId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/red",
+            "unsupportedControls": [],
+            "labels": [
+              "shared"
+            ],
+            "status": "captured"
+          },
+          "virtualNetworkId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualNetworks/vnet-spoke-se",
+          "addressPrefixes": [
+            "10.210.0.0/16"
+          ]
+        },
+        {
+          "defaultRouting": false,
+          "enableInternetSecurity": false,
+          "name": "vnet-isolated-se",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-isolated-se",
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/blue"
+            ],
+            "associatedTableId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/blue",
+            "unsupportedControls": [],
+            "labels": [
+              "blue"
+            ],
+            "status": "captured"
+          },
+          "virtualNetworkId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualNetworks/vnet-isolated-se",
+          "addressPrefixes": [
+            "10.212.0.0/16"
+          ]
+        }
+      ],
+      "hubRoutingPreference": "ASPath",
+      "unsupportedFeatures": [
+        "Hub branch-to-branch transit is disabled."
+      ],
+      "routeTablesStatus": "captured",
+      "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se",
+      "addressPrefix": "10.250.0.0/22",
+      "location": "swedencentral",
+      "routeTables": [
+        {
+          "staticRoutes": [],
+          "labels": [
+            "default",
+            "Default"
+          ],
+          "name": "defaultRouteTable",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "none"
+          ],
+          "name": "noneRouteTable",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/noneRouteTable"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "red",
+            "shared"
+          ],
+          "name": "red",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/red"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "blue",
+            "shared"
+          ],
+          "name": "blue",
+          "id": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/blue"
+        }
+      ],
+      "branchRoutingStatus": "unknown",
+      "virtualWanId": "/subscriptions/11b71798-1dd8-5c6b-85da-428e0b71ed2d/resourceGroups/rg-vwan-e-4cf83e09/providers/Microsoft.Network/virtualWans/wan-e-4cf83e09",
+      "gatewayTypes": [
+        "VPN",
+        "ExpressRoute"
+      ],
+      "name": "hub-se"
+    }
+  ],
+  "capturedAt": "2026-11-14T12:41:33.9011556Z"
+}

@@ -1,4 +1,8 @@
-import type { DiagramLayout, LayoutMode, PrependRule, RouteMap, RouteMapAssignment, RouteMapRule, Topology } from './model'
+import type { DiagramLayout, HubRouteTable, HubRoutingConfiguration, LayoutMode, PrependRule, RouteMap, RouteMapAssignment, RouteMapRule, Topology } from './model'
+import { attachmentHubRouting, hubRouteTables, propagatesLocally, propagationLabels } from './hub-routing'
+
+const canonicalHubTable = (value: string) => value.toLowerCase() === 'defaultroutetable' ? 'defaultRouteTable'
+  : value.toLowerCase() === 'noneroutetable' ? 'noneRouteTable' : value
 
 export function ipv4(value: string): number | undefined {
   if (!/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(value)) return undefined
@@ -129,16 +133,57 @@ export function validateTopology(input: unknown): Topology {
     const trimmed = value.trim()
     return trimmed ? trimmed : undefined
   }
+  const hubRouting = (value: unknown, hubId: string | undefined): HubRoutingConfiguration => {
+    if (!hubId) fail('Hub route-table configuration requires a hub attachment.')
+    const config = record(value)
+    if (!['configured', 'captured', 'unknown'].includes(config.status as string)) fail('Invalid hub routing provenance.')
+    const reference = (entry: unknown): string => {
+      if (typeof entry !== 'string' || !entry.trim() || entry.length > 2048) fail('Invalid hub route-table reference.')
+      return canonicalHubTable(entry as string)
+    }
+    const associatedTableId = config.associatedTableId === null ? null : reference(config.associatedTableId)
+    if (associatedTableId === null && config.status !== 'unknown') fail('Known hub routing requires an associated table.')
+    return {
+      status: config.status as HubRoutingConfiguration['status'], associatedTableId,
+      propagatedTableIds: [...new Set(array(config.propagatedTableIds, 64, 'Propagated hub route tables').map(reference))],
+      labels: [...new Set(array(config.labels, 64, 'Propagation labels').map((entry) => text(entry, 'Propagation label')))],
+      ...(config.limitations === undefined ? {} : { limitations: array(config.limitations, 40, 'Routing context limitations').map((entry) => text(entry, 'Routing context limitation')) }),
+    }
+  }
   const hubs = array(root.hubs, 20, 'Hubs').map((value) => {
     const hub = record(value)
     if (!['ExpressRoute', 'VPN', 'ASPath'].includes(hub.preference as string)) fail('Invalid hub routing preference.')
     const intent = record(hub.routingIntent ?? { private: false, internet: false, privatePrefixes: [] })
     if (typeof intent.private !== 'boolean' || typeof intent.internet !== 'boolean') fail('Routing intent policies must be boolean.')
     const label = optionalLabel(hub.label)
+    if (hub.routeTablesStatus !== undefined && !['captured', 'unknown'].includes(hub.routeTablesStatus as string)) fail('Invalid hub route-table inventory provenance.')
+    const tableIds = new Set<string>()
+    const routeTables = hub.routeTables === undefined ? undefined : array(hub.routeTables, 64, 'Hub route tables').map((entry): HubRouteTable => {
+      const table = record(entry), tableId = canonicalHubTable(text(table.id, 'Hub route-table ID'))
+      if (!/^[^/?#\r\n]+$/.test(tableId)) fail('Invalid hub route-table ID.')
+      if (tableIds.has(tableId.toLowerCase())) fail('Duplicate route-table ID within a hub.')
+      tableIds.add(tableId.toLowerCase())
+      return {
+        id: tableId, name: text(table.name, 'Hub route-table name'),
+        labels: [...new Set(array(table.labels, 64, 'Hub route-table labels').map((entry) => text(entry, 'Hub route-table label')))],
+        ...(table.staticRoutes === undefined ? {} : { staticRoutes: array(table.staticRoutes, 1000, 'Hub static routes').map((entry) => {
+          const route = record(entry)
+          const nextHop = route.nextHop
+          if (typeof nextHop !== 'string' || nextHop.length > 2048) fail('Invalid hub static-route next hop.')
+          return {
+            name: text(route.name, 'Hub static-route name'), destinationType: text(route.destinationType, 'Hub static-route destination type'),
+            destinations: array(route.destinations, 100, 'Hub static-route destinations').map((entry) => text(entry, 'Hub static-route destination')),
+            nextHopType: text(route.nextHopType, 'Hub static-route next-hop type'), nextHop: nextHop as string,
+          }
+        }) }),
+      }
+    })
     return { id: id(hub.id), name: text(hub.name, 'Hub name'),
       ...(label === undefined ? {} : { label }),
       region: text(hub.region, 'Region'), preference: hub.preference,
       routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') },
+      ...(routeTables === undefined ? {} : { routeTables }),
+      ...(hub.routeTablesStatus === undefined ? {} : { routeTablesStatus: hub.routeTablesStatus }),
       ...(hub.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(hub.routeMapAssignments) }) } as Topology['hubs'][number]
   })
   const sites = array(root.sites, 60, 'Sites').map((value) => {
@@ -197,6 +242,7 @@ export function validateTopology(input: unknown): Topology {
       prefixes,
       ...(nvaSpokeIds?.length ? { nvaSpokeIds } : {}),
       ...(spoke.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}),
+      ...(spoke.hubRouting === undefined ? {} : { hubRouting: hubRouting(spoke.hubRouting, hubId) }),
     }
   })
   for (const spoke of spokes) {
@@ -310,6 +356,7 @@ export function validateTopology(input: unknown): Topology {
     return { id: id(link.id), name: text(link.name, 'ER connection name'), locationId: link.locationId as string,
       ...(link.hubId === undefined ? { siteId: link.siteId as string } : { hubId: link.hubId as string }),
       enabled: link.enabled as boolean, learnSiteRoutes: link.learnSiteRoutes === true,
+      ...(link.hubRouting === undefined ? {} : { hubRouting: hubRouting(link.hubRouting, link.hubId as string | undefined) }),
       ...(link.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}) }
   })
   const usedHubNvaPeerIps = new Map<string, string[]>()
@@ -367,8 +414,30 @@ export function validateTopology(input: unknown): Topology {
       ...(outboundMapId !== undefined ? { outboundMapId } : {}),
       ...(connection.transport === 'SpokeNVA' ? { spokeId: connection.spokeId, peerIp: resolvedPeerIp } : {}),
       learnSiteRoutes: connection.learnSiteRoutes ?? false,
+      ...(connection.hubRouting === undefined ? {} : { hubRouting: hubRouting(connection.hubRouting, connection.hubId as string) }),
       ...(connection.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}) } as Topology['connections'][number]
   })
+  for (const attachment of [...spokes, ...connections, ...erLinks]) {
+    const config = attachment.hubRouting
+    if ('transport' in attachment && attachment.transport === 'SpokeNVA' && config) {
+      fail('Spoke NVA routing context is inherited from its hosting VNet connection.')
+    }
+    if (!config || config.status === 'unknown') continue
+    if (config.associatedTableId === 'noneRouteTable') fail('None is a propagation target, not an associated route table.')
+    const hub = hubs.find((hub) => hub.id === attachment.hubId)!
+    const tableIds = new Set(['defaultRouteTable', 'noneRouteTable', ...(hub.routeTables ?? []).map((table) => table.id)])
+    if (!tableIds.has(config.associatedTableId!) || config.propagatedTableIds.some((id) => !tableIds.has(id))) {
+      fail('Known hub routing references a missing local route table.')
+    }
+    if ('transport' in attachment && attachment.transport !== 'SpokeNVA' && config.associatedTableId !== 'defaultRouteTable'
+      || 'locationId' in attachment && config.associatedTableId !== 'defaultRouteTable') {
+      fail('Branch connections must associate with the Default route table.')
+    }
+    if ((config.propagatedTableIds.includes('noneRouteTable') || config.labels.includes('none'))
+      && (config.propagatedTableIds.some((id) => id !== 'noneRouteTable') || config.labels.some((label) => label !== 'none'))) {
+      fail('None propagation cannot be combined with other route tables or labels.')
+    }
+  }
   for (const hub of hubs) {
     const peers = connections.filter((connection) => connection.hubId === hub.id && connection.transport === 'SpokeNVA')
     if (peers.length > 8) fail('A Virtual WAN hub supports at most 8 spoke NVA BGP peers.')
@@ -499,7 +568,7 @@ export function validateTopology(input: unknown): Topology {
       seenSpokes.add(spokeId)
       return { spokeId, resourceId: resourceId(spoke.resourceId), virtualNetworkId: resourceId(spoke.virtualNetworkId) }
     }).filter((entry) => spokes.some((spoke) => spoke.id === entry.spokeId))
-    const sourceTables = source.tables === undefined ? undefined : array(source.tables, 20, 'Azure observed route tables').map((value) => {
+    const sourceTables = source.tables === undefined ? undefined : array(source.tables, 100, 'Azure observed route tables').map((value) => {
       const table = record(value)
       const hubId = sourceText(table.hubId, 'Azure observed table hub', 120)
       const hubResourceId = resourceId(table.hubResourceId)
@@ -550,13 +619,40 @@ export function validateTopology(input: unknown): Topology {
         seen.add(hubId)
         const addressPrefix = sourceText(hub.addressPrefix, 'Azure hub prefix', 40)
         if (!cidr(addressPrefix)) fail('Invalid Azure hub IPv4 prefix.')
-        return { hubId, resourceId: resourceId(hub.resourceId), addressPrefix, limitations: messages(hub.limitations) }
+        if (hub.routingScopeComplete !== undefined && typeof hub.routingScopeComplete !== 'boolean') fail('Invalid Azure routing scope provenance.')
+        return { hubId, resourceId: resourceId(hub.resourceId), addressPrefix, limitations: messages(hub.limitations),
+          ...(hub.routingScopeComplete === undefined ? {} : { routingScopeComplete: hub.routingScopeComplete as boolean }) }
       }).filter((entry) => hubs.some((hub) => hub.id === entry.hubId)),
       ...(sourceSpokes === undefined ? {} : { spokes: sourceSpokes }),
       ...(sourceTables === undefined ? {} : { tables: sourceTables }),
     }
+    for (const source of azureImport.hubs.filter((source) => source.limitations.length)) {
+      const hub = hubs.find((hub) => hub.id === source.hubId)!
+      if (hub.routeTablesStatus === undefined && hub.routeTables === undefined
+        && spokes.filter((spoke) => spoke.hubId === hub.id).every((spoke) => spoke.hubRouting === undefined)) {
+        hub.routeTablesStatus = 'unknown'
+      }
+    }
   }
-  return { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,
+  const topology: Topology = { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,
     ...(root.allowBranchToBranchTraffic === undefined ? {} : { allowBranchToBranchTraffic: root.allowBranchToBranchTraffic as boolean }),
     ...(root.erLocations === undefined && root.erLinks === undefined ? {} : { erLocations, erLinks }), ...(layout ? { layout } : {}), ...(azureImport ? { azureImport } : {}) }
+  for (const hub of hubs) {
+    const branches = [...connections, ...erLinks]
+      .filter((branch) => branch.hubId === hub.id)
+    if (branches.some((branch) => {
+      const config = attachmentHubRouting(topology, branch.id)
+      return config.status !== 'unknown' && config.associatedTableId !== 'defaultRouteTable'
+    })) fail('Branch and spoke NVA hosting connections must associate with the Default route table.')
+    if (branches.some((branch) => attachmentHubRouting(topology, branch.id).status === 'unknown')) continue
+    const signatures = branches.map((branch) => {
+      const config = attachmentHubRouting(topology, branch.id)
+      return JSON.stringify(hubs.flatMap((destination) => hubRouteTables(destination)
+        .filter((table) => destination.id === hub.id ? propagatesLocally(config, table)
+          : table.id !== 'noneRouteTable' && propagationLabels(config).some((label) => table.labels.includes(label)))
+        .map((table) => [destination.id, table.id])))
+    })
+    if (new Set(signatures).size > 1) fail('Branch connections in a hub must propagate to the same effective route-table destinations.')
+  }
+  return topology
 }

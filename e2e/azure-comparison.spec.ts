@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
-import { comparisonDesign, observationFixture } from '../tests/azure-observation-fixture'
+import { comparisonDesign, contextObservationFixture, observationFixture } from '../tests/azure-observation-fixture'
+import { importAzureCapture } from '../src/azure-import'
 
 const panel = (page: Page) => page.getByRole('dialog', { name: 'Compare with Azure capture', exact: true })
 async function open(page: Page) {
@@ -16,6 +17,62 @@ async function setup(page: Page, capture = observationFixture()) {
   await panel(page).getByLabel('Design spoke for Observed a', { exact: true }).selectOption('a')
   await panel(page).getByLabel('Design spoke for Observed b', { exact: true }).selectOption('b')
 }
+test('custom-table comparison stays table-scoped, local and translated when the scope changes', async ({ page }) => {
+  const capture = contextObservationFixture(), design = importAzureCapture({ ...capture, version: 1 })
+  await page.goto('/')
+  await page.getByLabel('Import topology file').setInputFiles({ name: 'contexts.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(design)) })
+  const saved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
+  await open(page)
+  await page.getByLabel('Azure comparison capture file').setInputFiles({ name: 'custom.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(capture)) })
+  await panel(page).getByLabel('Compared hub route table').selectOption('business')
+  await panel(page).getByRole('button', { name: 'Compare captured fields', exact: true }).click()
+  await panel(page).getByLabel('Comparison view', { exact: true }).selectOption('designed')
+  await expect(panel(page).locator('.comparison-finding.match').filter({ has: page.getByRole('button', { name: '10.1.0.0/24', exact: true }) })).toHaveCount(1)
+  await expect(panel(page).locator('.comparison-finding.match').filter({ has: page.getByRole('button', { name: '10.2.0.0/24', exact: true }) })).toHaveCount(1)
+  await page.locator('header [data-language-selector]').selectOption('ja')
+  const japanese = page.getByRole('dialog', { name: 'Azure の取得データと比較', exact: true })
+  await expect(japanese.getByLabel('比較するハブのルート テーブル')).toHaveValue('business')
+  await expect(japanese.getByRole('link', { name: '#22', exact: true })).toBeVisible()
+  await japanese.getByLabel('比較するハブのルート テーブル').selectOption('defaultRouteTable')
+  await expect(japanese.locator('.comparison-finding')).toHaveCount(0)
+  await page.locator('header [data-language-selector]').selectOption('en')
+  await panel(page).getByRole('button', { name: 'Compare captured fields', exact: true }).click()
+  await expect(panel(page).getByRole('button', { name: '10.1.0.0/24', exact: true })).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
+})
+
+test('custom route inspection never substitutes Default and explains unknown contexts in both languages', async ({ page }) => {
+  const design = importAzureCapture({ ...contextObservationFixture(), version: 1 })
+  await page.goto('/')
+  const upload = () => page.getByLabel('Import topology file').setInputFiles({
+    name: 'contexts.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(design)),
+  })
+  await upload()
+  const inspect = async () => {
+    await page.getByRole('button', { name: 'Select hub Observed west', exact: true }).focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'BGP table', exact: true }).click()
+    await page.getByLabel('Hub route table', { exact: true }).selectOption('business')
+  }
+  await inspect()
+  const inspector = page.getByRole('dialog', { name: 'BGP table · Observed west', exact: true })
+  await expect(inspector.getByRole('button', { name: '10.1.0.0/24', exact: true })).toBeEnabled()
+  await inspector.getByRole('button', { name: '10.1.0.0/24', exact: true }).click()
+  await expect(page.locator('.highlight-status')).toBeVisible()
+  await inspector.getByLabel('Hub route table', { exact: true }).selectOption('defaultRouteTable')
+  await expect(inspector.getByRole('button', { name: '10.1.0.0/24', exact: true })).toHaveCount(0)
+  await expect(page.locator('.highlight-status')).toHaveCount(0)
+  design.hubs[0].routeTablesStatus = 'unknown'
+  await upload(); await inspect()
+  await expect(inspector.getByRole('button', { name: '10.1.0.0/24', exact: true })).toBeDisabled()
+  await expect(inspector.getByText('Hub route-table configuration is unknown', { exact: false })).toBeVisible()
+  await page.locator('header [data-language-selector]').selectOption('ja')
+  const japanese = page.getByRole('dialog', { name: 'BGP テーブル · Observed west', exact: true })
+  await expect(japanese.getByLabel('ハブのルート テーブル')).toHaveValue('business')
+  await expect(japanese.getByText('到達性は確認できません', { exact: false })).toBeVisible()
+  await expect(japanese.getByRole('link', { name: '#22', exact: true })).toBeVisible()
+})
+
 test('comparison attaches observations without changing or transmitting the design and does not infer name identity', async ({ page }) => {
   const external: string[] = []
   await setup(page)

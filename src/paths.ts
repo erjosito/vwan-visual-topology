@@ -8,6 +8,7 @@ export { azureRoutesAtSites } from './site-routing'
 export type { SiteAdvertisement } from './site-routing'
 import { downstreamVnetForAddress, resolveAttachment, standaloneSites } from './topology-graph'
 import { cidr, contains, ipv4 } from './validation'
+import { attachmentHubRouting, DEFAULT_HUB_TABLE, hubRoutingCoverageMessage } from './hub-routing'
 
 export type PathNode = ObjectSelection & { kind: 'hub' | 'spoke' | 'site' }
 export interface NodePath extends FlowPath { sourceConnectionId?: string; sourceSiteHops?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; sourceSpokeId?: string; sourceNvaSpokeId?: string }
@@ -50,7 +51,7 @@ export function traceGroupedPaths(topology: Topology, simulation: Simulation, an
     .map((path) => ({ ...path, sourceName: object.name, destinationPrefix: prefix, destinationName: names.join(', ') })))
 }
 
-export function traceNodePath(topology: Topology, simulation: Simulation, source: PathNode, destination: string, siteRoutes?: ReturnType<typeof azureRoutesAtSites>): NodePath[] {
+export function traceNodePath(topology: Topology, simulation: Simulation, source: PathNode, destination: string, siteRoutes?: ReturnType<typeof azureRoutesAtSites>, hubTableId = DEFAULT_HUB_TABLE): NodePath[] {
   const address = ipv4(destination)
   if (address === undefined || !simulation.converged) return []
   if (source.kind !== 'site') {
@@ -90,9 +91,13 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
       })))
     }
     const hubId = source.kind === 'hub' ? source.id : spoke?.hubId
-    return hubId ? traceFlow(topology, simulation, hubId, destination).map((path) => ({
+    const tableId = spoke ? attachmentHubRouting(topology, spoke.id).associatedTableId : hubTableId
+    return hubId ? traceFlow(topology, simulation, hubId, destination, tableId ?? '').map((path) => ({
       ...path, ...(spoke && path.hubs.length ? { sourceSpokeId: spoke.id } : {}),
     })) : []
+  }
+  if (Object.values(simulation.hubTableCoverage ?? {}).some((tables) => tables[DEFAULT_HUB_TABLE]?.complete === false)) {
+    return [{ hubs: [], status: 'unknown', termination: 'unknown-context', traceComplete: false, steps: [hubRoutingCoverageMessage] }]
   }
   const learned = siteRoutes ?? azureRoutesAtSites(topology, simulation)
   if (!learned.converged) return [{ hubs: [], steps: ['On-premises Azure advertisement propagation did not converge.'], status: 'unreachable', termination: 'nonconverged', traceComplete: false }]
@@ -140,7 +145,7 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
       const hubId = connection?.hubId ?? erHub?.hubId
       if (!connection || !hubId) return [{ hubs: [], steps: [...steps, 'The Azure attachment is unavailable.'], status: 'unreachable', termination: 'attachment-unavailable', lookupPrefix: selected.prefix }]
       const combinedSourceErLinkIds = [...(route.erLinkIds ?? []), ...(erHub ? [connection.id, erHub.id] : [])]
-      return traceFlow(topology, simulation, hubId, destination).map((path) => {
+      return traceFlow(topology, simulation, hubId, destination, attachmentHubRouting(topology, erHub?.id ?? connection.id).associatedTableId ?? '').map((path) => {
         const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
         return {
           ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,

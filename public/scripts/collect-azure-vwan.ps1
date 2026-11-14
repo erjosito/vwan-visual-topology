@@ -8,10 +8,10 @@ Configuration-only captures use ARM GETs, version 1 and a 2 MB limit.
 observational effectiveRoutes POST action, including CLI-managed async polling.
 Requires metadata reads (including subscription hub discovery) and
 Microsoft.Network/virtualHubs/effectiveRoutes/action; Reader alone is insufficient.
-Only discovered selected-WAN hubs' Default tables are queried, not connection/NIC
+Only discovered selected-WAN hub route tables are queried, not connection/NIC
 tables. Observations are non-atomic and independent of configuration completeness.
 Limits: 500 CLI invocations, 20 hubs, 20 minutes overall, 180 seconds per
-effective-route invocation, no diagnostic retries, 10000 rows/table, 20000 total.
+effective-route invocation, no diagnostic retries, 100 route tables, 10000 rows/table, 20000 total.
 CLI-owned polling/retries share the invocation deadline, not a separate REST backend.
 Version 2 also records only the CLI version and selected subscription/tenant/cloud
 metadata. Missing metadata is explicitly warned; a known cloud/subscription mismatch
@@ -195,9 +195,9 @@ function Read-HubCollection([string]$ResourceId, [string]$Label, [System.Collect
         $Limitations.Add("$Label could not be read; configuration is incomplete.")
     }
 }
-function Read-EffectiveTable($Hub, [bool]$DiscoveredDefault) {
+function Read-EffectiveTable($Hub, [bool]$DiscoveredDefault, [string]$TableId = "$($Hub.id)/hubRouteTables/defaultRouteTable") {
     $entry = @{
-        hubResourceId = $Hub.id; resourceId = "$($Hub.id)/hubRouteTables/defaultRouteTable"
+        hubResourceId = $Hub.id; resourceId = $TableId
         resourceType = 'RouteTable'; status = 'unsupported'
         capturedAt = [DateTime]::UtcNow.ToString('o')
         apiVersion = 'az network vhub get-effective-routes'
@@ -284,13 +284,49 @@ foreach ($hub in $selectedHubs) {
     $limitations = [System.Collections.Generic.List[string]]::new()
     if ($hub.properties.provisioningState -ne 'Succeeded') { $limitations.Add('Hub provisioning is not Succeeded.') }
     if ($hub.properties.allowBranchToBranchTraffic -eq $false) { $limitations.Add('Hub branch-to-branch transit is disabled.') }
+    $priorLimitations = $limitations.Count
     $tables = @(Read-HubCollection "$($hub.id)/hubRouteTables" 'Route tables' $limitations)
+    $tablesKnown = $priorLimitations -eq $limitations.Count
+    if ($tables.Count -gt 64) {
+        $tablesKnown = $false
+        $tables = @($tables | Select-Object -First 64)
+        $limitations.Add('Hub route-table inventory exceeds the supported bound; configuration is incomplete.')
+    }
     if ($IncludeEffectiveRoutes) {
         $defaultDiscovered = @($tables | Where-Object { $_.name -ieq 'defaultRouteTable' -and $_.id -ieq "$($hub.id)/hubRouteTables/defaultRouteTable" }).Count -eq 1
         $effectiveTables.Add((Read-EffectiveTable $hub $defaultDiscovered))
+        foreach ($table in @($tables | Where-Object { $_.name -notin @('defaultRouteTable','noneRouteTable') } | Sort-Object id)) {
+            $remainingDefaults = $selectedHubs.Count - $capturedHubs.Count - 1
+            if ($effectiveTables.Count -ge (100 - $remainingDefaults)) {
+                $warnings.Add('Additional hub effective-route tables were not requested at the 100-table safety limit.')
+                break
+            }
+            if ($table.id -ine "$($hub.id)/hubRouteTables/$($table.name)" -or $table.name -notmatch '^[^/?#\r\n]+$') {
+                $tablesKnown = $false
+                $limitations.Add('A hub route-table identity was inconsistent; its routes were not queried.')
+                continue
+            }
+            $effectiveTables.Add((Read-EffectiveTable $hub $true $table.id))
+        }
     }
-    if (@($tables | Where-Object { $_.name -notin @('defaultRouteTable', 'noneRouteTable') -or $_.properties.routes.Count -gt 0 }).Count -gt 0 -or $hub.properties.routeTable.routes.Count -gt 0 -or $hub.properties.virtualHubRouteTableV2s.Count -gt 0) {
-        $limitations.Add('Custom hub route tables or static routes are not reconstructed.')
+    $projectedTables = @($tables | ForEach-Object {
+        if ($_.properties.routes -isnot [array] -or $_.properties.labels -isnot [array] -or
+            $_.properties.routes.Count -gt 1000 -or $_.properties.labels.Count -gt 64) { $tablesKnown = $false }
+        @{
+            id = $_.id; name = $_.name
+            labels = @($_.properties.labels | Where-Object { $null -ne $_ } | Select-Object -First 64)
+            staticRoutes = @($_.properties.routes | Where-Object { $null -ne $_ } | Select-Object -First 1000 | ForEach-Object {
+                @{ name = $_.name; destinationType = $_.destinationType; destinations = @($_.destinations)
+                   nextHopType = $_.nextHopType; nextHop = [string]$_.nextHop }
+            })
+        }
+    })
+    if (@($tables | Where-Object { $_.properties.routes.Count -gt 0 }).Count -gt 0) {
+        $limitations.Add('Hub static-route controls are captured; their arbitrary next-hop forwarding is not simulated.')
+    }
+    if ($hub.properties.routeTable.routes.Count -gt 0 -or $hub.properties.virtualHubRouteTableV2s.Count -gt 0) {
+        $tablesKnown = $false
+        $limitations.Add('Legacy hub static-route controls are not simulated.')
     }
     $maps = @(Read-HubCollection "$($hub.id)/routeMaps" 'Route maps' $limitations)
     if ($maps.Count -gt 0) { $limitations.Add('Azure route maps are not reconstructed.') }
@@ -327,6 +363,16 @@ foreach ($hub in $selectedHubs) {
         $propagated = $routing.propagatedRouteTables
         $ids = @($propagated.ids | ForEach-Object { $_.id })
         $labels = @($propagated.labels)
+        $unsupported = [System.Collections.Generic.List[string]]::new()
+        if ($routing.inboundRouteMap.id -or $routing.outboundRouteMap.id) {
+            $unsupported.Add('VNet connection route-map controls are not reconstructed.')
+        }
+        if ($routing.vnetRoutes.staticRoutes.Count -gt 0 -or $routing.vnetRoutes.staticRoutesConfig.propagateStaticRoutes -eq $false) {
+            $unsupported.Add('VNet connection static/NVA route controls are not simulated.')
+        }
+        $routingKnown = $null -ne $routing -and $routing.associatedRouteTable.id -is [string] -and
+            $null -ne $propagated -and $propagated.labels -is [array] -and
+            $unsupported.Count -eq 0 -and $ids.Count -le 64 -and $labels.Count -le 64
         $defaultRouting = $null -ne $routing -and $routing.associatedRouteTable.id -ieq $defaultTable -and
             ($ids.Count -gt 0 -or $labels.Count -gt 0) -and
             @($ids | Where-Object { $_ -ine $defaultTable }).Count -eq 0 -and
@@ -340,6 +386,13 @@ foreach ($hub in $selectedHubs) {
             virtualNetworkId = $vnetId
             addressPrefixes = $vnetCache[$vnetId]
             defaultRouting = [bool]$defaultRouting
+            routingConfiguration = @{
+                status = $(if ($routingKnown) { 'captured' } else { 'unknown' })
+                associatedTableId = $(if ($routing.associatedRouteTable.id -is [string]) { $routing.associatedRouteTable.id } else { $null })
+                propagatedTableIds = @($ids | Select-Object -First 64)
+                labels = @($labels | Select-Object -First 64)
+                unsupportedControls = $unsupported.ToArray()
+            }
             enableInternetSecurity = $(if ($connection.properties.enableInternetSecurity -is [bool]) { $connection.properties.enableInternetSecurity } else { $null })
         })
     }
@@ -348,16 +401,22 @@ foreach ($hub in $selectedHubs) {
         if ($hub.properties.expressRouteGateway.id) { 'ExpressRoute' }
         if ($hub.properties.p2SVpnGateway.id) { 'P2S' }
     )
+    $priorLimitations = $limitations.Count
+    $bgpConnections = @(Read-HubCollection "$($hub.id)/bgpConnections" 'Hub BGP connections' $limitations)
+    $branchScopeKnown = $priorLimitations -eq $limitations.Count -and $gateways.Count -eq 0 -and $bgpConnections.Count -eq 0
     $capturedHubs.Add(@{
         id = $hub.id; name = $hub.name; location = $hub.location
         virtualWanId = $hub.properties.virtualWan.id; addressPrefix = $hub.properties.addressPrefix
         hubRoutingPreference = $hub.properties.hubRoutingPreference
         routingPolicies = $policies; gatewayTypes = $gateways
+        routeTablesStatus = $(if ($tablesKnown) { 'captured' } else { 'unknown' })
+        routeTables = $projectedTables
+        branchRoutingStatus = $(if ($branchScopeKnown) { 'captured' } else { 'unknown' })
         connections = $connections.ToArray(); unsupportedFeatures = $limitations.ToArray()
     })
 }
 $capture = @{
-    kind = 'azure-vwan-capture'; version = 1; collectorVersion = '1'
+    kind = 'azure-vwan-capture'; version = 1; collectorVersion = '1'; routingContextVersion = 1
     capturedAt = [DateTime]::UtcNow.ToString('o'); complete = $script:complete
     wan = @{
         id = $wan.id; name = $wan.name; location = $wan.location; type = $wan.properties.type

@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([ValidateSet('All', 'Metadata')][string]$Suite = 'All')
+param([ValidateSet('All', 'Metadata', 'Contexts')][string]$Suite = 'All')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $output = Join-Path $repo 'test-artifacts' 'azure-files' 'collector'
@@ -90,11 +90,26 @@ $path = [uri]::UnescapeDataString(([uri]$uri).AbsolutePath)
 if ($path -like '*/hubRouteTables') {
     foreach ($table in $data.value) { $table.id = "$path/$($table.name)" }
     if ($env:MOCK_EFFECTIVE_MODE -eq 'missing-default') { $data.value = @() }
+    if ($env:MOCK_EFFECTIVE_MODE -in @('custom', 'none')) {
+        $data.value += @{id="$path/business";name='business';properties=@{routes=@();labels=@('red')};secret='must-not-be-exported'}
+    }
+    if ($env:MOCK_AZ_MODE -eq 'missing-table-labels') { $data.value[0].properties.Remove('labels') }
+    if ($env:MOCK_AZ_MODE -eq 'missing-table-routes') { $data.value[0].properties.Remove('routes') }
 }
 if ($path -like '*/hubVirtualNetworkConnections') {
     foreach ($connection in $data.value) {
         $connection.id = "$path/$($connection.name)"
         if ($env:MOCK_EFFECTIVE_MODE -ne 'null-security') { $connection.properties.enableInternetSecurity = $env:MOCK_EFFECTIVE_MODE -ne 'false-security' }
+        else { $connection.properties.Remove('enableInternetSecurity') }
+        if ($env:MOCK_EFFECTIVE_MODE -in @('custom', 'none')) {
+            $tablePath = $path.Replace('/hubVirtualNetworkConnections','/hubRouteTables')
+            $connection.properties.routingConfiguration.associatedRouteTable.id = "$tablePath/business"
+            $target = if ($env:MOCK_EFFECTIVE_MODE -eq 'none') { 'noneRouteTable' } else { 'business' }
+            $connection.properties.routingConfiguration.propagatedRouteTables = @{
+                ids = @(@{id="$tablePath/$target"})
+                labels = $(if ($target -eq 'business') { @('red') } else { @() })
+            }
+        }
     }
 }
 if ($path -like '*/providers/Microsoft.Network/virtualHubs' -and $uri -notlike '*skipToken=*') {
@@ -136,7 +151,7 @@ try {
     Set-Content -LiteralPath $env:MOCK_METADATA_LOG -Value ''
     Set-Content -LiteralPath $env:MOCK_EFFECTIVE_LOG -Value ''
     Set-Content -LiteralPath $env:MOCK_AZ_LOG -Value ''
-    $configModes = if ($Suite -eq 'Metadata') { @('normal') } else { @('normal', 'static-routes', 'partial', 'cross', 'basic', 'bad-next') }
+    $configModes = if ($Suite -eq 'Metadata') { @('normal') } elseif ($Suite -eq 'Contexts') { @('missing-table-labels', 'missing-table-routes') } else { @('normal', 'static-routes', 'partial', 'cross', 'vnet-only', 'basic', 'bad-next') }
     foreach ($mode in $configModes) {
         $env:MOCK_AZ_MODE = if ($mode -eq 'cross') { 'partial' } else { $mode }
         $file = Join-Path $output "$mode.json"
@@ -157,10 +172,14 @@ try {
         Assert ($null -eq $capture.context) 'Default v1 capture must not add metadata context.'
         Assert ($capture.hubs.Count -eq 1) 'WAN filtering/pagination must ignore hubs belonging to other WANs.'
         Assert ($json -notlike '*must-not-be-exported*') 'Unexpected Azure properties must not leak into captures.'
-        Assert ($capture.hubs[0].gatewayTypes[0] -eq 'VPN') 'Gateway presence must be captured.'
+        Assert ($capture.routingContextVersion -eq 1 -and $capture.hubs[0].routeTablesStatus -eq $(if ($mode -like 'missing-table-*') { 'unknown' } else { 'captured' })) 'Capture table inventory provenance explicitly, including missing native fields.'
+        Assert ($capture.hubs[0].branchRoutingStatus -eq $(if ($mode -eq 'vnet-only') { 'captured' } else { 'unknown' })) 'Unobserved branch controls must remain unknown, not invented.'
+        Assert ($capture.hubs[0].gatewayTypes.Count -eq $(if ($mode -eq 'vnet-only') { 0 } else { 1 })) 'Gateway inventory must preserve actual presence.'
+        if ($mode -ne 'missing-table-labels') { Assert ($capture.hubs[0].routeTables[0].labels[0] -ceq 'default') 'Preserve case-sensitive native table labels.' }
+        Assert ($capture.hubs[0].connections[0].routingConfiguration.status -eq $(if ($mode -in @('static-routes')) { 'unknown' } else { 'captured' })) 'Retain supported VNet contexts and disclose unsupported static controls.'
         Assert ($capture.hubs[0].connections[0].defaultRouting -eq ($mode -ne 'static-routes')) 'Azure-materialized defaults should be recognized without accepting real static routes.'
         Assert ($capture.hubs[0].connections[0].name -eq 'app') 'Use the actual VNet name, not the connection name.'
-        if ($mode -in @('normal', 'static-routes')) {
+        if ($mode -in @('normal', 'static-routes', 'vnet-only', 'missing-table-labels', 'missing-table-routes')) {
             Assert $capture.complete 'Successful reads should yield a complete capture.'
             Assert ($capture.hubs[0].connections[0].addressPrefixes[0] -eq '10.20.0.0/16') 'VNet address space should be captured.'
         } else {
@@ -178,8 +197,8 @@ try {
     Assert ([string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $env:MOCK_EFFECTIVE_LOG -Raw))) 'Default collection must never call effective routes.'
     Assert ([string]::IsNullOrWhiteSpace((Get-Content -LiteralPath $env:MOCK_METADATA_LOG -Raw))) 'Default v1 collection must never query account/version metadata.'
     $env:MOCK_AZ_MODE = 'normal'
-    $effectiveModes = if ($Suite -eq 'Metadata') { @('normal', '429', 'missing-extension') } else {
-        @('normal', 'denied', 'failed', 'unsupported', 'bad-json', 'bad-envelope', 'bad-row', 'bad-member', 'bad-path', 'unknown-field', 'empty', 'null-arrays', 'missing-default', 'pagination', 'table-bound', 'total-bound', 'argument-safety', 'false-security', 'null-security', '429', 'missing-extension')
+    $effectiveModes = if ($Suite -eq 'Metadata') { @('normal', '429', 'missing-extension') } elseif ($Suite -eq 'Contexts') { @('custom', 'none', 'null-security') } else {
+        @('normal', 'custom', 'none', 'denied', 'failed', 'unsupported', 'bad-json', 'bad-envelope', 'bad-row', 'bad-member', 'bad-path', 'unknown-field', 'empty', 'null-arrays', 'missing-default', 'pagination', 'table-bound', 'total-bound', 'argument-safety', 'false-security', 'null-security', '429', 'missing-extension')
     }
     foreach ($mode in $effectiveModes) {
         $env:MOCK_EFFECTIVE_MODE = $mode
@@ -201,7 +220,13 @@ try {
         Assert ($capture.version -eq 2 -and $capture.collectorVersion -eq '2') "$mode must produce version 2."
         Assert ($capture.context.cloud -ceq 'AzureCloud' -and $capture.context.subscriptionId -ceq '11111111-1111-1111-1111-111111111111' -and $capture.context.tenantId -ceq '33333333-3333-3333-3333-333333333333' -and $capture.context.azureCliVersion -ceq '2.80.0') 'Capture only the known selected context and actual CLI version.'
         Assert ($capture.complete) "$mode observation status must not affect configuration completeness."
-        Assert ($capture.observations.version -eq 1 -and $capture.observations.tables.Count -eq $capture.hubs.Count) "$mode observation contract mismatch."
+        $tableCount = $capture.hubs.Count + $(if ($mode -in @('custom','none')) { 1 } else { 0 })
+        Assert ($capture.observations.version -eq 1 -and $capture.observations.tables.Count -eq $tableCount) "$mode observation contract mismatch."
+        if ($mode -in @('custom','none')) {
+            Assert ($capture.observations.tables[1].resourceId -like '*/hubRouteTables/business') 'Capture the actual custom effective-route table, not a Default substitute.'
+            Assert ($capture.hubs[0].connections[0].routingConfiguration.associatedTableId -like '*/hubRouteTables/business') 'Preserve custom association independently of propagation.'
+            Assert ($capture.hubs[0].connections[0].routingConfiguration.propagatedTableIds[0] -like "*/hubRouteTables/$(if($mode -eq 'none'){'noneRouteTable'}else{'business'})") 'Preserve custom versus None propagation.'
+        }
         Assert ($table.status -eq $expectedStatus) "$mode status was $($table.status), expected $expectedStatus."
         Assert ($table.resourceType -eq 'RouteTable' -and $table.resourceId -ceq "$($table.hubResourceId)/hubRouteTables/defaultRouteTable") "$mode context must retain exact ARM IDs."
         Assert ($table.apiVersion -eq 'az network vhub get-effective-routes') 'Record the chosen CLI operation, not a fictional pinned REST API.'
@@ -231,12 +256,12 @@ try {
             Assert ($capture.observations.tables[2].status -eq 'truncated' -and $capture.observations.tables[2].routes.Count -eq 0) 'Exhausted total budget must never look empty/complete.'
         }
         $calls = @(Get-Content -LiteralPath $env:MOCK_EFFECTIVE_LOG | Where-Object { $_ } | ForEach-Object { ,($_ | ConvertFrom-Json) })
-        Assert ($calls.Count -eq $(if ($mode -eq 'missing-default') { 0 } else { $capture.hubs.Count })) "$mode must query only discovered selected-WAN Default tables, once each."
+        Assert ($calls.Count -eq $(if ($mode -eq 'missing-default') { 0 } else { $tableCount })) "$mode must query only discovered selected-WAN routable tables, once each."
         foreach ($call in $calls) {
             Assert (($call[0..2] -join ' ') -eq 'network vhub get-effective-routes' -and $call -notcontains '--no-wait') 'Use only the supported async-waiting CLI command.'
             Assert ($call[[Array]::IndexOf($call, '--resource-type') + 1] -ceq 'RouteTable') 'Explicit resource type is mandatory.'
             $id = $call[[Array]::IndexOf($call, '--resource-id') + 1]
-            Assert ($id -like '*/hubRouteTables/defaultRouteTable') 'Only Default tables may be queried.'
+            Assert ($id -like '*/hubRouteTables/defaultRouteTable' -or ($mode -in @('custom','none') -and $id -like '*/hubRouteTables/business')) 'Only discovered tables may be queried; None is not a routable lookup table.'
             Assert ($call[[Array]::IndexOf($call, '--subscription') + 1] -eq '11111111-1111-1111-1111-111111111111') 'Explicit subscription scope is mandatory.'
             Assert ($call[[Array]::IndexOf($call, '--output') + 1] -eq 'json' -and $call -contains '--only-show-errors') 'Use ordinary JSON output, not debug headers.'
             Assert ($call[[Array]::IndexOf($call, '--name') + 1] -ceq ($id -split '/')[-3]) 'Hub scope must come from ARM ID, not display name.'

@@ -32,4 +32,29 @@ export function comparisonDesign(): Topology {
     spokes: ['a', 'b'].map((id, index) => ({ id, name: `Desired ${id}`, hubId: 'h', prefixes: [`10.${index + 1}.0.0/24`] })),
     sites: [], connections: [], siteLinks: [],
   }
+
+}
+
+export function contextObservationFixture() {
+  const capture = observationFixture()
+  return {
+    ...capture, routingContextVersion: 1,
+    hubs: capture.hubs.map((hub) => ({
+      ...hub, branchRoutingStatus: 'captured', routeTablesStatus: 'captured',
+      routeTables: [
+        { id: `${hub.id}/hubRouteTables/defaultRouteTable`, name: 'defaultRouteTable', labels: ['default'], staticRoutes: [] },
+        { id: `${hub.id}/hubRouteTables/noneRouteTable`, name: 'noneRouteTable', labels: ['none'], staticRoutes: [] },
+        { id: `${hub.id}/hubRouteTables/business`, name: 'business', labels: ['red'], staticRoutes: [] },
+      ],
+      connections: hub.connections.map((connection) => ({
+        ...connection, defaultRouting: false,
+        routingConfiguration: { status: 'captured', associatedTableId: `${hub.id}/hubRouteTables/business`,
+          propagatedTableIds: [`${hub.id}/hubRouteTables/business`], labels: ['red'], unsupportedControls: [] as string[] },
+      })),
+    })),
+    observations: { ...capture.observations, tables: [
+      { ...capture.observations.tables[0], status: 'empty', routes: [] },
+      { ...capture.observations.tables[0], resourceId: `${hubArm}/hubRouteTables/business` },
+    ] },
+  }
 }

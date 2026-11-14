@@ -6,6 +6,7 @@ import { importAzureCapture } from './azure-import'
 import { bicepDefaults, generateBicep } from './bicep-export'
 import { validateTopology } from './validation'
 import { example } from './model'
+import { contextObservationFixture } from '../tests/azure-observation-fixture'
 
 const base = '/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/network/providers/Microsoft.Network'
 function capture() {
@@ -22,6 +23,29 @@ function capture() {
 }
 
 describe('offline Azure capture import', () => {
+  it('migrates explicit contexts without mistaking incomplete or contradictory scope for complete provenance', () => {
+    const input = contextObservationFixture()
+    const load = () => importAzureCapture({ ...input, version: 1 })
+    let imported = load()
+    expect(imported.spokes[0].hubRouting).toMatchObject({ status: 'captured', associatedTableId: 'business',
+      propagatedTableIds: ['business'], labels: ['red'] })
+    expect(imported.azureImport?.hubs[0].routingScopeComplete).toBe(true)
+    expect(validateTopology(JSON.parse(JSON.stringify(imported)))).toEqual(imported)
+    input.hubs[0].gatewayTypes = ['VPN']
+    expect(load().azureImport?.hubs[0].routingScopeComplete).toBe(false)
+    input.hubs[0].gatewayTypes = []
+    const connection = input.hubs[0].connections[0] as Record<string, unknown>
+    delete connection.enableInternetSecurity
+    imported = load()
+    expect(imported.azureImport?.hubs[0].routingScopeComplete).toBe(false)
+    expect(imported.spokes[0].hubRouting?.status).toBe('unknown')
+    expect(imported.azureImport?.hubs[0].limitations.join(' ')).toContain('internet-security flag is unknown')
+    connection.enableInternetSecurity = false
+    input.hubs[0].routeTablesStatus = 'unknown'
+    expect(load().hubs[0].routeTablesStatus).toBe('unknown')
+    expect(load().azureImport?.hubs[0].routingScopeComplete).toBe(false)
+  })
+
   it('preserves disabled branch transit in native import and generated Bicep', () => {
     const input = capture()
     input.wan.allowBranchToBranchTraffic = false
