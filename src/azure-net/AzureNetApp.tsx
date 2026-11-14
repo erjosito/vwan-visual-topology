@@ -2901,6 +2901,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             type="button"
             className="aznet-btn"
             data-testid="aznet-share-url-btn"
+            disabled={!!window.desktopSimulator}
             onClick={handleShareUrl}
             title="Copies a snapshot containing the full design. Not encrypted or redacted. Anyone with the link can read it. No topology is uploaded."
           >
@@ -2918,6 +2919,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             ⬆ Import JSON
           </button>
           <input
+            data-desktop-import
             ref={fileInputRef}
             type="file"
             accept="application/json"

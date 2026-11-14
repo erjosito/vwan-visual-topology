@@ -22,7 +22,7 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
   return <details className="analysis-coverage" open={initiallyOpen}>
     <summary>{t('Analysis coverage and model limitations')}</summary>
     <p>{t('These are coverage notes, not detected routing faults. Missing prefix ownership can be updated in the topology; model scope boundaries describe features outside the current simulator.')}</p>
-    {report.continuation && <p>{describeDiagnosticsProgress(report)}</p>}
+    {report.continuation && <p>{describeDiagnosticsProgress(report, t)}</p>}
     {report.budget && <p>{t('Limits: {0} address cells · {1} uncached path traces · {2} findings · {3} seconds', report.budget.maxCells, report.budget.maxProbes, report.budget.maxFindings, report.budget.maxMillis / 1000)}</p>}
     {report.budget && <p>{t('Optional route-recomputation limit: {0} failure scenarios', report.budget.maxFailureCases)}</p>}
     {coverage.scanIncomplete && <section className="coverage-section">
@@ -34,7 +34,7 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
         <p>{finding.source ? `${name(finding.source)} ${finding.sourceAddress ?? ''} → ${name(finding.target)} ${finding.destinationAddress ?? ''}`
           : finding.related.map(name).join(', ')} {finding.prefix}</p>
         <details><summary>{t('Evidence and investigation')}</summary>
-          <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> {evidence.prefix} {describeEvidenceSource(topology, evidence)}</li>)}</ul>
+          <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> {evidence.prefix} {describeEvidenceSource(topology, evidence, undefined, t)}</li>)}</ul>
         </details>
       </article>)}
       {coverage.otherUnknownFindings.length > visibleCount && <button onClick={() => setVisibleCount((count) => count + 50)}>{t('Show more coverage notes ({0} remaining)', coverage.otherUnknownFindings.length - visibleCount)}</button>}
@@ -67,11 +67,11 @@ export function AnalysisCoverage({ report, topology, initiallyOpen = false, onEd
           <p>{finding.related.map(name).join(', ')} · <code>{finding.prefix}</code></p>
           <ul className="coverage-sources">
             {finding.evidence.map((evidence, index) => (
-              <li key={index}><code>{evidence.prefix}</code> — {describeEvidenceSource(topology, evidence, owner?.id)}</li>
+              <li key={index}><code>{evidence.prefix}</code> — {describeEvidenceSource(topology, evidence, owner?.id, t)}</li>
             ))}
           </ul>
           <details><summary>{t('Evidence and investigation')}</summary>
-            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> <code>{evidence.prefix}</code> — {describeEvidenceSource(topology, evidence, owner?.id)}</li>)}</ul>
+            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{t(evidence.code)}</code> <code>{evidence.prefix}</code> — {describeEvidenceSource(topology, evidence, owner?.id, t)}</li>)}</ul>
             <p className="muted">{t('To resolve: either assign the prefix to the owning site or VNet, or open the connection advertisements / static routes above and remove the unused route.')}</p>
           </details>
         </article>

@@ -1,0 +1,80 @@
+import type { Topology } from '../model'
+import type { PathNode } from '../paths'
+import type { AzNetTopology } from '../azure-net/model'
+import type { AzEndpointRef } from '../azure-net/engine'
+
+export const contractVersion = 1 as const
+export const engineVersion = '2026.11.14.1'
+export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
+export type PlatformDocument =
+  | { mode: 'vwan'; topology: Topology }
+  | { mode: 'hub-spoke' | 'full'; topology: AzNetTopology }
+export type Endpoint = PathNode | AzEndpointRef
+export type FlowRequirement = {
+  id: string
+  kind: 'flow'
+  source: Endpoint
+  target: Endpoint
+  sourceAddress: string
+  destinationAddress: string
+  expectation: 'allow' | 'deny'
+  requiredFirewallHubId?: string
+  requiredApplianceId?: string
+}
+export type RouteRequirement = {
+  id: string
+  kind: 'route'
+  table: string
+  hubTableId?: string
+  prefix: string
+  expectation: 'present' | 'absent'
+}
+export type Requirement = FlowRequirement | RouteRequirement
+export type PlatformRequest = {
+  contractVersion: 1
+  engineVersion?: string
+  document: PlatformDocument
+  operation: 'validate' | 'simulate' | 'evaluate'
+  locale?: 'en' | 'ja'
+  requirements?: Requirement[]
+  budget?: { maxMillis?: number; maxOutputBytes?: number }
+}
+export type Assessment = {
+  id: string
+  outcome: 'satisfied' | 'violated' | 'not assessed'
+  evidence: unknown
+  reasons: string[]
+}
+export type PlatformResult = {
+  contractVersion: 1
+  engineVersion: string
+  revision: string
+  status: 'complete' | 'invalid' | 'not assessed'
+  document?: PlatformDocument
+  simulation?: unknown
+  assessments: Assessment[]
+  errors: { code: string; message: string }[]
+  limitations: string[]
+}
+
+export const platformLimits = {
+  maxInputBytes: 4_000_000,
+  maxOutputBytes: 8_000_000,
+  maxMillis: 15_000,
+  maxRequirements: 64,
+  maxArrayItems: 4096,
+  maxNodes: 512,
+  maxConcurrency: 2,
+}
+
+export const capabilities = {
+  contractVersion, engineVersion,
+  modes: ['vwan', 'hub-spoke', 'full'],
+  topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
+  operations: ['validate', 'simulate', 'evaluate'],
+  requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix table presence/absence'],
+  outcomes: ['satisfied', 'violated', 'not assessed'],
+  limits: platformLimits,
+  privacy: 'Local deterministic computation. No HTTP listener, files, Azure credentials or cloud calls. An external AI may receive tool inputs/results.',
+  excluded: ['elapsed Azure convergence/history', 'firewall rules/NAT/session enforcement', 'application or packet delivery', 'unobserved imported controls', 'identity and verified badges'],
+}

@@ -28,3 +28,8 @@ summary { cursor: pointer; color: var(--accent); }
 .canvas-maximized .canvas-workspace { flex: 1; display: flex; flex-direction: column; border: 0; border-radius: 0; }
 .canvas-maximized .canvas-stage { flex: 1; height: auto; min-height: 0; }
 .canvas-maximized .aznet-app { height: 100dvh; }
+.desktop-tools {
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.desktop-tools button, .desktop-tools select { margin: 0.25rem; }

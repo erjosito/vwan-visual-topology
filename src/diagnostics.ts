@@ -1,5 +1,6 @@
 import type { ObjectSelection, Topology } from './model'
-import { t } from './i18n'
+import { english } from './messages'
+import type { MessageRenderer } from './messages'
 import type { Simulation } from './routing'
 import { advertiseSiteRoutes, applyRouteMapRules, areErLocationsGlobalReachLinked, receiveSiteRoutes, routerMapRules } from './bgp'
 import { checkErHubLinkCompatibility, simulate } from './routing'
@@ -836,7 +837,7 @@ export function analyzeRouting(topology: Topology, input: DiagnosticsProfile, op
   return createRoutingAnalysis(topology, input, options).advance()
 }
 
-export function describeDiagnosticsProgress(report: DiagnosticsReport): string {
+export function describeDiagnosticsProgress(report: DiagnosticsReport, t: MessageRenderer = english): string {
   const progress = report.continuation
   if (!progress) return ''
   if (progress.baseCells === null) return t('Analysis scope is still being prepared.')
@@ -1243,7 +1244,7 @@ function* routingAnalysisSteps(topology: Topology, profile: DiagnosticsProfile, 
   return report
 }
 
-export function describeEvidenceSource(topology: Topology, evidence: DiagnosticsFinding['evidence'][number], fallbackSiteId?: string): string {
+export function describeEvidenceSource(topology: Topology, evidence: DiagnosticsFinding['evidence'][number], fallbackSiteId?: string, t: MessageRenderer = english): string {
   const siteId = evidence.nodeId ?? fallbackSiteId
   const site = siteId ? topology.sites.find((item) => item.id === siteId) : undefined
   if (evidence.connectionId) {
