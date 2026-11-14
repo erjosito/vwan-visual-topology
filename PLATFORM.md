@@ -194,7 +194,8 @@ The browser suite includes actual contract-worker parity and cancellation,
 alongside existing routing/import/UI regressions.
 
 `npm run test:desktop` launches actual Electron and checks three-mode engine
-parity, native JSON import/persistence, packaged offline assets, narrow bridge,
+parity, native JSON import/export/persistence, immediate HRP UI reevaluation,
+existing local diagnostics workers, packaged offline assets, narrow bridge,
 renderer Node isolation, disabled outbound integrations and remote-fetch
 blocking. The same harness accepts `DESKTOP_EXECUTABLE` to test ASAR packaging
 and the external worker resource. It does not authenticate to Azure.

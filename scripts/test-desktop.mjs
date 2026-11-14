@@ -47,6 +47,33 @@ try {
       return mode === 'vwan' ? value : value.topology
     }, mode)
     await expect.poll(readSaved).toEqual(executePlatform({ ...request, operation: 'validate' }).document.topology)
+    const exportFile = join(artifacts, `export-${mode}.json`)
+    await application.evaluate(({ session }, destination) => {
+      session.defaultSession.once('will-download', (_event, item) => item.setSavePath(destination))
+    }, exportFile)
+    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await expect.poll(async () => {
+      try { return JSON.parse(await readFile(exportFile, 'utf8')) }
+      catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error }
+    }).toEqual(await readSaved())
+    if (mode === 'vwan') {
+      await page.getByLabel(`Select hub ${topology.hubs[0].name}`, { exact: true }).focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'BGP table', exact: true }).click()
+      const routes = page.getByRole('dialog', { name: `BGP table · ${topology.hubs[0].name}`, exact: true })
+      const preferred = routes.locator('tr[data-prefix="10.50.0.0/16"][data-preferred="true"] .as-path').first()
+      const before = await preferred.innerText()
+      await routes.getByLabel('Hub routing preference', { exact: true }).selectOption('VPN')
+      await expect(preferred).not.toHaveText(before)
+      await expect.poll(async () => (await readSaved()).hubs[0].preference).toBe('VPN')
+      await page.keyboard.press('Escape')
+      await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+      await page.getByRole('button', { name: 'Advanced checks', exact: true }).click()
+      const diagnostics = page.getByRole('dialog', { name: 'Routing diagnostics', exact: true })
+      await diagnostics.getByRole('button', { name: 'Add flow requirement', exact: true }).click()
+      await diagnostics.getByRole('button', { name: 'Run diagnostics', exact: true }).click()
+      await expect(diagnostics.getByRole('region', { name: 'Diagnostic results' })).toBeVisible({ timeout: 15000 })
+    }
   }
   expect(outbound).toEqual([])
   expect(failures).toEqual([])
@@ -76,9 +103,10 @@ try {
   await page.screenshot({ path: join(artifacts, executablePath ? 'packaged.png' : 'development.png') })
   await writeFile(join(artifacts, executablePath ? 'packaged-checks.json' : 'development-checks.json'), JSON.stringify({
     verifiedAtUtc: new Date().toISOString(), packaged: !!executablePath, modes: ['vwan', 'hub-spoke', 'full'],
-    engineParity: true, localJsonRoundTrips: true, offlineNoAutomaticHttpRequests: true,
+    engineParity: true, localJsonRoundTrips: true, localNativeExports: true, offlineNoAutomaticHttpRequests: true,
     rendererNodeUnavailable: true, remoteFetchBlocked: true, malformedScopeRejected: true, externalIntegrationsDisabled: true,
     documentationWithoutBridge: true, runtime,
+    immediateHrpUiReevaluation: true, localDiagnosticsWorker: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }
