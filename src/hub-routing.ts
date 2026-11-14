@@ -75,16 +75,6 @@ export function hubTableCoverage(topology: Topology): Record<string, Record<stri
       }))
       || remoteOnlySources.some((source) => source.hubId !== hub.id
         && propagationLabels(attachmentHubRouting(topology, source.id)).some((label) => table.labels.includes(label)))
-      || attachments.some((source) => {
-        if (source.hubId === hub.id) return false
-        const origin = topology.hubs.find((entry) => entry.id === source.hubId)
-        if (!origin) return false
-        const config = attachmentHubRouting(topology, source.id)
-        const labels = propagationLabels(config).filter((label) => table.labels.includes(label))
-        const origins = hubRouteTables(origin)
-        return labels.length > 0 && !origins.some((entry) => entry.id !== NONE_HUB_TABLE && labels.some((label) => entry.labels.includes(label)))
-          && origins.some((entry) => entry.id !== DEFAULT_HUB_TABLE && propagatesLocally(config, entry))
-      })
       || (table.id !== DEFAULT_HUB_TABLE && table.id !== NONE_HUB_TABLE
         && topology.hubs.some((origin) => origin.routingIntent.private || origin.routingIntent.internet))
     const complete = !unknownPropagation && !unsupported

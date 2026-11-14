@@ -58,12 +58,18 @@ Empty label lists use the Default label unless None is explicit.
 Candidates are selected independently in each table before inter-hub export.
 Dynamic remote advertisements follow destination labels, retain their origin
 table context, and do not leak into unrelated Default tables. A connection's
-propagation label need not exist on an origin table: the live Default-table
-calibration demonstrated this case. The origin-context interpretation is
+propagation label need not exist on an origin table: live Default and custom
+VNet-table controls demonstrated this case. In the custom control, explicit
+local red propagation was retained while the origin table label changed;
+the remote red table still selected that VNet origin. Reverse propagation
+remained isolated because the destination no longer carried the red label.
+The origin-context interpretation is
 conservative when exports are remote-only or multiple origin contexts disagree.
-The same origin-label exception on a custom source table is not live-calibrated;
-affected remote contexts remain **Not assessed** rather than inheriting the
-Default-table result as proof.
+Shared labels on multiple origin tables are supported when the selected origin
+choices agree. The live shared-source control selected the SE red VNet in local
+and remote red/blue tables; merely adding shared labels without changing the
+source propagation preserved red/blue isolation. Conflicting origin choices
+still remain **Not assessed**.
 Default routes do not propagate between hubs.
 
 VNet ingress and NVA ingress use their connection association. The hub-origin
@@ -131,14 +137,21 @@ captures. The fixtures are executable import/path regressions:
 
 | Fixture | Provenance and expected interpretation |
 | --- | --- |
+| `native-custom-baseline.json` | Actual two-region red/blue association/propagation and selected local/remote VNet origins. Unknown branch and transit scope is retained, so imported paths remain Not assessed. |
+| `native-empty-ne.json` | An actual empty propagation request was accepted and normalized by Azure to Default table ID and lowercase `default` label, with red association retained. This is not an accepted native explicit-empty configuration. |
+| `native-none-ne.json` | Actual None propagation removes the NE red VNet prefix from observed local/remote tables while the connection retains red association and its table retains positive SE red input. Unknown scope remains explicit. |
+| `native-origin-label-absent.json` | Actual custom-table origin-label fallback: NE red retains SE red while the SE table's red label is absent. The converse SE destination-label isolation is retained, with unknown branch/transit scope. |
+| `native-shared-source.json` | Actual shared labels on both red/blue tables and SE red ID plus shared-label propagation. The SE red VNet appears in both colors locally/remotely; opaque branch/transit scope remains Not assessed. |
 | `native-default.json` | Actual two-hub collector output from November 14, 2026. Resource identities and public addresses are replaced. Both Default label spellings, unknown branch inputs and the unconfirmed WAN transit flag are retained; paths remain Not assessed. |
 | `synthetic-custom.json` | Synthetic business-table association/propagation with two VNets. This is a regression case, not live Azure evidence. |
 | `synthetic-isolated.json` | Synthetic None propagation while retaining business association. Forward and return reachability differ. This is not live Azure evidence. |
 | `synthetic-mixed-intent.json` | Synthetic custom tables combined with private routing intent. Coverage must remain Not assessed. This is not live Azure evidence. |
 
 The original lab's independent deadline cleanup began during a laptop outage.
-Custom-table origin-label fallback, empty-propagation and shared-label controls
-were prepared but not executed there. The captured Default label experiment
-does not establish their behavior. A separately authorized follow-up lab is
-being used for remaining live calibration; unexecuted controls are not passing
-results and must not be presented as certified Azure behavior.
+Its unexecuted custom controls were not counted as passing. The separately
+authorized replacement lab executed the native red/blue, normalized-empty,
+None, missing-origin-label and shared-source controls described above. See the
+[sanitized live report](https://github.com/erjosito/vwan-hrp-custom-tables-lab-20261114)
+for request/accepted/readback evidence, selected VNet origins and restorations.
+These fixtures calibrate the tested control-plane subset; they do not certify
+unobserved branches, arbitrary enforcement or packet delivery.

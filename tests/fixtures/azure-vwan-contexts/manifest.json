@@ -2,6 +2,36 @@
   "version": 1,
   "fixtures": [
     {
+      "file": "native-shared-source.json",
+      "origin": "sanitized live collector output",
+      "scope": "Shared labels select SE red VNet origins in local/remote red and blue tables; unknown branch/transit scope retained",
+      "sha256": "4ced5311c1ff92d01aac459c5bd7c8540400b770c3c268b426c8df941712be68"
+    },
+    {
+      "file": "native-origin-label-absent.json",
+      "origin": "sanitized live collector output",
+      "scope": "Custom origin-label fallback and converse destination-label isolation; unknown branch/transit scope retained",
+      "sha256": "11226744292093134fdac33dac041709177a92a18b6221c0c7b781a43614f960"
+    },
+    {
+      "file": "native-custom-baseline.json",
+      "origin": "sanitized live collector output",
+      "scope": "Two-region red/blue VNet origins; opaque branches and unconfirmed WAN transit retained",
+      "sha256": "70da5a6fae4acd6a9eb2091954a0ac6dc1c87cfc908b4687aa2579d524630574"
+    },
+    {
+      "file": "native-empty-ne.json",
+      "origin": "sanitized live collector output",
+      "scope": "Empty propagation request normalized by Azure to Default; red association retained; not an accepted native explicit-empty configuration",
+      "sha256": "bce30530e1fdc21bcf9ca1cd2251ffdb2a1692b3c0b7c5a4065f7e7c2a9b1f95"
+    },
+    {
+      "file": "native-none-ne.json",
+      "origin": "sanitized live collector output",
+      "scope": "Native None propagation with red association retained; positive remote red input and opaque branch limitations",
+      "sha256": "b10aa0754d8742f8af5f49af006abd5c5f50e6496c134d6ffde57282dde4b0bf"
+    },
+    {
       "file": "native-default.json",
       "origin": "sanitized live collector output",
       "scope": "Default tables; opaque branches and unconfirmed WAN transit retained",

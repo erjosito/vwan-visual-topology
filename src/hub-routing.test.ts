@@ -33,6 +33,40 @@ function fixture(): Topology {
 }
 
 describe('hub route-table contexts', () => {
+  it('replays live table-context VNet origins without certifying opaque branch scope', () => {
+    for (const name of ['custom-baseline', 'empty-ne', 'none-ne', 'origin-label-absent', 'shared-source']) {
+      const topology = importAzureCapture(JSON.parse(readFileSync(
+        new URL(`../tests/fixtures/azure-vwan-contexts/native-${name}.json`, import.meta.url), 'utf8',
+      )))
+      const simulation = simulate(topology)
+      expect(topology.azureImport?.hubs.every((hub) => hub.routingScopeComplete === false)).toBe(true)
+      expect(topology.sites).toEqual([])
+      expect(topology.connections).toEqual([])
+      for (const table of topology.azureImport!.tables!) {
+        const tableId = table.resourceId.split('/').at(-1)!
+        if (!['red', 'blue'].includes(tableId)) continue
+        const expected = table.routes.flatMap((row) => row.addressPrefixes
+          .filter((prefix) => /^10\.21[0-3]\./.test(prefix))
+          .map((prefix) => ({ prefix, remote: row.nextHopType === 'Remote Hub', asPath: row.asPath })))
+          .sort((a, b) => a.prefix.localeCompare(b.prefix))
+        const actual = simulation.hubTables![table.hubId][tableId]
+          .filter((row) => /^10\.21[0-3]\./.test(row.prefix))
+          .map((row) => ({ prefix: row.prefix, remote: row.selected[0].remote, asPath: row.selected[0].asPath.join('-') }))
+          .sort((a, b) => a.prefix.localeCompare(b.prefix))
+        expect(actual, `${name}: ${table.hubId}/${tableId}`).toEqual(expected)
+      }
+      const ne = topology.spokes.find((spoke) => spoke.prefixes.includes('10.211.0.0/16'))!
+      if (name === 'empty-ne' || name === 'none-ne') {
+        expect(ne.hubRouting).toMatchObject({
+          associatedTableId: 'red',
+          propagatedTableIds: [name === 'empty-ne' ? 'defaultRouteTable' : 'noneRouteTable'],
+          labels: [name === 'empty-ne' ? 'default' : 'none'],
+        })
+      }
+      expect(traceNodePath(topology, simulation, { kind: 'spoke', id: ne.id }, '10.210.1.4')[0].status).toBe('unknown')
+    }
+  })
+
   it('replays published native and synthetic captures without promoting unknown scope or losing None isolation', () => {
     const load = (name: string) => importAzureCapture({
       ...JSON.parse(readFileSync(new URL(`../tests/fixtures/azure-vwan-contexts/${name}.json`, import.meta.url), 'utf8')),
@@ -139,13 +173,32 @@ describe('hub route-table contexts', () => {
     expect(simulation.warnings.join(' ')).toContain('See #22')
   })
 
-  it('does not extend the live Default origin-label exception to an uncalibrated custom origin', () => {
+  it('uses live custom origin-label fallback without bypassing reverse destination-label isolation', () => {
     const topology = fixture()
     topology.spokes[1].hubRouting!.propagatedTableIds = ['red']
     topology.hubs[1].routeTables![0].labels = ['orphan']
     const simulation = simulate(validateTopology(topology))
-    expect(traceNodePath(topology, simulation, { kind: 'spoke', id: 'red-a' }, '10.2.0.4')[0].status).toBe('unknown')
+    expect(traceNodePath(topology, simulation, { kind: 'spoke', id: 'red-a' }, '10.2.0.4')[0].status).toBe('delivered')
+    expect(traceNodePath(topology, simulation, { kind: 'spoke', id: 'red-b' }, '10.1.0.4')[0].status).toBe('unreachable')
+    expect(simulation.hubTableCoverage?.a.red.complete).toBe(true)
     expect(simulation.hubTableCoverage?.b.red.complete).toBe(true)
+  })
+
+  it('delivers through consistent shared origin contexts but keeps conflicting choices unassessed', () => {
+    const topology = fixture()
+    topology.hubs.forEach((hub) => hub.routeTables!.forEach((table) => table.labels.push('shared')))
+    topology.spokes[0].hubRouting = { ...routing('red', 'shared'), propagatedTableIds: ['red'] }
+    let simulation = simulate(validateTopology(topology))
+    const paths = traceNodePath(topology, simulation, { kind: 'spoke', id: 'blue-b' }, '10.1.0.4')
+    expect(paths.length).toBeGreaterThan(0)
+    expect(paths.every((path) => path.status === 'delivered' && path.traceComplete)).toBe(true)
+    expect(traceNodePath(topology, simulation, { kind: 'spoke', id: 'red-a' }, '10.3.0.4')[0].status).toBe('unreachable')
+    topology.spokes.push({
+      id: 'blue-a', name: 'Conflicting blue origin', hubId: 'a', prefixes: ['10.1.0.0/16'], hubRouting: routing('blue', 'blue'),
+    })
+    simulation = simulate(validateTopology(topology))
+    expect(simulation.hubTableCoverage?.b.blue.complete).toBe(false)
+    expect(traceNodePath(topology, simulation, { kind: 'spoke', id: 'blue-b' }, '10.1.0.4')[0].status).toBe('unknown')
   })
 
   it('inherits NVA host controls and enforces the documented Default/branch propagation constraints', () => {

@@ -5,6 +5,16 @@ scoped comparisons and conservative unknown coverage are described in
 [hub route-table contexts](docs/hub-route-table-contexts.md). Historical
 Default-only scope statements below describe their reviewed revision.
 
+**November 14 live calibration:** the
+[controlled Azure/Megaport report](https://github.com/erjosito/vwan-hrp-custom-tables-lab-20261114)
+records actual source withdrawal/restoration, native hub RIBs, internal VPN
+inputs, both MSEEs and real VPN/customer receivers for #9 and #22. Strict-shorter
+remote ER4/ER5 won against local VPN10 under ASPath. The initial SE VPN-preference
+eligibility/history discrepancy remains unresolved; no ranking rewrite was made.
+AS-path inputs are learned-hub abstractions, not a guarantee that every protocol
+receiver sees the identical string: the auxiliary native/local-VPN/remote-VPN
+layers differ, and mixed public/private customer vendor behavior remains bounded.
+
 **Current application review:** section 9 was updated on **2026-10-31** against
 deployed feature revision `8c5f0a6498a8`, covering every open and closed issue
 through #23. Sections 1-8 retain the earlier, revision-specific engine review
