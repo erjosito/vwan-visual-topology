@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { example } from './model'
 import type { Topology } from './model'
 import { validateTopology } from './validation'
 
@@ -10,6 +9,7 @@ export interface UseTopologyHistoryOptions {
   onAfterChange?: (next: Topology) => void
 }
 
+const initialTopology: Topology = { version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] }
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Invalid input.')
 
 export function useTopologyHistory({
@@ -23,13 +23,13 @@ export function useTopologyHistory({
     try {
       saved = localStorage.getItem(storageKey)
       return {
-        topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(example)),
+        topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(initialTopology)),
         error: '',
         backup: '',
       }
     } catch (error) {
       return {
-        topology: validateTopology(structuredClone(example)),
+        topology: validateTopology(structuredClone(initialTopology)),
         error: `Saved topology could not be loaded: ${errorMessage(error)}. The saved data has not been overwritten.`,
         backup: saved ?? '',
       }

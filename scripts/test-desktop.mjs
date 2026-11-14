@@ -6,6 +6,17 @@ import { createRequire } from 'node:module'
 const artifacts = resolve('test-artifacts', 'desktop')
 await mkdir(artifacts, { recursive: true })
 const executablePath = process.env.DESKTOP_EXECUTABLE
+let brandedWindowsResources = false
+if (executablePath) {
+  const { NtExecutable, NtExecutableResource } = await import('resedit')
+  const icon = await readFile(resolve('public', 'desktop-icon.png'))
+  const { buildVersion } = JSON.parse(await readFile(resolve('electron-builder.json'), 'utf8'))
+  for (const file of [executablePath, resolve('release', `Azure-Network-Simulator-${buildVersion}-x64.exe`)]) {
+    const resources = NtExecutableResource.from(NtExecutable.from(await readFile(file))).entries
+    expect(resources.some((entry) => entry.type === 3 && Buffer.from(entry.bin).equals(icon))).toBe(true)
+  }
+  brandedWindowsResources = true
+}
 const application = await electron.launch({
   ...(executablePath ? { executablePath } : {}),
   args: [...(executablePath ? [] : [resolve('platform-dist', 'electron', 'main.cjs')]), `--user-data-dir=${join(artifacts, executablePath ? 'packaged-profile' : 'development-profile')}`],
@@ -19,6 +30,26 @@ try {
   page.on('pageerror', (error) => failures.push(error.message))
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
+  await page.evaluate(() => localStorage.removeItem('vwan-visual-topology:v1'))
+  await page.reload()
+  await page.getByTestId('vwan-app').waitFor()
+  await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: '+ Hub', exact: true })).toBeEnabled()
+  await page.getByRole('button', { name: 'Sample topologies', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Sample topologies', exact: true }).getByRole('button', { name: 'Load sample topology', exact: true }).first().click()
+  const savedVwan = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
+  const hubCount = JSON.parse(savedVwan).hubs.length
+  expect(hubCount).toBeGreaterThan(0)
+  await page.reload()
+  await expect(page.locator('.hub-node')).toHaveCount(hubCount)
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(savedVwan)
+  await page.evaluate(() => localStorage.setItem('vwan-visual-topology:v1', 'damaged saved workspace'))
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Download original saved topology', exact: true })).toBeVisible()
+  await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe('damaged saved workspace')
+  await page.evaluate(() => localStorage.removeItem('vwan-visual-topology:v1'))
+  await page.reload()
   await page.evaluate(() => localStorage.removeItem('aznet-simulator:practice:v1'))
   expect(await page.evaluate(() => ({ node: typeof window.require, ipc: Object.keys(window.desktopSimulator) }))).toEqual({
     node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate'],
@@ -142,6 +173,8 @@ try {
     documentationWithoutBridge: true, runtime,
     immediateHrpUiReevaluation: true, localDiagnosticsWorker: true,
     localThreeModePracticeWorker: true, independentPersistedPracticeDrafts: true, unverifiedLocalPracticeBadges: true,
+    freshVwanStartsEmpty: true, explicitVwanSampleLoading: true, savedVwanRestored: true, damagedVwanSavedDataPreserved: true,
+    brandedWindowsResources,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

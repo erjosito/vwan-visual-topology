@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './vwan-example-fixture'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { AZURE_NET_SAMPLES, createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'

@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './vwan-example-fixture'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Page } from '@playwright/test'
@@ -905,13 +905,14 @@ async function dragNode(page: Page, id: string, dx: number, dy: number) {
 
 test('dragging updates links live, saves per-view positions and round-trips the arrangement', async ({ page }) => {
   await page.goto('/')
+  const originalSaved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
   const hub = page.locator('[data-node-id="eu"]')
   const original = await hub.getAttribute('transform')
   const edge = await page.getByTestId('link-er-eu').getAttribute('d')
   await dragNode(page, 'eu', 90, -60)
   expect(await hub.getAttribute('transform')).not.toBe(original)
   expect(await page.getByTestId('link-er-eu').getAttribute('d')).not.toBe(edge)
-  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBeNull()
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(originalSaved)
   await page.mouse.up()
   await expect(hub).toHaveAttribute('aria-pressed', 'false')
   const moved = await hub.getAttribute('transform')

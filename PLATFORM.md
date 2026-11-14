@@ -8,6 +8,16 @@ remain the source of routing behavior. There is no separate desktop engine.
 Identity, cloud progress, verified awards and resource-deployment APIs remain
 outside this implementation.
 
+Web and Windows apps start VWAN with an empty topology when there is no saved
+workspace; explicit samples/imports and saved work still load normally.
+Damaged saved data remains available for recovery, not silently overwritten.
+Window/executable/installer icons derive from the web's `public/favicon.svg`;
+Windows resource editing is enabled, but code signing remains disabled.
+
+Full Hybrid remains enabled. More distinctive controls that surface its mixed
+VWAN/classic networking capabilities will follow VWAN/Hub & Spoke interaction
+unification in #85. Existing links, files, engines and practice remain supported.
+
 ## On-demand explanations and local practice
 
 **Learn & practice** opens an optional, keyboard-accessible EN/JA panel in all

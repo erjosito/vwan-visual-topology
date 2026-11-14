@@ -284,6 +284,7 @@ export const ja: Record<string, string> = {
   'Dismiss error': 'エラーを閉じる',
   'Dismiss': '閉じる',
   'The example is displayed because the saved workspace could not be loaded. Download the original before editing or closing this page.': '保存したワークスペースを読み込めなかったため、サンプルを表示しています。編集またはページを閉じる前に元のデータをダウンロードしてください。',
+  'The saved workspace could not be loaded. Download the original before editing or closing this page.': '保存したワークスペースを読み込めませんでした。編集またはページを閉じる前に元のデータをダウンロードしてください。',
   'Download original saved topology': '元の保存済みトポロジをダウンロード',
   'Azure structure-only import · simulated routes are not verified Azure effective routes.': 'Azure の構造のみをインポート · シミュレーションのルートは、検証済みの Azure 有効なルートではありません。',
   'Review import limitations': 'インポートの制限事項を確認',
