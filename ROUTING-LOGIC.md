@@ -10,7 +10,10 @@ Default-only scope statements below describe their reviewed revision.
 records actual source withdrawal/restoration, native hub RIBs, internal VPN
 inputs, both MSEEs and real VPN/customer receivers for #9 and #22. Strict-shorter
 remote ER4/ER5 won against local VPN10 under ASPath. The initial SE VPN-preference
-eligibility/history discrepancy remains unresolved; no ranking rewrite was made.
+selection is accepted as live Azure operational route-refresh/history behavior,
+not a simulator ranking defect; no ranking rewrite was made. The simulator
+reevaluates immediately, as explained in
+[live Azure HRP changes](#live-azure-hrp-changes-versus-simulator-reevaluation).
 AS-path inputs are learned-hub abstractions, not a guarantee that every protocol
 receiver sees the identical string: the auxiliary native/local-VPN/remote-VPN
 layers differ, and mixed public/private customer vendor behavior remains bounded.
@@ -87,6 +90,30 @@ The following filters are applied sequentially. A filter only eliminates candida
 Consequently, a shorter remote path can beat a local path under ASPath; equal-length local/remote paths prefer local. Other HRPs use locality before transport and length. Remote-origin HRP also matters because only that origin's selected local routes are exported.
 
 Examples for the same prefix: local ER length 5 beats local VPN length 2 under ExpressRoute HRP; VPN length 5 beats ER length 2 under VPN HRP. Under ASPath, length wins first; an equal-length local ER/VPN tie favors ER.
+
+### Live Azure HRP changes versus simulator reevaluation
+
+After changing HRP in a live Virtual WAN hub, affected route advertisements may
+need to be **bounced** (withdrawn and re-advertised) before the selected route
+reflects the new preference. This project's agreed disposition of
+[#9](https://github.com/erjosito/vwan-visual-topology/issues/9) treats that as
+normal live Azure operational behavior, not a limitation to reproduce in the
+planning simulator.
+
+In the November 14 SE common-prefix control (`10.60.0.0/16`), HRP was VPN but
+ER was selected. Withdrawing the originating customer-side ER statics on both
+peers selected VPN; restoring those statics initially left VPN selected.
+The VPN source configuration and exports remained unchanged. These observations
+do not establish that every HRP change requires a bounce, a fixed convergence
+time, or a particular internal Azure cause. A live bounce can interrupt traffic:
+prefer a controlled affected-prefix refresh over a whole-session reset, and
+use an appropriate authorized change plan.
+
+**The simulator does not require a route bounce.** Editing a hub's HRP reruns
+selection immediately against the existing topology and advertisements, without
+withdrawal, re-advertisement or an elapsed-time wait. It models the resulting
+steady-state routing preference, not retained live control-plane history.
+Existing unsupported-scope and nonconvergence safeguards still apply.
 
 ### Inter-hub convergence
 

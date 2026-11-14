@@ -43,6 +43,22 @@ sessions even when the BGP configuration is preserved. Recheck actual peer
 readiness after the update. A capture that correctly refuses a down peer is not
 an empty-route result.
 
+### Refresh routes after live HRP changes when necessary
+
+An accepted HRP change does not by itself prove that an existing selected route
+has been reevaluated. Affected advertisements may need a controlled withdrawal
+and re-advertisement ("bounce"). The November 14
+[#9 investigation](https://github.com/erjosito/vwan-visual-topology/issues/9)
+observed ER selected under VPN preference, then VPN selection after withdrawing
+the originating ER statics; restoring the statics initially retained VPN.
+This is accepted as normal live VWAN operational behavior, not a universal
+requirement or a proven internal cause.
+
+Preserve the before/after evidence, recheck peer readiness and account for
+possible traffic interruption before a live refresh. Do not require users to
+bounce routes in the simulator: its HRP edits immediately reevaluate existing
+candidates. See the [operational/model distinction](ROUTING-LOGIC.md#live-azure-hrp-changes-versus-simulator-reevaluation).
+
 ## Collect each layer; do not conflate their AS paths
 
 | Evidence | What it establishes |
@@ -95,9 +111,9 @@ to make a probe pass. Forward-path selection is not return-path symmetry.
   in advance; never normalize away an unexplained discrepancy.
 - In this lab, auxiliary Azure ER inputs reported two provider ASNs under some
   HRPs and three under ASPath; VPN receiver paths did not always mirror that
-  native representation. This remains an investigation in
+  native representation. The completed investigation in
   [#9](https://github.com/erjosito/vwan-visual-topology/issues/9), not a universal
-  path-rewriting rule.
+  path-rewriting rule, records the evidence and bounded receiver-layer fidelity.
 - MSEE removes private ASNs at the customer export boundary. Both RFC 6996
   ranges matter: `64512-65534` and `4200000000-4294967294`. Actual customer
   receipts for the tested private-AS VPN prefixes contained only `12076`.
