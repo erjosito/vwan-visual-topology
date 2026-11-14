@@ -8,6 +8,7 @@ import type { AzureObservation } from './azure-observation'
 import { compareAzure, comparisonHopChoices, comparisonProfileKey, comparisonStatuses, defaultComparisonProfile } from './azure-comparison'
 import type { ComparisonProfile, ComparisonReport, ComparisonRow } from './azure-comparison'
 import collectorUrl from './collect-azure-vwan.ps1?url'
+import { DEFAULT_HUB_TABLE } from './hub-routing'
 
 export interface ComparisonSession { observation: AzureObservation; profile: ComparisonProfile; report?: ComparisonReport }
 export function AzureComparisonPanel({ topology, session, onSession, onSelect, onClose }: {
@@ -41,7 +42,12 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
   const unresolvedHops = rawHops.filter((hop) => !profile?.hubs[armKey(hop)] && !profile?.spokes[armKey(hop)])
   const visible = currentReport?.rows.filter((row) => (view !== 'differences' || row.status !== 'match')
     && (!status || row.status === status) && (!filter || [row.prefix, row.hubResourceId, t(row.detail)].some((value) => value.toLocaleLowerCase().includes(filter.toLocaleLowerCase())))) ?? []
-  const snapshot = observation?.tables.filter((table) => !profile?.hubResourceId || armKey(table.hubResourceId) === armKey(profile.hubResourceId))
+  const scopedHub = observation?.hubs.find((hub) => armKey(hub.resourceId) === armKey(profile?.hubResourceId ?? ''))
+  const tableChoices = [...new Set([DEFAULT_HUB_TABLE, ...(scopedHub?.routeTables?.map((table) => table.id) ?? []),
+    ...(observation?.tables.filter((table) => armKey(table.hubResourceId) === armKey(profile?.hubResourceId ?? ''))
+      .map((table) => table.resourceId.split('/').at(-1)!) ?? [])])]
+  const snapshot = observation?.tables.filter((table) => (!profile?.hubResourceId || armKey(table.hubResourceId) === armKey(profile.hubResourceId))
+    && armKey(table.resourceId).endsWith(`/hubroutetables/${(profile?.routeTableId ?? DEFAULT_HUB_TABLE).toLowerCase()}`))
     .flatMap((table) => table.routes.map((row) => ({ table, row }))).filter(({ row }) => !filter || row.addressPrefixes.some((prefix) => prefix.includes(filter))) ?? []
   const exportReport = () => {
     if (!session || !currentReport) return
@@ -72,8 +78,8 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
   </article>
   return <CanvasOverlay title={t('Compare with Azure capture')} className="azure-comparison" onClose={onClose}>
     <p className="muted">{t('Attach an offline observation without replacing the design. This browser never reads your Azure CLI credentials or calls Azure.')}</p>
-    <p><a className="button-link" href={collectorUrl} download="collect-azure-vwan.ps1">{t('Download Azure collector')}</a> <a className="button-link" href="https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1" target="_blank" rel="noopener noreferrer">{t('View script on GitHub')}</a> <button onClick={() => input.current?.click()}>{t('Load comparison capture')}</button></p>
-    <pre className="azure-code">{`Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1\n./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json`}</pre>
+    <p><a className="button-link" href={collectorUrl} download="collect-azure-vwan.ps1">{t('Download Azure collector')}</a> <a className="button-link" href="https://github.com/erjosito/vwan-visual-topology/blob/main/public/scripts/collect-azure-vwan.ps1" target="_blank" rel="noopener noreferrer">{t('View script on GitHub')}</a> <button onClick={() => input.current?.click()}>{t('Load comparison capture')}</button></p>
+    <pre className="azure-code">{`Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology/main/public/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1\n./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json`}</pre>
     <p className="muted">{t('Run locally with PowerShell 7 and an already signed-in Azure CLI. Effective-route retrieval requires the virtualHubs/effectiveRoutes/action permission in addition to metadata reads; Reader alone may not suffice.')}</p>
     <p className="notice">{t('Captures and mappings stay in memory, separate from topology JSON, until this page is reloaded or the capture is removed. Local report exports contain addresses and Azure resource IDs. Nothing is sent to feedback.')}</p>
     <input ref={input} hidden type="file" accept=".json,application/json" aria-label={t('Azure comparison capture file')} onChange={async (event) => {
@@ -90,7 +96,7 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
       <h3>{t('Observation scope and mappings')}</h3>
       <p className="azure-resource-id">{observation.wanId}</p><p>{t('Captured')}: {observation.startedAt} → {observation.completedAt} · {t('collector')}: {observation.collectorVersion}</p>
       <p>{t('Cloud')}: {observation.context.cloud} · {t('Tenant')}: {observation.context.tenantId ?? t('Unknown')} · Azure CLI: {observation.context.azureCliVersion ?? t('Unknown')}</p>
-      <p className="notice">{t('Only unsecured Default table routes are comparable. Gateway mappings identify a gateway class and hub, not a particular branch connection. Missing or unsupported observations are not healthy results.')}</p>
+      <p className="notice">{t('Select the same table identity in the design and capture. Unknown controls and incomplete scope are not healthy results. Gateway mappings identify a gateway class and hub, not a branch connection. See #22.')} <a href="https://github.com/erjosito/vwan-visual-topology/issues/22" target="_blank" rel="noreferrer">#22</a></p>
       {!observation.inventoryComplete && <p className="notice">{t('Structural inventory is incomplete. Missing resources are not inferred.')}</p>}
       {observation.warnings.map((warning, index) => <p className="notice" key={index}>{localizeDiagnostic(warning)}</p>)}
       <details><summary>{t('Capture coverage and operation evidence')}</summary>
@@ -110,10 +116,11 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
         }}><option value="">{t('Unmapped')}</option>{choices.map(({ value, name }) => <option key={JSON.stringify(value)} value={JSON.stringify(value)}>{name}</option>)}</select></label>)}
         {unresolvedHops.length > 200 && <p className="notice">{t('Only the first 200 next-hop mapping controls are displayed. Unmapped identities remain unassessed.')}</p>}
       </details>
-      <label className="field"><span>{t('Observed hub scope')}</span><select aria-label={t('Observed hub scope')} value={profile.hubResourceId} onChange={(event) => change({ ...profile, hubResourceId: event.target.value })}>{observation.hubs.map((hub) => <option key={hub.resourceId} value={hub.resourceId}>{hub.name}</option>)}</select></label>
+      <label className="field"><span>{t('Observed hub scope')}</span><select aria-label={t('Observed hub scope')} value={profile.hubResourceId} onChange={(event) => change({ ...profile, hubResourceId: event.target.value, routeTableId: DEFAULT_HUB_TABLE })}>{observation.hubs.map((hub) => <option key={hub.resourceId} value={hub.resourceId}>{hub.name}</option>)}</select></label>
+      <label className="field"><span>{t('Compared hub route table')}</span><select aria-label={t('Compared hub route table')} value={profile.routeTableId ?? DEFAULT_HUB_TABLE} onChange={(event) => change({ ...profile, routeTableId: event.target.value })}>{tableChoices.map((id) => <option key={id} value={id}>{id}</option>)}</select></label>
       <label className="field"><span>{t('Exact expected IPv4 prefixes (optional, one per line)')}</span><textarea rows={3} value={profile.prefixes.join('\n')} onChange={(event) => change({ ...profile, prefixes: event.target.value.split('\n') })} onBlur={() => change({ ...profile, prefixes: profile.prefixes.map((prefix) => prefix.trim()).filter(Boolean) })} /></label>
       <label className="checkbox-field"><input type="checkbox" checked={profile.completeDesign} onChange={(event) => change({ ...profile, completeDesign: event.target.checked })} />{t('I have modeled all expected routes for these exact prefixes. A structure-only import is not a complete route baseline.')}</label>
-      <label className="checkbox-field"><input type="checkbox" checked={profile.compareAsPaths} onChange={(event) => change({ ...profile, compareAsPaths: event.target.checked })} />{t('Also compare learned AS paths at this Default-table boundary (including provider and inter-hub ASNs).')}</label>
+      <label className="checkbox-field"><input type="checkbox" checked={profile.compareAsPaths} onChange={(event) => change({ ...profile, compareAsPaths: event.target.checked })} />{t('Also compare learned AS paths at the selected table boundary (including provider and inter-hub ASNs).')}</label>
       <div className="row dialog-actions"><button className="primary" onClick={() => {
         try { const report = compareAzure(topology, observation, profile); onSession({ ...session, report }); setError('') }
         catch (error) { setError(error instanceof Error ? error.message : 'Comparison could not be completed.') }

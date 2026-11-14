@@ -5,6 +5,19 @@ import { simulate, traceFlow } from './routing'
 import { validateTopology } from './validation'
 
 describe('localization boundaries', () => {
+  it('translates declared context-provenance envelopes without rewriting opaque imported hub names', () => {
+    const name = 'BGP table {2}: Hub route-table inventory is incomplete'
+    for (const reason of [
+      'Hub route-table inventory is incomplete; table-context reachability is unknown.',
+      'A VNet association or propagation context is unknown or outside the captured local inventory.',
+      'A VNet internet-security flag is unknown; default-route reachability is not established.',
+      'Hub BGP connections could not be read; configuration is incomplete.',
+    ]) {
+      expect(localizeDiagnostic(`${name}: ${reason}`, 'ja')).toBe(`${name}: ${translate('ja', reason)}`)
+      expect(localizeDiagnostic(`${name}: ${reason} user prose`, 'ja')).toBe(`${name}: ${reason} user prose`)
+    }
+  })
+
   it('defaults to English for unsupported preferences and inaccessible storage', () => {
     expect(readLanguage({ getItem: () => 'ja' })).toBe('ja')
     for (const value of ['en', 'fr', 'JA', '', null]) {

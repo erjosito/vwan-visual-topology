@@ -1,5 +1,10 @@
 # Routing logic, route selection, and application critique
 
+**Later implementation:** explicit custom table contexts, association/propagation,
+scoped comparisons and conservative unknown coverage are described in
+[hub route-table contexts](docs/hub-route-table-contexts.md). Historical
+Default-only scope statements below describe their reviewed revision.
+
 **Current application review:** section 9 was updated on **2026-10-31** against
 deployed feature revision `8c5f0a6498a8`, covering every open and closed issue
 through #23. Sections 1-8 retain the earlier, revision-specific engine review

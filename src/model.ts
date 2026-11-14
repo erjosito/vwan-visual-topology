@@ -16,6 +16,23 @@ export interface Hub {
   preference: Preference
   routingIntent: { private: boolean; internet: boolean; privatePrefixes: string[] }
   routeMapAssignments?: RouteMapAssignment[]
+  routeTables?: HubRouteTable[]
+  routeTablesStatus?: 'captured' | 'unknown'
+}
+
+export interface HubRouteTable {
+  id: string
+  name: string
+  labels: string[]
+  staticRoutes?: { name: string; destinationType: string; destinations: string[]; nextHopType: string; nextHop: string }[]
+}
+
+export interface HubRoutingConfiguration {
+  status: 'configured' | 'captured' | 'unknown'
+  associatedTableId: string | null
+  propagatedTableIds: string[]
+  labels: string[]
+  limitations?: string[]
 }
 
 export interface Site {
@@ -49,6 +66,7 @@ export interface ErLink {
   enabled: boolean
   learnSiteRoutes: boolean
   propagateDefaultRoute?: boolean
+  hubRouting?: HubRoutingConfiguration
 }
 export interface RouteMapAssignment { connectionId: string; inboundMapId?: string; outboundMapId?: string }
 export interface RouterSelection { kind: 'hub' | 'site'; id: string }
@@ -120,6 +138,7 @@ export interface Spoke {
   prefixes: string[]
   nvaSpokeIds?: string[]
   propagateDefaultRoute?: boolean
+  hubRouting?: HubRoutingConfiguration
 }
 
 export interface Connection {
@@ -137,6 +156,7 @@ export interface Connection {
   outboundMapId?: string
   spokeId?: string
   peerIp?: string
+  hubRouting?: HubRoutingConfiguration
 }
 
 export type AzureObservationStatus = 'complete' | 'empty' | 'denied' | 'failed' | 'truncated' | 'unsupported'
@@ -166,7 +186,7 @@ export interface AzureImportInfo {
   collectorVersion: string
   wanId: string
   warnings: string[]
-  hubs: { hubId: string; resourceId: string; addressPrefix: string; limitations: string[] }[]
+  hubs: { hubId: string; resourceId: string; addressPrefix: string; limitations: string[]; routingScopeComplete?: boolean }[]
   spokes?: { spokeId: string; resourceId: string; virtualNetworkId: string }[]
   tables?: AzureObservedTable[]
 }

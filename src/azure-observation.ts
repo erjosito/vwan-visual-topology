@@ -1,5 +1,5 @@
 import { azureObjectId, importAzureCapture } from './azure-import'
-import type { AzureObservedTable, Preference, Topology } from './model'
+import type { AzureObservedTable, HubRouteTable, HubRoutingConfiguration, Preference, Topology } from './model'
 import { ipv4 } from './validation'
 
 export type ObservationStatus = 'complete' | 'empty' | 'denied' | 'failed' | 'truncated' | 'unsupported'
@@ -28,6 +28,7 @@ export interface ObservedSpoke {
   prefixes: string[] | null
   defaultRouting: boolean | null
   enableInternetSecurity: boolean | null
+  hubRouting?: HubRoutingConfiguration
 }
 export interface ObservedHub {
   resourceId: string
@@ -38,6 +39,9 @@ export interface ObservedHub {
   internetIntent: boolean
   limitations: string[]
   spokes: ObservedSpoke[]
+  routeTables?: HubRouteTable[]
+  routeTablesStatus?: 'captured' | 'unknown'
+  routingScopeComplete?: boolean
 }
 export interface AzureObservation {
   version: 1
@@ -113,6 +117,8 @@ export function parseAzureObservation(input: unknown): AzureObservation {
     return {
       resourceId: info.resourceId, importedId: hub.id, name: hub.name, preference: hub.preference,
       privateIntent: hub.routingIntent.private, internetIntent: hub.routingIntent.internet, limitations: info.limitations,
+      ...(hub.routeTables === undefined ? {} : { routeTables: hub.routeTables, routeTablesStatus: hub.routeTablesStatus }),
+      ...(info.routingScopeComplete === undefined ? {} : { routingScopeComplete: info.routingScopeComplete }),
       spokes: list(source.connections, 60).map((value) => {
         const connection = record(value), virtualNetworkId = text(connection.virtualNetworkId)
         const resourceId = text(connection.id)
@@ -122,6 +128,8 @@ export function parseAzureObservation(input: unknown): AzureObservation {
           resourceId, virtualNetworkId, importedId: azureObjectId('spoke', virtualNetworkId),
           name: text(connection.name, 120), prefixes: connection.addressPrefixes === null ? null : strings(connection.addressPrefixes, 30, 256),
           defaultRouting: nullableBoolean(connection.defaultRouting), enableInternetSecurity: nullableBoolean(connection.enableInternetSecurity),
+          ...(structure.spokes.find((spoke) => spoke.id === azureObjectId('spoke', virtualNetworkId))?.hubRouting
+            ? { hubRouting: structure.spokes.find((spoke) => spoke.id === azureObjectId('spoke', virtualNetworkId))!.hubRouting } : {}),
         }
       }),
     }
@@ -130,7 +138,7 @@ export function parseAzureObservation(input: unknown): AzureObservation {
   if (new Set(spokeIds).size !== spokeIds.length) return invalid()
   let totalRows = 0, expandedTuples = 0
   const selectors = new Set<string>()
-  const tables = list(observation.tables, 20).map((value): ObservedTable => {
+  const tables = list(observation.tables, 100).map((value): ObservedTable => {
     const table = record(value), hubResourceId = text(table.hubResourceId), resourceId = text(table.resourceId)
     if (!hubs.some((hub) => armKey(hub.resourceId) === armKey(hubResourceId))) return invalid()
     const prefix = `${armKey(hubResourceId)}/hubroutetables/`
@@ -187,26 +195,31 @@ export function hasObservedSnapshots(topology: Topology, session?: ObservedSnaps
   return (topology.azureImport?.tables?.length ?? 0) > 0 || (session?.observation.tables.length ?? 0) > 0
 }
 
-export function resolveObservedHubSnapshot(topology: Topology, hubId: string, session?: ObservedSnapshotLookupSession): ResolvedObservedHubSnapshot | undefined {
+export function resolveObservedHubSnapshot(topology: Topology, hubId: string, session?: ObservedSnapshotLookupSession, tableId = 'defaultRouteTable'): ResolvedObservedHubSnapshot | undefined {
   if (!hasObservedSnapshots(topology, session)) return undefined
   let table: AzureObservedTable | undefined
   let hubLimitations: string[] = []
+  let matchedSession = false
+  let capturedAt = topology.azureImport?.capturedAt ?? ''
+  let collectorVersion = topology.azureImport?.collectorVersion ?? '1'
   if (session) {
     const obsHub = session.observation.hubs.find((hub) =>
       session.profile?.hubs?.[armKey(hub.resourceId)] === hubId
       || (hub.importedId === hubId && topology.azureImport?.hubs.some((item) => item.hubId === hubId && armKey(item.resourceId) === armKey(hub.resourceId))))
     if (obsHub) {
+      matchedSession = true
       hubLimitations = obsHub.limitations
-      const obsTable = session.observation.tables.find((item) => armKey(item.hubResourceId) === armKey(obsHub.resourceId))
+      capturedAt = session.observation.capturedAt
+      collectorVersion = session.observation.collectorVersion
+      const obsTable = session.observation.tables.find((item) => armKey(item.resourceId) === `${armKey(obsHub.resourceId)}/hubroutetables/${tableId.toLowerCase()}`)
       if (obsTable) table = { hubId, ...obsTable }
     }
   }
-  if (!table) {
-    table = topology.azureImport?.tables?.find((item) => item.hubId === hubId)
-    if (!hubLimitations.length) hubLimitations = topology.azureImport?.hubs.find((item) => item.hubId === hubId)?.limitations ?? []
+  if (!matchedSession) {
+    table = topology.azureImport?.tables?.find((item) => item.hubId === hubId && armKey(item.resourceId).endsWith(`/hubroutetables/${tableId.toLowerCase()}`))
+    hubLimitations = topology.azureImport?.hubs.find((item) => item.hubId === hubId)?.limitations ?? []
   }
-  const capturedAt = table?.capturedAt ?? session?.observation.capturedAt ?? topology.azureImport?.capturedAt ?? ''
-  const collectorVersion = session?.observation.collectorVersion ?? topology.azureImport?.collectorVersion ?? '1'
+  capturedAt = table?.capturedAt ?? capturedAt
   const isStale = Boolean(table && (!Number.isFinite(Date.parse(table.capturedAt)) || Math.abs(Date.now() - Date.parse(table.capturedAt)) > 86_400_000))
   const notices: string[] = ['Observed effective routes are a read-only Azure snapshot, not reversible BGP configuration.']
   if (!table) {

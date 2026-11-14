@@ -1,5 +1,6 @@
 import type { Topology } from './model'
 import { cidr, contains, validateTopology } from './validation'
+import { DEFAULT_HUB_TABLE, NONE_HUB_TABLE, attachmentHubRouting, hubRouteTables } from './hub-routing'
 
 export interface HubDeployment {
   hubId: string
@@ -83,8 +84,12 @@ export function bicepDefaults(topology: Topology): BicepSettings {
 export function hubExportBlocker(topology: Topology, hubId: string, entry?: HubDeployment): string | undefined {
   const hub = topology.hubs.find((hub) => hub.id === hubId)
   if (!hub) return 'This hub no longer exists.'
-  if (hub.routeMapAssignments?.length) return 'Assigned hub route maps are not exportable; exclude this hub.'
   if (topology.azureImport?.hubs.find((item) => item.hubId === hubId)?.limitations.length) return 'This imported hub has unsupported or incompletely captured configuration; exclude it.'
+  if (hub.routeTablesStatus === 'unknown' || hubRouteTables(hub).some((table) => ![DEFAULT_HUB_TABLE, NONE_HUB_TABLE].includes(table.id)
+    || table.staticRoutes?.length || (table.id === DEFAULT_HUB_TABLE && (table.labels.length !== 1 || table.labels[0] !== 'default')))) {
+    return 'Custom or unknown hub route-table controls cannot be exported yet; exclude this hub rather than discard its configuration. See #22.'
+  }
+  if (hub.routeMapAssignments?.length) return 'Assigned hub route maps are not exportable; exclude this hub.'
   if (hub.routingIntent.private || hub.routingIntent.internet) {
     if (hub.routingIntent.privatePrefixes.length > 0) {
       return 'Secured hubs with custom non-RFC1918 private prefixes cannot be exported because Azure Routing Intent PrivateTraffic covers RFC 1918 only; remove custom private prefixes or exclude this hub.'
@@ -99,6 +104,13 @@ export function spokeExportBlocker(topology: Topology, spokeId: string): string 
   const spoke = topology.spokes.find((item) => item.id === spokeId)
   if (!spoke) return 'This spoke no longer exists.'
   if (!spoke.hubId) return 'Standalone VNets not attached to a Virtual WAN hub are not exportable as hub VNet connections; exclude this VNet.'
+  const routing = attachmentHubRouting(topology, spokeId)
+  if (routing.status === 'unknown' || routing.limitations?.length || routing.associatedTableId !== DEFAULT_HUB_TABLE
+    || routing.propagatedTableIds.some((id) => id !== DEFAULT_HUB_TABLE)
+    || routing.labels.some((label) => label !== 'default')
+    || (!routing.propagatedTableIds.length && !routing.labels.length)) {
+    return 'Custom or unknown VNet association/propagation cannot be exported yet; exclude this attachment rather than discard its configuration. See #22.'
+  }
   if (topology.connections.some((connection) => connection.transport === 'SpokeNVA' && connection.spokeId === spoke.id)) {
     return 'Spoke NVA BGP peers and static routes are not exportable; exclude this spoke attachment.'
   }
