@@ -49,13 +49,16 @@ try {
     await expect.poll(readSaved).toEqual(executePlatform({ ...request, operation: 'validate' }).document.topology)
     const exportFile = join(artifacts, `export-${mode}.json`)
     await application.evaluate(({ session }, destination) => {
-      session.defaultSession.once('will-download', (_event, item) => item.setSavePath(destination))
+      globalThis.__desktopDownloadDone = new Promise((resolve) => {
+        session.defaultSession.once('will-download', (_event, item) => {
+          item.setSavePath(destination)
+          item.once('done', (_event, state) => resolve(state))
+        })
+      })
     }, exportFile)
     await page.getByRole('button', { name: /Export JSON/ }).click()
-    await expect.poll(async () => {
-      try { return JSON.parse(await readFile(exportFile, 'utf8')) }
-      catch (error) { if (error.code === 'ENOENT' || error instanceof SyntaxError) return null; throw error }
-    }).toEqual(await readSaved())
+    expect(await application.evaluate(() => globalThis.__desktopDownloadDone)).toBe('completed')
+    expect(JSON.parse(await readFile(exportFile, 'utf8'))).toEqual(await readSaved())
     if (mode === 'vwan') {
       await page.getByLabel(`Select hub ${topology.hubs[0].name}`, { exact: true }).focus()
       await page.keyboard.press('Shift+F10')

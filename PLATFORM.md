@@ -141,7 +141,10 @@ installation, elevation or resource mutation is attempted.
 Metadata reads stop after 60 seconds; collection after 20 minutes; combined
 stdout/stderr is capped at 2 MB and not forwarded to the renderer. Final capture
 admission is capped at 4 MB. The underlying collector can create a larger
-temporary output before rejection; this is not a filesystem quota.
+temporary output before rejection; the existing VWAN UI has a narrower 2 MB
+file-import limit (Hub & Spoke/Full use 4 MB). Review/import retains those
+existing limits; the broker ceiling does not enlarge the UI's admission limit.
+Neither ceiling is a filesystem quota.
 Known credential fields are stripped, but captures still contain sensitive
 network/resource identifiers, observations and limitations. Partial captures
 retain warnings and must pass the existing importer before handoff.
