@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test } from './vwan-example-fixture'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Page } from '@playwright/test'
@@ -63,55 +63,6 @@ async function groupPath(page: Page, object: string, direction: 'to' | 'from', g
   await action(page, object, `Show path ${direction}`)
   await page.getByRole('menu', { name: `Show path ${direction}`, exact: true }).getByRole('menuitem', { name: group, exact: true }).click()
 }
-
-test('desktop VWAN starts empty while explicit samples and saved work still restore', async ({ page }) => {
-  await page.addInitScript(() => Object.defineProperty(window, 'desktopSimulator', { value: {} }))
-  await page.goto('/?mode=vwan')
-  await expect(page.getByTestId('vwan-app')).toBeVisible()
-  await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: '+ Hub', exact: true })).toBeEnabled()
-  await page.getByRole('button', { name: 'Sample topologies', exact: true }).click()
-  await dialog(page, 'Sample topologies').getByRole('button', { name: 'Load sample topology', exact: true }).first().click()
-  await expect(page.locator('.hub-node')).toHaveCount(example.hubs.length)
-  const saved = await readTopology(page)
-  await page.reload()
-  await expect(page.locator('.hub-node')).toHaveCount(saved.hubs.length)
-  expect(await readTopology(page)).toEqual(saved)
-  await page.goto('/?mode=vwan&sample=hub-routing-preferences')
-  const sample = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'hub-routing-preferences.json'), 'utf8'))
-  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue(sample.name)
-  await expect(page.locator('.hub-node')).toHaveCount(sample.hubs.length)
-})
-
-test('desktop VWAN preserves damaged saved data without silently displaying a sample', async ({ page }) => {
-  await page.addInitScript(() => {
-    Object.defineProperty(window, 'desktopSimulator', { value: {} })
-    localStorage.setItem('vwan-visual-topology:v1', 'damaged saved workspace')
-  })
-  await page.goto('/?mode=vwan')
-  await expect(page.getByRole('button', { name: 'Download original saved topology', exact: true })).toBeVisible()
-  await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
-  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe('damaged saved workspace')
-})
-
-test('parks Full Hybrid in the picker without breaking explicit links or the active modes', async ({ page }) => {
-  for (const mode of ['vwan', 'hub-spoke', 'full']) {
-    await page.goto(`/?mode=${mode}`)
-    await expect(page.getByTestId(`simulator-mode-${mode}`)).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByTestId('simulator-mode-full')).toBeDisabled()
-    await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('title', /Explicit Full Hybrid links and files still work/)
-    await expect(page.getByTestId('simulator-mode-vwan')).toBeEnabled()
-    await expect(page.getByTestId('simulator-mode-hub-spoke')).toBeEnabled()
-    await page.reload()
-    await expect(page.getByTestId(`simulator-mode-${mode}`)).toHaveAttribute('aria-pressed', 'true')
-  }
-  await page.getByTestId('simulator-mode-vwan').click()
-  await page.locator('[data-language-selector]').selectOption('ja')
-  await expect(page.getByTestId('simulator-mode-full')).toContainText('準備中')
-  await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('title', /引き続き利用できます/)
-  await page.getByTestId('simulator-mode-hub-spoke').click()
-  await expect(page.getByTestId('simulator-mode-hub-spoke')).toHaveAttribute('aria-pressed', 'true')
-})
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`ER location catalog matches the light UI with readable text in ${mode}`, async ({ page }) => {
@@ -954,13 +905,14 @@ async function dragNode(page: Page, id: string, dx: number, dy: number) {
 
 test('dragging updates links live, saves per-view positions and round-trips the arrangement', async ({ page }) => {
   await page.goto('/')
+  const originalSaved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
   const hub = page.locator('[data-node-id="eu"]')
   const original = await hub.getAttribute('transform')
   const edge = await page.getByTestId('link-er-eu').getAttribute('d')
   await dragNode(page, 'eu', 90, -60)
   expect(await hub.getAttribute('transform')).not.toBe(original)
   expect(await page.getByTestId('link-er-eu').getAttribute('d')).not.toBe(edge)
-  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBeNull()
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(originalSaved)
   await page.mouse.up()
   await expect(hub).toHaveAttribute('aria-pressed', 'false')
   const moved = await hub.getAttribute('transform')

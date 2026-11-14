@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './vwan-example-fixture'
+import type { Page } from '@playwright/test'
 import { example, type Topology } from '../src/model'
 import { createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
 

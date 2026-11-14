@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, test } from './vwan-example-fixture'
+import type { Locator, Page } from '@playwright/test'
 
 async function readable(root: Locator) {
   const failures = await root.evaluate((root) => {

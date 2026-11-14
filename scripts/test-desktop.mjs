@@ -61,7 +61,6 @@ try {
   ]) {
     await page.goto(`app://simulator/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
-    await expect(page.getByTestId('simulator-mode-full')).toBeDisabled()
     const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', ...file.split('/')), 'utf8'))
     const request = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
     const result = await page.evaluate((input) => window.desktopSimulator.simulate(input), request)

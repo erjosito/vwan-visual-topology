@@ -1,21 +1,19 @@
 import { useEffect, useState } from 'react'
-import { example } from './model'
 import type { Topology } from './model'
 import { validateTopology } from './validation'
 
 export interface UseTopologyHistoryOptions {
   storageKey: string
-  initialTopology?: Topology
   maxHistory?: number
   onBeforeUndoRedo?: (next: Topology) => void
   onAfterChange?: (next: Topology) => void
 }
 
+const initialTopology: Topology = { version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] }
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Invalid input.')
 
 export function useTopologyHistory({
   storageKey,
-  initialTopology = example,
   maxHistory = 40,
   onBeforeUndoRedo,
   onAfterChange,

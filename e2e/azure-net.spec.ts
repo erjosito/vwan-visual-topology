@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from './vwan-example-fixture'
+import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { AZURE_NET_SAMPLES, createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
@@ -325,8 +326,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
       })
       await page.goto(`https://${hostname}/`)
       await expect(page.getByTestId(`simulator-mode-${defaultMode}`)).toHaveAttribute('aria-pressed', 'true')
-      await expect(page.getByTestId('simulator-mode-full')).toBeDisabled()
-      await page.goto(`https://${hostname}/?mode=full`)
+      await page.getByTestId('simulator-mode-full').click()
       await page.reload()
       await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('aria-pressed', 'true')
       await page.goto(`https://${hostname}/?mode=hub-spoke&sample=hub-spoke-firewall-udr`)
@@ -515,12 +515,11 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
       .allTextContents()
     expect(sampleOptions.some((t) => t.includes('Hybrid Secured vWAN Hub'))).toBe(false)
 
-    // Switch to vWAN-Only; Full Hybrid remains available through an explicit link.
+    // Switch to vWAN-Only mode and back to Full Hybrid mode
     await page.getByTestId('simulator-mode-vwan').click()
     await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
     await expect(page.getByTestId('unified-mode-pill')).toHaveText('Virtual WAN')
-    await expect(page.getByTestId('simulator-mode-full')).toBeDisabled()
-    await page.goto('/?mode=full')
+    await page.getByTestId('simulator-mode-full').click()
     await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
     await expect(page.getByTestId('unified-mode-pill')).toHaveText('Full Hybrid')
 
@@ -572,7 +571,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     // #35: Mode switcher stays at a fixed position across all 3 modes
     const switchBoxHubSpoke = await page.getByTestId('simulator-mode-switch').boundingBox()
     expect(switchBoxHubSpoke).not.toBeNull()
-    await page.goto('/?mode=full')
+    await page.getByTestId('simulator-mode-full').click()
     const switchBoxFull = await page.getByTestId('simulator-mode-switch').boundingBox()
     expect(switchBoxFull).not.toBeNull()
     expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxFull?.x ?? 0))).toBeLessThanOrEqual(4)
