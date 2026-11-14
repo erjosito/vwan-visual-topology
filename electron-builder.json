@@ -10,7 +10,7 @@
   ],
   "asar": true,
   "extraMetadata": { "version": "2026.11.14" },
-  "buildVersion": "2026.11.14.1",
+  "buildVersion": "2026.11.14.2",
   "artifactName": "Azure-Network-Simulator-${buildVersion}-${arch}.${ext}",
   "win": { "target": ["nsis"], "signAndEditExecutable": false },
   "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true }

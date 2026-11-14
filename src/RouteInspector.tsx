@@ -5,6 +5,7 @@ import { preferenceLabels, routeLabels, transportLabels } from './model'
 import type { Candidate, Simulation } from './routing'
 import { cidr } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
+import { Explain } from './learning/Explain'
 import {
   describeObservedNextHopType,
   describeObservedResource,
@@ -132,6 +133,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
       {hub && mode === 'bgp' && activeSource === 'simulated' && <><label className="field"><span>{t("Hub routing preference")}</span><select aria-label={t("Hub routing preference")} value={hub.preference} onChange={(e) => onPreference(e.target.value as Preference)}>{Object.entries(preferenceLabels).map(([v, name]) => <option key={v} value={v}>{t(name)}</option>)}</select></label>
         {tableId === DEFAULT_HUB_TABLE && <label className="field"><span>{t("Route view")}</span><select aria-label={t("Route view")} value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">{t("BGP table (before routing intent)")}</option><option value="hub">{t("Hub forwarding table")}</option><option value="firewall" disabled={!hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label>}</>}
     </div>
+    {hub && <Explain concept="hrp" />}
     {hub && mode === 'bgp' && <p className="muted">{t('Table labels')}: <code>{tableChoices.find((table) => table.id === tableId)?.labels.join(', ') || '—'}</code></p>}
     {hub && mode === 'bgp' && !contextKnown && <p className="notice">{t(hubRoutingCoverageMessage)} <a href="https://github.com/erjosito/vwan-visual-topology/issues/22" target="_blank" rel="noreferrer">#22</a></p>}
     {activeSource === 'azure' && hub && observedSnapshot ? <>
@@ -167,7 +169,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
     {location && <p className="muted inspector-note">{t("Circuit export rules still apply. Global Reach and shared-circuit hub reflection are not modeled.")}{mode !== 'bgp' && t(" Routes are shown from the ER location's perspective; it has no configurable route maps.")}</p>}
     <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th>{showLocalPreference && <th>{t("Local preference")}</th>}</tr></thead>
       {groups.map((d) => <tbody key={d.prefix}>
-        <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={(mode === 'bgp' ? 3 : 2) + (showLocalPreference ? 1 : 0)} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span></th></tr>
+        <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={(mode === 'bgp' ? 3 : 2) + (showLocalPreference ? 1 : 0)} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span><Explain concept={contextKnown ? 'selection' : 'coverage'} evidence={contextKnown ? d.explanation : []} /></th></tr>
         {[...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((r) => <tr key={r.key} data-prefix={d.prefix} data-preferred={mode === 'bgp' ? r.preferred : undefined} className={mode === 'bgp' ? r.preferred ? 'preferred-route' : 'alternative-route' : undefined}>
         {mode === 'bgp' && <td className="route-state" aria-label={r.preferred ? t("Preferred") : t("Alternative")}>{r.preferred ? '*' : ''}</td>}
         <td>{r.nextHop}{r.via && <small>{t("Via")} {r.via}</small>}<small>{r.source}</small>{r.erExportUncertain && <details className="er-export-warning notice">

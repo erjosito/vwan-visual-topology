@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { cidr } from '../validation'
 import type { AzBgpRibEntry } from './engine'
+import { Explain } from '../learning/Explain'
 
 export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]; available: boolean }) {
   const [filter, setFilter] = useState('')
@@ -26,6 +27,7 @@ export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]
           <tr data-reason-prefix={prefix}><th scope="rowgroup" colSpan={4} className="route-prefix-heading" style={{ whiteSpace: 'normal' }}>
             <code>{prefix}</code>{' '}
             <span className="selection-reason">{[...new Set(candidates.map((entry) => entry.explanation))].join(' ')}</span>
+            <Explain concept="selection" evidence={candidates.map((entry) => entry.explanation)} />
           </th></tr>
           {[...candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((entry) => <tr key={entry.id}
             data-prefix={prefix} data-preferred={entry.preferred} className={entry.preferred ? 'preferred-route' : 'alternative-route'}>
