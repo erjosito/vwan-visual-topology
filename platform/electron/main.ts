@@ -95,4 +95,12 @@ void app.whenReady().then(async () => {
   handle('desktop:simulate', (request) => jobs.run(request))
   await window.loadURL('app://simulator/')
 })
-app.on('window-all-closed', () => { jobs.close(); app.quit() })
+let quitting = false
+app.on('before-quit', (event) => {
+  if (quitting) return
+  event.preventDefault()
+  quitting = true
+  jobs.close()
+  void broker.close().finally(() => app.quit())
+})
+app.on('window-all-closed', () => app.quit())

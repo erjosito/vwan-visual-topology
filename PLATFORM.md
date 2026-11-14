@@ -164,7 +164,9 @@ the product-specific profile deliberately if retention policy requires it.
 The smoke harness uses its own `test-artifacts/desktop` profiles.
 
 File opens require native dialogs. Exports use save dialogs; captures use a
-private temporary directory deleted after success/failure. These files are
+private temporary directory deleted after success/failure. Normal application
+shutdown cancels active CLI work and waits for process exit and capture cleanup;
+an OS crash/forced termination cannot guarantee that cleanup. These files are
 not encrypted by the application. OS account permissions and disk protection
 apply. A user-chosen OneDrive/network/synchronized export location can upload
 files independently of the simulator. Do not put confidential captures in
