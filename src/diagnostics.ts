@@ -7,6 +7,7 @@ import type { NodePath, PathNode } from './paths'
 import { azureRoutesAtSites, traceNodePath } from './paths'
 import { cidr, contains, ipv4 } from './validation'
 import { singleLinkIsolation } from './resilience'
+import { attachmentHubRouting } from './hub-routing'
 import type { LinkIsolation } from './resilience'
 
 export type DiagnosticIntent = {
@@ -113,6 +114,7 @@ const limits = {
   convergence: 'Routing or combined site learning did not converge; reachability assertions are disabled.',
   selection: 'Site route selection exceeded 32 equal paths; branch coverage is incomplete.',
   trace: 'Flow tracing exceeded 128 branches; branch coverage is incomplete.',
+  hubContext: 'Hub route-table configuration is unknown or unsupported; reachability is not established. See #22.',
   sdwan: 'SD-WAN outbound learning and vendor-specific NVA ranking are not validated.',
   erDefault: 'ExpressRoute default propagation controls and legacy/physical ER default parity are not modeled.',
   ownAs: 'Hub own-AS rejection and advertised AS-path input assumptions are not validated.',
@@ -370,14 +372,16 @@ function scenario(topology: Topology): Scenario {
   for (const site of topology.sites) site.vpnStaticRoutes?.forEach((route) => prefix(route.prefix))
   for (const map of topology.routeMaps ?? []) for (const rule of map.rules) [...rule.prefixes, ...rule.summaryPrefixes].forEach(prefix)
   for (const connection of topology.connections) for (const rule of [...connection.inbound, ...connection.outbound]) rule.prefixes.forEach(prefix)
-  for (const table of [...Object.values(simulation.tables), ...Object.values(simulation.firewallTables), ...Object.values(simulation.bgpTables)]) {
+  for (const table of [...Object.values(simulation.tables), ...Object.values(simulation.firewallTables), ...Object.values(simulation.bgpTables),
+    ...Object.values(simulation.hubTables ?? {}).flatMap((tables) => Object.values(tables))]) {
     for (const decision of table) routes(decision.candidates)
   }
   for (const table of [...Object.values(simulation.siteCandidates), ...Object.values(learned.candidates)]) routes(table)
   const limitations: string[] = []
   if (!simulation.converged || !learned.converged) limitations.push(limits.convergence)
   if (simulation.siteSelectionComplete === false || !learned.selectionComplete) limitations.push(limits.selection)
-  if (topology.azureImport && (topology.azureImport.warnings.length || topology.azureImport.hubs.some((hub) => hub.limitations.length))) limitations.push(limits.imported)
+  if (topology.azureImport && !topology.azureImport.hubs.every((hub) => hub.routingScopeComplete === true)
+    && (topology.azureImport.warnings.length || topology.azureImport.hubs.some((hub) => hub.limitations.length))) limitations.push(limits.imported)
   const ownAs = (asPath: number[]) => asPath.includes(65515) || asPath.includes(65520)
   const hasOwnAs =
     topology.sites.some((site) => [65515, 65520].includes(site.asn)) ||
@@ -404,10 +408,13 @@ function owners(state: Scenario, address: string): PathNode[] {
   return result
 }
 const same = (a: PathNode, b: PathNode) => a.kind === b.kind && a.id === b.id
-function owned(state: Scenario, node: PathNode, address: string) {
+function owned(state: Scenario, node: PathNode, address: string, incoming: NodePath[]) {
   const found = state.ownersCache.get(address) ?? owners(state, address)
   state.ownersCache.set(address, found)
   return found.length === 1 && same(found[0], node)
+    || found.some((owner) => same(owner, node)) && incoming.length > 0
+      && incoming.some((path) => path.hubContexts?.some((context) => context.tableId !== 'defaultRouteTable'))
+      && incoming.every((path) => path.traceComplete !== false && delivered(path, node))
 }
 const delivered = (path: NodePath, target: PathNode) => path.status === 'delivered' && path.termination === 'owner' && path.terminalKind === target.kind && path.siteId === target.id
 
@@ -418,9 +425,11 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
   const { topology, simulation } = state
   const address = ipv4(destination)!
   const reasons: string[] = []
-  const hubIds = [...new Set(paths.flatMap((path) => path.hubs))]
-  for (const id of hubIds) {
-    for (const table of [simulation.bgpTables[id], simulation.tables[id], simulation.firewallTables[id]]) {
+  const contexts = [...new Map(paths.flatMap((path) => path.hubContexts
+    ?? path.hubs.map((hubId) => ({ hubId, tableId: 'defaultRouteTable' }))).map((context) => [`${context.hubId}:${context.tableId}`, context])).values()]
+  for (const { hubId: id, tableId } of contexts) {
+    for (const table of tableId === 'defaultRouteTable' ? [simulation.bgpTables[id], simulation.tables[id], simulation.firewallTables[id]]
+      : [simulation.hubTables?.[id]?.[tableId]]) {
       const decision = table?.filter((d) => contains(d.prefix, address)).sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
       if ((decision?.candidates.length ?? 0) > 1 && decision?.candidates.some((route) => route.transport === 'SDWAN')) reasons.push(limits.sdwan)
       if (decision?.candidates.some((route) => !route.remote && route.kind === 'bgp' && (route.asPath.includes(65515) || route.asPath.includes(65520)))) reasons.push(limits.ownAs)
@@ -453,18 +462,21 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
         }
       }
       for (const c of topology.connections.filter((conn) => conn.enabled && conn.transport === 'SDWAN' && reachable.has(conn.siteId))) {
-        for (const table of [simulation.bgpTables[c.hubId], simulation.tables[c.hubId], simulation.firewallTables[c.hubId]]) {
+        const tableId = attachmentHubRouting(topology, c.id).associatedTableId ?? ''
+        for (const table of tableId === 'defaultRouteTable' ? [simulation.bgpTables[c.hubId], simulation.tables[c.hubId], simulation.firewallTables[c.hubId]]
+          : [simulation.hubTables?.[c.hubId]?.[tableId]]) {
           const decision = table?.filter((d) => contains(d.prefix, address)).sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
           if ((decision?.candidates.length ?? 0) > 1 && decision?.candidates.some((route) => route.transport === 'SDWAN')) reasons.push(limits.sdwan)
         }
       }
       const erAttached = topology.connections.some((c) => c.enabled && c.transport === 'ExpressRoute' && reachable.has(c.siteId)) ||
         topology.erLinks?.some((link) => link.enabled && link.siteId && reachable.has(link.siteId))
-      if (erAttached && Object.values(simulation.bgpTables).some((table) => table.some((d) => d.prefix === '0.0.0.0/0'))) reasons.push(limits.erDefault)
+      if (erAttached && [...Object.values(simulation.bgpTables), ...Object.values(simulation.hubTables ?? {}).flatMap((tables) => Object.values(tables))]
+        .some((table) => table.some((d) => d.prefix === '0.0.0.0/0'))) reasons.push(limits.erDefault)
     }
   }
   const ownAs = (asPath: number[]) => asPath.includes(65515) || asPath.includes(65520)
-  if (state.hasOwnAs && (Object.values(simulation.bgpTables).some((table) => table.some((d) => contains(d.prefix, address) && d.candidates.some((r) => !r.remote && ownAs(r.asPath)))) ||
+  if (state.hasOwnAs && ([...Object.values(simulation.bgpTables), ...Object.values(simulation.hubTables ?? {}).flatMap((tables) => Object.values(tables))].some((table) => table.some((d) => contains(d.prefix, address) && d.candidates.some((r) => !r.remote && ownAs(r.asPath)))) ||
     topology.sites.some((site) => [65515, 65520].includes(site.asn) && (site.id === source.id || paths.some((path) => path.siteHops?.includes(site.id) || path.sourceSiteHops?.includes(site.id)) || site.prefixes.some((p) => contains(p, address)))))) reasons.push(limits.ownAs)
   state.limitsCache.set(key, reasons)
   return reasons
@@ -950,9 +962,10 @@ function* routingAnalysisSteps(topology: Topology, profile: DiagnosticsProfile, 
     const reverse = intent.expectation === 'allow' ? yield* trace(state, intent.target, sourceCell.address) : []
     const reasons = [...state.limitations, ...modelLimits(state, intent.source, targetCell.address, forward),
       ...(intent.expectation === 'allow' ? modelLimits(state, intent.target, sourceCell.address, reverse) : [])]
-    if (!owned(state, intent.source, sourceCell.address) || !owned(state, intent.target, targetCell.address)) reasons.push(limits.ownership)
+    if (!owned(state, intent.source, sourceCell.address, reverse) || !owned(state, intent.target, targetCell.address, forward)) reasons.push(limits.ownership)
     if (intent.requiredFirewallHubId && !state.topology.hubs.some((hub) => hub.id === intent.requiredFirewallHubId)) reasons.push(limits.inspection)
-    if ([...forward, ...reverse].some((path) => path.traceComplete === false)) reasons.push(limits.trace)
+    if ([...forward, ...reverse].some((path) => path.termination === 'unknown-context')) reasons.push(limits.hubContext)
+    if ([...forward, ...reverse].some((path) => path.traceComplete === false && path.termination !== 'unknown-context')) reasons.push(limits.trace)
     if (!forward.length || (intent.expectation === 'allow' && !reverse.length)) reasons.push(limits.ownership)
     const f = forward.filter((path) => delivered(path, intent.target)).length
     const r = reverse.filter((path) => delivered(path, intent.source)).length

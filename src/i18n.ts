@@ -41,6 +41,14 @@ export function t(message: string, ...values: unknown[]) {
 
 const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const azureLimitationMessages = [
+  'Hub route-table inventory is incomplete; table-context reachability is unknown.',
+  'A VNet association or propagation context is unknown or outside the captured local inventory.',
+  'A VNet internet-security flag is unknown; default-route reachability is not established.',
+  'Hub static-route controls are captured; their arbitrary next-hop forwarding is not simulated.',
+  'Legacy hub static-route controls are not simulated.',
+  'VNet connection route-map controls are not reconstructed.',
+  'VNet connection static/NVA route controls are not simulated.',
+  'Hub BGP connections could not be read; configuration is incomplete.',
   'Route tables could not be read; configuration is incomplete.',
   'Route maps could not be read; configuration is incomplete.',
   'Routing intent could not be read; configuration is incomplete.',
@@ -62,7 +70,7 @@ const azureLimitationMessages = [
   'A referenced VNet read failed; check read permissions.',
 ]
 const prefixedAzureDiagnostics = Object.fromEntries(azureLimitationMessages.map((message) =>
-  [`{0}: ${message}`, `{0}: ${diagnosticJa[message]}`]))
+  [`{0}: ${message}`, `{0}: ${diagnosticJa[message] ?? ja[message] ?? message}`]))
 const networkPrefix = '(?:\\d{1,3}\\.){3}\\d{1,3}/\\d{1,2}'
 const diagnosticShapes: Record<string, { priority?: number; slots: Record<string, string> }> = {
   // Match structural envelopes before atomic reasons. Greedy router slots preserve names

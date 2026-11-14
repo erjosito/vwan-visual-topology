@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { azureBase, comparisonDesign, gatewayArm, hubArm, observationFixture, spokeArm } from '../tests/azure-observation-fixture'
+import { azureBase, comparisonDesign, contextObservationFixture, gatewayArm, hubArm, observationFixture, spokeArm } from '../tests/azure-observation-fixture'
 import {
   armKey,
   describeObservedNextHopType,
@@ -64,6 +64,71 @@ describe('Azure observation validation and normalization', () => {
   })
 })
 describe('scoped selected-route comparison', () => {
+  it('does not fill a reattached capture gap from persisted custom routes or mix collector provenance', () => {
+    const capture = contextObservationFixture(), design = importAzureCapture(capture)
+    const hubId = design.hubs[0].id
+    design.azureImport!.collectorVersion = 'persisted-collector'
+    const attached = parseAzureObservation(capture)
+    attached.collectorVersion = 'attached-collector'
+    attached.tables.pop()
+    const missing = resolveObservedHubSnapshot(design, hubId, { observation: attached }, 'business')!
+    expect(missing.table).toBeUndefined()
+    expect(missing.collectorVersion).toBe('attached-collector')
+    expect(missing.notices.join(' ')).toContain('No Azure effective-route snapshot')
+
+    const unrelated = parseAzureObservation({
+      ...capture, collectorVersion: 'unrelated-collector', hubs: [],
+      observations: { ...capture.observations, tables: [] },
+    })
+    const persisted = resolveObservedHubSnapshot(design, hubId, { observation: unrelated }, 'business')!
+    expect(persisted.table?.routes).toHaveLength(2)
+    expect(persisted.collectorVersion).toBe('persisted-collector')
+  })
+
+  it('compares the selected custom table and attachment controls without falling back to Default', () => {
+    const capture = contextObservationFixture(), design = importAzureCapture({ ...capture, version: 1 })
+    const observation = parseAzureObservation(capture)
+    const profile = { ...defaultComparisonProfile(design, observation), routeTableId: 'business' }
+    const report = compareAzure(design, observation, profile)
+    expect(report.rows.filter((row) => row.area === 'route').map((row) => row.status)).toEqual(['match', 'match'])
+    expect(report.rows.filter((row) => row.area === 'structure').every((row) => row.status === 'match')).toBe(true)
+    expect(design.sites).toEqual([])
+    expect(resolveObservedHubSnapshot(design, design.hubs[0].id, { observation, profile }, 'business')?.table?.routes).toHaveLength(2)
+    observation.tables.pop()
+    expect(compareAzure(design, observation, profile).rows.filter((row) => row.area === 'route').every((row) => row.status === 'unknown')).toBe(true)
+    expect(resolveObservedHubSnapshot(design, design.hubs[0].id, { observation, profile }, 'business')?.table).toBeUndefined()
+  })
+
+  it('requires authoritative modern scope before custom-table absence is actionable', () => {
+    const capture = contextObservationFixture(), design = importAzureCapture({ ...capture, version: 1 })
+    capture.observations.tables[1].routes = []; capture.observations.tables[1].status = 'empty'
+    let observation = parseAzureObservation(capture)
+    const profile = { ...defaultComparisonProfile(design, observation), routeTableId: 'business',
+      completeDesign: true, prefixes: ['10.1.0.0/24'] }
+    const status = () => compareAzure(design, observation, profile).rows.find((row) => row.area === 'route')?.status
+    expect(status()).toBe('design-only')
+    capture.hubs[0].branchRoutingStatus = 'unknown'; observation = parseAzureObservation(capture)
+    expect(status()).toBe('unknown')
+    capture.hubs[0].branchRoutingStatus = 'captured'; capture.complete = false; observation = parseAzureObservation(capture)
+    expect(status()).toBe('unknown')
+    capture.complete = true; capture.hubs[0].connections[0].routingConfiguration.unsupportedControls = ['Unmodeled static forwarding']
+    observation = parseAzureObservation(capture)
+    expect(status()).toBe('unknown')
+  })
+
+  it('reports captured association changes separately from route identity, preserving unknown controls', () => {
+    const capture = contextObservationFixture(), design = importAzureCapture({ ...capture, version: 1 })
+    design.spokes[0].hubRouting!.associatedTableId = 'defaultRouteTable'
+    const observation = parseAzureObservation(capture), profile = defaultComparisonProfile(design, observation)
+    const row = compareAzure(design, observation, profile).rows.find((row) => row.prefix === 'Observed a')!
+    expect(row.status).toBe('changed')
+    expect(row.configuration?.find((field) => field.label === 'Associated hub route table'))
+      .toMatchObject({ designed: 'defaultRouteTable', observed: 'business' })
+    capture.hubs[0].connections[0].routingConfiguration.status = 'unknown'
+    const unknown = compareAzure(design, parseAzureObservation(capture), profile).rows.find((row) => row.prefix === 'Observed a')!
+    expect(unknown.status).toBe('unknown')
+  })
+
   it('matches selected forwarding routes without modifying design, observations or mappings', () => {
     const { design, observation, profile } = setup()
     const before = JSON.stringify({ design, observation, profile })

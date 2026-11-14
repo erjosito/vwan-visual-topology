@@ -20,11 +20,12 @@ $response = switch -Wildcard ($path) {
             @{ value = @(@{ id = $hub; name = 'West hub'; location = 'westeurope'; properties = @{
                 virtualWan = @{ id = $wan.ToUpperInvariant() }; addressPrefix = '10.250.0.0/23'
                 hubRoutingPreference = 'VpnGateway'; provisioningState = 'Succeeded'
-                vpnGateway = @{ id = "$base/vpnGateways/vpn" }
+                vpnGateway = $(if ($env:MOCK_AZ_MODE -ne 'vnet-only') { @{ id = "$base/vpnGateways/vpn" } } else { $null })
             } }); nextLink = $(if ($env:MOCK_AZ_MODE -eq 'bad-next') { 'https://example.invalid/anything' } else { "$uri&skipToken=A%2FB%3D%3D" }) }
         }
     }
-    '*/hubRouteTables' { @{ value = @(@{ name = 'defaultRouteTable'; properties = @{ routes = @() } }, @{ name = 'noneRouteTable'; properties = @{ routes = @() } }) } }
+    '*/hubRouteTables' { @{ value = @(@{ name = 'defaultRouteTable'; properties = @{ routes = @(); labels = @('default') } }, @{ name = 'noneRouteTable'; properties = @{ routes = @(); labels = @('none') } }) } }
+    '*/bgpConnections' { @{ value = @() } }
     '*/routeMaps' {
         if ($env:MOCK_AZ_MODE -eq 'partial') { Write-Error 'Mock permission denied'; exit 1 }
         @{ value = @() }
@@ -32,9 +33,9 @@ $response = switch -Wildcard ($path) {
     '*/routingIntent' { @{ value = @() } }
     '*/hubVirtualNetworkConnections' {
         $connections = @(@{ name = 'connection-to-app'; properties = @{
-            remoteVirtualNetwork = @{ id = $vnet }; routingConfiguration = @{
+            remoteVirtualNetwork = @{ id = $vnet }; enableInternetSecurity = $false; routingConfiguration = @{
                 associatedRouteTable = @{ id = "$hub/hubRouteTables/defaultRouteTable" }
-                propagatedRouteTables = @{ ids = @(@{ id = "$hub/hubRouteTables/defaultRouteTable" }); labels = @('Default') }
+                propagatedRouteTables = @{ ids = @(@{ id = "$hub/hubRouteTables/defaultRouteTable" }); labels = @('default') }
             }
         } })
         if ($env:MOCK_AZ_MODE -in @('normal', 'static-routes')) {

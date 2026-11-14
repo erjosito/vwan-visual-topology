@@ -5,6 +5,7 @@ import { routingRevision } from './diagnostics'
 import { cidr } from './validation'
 import { armKey, normalizeObservedAsPath, normalizeObservedPrefix } from './azure-observation'
 import type { AzureObservation, ObservedRoute } from './azure-observation'
+import { DEFAULT_HUB_TABLE, attachmentHubRouting, hubRouteTables } from './hub-routing'
 
 export type ComparisonHop = { kind: 'hub' | 'spoke' | 'connection'; id: string }
   | { kind: 'gateway'; id: string; transport: 'VPN' | 'ExpressRoute' }
@@ -16,6 +17,7 @@ export interface ComparisonProfile {
   prefixes: string[]
   completeDesign: boolean
   compareAsPaths: boolean
+  routeTableId?: string
 }
 export type ComparisonStatus = 'match' | 'design-only' | 'azure-only' | 'next-hop' | 'attribute' | 'changed' | 'unknown'
 export interface ComparisonTuple { hop: string; asPath: string }
@@ -133,6 +135,10 @@ export function compareAzure(topology: Topology, observation: AzureObservation, 
       continue
     }
     const related: ObjectSelection[] = [{ kind: 'hub', id: hubId }]
+    const requestedTableId = profile.routeTableId ?? DEFAULT_HUB_TABLE
+    const designedTable = hubRouteTables(designedHub).find((table) => table.id.toLowerCase() === requestedTableId.toLowerCase())
+    const routeTableId = designedTable?.id ?? requestedTableId
+    const capturedTable = hub.routeTables?.find((table) => table.id.toLowerCase() === routeTableId.toLowerCase())
     const configKnown = !hub.limitations.length
     const preferenceMatch = designedHub.preference === hub.preference
     const configMatch = preferenceMatch && designedHub.routingIntent.private === hub.privateIntent && designedHub.routingIntent.internet === hub.internetIntent
@@ -148,21 +154,36 @@ export function compareAzure(topology: Topology, observation: AzureObservation, 
       const spokeId = profile.spokes[armKey(spoke.resourceId)], designed = topology.spokes.find((node) => node.id === spokeId)
       const prefixesKnown = spoke.prefixes !== null && spoke.prefixes.every((prefix) => !!normalizeObservedPrefix(prefix))
       const changed = designed && (designed.hubId !== hubId || !same(designed.prefixes, spoke.prefixes ?? []))
+      const expectedRouting = designed ? attachmentHubRouting(topology, designed.id) : undefined
+      const actualRouting = spoke.hubRouting ?? (spoke.defaultRouting === true
+        ? { status: 'captured' as const, associatedTableId: DEFAULT_HUB_TABLE, propagatedTableIds: [DEFAULT_HUB_TABLE], labels: ['default'] } : undefined)
+      const routingKnown = actualRouting?.status === 'captured' && expectedRouting?.status !== 'unknown'
+      const routingChanged = routingKnown && expectedRouting && (expectedRouting.associatedTableId !== actualRouting.associatedTableId
+        || !same(expectedRouting.propagatedTableIds, actualRouting.propagatedTableIds) || !same(expectedRouting.labels, actualRouting.labels))
       add({ area: 'structure', hubResourceId: hub.resourceId, prefix: spoke.name,
         related: designed ? [...related, { kind: 'spoke', id: designed.id }] : related,
-        status: !designed ? 'azure-only' : !prefixesKnown ? 'unknown' : changed ? 'changed' : 'match',
-        detail: !designed ? messages.unmapped : !prefixesKnown ? messages.context : changed ? messages.configDiff : messages.configMatch,
+        status: !designed ? 'azure-only' : !prefixesKnown ? 'unknown' : changed || routingChanged ? 'changed' : !routingKnown ? 'unknown' : 'match',
+        detail: !designed ? messages.unmapped : !prefixesKnown ? messages.context : changed || routingChanged ? messages.configDiff : !routingKnown ? messages.context : messages.configMatch,
         configuration: [
           { label: 'Hub attachment', designed: designed?.hubId ?? null, observed: hubId },
           { label: 'Address spaces', designed: designed?.prefixes ?? null, observed: spoke.prefixes },
+          { label: 'Associated hub route table', designed: expectedRouting?.associatedTableId ?? null, observed: actualRouting?.status === 'captured' ? actualRouting.associatedTableId : null },
+          { label: 'Propagated hub route tables', designed: expectedRouting?.propagatedTableIds ?? null, observed: actualRouting?.status === 'captured' ? actualRouting.propagatedTableIds : null },
+          { label: 'Propagation labels', designed: expectedRouting?.labels ?? null, observed: actualRouting?.status === 'captured' ? actualRouting.labels : null },
         ] })
     }
     for (const spoke of topology.spokes.filter((spoke) => spoke.hubId === hubId && !Object.values(profile.spokes).includes(spoke.id))) {
       add({ area: 'structure', hubResourceId: hub.resourceId, prefix: spoke.name, related: [...related, { kind: 'spoke', id: spoke.id }],
         status: 'unknown', detail: messages.missingMapping })
     }
-    const table = observation.tables.find((table) => armKey(table.resourceId) === `${armKey(hub.resourceId)}/hubroutetables/defaultroutetable`)
-    const selected = simulation.tables[hubId] ?? []
+    if (hub.routeTablesStatus !== undefined) add({ area: 'structure', hubResourceId: hub.resourceId, prefix: capturedTable?.name ?? routeTableId, related,
+      status: hub.routeTablesStatus !== 'captured' || !capturedTable || !designedTable ? 'unknown' : same(designedTable.labels, capturedTable.labels) ? 'match' : 'changed',
+      detail: hub.routeTablesStatus !== 'captured' || !capturedTable || !designedTable ? messages.context
+        : same(designedTable.labels, capturedTable.labels) ? messages.configMatch : messages.configDiff,
+      configuration: [{ label: 'Hub route table', designed: designedTable?.id ?? null, observed: capturedTable?.id ?? null },
+        { label: 'Table labels', designed: designedTable?.labels ?? null, observed: capturedTable?.labels ?? null }] })
+    const table = observation.tables.find((table) => armKey(table.resourceId) === `${armKey(hub.resourceId)}/hubroutetables/${routeTableId.toLowerCase()}`)
+    const selected = routeTableId === DEFAULT_HUB_TABLE ? simulation.tables[hubId] ?? [] : simulation.hubTables?.[hubId]?.[routeTableId] ?? []
     const observed = new Map<string, ObservedRoute[]>()
     for (const row of table?.routes ?? []) for (const rawPrefix of row.addressPrefixes) {
       const prefix = normalizeObservedPrefix(rawPrefix) ?? rawPrefix
@@ -171,10 +192,13 @@ export function compareAzure(topology: Topology, observation: AzureObservation, 
     const decisions = new Map(selected.map((decision) => [decision.prefix, decision]))
     const prefixes = profile.prefixes.length ? [...new Set(profile.prefixes)] : [...new Set([...decisions.keys(), ...observed.keys()])]
     const expectedLimitations = topology.azureImport?.hubs.find((source) => source.hubId === hubId)?.limitations ?? []
-    const tableKnown = configKnown && !expectedLimitations.length && !!observation.context.tenantId && !!observation.context.azureCliVersion
+    const contextKnown = hub.routeTablesStatus === undefined ? routeTableId === DEFAULT_HUB_TABLE && hub.spokes.every((spoke) => spoke.defaultRouting === true)
+      : hub.routeTablesStatus === 'captured' && !!capturedTable && hub.spokes.every((spoke) => spoke.hubRouting?.status === 'captured')
+    const tableKnown = configKnown && contextKnown && !!designedTable && simulation.hubTableCoverage?.[hubId]?.[routeTableId]?.complete !== false
+      && !expectedLimitations.length && !!observation.context.tenantId && !!observation.context.azureCliVersion
       && !hub.privateIntent && !hub.internetIntent && !designedHub.routingIntent.private && !designedHub.routingIntent.internet && table?.resourceType === 'RouteTable'
       && (table.status === 'complete' || table.status === 'empty') && table.routes.every((row) => row.addressPrefixes.length > 0)
-      && hub.spokes.every((spoke) => spoke.defaultRouting === true && spoke.enableInternetSecurity === false)
+      && hub.spokes.every((spoke) => spoke.enableInternetSecurity === false)
     const age = table ? now - Date.parse(table.capturedAt) : 0
     const stale = age > 86_400_000 || age < -300_000
     for (const prefix of prefixes.sort()) {
@@ -210,8 +234,9 @@ export function compareAzure(topology: Topology, observation: AzureObservation, 
       if (unknown) { add({ ...base, status: 'unknown', detail: messages.unmappedHop }); continue }
       if (!actual.length) {
         if (!expected.length) { add({ ...base, status: 'unknown', detail: messages.coverage }); continue }
-        add({ ...base, status: profile.completeDesign && profile.prefixes.includes(prefix) ? 'design-only' : 'unknown',
-          detail: profile.completeDesign && profile.prefixes.includes(prefix) ? messages.missing : messages.coverage })
+        const complete = profile.completeDesign && profile.prefixes.includes(prefix) && observation.inventoryComplete
+          && observation.hubs.every((hub) => hub.routingScopeComplete !== false)
+        add({ ...base, status: complete ? 'design-only' : 'unknown', detail: complete ? messages.missing : messages.coverage })
         continue
       }
       const hopsMatch = same(designed.map((tuple) => tuple.hop), tuples.map((tuple) => tuple.hop))
@@ -226,7 +251,7 @@ export function compareAzure(topology: Topology, observation: AzureObservation, 
     rows, compared: rows.filter((row) => row.status !== 'unknown').length, notCompared: rows.filter((row) => row.status === 'unknown').length + omitted,
     truncated: omitted > 0, limitations: [
       'Point-in-time captures are not atomic or live network tests. Differences are not automatically Azure faults.',
-      'Only unsecured Default table contexts are compared. Origins, gateway instances, per-circuit exits, communities and traffic hashes are not compared.',
+      'Only explicitly selected supported table contexts are compared. Unknown controls and incomplete capture scope do not establish missing routes. See #22.',
       'Gateway next hops compare gateway class and hub, not individual branch connections. ECMP tuple sets do not predict traffic hashes.',
       ...(omitted ? ['Comparison result limit reached; omitted cases are not assessed.'] : []),
     ],

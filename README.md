@@ -110,7 +110,7 @@ Unsupported analysis is tracked separately from detected network problems:
 | Hub own-AS loop rejection and advertised AS-path boundaries | Hub eBGP own-AS (`65515`/`65520`) rejection and diagnostic input gates delivered under #20; ER customer/native path fidelity remains #9 |
 | ER Internet/default advertisement controls and parity | Delivered under #13 |
 | Resumable large analyses, trace/ECMP overflow and bounded failure scenarios | Continuation and explicit coverage under #21; independent 128-branch / 32-path safeguards retained |
-| Imported custom hub tables, association/propagation and unobserved controls | #22; observed snapshot persistence delivered under #3 |
+| Custom-table statics, ambiguous exports and secured/custom combinations | [Supported table contexts and explicit unknown boundaries](docs/hub-route-table-contexts.md); #22; snapshot persistence delivered under #3 |
 
 Missing/ambiguous ownership and references to deleted endpoints or neighbors are model/profile input problems to correct, not missing application features. Actual host duplicate-IP discovery, firewall rules, NAT, sessions and traffic-hash predictions are outside the current offline routing model; duplicate **declared IP ranges** are detected, not inferred from repeated route advertisements.
 
@@ -173,7 +173,7 @@ Drag a blank canvas area with the left mouse button to pan the topology in eithe
 5. Right-click the NVA for **BGP table**, **Learned routes**, **Advertised routes** or path commands. Hubs show a distinct **Spoke BGP NVA** origin. Animated paths traverse the hosting spoke, NVA and downstream links, including the independent return path. Edit or disable its **NVA BGP** connection to change/withdraw the peering.
 6. On the hosting spoke, **Spoke connection route maps** edits hub-side VNet policies. These apply to its system routes and the advertisements of all NVAs in that spoke, not to an integrated SD-WAN connection. NVA-side router policies remain independent.
 
-**Azure requirements and model boundary:** a peer must reside in a directly attached VNet and use an actual NIC IP, not a loopback. Azure requires identical advertisements to **both** hub router IPs; the app models these as **one logical peering**, not two independent failures. It assumes Default association/propagation and reachable sessions; branch exchange follows the WAN-wide branch-to-branch setting. Secured hubs require Routing Intent. Azure supports at most eight BGP peers per hub and 4,000 advertised routes per NVA; native JSON remains bounded at 2 MB and routing analyses retain their existing budgets. The app does not configure or verify live sessions, UDRs, appliance/vendor forwarding, subnet membership, load-balancer next-hop overrides, dynamic convergence or shared failure domains. Advertisements contained in directly attached local VNet address spaces are suppressed in favor of their system routes.
+**Azure requirements and model boundary:** a peer must reside in a directly attached VNet and use an actual NIC IP, not a loopback. Azure requires identical advertisements to **both** hub router IPs; the app models these as **one logical peering**, not two independent failures. The NVA inherits its hosting connection's propagation, which must match the hub's branches, and that connection must associate with Default. Sessions are assumed reachable; branch exchange follows the WAN-wide branch-to-branch setting. Secured hubs require Routing Intent. Azure supports at most eight BGP peers per hub and 4,000 advertised routes per NVA; native JSON remains bounded at 2 MB and routing analyses retain their existing budgets. The app does not configure or verify live sessions, UDRs, appliance/vendor forwarding, subnet membership, load-balancer next-hop overrides, dynamic convergence or shared failure domains. Advertisements contained in directly attached local VNet address spaces are suppressed in favor of their system routes.
 
 The existing [controlled Azure lab](verification/azure-vwan-2026-10-29/README.md) includes real local/remote direct-spoke NVA endpoint deliveries, but is not certification of every new configuration or NVA ranking/failover case. See [Microsoft's BGP peering requirements and examples](https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub) and [routing deep dive](https://learn.microsoft.com/azure/virtual-wan/routing-deep-dive). Structural Azure import still **does not reconstruct BGP NVAs**; configure them manually after import. Bicep export still omits appliances, peers and downstream routing, with an explicit warning; it does not enable BGP in Azure.
 
@@ -204,10 +204,10 @@ Canvas hubs, spokes and ER locations use Microsoft's official **Virtual WAN Hub*
 
 Open **Azure files** in the header. All application processing stays in the browser; this feature adds no Azure sign-in, backend, SDK, account selector or deploy button. Ordinary native JSON import/export remains unchanged.
 
-**Import:** download and review [`collect-azure-vwan.ps1`](https://github.com/erjosito/vwan-visual-topology-feedback/blob/main/scripts/collect-azure-vwan.ps1) from the app or the public repository, then run it with PowerShell 7 and an Azure CLI session authenticated **outside** this app (locally or in Cloud Shell PowerShell):
+**Import:** download and review [`collect-azure-vwan.ps1`](public/scripts/collect-azure-vwan.ps1) from the app or the public repository, then run it with PowerShell 7 and an Azure CLI session authenticated **outside** this app (locally or in Cloud Shell PowerShell):
 
 ```powershell
-Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile .\collect-azure-vwan.ps1
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology/main/public/scripts/collect-azure-vwan.ps1' -OutFile .\collect-azure-vwan.ps1
 .\collect-azure-vwan.ps1 `
   -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' `
   -OutputFile .\vwan-capture.json
@@ -219,7 +219,7 @@ Reads require subscription-wide hub-list access plus read access to the selected
 
 Import the result with **Import Azure capture** or **Import JSON**. The app shows counts and omissions **before** replacement; acknowledgement and confirmation are required. Cancel/Escape, malformed captures and unsupported versions leave the workspace intact. Export its native JSON first if you need a backup. The versioned `azure-vwan-capture` format is intentionally **not** arbitrary ARM-template or Azure CLI JSON.
 
-Imports create hubs and IPv4 spoke attachments with stable IDs derived from ARM IDs, and map `VpnGateway` to the simulator's `VPN` preference. Azure Firewall private/Internet routing intent is shown where recognized; no separate firewall site is fabricated. Sites, circuits, BGP advertisements/ASNs, subnet UDRs, firewall enforcement, route maps, custom propagation and observed effective routes are **not reconstructed**. Unsupported policies, custom routing, missing VNets and IPv6 omissions stay visible as **structure-only** limitations, not a promise of Azure-equivalent routing. Unknown hub preferences, Basic WANs, duplicate/ambiguous references, malformed prefixes and app-limit violations are rejected.
+Imports create hubs and IPv4 spoke attachments with stable IDs derived from ARM IDs, and map `VpnGateway` to the simulator's `VPN` preference. Captured table inventories, labels and VNet association/propagation retain explicit known-versus-unknown provenance. Azure Firewall private/Internet routing intent is shown where recognized; no separate firewall site is fabricated. Sites, circuits, BGP advertisements/ASNs, subnet UDRs, firewall enforcement and route maps are **not reconstructed**. Unsupported static/secured custom contexts, missing VNets and IPv6 omissions remain explicit **structure-only** limitations, not Azure-equivalent routing claims. See [hub route-table contexts](docs/hub-route-table-contexts.md) for compatibility, branch/NVA constraints and boundaries. Unknown hub preferences, Basic WANs, duplicate/ambiguous references, malformed prefixes and app-limit violations are rejected.
 
 ### Compare an existing design with Azure observations
 
@@ -227,7 +227,7 @@ Choose **Azure files → Compare with Azure capture**. Download the same collect
 review it, and opt into observational route queries:
 
 ```powershell
-Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology-feedback/main/scripts/collect-azure-vwan.ps1' -OutFile .\collect-azure-vwan.ps1
+Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology/main/public/scripts/collect-azure-vwan.ps1' -OutFile .\collect-azure-vwan.ps1
 .\collect-azure-vwan.ps1 `
   -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' `
   -IncludeEffectiveRoutes -OutputFile .\vwan-observation.json
@@ -236,7 +236,8 @@ Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-t
 The collector uses the existing local Azure CLI login, explicitly selects the
 WAN subscription, and records its public-cloud/tenant/subscription context and
 actual CLI version without account names or credentials. Route retrieval uses
-`az network vhub get-effective-routes` for each discovered hub's Default table.
+`az network vhub get-effective-routes` for discovered Default and custom routable
+tables (not None), up to 100 tables with Default reservations.
 The CLI handles the underlying asynchronous diagnostic POST/polling operation;
 the captured `apiVersion` field identifies this CLI operation, not a claimed
 fixed REST API version. Metadata reads and
@@ -252,7 +253,7 @@ review list; they are not added as fictional sites or circuits.
 
 Select one observed hub. Supported structural comparisons cover HRP,
 recognized routing intent, spoke attachments and IPv4 address spaces. Route
-comparison starts with **unsecured Default tables on both sides**, compares
+comparison uses the **explicitly selected supported table on both sides**, compares
 selected forwarding routes rather than losing BGP candidates, and preserves
 associated multiprefix/ECMP rows. Explicitly map gateway next hops to the
 appropriate hub and VPN/ER class: these snapshots cannot distinguish individual
@@ -264,7 +265,7 @@ a missing expected route, enter its exact IPv4 prefix and confirm complete
 expected design coverage; a structure-only import is not a full route baseline.
 A covering aggregate is not an identical more-specific route. Optional AS-path
 comparison preserves repeated, provider and inter-hub ASNs and normalizes only
-formatting. Unsupported intent/custom routing, unknown next hops, denied/failed/
+formatting. Unsupported static/secured custom contexts, unknown next hops, denied/failed/
 truncated observations, incomplete model selection and captures older than
 24 hours or more than five minutes in the future remain unassessed.
 
@@ -315,7 +316,7 @@ Right-click a location for its **BGP table**, **Learned routes** (from the attac
 
 Route maps remain hub/site attributes, assigned to their own ER attachment. Markers and rule inspectors work on the new links. Azure-to-site traces show the hub attachment, ER location and site circuit; site-origin traces use advertised Azure routes and highlight both ingress links. Disabling/deleting either attachment withdraws that path. Removing a location cascades to its attachments and policy assignments, not its hubs/sites. Import/export and per-layout positions include the new objects (`erLocations` / `erLinks`); older JSON remains compatible.
 
-ExpressRoute Global Reach, shared-circuit hub-to-hub route reflection, redundant MSEE sessions, bandwidth, gateway limits and custom propagation are not modeled. In particular, connecting one location to several hubs does not simulate the shared-circuit reflection behavior in Microsoft's scenario 3. Routing intent continues to use the existing separate hub/firewall model; ER-to-ER firewall transit is not enabled.
+ExpressRoute Global Reach, shared-circuit hub-to-hub route reflection, redundant MSEE sessions, bandwidth and gateway limits are not modeled. Known hub-side association/propagation uses the [table-context model](docs/hub-route-table-contexts.md), not shared-circuit reflection: connecting one location to several hubs does not simulate the reflection behavior in Microsoft's scenario 3. Routing intent continues to use the existing separate hub/firewall model; ER-to-ER firewall transit is not enabled, and secured/custom combinations remain explicitly unknown.
 
 ### Editing directly from the diagram
 
@@ -381,7 +382,7 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 
 | Area | Model |
 |---|---|
-| Virtual WAN | One Standard VWAN; full-mesh inter-hub connectivity. WAN-wide branch-to-branch control (enabled by default) gates branch exports, not hub learning or VNet connectivity. Default association/propagation unless private routing intent manages it. |
+| Virtual WAN | One Standard VWAN; full-mesh inter-hub connectivity. WAN-wide branch-to-branch control gates branch exports, not hub learning or VNet connectivity. Explicit table-local association/propagation with backward-compatible Default defaults; unsupported contexts remain unassessed. |
 | Route selection | Per-prefix best-path selection; forwarding uses longest-prefix match. AS Path preference compares full received lengths, including inter-hub prepends; a shorter remote ER path can win. Local paths break equal-length local/remote ties. Other HRPs retain their local/remote and ER/VPN distinctions. |
 | Inter-hub advertisements | Only selected local best paths are advertised, with `65520 65520` prepended. No default-route propagation or remote-route re-export over the full mesh. Nonconvergent calculations are flagged and tracing is disabled. |
 | Spokes | Directly attached IPv4 VNets. Local system routes override equal-prefix BGP routes. No subnet UDRs or Private Endpoint policies. |
@@ -390,13 +391,13 @@ This is **not** an Azure control-plane emulator or a guarantee of effective rout
 | Private routing intent | Hub policy table contains RFC1918 aggregates plus configured private prefixes to Azure Firewall. Firewall table contains selected exact routes and an Internet fallback when no default is learned; that fallback does not install a hub default. Unknown RFC1918 destinations without a private forwarding route remain unreachable. Non-RFC1918 destinations require explicit private prefixes on each secured hub. |
 | Internet routing intent | Hub default route to Azure Firewall, with direct Internet egress from the firewall. Forced tunneling and per-connection default-route advertisement switches are not modeled. |
 | Firewalls | Forwarding only, assuming permissive policies. No allow/deny, DNAT, SNAT, threat inspection, or health simulation. |
-| Spoke BGP NVA | Explicit hosting spoke, NIC peer IP, 2-byte ASN and advertisements. Bidirectional modeled BGP through the NVA and downstream site links; Default propagation and identical dual hub sessions are assumed. Branch exchange follows the WAN setting. Distinct from integrated SD-WAN; live sessions/UDRs/physical failover are not verified. |
+| Spoke BGP NVA | Explicit hosting spoke, NIC peer IP, 2-byte ASN and advertisements. Inherits host association/propagation; Default association and uniform branch propagation are required. Identical dual hub sessions are assumed. Branch exchange follows the WAN setting; live sessions/UDRs/physical failover are not verified. |
 | Route maps | Hub/site-owned, reusable policies assigned per endpoint and connection, including hosting-VNet maps for NVA advertisements/system routes. Prefix and AS-path matching, permit/drop, summarize/prepend and continue/terminate. Independent site-peer policies; hub and site policies compose in advertisement order. No Azure-side SD-WAN, inter-hub/P2S, community conditions, advanced attribute modifications or NAT. |
 | Prepend ASNs | Hub wizard saves require valid public 2-byte ASNs and reject Azure-reserved, private, documentation, AS_TRANS and 4-byte ASNs. Legacy documentation ASNs `64496-64511` remain importable **for simulation only**. Site maps and on-premises peer policies can use private/32-bit ASNs. |
 | On-premises BGP | Shortest AS path, exact-prefix directional export allowlists, ASN/path loop prevention, up to 32 equal paths per prefix. Explicit connection BGP routes and configured site prefixes are available to the mesh. |
 | Azure outbound routes | Preview includes post-map advertisements. Azure-originated routes are **not reimported into Azure through the site mesh**. Azure community suppression, route reflection through shared ER circuits, and Global Reach are not simulated. |
 | Timing | Deterministic nominal convergence only. Azure arrival-order race conditions, failback history, and convergence delays are not predicted. |
-| Flow traces | Forward direction only, up to 128 equal-cost branches. No return-flow symmetry, gateway-instance hashing, BGP MED/local preference, custom route tables, IPv6, or multiple VWANs. |
+| Flow traces | One direction per trace, up to 128 equal-cost branches, preserving the selected table context. Diagnostics assess return reachability independently. No guaranteed symmetry, gateway-instance hashing, BGP MED/local preference, IPv6 or multiple VWANs. |
 
 The AS Path treatment of remote ER follows the controlled two-hub customer-MCR observations in [#10](https://github.com/erjosito/vwan-visual-topology/issues/10): remote ER4 beat local VPN10 after both arrival orders, with each input independently verified. Microsoft's HRP page contains a conflicting "remote ER last" note and a shorter-remote-ER example. The model follows the reproduced received-path comparison, not that unconditional exclusion; this is not a guarantee of every Azure topology or convergence history.
 

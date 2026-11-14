@@ -1,0 +1,414 @@
+{
+  "context": {
+    "tenantId": "00000000-0000-4000-8000-000000000001",
+    "azureCliVersion": "2.92.0",
+    "cloud": "AzureCloud",
+    "subscriptionId": "00000000-0000-4000-8000-000000000002"
+  },
+  "collectorVersion": "2",
+  "warnings": [],
+  "routingContextVersion": 1,
+  "hubs": [
+    {
+      "addressPrefix": "10.250.4.0/22",
+      "virtualWanId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualWans/fixture-wan",
+      "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne",
+      "hubRoutingPreference": "VpnGateway",
+      "unsupportedFeatures": [
+        "Hub branch-to-branch transit is disabled."
+      ],
+      "branchRoutingStatus": "unknown",
+      "routeTables": [
+        {
+          "staticRoutes": [],
+          "labels": [
+            "default",
+            "Default"
+          ],
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable",
+          "name": "defaultRouteTable"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "none"
+          ],
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/noneRouteTable",
+          "name": "noneRouteTable"
+        }
+      ],
+      "routeTablesStatus": "captured",
+      "gatewayTypes": [
+        "VPN",
+        "ExpressRoute"
+      ],
+      "routingPolicies": [],
+      "name": "hub-ne",
+      "connections": [
+        {
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-spoke-ne",
+          "enableInternetSecurity": false,
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+            ],
+            "status": "captured",
+            "associatedTableId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable",
+            "unsupportedControls": [],
+            "labels": [
+              "Default"
+            ]
+          },
+          "virtualNetworkId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualNetworks/vnet-spoke-ne",
+          "defaultRouting": true,
+          "addressPrefixes": [
+            "10.211.0.0/16"
+          ],
+          "name": "vnet-spoke-ne"
+        },
+        {
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-isolated-ne",
+          "enableInternetSecurity": false,
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable"
+            ],
+            "status": "captured",
+            "associatedTableId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable",
+            "unsupportedControls": [],
+            "labels": [
+              "Default"
+            ]
+          },
+          "virtualNetworkId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualNetworks/vnet-isolated-ne",
+          "defaultRouting": true,
+          "addressPrefixes": [
+            "10.213.0.0/16"
+          ],
+          "name": "vnet-isolated-ne"
+        }
+      ],
+      "location": "northeurope"
+    },
+    {
+      "addressPrefix": "10.250.0.0/22",
+      "virtualWanId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualWans/fixture-wan",
+      "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se",
+      "hubRoutingPreference": "VpnGateway",
+      "unsupportedFeatures": [
+        "Hub branch-to-branch transit is disabled."
+      ],
+      "branchRoutingStatus": "unknown",
+      "routeTables": [
+        {
+          "staticRoutes": [],
+          "labels": [
+            "default",
+            "Default"
+          ],
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable",
+          "name": "defaultRouteTable"
+        },
+        {
+          "staticRoutes": [],
+          "labels": [
+            "none"
+          ],
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/noneRouteTable",
+          "name": "noneRouteTable"
+        }
+      ],
+      "routeTablesStatus": "captured",
+      "gatewayTypes": [
+        "VPN",
+        "ExpressRoute"
+      ],
+      "routingPolicies": [],
+      "name": "hub-se",
+      "connections": [
+        {
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se",
+          "enableInternetSecurity": false,
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable"
+            ],
+            "status": "captured",
+            "associatedTableId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable",
+            "unsupportedControls": [],
+            "labels": [
+              "Default"
+            ]
+          },
+          "virtualNetworkId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualNetworks/vnet-spoke-se",
+          "defaultRouting": true,
+          "addressPrefixes": [
+            "10.210.0.0/16"
+          ],
+          "name": "vnet-spoke-se"
+        },
+        {
+          "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-isolated-se",
+          "enableInternetSecurity": false,
+          "routingConfiguration": {
+            "propagatedTableIds": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable"
+            ],
+            "status": "captured",
+            "associatedTableId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable",
+            "unsupportedControls": [],
+            "labels": [
+              "Default"
+            ]
+          },
+          "virtualNetworkId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualNetworks/vnet-isolated-se",
+          "defaultRouting": true,
+          "addressPrefixes": [
+            "10.212.0.0/16"
+          ],
+          "name": "vnet-isolated-se"
+        }
+      ],
+      "location": "swedencentral"
+    }
+  ],
+  "wan": {
+    "id": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualWans/fixture-wan",
+    "allowVnetToVnetTraffic": null,
+    "type": "Standard",
+    "location": "swedencentral",
+    "name": "fixture-wan",
+    "allowBranchToBranchTraffic": true
+  },
+  "capturedAt": "2026-11-14T02:27:16.4918828Z",
+  "version": 2,
+  "complete": true,
+  "kind": "azure-vwan-capture",
+  "observations": {
+    "tables": [
+      {
+        "status": "complete",
+        "apiVersion": "az network vhub get-effective-routes",
+        "resourceId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubRouteTables/defaultRouteTable",
+        "capturedAt": "2026-11-14T02:25:46.2729211Z",
+        "routes": [
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/expressRouteGateways/ergw-ne",
+            "addressPrefixes": [
+              "10.231.0.0/16"
+            ],
+            "nextHopType": "ExpressRouteGateway",
+            "asPath": "12076-12076",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/expressRouteGateways/ergw-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+            "addressPrefixes": [
+              "10.230.0.0/16"
+            ],
+            "nextHopType": "VPN_S2S_Gateway",
+            "asPath": "65012-65012-65012-65012",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+            "addressPrefixes": [
+              "10.60.0.0/16"
+            ],
+            "nextHopType": "VPN_S2S_Gateway",
+            "asPath": "65012-65012-65012-65012",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-ne",
+            "addressPrefixes": [
+              "10.61.2.0/24"
+            ],
+            "nextHopType": "VPN_S2S_Gateway",
+            "asPath": "65012-65012-65012-65012",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se",
+            "addressPrefixes": [
+              "10.210.0.0/16"
+            ],
+            "nextHopType": "Remote Hub",
+            "asPath": "65520-65520",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se",
+            "addressPrefixes": [
+              "10.61.1.0/24"
+            ],
+            "nextHopType": "Remote Hub",
+            "asPath": "65520-65520-65011-65011-65011-65011",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se",
+            "addressPrefixes": [
+              "10.212.0.0/16"
+            ],
+            "nextHopType": "Remote Hub",
+            "asPath": "65520-65520",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-isolated-ne",
+            "addressPrefixes": [
+              "10.213.0.0/16"
+            ],
+            "nextHopType": "Virtual Network Connection",
+            "asPath": "",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-isolated-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-spoke-ne",
+            "addressPrefixes": [
+              "10.211.0.0/16"
+            ],
+            "nextHopType": "Virtual Network Connection",
+            "asPath": "",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne/hubVirtualNetworkConnections/vnet-spoke-ne"
+            ]
+          }
+        ],
+        "hubResourceId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne",
+        "resourceType": "RouteTable",
+        "warnings": []
+      },
+      {
+        "status": "complete",
+        "apiVersion": "az network vhub get-effective-routes",
+        "resourceId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubRouteTables/defaultRouteTable",
+        "capturedAt": "2026-11-14T02:26:42.9783572Z",
+        "routes": [
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+            "addressPrefixes": [
+              "10.60.0.0/16"
+            ],
+            "nextHopType": "ExpressRouteGateway",
+            "asPath": "12076-133937",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-se",
+            "addressPrefixes": [
+              "10.61.1.0/24"
+            ],
+            "nextHopType": "VPN_S2S_Gateway",
+            "asPath": "65011-65011-65011-65011",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/vpnGateways/vpngw-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/expressRouteGateways/ergw-se",
+            "addressPrefixes": [
+              "10.230.0.0/16"
+            ],
+            "nextHopType": "ExpressRouteGateway",
+            "asPath": "12076-12076",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/expressRouteGateways/ergw-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se",
+            "addressPrefixes": [
+              "10.210.0.0/16"
+            ],
+            "nextHopType": "Virtual Network Connection",
+            "asPath": "",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-spoke-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-isolated-se",
+            "addressPrefixes": [
+              "10.212.0.0/16"
+            ],
+            "nextHopType": "Virtual Network Connection",
+            "asPath": "",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se/hubVirtualNetworkConnections/vnet-isolated-se"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne",
+            "addressPrefixes": [
+              "10.211.0.0/16"
+            ],
+            "nextHopType": "Remote Hub",
+            "asPath": "65520-65520",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne",
+            "addressPrefixes": [
+              "10.231.0.0/16"
+            ],
+            "nextHopType": "Remote Hub",
+            "asPath": "65520-65520-12076-12076",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne",
+            "addressPrefixes": [
+              "10.61.2.0/24"
+            ],
+            "nextHopType": "Remote Hub",
+            "asPath": "65520-65520-65012-65012-65012-65012",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne"
+            ]
+          },
+          {
+            "routeOrigin": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne",
+            "addressPrefixes": [
+              "10.213.0.0/16"
+            ],
+            "nextHopType": "Remote Hub",
+            "asPath": "65520-65520",
+            "nextHops": [
+              "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-ne"
+            ]
+          }
+        ],
+        "hubResourceId": "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/fixture-network/providers/Microsoft.Network/virtualHubs/hub-se",
+        "resourceType": "RouteTable",
+        "warnings": []
+      }
+    ],
+    "startedAt": "2026-11-14T02:24:57.5468808Z",
+    "version": 1,
+    "completedAt": "2026-11-14T02:27:16.5363334Z"
+  }
+}

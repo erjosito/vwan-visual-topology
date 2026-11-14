@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "fixtures": [
+    {
+      "file": "native-default.json",
+      "origin": "sanitized live collector output",
+      "scope": "Default tables; opaque branches and unconfirmed WAN transit retained",
+      "sha256": "7e0bf375c33ff05a26e7d4b4a9ef5fb69d0a88fe558a348718ea034debe36bcf"
+    },
+    {
+      "file": "synthetic-custom.json",
+      "origin": "synthetic regression",
+      "scope": "Business-table VNet association and propagation; not Azure calibration",
+      "sha256": "551dc789488f47dac870e00eafb3e57308cadd36feab76920319a7418f90b9ca"
+    },
+    {
+      "file": "synthetic-isolated.json",
+      "origin": "synthetic regression",
+      "scope": "None propagation with independent association and asymmetric return; not Azure calibration",
+      "sha256": "37036594aa530aaa3a800fb7925c50f9fd88bbdbd1ae8cb411684105c5dbe880"
+    },
+    {
+      "file": "synthetic-mixed-intent.json",
+      "origin": "synthetic regression",
+      "scope": "Custom tables combined with private routing intent must remain unknown; not Azure calibration",
+      "sha256": "3064178a1d2491b2b41de58f4032f5673b65fe6f697ce1cf8760775a22efed9c"
+    }
+  ]
+}

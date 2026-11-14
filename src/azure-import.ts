@@ -1,4 +1,4 @@
-import type { AzureImportInfo, Hub, Topology } from './model'
+import type { AzureImportInfo, Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
 import { armKey, parseAzureObservation } from './azure-observation'
 import { cidr, validateTopology } from './validation'
 
@@ -55,6 +55,8 @@ export function importAzureCapture(input: unknown): Topology {
     return validateTopology(topology)
   }
   if (typeof root.complete !== 'boolean') throw new Error('Capture completeness is missing.')
+  if (root.routingContextVersion !== undefined && root.routingContextVersion !== 1) throw new Error('Unsupported hub routing-context capture version.')
+  const capturesContexts = root.routingContextVersion === 1
   const wan = object(root.wan, 'Virtual WAN')
   const wanId = resourceId(wan.id, 'virtualWans')
   if (wan.type !== 'Standard') throw new Error('Only Standard Virtual WAN captures are supported.')
@@ -63,7 +65,9 @@ export function importAzureCapture(input: unknown): Topology {
   if (wan.allowBranchToBranchTraffic !== undefined && typeof wan.allowBranchToBranchTraffic !== 'boolean') throw new Error('WAN branch-to-branch traffic must be a boolean.')
   if (wan.allowBranchToBranchTraffic === undefined || wan.allowVnetToVnetTraffic !== true) globalLimitations.push('WAN transit flags differ from, or cannot confirm, the simulator full-mesh defaults.')
   const warnings = new Set([
-    'Structural Azure import, not a production routing replica. ER/on-premises connectivity, gateway advertisements, route maps, custom propagation and firewall enforcement are not reconstructed.',
+    capturesContexts
+      ? 'Structural Azure import, not a production routing replica. Captured VNet table contexts are imported; ER/on-premises advertisements, route maps and firewall enforcement are not reconstructed.'
+      : 'Structural Azure import, not a production routing replica. ER/on-premises connectivity, gateway advertisements, route maps, custom propagation and firewall enforcement are not reconstructed.',
     'Spoke NVA BGP peers, interface IPs and downstream routing are not reconstructed. Configure them manually after structural import.',
     ...messages(root.warnings), ...globalLimitations,
   ])
@@ -88,6 +92,39 @@ export function importAzureCapture(input: unknown): Topology {
     if (!cidr(addressPrefix)) throw new Error(`Invalid hub infrastructure IPv4 CIDR for ${name}.`)
     const limitations = [...globalLimitations, ...messages(source.unsupportedFeatures)]
     const hub: Hub = { id: stableId('hub', armId), name, region: text(source.location, 'Hub location'), preference, routingIntent: { private: false, internet: false, privatePrefixes: [] } }
+    const localTableReference = (value: unknown) => {
+      const result = text(value, 'Hub route-table reference', 2048), prefix = `${armKey(armId)}/hubroutetables/`
+      if (!armKey(result).startsWith(prefix)) return
+      const suffix = result.slice(prefix.length)
+      if (!/^[^/?#\r\n]{1,120}$/.test(suffix)) return
+      return suffix.toLowerCase() === 'defaultroutetable' ? 'defaultRouteTable'
+        : suffix.toLowerCase() === 'noneroutetable' ? 'noneRouteTable' : suffix
+    }
+    if (capturesContexts) {
+      if (!['captured', 'unknown'].includes(source.routeTablesStatus as string)) throw new Error('Invalid hub route-table capture provenance.')
+      hub.routeTablesStatus = source.routeTablesStatus as Hub['routeTablesStatus']
+      hub.routeTables = list(source.routeTables, 'Captured hub route tables', 64).map((value): HubRouteTable => {
+        const table = object(value, 'Captured hub route table'), id = localTableReference(table.id)
+        if (!id || id.toLowerCase() !== text(table.name, 'Hub route-table name').toLowerCase()) throw new Error('Captured route table is outside its hub or has an inconsistent identity.')
+        return {
+          id, name: text(table.name, 'Hub route-table name'),
+          labels: list(table.labels, 'Hub route-table labels', 64).map((entry) => text(entry, 'Hub route-table label')),
+          staticRoutes: list(table.staticRoutes, 'Captured hub static routes', 1000).map((value) => {
+            const route = object(value, 'Captured hub static route')
+            if (typeof route.nextHop !== 'string' || route.nextHop.length > 2048) throw new Error('Invalid captured static next hop.')
+            return {
+              name: text(route.name, 'Hub static-route name'), destinationType: text(route.destinationType, 'Hub static-route destination type'),
+              destinations: list(route.destinations, 'Hub static-route destinations', 100).map((entry) => text(entry, 'Hub static-route destination')),
+              nextHopType: text(route.nextHopType, 'Hub static-route next-hop type'), nextHop: route.nextHop,
+            }
+          }),
+        }
+      })
+      if (!hub.routeTables.some((table) => table.id === 'defaultRouteTable')) hub.routeTablesStatus = 'unknown'
+      if (hub.routeTablesStatus === 'unknown') limitations.push('Hub route-table inventory is incomplete; table-context reachability is unknown.')
+    } else if (limitations.length) {
+      hub.routeTablesStatus = 'unknown'
+    }
     for (const value of list(source.routingPolicies, 'Routing policies', 2)) {
       const policy = object(value, 'Routing policy')
       const nextHop = text(policy.nextHop, 'Routing next hop', 2048)
@@ -111,7 +148,31 @@ export function importAzureCapture(input: unknown): Topology {
       const vnetId = resourceId(connection.virtualNetworkId, 'virtualNetworks')
       if (seenVnets.has(vnetId.toLowerCase())) throw new Error('A VNet appears in multiple captured connections; ambiguous attachments are not supported.')
       seenVnets.add(vnetId.toLowerCase())
-      if (connection.defaultRouting !== true) limitations.push('A VNet connection has custom or unknown association/propagation settings.')
+      let hubRouting: HubRoutingConfiguration | undefined
+      if (capturesContexts) {
+        const captured = object(connection.routingConfiguration, 'Captured VNet routing configuration')
+        if (!['captured', 'unknown'].includes(captured.status as string)) throw new Error('Invalid VNet routing capture provenance.')
+        const associated = captured.associatedTableId === null ? null : text(captured.associatedTableId, 'Associated hub route table', 2048)
+        const propagated = list(captured.propagatedTableIds, 'Propagated hub route tables', 64).map((entry) => text(entry, 'Propagated hub route table', 2048))
+        const resolve = (reference: string) => {
+          const local = localTableReference(reference)
+          return hub.routeTables?.find((table) => table.id.toLowerCase() === local?.toLowerCase())?.id
+        }
+        const unsupported = list(captured.unsupportedControls, 'Unsupported VNet routing controls', 40).map((entry) => text(entry, 'Unsupported VNet routing control'))
+        const known = captured.status === 'captured' && unsupported.length === 0
+          && associated !== null && !!resolve(associated) && propagated.every((entry) => !!resolve(entry))
+        hubRouting = {
+          status: known ? 'captured' : 'unknown',
+          associatedTableId: known ? resolve(associated!)! : associated,
+          propagatedTableIds: known ? propagated.map((entry) => resolve(entry)!) : propagated,
+          labels: list(captured.labels, 'Propagation labels', 64).map((entry) => text(entry, 'Propagation label')),
+          limitations: unsupported,
+        }
+        if (!known) limitations.push('A VNet association or propagation context is unknown or outside the captured local inventory.')
+      } else if (connection.defaultRouting !== true) {
+        limitations.push('A VNet connection has custom or unknown association/propagation settings.')
+        hubRouting = { status: 'unknown', associatedTableId: null, propagatedTableIds: [], labels: [] }
+      }
       if (connection.addressPrefixes === null) {
         limitations.push('A referenced VNet could not be read; its spoke is omitted.')
         continue
@@ -131,14 +192,22 @@ export function importAzureCapture(input: unknown): Topology {
       if (connection.enableInternetSecurity !== undefined && connection.enableInternetSecurity !== null && typeof connection.enableInternetSecurity !== 'boolean') {
         throw new Error('Invalid captured VNet internet security flag.')
       }
+      if (capturesContexts && typeof connection.enableInternetSecurity !== 'boolean') {
+        limitations.push('A VNet internet-security flag is unknown; default-route reachability is not established.')
+        if (hubRouting) hubRouting.status = 'unknown'
+      }
       topology.spokes.push({
         id: stableId('spoke', vnetId), name: text(connection.name, 'Spoke name'), hubId: hub.id, prefixes: [...new Set(prefixes)],
         ...(connection.enableInternetSecurity === true ? { propagateDefaultRoute: true } : {}),
+        ...(hubRouting ? { hubRouting } : {}),
       })
     }
     const uniqueLimitations = [...new Set(limitations)]
     for (const warning of uniqueLimitations) warnings.add(`${name}: ${warning}`)
-    sources.push({ hubId: hub.id, resourceId: armId, addressPrefix, limitations: uniqueLimitations })
+    sources.push({ hubId: hub.id, resourceId: armId, addressPrefix, limitations: uniqueLimitations,
+      ...(capturesContexts ? { routingScopeComplete: root.complete === true && source.branchRoutingStatus === 'captured'
+        && list(source.gatewayTypes, 'Gateway types', 3).length === 0
+        && hub.routeTablesStatus === 'captured' && uniqueLimitations.length === 0 } : {}) })
   }
   topology.azureImport = {
     capturedAt: text(root.capturedAt, 'capture timestamp', 40), collectorVersion: text(root.collectorVersion, 'collector version', 40),
