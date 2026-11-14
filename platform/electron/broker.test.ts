@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest'
+import { it, expect, vi } from 'vitest'
 import { AzureBroker, scopeArguments, executePowerShell } from './broker'
 import { readFile, writeFile, access, mkdtemp, rm } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
@@ -89,13 +89,26 @@ it('cancels CLI work on application shutdown and waits for capture cleanup befor
   await expect(broker.accounts()).rejects.toThrow('closing')
 })
 
-it('terminates an actual bounded PowerShell process before rejecting a timed-out operation', async () => {
+it('terminates an actual PowerShell process before rejecting cancellation and enforces startup deadlines', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'aznet-desktop-process-test-'))
   const script = join(directory, 'wait.ps1'), pidFile = join(directory, 'pid.txt')
+  const controller = new AbortController()
+  let stopped: Promise<void> | undefined
   try {
     await writeFile(script, `$PID | Set-Content -LiteralPath '${pidFile.replaceAll("'", "''")}'\nStart-Sleep -Seconds 60\n`)
-    await expect(executePowerShell([script], 5000)).rejects.toThrow('stopped')
-    const pid = Number((await readFile(pidFile, 'utf8')).trim())
+    stopped = expect(executePowerShell([script], 25000, controller.signal)).rejects.toThrow('stopped')
+    let pid = 0
+    await vi.waitFor(async () => {
+      pid = Number((await readFile(pidFile, 'utf8')).trim())
+      expect(pid).toBeGreaterThan(0)
+    }, { timeout: 20000, interval: 50 })
+    controller.abort()
+    await stopped
     expect(() => process.kill(pid, 0)).toThrow()
-  } finally { await rm(directory, { recursive: true, force: true }) }
-}, 15000)
+    await expect(executePowerShell([script], 1)).rejects.toThrow('stopped')
+  } finally {
+    controller.abort()
+    await stopped
+    await rm(directory, { recursive: true, force: true })
+  }
+}, 30000)
