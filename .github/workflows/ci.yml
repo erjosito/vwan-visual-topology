@@ -48,6 +48,40 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:platform
+      - run: npm run test:desktop-cli
+      - run: npm run build:desktop
+      - run: npm run test:desktop
+      - name: Smoke packaged offline application
+        shell: pwsh
+        run: |
+          $env:DESKTOP_EXECUTABLE = Join-Path (Get-Location) 'release\win-unpacked\Azure Network Simulator.exe'
+          npm run test:desktop
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Record development installer checksum
+        shell: pwsh
+        run: |
+          Get-FileHash release\Azure-Network-Simulator-*-x64.exe -Algorithm SHA256 |
+            Select-Object Path, Hash | ConvertTo-Json |
+            Set-Content test-artifacts\desktop\installer-sha256.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-development-build
+          path: |
+            release/Azure-Network-Simulator-*-x64.exe
+            test-artifacts/desktop/*checks.json
+            test-artifacts/desktop/*sha256.json
+          retention-days: 7
+
   deploy:
     needs: validate
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'

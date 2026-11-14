@@ -1,0 +1,17 @@
+{
+  "appId": "com.github.erjosito.aznet-simulator",
+  "productName": "Azure Network Simulator",
+  "directories": { "output": "release" },
+  "files": ["dist/**/*", "platform-dist/**/*", "package.json"],
+  "extraResources": [
+    { "from": "public/scripts", "to": "collectors", "filter": ["*.ps1"] },
+    { "from": "platform/electron/azure-read.ps1", "to": "desktop/azure-read.ps1" },
+    { "from": "platform-dist/worker.cjs", "to": "platform/worker.cjs" }
+  ],
+  "asar": true,
+  "extraMetadata": { "version": "2026.11.14" },
+  "buildVersion": "2026.11.14.1",
+  "artifactName": "Azure-Network-Simulator-${buildVersion}-${arch}.${ext}",
+  "win": { "target": ["nsis"], "signAndEditExecutable": false },
+  "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true }
+}

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "azure-network-simulator": {
+      "type": "local",
+      "command": "node",
+      "args": ["platform-dist/mcp.cjs"],
+      "tools": ["get_capabilities", "get_schema", "start_simulation", "get_job", "get_evidence", "cancel_job"]
+    }
+  }
+}

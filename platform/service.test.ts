@@ -1,0 +1,86 @@
+import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { executePlatform } from '../src/platform/service'
+import { simulate } from '../src/routing'
+import { simulateAzNet } from '../src/azure-net/engine'
+import { validateTopology } from '../src/validation'
+import { parseAzNetTopology } from '../src/azure-net/admission'
+import { translate } from '../src/messages'
+import { PlatformJobs } from './jobs'
+import type { PlatformRequest } from '../src/platform/contract'
+import { resolve } from 'node:path'
+
+const require = createRequire(import.meta.url)
+const compiled = require('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
+function sample(file: string) { return JSON.parse(readFileSync(new URL(`../public/docs/samples/${file}`, import.meta.url), 'utf8')) }
+export const request = (): PlatformRequest => ({
+  contractVersion: 1, operation: 'simulate',
+  document: { mode: 'vwan', topology: sample('hub-routing-preferences.json') },
+})
+
+describe('browser-free platform contract', () => {
+  it.each([
+    ['vwan', 'hub-routing-preferences.json'],
+    ['hub-spoke', 'azure-net/hub-spoke-firewall-udr.json'],
+    ['full', 'azure-net/hybrid-vwan-and-hub-spoke.json'],
+  ] as const)('preserves %s engine semantics and native JSON across compiled Node execution', (mode, file) => {
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology: sample(file) } }
+    const result = executePlatform(input)
+    expect(result.errors).toEqual([])
+    const expected = mode === 'vwan' ? simulate(validateTopology(input.document.topology)) : simulateAzNet(parseAzNetTopology(input.document.topology))
+    expect(result.simulation).toEqual(expected)
+    expect(compiled.executePlatform(input)).toEqual(result)
+    expect(executePlatform({ ...input, document: JSON.parse(JSON.stringify(result.document)) }).document).toEqual(result.document)
+    const inputs: string[] = JSON.parse(readFileSync(new URL('../platform-dist/service.inputs.json', import.meta.url), 'utf8'))
+    expect(inputs.some((file) => /node_modules\/react|src\/i18n\.ts|worker/.test(file))).toBe(false)
+  })
+
+  it('does not leak locale state across clients or interpret placeholders inside user data', () => {
+    expect(translate('ja', 'Shortest learned AS path ({0} ASNs).', 2)).not.toEqual(translate('en', 'Shortest learned AS path ({0} ASNs).', 2))
+    expect(translate('en', '{0}', '{1}', 'private')).toBe('{1}')
+    expect(executePlatform({ ...request(), locale: 'ja' }).simulation).toEqual(executePlatform({ ...request(), locale: 'en' }).simulation)
+  })
+
+  it('rejects malformed versions, duplicate/missing requirements, unsafe JSON and input limits', () => {
+    for (const input of [
+      { ...request(), contractVersion: 2 }, { ...request(), operation: 'evaluate' },
+      { ...request(), engineVersion: '' }, { ...request(), locale: '' }, { ...request(), budget: 0 },
+      { ...request(), budget: { maxMillis: 15001 } },
+      JSON.parse('{"__proto__":{}}'),
+      { ...request(), document: { mode: 'vwan', topology: { version: 2 } } },
+      { ...request(), padding: 'x'.repeat(4_000_001) },
+    ]) expect(executePlatform(input).status).toBe('invalid')
+  })
+
+  it('rejects array accessors without evaluating user code', () => {
+    let accessed = false
+    const input = request()
+    if (input.document.mode !== 'vwan') throw new Error('Expected VWAN fixture')
+    Object.defineProperty(input.document.topology.hubs, '0', { enumerable: true, get() { accessed = true; return {} } })
+    expect(executePlatform(input).status).toBe('invalid')
+    expect(accessed).toBe(false)
+  })
+
+  it('isolates jobs, cancels only the requested job and withholds oversized/timed-out results', async () => {
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      const cancelled = jobs.start(request())
+      jobs.cancel(cancelled)
+      expect(jobs.get(cancelled).result?.status).toBe('not assessed')
+      const complete = await jobs.run(request())
+      expect(complete.simulation).toEqual(executePlatform(request()).simulation)
+      expect((await jobs.run({ ...request(), budget: { maxOutputBytes: 100 } })).errors[0].code).toBe('OUTPUT_LIMIT')
+      expect((await jobs.run({ ...request(), budget: { maxMillis: 1 } })).errors[0].code).toBe('TIME_LIMIT')
+    } finally { jobs.close() }
+  })
+
+  it('rejects concurrent overload rather than spawning extra workers', () => {
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      jobs.start(request())
+      jobs.start(request())
+      expect(() => jobs.start(request())).toThrow('capacity')
+    } finally { jobs.close() }
+  })
+})

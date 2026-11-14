@@ -1,5 +1,17 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Local desktop tools': 'ローカルのデスクトップ ツール',
+  'Desktop · offline modeling · no automatic uploads': 'デスクトップ · オフラインのモデル作成 · 自動アップロードなし',
+  'Open local JSON': 'ローカル JSON を開く',
+  'Read-only local Azure collection': 'ローカルでの読み取り専用 Azure データ取得',
+  'Uses existing Azure CLI and PowerShell 7. No automatic installation, login or resource changes. Public Azure only.': '既存の Azure CLI と PowerShell 7 を使用します。自動インストール、ログイン、リソース変更は行いません。パブリック Azure のみ対応します。',
+  'Read existing Azure session': '既存の Azure セッションを読み取る',
+  'Azure cloud': 'Azure クラウド',
+  'Select subscription and tenant': 'サブスクリプションとテナントを選択',
+  'Select explicitly': '明示的に選択してください',
+  'Read available collection targets': '取得可能な対象を読み取る',
+  'Collect and review locally': 'ローカルで取得して確認',
+  'Review the local file using the existing import workflow.': '既存のインポート手順でローカル ファイルを確認してください。',
   'Hub route table': 'ハブのルート テーブル',
   'Source hub route table': '送信元ハブのルート テーブル',
   'Compared hub route table': '比較するハブのルート テーブル',

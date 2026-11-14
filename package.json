@@ -3,15 +3,24 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "platform-dist/electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
+    "pretest": "npm run build:platform",
     "benchmark:diagnostics": "node scripts/benchmark-diagnostics.mjs",
     "test:collector": "pwsh -NoLogo -NoProfile -File tests/collect-azure-vwan.test.ps1 && pwsh -NoLogo -NoProfile -File tests/collect-azure-network.test.ps1",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:platform": "tsc -p tsconfig.platform.json && node scripts/build-platform.mjs",
+    "test:platform": "npm run build:platform && vitest run platform",
+    "mcp": "node platform-dist/mcp.cjs",
+    "build:desktop": "npm run build && npm run build:platform && electron-builder --win --x64 --publish never",
+    "desktop": "electron platform-dist/electron/main.cjs",
+    "test:desktop": "node scripts/test-desktop.mjs",
+    "test:desktop-cli": "pwsh -NoLogo -NoProfile -File tests/desktop-azure-read.test.ps1"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -26,6 +35,11 @@
     "typescript": "~6.0.3",
     "vite": "^8.3.4",
     "vitest": "^4.1.0",
-    "@playwright/test": "^1.58.0"
+    "@playwright/test": "^1.58.0",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7",
+    "esbuild": "0.28.2",
+    "electron": "42.11.18",
+    "electron-builder": "26.18.0"
   }
 }

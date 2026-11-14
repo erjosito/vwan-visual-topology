@@ -199,7 +199,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
     {error && <p className="notice error" role="alert">{t(error)}</p>}
     {running && <p role="status">{t('Analyzing routing in a local worker. You can cancel or continue editing the topology.')}</p>}
     {cancelled && <p role="status">{t('Analysis cancelled; unassessed cases remain unverified.')}</p>}
-    {currentReport?.continuation && <p role="status">{describeDiagnosticsProgress(currentReport)}</p>}
+    {currentReport?.continuation && <p role="status">{describeDiagnosticsProgress(currentReport, t)}</p>}
     {report && !currentReport && <p className="notice" role="status">{t('The routing configuration changed. Run diagnostics again; previous results are stale.')}</p>}
     {currentReport && (() => {
       const coverage = summarizeCoverage(currentReport)
@@ -236,7 +236,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
           {finding.source && <p>{name(finding.source)} · {finding.sourceAddress ?? finding.prefix} → {name(finding.target)} · {finding.destinationAddress ?? finding.prefix}</p>}
           <small>{t(finding.confidence === 'modeled' ? 'Modeled result' : finding.confidence === 'risk' ? 'Potential risk' : 'Unknown')}</small>
           <details><summary>{t('Evidence and investigation')}</summary>
-            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{evidence.code}</code> · {evidence.nodeId ? topologyObject(topology, finding.related.find((node) => node.id === evidence.nodeId) ?? { kind: 'hub', id: evidence.nodeId })?.name ?? evidence.nodeId : ''} {evidence.prefix} {describeEvidenceSource(topology, evidence)}</li>)}</ul>
+            <ul>{finding.evidence.map((evidence, index) => <li key={index}><code>{evidence.code}</code> · {evidence.nodeId ? topologyObject(topology, finding.related.find((node) => node.id === evidence.nodeId) ?? { kind: 'hub', id: evidence.nodeId })?.name ?? evidence.nodeId : ''} {evidence.prefix} {describeEvidenceSource(topology, evidence, undefined, t)}</li>)}</ul>
             <div className="row">{finding.related.filter((node) => ['hub', 'site', 'erLocation'].includes(node.kind) && topologyObject(topology, node)).slice(0, 4).map((node) => <button key={key(node)} onClick={() => onInspect(node)}>{t('Inspect routes: {0}', topologyObject(topology, node)?.name)}</button>)}</div>
             {([['Forward', finding.forward], ['Return', finding.reverse]] as const).map(([direction, paths]) => <div key={direction}><h4>{t(direction)}</h4>{paths.map((path, index) => <details key={index}><summary>{t(path.status === 'unknown' ? 'Not assessed' : path.status === 'delivered' ? 'Reachable' : path.status === 'loop' ? 'Forwarding loop' : 'No route')} · {index + 1}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details>)}</div>)}
           </details>

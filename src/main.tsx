@@ -8,6 +8,7 @@ import { useLanguage } from './i18n'
 import { CanvasMaximizeButton, CanvasPresentationProvider } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
 import './theme.css'
+import { DesktopTools } from './DesktopTools'
 
 function resolveInitialMode(): SimulatorMode {
   const params = new URLSearchParams(window.location.search)
@@ -49,6 +50,7 @@ export function UnifiedSimulatorRoot() {
   }, [mode])
 
   return <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
+    <DesktopTools key={mode} mode={mode} />
     <CanvasMaximizeButton />
     {mode === 'vwan'
       ? <App simulatorMode={mode} onChangeSimulatorMode={setMode} />

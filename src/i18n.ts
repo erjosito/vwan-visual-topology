@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from 'react'
 import { ja } from './i18n-ja'
 import { diagnosticJa } from './i18n-diagnostics-ja'
+import { translate } from './messages'
+import type { Language } from './messages'
+export { translate } from './messages'
+export type { Language } from './messages'
 
-export type Language = 'en' | 'ja'
 export const languageStorageKey = 'vwan-visual-topology:language:v1'
 export const documentTitles: Record<Language, string> = {
   en: 'Virtual WAN Topology Lab',
@@ -29,11 +32,6 @@ export function setLanguage(next: Language) {
 }
 export function useLanguage() {
   return useSyncExternalStore(subscribe, () => language, () => 'en' as Language)
-}
-export function translate(locale: Language, message: string, ...values: unknown[]): string {
-  const template = locale === 'ja' ? ja[message] ?? diagnosticJa[message] ?? message : message
-  // Substitute once: placeholder-looking content inside user data must remain opaque.
-  return template.replace(/\{(\d+)\}/g, (slot, index: string) => Number(index) < values.length ? String(values[Number(index)] ?? '') : slot)
 }
 export function t(message: string, ...values: unknown[]) {
   return translate(language, message, ...values)
