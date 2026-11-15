@@ -1,5 +1,15 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Workspace could not load. Your saved design has not been replaced.': 'ワークスペースを読み込めませんでした。保存された設計は置き換えていません。',
+  'Reload workspace': 'ワークスペースを再読み込み',
+  'Workspace loading': 'ワークスペースを読み込み中',
+  'Loading workspace…': 'ワークスペースを読み込み中…',
+  'Legacy v2 capture has unknown observation coverage. Present routes can be compared; absence is not evidence of a mismatch.': '従来の v2 キャプチャでは観測範囲が不明です。観測されたルートは比較できますが、欠落は不一致の根拠にはなりません。',
+  'Configuration capture is incomplete or unsupported; route comparisons cannot establish a mismatch or complete agreement.': '構成のキャプチャが不完全、または未対応です。ルート比較から不一致や完全な一致は判定できません。',
+  '"{0}" has unknown or unsupported {1}; no address ownership was invented for simulation.': '「{0}」の {1} は不明、または未対応です。シミュレーション用のアドレス所有関係は補完していません。',
+  'COVERAGE UNKNOWN ({0} matched)': '観測範囲不明（一致 {0} 件）',
+  'COVERAGE PARTIAL ({0} matched)': '観測範囲不完全（一致 {0} 件）',
+  'unassessed': '未評価',
   'Local desktop tools': 'ローカルのデスクトップ ツール',
   'Desktop · offline modeling · no automatic uploads': 'デスクトップ · オフラインのモデル作成 · 自動アップロードなし',
   'Open local JSON': 'ローカル JSON を開く',

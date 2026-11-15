@@ -569,15 +569,18 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
 
     // #35: Mode switcher stays at a fixed position across all 3 modes
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
     const switchBoxHubSpoke = await page.getByTestId('simulator-mode-switch').boundingBox()
     expect(switchBoxHubSpoke).not.toBeNull()
     await page.getByTestId('simulator-mode-full').click()
+    await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('aria-pressed', 'true')
     const switchBoxFull = await page.getByTestId('simulator-mode-switch').boundingBox()
     expect(switchBoxFull).not.toBeNull()
     expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxFull?.x ?? 0))).toBeLessThanOrEqual(4)
     expect(Math.abs((switchBoxHubSpoke?.y ?? 0) - (switchBoxFull?.y ?? 0))).toBeLessThanOrEqual(4)
 
     await page.getByTestId('simulator-mode-vwan').click()
+    await expect(page.getByTestId('vwan-app')).toBeVisible()
     const switchBoxVwan = await page.getByTestId('simulator-mode-switch').boundingBox()
     expect(switchBoxVwan).not.toBeNull()
     expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxVwan?.x ?? 0))).toBeLessThanOrEqual(4)

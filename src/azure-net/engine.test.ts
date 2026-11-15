@@ -1717,6 +1717,75 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(vngRib5.some((r) => r.prefix === '192.168.100.0/24')).toBe(false)
   })
 
+  it('preserves unknown capture addressing without inventing subnet, VNet, endpoint, site or UDR ownership', () => {
+    const imported = importAzNetCapture({
+      kind: 'azure-network-capture', version: 2, resourceGroup: 'rg',
+      vnets: [
+        { id: 'missing', name: 'Unknown VNet' },
+        { id: 'known', name: 'Known VNet', addressSpace: { addressPrefixes: ['10.42.0.0/16'] },
+          subnets: [{ id: 'missing-sub', name: 'Unknown subnet' }, { id: 'work', name: 'Workload', addressPrefix: '10.42.1.0/24' }] },
+      ],
+      privateEndpoints: [{ id: 'pe', name: 'Unknown endpoint', subnetId: 'work' }],
+      localNetworkGateways: [{ id: 'branch', name: 'Unknown branch' }],
+      routeTables: [{ id: 'rt', name: 'Routes', routes: [{ name: 'Unknown UDR', nextHopType: 'Internet' }] }],
+    })
+    expect(imported.topology.vnets.map((vnet) => vnet.name)).toEqual(['Known VNet'])
+    expect(imported.topology.vnets[0].subnets.map((subnet) => subnet.name)).toEqual(['Workload'])
+    expect(imported.topology.vnets[0].subnets[0].privateEndpoints).toBeUndefined()
+    expect(imported.topology.sites[0].prefixes).toEqual([])
+    expect(imported.topology.udrTables[0].routes).toEqual([])
+    expect(imported.unknownAddressing.map((item) => item.resourceName).sort()).toEqual(['Unknown UDR', 'Unknown VNet', 'Unknown branch', 'Unknown endpoint', 'Unknown subnet'])
+    expect(validateAzNetTopology(imported.topology)).toEqual([])
+    expect(imported.warnings.join(' ')).toContain('no address ownership was invented')
+  })
+
+  it('requires complete observations for absence comparisons and never calls denied or legacy empty observations a match', () => {
+    const topology = transitTopology()
+    const simulation = simulateAzNet(topology)
+    const observations = {
+      resourceGroup: 'rg', capturedAt: '2026-11-14T00:00:00Z', collectorVersion: 'test',
+      nicEffectiveRoutes: [{ nicName: 'probe', nicId: 'nic', vnetName: 'Spoke', subnetName: 'Workload', effectiveRoutes: [] }],
+    }
+    const legacy = compareAzNetWithObservations(topology, simulation, observations)
+    expect(legacy.subnetComparisons[0].coverage).toBe('unknown')
+    expect(legacy.totalMismatchedRoutes).toBe(0)
+    const complete = {
+      ...observations, observationVersion: 1 as const, configurationComplete: true,
+      nicEffectiveRoutes: [{ ...observations.nicEffectiveRoutes[0], observation: { state: 'empty' as const, complete: true } }],
+    }
+    expect(compareAzNetWithObservations(topology, simulation, complete).totalMismatchedRoutes).toBeGreaterThan(0)
+    const denied = { ...complete, nicEffectiveRoutes: [{ ...complete.nicEffectiveRoutes[0], observation: { state: 'denied' as const, complete: false } }] }
+    const partial = compareAzNetWithObservations(topology, simulation, denied)
+    expect(partial.subnetComparisons[0].coverage).toBe('partial')
+    expect(partial.totalMatchedRoutes).toBe(0)
+    expect(partial.totalMismatchedRoutes).toBe(0)
+    const presentUnknown = {
+      ...observations,
+      nicEffectiveRoutes: [{ ...observations.nicEffectiveRoutes[0], effectiveRoutes: [
+        { addressPrefix: ['192.0.2.0/24'], source: 'Default', state: 'Active', nextHopType: 'VnetLocal' },
+      ] }],
+    }
+    const unknown = compareAzNetWithObservations(topology, simulation, presentUnknown)
+    expect(unknown.totalMismatchedRoutes).toBe(0)
+    expect(unknown.totalUnknownRoutes).toBe(1)
+  })
+
+  it('validates versioned section provenance and does not trust global completeness over denied configuration', () => {
+    const keys = ['account', 'vnets', 'routeTables', 'vnetGateways', 'localNetworkGateways', 'vpnConnections', 'routeServers', 'privateEndpoints', 'networkInterfaces']
+    const capture = {
+      kind: 'azure-network-capture', version: 2, observationVersion: 1, resourceGroup: 'rg',
+      configurationComplete: true, context: { cloud: 'AzureCloud' },
+      sections: Object.fromEntries(keys.map((key) => [key, { state: 'succeeded', complete: true }])),
+      nicEffectiveRoutes: [],
+    }
+    expect(importAzNetCapture(capture).observations?.configurationComplete).toBe(true)
+    capture.sections.routeTables = { state: 'denied', complete: false }
+    expect(importAzNetCapture(capture).observations?.configurationComplete).toBe(false)
+    capture.sections.routeTables.complete = true
+    expect(() => importAzNetCapture(capture)).toThrow(/state\/completeness/)
+    expect(() => importAzNetCapture({ ...capture, observationVersion: 2 })).toThrow(/observationVersion/)
+  })
+
   it('imports azure-network-capture v2 JSON and compares NIC effective routes including GatewaySubnet proxy', () => {
     const rawUc1 = readFileSync(
       resolve(process.cwd(), 'samples', 'azure-net', 'uc1-hub-spoke-nva-ars-baseline.json'),
@@ -1791,11 +1860,22 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     const imported = importAzNetCapture(capture)
     expect(imported.topology.vnets).toHaveLength(1)
     expect(imported.observations).toBeDefined()
+    expect(imported.unknownAddressing).toEqual([])
 
-    const directCompare = compareAzNetWithObservations(uc1, sim1, imported.observations!)
+    const observations = {
+      ...imported.observations!,
+      observationVersion: 1 as const,
+      configurationComplete: true,
+      nicEffectiveRoutes: imported.observations!.nicEffectiveRoutes.map((nic) => ({
+        ...nic,
+        observation: { state: 'succeeded' as const, complete: true },
+      })),
+    }
+    const directCompare = compareAzNetWithObservations(uc1, sim1, observations)
     expect(directCompare.subnetComparisons).toHaveLength(1)
     expect(directCompare.subnetComparisons[0].proxyForGatewaySubnet).toBe(true)
     expect(directCompare.subnetComparisons[0].mismatchCount).toBe(0)
+    expect(directCompare.totalUnknownRoutes).toBe(0)
     expect(directCompare.totalMatchedRoutes).toBeGreaterThan(0)
   })
 
@@ -1819,14 +1899,27 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
       const cap = JSON.parse(capRaw)
       const imp = importAzNetCapture(cap)
       expect(imp.observations, `${capFile} observations`).toBeDefined()
+      expect(imp.unknownAddressing, `${capFile} addressing`).toEqual([])
+
+      // These pinned archives have established full-table coverage; generic legacy imports do not.
+      const observations = {
+        ...imp.observations!,
+        observationVersion: 1 as const,
+        configurationComplete: true,
+        nicEffectiveRoutes: imp.observations!.nicEffectiveRoutes.map((nic) => ({
+          ...nic,
+          observation: { state: 'succeeded' as const, complete: true },
+        })),
+      }
 
       const impSim = simulateAzNet(imp.topology)
-      const impCmp = compareAzNetWithObservations(imp.topology, impSim, imp.observations!)
+      const impCmp = compareAzNetWithObservations(imp.topology, impSim, observations)
       const mismatched = impCmp.subnetComparisons.flatMap((sc) =>
         sc.rows.filter((r) => !r.matched).map((r) => ({ vnet: sc.vnetName, subnet: sc.subnetName, ...r })),
       )
       expect(mismatched, `${capFile} imported mismatches`).toEqual([])
       expect(impCmp.totalMismatchedRoutes, `${capFile} imported mismatches`).toBe(0)
+      expect(impCmp.totalUnknownRoutes, `${capFile} imported unknown routes`).toBe(0)
       expect(impCmp.totalMatchedRoutes, `${capFile} imported matches`).toBeGreaterThanOrEqual(27)
 
       const sampleRaw = readFileSync(
@@ -1835,8 +1928,9 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
       )
       const sample = JSON.parse(sampleRaw) as AzNetTopology
       const sampleSim = simulateAzNet(sample)
-      const sampleCmp = compareAzNetWithObservations(sample, sampleSim, imp.observations!)
+      const sampleCmp = compareAzNetWithObservations(sample, sampleSim, observations)
       expect(sampleCmp.totalMismatchedRoutes, `${capFile} vs ${sampleFile} mismatches`).toBe(0)
+      expect(sampleCmp.totalUnknownRoutes, `${capFile} vs ${sampleFile} unknown routes`).toBe(0)
       expect(sampleCmp.totalMatchedRoutes, `${capFile} vs ${sampleFile} matches`).toBeGreaterThanOrEqual(25)
     }
   })
