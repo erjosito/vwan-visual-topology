@@ -943,6 +943,7 @@ test('dragging updates links live, saves per-view positions and round-trips the 
 for (const mode of ['layered', 'constellation'] as const) {
   test(`blank-canvas dragging pans ${mode} without changing saved nodes and preserves node dragging at zoom`, async ({ page }) => {
     await page.goto('/')
+    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
     await page.getByLabel('Visualization mode').selectOption(mode)
     await page.getByLabel('Canvas zoom').selectOption('1.5')
     await page.locator('.diagram-scroll').evaluate((element) => element.scrollTo(70, 40))
@@ -1076,6 +1077,7 @@ test('canvas is the workspace, with layouts, zoom and keyboard background action
 
 test('BGP overlay preserves all candidates, colors, preference changes and topology comparison', async ({ page }) => {
   await page.goto('/')
+  await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
   await showRoutes(page)
   const inspector = dialog(page, 'BGP table · Europe hub')
   const rows = inspector.locator('tr[data-prefix="10.20.0.0/16"]')
@@ -1391,7 +1393,7 @@ test('hub route-map wizard rejects restricted prepend ASNs and explains public A
 test('spoke NVA creation auto-infers peer IP, embeds the NVA icon on the spoke, and advertises attached downstream VNets and sites', async ({ page }) => {
   await page.goto('/'); await importTopology(page, structuredClone(example))
   await action(page, 'Select spoke Europe applications', 'Edit configuration')
-  await page.getByRole('button', { name: 'Add BGP NVA', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Add BGP NVA', exact: true }).click()
   await expect(page.getByLabel('Originated prefix', { exact: true })).toHaveCount(0)
   await expect(page.getByLabel('NVA BGP advertisements', { exact: true })).toHaveCount(0)
   await expect(page.getByLabel('NVA BGP interface IPv4', { exact: true })).toHaveValue('10.1.0.4')

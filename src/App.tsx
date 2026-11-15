@@ -19,6 +19,7 @@ import { ErLocationInfoModal } from './ErLocationInfoModal'
 import type { ErCircuitSku } from './er-locations-catalog'
 import { CanvasOverlay } from './CanvasOverlay'
 import { SampleGallery } from './SampleGallery'
+import { WorkspaceTools } from './WorkspaceTools'
 import { RouteInspector } from './RouteInspector'
 import { RouteMapsPanel } from './RouteMapsPanel'
 import { RouteMapInspector } from './RouteMapInspector'
@@ -426,15 +427,6 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const groupSummary = groupTrace && (groupTrace.direction === 'to'
     ? t("Paths from {0} to {1}", sourceNode?.name ?? t('source'), groupLabel)
     : t("Paths from {0} to {1}", groupLabel, targetNode?.name ?? t('destination')))
-  const contextSelection = contextMenu?.selection
-  const contextObject = contextSelection && topologyObject(topology, contextSelection)
-  const contextConnection = contextSelection?.kind === 'connection' ? topology.connections.find((connection) => connection.id === contextSelection.id) : undefined
-  const vpnActions: ContextAction[] = contextConnection?.transport === 'VPN'
-    ? (['static', 'bgp'] as const).map((mode) => ({
-      label: mode === 'static' ? t("Change to static routing") : t("Change to BGP routing"),
-      disabled: vpnRoutingMode(topology, contextConnection) === mode,
-      run: () => { setVpnConversion({ connectionId: contextConnection.id, mode }); setEditorRequest(undefined); setPanel('vpnWizard') },
-    })) : []
   const canvasActions: ContextAction[] = [
     { label: t("Add hub"), run: () => setEditorRequest({ kind: 'hub' }) },
     { label: t("Add Azure VNet"), run: () => setEditorRequest({ kind: 'spoke' }) },
@@ -444,102 +436,115 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     { label: t("Check routing"), run: checkRouting },
     { label: t("Model notes and warnings"), run: () => setPanel('notes') },
   ]
-  const spokeObj = contextSelection?.kind === 'spoke' ? topology.spokes.find((spoke) => spoke.id === contextSelection.id) : undefined
-  const spokeNvaConn = spokeObj ? topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeObj.id) : undefined
-  const spokeNvaSite = spokeNvaConn ? topology.sites.find((s) => s.id === spokeNvaConn.siteId) : undefined
-  const ordinaryContextActions: ContextAction[] = contextSelection ? [
-    ...(contextMenu?.routeMap ? [{
-      label: t("Remove route map association"),
-      run: () => {
-        const association = contextMenu.routeMap!
-        update((next) => {
-          const router = (association.router.kind === 'hub' ? next.hubs : next.sites).find((router) => router.id === association.router.id)
-          const binding = router?.routeMapAssignments?.find((binding) => binding.connectionId === association.connectionId)
-          if (!router || !binding) return
-          delete binding[`${association.direction}MapId`]
-          router.routeMapAssignments = router.routeMapAssignments?.filter((binding) => binding.inboundMapId || binding.outboundMapId)
-        })
-      },
-    }] : []),
-    { label: t("Edit configuration"), run: () => setEditorRequest(contextSelection) },
-    ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
-      { label: t("BGP table"), run: () => showRoutes(contextSelection) },
-      { label: t("Learned routes"), run: () => showRoutes(contextSelection, false, 'learned') },
-      { label: t("Advertised routes"), run: () => showRoutes(contextSelection, false, 'advertised') },
-      { label: t('Highlight preferred routes'), run: () => { selectRouter(contextSelection); setDiagnosticHighlight(undefined); setHighlighting(true); setTracing(false) } },
-    ] : []),
-    ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Route maps"), run: () => openRouteMaps(contextSelection as RouterSelection) }] : []),
-    ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Show route map rules"), run: () => showRouteMapRules(contextSelection as RouterSelection) }] : []),
-    ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Static routing"), run: () => openStaticRouting(contextSelection as RouterSelection) }] : []),
-    ...(['hub', 'site', 'spoke'].includes(contextSelection.kind) ? [
-      { label: t("Show path to"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'to') },
-      { label: t("Show path from"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'from') },
-      { label: t("Open path explorer"), run: () => openPath(contextSelection as PathNode, 'to') },
-    ] : []),
-    ...(contextSelection.kind === 'hub' ? [
-      ...(topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [{ label: t("Show firewall routes"), run: () => showRoutes(contextSelection, true) }] : []),
-      { label: t("Add spoke"), run: () => setEditorRequest({ kind: 'spoke', hubId: contextSelection.id }) },
-      { label: t("Add connected site"), run: () => setEditorRequest({ kind: 'site', hubId: contextSelection.id }) },
-      { label: t("Connect existing site"), disabled: !topology.sites.length, run: () => setEditorRequest({ kind: 'connection', hubId: contextSelection.id }) },
-      { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', hubId: contextSelection.id }) },
-    ] : []),
-    ...(contextSelection.kind === 'site' ? [
-      { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'connection', siteId: contextSelection.id }) },
-      { label: t("Link to another site"), disabled: topology.sites.length < 2, run: () => setEditorRequest({ kind: 'siteLink', siteId: contextSelection.id }) },
-      { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', siteId: contextSelection.id }) },
-    ] : []),
-    ...(contextSelection.kind === 'spoke' ? [
-      ...(spokeObj?.hubId ? [
-        ...(spokeNvaConn && spokeNvaSite ? [
-          { label: t("Configure BGP NVA"), run: () => setEditorRequest({ kind: 'site', id: spokeNvaSite.id, spokeId: spokeObj.id }) },
-          { label: t("Add downstream VNet"), run: () => setEditorRequest({ kind: 'spoke', nvaSpokeId: spokeObj.id }) },
-          { label: t("Add downstream site"), run: () => setEditorRequest({ kind: 'site', nvaSpokeId: spokeObj.id }) },
-          { label: t("NVA BGP table"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }) },
-          { label: t("NVA learned routes"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }, false, 'learned') },
-          { label: t("NVA advertised routes"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }, false, 'advertised') },
-          { label: t("NVA route maps"), run: () => openRouteMaps({ kind: 'site', id: spokeNvaSite.id }) },
-          { label: spokeNvaConn.enabled ? t("Disable BGP NVA") : t("Enable BGP NVA"), run: () => update((next) => { const c = next.connections.find((c) => c.id === spokeNvaConn.id)!; c.enabled = !c.enabled }) },
-          { label: t("Remove BGP NVA"), danger: true, run: () => setEditorRequest({ kind: 'site', id: spokeNvaSite.id, spokeId: spokeObj.id, deleting: true }) },
-        ] : [
-          { label: t("Add BGP NVA"), run: () => setEditorRequest({ kind: 'site', spokeId: contextSelection.id }) },
-        ]),
-        { label: t("Spoke connection route maps"), run: () => { openRouteMaps({ kind: 'hub', id: spokeObj.hubId! }, contextSelection.id) } },
+  const getContextActions = (contextSelection?: ObjectSelection, routeMap?: DiagramContextMenu['routeMap']): ContextAction[] => {
+    const contextConnection = contextSelection?.kind === 'connection' ? topology.connections.find((connection) => connection.id === contextSelection.id) : undefined
+    const vpnActions: ContextAction[] = contextConnection?.transport === 'VPN'
+      ? (['static', 'bgp'] as const).map((mode) => ({
+        label: mode === 'static' ? t("Change to static routing") : t("Change to BGP routing"),
+        disabled: vpnRoutingMode(topology, contextConnection) === mode,
+        run: () => { setVpnConversion({ connectionId: contextConnection.id, mode }); setEditorRequest(undefined); setPanel('vpnWizard') },
+      })) : []
+    const spokeObj = contextSelection?.kind === 'spoke' ? topology.spokes.find((spoke) => spoke.id === contextSelection.id) : undefined
+    const spokeNvaConn = spokeObj ? topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeObj.id) : undefined
+    const spokeNvaSite = spokeNvaConn ? topology.sites.find((s) => s.id === spokeNvaConn.siteId) : undefined
+    const ordinaryContextActions: ContextAction[] = contextSelection ? [
+      ...(routeMap ? [{
+        label: t("Remove route map association"),
+        run: () => {
+          const association = routeMap
+          update((next) => {
+            const router = (association.router.kind === 'hub' ? next.hubs : next.sites).find((router) => router.id === association.router.id)
+            const binding = router?.routeMapAssignments?.find((binding) => binding.connectionId === association.connectionId)
+            if (!router || !binding) return
+            delete binding[`${association.direction}MapId`]
+            router.routeMapAssignments = router.routeMapAssignments?.filter((binding) => binding.inboundMapId || binding.outboundMapId)
+          })
+        },
+      }] : []),
+      { label: t("Edit configuration"), run: () => setEditorRequest(contextSelection) },
+      ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
+        { label: t("BGP table"), run: () => showRoutes(contextSelection) },
+        { label: t("Learned routes"), run: () => showRoutes(contextSelection, false, 'learned') },
+        { label: t("Advertised routes"), run: () => showRoutes(contextSelection, false, 'advertised') },
+        { label: t('Highlight preferred routes'), run: () => { selectRouter(contextSelection); setDiagnosticHighlight(undefined); setHighlighting(true); setTracing(false) } },
       ] : []),
-    ] : []),
-    ...(contextSelection.kind === 'erLocation' ? [
-      { label: t("Show ER Location Info"), run: () => {
-        const loc = topology.erLocations?.find((l) => l.id === contextSelection.id)
-        const hubLink = topology.erLinks?.find((l) => l.locationId === contextSelection.id && l.hubId)
-        const hub = hubLink ? topology.hubs.find((h) => h.id === hubLink.hubId) : undefined
-        setErLocationModal({ open: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
-      } },
-      { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id }) },
-      { label: t("Connect to site"), disabled: !topology.sites.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id, siteId: topology.sites[0]?.id }) },
-    ] : []),
-    ...(contextSelection.kind === 'erLink' ? [
-      { label: t("Show ER Location Info"), run: () => {
-        const link = topology.erLinks?.find((l) => l.id === contextSelection.id)
-        const loc = link ? topology.erLocations?.find((l) => l.id === link.locationId) : undefined
-        const hub = link?.hubId ? topology.hubs.find((h) => h.id === link.hubId) : undefined
-        setErLocationModal({ open: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
-      } },
-      { label: topology.erLinks?.find((link) => link.id === contextSelection.id)?.enabled ? t("Disable connection") : t("Enable connection"), run: () => update((next) => { const link = next.erLinks!.find((link) => link.id === contextSelection.id)!; link.enabled = !link.enabled }) },
-    ] : []),
-    ...(contextSelection.kind === 'connection' ? [
-      ...vpnActions,
-      { label: topology.connections.find((c) => c.id === contextSelection.id)?.enabled ? t("Disable connection") : t("Enable connection"), run: () => update((next) => { const c = next.connections.find((c) => c.id === contextSelection.id)!; c.enabled = !c.enabled }) },
-    ] : []),
-    { label: t("Delete {0}", t(objectLabels[contextSelection.kind])), danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
-  ] : canvasActions
-  const contextFaults = contextSelection ? scenario.affected[contextSelection.id] ?? [] : []
-  const contextDomain = contextSelection && scenario.domains.find((domain) =>
-    (domain.kind === 'site' && contextSelection.kind === 'site' || domain.kind === 'er-location' && contextSelection.kind === 'erLocation') && domain.id === contextSelection.id ||
-    domain.kind === 'region' && (contextSelection.kind === 'hub' || contextSelection.kind === 'spoke') &&
+      ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Route maps"), run: () => openRouteMaps(contextSelection as RouterSelection) }] : []),
+      ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Show route map rules"), run: () => showRouteMapRules(contextSelection as RouterSelection) }] : []),
+      ...(['hub', 'site'].includes(contextSelection.kind) ? [{ label: t("Static routing"), run: () => openStaticRouting(contextSelection as RouterSelection) }] : []),
+      ...(['hub', 'site', 'spoke'].includes(contextSelection.kind) ? [
+        { label: t("Show path to"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'to') },
+        { label: t("Show path from"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'from') },
+        { label: t("Open path explorer"), run: () => openPath(contextSelection as PathNode, 'to') },
+      ] : []),
+      ...(contextSelection.kind === 'hub' ? [
+        ...(topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [{ label: t("Show firewall routes"), run: () => showRoutes(contextSelection, true) }] : []),
+        { label: t("Add spoke"), run: () => setEditorRequest({ kind: 'spoke', hubId: contextSelection.id }) },
+        { label: t("Add connected site"), run: () => setEditorRequest({ kind: 'site', hubId: contextSelection.id }) },
+        { label: t("Connect existing site"), disabled: !topology.sites.length, run: () => setEditorRequest({ kind: 'connection', hubId: contextSelection.id }) },
+        { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', hubId: contextSelection.id }) },
+      ] : []),
+      ...(contextSelection.kind === 'site' ? [
+        { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'connection', siteId: contextSelection.id }) },
+        { label: t("Link to another site"), disabled: topology.sites.length < 2, run: () => setEditorRequest({ kind: 'siteLink', siteId: contextSelection.id }) },
+        { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', siteId: contextSelection.id }) },
+      ] : []),
+      ...(contextSelection.kind === 'spoke' ? [
+        ...(spokeObj?.hubId ? [
+          ...(spokeNvaConn && spokeNvaSite ? [
+            { label: t("Configure BGP NVA"), run: () => setEditorRequest({ kind: 'site', id: spokeNvaSite.id, spokeId: spokeObj.id }) },
+            { label: t("Add downstream VNet"), run: () => setEditorRequest({ kind: 'spoke', nvaSpokeId: spokeObj.id }) },
+            { label: t("Add downstream site"), run: () => setEditorRequest({ kind: 'site', nvaSpokeId: spokeObj.id }) },
+            { label: t("NVA BGP table"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }) },
+            { label: t("NVA learned routes"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }, false, 'learned') },
+            { label: t("NVA advertised routes"), run: () => showRoutes({ kind: 'site', id: spokeNvaSite.id }, false, 'advertised') },
+            { label: t("NVA route maps"), run: () => openRouteMaps({ kind: 'site', id: spokeNvaSite.id }) },
+            { label: spokeNvaConn.enabled ? t("Disable BGP NVA") : t("Enable BGP NVA"), run: () => update((next) => { const c = next.connections.find((c) => c.id === spokeNvaConn.id)!; c.enabled = !c.enabled }) },
+            { label: t("Remove BGP NVA"), danger: true, run: () => setEditorRequest({ kind: 'site', id: spokeNvaSite.id, spokeId: spokeObj.id, deleting: true }) },
+          ] : [
+            { label: t("Add BGP NVA"), run: () => setEditorRequest({ kind: 'site', spokeId: contextSelection.id }) },
+          ]),
+          { label: t("Spoke connection route maps"), run: () => { openRouteMaps({ kind: 'hub', id: spokeObj.hubId! }, contextSelection.id) } },
+        ] : []),
+      ] : []),
+      ...(contextSelection.kind === 'erLocation' ? [
+        { label: t("Show ER Location Info"), run: () => {
+            const loc = topology.erLocations?.find((l) => l.id === contextSelection.id)
+            const hubLink = topology.erLinks?.find((l) => l.locationId === contextSelection.id && l.hubId)
+            const hub = hubLink ? topology.hubs.find((h) => h.id === hubLink.hubId) : undefined
+            setErLocationModal({ open: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
+          } },
+        { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id }) },
+        { label: t("Connect to site"), disabled: !topology.sites.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id, siteId: topology.sites[0]?.id }) },
+      ] : []),
+      ...(contextSelection.kind === 'erLink' ? [
+        { label: t("Show ER Location Info"), run: () => {
+            const link = topology.erLinks?.find((l) => l.id === contextSelection.id)
+            const loc = link ? topology.erLocations?.find((l) => l.id === link.locationId) : undefined
+            const hub = link?.hubId ? topology.hubs.find((h) => h.id === link.hubId) : undefined
+            setErLocationModal({ open: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
+          } },
+        { label: topology.erLinks?.find((link) => link.id === contextSelection.id)?.enabled ? t("Disable connection") : t("Enable connection"), run: () => update((next) => { const link = next.erLinks!.find((link) => link.id === contextSelection.id)!; link.enabled = !link.enabled }) },
+      ] : []),
+      ...(contextSelection.kind === 'connection' ? [
+        ...vpnActions,
+        { label: topology.connections.find((c) => c.id === contextSelection.id)?.enabled ? t("Disable connection") : t("Enable connection"), run: () => update((next) => { const c = next.connections.find((c) => c.id === contextSelection.id)!; c.enabled = !c.enabled }) },
+      ] : []),
+      { label: t("Delete {0}", t(objectLabels[contextSelection.kind])), danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
+    ] : canvasActions
+    const contextFaults = contextSelection ? scenario.affected[contextSelection.id] ?? [] : []
+    const contextDomain = contextSelection && scenario.domains.find((domain) =>
+      (domain.kind === 'site' && contextSelection.kind === 'site' || domain.kind === 'er-location' && contextSelection.kind === 'erLocation') && domain.id === contextSelection.id ||
+      domain.kind === 'region' && (contextSelection.kind === 'hub' || contextSelection.kind === 'spoke') &&
       domain.id === regionKey((contextSelection.kind === 'hub' ? topology.hubs : topology.spokes).find((n) => n.id === contextSelection.id)?.region))
-  const contextActions: ContextAction[] = contextFaults.length
-    ? contextFaults.map((fault) => ({ label: `Restore ${failureLabel(fault)}`, run: () => restoreFault(fault) }))
-    : [...(contextDomain ? [{ label: `Simulate failure of ${failureLabel(contextDomain)}`, run: () => addFault(contextDomain) }]
-      : contextSelection && ['hub', 'spoke'].includes(contextSelection.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...ordinaryContextActions]
+    return contextFaults.length
+      ? contextFaults.map((fault) => ({ label: `Restore ${failureLabel(fault)}`, run: () => restoreFault(fault) }))
+      : [...(contextDomain ? [{ label: `Simulate failure of ${failureLabel(contextDomain)}`, run: () => addFault(contextDomain) }]
+        : contextSelection && ['hub', 'spoke'].includes(contextSelection.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...ordinaryContextActions]
+  }
+  const contextSelection = contextMenu?.selection
+  const contextObject = contextSelection && topologyObject(topology, contextSelection)
+  const contextActions = getContextActions(contextSelection, contextMenu?.routeMap)
+  const selectedObject = selection && topologyObject(topology, selection)
   const exportTopology = (original = '') => {
     const url = URL.createObjectURL(new Blob([original || JSON.stringify(topology, null, 2)], { type: 'application/json' }))
     const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'vwan-topology.json'; anchor.click()
@@ -591,6 +596,15 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
         {onChangeSimulatorMode && <SimulatorModeSwitch mode={simulatorMode} onChange={onChangeSimulatorMode} variant="vwan" />}
       </div>
       <div className="actions unified-topbar-controls"><LanguageSelector />
+        <WorkspaceTools creationActions={[
+          { label: t('+ Hub'), run: () => setEditorRequest({ kind: 'hub' }) },
+          { label: t('+ VNet'), run: () => setEditorRequest({ kind: 'spoke' }) },
+          { label: t('+ Site'), run: () => setEditorRequest({ kind: 'site' }) },
+          { label: t('+ ER location'), run: () => setEditorRequest({ kind: 'erLocation' }) },
+        ]} getSelection={() => selectedObject && selection ? {
+          title: t("{0} actions: {1}", t(objectLabels[selection.kind]), selectedObject.name),
+          actions: getContextActions(selection),
+        } : undefined} />
         <LearningTools document={{ mode: 'vwan', topology }} onOpen={(document) => { if (document.mode === 'vwan') { reset(document.topology); setFaults([]) } }} />
         <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
@@ -624,7 +638,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
         <div className="canvas-toolbar"><div><h2>{t("Network topology")}</h2><p className="muted">{t("Drag blank canvas to pan; drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.")}</p></div>
           <div className="canvas-tools"><label className="checkbox-field"><input type="checkbox" checked={topology.allowBranchToBranchTraffic !== false} onChange={(event) => update((next) => { next.allowBranchToBranchTraffic = event.target.checked })} />{t('Allow branch-to-branch traffic (WAN-wide)')}</label>
             <button disabled={!canUndo} title={t("Undo last topology change (Ctrl+Z)")} onClick={undo}>{t("Undo")}</button><button disabled={!canRedo} title={t("Redo topology change (Ctrl+Y)")} onClick={redo}>{t("Redo")}</button>
-            <button onClick={() => setEditorRequest({ kind: 'hub' })}>{t("+ Hub")}</button><button onClick={() => setEditorRequest({ kind: 'spoke' })}>{t("+ VNet")}</button><button onClick={() => setEditorRequest({ kind: 'site' })}>{t("+ Site")}</button><button onClick={() => setEditorRequest({ kind: 'erLocation' })}>{t("+ ER location")}</button><button onClick={() => openRouteMaps()}>{t("Route maps")}</button><button disabled={currentCheck?.status === 'running'} onClick={checkRouting}>{t("Check routing")}</button><button aria-label={t("Open model notes and warnings")} onClick={() => setPanel('notes')}>{t("Notes")}{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
+            <button onClick={() => openRouteMaps()}>{t("Route maps")}</button><button disabled={currentCheck?.status === 'running'} onClick={checkRouting}>{t("Check routing")}</button><button aria-label={t("Open model notes and warnings")} onClick={() => setPanel('notes')}>{t("Notes")}{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         {routingCheck && <div className="routing-check-status" role="status">
           <span>{t(!currentCheck ? 'Routing changed. Check routing again.' : currentCheck.status === 'running' ? 'Checking all modeled networks…'
