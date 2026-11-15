@@ -24,6 +24,7 @@ export interface Candidate {
   prefix: string
   asPath: number[]
   localPreference?: number
+  weight?: number
   kind: RouteKind | 'system' | 'policy'
   transport: Transport | 'VNet' | 'Firewall' | 'Internet'
   connectionId: string
@@ -72,7 +73,7 @@ export interface RoutePolicySnapshot {
   after: Candidate[]
 }
 
-function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
+export function chooseVwanHubRoutes(hub: Pick<Hub, 'preference'>, prefix: string, candidates: Candidate[]): Decision {
   let selected = candidates
   const explanation: string[] = []
   const filter = (reason: string, predicate: (route: Candidate) => boolean) => {
@@ -98,6 +99,12 @@ function choose(hub: Hub, prefix: string, candidates: Candidate[]): Decision {
     filter(`${preferred} wins the ExpressRoute versus S2S VPN comparison.`, (r) => r.transport !== (preferred === 'VPN' ? 'ExpressRoute' : 'VPN'))
   }
   if (hub.preference !== 'ASPath') {
+    const er = selected.filter((route) => route.transport === 'ExpressRoute')
+    if (er.length) {
+      const maxWeight = Math.max(...er.map((route) => route.weight ?? 0))
+      filter(`Higher ExpressRoute link weight (${maxWeight}).`, (route) =>
+        route.transport !== 'ExpressRoute' || (route.weight ?? 0) === maxWeight)
+    }
     const shortest = Math.min(...selected.map((r) => r.asPath.length))
     filter(`Shortest learned AS path (${shortest} ASNs).`, (r) => r.asPath.length === shortest)
   }
@@ -128,7 +135,7 @@ function localRoutes(connection: Connection, topology: Topology): Candidate[] {
 function decide(hub: Hub, candidates: Candidate[]): Decision[] {
   return [...new Set(candidates.map((r) => r.prefix))]
     .sort((a, b) => cidr(a)!.network - cidr(b)!.network || cidr(a)!.length - cidr(b)!.length)
-    .map((prefix) => choose(hub, prefix, candidates.filter((r) => r.prefix === prefix)))
+    .map((prefix) => chooseVwanHubRoutes(hub, prefix, candidates.filter((r) => r.prefix === prefix)))
 }
 
 function erCustomerExport(route: Candidate): Candidate {

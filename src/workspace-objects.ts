@@ -111,7 +111,7 @@ export function azWorkspaceObjects(topology: AzNetTopology): readonly WorkspaceO
   for (const link of topology.erLinks) add(link, { kind: 'er-link', linkId: link.id }, 'ER connection', names(link.locationId, link.targetId), [], link.enabled)
   for (const link of topology.erGlobalReachLinks ?? []) add(link, { kind: 'er-global-reach-link', linkId: link.id }, 'Global Reach link',
     names(link.locationAId, link.locationBId), [], link.enabled)
-  for (const connection of topology.vpnConnections) add(connection, { kind: 'vpn-connection', connectionId: connection.id }, 'VPN connection',
+  for (const connection of topology.vpnConnections) add(connection, { kind: 'vpn-connection', connectionId: connection.id }, connection.transport === 'SDWAN' ? 'SD-WAN connection' : 'VPN connection',
     names(connection.siteId, connection.targetId), [], connection.enabled)
   for (const link of topology.siteLinks) add(link, { kind: 'site-link', siteLinkId: link.id }, 'Site link', names(link.siteAId, link.siteBId), [], link.enabled)
   return objects

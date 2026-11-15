@@ -67,6 +67,17 @@ try {
     const inventoryOwner = mode === 'vwan' ? topology.spokes[0] : topology.vnets.find((vnet) => vnet.role === 'spoke-vnet')
     if (mode === 'vwan') inventoryOwner.subnets = [{ id: 'desktop-subnet', name: 'Desktop subnet', prefix: inventoryOwner.prefixes[0] }]
     const subnet = inventoryOwner.subnets[0]
+    if (mode === 'full') {
+      const hub = topology.vwanHubs[0]
+      topology.vpnConnections.push({ id: 'desktop-sdwan', name: 'Desktop SD-WAN', siteId: topology.sites[0].id,
+        targetKind: 'vwan-hub', targetId: hub.id, enabled: true, bgpEnabled: true, transport: 'SDWAN', learnSiteRoutes: true, propagateDefaultRoute: false })
+      topology.routeMaps = [...(topology.routeMaps ?? []), { id: 'desktop-policy', name: 'Desktop hub policy', hubId: hub.id,
+        rules: [{ id: 'prepend', prefixes: [], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [64496], nextStep: 'terminate' }] }]
+      hub.routeMapAssignments = [{ connectionId: inventoryOwner.id, inboundMapId: 'desktop-policy' }]
+      inventoryOwner.appliances.push({ id: 'desktop-nva', name: 'Desktop NVA', kind: 'nva-vm', subnetId: subnet.id,
+        privateIp: `${subnet.prefix.split('/')[0].split('.').slice(0, 3).join('.')}.5`, asn: 65010,
+        bgpEnabled: true, vwanBgpEnabled: true, enableIpForwarding: true, staticRoutes: [], advertisedPrefixes: ['192.0.2.0/24'] })
+    }
     topology.inventory = {
       workloads: [{ id: 'desktop-vm', name: 'Desktop workload', nicIds: ['desktop-nic'] }],
       nics: [{ id: 'desktop-nic', name: 'Desktop NIC', owner: { kind: mode === 'vwan' ? 'spoke' : 'vnet', id: inventoryOwner.id },
@@ -77,6 +88,11 @@ try {
     const result = await page.evaluate((input) => window.desktopSimulator.simulate(input), request)
     expect(result.ok).toBe(true)
     expect(result.value).toEqual(executePlatform(request))
+    if (mode === 'full') {
+      expect(result.value.simulation.vwanHubRibs[topology.vwanHubs[0].id]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ prefix: '192.0.2.0/24', nextHopId: 'desktop-nva', asPath: [64496, 65010], preferred: true }),
+      ]))
+    }
     const packetRequest = { ...request, packet: {
       source: { kind: 'workload', workloadId: 'desktop-vm', nicId: 'desktop-nic', ipConfigurationId: 'desktop-ip' },
       target: { kind: 'external', address: '20.50.60.70' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443,

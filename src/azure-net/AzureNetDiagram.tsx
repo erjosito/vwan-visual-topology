@@ -10,7 +10,7 @@ import type { RouteMap, RouteMapAssignment, RouteMapDirection } from '../model'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
 import { RouteMapPreview } from '../RouteMapPreview'
 import { azArsPolicyLinks } from './ars-route-maps'
-import { azSitePolicyLinks } from './route-maps'
+import { azHubPolicyLinks, azSitePolicyLinks } from './route-maps'
 import { azInterHubLinks } from './hub-routing'
 import { inventoryCounts } from '../inventory'
 import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
@@ -37,7 +37,7 @@ export type AzContextMenuTarget =
   | { kind: 'entity'; x: number; y: number; entity: AzSelectedEntity; routeMap?: AzRouteMapSelection }
 
 export interface AzRouteMapSelection {
-  owner: Extract<AzSelectedEntity, { kind: 'site' | 'route-server' }>
+  owner: Extract<AzSelectedEntity, { kind: 'site' | 'route-server' | 'vwan-hub' }>
   connectionId: string
   direction: RouteMapDirection
 }
@@ -494,7 +494,7 @@ export function AzureNetDiagram({
     maps: RouteMap[], bindings: RouteMapAssignment[], enabled: boolean,
     curve: ReturnType<typeof diagramCurve>, offset = 28, internal = false,
   ) => {
-    const ownerId = owner.kind === 'site' ? owner.siteId : owner.routeServerId
+    const ownerId = owner.kind === 'site' ? owner.siteId : owner.kind === 'vwan-hub' ? owner.hubId : owner.routeServerId
     const binding = bindings.find((assignment) => assignment.connectionId === connectionId)
     const directions = (['inbound', 'outbound'] as const).filter((direction) => maps.some((map) => map.id === binding?.[`${direction}MapId`]))
     directions.forEach((direction, index) => {
@@ -532,6 +532,20 @@ export function AzureNetDiagram({
         curve, 28 + slot * 52)
     }
   }
+  for (const hub of topology.vwanHubs) {
+    for (const link of azHubPolicyLinks(topology, hub.id)) {
+      const vnet = topology.vnets.find((vnet) => vnet.id === link.id)
+      const edgeId = vnet ? `vhub-attach:${vnet.id}:${hub.id}` : link.id
+      const edge = connectionCurves.get(edgeId)
+      if (!edge) continue
+      const connection = topology.vpnConnections.find((connection) => connection.id === link.id)
+        ?? topology.erLinks.find((connection) => connection.id === link.id)
+      addPolicyMarkers({ kind: 'vwan-hub', hubId: hub.id }, hub.name, link.id, link.name,
+        topology.routeMaps?.filter((map) => map.hubId === hub.id) ?? [], hub.routeMapAssignments ?? [],
+        Boolean(link.bgp && (vnet ? vnet.vwanHubAttachment?.enabled : connection?.enabled) && !faults[vnet?.id ?? '']),
+        edge.from === `vwan-hub:${hub.id}` ? edge.curve : reverseCurve(edge.curve))
+    }
+  }
   for (const vnet of topology.vnets) {
     const ars = vnet.routeServer
     if (!ars) continue
@@ -550,7 +564,7 @@ export function AzureNetDiagram({
   const previewMarker = policyMarkers.find((marker) => marker.id === policyPreview?.id)
   const renderPolicyMarker = (marker: typeof policyMarkers[number]) => {
     const { direction, owner, connectionId } = marker.selection
-    const ownerId = owner.kind === 'site' ? owner.siteId : owner.routeServerId
+    const ownerId = owner.kind === 'site' ? owner.siteId : owner.kind === 'vwan-hub' ? owner.hubId : owner.routeServerId
     const label = t("{0} route map rules for {1} on {2}", t(direction === 'inbound' ? 'Inbound' : 'Outbound'), marker.ownerName, marker.connectionName)
     const activate = () => { closePolicyPreview(); setHoverPopover(null); onShowRouteMapRules?.(marker.selection) }
     return <Fragment key={marker.id}>
@@ -1102,7 +1116,7 @@ export function AzureNetDiagram({
                 fontWeight={600}
                 fill="var(--purple)"
               >
-                VPN · {conn.bgpEnabled ? 'BGP' : 'Static'}
+                {conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} · {conn.bgpEnabled ? 'BGP' : 'Static'}
                 {!conn.enabled ? ' · OFF' : ''}
               </text>
             </g>

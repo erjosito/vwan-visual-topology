@@ -224,6 +224,14 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'azure-net', 'hybrid-vwan-and-hub-spoke.json'), 'utf8'))
       const hub = topology.vwanHubs[0]
       const vnet = topology.vnets.find((vnet: { vwanHubAttachment?: { hubId: string } }) => vnet.vwanHubAttachment?.hubId === hub.id)
+      topology.vpnConnections.push({ id: 'production-sdwan', name: 'Production SD-WAN', siteId: topology.sites[0].id,
+        targetKind: 'vwan-hub', targetId: hub.id, enabled: true, bgpEnabled: true, transport: 'SDWAN', learnSiteRoutes: true, propagateDefaultRoute: false })
+      topology.routeMaps = [{ id: 'production-policy', name: 'Production hub policy', hubId: hub.id,
+        rules: [{ id: 'prepend', prefixes: [], match: 'equals', action: 'prepend', summaryPrefixes: [], prepend: [64496], nextStep: 'terminate' }] }]
+      hub.routeMapAssignments = [{ connectionId: vnet.id, inboundMapId: 'production-policy' }]
+      vnet.appliances.push({ id: 'production-nva', name: 'Production NVA', kind: 'nva-vm', subnetId: vnet.subnets[0].id,
+        privateIp: `${vnet.subnets[0].prefix.split('/')[0].split('.').slice(0, 3).join('.')}.5`, asn: 65010,
+        bgpEnabled: true, vwanBgpEnabled: true, enableIpForwarding: true, staticRoutes: [], advertisedPrefixes: ['192.0.2.0/24'] })
       const request = { contractVersion: 1, operation: 'evaluate', document: { mode, topology }, requirements: [
         { id: 'hub', kind: 'route', table: hub.id, hubTableId: 'defaultRouteTable', prefix: vnet.prefixes[0], expectation: 'present' },
         { id: 'custom', kind: 'route', table: hub.id, hubTableId: 'custom', prefix: vnet.prefixes[0], expectation: 'absent' },
@@ -238,6 +246,10 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       }), { url: workers.find((url) => /\/assets\/browser-worker-.*\.js$/.test(url)), request })
       expect(assessed.assessments.map((goal) => goal.outcome)).toEqual(['satisfied', 'not assessed', 'not assessed'])
       expect(assessed.document).toEqual(request.document)
+      expect(assessed).toEqual(executePlatform(request as PlatformRequest))
+      expect((assessed as PlatformResult & { simulation: { vwanHubRibs: Record<string, unknown[]> } }).simulation.vwanHubRibs[hub.id]).toEqual(expect.arrayContaining([
+        expect.objectContaining({ prefix: '192.0.2.0/24', nextHopId: 'production-nva', asPath: [64496, 65010], preferred: true }),
+      ]))
       const subnet = vnet.subnets[0]
       topology.inventory = {
         workloads: [{ id: 'production-vm', name: 'Production VM', nicIds: ['production-nic'] }],

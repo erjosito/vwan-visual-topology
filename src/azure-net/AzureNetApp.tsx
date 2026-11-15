@@ -37,11 +37,9 @@ import {
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
 import { BgpRouteTable } from './BgpRouteTable'
-import { HubTablesEditor } from './HubTablesEditor'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 
-import { AzRouteMapsPanel } from './RouteMapsPanel'
 import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
 import {
@@ -55,7 +53,7 @@ import {
   type AzDiagnosticFinding,
 } from './diagnostics'
 import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
-import { contains, ipv4 } from '../validation'
+import { cidr, contains, ipv4 } from '../validation'
 import {
   checkErLocationAzureRegionAccess,
   lookupSubnetEffectiveRoute,
@@ -228,6 +226,10 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
+const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
+const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
+const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
   value: string; deferred: boolean; onCommit: (value: string) => void
@@ -280,6 +282,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
   const [routeMapArsId, setRouteMapArsId] = useState<string>()
+  const [routeMapHubId, setRouteMapHubId] = useState<string>()
   const [routeMapInspection, setRouteMapInspection] = useState<AzRouteMapSelection>()
   const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
@@ -1882,7 +1885,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Azure Route Server · ${ars.name}`,
         actions: [
-          { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
+          { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapHubId(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
           {
             label: 'Inspect Route Server RIB (ASN 65515)',
             onSelect: () => {
@@ -2109,6 +2112,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Virtual WAN Hub · ${hub.name}`,
         actions: [
+          {
+            label: t('Edit Hub Route Maps'),
+            onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id) },
+          },
           {
             label: 'Inspect Virtual WAN Hub Effective RIB',
             onSelect: () => {
@@ -2388,7 +2395,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `On-Premises Site · ${site.name} (ASN ${site.asn})`,
         actions: [
-          { label: 'Manage Site Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapArsId(undefined); setRouteMapSiteId(site.id) } },
+          { label: 'Manage Site Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapHubId(undefined); setRouteMapArsId(undefined); setRouteMapSiteId(site.id) } },
           ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'site' && e.ref.siteId === site.id)),
           {
             label: 'Inspect Site BGP Route Table',
@@ -2482,32 +2489,26 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     })
                   },
                 })),
-              ...topology.vwanHubs
-                .filter(
-                  (hub) =>
-                    !topology.vpnConnections.some(
-                      (c) =>
-                        c.siteId === site.id &&
-                        c.targetKind === 'vwan-hub' &&
-                        c.targetId === hub.id,
-                    ),
-                )
-                .map((hub) => ({
-                  label: `S2S VPN to vWAN Hub: ${hub.name}`,
+              ...topology.vwanHubs.flatMap((hub) => (['VPN', 'SDWAN'] as const)
+                .filter((transport) => !topology.vpnConnections.some((connection) => connection.siteId === site.id
+                  && connection.targetKind === 'vwan-hub' && connection.targetId === hub.id && (connection.transport ?? 'VPN') === transport))
+                .map((transport) => ({
+                  label: `${transport === 'SDWAN' ? 'SD-WAN' : 'S2S VPN'} to vWAN Hub: ${hub.name}`,
                   onSelect: () => {
                     commitTopology((draft) => {
                       draft.vpnConnections.push({
-                        id: `vpn-${site.id}-${hub.id}-${Date.now().toString(36).slice(-3)}`,
+                        id: crypto.randomUUID(),
                         name: `${site.name}-to-${hub.name}`,
                         siteId: site.id,
                         targetKind: 'vwan-hub',
                         targetId: hub.id,
                         bgpEnabled: true,
                         enabled: true,
+                        transport,
                       })
                     })
                   },
-                })),
+                }))),
               ...topology.sites
                 .filter(
                   (other) =>
@@ -2603,7 +2604,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       const conn = topology.vpnConnections.find((c) => c.id === target.connectionId)
       if (!conn) return null
       return {
-        title: `S2S VPN Connection · ${conn.name}`,
+        title: `${conn.transport === 'SDWAN' ? 'SD-WAN' : 'S2S VPN'} Connection · ${conn.name}`,
         actions: [
           {
             label: conn.enabled ? 'Disable VPN Connection' : 'Enable VPN Connection',
@@ -2616,10 +2617,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           },
           {
             label: conn.bgpEnabled ? 'Switch to Static Routing (BGP Off)' : 'Enable BGP on VPN Connection',
+            disabled: conn.transport === 'SDWAN',
             onSelect: () => {
               commitTopology((draft) => {
                 const c = draft.vpnConnections.find((x) => x.id === conn.id)
-                if (c) c.bgpEnabled = !c.bgpEnabled
+                if (c && c.transport !== 'SDWAN') c.bgpEnabled = !c.bgpEnabled
               })
             },
           },
@@ -2694,6 +2696,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }
   const openRouteMapRules = (selection: AzRouteMapSelection) => {
     setActiveTab(null)
+    setRouteMapHubId(selection.owner.kind === 'vwan-hub' ? selection.owner.hubId : undefined)
     setCanvasSelection(selection.owner)
     setRouteMapInspection(selection)
     setRouteMapSiteId(selection.owner.kind === 'site' ? selection.owner.siteId : undefined)
@@ -3173,11 +3176,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           )}
         </section>
 
-        {(routeMapSiteId || routeMapArsId) && <AzRouteMapsPanel key={`${routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`}:${routeMapInspection?.connectionId ?? ''}:${routeMapInspection?.direction ?? ''}`} topology={topology}
+        {(routeMapSiteId || routeMapArsId || routeMapHubId) && <Suspense fallback={null}><AzRouteMapsPanel key={`${routeMapHubId ? `hub:${routeMapHubId}` : routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`}:${routeMapInspection?.connectionId ?? ''}:${routeMapInspection?.direction ?? ''}`} topology={topology}
           initialConnectionId={routeMapInspection?.connectionId} initialDirection={routeMapInspection?.direction}
-          siteId={routeMapSiteId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
+          siteId={routeMapSiteId} hubId={routeMapHubId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
           inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
-          onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined) }} />}
+          onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
         {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
           title={{
             routes: 'Effective routes',
@@ -3977,6 +3980,12 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                     Click any node or connection on the diagram to configure it
                   </span>
                 </div>
+
+                <Suspense fallback={null}>
+                {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
+                {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
+                {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
+                </Suspense>
 
                 {/* VNet Peerings & Connections Editor (#38, #42, #47, #48) */}
                 {showPeeringEditor && (
@@ -5683,7 +5692,24 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             <option value="ASPath">ASPath Preference</option>
                           </select>
                         </div>
-                        <HubTablesEditor hub={hub} topology={topology} commit={commitTopology} />
+                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} /></Suspense>
+                        <form onSubmit={(event) => {
+                          event.preventDefault()
+                          const prefixes = String(new FormData(event.currentTarget).get('prefixes') ?? '').split(/[,\s]+/).filter(Boolean)
+                          if (prefixes.some((prefix) => !cidr(prefix))) { setWorkspaceNotice(t('Enter valid IPv4 CIDR prefixes.')); return }
+                          commitTopology((draft) => { draft.vwanHubs.find((target) => target.id === hub.id)!.routingIntent.privatePrefixes = prefixes })
+                        }}>
+                          <label className="field"><span>{t('Private routing intent prefixes')}</span><input name="prefixes" defaultValue={hub.routingIntent.privatePrefixes?.join(', ') ?? ''} /></label>
+                          <button type="submit">{t('Save private routing prefixes')}</button>
+                        </form>
+                        <label className="aznet-hover-toggle"><input type="checkbox" checked={topology.allowBranchToBranchTraffic !== false} onChange={(event) => {
+                          const enabled = event.target.checked
+                          commitTopology((draft) => { draft.allowBranchToBranchTraffic = enabled })
+                        }} />{t('WAN branch-to-branch route propagation')}</label>
+                        <p className="muted">{t('Disabling branch propagation does not disable hub learning, VNet connectivity, site links or ExpressRoute Global Reach. This is not a packet-filtering guarantee.')}</p>
+                        <button type="button" className="aznet-btn" onClick={() => {
+                          setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id)
+                        }}>{t('Edit Hub Route Maps')}</button>
                       </div>
                     ))}
 

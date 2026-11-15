@@ -46,7 +46,7 @@ export function azHubTableCoverage(topology: AzNetTopology) {
   const projection: Topology = {
     version: 1, name: topology.name,
     hubs: topology.vwanHubs.map((hub) => ({
-      ...hub, routingIntent: { ...hub.routingIntent, privatePrefixes: [] },
+      ...hub, routingIntent: { ...hub.routingIntent, privatePrefixes: hub.routingIntent.privatePrefixes ?? [] },
     })),
     spokes: topology.vwanHubs.flatMap((hub) => azHubAttachments(topology, hub.id).map((attachment) => ({
       ...attachment, hubId: hub.id, prefixes: [],
@@ -54,8 +54,7 @@ export function azHubTableCoverage(topology: AzNetTopology) {
     sites: [], connections: [], siteLinks: [],
   }
   const coverage = hubTableCoverage(projection)
-  if (topology.vwanHubs.some((hub) => 'routeMapAssignments' in hub)
-    || topology.vnets.some((vnet) => vnet.vwanHubAttachment?.enabled && 'hubRouting' in vnet)) {
+  if (topology.vnets.some((vnet) => vnet.vwanHubAttachment?.enabled && 'hubRouting' in vnet)) {
     for (const tables of Object.values(coverage)) for (const entry of Object.values(tables)) {
       entry.complete = false
       entry.limitations = ['Retained mixed hub policy configuration is not modeled; reachability is not established.']

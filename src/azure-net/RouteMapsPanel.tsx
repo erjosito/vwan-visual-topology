@@ -4,12 +4,12 @@ import { MapDefinition } from '../RouteMapsPanel'
 import type { RouteMap, RouteMapDirection } from '../model'
 import type { AzAppliance, AzNetTopology } from './model'
 import { parseAsPath } from '../validation'
-import { azSitePolicyLinks, pruneAzSiteRouteMaps, validateAzSiteRouteMaps } from './route-maps'
+import { azHubPolicyLinks, azSitePolicyLinks, pruneAzSiteRouteMaps, validateAzSiteRouteMaps } from './route-maps'
 import { azArsPeerHosts, azArsPolicyLinks, parseArsPrependAsPath, parseBgpCommunities, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
 import { BgpRouteTable } from './BgpRouteTable'
 import type { AzBgpRibEntry } from './engine'
 
-function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave: (attributes: AzAppliance['advertisedRouteAttributes']) => void }) {
+export function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave: (attributes: AzAppliance['advertisedRouteAttributes']) => void }) {
   const [error, setError] = useState('')
   if (!app.advertisedPrefixes?.length) return null
   return <details><summary>Advertised route attributes · {app.name}</summary>
@@ -38,15 +38,16 @@ function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave: (attri
   </details>
 }
 
-export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, outbound, initialConnectionId, initialDirection, onSave, onClose }: {
-  topology: AzNetTopology; siteId?: string; routeServerId?: string;
+export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbound, outbound, initialConnectionId, initialDirection, onSave, onClose }: {
+  topology: AzNetTopology; siteId?: string; hubId?: string; routeServerId?: string;
   inbound?: Record<string, AzBgpRibEntry[]>; outbound?: Record<string, AzBgpRibEntry[]>;
   initialConnectionId?: string; initialDirection?: RouteMapDirection;
   onSave: (topology: AzNetTopology) => void; onClose: () => void
 }) {
   const arsVnet = topology.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)
   const ars = routeServerId ? arsVnet?.routeServer : undefined
-  const site = ars ?? topology.sites.find((site) => site.id === siteId)
+  const hub = topology.vwanHubs.find((hub) => hub.id === hubId)
+  const site = ars ?? hub ?? topology.sites.find((site) => site.id === siteId)
   const [mapId, setMapId] = useState(() => initialDirection
     ? site?.routeMapAssignments?.find((assignment) => assignment.connectionId === initialConnectionId)?.[`${initialDirection}MapId`] ?? ''
     : '')
@@ -55,9 +56,9 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
   const [error, setError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   if (!site) return null
-  const maps = ars ? ars.routeMaps ?? [] : topology.routeMaps?.filter((map) => map.siteId === siteId) ?? []
+  const maps = ars ? ars.routeMaps ?? [] : topology.routeMaps?.filter((map) => hub ? map.hubId === hubId : map.siteId === siteId) ?? []
   const map = draft ?? maps.find((map) => map.id === mapId)
-  const links = ars && arsVnet ? azArsPolicyLinks(arsVnet, topology) : azSitePolicyLinks(topology, site.id)
+  const links = ars && arsVnet ? azArsPolicyLinks(arsVnet, topology) : hub ? azHubPolicyLinks(topology, hub.id) : azSitePolicyLinks(topology, site.id)
   const link = links.find((link) => link.id === connectionId) ?? links[0]
   const binding = site.routeMapAssignments?.find((assignment) => assignment.connectionId === link?.id)
   const commit = (next: AzNetTopology) => {
@@ -71,7 +72,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
       if (!link) return
       const next = structuredClone(topology)
       const target = ars ? next.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)!.routeServer!
-        : next.sites.find((site) => site.id === siteId)!
+        : hub ? next.vwanHubs.find((hub) => hub.id === hubId)! : next.sites.find((site) => site.id === siteId)!
       const assignment = { ...binding, connectionId: link.id, [direction]: id || undefined }
       target.routeMapAssignments = [
         ...(target.routeMapAssignments ?? []).filter((assignment) => assignment.connectionId !== link.id),
@@ -81,7 +82,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid assignment.') }
   }
   return <CanvasOverlay title={`Route maps · ${site.name}`} className="route-map-panel" onClose={onClose}>
-    <p className="muted">Policies belong to this {ars ? 'Azure Route Server' : 'site'}, with independent assignments on each connection. Inbound means learned by {site.name}; outbound means advertised by it. Unmatched routes are allowed.</p>
+    <p className="muted">Policies belong to this {ars ? 'Azure Route Server' : hub ? 'Virtual WAN hub' : 'site'}, with independent assignments on each connection. Inbound means learned by {site.name}; outbound means advertised by it. Unmatched routes are allowed.</p>
     {ars && arsVnet && <details><summary>BGP peers (local or directly peered VNets)</summary>
       <p className="muted">BGP peering requires VNet access, not gateway transit. Injecting routes into spokes still requires gateway-transit settings. Remote policy assignments remain limited to eligible spoke virtual network connections. Enabling a BGP peer here does not create VNet peering or packet connectivity.</p>
       {azArsPeerHosts(arsVnet, topology).flatMap((host) => host.appliances.filter((app) => app.bgpEnabled).map((app) => <div key={app.id}><label className="aznet-hover-toggle">
@@ -102,7 +103,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
       }} /></div>))}
     </details>}
     <button onClick={() => {
-      setDraft({ id: crypto.randomUUID(), name: 'New route map', ...(ars ? {} : { siteId }), rules: [] })
+      setDraft({ id: crypto.randomUUID(), name: 'New route map', ...(ars ? {} : hub ? { hubId } : { siteId }), rules: [] })
       setMapId(''); setConfirmDelete(false)
     }}>Create route map</button>
     {link && <section className="assignment-panel">
@@ -116,7 +117,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
           <option value="">None</option>{maps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}
         </select>
       </label>)}</div>
-      {!link.bgp && <p className="notice">{ars ? 'Enable BGP on this peer or gateway to exchange BGP routes.' : 'Static VPN routes bypass BGP route maps. Enable BGP on the connection and gateway to apply policies.'}</p>}
+      {!link.bgp && <p className="notice">{ars ? 'Enable BGP on this peer or gateway to exchange BGP routes.' : hub ? 'Hub route maps are unsupported on integrated SD-WAN and static VPN connections.' : 'Static VPN routes bypass BGP route maps. Enable BGP on the connection and gateway to apply policies.'}</p>}
     </section>}
     {!links.length && <p className="notice">{ars ? 'Add a local NVA BGP peer or gateway to assign ARS policies.' : 'Connect this site to a gateway, ExpressRoute location, NVA or another site to assign policies.'}</p>}
     <div className="resource-list">{maps.map((map) => <button key={map.id} aria-pressed={!draft && map.id === mapId} onClick={() => { setMapId(map.id); setDraft(undefined); setConfirmDelete(false) }}>
@@ -127,7 +128,7 @@ export function AzRouteMapsPanel({ topology, siteId, routeServerId, inbound, out
         const directions = [assignment.inboundMapId === map.id ? 'Inbound' : '', assignment.outboundMapId === map.id ? 'Outbound' : ''].filter(Boolean)
         return directions.length ? [`${links.find((link) => link.id === assignment.connectionId)?.name ?? assignment.connectionId} (${directions.join(', ')})`] : []
       }).join(' · ') || 'No connections'}</p>}
-      <MapDefinition key={map.id} map={map} advanced={!!ars} asPathMatching={!ars} parsePrepend={ars ? parseArsPrependAsPath : undefined} onSave={(value) => {
+      <MapDefinition key={map.id} map={map} advanced={!!ars} asPathMatching={!ars} siteLocalPreference={!ars && !hub} parsePrepend={ars ? parseArsPrependAsPath : undefined} onSave={(value) => {
         const next = structuredClone(topology)
         if (ars) {
           const target = next.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)!.routeServer!

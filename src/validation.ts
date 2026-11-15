@@ -50,6 +50,12 @@ export function contains(prefix: string, address: number): boolean {
   return !!parsed && Math.floor(address / 2 ** (32 - parsed.length)) * 2 ** (32 - parsed.length) === parsed.network
 }
 
+export function isVwanNvaAsn(asn: number): boolean {
+  return Number.isInteger(asn) && asn > 0 && asn <= 65534
+    && ![8074, 8075, 12076, 23456, 65515, 65517, 65518, 65519, 65520].includes(asn)
+    && !(asn >= 64496 && asn <= 64511)
+}
+
 export function parseAsPath(value: string): number[] {
   if (!value.trim()) return []
   if (!/^\d+(?:[\s,]+\d+)*$/.test(value.trim())) throw new Error('Use space-separated numeric ASNs.')
@@ -390,8 +396,7 @@ export function validateTopology(input: unknown): Topology {
       const address = resolvedPeerIp === undefined ? undefined : ipv4(resolvedPeerIp)
       if (address === undefined || !spoke!.prefixes.some((prefix) => contains(prefix, address))) fail('The NVA BGP interface IPv4 address must be inside its hosting spoke address space.')
       usedHubNvaPeerIps.set(connection.hubId as string, [...existingIps, resolvedPeerIp!])
-      if (site.asn > 65534 || [8074, 8075, 12076, 23456, 65515, 65517, 65518, 65519, 65520].includes(site.asn)
-        || site.asn >= 64496 && site.asn <= 64511) fail('Spoke NVA peering requires a non-reserved public or private 2-byte ASN, different from the Azure hub ASN.')
+      if (!isVwanNvaAsn(site.asn)) fail('Spoke NVA peering requires a non-reserved public or private 2-byte ASN, different from the Azure hub ASN.')
     } else if (connection.spokeId !== undefined || connection.peerIp !== undefined) fail('Spoke and NVA peer IP fields are supported only on spoke BGP NVA connections.')
     if (typeof connection.enabled !== 'boolean') fail('Connection enabled must be boolean.')
     if (connection.learnSiteRoutes !== undefined && typeof connection.learnSiteRoutes !== 'boolean') fail('Learn site routes must be boolean.')

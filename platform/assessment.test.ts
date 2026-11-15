@@ -107,7 +107,8 @@ describe('engine-backed explicit requirement assessment', () => {
         contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology: retained },
         requirements: [route, { ...route, id: 'absent', prefix: '10.99.0.0/16', expectation: 'absent' }],
       })
-      expect(result.assessments.map((goal) => goal.outcome)).toEqual(['not assessed', 'not assessed'])
+      expect(result.assessments.map((goal) => goal.outcome)).toEqual(field === 'routeTablesStatus'
+        ? ['not assessed', 'not assessed'] : ['satisfied', 'satisfied'])
       expect(result.document).toEqual({ mode: 'full', topology: retained })
     }
     Object.assign(network.vnets[0].vwanHubAttachment!, {

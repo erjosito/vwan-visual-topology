@@ -15,8 +15,9 @@ Window/executable/installer icons derive from the web's `public/favicon.svg`;
 Windows resource editing is enabled, but code signing remains disabled.
 
 Full Hybrid remains enabled. Contextual mixed-hub controls and shared workload
-detail build on the #85 interaction foundation; complete capability parity and
-mode retirement remain gated by #126/#138. Existing links, files, engines and
+detail build on the #85 interaction foundation. #126 bridges the supported native
+capabilities; migration, unified defaults and mode retirement remain gated by
+#138. Existing links, files, engines and
 practice remain supported.
 
 ## On-demand explanations and local practice
@@ -162,12 +163,49 @@ An unknown hub-table scope requires the explicit **Use edited hub table scope**
 action; simply adding or renaming a table does not certify captured completeness.
 Remote label propagation uses the original hub/table/route identities.
 
-This is a bounded bridge, not full dedicated VWAN parity. Mixed custom tables
-with secured routing intent, static hub next hops, hub route maps, static-VPN
-return routing and ER export of remote/VPN-learned routes remain explicitly
-not assessed. Incomplete mixed table coverage conservatively suppresses flow
-certification, including unrelated flows. Dedicated mode controls remain
-available; mode retirement and saved-link migration remain gated by #138.
+**Workspace controls > Capability coverage** inventories dedicated VWAN,
+classic and mixed capabilities with explicit native-model limits. The same
+matrix is exposed by MCP capabilities. Both native formats remain authoritative;
+no second editable graph or automatic cross-format conversion is introduced.
+
+Mixed hubs reuse the dedicated VWAN HRP selector, including local/remote
+preference and the distinction between VPN gateways and NVAs. Hub-owned maps
+are assigned to exact ER/VPN IDs or the original attached VNet ID, independently
+on ingress and egress. VNet policies include its spoke NVA advertisements.
+Integrated SD-WAN bypasses hub maps, but supports site policies. Static VPN
+prefixes bypass BGP policies. Summaries retain contributors for forwarding;
+aggregate holes remain unreachable. Mixed ER exports use selected associated
+table routes, including remote and VPN origins, subject to existing ER scope,
+Global Reach and private-ASN rules. Hub/site export feedback is bounded to 64
+passes; incomplete or cyclic selection cannot certify any routing assertion.
+Mixed ER link weights remain effective within ER selection; ASPath hub
+preference still compares path length first.
+
+The original `vpnConnections` collection retains its IDs and default VPN
+meaning. Optional `transport: "SDWAN"` requires a BGP-enabled hub target;
+`learnSiteRoutes` and `propagateDefaultRoute` expose hub branch controls.
+ER hub links accept the same optional learning/default controls. Optional
+`allowBranchToBranchTraffic: false` suppresses branch-origin hub exports, not
+hub learning, VNet connectivity, site links or independent Global Reach. This
+is route-propagation control, not a packet ACL. Site inbound local preference
+defaults to 100 and is reset at inter-router boundaries; outbound local-preference
+assignments are rejected. The existing native rule/ASN validator remains shared.
+
+An original appliance can set `vwanBgpEnabled: true` to peer with its hosting
+VNet's attached hub. BGP and IP forwarding must also be enabled; its original
+ASN, advertised prefixes/attributes, overlay links and VNet connection are
+reused. No duplicate router/site is created. The NVA inspector and connection
+inspector expose these controls; hub/site policy markers retain exact owned
+connection IDs, keyboard activation and rule previews.
+
+Custom tables combined with routing intent and static hub next hops remain
+not assessed in both VWAN providers. Unknown propagation and incomplete table
+scope remain conservative; retained source is not proof of isolation. Bicep
+starters explicitly warn about omitted hub policies, branch controls and NVA
+peerings; native JSON/share URLs preserve them. Dedicated controls, legacy
+documents, practice progress and all mode selectors remain available. Automatic
+legacy-save/URL migration, unified defaults and selector retirement are #138,
+not part of this capability bridge. Internet/NAT/LB/NSG engines are separate work.
 
 Optional `topology.inventory` contains `workloads`, `nics` and `publicIps`.
 A workload has `id`, `name`, `nicIds` and an optional existing router
