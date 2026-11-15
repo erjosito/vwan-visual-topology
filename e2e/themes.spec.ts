@@ -160,7 +160,7 @@ test('preference persists across reload/modes; system follows OS and storage upd
   await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark')
   await page.reload()
   for (const mode of ['hub-spoke', 'full', 'vwan']) {
-    await page.getByTestId(`simulator-mode-${mode}`).click()
+    await page.goto(`/?mode=${mode}`)
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     await expect(page.getByRole('combobox', { name: 'Theme', exact: true })).toHaveValue('dark')
   }

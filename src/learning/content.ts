@@ -63,7 +63,7 @@ export const labels = {
   concepts: { en: 'Concepts', ja: '概念' },
   practice: { en: 'Practice', ja: '練習' },
   exercise: { en: 'Choose an exercise', ja: '演習を選択' },
-  matchingMode: { en: 'To copy or visually edit this exercise, close learning and switch the simulator to its matching architecture mode. Assessment and saved drafts remain available here.', ja: 'この演習をコピーまたはビジュアル編集するには、学習を閉じて対応するアーキテクチャ モードに切り替えてください。評価と保存された下書きはここで使用できます。' },
+  matchingMode: { en: 'This exercise uses a different native document format. Open its draft directly in the compatible visual editor; independent assessment and saved drafts remain available here.', ja: 'この演習は別のネイティブ形式を使用します。下書きは互換ビジュアル エディターで直接開けます。独立した評価と保存済みの下書きはここで使用できます。' },
   source: { en: 'Source reference (opens only when selected)', ja: '参考資料（選択時のみ開きます）' },
   evidence: { en: 'Reasons from this modeled result', ja: 'このモデルの結果に基づく理由' },
   noEvidence: { en: 'No decision evidence is available here. This concept is not a claim about this route.', ja: 'ここには選択の根拠がありません。この概念の説明は、このルートの判定を主張するものではありません。' },

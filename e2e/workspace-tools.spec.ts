@@ -82,16 +82,16 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   })
 }
 
-test('Full Hybrid controls expose implemented hub creation without enabling it in classic H&S', async ({ page }) => {
+test('legacy classic aliases expose both network families without removing existing hubs', async ({ page }) => {
   await page.goto('/?mode=full')
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   await page.getByTestId('aznet-add-vwan-hub-btn').click()
   await expect.poll(async () => JSON.parse((await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1')))!).topology.vwanHubs.length).toBe(1)
-  await page.getByTestId('simulator-mode-vwan').click()
-  await expect(page.getByTestId('vwan-app')).toBeVisible()
-  await page.getByTestId('simulator-mode-hub-spoke').click()
+  await page.goto('/?mode=hub-spoke')
   await expect(page.getByTestId('aznet-app')).toBeVisible()
-  await expect(page.getByTestId('aznet-add-vwan-hub-btn')).toHaveCount(0)
+  await expect(page.getByTestId('aznet-add-vwan-hub-btn')).toBeEnabled()
+  expect(JSON.parse((await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1')))!).topology.vwanHubs).toHaveLength(1)
+  await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
 })
 
 test('contextual deletion requires confirmation and cancellation preserves the selected VNet', async ({ page }) => {

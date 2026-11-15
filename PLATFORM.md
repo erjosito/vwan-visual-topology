@@ -8,22 +8,41 @@ remain the source of routing behavior. There is no separate desktop engine.
 Identity, cloud progress, verified awards and resource-deployment APIs remain
 outside this implementation.
 
-Web and Windows apps start VWAN with an empty topology when there is no saved
-workspace; explicit samples/imports and saved work still load normally.
+Both websites and Windows start with an empty mixed-network topology when there
+is no saved workspace; explicit samples/imports and saved work still load normally.
 Damaged saved data remains available for recovery, not silently overwritten.
 Window/executable/installer icons derive from the web's `public/favicon.svg`;
 Windows resource editing is enabled, but code signing remains disabled.
 
-Full Hybrid remains enabled. Contextual mixed-hub controls and shared workload
-detail build on the #85 interaction foundation. #126 bridges the supported native
-capabilities; migration, unified defaults and mode retirement remain gated by
-#138. Existing links, files, engines and
-practice remain supported.
+There is no visible architecture-mode selector. Contextual creation/selection
+controls expose classic VNets and Virtual WAN together. #138 preserves the native
+v1 Virtual WAN editor/provider as an explicit compatibility path rather than
+converting unsupported semantics to v2. Both native engines, existing links/files
+and independent practice remain supported.
+
+**Workspace** opens the saved-design/recovery library or starts an empty mixed
+design. `network-simulator:workspace:v1` stores only the active native provider;
+the existing `vwan-visual-topology:v1` and `aznet-visual-topology:v1` payloads stay
+authoritative for their own families. Without a selection, two legacy saves
+require an explicit choice. A single legacy save resumes in its compatible
+editor. Legacy architecture aliases are consumed once; H&S aliases never delete
+mixed virtual hubs or branch connections. Native imports/captures and v2 shared
+snapshots select the appropriate provider, retaining native capture review and
+comparison behavior. Explicit sample URLs are consumed after load.
+
+Before selection/replacement, exact original bytes are preserved in
+`network-simulator:originals:v1`, deduplicated by native key/content without silent
+eviction. The library exports these immutable originals for explicit reimport.
+They are not a second editable graph. Invalid active selections are recoverable
+and archived before replacement. Archive/quota failures refuse replacement;
+native-write failures roll back the selection. If storage is unavailable, an
+explicitly unsaved in-memory design remains possible. Practice, display
+preferences and inactive native payloads are not reset by workspace selection.
 
 ## On-demand explanations and local practice
 
 **Learn & practice** opens an optional, keyboard-accessible EN/JA panel in all
-three modes. Concept help also appears as collapsed **Explain this** disclosures
+native editors. Concept help also appears as collapsed **Explain this** disclosures
 beside hub preference, route decisions and diagnostics. Curated concepts live
 in `src/learning/content.ts`; result-specific disclosures display the existing
 engine's reasons, not AI-inferred causes. Help does not change configuration
@@ -32,8 +51,8 @@ selection; external references remain blocked by the desktop host.
 
 Three exercises in `src/learning/exercises.ts` cover Virtual WAN, VNet peering
 and Full Hybrid connectivity. The course picker can assess/resume any exercise
-without changing the normal workspace; visual editing/copying requires its
-matching architecture mode. Each pins its rubric version, owned endpoint
+without changing the normal workspace; visual opening selects its native editor,
+and copying requires a compatible native document family. Each pins its rubric version, owned endpoint
 IDs/addresses, requirements, preparation, concept links and hints. The VWAN
 starter intentionally has unassessable propagation scope; absence is not
 taught as verified isolation. Tests accept a one-hub or multi-hub repair,
@@ -47,7 +66,7 @@ reopen learning and **Copy workspace configuration into practice** before
 assessment. Copying does not include temporary failure overlays. **Assess
 practice draft** grades that exact snapshot using the P1 browser-worker adapter;
 editing cancels pending work and visibly invalidates earlier displayed evidence.
-Changing architecture mode cannot display a previous mode's assessment.
+Changing native editors cannot display a previous editor's assessment.
 
 Local progress uses `aznet-simulator:practice:v1` in localStorage, independently
 of normal topology saves: at most three 200,000-character drafts, twenty recent
@@ -408,12 +427,11 @@ Closing a pending gallery load cancels it; failed or stale loads cannot replace
 the active design. Explicit sample links and the legacy H&S/Full quick selector
 retain their existing admission behavior.
 
-This is a reusable foundation for #85/#138, not mode retirement. Current
-hostname/query defaults, both saved workspace families, offline Electron and
-dedicated VWAN routing capabilities remain intact. The future single workspace
-must prove feature parity and lossless legacy save/link migration before the
-visible mode switch is removed. Shared presentation does not require replacing
-the existing routing/control-plane implementations.
+The original #85 shell foundation is now used by #138's single-workspace
+rollout described above. Both saved families, offline Electron and dedicated
+VWAN routing capabilities remain intact. Compatibility preserves the native
+editor rather than claiming universal lossless v1-to-v2 conversion. Shared
+presentation does not replace the routing/control-plane implementations.
 
 The current roots also reuse `WorkspaceTools` for collapsible/searchable
 creation controls and selection-driven context actions. It calls existing
@@ -430,14 +448,14 @@ non-modal drawer on narrow screens. Explicit opening focuses search; Escape
 and the close control restore the opener. A narrow-screen action dismisses
 the drawer before opening its editor. Canvas maximization temporarily hides
 it without losing its choice. `aznet-workspace-tools:v1` stores only
-`open`/`closed`, shared across current mode transitions; invalid/unavailable
+`open`/`closed`, shared across compatible editors; invalid/unavailable
 storage falls back to viewport-appropriate in-session behavior. Searching,
 collapsing and inspecting do not modify topology JSON, saved coordinates,
 simulation inputs or practice progress.
 
-This is an incremental shared-shell foundation, not mode retirement or
-schema migration. Global workspace/file/analysis controls and legacy sample
-shortcuts remain during transition. Context-action terminology and semantics
+This shell supports the single-workspace rollout without schema migration.
+Global workspace/file/analysis controls and legacy sample shortcuts remain.
+Context-action terminology and semantics
 remain supplied by their compatible root; no unsupported Internet/workload
 controls are advertised.
 
