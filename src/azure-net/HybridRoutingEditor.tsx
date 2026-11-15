@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { t } from '../i18n'
-import { cidr, parseAsPath } from '../validation'
+import { cidr, isVwanNvaAsn, parseAsPath } from '../validation'
 import type { AzNetTopology } from './model'
 import { PeerRouteAttributes } from './RouteMapsPanel'
 
@@ -95,6 +95,7 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
         const data = new FormData(event.currentTarget)
         const asn = Number(data.get('asn'))
         if (!Number.isInteger(asn) || asn < 1 || asn > 4294967294 || [65515, 65520, 12076].includes(asn)) throw new Error(t('Enter a non-reserved BGP peer ASN.'))
+        if (data.has('hub') && !isVwanNvaAsn(asn)) throw new Error(t('Spoke NVA peering requires a non-reserved public or private 2-byte ASN, different from the Azure hub ASN.'))
         const advertised = prefixes(String(data.get('prefixes') ?? ''))
         commit((draft) => {
           const target = draft.vnets.find((owner) => owner.id === vnet.id)!.appliances.find((app) => app.id === applianceId)!
@@ -108,7 +109,7 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
     }}>
       <label className="field"><span>{t('Peer ASN')}</span><input type="number" min={1} max={4294967294} name="asn" defaultValue={app.asn ?? 65501} /></label>
       <label><input type="checkbox" name="bgp" defaultChecked={app.bgpEnabled === true} />{t('BGP enabled')}</label>
-      <label><input type="checkbox" name="hub" disabled={!vnet.vwanHubAttachment?.enabled} defaultChecked={app.vwanBgpEnabled === true} />{t('Peer with the attached Virtual WAN hub')}</label>
+      <label><input type="checkbox" name="hub" disabled={!vnet.vwanHubAttachment?.enabled || app.kind === 'azure-firewall'} defaultChecked={app.vwanBgpEnabled === true} />{t('Peer with the attached Virtual WAN hub')}</label>
       <label className="field"><span>{t('Advertised prefixes')}</span><textarea name="prefixes" defaultValue={app.advertisedPrefixes?.join('\n') ?? ''} /></label>
       <p className="muted">{t('Uses this original appliance and VNet connection. Requires BGP and IP forwarding; hub policies apply on the hosting VNet connection. Advertisements do not create data-plane reachability.')}</p>
       <button type="submit">{t('Save NVA BGP routing')}</button>

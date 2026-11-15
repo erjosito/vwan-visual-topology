@@ -162,6 +162,11 @@ describe('Mixed native capability bridge', () => {
     expect(forward.traversedEdgeIds).toEqual(expect.arrayContaining(['wan-er', 'vhub-attach:spoke:wan', 'branch-vpn']))
     topology.vnets[1].appliances[0].bgpEnabled = false
     expect(simulateAzNet(topology).vwanHubRibs.wan.some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+    topology.vnets[1].appliances[0].asn = 4200000010
+    expect(() => parseAzNetTopology(topology)).toThrow(/2-byte ASN/)
+    topology.vnets[1].appliances[0].asn = 65010
+    topology.vnets[1].appliances[0].kind = 'azure-firewall'
+    expect(() => parseAzNetTopology(topology)).toThrow(/requires an NVA/)
   })
 
   it('models explicit static VPN prefixes, bypasses BGP maps, and assesses the independent static return path', () => {

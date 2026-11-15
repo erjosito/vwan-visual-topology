@@ -4,6 +4,7 @@ import { DEFAULT_HUB_TABLE, hubRouteTables, propagatesLocally, propagationLabels
 import type { HubRoutingConfiguration } from '../model'
 import { validateInventory } from '../inventory'
 import { azHubPolicyLinks } from './route-maps'
+import { isVwanNvaAsn } from '../validation'
 
 export const AZNET_MAX_JSON_LENGTH = 4_000_000
 const MAX_ITEMS = 4096
@@ -211,6 +212,11 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
     }
   }
   for (const vnet of topology.vnets) {
+    for (const app of vnet.appliances) {
+      if (app.vwanBgpEnabled && (app.kind === 'azure-firewall' || !isVwanNvaAsn(app.asn ?? 65501))) {
+        fail(app.id, 'Spoke NVA peering requires an NVA with a non-reserved public or private 2-byte ASN.')
+      }
+    }
     unique([...vnet.subnets, ...vnet.gateways, ...vnet.appliances, ...(vnet.routeServer ? [vnet.routeServer] : [])])
     for (const subnet of vnet.subnets) {
       ref(subnet.routeTableId, topology.udrTables, 'Subnet route table')
