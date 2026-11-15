@@ -20,6 +20,7 @@ import type { ErCircuitSku } from './er-locations-catalog'
 import { CanvasOverlay } from './CanvasOverlay'
 import { SampleGallery } from './SampleGallery'
 import { WorkspaceTools } from './WorkspaceTools'
+import { vwanWorkspaceIdentity, vwanWorkspaceObjects } from './workspace-objects'
 import { RouteInspector } from './RouteInspector'
 import { RouteMapsPanel } from './RouteMapsPanel'
 import { RouteMapInspector } from './RouteMapInspector'
@@ -604,7 +605,11 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
         ]} getSelection={() => selectedObject && selection ? {
           title: t("{0} actions: {1}", t(objectLabels[selection.kind]), selectedObject.name),
           actions: getContextActions(selection),
-        } : undefined} />
+        } : undefined} inventory={{
+          getObjects: () => vwanWorkspaceObjects(topology),
+          selected: selection ? vwanWorkspaceIdentity(selection) : undefined,
+          onSelect: selectObject,
+        }} />
         <LearningTools document={{ mode: 'vwan', topology }} onOpen={(document) => { if (document.mode === 'vwan') { reset(document.topology); setFaults([]) } }} />
         <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>

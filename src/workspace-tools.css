@@ -19,9 +19,12 @@
 .workspace-tools-panel button { width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; min-height: 34px; }
 .workspace-tools-heading button { width: 34px; flex-shrink: 0; text-align: center; }
 .workspace-tools-panel button.danger { color: var(--danger); }
+.workspace-tools-objects { margin-top: 12px; }
+.workspace-tools-objects button small { display: block; margin-top: 4px; color: var(--text-muted); }
+.workspace-tools-objects button[aria-pressed="true"] { border-color: var(--accent); }
 .workspace-tools-backdrop { display: none; }
 @media (min-width: 901px) {
-  .workspace-tools-panel { top: var(--workspace-tools-top, 0px); }
+  .workspace-tools-panel { top: min(var(--workspace-tools-top, 0px), max(0px, calc(100dvh - 240px))); }
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .canvas-app > main,
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .aznet-workspace { padding-left: 280px; }
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .canvas-app > footer { padding-left: 298px; }

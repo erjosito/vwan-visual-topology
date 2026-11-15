@@ -104,6 +104,9 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await toolsOpener.click()
     const commandSearch = tools.getByRole('searchbox', { name: 'Search workspace controls', exact: true })
     await expect(commandSearch).toBeFocused()
+    await expect(tools.getByRole('list', { name: 'Objects in this design' })).toHaveCount(0)
+    await tools.getByText('Find objects', { exact: true }).click()
+    await expect(tools.getByRole('status')).toHaveText('No selectable objects in this design.')
     await commandSearch.fill('production-unmatched-command')
     await expect(tools.getByRole('status')).toHaveText('No commands match your search.')
     await page.keyboard.press('Escape')
@@ -204,6 +207,16 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(workers.every((url) => new URL(url).origin === 'http://127.0.0.1:4174')).toBe(true)
 
     await context.setOffline(true)
+    const beforeDiscovery = await page.evaluate((key) => localStorage.getItem(key), storageKey)
+    const design = JSON.parse(beforeDiscovery!)
+    const node = mode === 'vwan' ? design.hubs[0] : design.topology.vnets[0]
+    const offlineTools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
+    await offlineTools.getByRole('searchbox').fill(node.id)
+    await offlineTools.getByRole('button', {
+      name: `Select ${mode === 'vwan' ? 'Virtual WAN hub' : 'VNet'}: ${node.label ?? node.name}`, exact: true,
+    }).click()
+    await expect(offlineTools.locator('h3[tabindex="-1"]')).toBeFocused()
+    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(beforeDiscovery)
     if (mode === 'vwan') {
       const name = page.getByLabel('Topology name', { exact: true })
       const before = await name.inputValue()
