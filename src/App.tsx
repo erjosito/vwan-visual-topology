@@ -18,6 +18,7 @@ import type { EditorRequest } from './TopologyObjectEditor'
 import { ErLocationInfoModal } from './ErLocationInfoModal'
 import type { ErCircuitSku } from './er-locations-catalog'
 import { CanvasOverlay } from './CanvasOverlay'
+import { SampleGallery } from './SampleGallery'
 import { RouteInspector } from './RouteInspector'
 import { RouteMapsPanel } from './RouteMapsPanel'
 import { RouteMapInspector } from './RouteMapInspector'
@@ -328,20 +329,22 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     setTracing(false); setGroupTrace(undefined); setHighlighting(false); setPrefix(''); setVpnConversion(undefined)
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
-  const loadGallerySample = (entry: (typeof VWAN_SAMPLE_GALLERY)[number]) => {
-    if (!entry.file) {
-      reset(validateTopology(structuredClone(example)))
-      return
-    }
-    void fetch(entry.file)
-      .then(async (res) => {
+  const loadGallerySample = async (id: string, signal: AbortSignal) => {
+    const entry = VWAN_SAMPLE_GALLERY.find((sample) => sample.id === id)
+    if (!entry) return false
+    const request = ++importRequest.current
+    try {
+      const loaded = entry.file ? await fetch(entry.file, { signal }).then(async (res) => {
         if (!res.ok) throw new Error(`Sample topology "${entry.id}" not found.`)
         return validateTopology(await res.json())
-      })
-      .then((loaded) => {
-        reset(loaded)
-      })
-      .catch((err) => setError(`Sample load failed: ${message(err)}`))
+      }) : validateTopology(structuredClone(example))
+      if (signal.aborted || request !== importRequest.current) return false
+      reset(loaded)
+      return true
+    } catch (err) {
+      if (!signal.aborted) setError(`Sample load failed: ${message(err)}`)
+      return false
+    }
   }
   const sampleLoaded = useRef(false)
   useEffect(() => {
@@ -592,6 +595,9 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
         <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
+    {panel === 'samples' && <SampleGallery entries={VWAN_SAMPLE_GALLERY} testIdPrefix="vwan"
+      hasWorkspace={topology.name !== 'New topology' || !!(topology.hubs.length || topology.spokes.length || topology.sites.length || topology.connections.length || topology.routeMaps?.length || topology.erLocations?.length)}
+      onLoad={loadGallerySample} onExport={() => exportTopology()} onClose={closePanel} />}
     <ErLocationInfoModal
       isOpen={erLocationModal.open}
       initialLocationName={erLocationModal.peeringLocation}
@@ -678,20 +684,6 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
             {simulation.warnings.map((warning) => <p className="notice" key={warning}>{localizeDiagnostic(warning)}</p>)}
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">{t("Microsoft hub routing preference")}</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">{t("Microsoft route-map behavior and limitations")}</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>{t("Load example (replaces workspace)")}</button>
-          </CanvasOverlay>}
-          {panel === 'samples' && <CanvasOverlay title={t("Sample topologies")} className="model-notes" onClose={closePanel}>
-            <p className="muted">{t("Choose a ready-made Virtual WAN topology below to replace the current workspace and immediately explore effective routes, path traces, and routing diagnostics.")}</p>
-            <div className="flow-results">
-              {VWAN_SAMPLE_GALLERY.map((sample) => (
-                <article key={sample.id} className="flow-result">
-                  <strong>{t(sample.title)}</strong>
-                  <p>{t(sample.summary)}</p>
-                  <button className="primary" onClick={() => loadGallerySample(sample)}>
-                    {t("Load sample topology")}
-                  </button>
-                </article>
-              ))}
-            </div>
           </CanvasOverlay>}
           {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onOpenErLocationInfo={(peeringLocation, sku, hubRegion, erLocationId) => setErLocationModal({ open: true, peeringLocation, sku, targetAzureRegion: hubRegion, erLocationId })} onAddNva={(spokeId) => {
             const existing = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeId)
