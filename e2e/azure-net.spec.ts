@@ -512,11 +512,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
 
     await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
     await expect(page.getByTestId('aznet-sample-select')).toBeVisible()
-    const sampleOptions = await page
-      .getByTestId('aznet-sample-select')
-      .locator('option')
-      .allTextContents()
-    expect(sampleOptions.some((t) => t.includes('Hybrid Secured vWAN Hub'))).toBe(true)
+    await expect(page.getByTestId('aznet-sample-select')).toContainText('Hybrid Secured vWAN Hub')
 
     // 2. Public Internet endpoint in Path Tracer + Subnet Default Outbound Access toggle
     await openNodeMenu(page, 'aznet-subnet-sub-app-web')

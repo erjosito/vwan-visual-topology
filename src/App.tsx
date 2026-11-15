@@ -561,11 +561,12 @@ function App() {
   const importTopology = async (file?: File) => {
     if (!file) return
     const revision = ++importRequest.current
+    const workspaceRequest = workspaceSession?.getRequestVersion()
     setPendingAzureImport(undefined)
     try {
       if (file.size > 2_000_000) throw new Error('Topology files must be smaller than 2 MB.')
       const input: unknown = JSON.parse(await file.text())
-      if (!mounted.current || revision !== importRequest.current) return
+      if (!mounted.current || revision !== importRequest.current || workspaceRequest !== workspaceSession?.getRequestVersion()) return
       if (input && typeof input === 'object' && 'kind' in input
         && ['azure-network-topology', 'azure-network-capture'].includes(String(input.kind)) && workspaceSession) {
         await workspaceSession.openDocument(input)

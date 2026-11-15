@@ -117,7 +117,7 @@ export function UnifiedSimulatorRoot() {
     window.addEventListener('hashchange', changed)
     return () => window.removeEventListener('hashchange', changed)
   }, [])
-  return <WorkspaceSessionContext value={{ openLibrary: () => { request.current++; setLibraryOpen(true) }, openDocument, capture: active?.capture }}>
+  return <WorkspaceSessionContext value={{ openLibrary: () => { request.current++; setLibraryOpen(true) }, openDocument, getRequestVersion: () => request.current, capture: active?.capture }}>
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
       <CanvasMaximizeButton />

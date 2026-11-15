@@ -2954,8 +2954,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               const request = ++sampleRequest.current
               try {
                 if (file.size > AZNET_MAX_JSON_LENGTH) throw new Error('JSON exceeds 4 MB limit.')
+                const workspaceRequest = workspaceSession?.getRequestVersion()
                 const text = await file.text()
-                if (!mounted.current || request !== sampleRequest.current) return
+                if (!mounted.current || request !== sampleRequest.current || workspaceRequest !== workspaceSession?.getRequestVersion()) return
                 const raw: unknown = JSON.parse(text)
                 if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-vwan-capture' && workspaceSession) {
                   await workspaceSession.openDocument(raw)

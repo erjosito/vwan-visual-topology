@@ -228,6 +228,7 @@ try {
     await page.reload()
     await page.getByTestId('learning-open').click()
     await learning.getByRole('button', { name: 'Practice', exact: true }).click()
+    await learning.getByLabel('Choose an exercise', { exact: true }).selectOption(mode === 'vwan' ? 'vwan-connect' : mode === 'hub-spoke' ? 'peering-connect' : 'hybrid-connect')
     await expect(draftControl).toHaveValue(JSON.stringify(practice, null, 2))
     await expect(learning).toContainText('Hints used: 1/2')
     expect(await readSaved()).toEqual(retainedWorkspace)
