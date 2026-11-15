@@ -98,11 +98,18 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.getByRole('button', { name: 'Azure files', exact: true }).click()
       await expect(page.getByRole('dialog', { name: 'Azure files', exact: true })).toBeVisible()
       await page.getByRole('button', { name: 'Close Azure files', exact: true }).click()
-    } else {
-      await page.getByTestId('aznet-open-sample-gallery-btn').click()
-      await expect(page.getByTestId('aznet-sample-gallery-modal')).toBeVisible()
-      await page.getByTestId('aznet-close-sample-gallery-btn').click()
     }
+    const galleryOpener = page.getByRole('button', { name: 'Sample topologies', exact: true })
+    await galleryOpener.click()
+    const gallery = page.getByTestId(`${mode === 'vwan' ? 'vwan' : 'aznet'}-sample-gallery-modal`)
+    await expect(gallery).toBeVisible()
+    const search = gallery.getByRole('searchbox', { name: 'Search samples', exact: true })
+    await expect(search).toBeFocused()
+    await search.fill('production-empty-search')
+    await expect(gallery).toContainText('No samples match your search.')
+    await page.keyboard.press('Escape')
+    await expect(gallery).toHaveCount(0)
+    await expect(galleryOpener).toBeFocused()
     const firstOptionalPanelMs = performance.now() - panelStart
     const nextMode = mode === 'vwan' ? 'hub-spoke' : 'vwan'
     const switchStart = performance.now()

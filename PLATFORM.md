@@ -284,6 +284,24 @@ peak-memory improvements assumed. CI enforces bounded entry/per-mode byte
 budgets and tests defaults/overrides, pre-paint theme, workers, optional panels,
 failure recovery and cached offline operations.
 
+## Shared samples and workspace evolution
+
+All current workspaces use the same searchable sample gallery, native modal
+focus/keyboard behavior, responsive theme styling and load/error feedback.
+Catalogs remain capability-specific; the gallery does not convert one topology
+schema into another. Loading over an existing design requires confirmation and
+offers the existing JSON exporter before replacing the design and undo history.
+Closing a pending gallery load cancels it; failed or stale loads cannot replace
+the active design. Explicit sample links and the legacy H&S/Full quick selector
+retain their existing admission behavior.
+
+This is a reusable foundation for #85/#138, not mode retirement. Current
+hostname/query defaults, both saved workspace families, offline Electron and
+dedicated VWAN routing capabilities remain intact. The future single workspace
+must prove feature parity and lossless legacy save/link migration before the
+visible mode switch is removed. Shared presentation does not require replacing
+the existing routing/control-plane implementations.
+
 ## Storage, installation and maintenance
 
 Native topology/workspace and display preferences persist in Electron's local

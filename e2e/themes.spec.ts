@@ -137,8 +137,8 @@ for (const theme of ['light', 'dark']) {
 
       if (mode === 'vwan') {
         await page.getByRole('button', { name: 'Sample topologies', exact: true }).click()
-        await readable(page.locator('.canvas-overlay').last())
-        await page.locator('.canvas-overlay').last().locator('.overlay-heading button').filter({ hasText: 'Close' }).click()
+        await readable(page.getByTestId('vwan-sample-gallery-modal'))
+        await page.getByTestId('vwan-close-sample-gallery-btn').click()
         await page.getByRole('button', { name: 'Feedback', exact: true }).click()
         await readable(page.getByRole('dialog'))
         await expect(page.getByRole('button', { name: 'Open issue on GitHub', exact: true })).toBeDisabled()

@@ -13,6 +13,7 @@ import { Explain } from '../learning/Explain'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { CanvasOverlay } from '../CanvasOverlay'
+import { SampleGallery } from '../SampleGallery'
 import { useDeleteShortcut } from '../useDeleteShortcut'
 import { ErLocationInfoModal } from '../ErLocationInfoModal'
 import {
@@ -394,7 +395,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const analysisWorker = useRef<Worker | undefined>(undefined)
   const [reviewFindingIds, setReviewFindingIds] = useState<string[] | null>(null)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
-  const [sampleLoadingId, setSampleLoadingId] = useState<string | null>(null)
+  const sampleRequest = useRef(0)
   const [shareCopied, setShareCopied] = useState<boolean>(false)
   const [contextMenu, setContextMenu] = useState<AzContextMenuTarget | null>(null)
 
@@ -585,6 +586,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
     nextTopology = parseAzNetTopology(nextTopology)
+    sampleRequest.current++
     setSampleId(id)
     setTopology(nextTopology)
     setHistory([])
@@ -624,32 +626,24 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
 
-  const loadSample = (id: string) => {
-    if (!id) {
-      applyLoadedTopology('', createEmptyAzNetTopology())
-      return
+  const loadSample = async (id: string, signal?: AbortSignal) => {
+    const request = ++sampleRequest.current
+    try {
+      if (id && !/^[a-z0-9-]+$/.test(id)) return false
+      const found = AZURE_NET_SAMPLES.find((s) => s.id === id)
+      const next = !id ? createEmptyAzNetTopology()
+        : found ? cloneAzNetTopology(found.topology)
+        : await fetch(`/docs/samples/azure-net/${id}.json`, { signal }).then(async (res) => {
+          if (!res.ok) throw new Error(`Sample "${id}" not found.`)
+          return parseAzNetJson(await res.text())
+        })
+      if (signal?.aborted || request !== sampleRequest.current) return false
+      applyLoadedTopology(id, next)
+      return true
+    } catch (error) {
+      if (!signal?.aborted && request === sampleRequest.current) setWorkspaceNotice(`Sample rejected: ${workspaceError(error)}`)
+      return false
     }
-    const found = AZURE_NET_SAMPLES.find((s) => s.id === id)
-    if (found) {
-      applyLoadedTopology(found.id, cloneAzNetTopology(found.topology))
-      return
-    }
-    if (!/^[a-z0-9-]+$/.test(id)) return
-    setSampleLoadingId(id)
-    void fetch(`/docs/samples/azure-net/${id}.json`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Sample "${id}" not found.`)
-        return parseAzNetJson(await res.text())
-      })
-      .then((loaded) => {
-        applyLoadedTopology(id, parseAzNetTopology(loaded))
-      })
-      .catch((error) => {
-        setWorkspaceNotice(`Sample rejected: ${workspaceError(error)}`)
-      })
-      .finally(() => {
-        setSampleLoadingId(null)
-      })
   }
 
   const urlSampleLoaded = useRef(false)
@@ -2723,7 +2717,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             onClick={() => setSampleGalleryOpen(true)}
             title="Browse built-in Azure VNet & Hybrid sample topologies"
           >
-            📚 Sample Gallery ({visibleCatalogEntries.length})
+            {t('Sample topologies')}
           </button>
 
           <button
@@ -5958,195 +5952,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         </CanvasOverlay>}
       </div>
 
-      {sampleGalleryOpen && (
-        <div
-          data-testid="aznet-sample-gallery-modal"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'var(--backdrop)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: 24,
-          }}
-          onClick={() => setSampleGalleryOpen(false)}
-        >
-          <div
-            style={{
-              background: 'var(--surface)',
-              borderRadius: 12,
-              maxWidth: 1040,
-              width: '100%',
-              maxHeight: '86vh',
-              display: 'flex',
-              flexDirection: 'column',
-              boxShadow: '0 25px 50px -12px var(--backdrop)',
-              overflow: 'hidden',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div
-              style={{
-                padding: '16px 20px',
-                background: 'var(--surface-muted)',
-                color: 'var(--text-muted)',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-              }}
-            >
-              <div>
-                <h2 style={{ margin: 0, fontSize: 17 }}>
-                  📚 Azure VNet & Hybrid Sample Topologies Gallery ({visibleCatalogEntries.length})
-                </h2>
-                <p style={{ margin: '4px 0 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
-                  Click any reference architecture or live-Azure validated scenario below to load it
-                  immediately into the simulator.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="aznet-btn"
-                data-testid="aznet-close-sample-gallery-btn"
-                onClick={() => setSampleGalleryOpen(false)}
-              >
-                ✕ Close
-              </button>
-            </div>
-
-            <div style={{ padding: 20, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: 'var(--text)' }}>
-                  Flagship Reference Topologies ({visibleCatalogEntries.filter((s) => s.category === 'flagship').length})
-                </h3>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(295px, 1fr))',
-                    gap: 12,
-                  }}
-                >
-                  {visibleCatalogEntries.filter((s) => s.category === 'flagship').map((entry) => {
-                    const isCurrent = entry.id === sampleId
-                    return (
-                      <div
-                        key={entry.id}
-                        data-testid={`aznet-gallery-card-${entry.id}`}
-                        style={{
-                          border: isCurrent ? '2px solid var(--accent)' : '1px solid var(--border)',
-                          background: isCurrent ? 'var(--surface-muted)' : 'var(--surface)',
-                          borderRadius: 8,
-                          padding: 12,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>
-                            {entry.title}
-                          </div>
-                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)', lineHeight: 1.45 }}>
-                            {entry.summary}
-                          </p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                            {entry.badges.map((badge) => (
-                              <span key={badge} className="aznet-badge info">
-                                {badge}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <code style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{entry.id}.json</code>
-                          <button
-                            type="button"
-                            className="aznet-btn aznet-btn-primary"
-                            data-testid={`aznet-gallery-load-${entry.id}`}
-                            disabled={sampleLoadingId === entry.id}
-                            onClick={() => loadSample(entry.id)}
-                          >
-                            {isCurrent ? '✓ Loaded (Reload)' : 'Load Topology'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <div>
-                <h3 style={{ margin: '0 0 10px 0', fontSize: 14, color: 'var(--text)' }}>
-                  Live-Azure Empirical Validation Scenarios (UC1–UC9)
-                </h3>
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(295px, 1fr))',
-                    gap: 12,
-                  }}
-                >
-                  {ALL_AZURE_NET_CATALOG.filter((s) => s.category === 'validation').map((entry) => {
-                    const isCurrent = entry.id === sampleId
-                    return (
-                      <div
-                        key={entry.id}
-                        data-testid={`aznet-gallery-card-${entry.id}`}
-                        style={{
-                          border: isCurrent ? '2px solid var(--accent)' : '1px solid var(--border)',
-                          background: isCurrent ? 'var(--surface-muted)' : 'var(--surface)',
-                          borderRadius: 8,
-                          padding: 12,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          gap: 10,
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)', marginBottom: 4 }}>
-                            {entry.title}
-                          </div>
-                          <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)', lineHeight: 1.45 }}>
-                            {entry.summary}
-                          </p>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                            {entry.badges.map((badge) => (
-                              <span key={badge} className="aznet-badge ok">
-                                {badge}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <code style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{entry.id}.json</code>
-                          <button
-                            type="button"
-                            className="aznet-btn aznet-btn-primary"
-                            data-testid={`aznet-gallery-load-${entry.id}`}
-                            disabled={sampleLoadingId === entry.id}
-                            onClick={() => loadSample(entry.id)}
-                          >
-                            {sampleLoadingId === entry.id
-                              ? 'Loading…'
-                              : isCurrent
-                                ? '✓ Loaded (Reload)'
-                                : 'Load Scenario'}
-                          </button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {sampleGalleryOpen && <SampleGallery entries={visibleCatalogEntries} currentId={sampleId} testIdPrefix="aznet"
+        hasWorkspace={topology.name !== 'Empty Topology' || !!(topology.vnets.length || topology.vwanHubs.length || topology.sites.length || topology.erLocations.length || topology.udrTables.length || topology.routeMaps?.length || topology.vnetPeerings.length || topology.erLinks.length || topology.vpnConnections.length || topology.siteLinks.length)}
+        onLoad={loadSample} onExport={handleExportJson} onClose={() => setSampleGalleryOpen(false)} />}
 
       {/* ExpressRoute Peering Locations & Providers Modal (#43, #44) */}
       <ErLocationInfoModal
