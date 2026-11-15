@@ -2,6 +2,8 @@ import { Component, lazy, StrictMode, Suspense, useEffect, useState } from 'reac
 import type { ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './App.css'
+import './azure-net/azure-net.css'
 import { SimulatorModeSwitch } from './SimulatorModeSwitch.tsx'
 import type { SimulatorMode } from './SimulatorModeSwitch.tsx'
 import { t, useLanguage } from './i18n'

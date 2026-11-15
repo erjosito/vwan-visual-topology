@@ -5,7 +5,11 @@ import { progressKey } from '../src/learning/progress'
 for (const exercise of exercises) {
   test(`local practice persists independent drafts and grades ${exercise.starter.mode}`, async ({ page }) => {
     await page.goto(`/?mode=${exercise.starter.mode}`)
+    await expect(page.getByTestId(exercise.starter.mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
     const storageKey = exercise.starter.mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    if (exercise.starter.mode !== 'vwan') {
+      await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey)).not.toBeNull()
+    }
     const original = await page.evaluate((key) => localStorage.getItem(key), storageKey)
     await page.getByTestId('learning-open').click()
     const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })

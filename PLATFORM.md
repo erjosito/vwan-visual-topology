@@ -265,7 +265,9 @@ delete their downloads or traces.
 
 The blocking external `theme-bootstrap.js` resolves stored/system theme before
 React/CSS paint without loosening the self-only script CSP. Inactive workspace
-roots load on demand, retaining shared dependencies, mode-specific state,
+JavaScript roots load on demand; presentation styles retain their shared eager
+order so popup layering, motion and theme overrides do not depend on visiting
+another mode first. This retains shared dependencies, mode-specific state,
 recoverable loading/failure controls, native JSON/history and offline workers.
 
 `npm run measure:production -- <output.json>` records the initial referenced
@@ -274,9 +276,9 @@ and first inactive-workspace latency. `PRODUCTION_ROOT` selects an existing
 artifact for baseline reproduction. Gzip sizes are computed locally, not
 observed Azure transfers; loopback timing samples are not a network-performance
 promise. Compared with the published 8d9d76d artifact, the measured entry graph
-fell from 354,192 to about 128,061 local-gzip bytes, and settled per-mode requests
-from 354,192 to about 293,275–294,716 bytes. The initial request graph excludes the
-inactive workspace; the first switch now pays its loading cost. Measured local
+fell from 354,192 to about 135,346 local-gzip bytes, and settled per-mode requests
+from 354,192 to about 293,995–299,890 bytes. The initial request graph excludes the
+inactive workspace JavaScript; the first switch now pays its loading cost. Measured local
 ready/panel/switch timings are retained separately, with neither speed nor
 peak-memory improvements assumed. CI enforces bounded entry/per-mode byte
 budgets and tests defaults/overrides, pre-paint theme, workers, optional panels,
