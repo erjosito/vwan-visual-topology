@@ -24,7 +24,7 @@
 .workspace-tools-objects button[aria-pressed="true"] { border-color: var(--accent); }
 .workspace-tools-backdrop { display: none; }
 @media (min-width: 901px) {
-  .workspace-tools-panel { top: var(--workspace-tools-top, 0px); }
+  .workspace-tools-panel { top: min(var(--workspace-tools-top, 0px), max(0px, calc(100dvh - 240px))); }
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .canvas-app > main,
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .aznet-workspace { padding-left: 280px; }
   .simulator-shell:has(.workspace-tools-panel):not(.canvas-maximized) .canvas-app > footer { padding-left: 298px; }

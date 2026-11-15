@@ -100,6 +100,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     if (focusSelection.current) {
       focusSelection.current = false
       const target = selectionHeading.current ?? input.current
+      target?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
       target?.focus({ preventScroll: true })
     }
   })

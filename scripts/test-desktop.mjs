@@ -81,6 +81,12 @@ try {
       return mode === 'vwan' ? value : value.topology
     }, mode)
     await expect.poll(readSaved).toEqual(executePlatform({ ...request, operation: 'validate' }).document.topology)
+    const originalWindow = await application.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      const size = window.getContentSize()
+      window.setContentSize(1024, 640)
+      return size
+    })
     const toolsOpener = page.getByRole('button', { name: 'Workspace controls', exact: true })
     const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
     if (await toolsOpener.getAttribute('aria-expanded') !== 'true') await toolsOpener.click()
@@ -92,9 +98,11 @@ try {
       name: `Select ${hub ? 'Virtual WAN hub' : 'VNet'}: ${node.label ?? node.name}`, exact: true,
     }).click()
     await expect(tools.locator('h3[tabindex="-1"]')).toBeFocused()
+    await expect(tools.locator('h3[tabindex="-1"]')).toBeInViewport()
     await expect(tools.getByRole('searchbox')).toHaveValue('')
     expect(await readSaved()).toEqual(beforeDiscovery)
     await toolsOpener.click()
+    await application.evaluate(({ BrowserWindow }, size) => BrowserWindow.getAllWindows()[0].setContentSize(...size), originalWindow)
     const exportFile = join(artifacts, `export-${mode}.json`)
     await application.evaluate(({ session }, destination) => {
       globalThis.__desktopDownloadDone = new Promise((resolve) => {
@@ -192,6 +200,7 @@ try {
     freshVwanStartsEmpty: true, explicitVwanSampleLoading: true, savedVwanRestored: true, damagedVwanSavedDataPreserved: true,
     brandedWindowsResources,
     sharedObjectDiscovery: true, providerScopedSelection: true, objectDiscoveryPreservesSavedGraph: true,
+    compactDesktopPointerDiscovery: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

@@ -147,3 +147,24 @@ test('Japanese discovery translates presentation but preserves opaque user label
   await expect(tools.getByRole('button', { name: 'VNet を選択: Workspace controls', exact: true })).toBeVisible()
   await expect(tools.getByText('オブジェクトを探す', { exact: true })).toBeVisible()
 })
+
+test('compact desktop-height workspace keeps pointer discovery and focused context within the viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 640 })
+  await page.addInitScript((topology) => {
+    Object.defineProperty(window, 'desktopSimulator', { value: {} })
+    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, deviceTopology())
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  const original = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  const tools = page.getByRole('complementary', { name: toolsName, exact: true })
+  const bounds = (await tools.boundingBox())!
+  expect(bounds.height).toBeGreaterThanOrEqual(239)
+  expect(bounds.y + bounds.height).toBeLessThanOrEqual(641)
+  await tools.getByRole('searchbox').fill('vpn-2')
+  await tools.getByRole('button', { name: 'Select VPN gateway: Shared VPN name (Owner 2)', exact: true }).click()
+  const heading = tools.locator('h3[tabindex="-1"]')
+  await expect(heading).toBeFocused()
+  await expect(heading).toBeInViewport()
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
+})

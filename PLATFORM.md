@@ -349,6 +349,14 @@ focusing their heading on wide screens or the restored opener on narrow ones.
 No inventory selection changes saved designs, coordinates, undo history or
 routing inputs.
 
+On short wide windows, a wrapped global/native header can extend beyond the
+viewport. The palette then clamps its top to retain at least 240px of usable
+height (or the available viewport), temporarily overlapping the lower header
+instead of placing all controls offscreen. Normal-height placement stays below
+the measured header. Selecting an object scrolls its contextual heading into
+the panel before focusing it; both development and packaged Electron exercise
+real pointer selection at 1024x640.
+
 ## Storage, installation and maintenance
 
 Native topology/workspace and display preferences persist in Electron's local
