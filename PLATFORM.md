@@ -348,6 +348,8 @@ Selection clears search and collapses discovery to surface contextual actions,
 focusing their heading on wide screens or the restored opener on narrow ones.
 No inventory selection changes saved designs, coordinates, undo history or
 routing inputs.
+Status badges read only enabled flags supported by the corresponding model;
+retained extension fields on other records are not interpreted as status.
 
 On short wide windows, a wrapped global/native header can extend beyond the
 viewport. The palette then clamps its top to retain at least 240px of usable

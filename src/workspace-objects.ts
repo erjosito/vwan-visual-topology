@@ -49,13 +49,13 @@ export function azWorkspaceIdentity(selection: AzSelectedEntity): WorkspaceIdent
     ownerId: 'vnetId' in selection && selection.kind !== 'vnet' ? selection.vnetId : undefined }
 }
 
-type NamedObject = { id: string; name: string; label?: string; enabled?: boolean }
+type NamedObject = { id: string; name: string; label?: string }
 
 function inventoryBuilder<Selection>(identity: (selection: Selection) => WorkspaceIdentity) {
   const objects: WorkspaceObject<Selection>[] = []
-  const add = (object: NamedObject, selection: Selection, kindLabel: string, parents: string[] = [], searchTerms: string[] = []) => {
+  const add = (object: NamedObject, selection: Selection, kindLabel: string, parents: string[] = [], searchTerms: string[] = [], enabled?: boolean) => {
     objects.push({ identity: identity(selection), selection, name: object.name, label: object.label,
-      kindLabel, parents, searchTerms, enabled: object.enabled })
+      kindLabel, parents, searchTerms, enabled })
   }
   return { objects, add }
 }
@@ -71,11 +71,11 @@ export function vwanWorkspaceObjects(topology: Topology): readonly WorkspaceObje
   for (const site of topology.sites) add(site, { kind: 'site', id: site.id }, siteLabel(topology, site.id))
   for (const location of topology.erLocations ?? []) add(location, { kind: 'erLocation', id: location.id }, 'ER location')
   for (const connection of topology.connections) add(connection, { kind: 'connection', id: connection.id }, 'Connection',
-    names(hubNames.get(connection.hubId), siteNames.get(connection.siteId)), [connection.transport, transportLabels[connection.transport]])
+    names(hubNames.get(connection.hubId), siteNames.get(connection.siteId)), [connection.transport, transportLabels[connection.transport]], connection.enabled)
   for (const link of topology.siteLinks) add(link, { kind: 'siteLink', id: link.id }, 'Site link',
-    names(siteNames.get(link.a), siteNames.get(link.b)))
+    names(siteNames.get(link.a), siteNames.get(link.b)), [], link.enabled)
   for (const link of topology.erLinks ?? []) add(link, { kind: 'erLink', id: link.id }, 'ER connection',
-    names(locationNames.get(link.locationId), hubNames.get(link.hubId ?? ''), siteNames.get(link.siteId ?? '')))
+    names(locationNames.get(link.locationId), hubNames.get(link.hubId ?? ''), siteNames.get(link.siteId ?? '')), [], link.enabled)
   return objects
 }
 
@@ -92,9 +92,9 @@ export function azWorkspaceObjects(topology: AzNetTopology): readonly WorkspaceO
     for (const gateway of vnet.gateways) {
       nodeNames.set(gateway.id, gateway.name)
       add(gateway, { kind: 'gateway', vnetId: vnet.id, gatewayId: gateway.id },
-        gateway.kind === 'Vpn' ? 'VPN gateway' : 'ExpressRoute gateway', parents)
+        gateway.kind === 'Vpn' ? 'VPN gateway' : 'ExpressRoute gateway', parents, [], gateway.enabled)
     }
-    if (vnet.routeServer) add(vnet.routeServer, { kind: 'route-server', vnetId: vnet.id, routeServerId: vnet.routeServer.id }, 'Azure Route Server', parents)
+    if (vnet.routeServer) add(vnet.routeServer, { kind: 'route-server', vnetId: vnet.id, routeServerId: vnet.routeServer.id }, 'Azure Route Server', parents, [], vnet.routeServer.enabled)
     for (const appliance of vnet.appliances) {
       nodeNames.set(appliance.id, appliance.name)
       const subnet = subnets.get(appliance.subnetId)
@@ -107,12 +107,12 @@ export function azWorkspaceObjects(topology: AzNetTopology): readonly WorkspaceO
   for (const site of topology.sites) add(site, { kind: 'site', siteId: site.id }, 'site')
   for (const location of topology.erLocations) add(location, { kind: 'er-location', locationId: location.id }, 'ER location')
   for (const peering of topology.vnetPeerings) add(peering, { kind: 'peering', peeringId: peering.id }, 'VNet peering',
-    names(peering.vnetAId, peering.vnetBId))
-  for (const link of topology.erLinks) add(link, { kind: 'er-link', linkId: link.id }, 'ER connection', names(link.locationId, link.targetId))
+    names(peering.vnetAId, peering.vnetBId), [], peering.enabled)
+  for (const link of topology.erLinks) add(link, { kind: 'er-link', linkId: link.id }, 'ER connection', names(link.locationId, link.targetId), [], link.enabled)
   for (const link of topology.erGlobalReachLinks ?? []) add(link, { kind: 'er-global-reach-link', linkId: link.id }, 'Global Reach link',
-    names(link.locationAId, link.locationBId))
+    names(link.locationAId, link.locationBId), [], link.enabled)
   for (const connection of topology.vpnConnections) add(connection, { kind: 'vpn-connection', connectionId: connection.id }, 'VPN connection',
-    names(connection.siteId, connection.targetId))
-  for (const link of topology.siteLinks) add(link, { kind: 'site-link', siteLinkId: link.id }, 'Site link', names(link.siteAId, link.siteBId))
+    names(connection.siteId, connection.targetId), [], connection.enabled)
+  for (const link of topology.siteLinks) add(link, { kind: 'site-link', siteLinkId: link.id }, 'Site link', names(link.siteAId, link.siteBId), [], link.enabled)
   return objects
 }

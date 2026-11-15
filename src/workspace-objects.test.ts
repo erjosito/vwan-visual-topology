@@ -67,4 +67,20 @@ describe('existing workspace object projections', () => {
       ['a:b', 'c'], ['a', 'b:c'], ['other', 'c'],
     ])
   })
+
+  it('does not interpret retained extension flags as supported object status', () => {
+    const topology = createEmptyAzNetTopology()
+    topology.sites = ['one', 'two'].map((id) => Object.assign({
+      id, name: id, asn: 65000, prefixes: ['10.0.0.0/24'],
+    }, { enabled: false }))
+    topology.siteLinks = [{ id: 'link', name: 'Link', siteAId: 'one', siteBId: 'two', enabled: false }]
+    const before = JSON.stringify(topology)
+    const objects = azWorkspaceObjects(topology)
+    expect(objects.filter((object) => object.enabled === false).map((object) => object.identity.id)).toEqual(['link'])
+    expect(JSON.stringify(topology)).toBe(before)
+
+    const vwan = structuredClone(example)
+    Object.assign(vwan.hubs[0], { enabled: false })
+    expect(vwanWorkspaceObjects(vwan).find((object) => object.identity.id === vwan.hubs[0].id)?.enabled).toBeUndefined()
+  })
 })
