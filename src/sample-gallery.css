@@ -1,4 +1,4 @@
-.sample-gallery.object-dialog { width: min(1040px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); padding: 20px; box-sizing: border-box; overflow-y: auto; }
+.sample-gallery.object-dialog { width: min(1040px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); padding: 20px; box-sizing: border-box; overflow-y: auto; font-family: 'DM Sans', system-ui, sans-serif; }
 .sample-gallery .dialog-heading { justify-content: space-between; gap: 12px; }
 .sample-gallery .dialog-heading h2 { margin: 0; }
 .sample-gallery-groups { display: grid; gap: 20px; }

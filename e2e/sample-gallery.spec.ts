@@ -15,6 +15,8 @@ for (const entry of modes) {
     const opener = page.getByRole('button', { name: 'Sample topologies', exact: true })
     await opener.click()
     const gallery = page.getByTestId(`${entry.prefix}-sample-gallery-modal`)
+    const sharedFont = await page.locator('html').evaluate((element) => getComputedStyle(element).fontFamily)
+    await expect(gallery.getByRole('heading', { name: 'Sample topologies', exact: true })).toHaveCSS('font-family', sharedFont)
     const search = gallery.getByRole('searchbox', { name: 'Search samples', exact: true })
     await expect(search).toBeFocused()
     await page.keyboard.press('Shift+Tab')
