@@ -328,6 +328,27 @@ shortcuts remain during transition. Context-action terminology and semantics
 remain supplied by their compatible root; no unsupported Internet/workload
 controls are advertised.
 
+Object discovery derives a read-only `WorkspaceObject` projection from each
+existing editable graph. Provider family, selection kind, opaque ID and (for
+classic child devices/subnets) VNet owner ID form a structured identity.
+React keys serialize that tuple rather than joining unescaped user IDs.
+The projection preserves the existing `ObjectSelection`/`AzSelectedEntity`
+payloads; it is not another document wrapper, editable graph or canonical
+schema conversion. Both root selection handlers retain explicit route
+inspection scope until the user requests a route action.
+
+`Find objects` indexes current canvas-selectable nodes, subnets, gateways,
+Route Servers, appliances and links, including disabled devices. Route tables,
+route maps and private endpoints still use their existing owner configuration;
+discovery does not invent standalone selection handlers for them. Names,
+labels, IDs and parent names remain opaque user data. The index is requested
+only when its disclosure opens or search needs it; at most 100 matching buttons
+are rendered, with a refine-search notice rather than a topology size limit.
+Selection clears search and collapses discovery to surface contextual actions,
+focusing their heading on wide screens or the restored opener on narrow ones.
+No inventory selection changes saved designs, coordinates, undo history or
+routing inputs.
+
 ## Storage, installation and maintenance
 
 Native topology/workspace and display preferences persist in Electron's local

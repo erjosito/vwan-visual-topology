@@ -1,7 +1,9 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { t } from './i18n'
 import { contextActionDisabled } from './context-actions'
 import type { ContextAction } from './TopologyContextMenu'
+import { workspaceIdentityKey } from './workspace-objects'
+import type { WorkspaceIdentity, WorkspaceObject } from './workspace-objects'
 import './workspace-tools.css'
 
 type WorkspaceAction = ContextAction & { testId?: string }
@@ -46,16 +48,24 @@ function ActionList({ actions, query, parents = [], onRun }: {
   })}</ul>
 }
 
-export function WorkspaceTools({ creationActions, getSelection }: {
+export function WorkspaceTools<Selection>({ creationActions, getSelection, inventory }: {
   creationActions: WorkspaceAction[]
   getSelection?: () => { title: string; actions: ContextAction[] } | null | undefined
+  inventory?: {
+    getObjects: () => readonly WorkspaceObject<Selection>[]
+    selected?: WorkspaceIdentity
+    onSelect: (selection: Selection) => void
+  }
 }) {
   const id = useId()
   const [open, setOpen] = useState(initialOpen)
   const [search, setSearch] = useState('')
   const [top, setTop] = useState(0)
+  const [objectsOpen, setObjectsOpen] = useState(false)
   const opener = useRef<HTMLButtonElement>(null)
   const input = useRef<HTMLInputElement>(null)
+  const selectionHeading = useRef<HTMLHeadingElement>(null)
+  const focusSelection = useRef(false)
   const focusSearch = useRef(false)
   useLayoutEffect(() => {
     const header = opener.current?.closest('header')
@@ -86,16 +96,41 @@ export function WorkspaceTools({ creationActions, getSelection }: {
       focusSearch.current = false
     }
   }, [open])
+  useEffect(() => {
+    if (focusSelection.current) {
+      focusSelection.current = false
+      const target = selectionHeading.current ?? input.current
+      target?.focus({ preventScroll: true })
+    }
+  })
   const query = search.trim().toLocaleLowerCase()
   const selection = open ? getSelection?.() : undefined
+  const needsObjects = open && (objectsOpen || !!query)
+  const getObjects = inventory?.getObjects
+  const objects = useMemo(() => needsObjects ? getObjects?.() ?? [] : [], [needsObjects, getObjects])
+  const matches = objects.filter((object) => [t(object.kindLabel), object.name, object.label ?? '',
+    object.identity.id, object.identity.ownerId ?? '', ...object.parents, ...object.searchTerms]
+    .join(' ').toLocaleLowerCase().includes(query))
+  const selectedKey = inventory?.selected ? workspaceIdentityKey(inventory.selected) : undefined
   const groups = [
-    { title: t('Create network objects'), actions: creationActions },
-    ...(selection ? [{ title: selection.title, actions: selection.actions }] : []),
+    { title: t('Create network objects'), actions: creationActions, selection: false },
+    ...(selection ? [{ title: selection.title, actions: selection.actions, selection: true }] : []),
   ].filter((group) => visibleActions(group.actions, query).length)
   const run = (action: WorkspaceAction) => {
     if (!window.matchMedia('(min-width: 901px)').matches) changeOpen(false, true)
     const handler = action.run ?? action.onSelect
     handler?.()
+  }
+  const chooseObject = (object: WorkspaceObject<Selection>) => {
+    const narrow = !window.matchMedia('(min-width: 901px)').matches
+    if (narrow) changeOpen(false, true)
+    else {
+      input.current?.focus({ preventScroll: true })
+      focusSelection.current = true
+    }
+    setObjectsOpen(false)
+    setSearch('')
+    inventory?.onSelect(object.selection)
   }
   return <>
     <button type="button" ref={opener} aria-expanded={open} aria-controls={id}
@@ -116,11 +151,33 @@ export function WorkspaceTools({ creationActions, getSelection }: {
         <label className="workspace-tools-search">{t('Search workspace controls')}
           <input ref={input} type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>
+        {inventory && (!query || matches.length > 0) && <details className="workspace-tools-objects"
+          open={objectsOpen || !!query} onToggle={(event) => setObjectsOpen(event.currentTarget.open)}>
+          <summary>{t('Find objects')}</summary>
+          {(objectsOpen || !!query) && <>
+            <ul aria-label={t('Objects in this design')}>{matches.slice(0, 100).map((object) => {
+              const key = workspaceIdentityKey(object.identity)
+              const title = t('Select {0}: {1}', t(object.kindLabel), object.label ?? object.name)
+              const parents = [...new Set(object.parents)].join(' / ')
+              return <li key={key}><button type="button" aria-pressed={key === selectedKey}
+                title={object.identity.ownerId
+                  ? t('Object ID: {0}; VNet ID: {1}', object.identity.id, object.identity.ownerId)
+                  : t('Object ID: {0}', object.identity.id)}
+                aria-label={parents ? t('{0} ({1})', title, parents) : title} onClick={() => chooseObject(object)}>
+                <span>{title}{object.enabled === false && <span className="muted"> · {t('Disabled')}</span>}</span>
+                {parents && <small>{parents}</small>}
+              </button></li>
+            })}</ul>
+            {!matches.length && <p role="status">{t('No selectable objects in this design.')}</p>}
+            {matches.length > 100 && <p role="status">{t('Showing {0} of {1} objects. Refine your search to find others.', 100, matches.length)}</p>}
+          </>}
+        </details>}
         {groups.map((group) => <section key={group.title} aria-label={group.title}>
-          <h3>{group.title}</h3><ActionList actions={group.actions} query={query} onRun={run} />
+          <h3 ref={group.selection ? selectionHeading : undefined} tabIndex={group.selection ? -1 : undefined}>{group.title}</h3>
+          <ActionList actions={group.actions} query={query} onRun={run} />
         </section>)}
-        {!groups.length && <p role="status">{t('No commands match your search.')}</p>}
-        {!selection && <p className="muted">{t('Select an object on the canvas for its configuration, routes and connection actions.')}</p>}
+        {!groups.length && !matches.length && <p role="status">{t('No commands match your search.')}</p>}
+        {!selection && <p className="muted">{t('Select an object on the canvas or find it here for its configuration, routes and connection actions.')}</p>}
       </aside>
     </>}
   </>

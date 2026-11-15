@@ -13,6 +13,7 @@ import { Explain } from '../learning/Explain'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { WorkspaceTools } from '../WorkspaceTools'
+import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { SampleGallery } from '../SampleGallery'
 import { useDeleteShortcut } from '../useDeleteShortcut'
@@ -2735,6 +2736,10 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             const deletion = spec?.actions.find((action) => action.danger && !action.disabled && action.onSelect)
             return spec && { ...spec, actions: spec.actions.map((action) => action === deletion
               ? { ...action, onSelect: () => setDeleteTarget(canvasSelection) } : action) }
+          }} inventory={{
+            getObjects: () => azWorkspaceObjects(topology),
+            selected: canvasSelection ? azWorkspaceIdentity(canvasSelection) : undefined,
+            onSelect: setCanvasSelection,
           }} />
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
             onOpen={(document) => { if (document.mode !== 'vwan') applyLoadedTopology('practice', document.topology) }} />

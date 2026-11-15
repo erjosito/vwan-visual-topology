@@ -34,6 +34,8 @@ try {
   await page.reload()
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
+  const initialToolsOpener = page.getByRole('button', { name: 'Workspace controls', exact: true })
+  if (await initialToolsOpener.getAttribute('aria-expanded') !== 'true') await initialToolsOpener.click()
   await expect(page.getByRole('button', { name: '+ Hub', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: 'Sample topologies', exact: true }).click()
   await page.getByRole('dialog', { name: 'Sample topologies', exact: true }).getByRole('button', { name: 'Load sample topology', exact: true }).first().click()
@@ -79,6 +81,20 @@ try {
       return mode === 'vwan' ? value : value.topology
     }, mode)
     await expect.poll(readSaved).toEqual(executePlatform({ ...request, operation: 'validate' }).document.topology)
+    const toolsOpener = page.getByRole('button', { name: 'Workspace controls', exact: true })
+    const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
+    if (await toolsOpener.getAttribute('aria-expanded') !== 'true') await toolsOpener.click()
+    const beforeDiscovery = await readSaved()
+    const hub = mode === 'vwan' ? beforeDiscovery.hubs[0] : mode === 'full' ? beforeDiscovery.vwanHubs[0] : undefined
+    const node = hub ?? beforeDiscovery.vnets[0]
+    await tools.getByRole('searchbox').fill(node.id)
+    await tools.getByRole('button', {
+      name: `Select ${hub ? 'Virtual WAN hub' : 'VNet'}: ${node.label ?? node.name}`, exact: true,
+    }).click()
+    await expect(tools.locator('h3[tabindex="-1"]')).toBeFocused()
+    await expect(tools.getByRole('searchbox')).toHaveValue('')
+    expect(await readSaved()).toEqual(beforeDiscovery)
+    await toolsOpener.click()
     const exportFile = join(artifacts, `export-${mode}.json`)
     await application.evaluate(({ session }, destination) => {
       globalThis.__desktopDownloadDone = new Promise((resolve) => {
@@ -175,6 +191,7 @@ try {
     localThreeModePracticeWorker: true, independentPersistedPracticeDrafts: true, unverifiedLocalPracticeBadges: true,
     freshVwanStartsEmpty: true, explicitVwanSampleLoading: true, savedVwanRestored: true, damagedVwanSavedDataPreserved: true,
     brandedWindowsResources,
+    sharedObjectDiscovery: true, providerScopedSelection: true, objectDiscoveryPreservesSavedGraph: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }
