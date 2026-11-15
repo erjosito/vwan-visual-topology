@@ -262,6 +262,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
         if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ topology: value }))
       }, topology)
       await page.goto(`/?mode=${mode}`)
+      await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
       await page.getByTestId('aznet-check-routing-btn').click()
       await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible()
       const node = page.getByTestId('aznet-vnet-bench-vnet-0')
@@ -676,6 +677,7 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
 
   test('opens movable inspectors only on request, preserves edits when closed, and uses the full canvas', async ({ page }) => {
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
+    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await page.getByTestId('aznet-subnet-sub-app-web').click()
     await expect(page.getByRole('dialog')).toHaveCount(0)

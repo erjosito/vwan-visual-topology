@@ -12,6 +12,7 @@ import { LearningTools } from '../learning/LearningTools'
 import { Explain } from '../learning/Explain'
 import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
+import { WorkspaceTools } from '../WorkspaceTools'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { SampleGallery } from '../SampleGallery'
 import { useDeleteShortcut } from '../useDeleteShortcut'
@@ -1427,6 +1428,37 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     ]
   }
 
+  const addDefaultVnet = () => {
+    const newId = `vnet-custom-${topology.vnets.length + 1}`
+    commitTopology((draft) => {
+      const idx = draft.vnets.length + 1
+      draft.vnets.push({
+        id: `vnet-custom-${idx}`,
+        name: `Spoke-VNet-${idx}`,
+        region: 'West Europe',
+        role: 'spoke',
+        prefixes: [`10.${50 + idx}.0.0/16`],
+        subnets: [{ id: `snet-custom-${idx}`, name: 'snet-workload', prefix: `10.${50 + idx}.1.0/24` }],
+        gateways: [],
+        appliances: [],
+      })
+    })
+    setSelected({ kind: 'vnet', vnetId: newId })
+  }
+  const addVwanHub = (x?: number, y?: number) => {
+    commitTopology((draft) => {
+      const idx = draft.vwanHubs.length + 1
+      draft.vwanHubs.push({
+        id: `vhub-custom-${idx}`,
+        name: `vWAN-Hub-${idx}`,
+        region: 'West Europe',
+        prefix: `10.${190 + idx}.0.0/23`,
+        preference: 'ExpressRoute',
+        routingIntent: { private: false, internet: false },
+        ...(x === undefined || y === undefined ? {} : { x, y }),
+      })
+    })
+  }
   const getOrdinaryContextMenuSpec = (
     target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number },
   ): { title: string; actions: ContextAction[] } | null => {
@@ -1443,24 +1475,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             ? [
                 {
                   label: 'Add Virtual WAN Hub here',
-                  onSelect: () => {
-                    commitTopology((draft) => {
-                      const idx = draft.vwanHubs.length + 1
-                      draft.vwanHubs.push({
-                        id: `vhub-custom-${idx}`,
-                        name: `vWAN-Hub-${idx}`,
-                        region: 'West Europe',
-                        prefix: `10.${190 + idx}.0.0/23`,
-                        preference: 'ExpressRoute',
-                        routingIntent: {
-                          private: false,
-                          internet: false,
-                        },
-                        x: target.svgX,
-                        y: target.svgY,
-                      })
-                    })
-                  },
+                  onSelect: () => addVwanHub(target.svgX, target.svgY),
                 },
               ]
             : []),
@@ -2708,6 +2723,19 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         </div>
 
         <div className="aznet-topbar-controls">
+          <WorkspaceTools creationActions={[
+            { label: t('+ VNet'), testId: 'aznet-add-vnet-btn', run: addDefaultVnet },
+            { label: t('+ Site'), testId: 'aznet-add-site-btn', run: () => addSiteNode() },
+            { label: t('+ ER location'), testId: 'aznet-add-erloc-btn', run: () => addErLocationNode() },
+            { label: t('+ Route Table'), testId: 'aznet-add-rt-topbar-btn', run: () => { createAndAssociateRouteTable(); setActiveTab('editor') } },
+            ...(simulatorMode === 'full' ? [{ label: t('+ Virtual WAN hub'), testId: 'aznet-add-vwan-hub-btn', run: () => addVwanHub() }] : []),
+          ]} getSelection={() => {
+            if (!canvasSelection) return
+            const spec = getContextMenuSpec(canvasSelection)
+            const deletion = spec?.actions.find((action) => action.danger && !action.disabled && action.onSelect)
+            return spec && { ...spec, actions: spec.actions.map((action) => action === deletion
+              ? { ...action, onSelect: () => setDeleteTarget(canvasSelection) } : action) }
+          }} />
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
             onOpen={(document) => { if (document.mode !== 'vwan') applyLoadedTopology('practice', document.topology) }} />
           <button
@@ -2776,72 +2804,6 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
             title="Clear canvas to an empty topology"
           >
             🗑 Clear
-          </button>
-
-          <button
-            type="button"
-            className="aznet-btn"
-            onClick={() => {
-              const newId = `vnet-custom-${topology.vnets.length + 1}`
-              commitTopology((draft) => {
-                const idx = draft.vnets.length + 1
-                const vId = `vnet-custom-${idx}`
-                const sId = `snet-custom-${idx}`
-                draft.vnets.push({
-                  id: vId,
-                  name: `Spoke-VNet-${idx}`,
-                  region: 'West Europe',
-                  role: 'spoke',
-                  prefixes: [`10.${50 + idx}.0.0/16`],
-                  subnets: [
-                    {
-                      id: sId,
-                      name: 'snet-workload',
-                      prefix: `10.${50 + idx}.1.0/24`,
-                    },
-                  ],
-                  gateways: [],
-                  appliances: [],
-                })
-              })
-              setSelected({ kind: 'vnet', vnetId: newId })
-            }}
-            data-testid="aznet-add-vnet-btn"
-          >
-            + VNet
-          </button>
-
-          <button
-            type="button"
-            className="aznet-btn"
-            onClick={() => addSiteNode()}
-            data-testid="aznet-add-site-btn"
-            title="Add On-Premises Site"
-          >
-            + Site
-          </button>
-
-          <button
-            type="button"
-            className="aznet-btn"
-            onClick={() => addErLocationNode()}
-            data-testid="aznet-add-erloc-btn"
-            title="Add ExpressRoute Location"
-          >
-            + ER location
-          </button>
-
-          <button
-            type="button"
-            className="aznet-btn"
-            onClick={() => {
-              createAndAssociateRouteTable()
-              setActiveTab('editor')
-            }}
-            data-testid="aznet-add-rt-topbar-btn"
-            title="Create Independent Route Table"
-          >
-            + Route Table
           </button>
 
           <button

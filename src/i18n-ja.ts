@@ -1,5 +1,13 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Workspace controls': 'ワークスペースの操作',
+  'Close workspace controls': 'ワークスペースの操作を閉じる',
+  'Search workspace controls': 'ワークスペースの操作を検索',
+  'Create network objects': 'ネットワーク オブジェクトを作成',
+  'No commands match your search.': '検索に一致する操作はありません。',
+  'Select an object on the canvas for its configuration, routes and connection actions.': '構成、ルート、接続の操作を表示するには、キャンバス上のオブジェクトを選択してください。',
+  '+ Virtual WAN hub': '+ Virtual WAN ハブ',
+  '+ Route Table': '+ ルート テーブル',
   'Workspace could not load. Your saved design has not been replaced.': 'ワークスペースを読み込めませんでした。保存された設計は置き換えていません。',
   'Reload workspace': 'ワークスペースを再読み込み',
   'Workspace loading': 'ワークスペースを読み込み中',

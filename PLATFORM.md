@@ -302,6 +302,32 @@ must prove feature parity and lossless legacy save/link migration before the
 visible mode switch is removed. Shared presentation does not require replacing
 the existing routing/control-plane implementations.
 
+The current roots also reuse `WorkspaceTools` for collapsible/searchable
+creation controls and selection-driven context actions. It calls existing
+root-owned handlers rather than registering global callbacks or importing
+another engine/editor into the entry bundle. Nested actions retain their
+current prerequisite/disabled and failure-recovery gates and mount only when
+expanded or requested by search. Classic deletion
+uses the existing confirmation path. Full Hybrid exposes its implemented
+virtual-hub creation; this does not supply missing custom-table parity.
+
+The palette reserves canvas space below the unchanged full-width global bar
+on wide screens and becomes a dismissible
+non-modal drawer on narrow screens. Explicit opening focuses search; Escape
+and the close control restore the opener. A narrow-screen action dismisses
+the drawer before opening its editor. Canvas maximization temporarily hides
+it without losing its choice. `aznet-workspace-tools:v1` stores only
+`open`/`closed`, shared across current mode transitions; invalid/unavailable
+storage falls back to viewport-appropriate in-session behavior. Searching,
+collapsing and inspecting do not modify topology JSON, saved coordinates,
+simulation inputs or practice progress.
+
+This is an incremental shared-shell foundation, not mode retirement or
+schema migration. Global workspace/file/analysis controls and legacy sample
+shortcuts remain during transition. Context-action terminology and semantics
+remain supplied by their compatible root; no unsupported Internet/workload
+controls are advertised.
+
 ## Storage, installation and maintenance
 
 Native topology/workspace and display preferences persist in Electron's local

@@ -86,6 +86,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       }, { ...example, layout: { mode: 'layered', positions: { layered: { eu: { x: 420, y: 300 } } } } })
     }
     await page.goto(`/?mode=${mode}${mode === 'vwan' ? '' : '&sample=hub-spoke-firewall-udr'}`)
+    await expect(page.getByRole('complementary', { name: 'Workspace controls' })).toBeVisible()
+    await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
     const shell = page.locator('.simulator-shell')
     const canvas = mode === 'vwan' ? page.locator('.canvas-stage') : page.getByTestId('aznet-canvas-shell')
     const svg = mode === 'vwan' ? page.locator('svg.diagram') : page.getByTestId('aznet-diagram-svg')
