@@ -6,6 +6,9 @@ $command = $args[0..([Math]::Min(2, $args.Count - 1))] -join ' '
 Add-Content -LiteralPath $env:MOCK_NETWORK_LOG -Value (ConvertTo-Json -InputObject @($args) -Compress)
 if ($args -notcontains '--query' -or $args -notcontains '--only-show-errors') { throw 'Missing projected, quiet CLI invocation.' }
 if ($command.StartsWith('network ') -and $args[[Array]::IndexOf($args, '--subscription') + 1] -ne $subscription) { throw 'Subscription not pinned.' }
+if ($command -eq 'network vnet list' -and $env:MOCK_NETWORK_MODE -eq 'overall-budget') {
+    Start-Sleep -Seconds 30
+}
 if ($command -eq 'network route-table list' -and $env:MOCK_NETWORK_MODE -eq 'denied') {
     [Console]::Error.WriteLine('AuthorizationFailed 403 Bearer must-not-be-exported'); exit 1
 }

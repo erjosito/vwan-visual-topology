@@ -55,6 +55,7 @@ try {
     $config = Get-Content $configFile -Raw | ConvertFrom-Json
     Assert ($config.subscriptionId -eq $subscription -and $config.configurationComplete) 'Observed subscription was not pinned for configuration reads.'
     Assert ($config.sections.nicEffectiveRoutes.state -eq 'not-requested' -and !$config.sections.nicEffectiveRoutes.complete) 'Unrequested observations were declared complete.'
+    $env:MOCK_NETWORK_MODE = 'overall-budget'
     $budgetFile = Join-Path $output 'overall-budget.json'
     $watch = [Diagnostics.Stopwatch]::StartNew()
     & (Join-Path $repo 'public' 'scripts' 'collect-azure-network.ps1') -ResourceGroupName network -SubscriptionId $subscription `
