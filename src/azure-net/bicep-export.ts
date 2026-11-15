@@ -46,7 +46,14 @@ export function generateAzNetBicep(
     warnings.push('Mixed hub custom tables, association and propagation settings are not deployed by this Bicep starter. Preserve JSON and configure these settings explicitly before deployment.')
   }
   if (topology.routeMaps?.length) {
-    warnings.push('On-premises site route maps are simulation/device policies and are not deployed by this Azure Bicep export. Configure the corresponding site routers separately.')
+    if (topology.routeMaps.some((map) => map.siteId)) warnings.push('On-premises site route maps are simulation/device policies and are not deployed by this Azure Bicep export. Configure the corresponding site routers separately.')
+    if (topology.routeMaps.some((map) => map.hubId)) warnings.push('Mixed Virtual WAN hub route maps and connection assignments are not deployed by this Bicep starter. Preserve native JSON and configure hub policies explicitly.')
+  }
+  if (topology.allowBranchToBranchTraffic === false || topology.vpnConnections.some((connection) => connection.transport === 'SDWAN'
+    || connection.learnSiteRoutes !== undefined || connection.propagateDefaultRoute !== undefined)
+    || topology.erLinks.some((link) => link.learnSiteRoutes !== undefined || link.propagateDefaultRoute !== undefined)
+    || topology.vnets.some((vnet) => vnet.appliances.some((app) => app.vwanBgpEnabled))) {
+    warnings.push('WAN branch controls, integrated SD-WAN and spoke NVA BGP peering require explicit configuration; this Bicep starter does not deploy them. Preserve native JSON.')
   }
   if (topology.vnets.some((vnet) => vnet.routeServer?.routeMaps?.length)) {
     warnings.push(includeRouteServers

@@ -3,9 +3,10 @@ import type { PathNode } from '../paths'
 import type { AzNetTopology } from '../azure-net/model'
 import type { AzEndpointRef } from '../azure-net/engine'
 import type { PacketRequest, PacketResult } from '../packet-flow'
+import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.15.2'
+export const engineVersion = '2026.11.15.3'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -75,6 +76,10 @@ export const capabilities = {
   modes: ['vwan', 'hub-spoke', 'full'],
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
   operations: ['validate', 'simulate', 'evaluate'],
+  mixedRouting: ['native hub tables/association/propagation', 'shared VWAN HRP selection', 'hub-owned and site-owned route maps',
+    'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
+    'site inbound local preference', 'WAN branch export/default/learning controls'],
+  workspace: { capabilities: workspaceCapabilities, limitations: workspaceCapabilityLimits },
   inventory: ['optional original workload/NIC/IP-configuration/public-IP identities', 'explicit detailed subnets on VWAN spokes; no inferred VMs or addresses'],
   packet: { operation: 'simulate', addressFamily: 'IPv4', protocols: ['tcp', 'udp'], ports: '1-65535',
     endpoints: ['owned workload/NIC/IP-configuration tuple', 'explicit external public address'],

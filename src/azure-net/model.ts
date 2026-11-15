@@ -104,6 +104,7 @@ export interface AzAppliance {
   privateIp: string
   asn?: number
   bgpEnabled?: boolean
+  vwanBgpEnabled?: boolean
   enableIpForwarding: boolean
   inspectsTraffic?: boolean
   advertisedPrefixes?: string[]
@@ -161,9 +162,11 @@ export interface AzVwanHub {
   preference: Preference
   routeTables?: HubRouteTable[]
   routeTablesStatus?: 'captured' | 'unknown'
+  routeMapAssignments?: RouteMapAssignment[]
   routingIntent: {
     private: boolean
     internet: boolean
+    privatePrefixes?: string[]
   }
   x?: number
   y?: number
@@ -213,6 +216,8 @@ export interface AzErLink {
   weight?: number
   prepend?: number[]
   hubRouting?: HubRoutingConfiguration
+  learnSiteRoutes?: boolean
+  propagateDefaultRoute?: boolean
 }
 
 export interface AzVpnConnection {
@@ -227,6 +232,9 @@ export interface AzVpnConnection {
   outboundPrepend?: number[]
   enabled: boolean
   hubRouting?: HubRoutingConfiguration
+  transport?: 'VPN' | 'SDWAN'
+  learnSiteRoutes?: boolean
+  propagateDefaultRoute?: boolean
 }
 
 export interface AzSiteLink {
@@ -253,6 +261,7 @@ export interface AzNetTopology {
   routeMaps?: RouteMap[]
   vpnConnections: AzVpnConnection[]
   siteLinks: AzSiteLink[]
+  allowBranchToBranchTraffic?: boolean
   inventory?: NetworkInventory
   layout?: {
     mode: LayoutMode

@@ -3,6 +3,7 @@ import { azArsPolicyLinks } from './ars-route-maps'
 import { DEFAULT_HUB_TABLE, hubRouteTables, propagatesLocally, propagationLabels } from '../hub-routing'
 import type { HubRoutingConfiguration } from '../model'
 import { validateInventory } from '../inventory'
+import { azHubPolicyLinks } from './route-maps'
 
 export const AZNET_MAX_JSON_LENGTH = 4_000_000
 const MAX_ITEMS = 4096
@@ -41,6 +42,7 @@ const rule = object({
   id, prefixes: strings, match: choice('equals', 'contains'), action: choice('permit', 'drop', 'summarize', 'prepend'),
   summaryPrefixes: strings, prepend: asns, nextStep: choice('continue', 'terminate'),
 }, {
+  localPreference: (v, p) => { number(v, p); if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 4294967295) fail(p, 'invalid local preference') },
   matchConditions: array(object({ property: choice('prefix', 'asPath', 'community'), match: choice('equals', 'contains'), values: strings }, { id })),
   modifications: array(object({ property: choice('asPath', 'community'), action: choice('add', 'replace', 'remove'), values: strings }, { id })),
 })
@@ -60,7 +62,7 @@ const schema = object({
       ...named, kind: choice('azure-firewall', 'nva-vm', 'vnra'), subnetId: id, privateIp: text, enableIpForwarding: bool,
       staticRoutes: array(object({ id, prefix: text, nextHopKind: choice('subnet', 'gateway', 'appliance', 'internet', 'drop'), enabled: bool }, { nextHopIp: text })),
     }, {
-      asn, bgpEnabled: bool, inspectsTraffic: bool, advertisedPrefixes: strings,
+      asn, bgpEnabled: bool, vwanBgpEnabled: bool, inspectsTraffic: bool, advertisedPrefixes: strings,
       advertisedRouteAttributes: array(object({ prefix: text }, { asPath: asns, communities: strings })),
     })),
   }, {
@@ -80,17 +82,17 @@ const schema = object({
     routes: array(object({ ...named, prefix: text, nextHopType: choice('VirtualAppliance', 'VirtualNetworkGateway', 'VnetLocal', 'Internet', 'None'), enabled: bool }, { nextHopIp: text })),
   }, { disablePeeringRoutePropagation: bool })),
   vwanHubs: array(object({
-    ...named, region: text, preference: choice('ExpressRoute', 'VPN', 'ASPath'), routingIntent: object({ private: bool, internet: bool }),
-  }, { ...positioned, prefix: text, routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown') })),
+    ...named, region: text, preference: choice('ExpressRoute', 'VPN', 'ASPath'), routingIntent: object({ private: bool, internet: bool }, { privatePrefixes: strings }),
+  }, { ...positioned, prefix: text, routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown'), routeMapAssignments: array(assignment) })),
   erLocations: array(object(named, { ...positioned, globalReachEnabled: bool, sku: choice('Local', 'Standard', 'Premium'), peeringLocation: text })),
-  erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { weight: number, prepend: asns, hubRouting })),
+  erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { weight: number, prepend: asns, hubRouting, learnSiteRoutes: bool, propagateDefaultRoute: bool })),
   sites: array(object({ ...named, asn, prefixes: strings }, { ...positioned, routeMapAssignments: array(assignment) })),
   vpnConnections: array(object({
     ...named, siteId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'appliance'), targetId: id, bgpEnabled: bool, enabled: bool,
-  }, { staticPrefixes: strings, inboundPrepend: asns, outboundPrepend: asns, hubRouting })),
+  }, { staticPrefixes: strings, inboundPrepend: asns, outboundPrepend: asns, hubRouting, transport: choice('VPN', 'SDWAN'), learnSiteRoutes: bool, propagateDefaultRoute: bool })),
   siteLinks: array(object({ ...named, siteAId: id, siteBId: id, enabled: bool })),
 }, {
-  subtitle: text, routeMaps: maps,
+  subtitle: text, routeMaps: maps, allowBranchToBranchTraffic: bool,
   erGlobalReachLinks: array(object({ ...named, locationAId: id, locationBId: id, enabled: bool })),
   layout: object({ mode: choice('layered', 'constellation'), positions: (v, p) => {
     object({})(v, p)
@@ -200,6 +202,14 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
     const owned = (topology.routeMaps ?? []).filter((map) => map.siteId === site.id)
     ref(a.inboundMapId, owned, 'Inbound map must belong to the same site'); ref(a.outboundMapId, owned, 'Outbound map must belong to the same site')
   }
+  for (const hub of topology.vwanHubs) {
+    const owned = (topology.routeMaps ?? []).filter((map) => map.hubId === hub.id)
+    policies({ routeMaps: [], routeMapAssignments: hub.routeMapAssignments?.map((a) => ({ connectionId: a.connectionId })) }, azHubPolicyLinks(topology, hub.id))
+    for (const a of hub.routeMapAssignments ?? []) {
+      ref(a.inboundMapId, owned, 'Inbound map must belong to the same hub')
+      ref(a.outboundMapId, owned, 'Outbound map must belong to the same hub')
+    }
+  }
   for (const vnet of topology.vnets) {
     unique([...vnet.subnets, ...vnet.gateways, ...vnet.appliances, ...(vnet.routeServer ? [vnet.routeServer] : [])])
     for (const subnet of vnet.subnets) {
@@ -236,6 +246,7 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
     ref(l.targetId, l.targetKind === 'appliance' ? allAppliances : l.targetKind === 'vwan-hub' ? topology.vwanHubs : gateways, 'VPN target')
     if (l.hubRouting && l.targetKind !== 'vwan-hub') fail(l.id, 'hub routing requires a virtual hub target')
     if (l.targetKind === 'vwan-hub') routingRefs(l.targetId, l.hubRouting)
+    if (l.transport === 'SDWAN' && (l.targetKind !== 'vwan-hub' || !l.bgpEnabled)) fail(l.id, 'SDWAN requires a BGP-enabled virtual hub connection')
   }
   for (const hub of topology.vwanHubs) {
     const branches = [...topology.erLinks, ...topology.vpnConnections].filter((link) =>

@@ -5,6 +5,7 @@ import type { ContextAction } from './TopologyContextMenu'
 import { workspaceIdentityKey } from './workspace-objects'
 import type { WorkspaceIdentity, WorkspaceObject } from './workspace-objects'
 import './workspace-tools.css'
+import { workspaceCapabilities, workspaceCapabilityLimits } from './workspace-capabilities'
 
 type WorkspaceAction = ContextAction & { testId?: string }
 const storageKey = 'aznet-workspace-tools:v1'
@@ -113,6 +114,8 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     object.identity.id, object.identity.ownerId ?? '', ...object.parents, ...object.searchTerms]
     .join(' ').toLocaleLowerCase().includes(query))
   const selectedKey = inventory?.selected ? workspaceIdentityKey(inventory.selected) : undefined
+  const capabilityMatches = workspaceCapabilities.filter((row) =>
+    [t('Capability coverage'), t(row.feature)].join(' ').toLocaleLowerCase().includes(query))
   const groups = [
     { title: t('Create network objects'), actions: creationActions, selection: false },
     ...(selection ? [{ title: selection.title, actions: selection.actions, selection: true }] : []),
@@ -152,6 +155,16 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
         <label className="workspace-tools-search">{t('Search workspace controls')}
           <input ref={input} type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>
+        {(!query || capabilityMatches.length > 0) && <details className="workspace-tools-objects" data-testid="workspace-capabilities" open={query ? true : undefined}>
+          <summary>{t('Capability coverage')}</summary>
+          <div style={{ overflowX: 'auto' }}>
+            <table><thead><tr><th>{t('Capability')}</th><th>{t('Dedicated VWAN')}</th><th>{t('Classic networking')}</th><th>{t('Mixed networking')}</th></tr></thead>
+              <tbody>{capabilityMatches.map((row) => <tr key={row.feature}><th scope="row">{t(row.feature)}</th>
+                {(['vwan', 'classic', 'mixed'] as const).map((provider) => <td key={provider}>{t(row[provider] ? 'Supported' : 'Not applicable')}</td>)}
+              </tr>)}</tbody></table>
+          </div>
+          {workspaceCapabilityLimits.map((limit) => <p className="muted" key={limit}>{t(limit)}</p>)}
+        </details>}
         {inventory && (!query || matches.length > 0) && <details className="workspace-tools-objects"
           open={objectsOpen || !!query} onToggle={(event) => setObjectsOpen(event.currentTarget.open)}>
           <summary>{t('Find objects')}</summary>
@@ -177,7 +190,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
           <h3 ref={group.selection ? selectionHeading : undefined} tabIndex={group.selection ? -1 : undefined}>{group.title}</h3>
           <ActionList actions={group.actions} query={query} onRun={run} />
         </section>)}
-        {!groups.length && !matches.length && <p role="status">{t('No commands match your search.')}</p>}
+        {!groups.length && !matches.length && !capabilityMatches.length && <p role="status">{t('No commands match your search.')}</p>}
         {!selection && <p className="muted">{t('Select an object on the canvas or find it here for its configuration, routes and connection actions.')}</p>}
       </aside>
     </>}

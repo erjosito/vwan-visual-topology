@@ -170,6 +170,7 @@ export function executePlatform(input: unknown): PlatformResult {
     } else {
       const simulation = simulateAzNet(document.topology)
       result.simulation = simulation
+      if (simulation.controlPlaneComplete === false) result.status = 'not assessed'
       if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)
       result.limitations = simulation.warnings
       const endpoints = getAzNetEndpoints(document.topology).filter((endpoint) => ['workload', 'site'].includes(endpoint.group))
