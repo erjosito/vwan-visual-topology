@@ -37,12 +37,9 @@ import {
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
 import { BgpRouteTable } from './BgpRouteTable'
-import { HubTablesEditor } from './HubTablesEditor'
-import { HybridConnectionEditor, HybridNvaEditor } from './HybridRoutingEditor'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 
-import { AzRouteMapsPanel } from './RouteMapsPanel'
 import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
 import {
@@ -229,6 +226,10 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
+const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
+const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
+const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
   value: string; deferred: boolean; onCommit: (value: string) => void
@@ -3175,11 +3176,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           )}
         </section>
 
-        {(routeMapSiteId || routeMapArsId || routeMapHubId) && <AzRouteMapsPanel key={`${routeMapHubId ? `hub:${routeMapHubId}` : routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`}:${routeMapInspection?.connectionId ?? ''}:${routeMapInspection?.direction ?? ''}`} topology={topology}
+        {(routeMapSiteId || routeMapArsId || routeMapHubId) && <Suspense fallback={null}><AzRouteMapsPanel key={`${routeMapHubId ? `hub:${routeMapHubId}` : routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`}:${routeMapInspection?.connectionId ?? ''}:${routeMapInspection?.direction ?? ''}`} topology={topology}
           initialConnectionId={routeMapInspection?.connectionId} initialDirection={routeMapInspection?.direction}
           siteId={routeMapSiteId} hubId={routeMapHubId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
           inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
-          onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} />}
+          onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
         {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
           title={{
             routes: 'Effective routes',
@@ -3980,9 +3981,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                   </span>
                 </div>
 
+                <Suspense fallback={null}>
                 {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
+                </Suspense>
 
                 {/* VNet Peerings & Connections Editor (#38, #42, #47, #48) */}
                 {showPeeringEditor && (
@@ -5689,7 +5692,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             <option value="ASPath">ASPath Preference</option>
                           </select>
                         </div>
-                        <HubTablesEditor hub={hub} topology={topology} commit={commitTopology} />
+                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} /></Suspense>
                         <form onSubmit={(event) => {
                           event.preventDefault()
                           const prefixes = String(new FormData(event.currentTarget).get('prefixes') ?? '').split(/[,\s]+/).filter(Boolean)

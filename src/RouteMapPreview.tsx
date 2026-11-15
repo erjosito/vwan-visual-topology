@@ -32,14 +32,19 @@ export function RouteMapPreview({ id, anchor, map, owner, connection, direction,
     const dismiss = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose() }
     }
+    const dismissOutsideFocus = (event: FocusEvent) => {
+      if (event.target instanceof Node && !anchor.contains(event.target) && !preview.current?.contains(event.target)) onClose()
+    }
     position()
     window.addEventListener('resize', position)
     window.addEventListener('scroll', position, true)
     document.addEventListener('keydown', dismiss, true)
+    document.addEventListener('focusin', dismissOutsideFocus, true)
     return () => {
       window.removeEventListener('resize', position)
       window.removeEventListener('scroll', position, true)
       document.removeEventListener('keydown', dismiss, true)
+      document.removeEventListener('focusin', dismissOutsideFocus, true)
     }
   }, [anchor, map, onClose])
   return createPortal(<div ref={preview} id={id} role="tooltip" className={`route-map-preview ${direction}`} onPointerEnter={onEnter} onPointerLeave={onLeave}>

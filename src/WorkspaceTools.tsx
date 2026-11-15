@@ -1,11 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { t } from './i18n'
+import { t, useLanguage } from './i18n'
 import { contextActionDisabled } from './context-actions'
 import type { ContextAction } from './TopologyContextMenu'
 import { workspaceIdentityKey } from './workspace-objects'
 import type { WorkspaceIdentity, WorkspaceObject } from './workspace-objects'
 import './workspace-tools.css'
 import { workspaceCapabilities, workspaceCapabilityLimits } from './workspace-capabilities'
+import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 
 type WorkspaceAction = ContextAction & { testId?: string }
 const storageKey = 'aznet-workspace-tools:v1'
@@ -59,6 +60,8 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
   }
 }) {
   const id = useId()
+  const language = useLanguage()
+  const capabilityText = (message: string) => language === 'ja' ? workspaceCapabilitiesJa[message] ?? message : message
   const [open, setOpen] = useState(initialOpen)
   const [search, setSearch] = useState('')
   const [top, setTop] = useState(0)
@@ -115,7 +118,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     .join(' ').toLocaleLowerCase().includes(query))
   const selectedKey = inventory?.selected ? workspaceIdentityKey(inventory.selected) : undefined
   const capabilityMatches = workspaceCapabilities.filter((row) =>
-    [t('Capability coverage'), t(row.feature)].join(' ').toLocaleLowerCase().includes(query))
+    [t('Capability coverage'), capabilityText(row.feature)].join(' ').toLocaleLowerCase().includes(query))
   const groups = [
     { title: t('Create network objects'), actions: creationActions, selection: false },
     ...(selection ? [{ title: selection.title, actions: selection.actions, selection: true }] : []),
@@ -159,11 +162,11 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
           <summary>{t('Capability coverage')}</summary>
           <div style={{ overflowX: 'auto' }}>
             <table><thead><tr><th>{t('Capability')}</th><th>{t('Dedicated VWAN')}</th><th>{t('Classic networking')}</th><th>{t('Mixed networking')}</th></tr></thead>
-              <tbody>{capabilityMatches.map((row) => <tr key={row.feature}><th scope="row">{t(row.feature)}</th>
+              <tbody>{capabilityMatches.map((row) => <tr key={row.feature}><th scope="row">{capabilityText(row.feature)}</th>
                 {(['vwan', 'classic', 'mixed'] as const).map((provider) => <td key={provider}>{t(row[provider] ? 'Supported' : 'Not applicable')}</td>)}
               </tr>)}</tbody></table>
           </div>
-          {workspaceCapabilityLimits.map((limit) => <p className="muted" key={limit}>{t(limit)}</p>)}
+          {workspaceCapabilityLimits.map((limit) => <p className="muted" key={limit}>{capabilityText(limit)}</p>)}
         </details>}
         {inventory && (!query || matches.length > 0) && <details className="workspace-tools-objects"
           open={objectsOpen || !!query} onToggle={(event) => setObjectsOpen(event.currentTarget.open)}>
