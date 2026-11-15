@@ -93,7 +93,7 @@ export function WorkspaceTools({ creationActions, getSelection }: {
     ...(selection ? [{ title: selection.title, actions: selection.actions }] : []),
   ].filter((group) => visibleActions(group.actions, query).length)
   const run = (action: WorkspaceAction) => {
-    if (!window.matchMedia('(min-width: 901px)').matches) changeOpen(false)
+    if (!window.matchMedia('(min-width: 901px)').matches) changeOpen(false, true)
     const handler = action.run ?? action.onSelect
     handler?.()
   }

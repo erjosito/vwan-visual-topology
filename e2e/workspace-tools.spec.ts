@@ -77,6 +77,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
       expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
     } else {
       await expect.poll(async () => JSON.parse((await page.evaluate((key) => localStorage.getItem(key), key))!).topology.vnets.length).toBe(1)
+      await expect(page.getByRole('button', { name: 'Workspace controls', exact: true })).toBeFocused()
     }
   })
 }
