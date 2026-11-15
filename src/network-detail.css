@@ -1,0 +1,26 @@
+.network-detail {
+  width: min(1120px, calc(100vw - 32px));
+  max-width: calc(100vw - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  background: var(--surface);
+}
+.network-detail header { position: sticky; top: 0; z-index: 1; background: var(--surface); padding-bottom: 12px; }
+.network-detail-graph { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 16px; }
+.network-detail section, .network-detail form, .network-detail fieldset { min-width: 0; }
+.network-detail label, .packet-panel label { display: grid; gap: 4px; min-width: 0; margin: 8px 0; }
+.network-detail input:not([type="checkbox"]), .network-detail select { width: 100%; max-width: 100%; box-sizing: border-box; }
+.network-detail input, .network-detail select, .network-detail button { color: var(--text); background: var(--surface); border: 1px solid var(--border); padding: 8px; border-radius: 6px; }
+.network-detail :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.network-detail code, .network-detail p { overflow-wrap: anywhere; }
+.detail-subnet, .detail-workload, .packet-panel { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin: 12px 0; }
+.detail-workload[data-selected="true"] { border: 2px solid var(--accent); }
+.detail-workload > code { display: block; font-size: 11px; }
+.detail-association { border-inline-start: 2px solid var(--border); padding-inline-start: 8px; }
+.network-detail > form { border-top: 1px solid var(--border); padding: 12px 0; }
+@media (max-width: 640px) {
+  .network-detail { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border-radius: 0; box-sizing: border-box; }
+  .network-detail-graph { grid-template-columns: minmax(0, 1fr); }
+}

@@ -38,6 +38,7 @@ export type AzDiagnosticCategory =
   | 'appliance-ip-forwarding-disabled'
   | 'asymmetric-firewall-bypass'
   | 'connectivity-failure'
+  | 'routing-not-assessed'
   | 'scale-limit'
 
 export interface AzDiagnosticFinding {
@@ -983,6 +984,17 @@ export function createAzNetConnectivityAnalysis(
   const check = (a: AzEndpointOption, b: AzEndpointOption) => {
     checked++
     const pair = traceAzNetPair(topology, simulation, a.ref, a.defaultIp, b.ref, b.defaultIp)
+    if ([pair.forward, pair.reverse].some((trace) => trace.status === 'not-assessed')) {
+      findings.push({
+        id: `flow:${a.key}:${b.key}`, severity: 'warning', category: 'routing-not-assessed',
+        title: `Routing not assessed: ${a.label} ↔ ${b.label}`,
+        summary: 'Unknown or unsupported hub routing scope prevents a reachability or isolation conclusion.',
+        remediation: 'Capture complete supported hub table, association and propagation configuration before assessing this flow.',
+        sourceKey: a.key, destinationKey: b.key,
+        sampleFlow: { source: a.ref, sourceIp: a.defaultIp, destination: b.ref, destinationIp: b.defaultIp },
+      })
+      return
+    }
     const failed = pair.forward.status !== 'delivered' || pair.reverse.status !== 'delivered'
     if (!failed && pair.symmetricInspection) return
     const vnetId = a.ref.kind === 'subnet' ? a.ref.vnetId : b.ref.kind === 'subnet' ? b.ref.vnetId : undefined

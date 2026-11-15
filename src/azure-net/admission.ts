@@ -1,5 +1,8 @@
 import type { AzNetTopology } from './model'
 import { azArsPolicyLinks } from './ars-route-maps'
+import { DEFAULT_HUB_TABLE, hubRouteTables, propagatesLocally, propagationLabels } from '../hub-routing'
+import type { HubRoutingConfiguration } from '../model'
+import { validateInventory } from '../inventory'
 
 export const AZNET_MAX_JSON_LENGTH = 4_000_000
 const MAX_ITEMS = 4096
@@ -25,6 +28,14 @@ const object = (required: Record<string, Shape>, optional: Record<string, Shape>
 const named = { id, name: text }
 const positioned = { label: (v: unknown, p: string) => { text(v, p); if ((v as string).length > 120) fail(p, 'label exceeds 120 characters') }, x: number, y: number }
 const strings = array(text), asns = array(asn)
+const hubRouting = object({
+  status: choice('configured', 'captured', 'unknown'),
+  associatedTableId: (v, p) => { if (v !== null) id(v, p) },
+  propagatedTableIds: array(id), labels: strings,
+}, { limitations: strings })
+const hubTables = array(object({ ...named, labels: strings }, {
+  staticRoutes: array(object({ name: text, destinationType: text, destinations: strings, nextHopType: text, nextHop: text })),
+}))
 const assignment = object({ connectionId: id }, { inboundMapId: id, outboundMapId: id })
 const rule = object({
   id, prefixes: strings, match: choice('equals', 'contains'), action: choice('permit', 'drop', 'summarize', 'prepend'),
@@ -57,7 +68,7 @@ const schema = object({
       if (!Array.isArray(v)) fail(p, 'advertised gateway prefixes must be an array')
       array((entry, path) => { if (typeof entry !== 'string') fail(path, 'invalid advertised gateway prefix'); text(entry, path) })(v, p)
     },
-    vwanHubAttachment: object({ hubId: id, enabled: bool }, { propagateDefaultRoute: bool }),
+    vwanHubAttachment: object({ hubId: id, enabled: bool }, { propagateDefaultRoute: bool, hubRouting }),
     routeServer: object({
       ...named, enabled: bool, branchToBranchTraffic: bool,
       hubRoutingPreference: choice('ExpressRoute', 'VpnGateway', 'ASPath'), peerApplianceIds: array(id),
@@ -70,13 +81,13 @@ const schema = object({
   }, { disablePeeringRoutePropagation: bool })),
   vwanHubs: array(object({
     ...named, region: text, preference: choice('ExpressRoute', 'VPN', 'ASPath'), routingIntent: object({ private: bool, internet: bool }),
-  }, { ...positioned, prefix: text })),
+  }, { ...positioned, prefix: text, routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown') })),
   erLocations: array(object(named, { ...positioned, globalReachEnabled: bool, sku: choice('Local', 'Standard', 'Premium'), peeringLocation: text })),
-  erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { weight: number, prepend: asns })),
+  erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { weight: number, prepend: asns, hubRouting })),
   sites: array(object({ ...named, asn, prefixes: strings }, { ...positioned, routeMapAssignments: array(assignment) })),
   vpnConnections: array(object({
     ...named, siteId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'appliance'), targetId: id, bgpEnabled: bool, enabled: bool,
-  }, { staticPrefixes: strings, inboundPrepend: asns, outboundPrepend: asns })),
+  }, { staticPrefixes: strings, inboundPrepend: asns, outboundPrepend: asns, hubRouting })),
   siteLinks: array(object({ ...named, siteAId: id, siteBId: id, enabled: bool })),
 }, {
   subtitle: text, routeMaps: maps,
@@ -145,10 +156,20 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   const ref = (value: string | undefined, items: { id: string }[], path: string) => {
     if (value !== undefined && !items.some((item) => item.id === value)) fail(path, `dangling reference "${value}"`)
   }
+  const routingRefs = (hubId: string, config?: HubRoutingConfiguration) => {
+    if (!config) return
+    const hub = topology.vwanHubs.find((hub) => hub.id === hubId)
+    if (!hub) return
+    const tables = hubRouteTables(hub)
+    ref(config.associatedTableId ?? undefined, tables, 'Associated hub table')
+    for (const tableId of config.propagatedTableIds) ref(tableId, tables, 'Propagated hub table')
+    if (config.status !== 'unknown' && config.associatedTableId === null) fail(hubId, 'known hub routing requires an associated table')
+  }
   const allAppliances = topology.vnets.flatMap((vnet) => vnet.appliances)
   const gateways = topology.vnets.flatMap((vnet) => vnet.gateways)
   unique([...topology.vnets, ...topology.vwanHubs, ...topology.erLocations, ...topology.sites, ...topology.udrTables,
     ...topology.vnetPeerings, ...topology.erLinks, ...(topology.erGlobalReachLinks ?? []), ...topology.vpnConnections, ...topology.siteLinks])
+  for (const hub of topology.vwanHubs) unique(hub.routeTables ?? [], new Set())
   const policies = (owner: { routeMaps?: AzNetTopology['routeMaps']; routeMapAssignments?: { connectionId: string; inboundMapId?: string; outboundMapId?: string }[] }, links: { id: string }[]) => {
     unique(owner.routeMaps ?? [])
     for (const map of owner.routeMaps ?? []) {
@@ -190,6 +211,7 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
       unique(app.staticRoutes, new Set())
     }
     ref(vnet.vwanHubAttachment?.hubId, topology.vwanHubs, 'VNet hub attachment')
+    if (vnet.vwanHubAttachment) routingRefs(vnet.vwanHubAttachment.hubId, vnet.vwanHubAttachment.hubRouting)
     if (vnet.routeServer) {
       ref(vnet.routeServer.subnetId, vnet.subnets, 'Route Server subnet')
       const peers = new Set<string>()
@@ -206,12 +228,33 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   for (const l of topology.erLinks) {
     ref(l.locationId, topology.erLocations, 'ER location')
     ref(l.targetId, l.targetKind === 'site' ? topology.sites : l.targetKind === 'vwan-hub' ? topology.vwanHubs : gateways, 'ER target')
+    if (l.hubRouting && l.targetKind !== 'vwan-hub') fail(l.id, 'hub routing requires a virtual hub target')
+    if (l.targetKind === 'vwan-hub') routingRefs(l.targetId, l.hubRouting)
   }
   for (const l of topology.vpnConnections) {
     ref(l.siteId, topology.sites, 'VPN site')
     ref(l.targetId, l.targetKind === 'appliance' ? allAppliances : l.targetKind === 'vwan-hub' ? topology.vwanHubs : gateways, 'VPN target')
+    if (l.hubRouting && l.targetKind !== 'vwan-hub') fail(l.id, 'hub routing requires a virtual hub target')
+    if (l.targetKind === 'vwan-hub') routingRefs(l.targetId, l.hubRouting)
+  }
+  for (const hub of topology.vwanHubs) {
+    const branches = [...topology.erLinks, ...topology.vpnConnections].filter((link) =>
+      link.targetKind === 'vwan-hub' && link.targetId === hub.id)
+    if (branches.some((branch) => branch.hubRouting && branch.hubRouting.status !== 'unknown'
+      && branch.hubRouting.associatedTableId !== DEFAULT_HUB_TABLE)) {
+      fail(hub.id, 'Branch connections must associate with the Default route table')
+    }
+    const signatures = branches.filter((branch) => branch.hubRouting?.status !== 'unknown').map((branch) => {
+      const config = branch.hubRouting ?? { status: 'configured', associatedTableId: DEFAULT_HUB_TABLE, propagatedTableIds: [DEFAULT_HUB_TABLE], labels: ['default'] }
+      return JSON.stringify(topology.vwanHubs.flatMap((destination) => hubRouteTables(destination)
+        .filter((table) => destination.id === hub.id ? propagatesLocally(config, table)
+          : table.id !== 'noneRouteTable' && propagationLabels(config).some((label) => table.labels.includes(label)))
+        .map((table) => [destination.id, table.id])))
+    })
+    if (new Set(signatures).size > 1) fail(hub.id, 'Branch connections must propagate to the same effective table destinations')
   }
   for (const l of topology.siteLinks) { ref(l.siteAId, topology.sites, 'Site link A'); ref(l.siteBId, topology.sites, 'Site link B') }
   for (const l of topology.erGlobalReachLinks ?? []) { ref(l.locationAId, topology.erLocations, 'Global Reach A'); ref(l.locationBId, topology.erLocations, 'Global Reach B') }
+  validateInventory(topology)
   return topology
 }

@@ -1,4 +1,5 @@
-import type { LayoutMode, NodePosition, Preference, RouteMap, RouteMapAssignment } from '../model'
+import type { HubRouteTable, HubRoutingConfiguration, LayoutMode, NodePosition, Preference, RouteMap, RouteMapAssignment } from '../model'
+import type { NetworkInventory } from '../inventory'
 import { cidr, contains, ipv4 } from '../validation'
 import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
@@ -114,6 +115,7 @@ export interface AzVwanHubAttachment {
   hubId: string
   enabled: boolean
   propagateDefaultRoute?: boolean
+  hubRouting?: HubRoutingConfiguration
 }
 
 export interface AzVNet {
@@ -157,6 +159,8 @@ export interface AzVwanHub {
   region: string
   prefix?: string
   preference: Preference
+  routeTables?: HubRouteTable[]
+  routeTablesStatus?: 'captured' | 'unknown'
   routingIntent: {
     private: boolean
     internet: boolean
@@ -208,6 +212,7 @@ export interface AzErLink {
   enabled: boolean
   weight?: number
   prepend?: number[]
+  hubRouting?: HubRoutingConfiguration
 }
 
 export interface AzVpnConnection {
@@ -221,6 +226,7 @@ export interface AzVpnConnection {
   inboundPrepend?: number[]
   outboundPrepend?: number[]
   enabled: boolean
+  hubRouting?: HubRoutingConfiguration
 }
 
 export interface AzSiteLink {
@@ -247,6 +253,7 @@ export interface AzNetTopology {
   routeMaps?: RouteMap[]
   vpnConnections: AzVpnConnection[]
   siteLinks: AzSiteLink[]
+  inventory?: NetworkInventory
   layout?: {
     mode: LayoutMode
     positions: Partial<Record<LayoutMode, Record<string, NodePosition>>>

@@ -35,7 +35,10 @@ export function azRoutingInput(topology: AzNetTopology) {
       vnet.routeServer.routeMaps?.forEach(name)
     }
   }
-  routing.vwanHubs.forEach(node)
+  for (const hub of routing.vwanHubs) {
+    node(hub)
+    hub.routeTables?.forEach(name)
+  }
   for (const location of routing.erLocations) {
     location.peeringLocation ??= location.name
     node(location)

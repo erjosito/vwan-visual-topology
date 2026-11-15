@@ -14,9 +14,10 @@ Damaged saved data remains available for recovery, not silently overwritten.
 Window/executable/installer icons derive from the web's `public/favicon.svg`;
 Windows resource editing is enabled, but code signing remains disabled.
 
-Full Hybrid remains enabled. More distinctive controls that surface its mixed
-VWAN/classic networking capabilities will follow VWAN/Hub & Spoke interaction
-unification in #85. Existing links, files, engines and practice remain supported.
+Full Hybrid remains enabled. Contextual mixed-hub controls and shared workload
+detail build on the #85 interaction foundation; complete capability parity and
+mode retirement remain gated by #126/#138. Existing links, files, engines and
+practice remain supported.
 
 ## On-demand explanations and local practice
 
@@ -129,9 +130,9 @@ document; `simulate` adds engine tables; `evaluate` also requires explicit goals
   VWAN uses a hub ID plus optional `hubTableId`; Azure-network uses its exact
   simulation subnet table key (the original subnet ID). For an Azure-network
   hub assertion, use the original hub ID as `table` and explicitly set
-  `hubTableId: "defaultRouteTable"`. This inspects the current mixed engine's
-  single hub RIB, not dedicated VWAN custom-table/propagation parity.
-  `hubTableId` never falls back to a subnet table. Missing owners, custom/None
+  `hubTableId` to an exact owned table ID. The mixed engine maintains separate
+  Default/custom/None RIBs; legacy `vwanHubRibs` remains its Default projection.
+  `hubTableId` never falls back to a subnet table. Missing owners, unknown
   scopes and retained unsupported hub-table/policy/attachment configuration
   remain `not assessed` for both presence and absence. Native documents and
   unknown extension fields are preserved; retention is not semantic support.
@@ -147,7 +148,74 @@ rules/NAT/session enforcement, bandwidth/SLA or convergence-time guarantees.
 HRP edits reevaluate immediately without Azure's possible route-bounce behavior.
 
 Plain JSON admission bounds depth (32), aggregate values (100,000),
-arrays (4,096), input (4 MB), modeled hub/VNet/site nodes (512) and goals (64).
+arrays (4,096), input (4 MB), total hub/VNet/site/workload/NIC/public-IP nodes
+(512) and goals (64).
+
+## Mixed hub tables and original workload detail
+
+The contextual mixed hub editor exposes custom tables/labels and attachment
+association/propagation. Labels are case-sensitive, association selects the
+ingress lookup table and None suppresses propagation. Branches associate with
+Default and share effective propagation destinations; branch edits synchronize
+those destinations without silently changing captured/unknown provenance.
+An unknown hub-table scope requires the explicit **Use edited hub table scope**
+action; simply adding or renaming a table does not certify captured completeness.
+Remote label propagation uses the original hub/table/route identities.
+
+This is a bounded bridge, not full dedicated VWAN parity. Mixed custom tables
+with secured routing intent, static hub next hops, hub route maps, static-VPN
+return routing and ER export of remote/VPN-learned routes remain explicitly
+not assessed. Incomplete mixed table coverage conservatively suppresses flow
+certification, including unrelated flows. Dedicated mode controls remain
+available; mode retirement and saved-link migration remain gated by #138.
+
+Optional `topology.inventory` contains `workloads`, `nics` and `publicIps`.
+A workload has `id`, `name`, `nicIds` and an optional existing router
+`backingDeviceId`. A NIC has `id`, `name`, an original
+`owner: {kind: "spoke"|"vnet", id}` and `ipConfigurations`. Each configuration
+has `id`, `name`, a real owned `subnetId`, optional `privateIp` and optional
+`publicIpId`. Public-IP records have `id`, `name` and optional `address`.
+Entity IDs are unique, IP-configuration IDs are scoped to a NIC, and addresses
+may be absent but are never synthesized. Detailed VWAN spokes explicitly
+declare `subnets: [{id, name, prefix}]`; legacy spokes do not gain subnets.
+Private addresses must be usable in one owned subnet and must not duplicate
+another NIC, private endpoint or independently represented router. A workload
+cannot span network owners; one router backing identity is not a second router.
+
+**VNet detail** is available for selected VNets/spokes and their context menus
+in all three modes. It edits the original saved graph, reuses its native
+simulation and preserves entity IDs and overview coordinates. Search caps
+visible cards/endpoints at 100; NIC associations remain explicit. Unknown or
+unsupported services are not displayed as healthy discovered inventory.
+With inventory present, VNet/subnet prefix text commits atomically on blur so
+incomplete keystrokes cannot invalidate owned addresses. Native JSON preserves
+the inventory; Bicep starters explicitly warn that they do not deploy it.
+
+`simulate` accepts an optional `packet` (not an evaluation requirement):
+
+```json
+{
+  "source": {"kind": "workload", "workloadId": "vm", "nicId": "nic", "ipConfigurationId": "primary"},
+  "target": {"kind": "external", "address": "20.50.60.70"},
+  "protocol": "tcp",
+  "sourcePort": 49152,
+  "destinationPort": 443
+}
+```
+
+Either endpoint may reference an owned workload IP configuration. Only explicit
+public IPv4 external addresses and TCP/UDP ports 1–65535 are supported.
+Private/connected destinations and known public-IP associations are not
+reclassified as Internet. The result's `packet` section preserves endpoint
+identities and independently reports forward/reply `reachable`, `unreachable`
+or `not-assessed` routing, original route/edge/table references and five-tuples.
+The reply swaps addresses/ports as a separate hypothetical routing probe,
+not proof that a response or session exists. Unknown addressing or coverage
+remains not assessed; unsupported boundary translation has a null post-tuple.
+Public-IP association alone establishes neither inbound DNAT nor a listener.
+Delivery, security and translation readiness always remain not assessed.
+The MCP schema and bounded `packet` evidence section expose the same contract;
+web workers, Node workers and offline Electron use the same adapters.
 Node/browser jobs have a hard 15-second ceiling and 8 MB result ceiling; callers
 can lower them. Node worker heaps are bounded (192 MB old/32 MB young generation),
 with at most two active workers. Cancellation terminates computation; capacity

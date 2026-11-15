@@ -437,6 +437,94 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     expect(validateAzNetTopology(topology).join(' ')).toContain('Duplicate ARS')
   })
 
+  function mixedTableTopology(transport: 'ExpressRoute' | 'Vpn' = 'Vpn') {
+    const topology = transitTopology(transport)
+    topology.vnetPeerings = []
+    topology.vwanHubs = [{
+      id: 'virtual-hub', name: 'Virtual hub', region: 'West Europe', preference: 'ASPath',
+      routingIntent: { private: false, internet: false },
+      routeTables: [
+        { id: 'blue', name: 'Blue table', labels: ['blue'] },
+        { id: 'red', name: 'Red table', labels: ['red'] },
+      ],
+    }]
+    topology.vnets[1].vwanHubAttachment = {
+      hubId: 'virtual-hub', enabled: true,
+      hubRouting: { status: 'configured', associatedTableId: 'blue', propagatedTableIds: ['defaultRouteTable'], labels: ['default'] },
+    }
+    const link = transport === 'Vpn' ? topology.vpnConnections[0] : topology.erLinks[0]
+    link.targetKind = 'vwan-hub'; link.targetId = 'virtual-hub'
+    link.hubRouting = { status: 'configured', associatedTableId: 'defaultRouteTable', propagatedTableIds: ['blue'], labels: ['blue'] }
+    return topology
+  }
+
+  it.each(['Vpn', 'ExpressRoute'] as const)('uses associated tables for bidirectional %s ingress and return advertisements', (transport) => {
+    const topology = mixedTableTopology(transport)
+    const source = { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' } as const
+    const target = { kind: 'site', siteId: 'site' } as const
+    let result = simulateAzNet(topology)
+    const pair = traceAzNetPair(topology, result, source, '10.1.1.4', target, '172.16.0.4')
+    expect(pair.forward.status).toBe('delivered')
+    expect(pair.reverse.status).toBe('delivered')
+    expect(pair.forward.hops.filter((hop) => hop.hubTableId).map((hop) => hop.hubTableId)).toEqual(['blue'])
+    expect(pair.reverse.hops.filter((hop) => hop.hubTableId).map((hop) => hop.hubTableId)).toEqual(['defaultRouteTable'])
+    expect(pair.forward.traversedEdgeIds).toEqual(transport === 'Vpn'
+      ? ['vhub-attach:spoke:virtual-hub', 'vpn'] : ['vhub-attach:spoke:virtual-hub', 'er-gw', 'er-site'])
+    expect(pair.reverse.traversedEdgeIds).toEqual(transport === 'Vpn'
+      ? ['vpn', 'vhub-attach:spoke:virtual-hub'] : ['er-site', 'er-gw', 'vhub-attach:spoke:virtual-hub'])
+    expect(result.vwanHubRibs['virtual-hub'].some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+    expect(traceAzNetFlow(topology, result, { kind: 'vwanHub', hubId: 'virtual-hub' }, '172.16.0.4').status).not.toBe('delivered')
+    topology.vnets[1].vwanHubAttachment!.hubRouting!.propagatedTableIds = ['noneRouteTable']
+    result = simulateAzNet(topology)
+    expect(result.siteRibs.site.some((route) => route.prefix === '10.1.0.0/16')).toBe(false)
+    expect(traceAzNetFlow(topology, result, target, '10.1.1.4').status).not.toBe('delivered')
+  })
+
+  it('does not certify unknown mixed table scope or report it as verified isolation', () => {
+    const topology = mixedTableTopology()
+    topology.vnets[1].vwanHubAttachment!.hubRouting!.status = 'unknown'
+    const result = simulateAzNet(topology)
+    expect(traceAzNetFlow(topology, result, { kind: 'site', siteId: 'site' }, '10.1.1.4').status).toBe('not-assessed')
+    const report = analyzeAzNetConnectivity(topology, result, expectedPair)
+    expect(report.findings.map((finding) => finding.category)).toEqual(['routing-not-assessed'])
+    expect(result.warnings.length).toBeGreaterThan(0)
+  })
+
+  it('propagates mixed hub labels across exact remote table and connection boundaries', () => {
+    const topology = mixedTableTopology()
+    topology.vwanHubs[0].routeTables!.push({ id: 'defaultRouteTable', name: 'Default', labels: ['red'] })
+    topology.vwanHubs.push({
+      ...structuredClone(topology.vwanHubs[0]), id: 'remote', name: 'Remote hub',
+      routeTables: [{ id: 'different-id', name: 'Remote blue', labels: ['blue', 'red'] }],
+    })
+    topology.vnets[1].vwanHubAttachment = {
+      hubId: 'remote', enabled: true,
+      hubRouting: { status: 'configured', associatedTableId: 'different-id', propagatedTableIds: ['different-id'], labels: ['red'] },
+    }
+    const result = simulateAzNet(topology)
+    const pair = traceAzNetPair(topology, result, { kind: 'subnet', vnetId: 'spoke', subnetId: 'work' }, '10.1.1.4',
+      { kind: 'site', siteId: 'site' }, '172.16.0.4')
+    expect([pair.forward.status, pair.reverse.status]).toEqual(['delivered', 'delivered'])
+    expect(pair.forward.hops.filter((hop) => hop.hubTableId).map((hop) => [hop.nodeId, hop.hubTableId]))
+      .toEqual([['remote', 'different-id'], ['virtual-hub', 'blue']])
+    expect(pair.reverse.hops.filter((hop) => hop.hubTableId).map((hop) => [hop.nodeId, hop.hubTableId]))
+      .toEqual([['virtual-hub', 'defaultRouteTable'], ['remote', 'different-id']])
+    topology.vnets[1].vwanHubAttachment.hubRouting!.labels = ['RED']
+    expect(simulateAzNet(topology).vwanHubTables['virtual-hub'].defaultRouteTable.some((route) => route.prefix === '10.1.0.0/16')).toBe(false)
+    topology.vpnConnections[0].enabled = false
+    expect(simulateAzNet(topology).vwanHubTables.remote['different-id'].some((route) => route.prefix === '172.16.0.0/24')).toBe(false)
+  })
+
+  it('admits owned mixed table references and rejects dangling or malformed configurations', () => {
+    const topology = mixedTableTopology()
+    expect(parseAzNetTopology(topology)).toEqual(topology)
+    topology.vnets[1].vwanHubAttachment!.hubRouting!.associatedTableId = 'missing'
+    expect(() => parseAzNetTopology(topology)).toThrow(/Associated hub table/)
+    topology.vnets[1].vwanHubAttachment!.hubRouting!.associatedTableId = 'blue'
+    topology.vwanHubs[0].routeTables!.push(topology.vwanHubs[0].routeTables![0])
+    expect(() => parseAzNetTopology(topology)).toThrow(/duplicate ID/)
+  })
+
   it.each([
     { property: 'community', values: ['65536:1'], expected: '2-byte ASN:value' },
     { property: 'community', values: ['65001:1,'], expected: 'one community each' },

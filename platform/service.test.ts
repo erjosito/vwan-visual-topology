@@ -74,6 +74,36 @@ describe('browser-free platform contract', () => {
       { ...request(), padding: 'x'.repeat(4_000_001) },
     ]) expect(executePlatform(input).status).toBe('invalid')
   })
+  it('keeps named workload packet evidence identical in source, compiled Node and isolated workers', async () => {
+    const topology = parseAzNetTopology(sample('azure-net/hub-spoke-firewall-udr.json'))
+    const vnet = topology.vnets.find((vnet) => vnet.role === 'spoke-vnet' || vnet.role === 'spoke')!
+    const subnet = vnet.subnets[0]
+    const prefix = subnet.prefix.split('/')[0].split('.').slice(0, 3).join('.')
+    topology.inventory = {
+      workloads: [{ id: 'vm', name: 'VM', nicIds: ['nic'] }],
+      nics: [{ id: 'nic', name: 'NIC', owner: { kind: 'vnet', id: vnet.id }, ipConfigurations: [{ id: 'ip', name: 'Primary', subnetId: subnet.id, privateIp: `${prefix}.4` }] }],
+      publicIps: [],
+    }
+    const input: PlatformRequest = {
+      contractVersion: 1, operation: 'simulate', document: { mode: 'full', topology },
+      packet: { source: { kind: 'workload', workloadId: 'vm', nicId: 'nic', ipConfigurationId: 'ip' },
+        target: { kind: 'external', address: '20.50.60.70' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443 },
+    }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(result.packet?.reply.routing).toBe('not-assessed')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try { expect(await jobs.run(input)).toEqual(result) } finally { jobs.close() }
+  })
+
+  it('counts explicit inventory identities against the platform node budget', () => {
+    const topology = parseAzNetTopology(sample('azure-net/hub-spoke-firewall-udr.json'))
+    topology.inventory = { workloads: [], nics: [], publicIps: Array.from({ length: 512 }, (_, index) => ({ id: `pip-${index}`, name: `IP ${index}` })) }
+    expect(executePlatform({ contractVersion: 1, operation: 'simulate', document: { mode: 'full', topology } })).toMatchObject({
+      status: 'invalid', errors: [{ code: 'INVALID_REQUEST_OR_TOPOLOGY', message: 'Topology node limit exceeded.' }],
+    })
+  })
 
   it('rejects array accessors without evaluating user code', () => {
     let accessed = false

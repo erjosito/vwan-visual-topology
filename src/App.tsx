@@ -3,7 +3,7 @@ import { LanguageSelector } from './LanguageSelector'
 import { LearningTools } from './learning/LearningTools'
 import { SimulatorModeSwitch } from './SimulatorModeSwitch'
 import type { SimulatorMode } from './SimulatorModeSwitch'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
 import type { LayoutMode, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
@@ -50,7 +50,9 @@ import './App.css'
 import { projectVwanFailures, regionKey, failureKey, failureLabel, type FailureDomain } from './failures'
 import { analyzeVwanResilience, resilienceMarkers, type ResilienceReport } from './failure-analysis'
 import { FailurePanel } from './FailurePanel'
+import { pruneDeletedInventory } from './inventory'
 
+const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
 const storageKey = 'vwan-visual-topology:v1'
 const pathGroups: { group: PathGroup; label: string }[] = [
   { group: 'vnets', label: 'All Azure VNets' },
@@ -114,6 +116,8 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     document.title = documentTitles[language]
   }, [language])
   const [selection, setSelection] = useState<ObjectSelection>()
+  const [detailOwner, setDetailOwner] = useState<string>()
+  const [inventorySelection, setInventorySelection] = useState<string>()
   const [routerState, setRouter] = useState<ObjectSelection>()
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
@@ -311,7 +315,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   }
   const openDiagnostics = () => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPanel('diagnostics') }
   const update = (mutate: (next: Topology) => void) => {
-    try { const next = structuredClone(topology); mutate(next); save(validateTopology(next)) }
+    try { const next = structuredClone(topology); mutate(next); pruneDeletedInventory(next, topology); save(validateTopology(next)) }
     catch (error) { setError(message(error)) }
   }
   const assignPrefixToSite = (siteId: string, prefixesToAdd: string[]) => {
@@ -463,6 +467,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
         },
       }] : []),
       { label: t("Edit configuration"), run: () => setEditorRequest(contextSelection) },
+      ...(contextSelection.kind === 'spoke' ? [{ label: t('Open VNet detail'), run: () => setDetailOwner(contextSelection.id) }] : []),
       ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
         { label: t("BGP table"), run: () => showRoutes(contextSelection) },
         { label: t("Learned routes"), run: () => showRoutes(contextSelection, false, 'learned') },
@@ -579,7 +584,12 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const submitPath = (event: FormEvent) => { event.preventDefault(); setGroupTrace(undefined); setHighlighting(false); setTracing(true) }
   const closePanel = () => setPanel(undefined)
 
-  return <div className="app canvas-app mode-vwan" data-testid="vwan-app" data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
+  return <div className="app canvas-app mode-vwan" data-testid="vwan-app" data-inventory-selection={inventorySelection} data-revision={import.meta.env.VITE_APP_REVISION || 'development'}>
+    {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'spoke', id: detailOwner }} simulation={simulation}
+      selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => update((next) => mutate(next))}
+      boundaries={diagramPaths.slice(0, 16).map((path) => ({ direction: 'direction' in path && path.direction === 'return' ? 'reply' : 'forward',
+        destination, evidence: path.steps.join(' '), subnetIds: [] }))}
+      onClose={() => setDetailOwner(undefined)} /></Suspense>}
     <FailurePanel faults={faults} unassessed={scenario.unassessed} onRestore={restoreFault} onRestoreAll={() => restoreFault()}
       revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={() => {
         let intents: ReturnType<typeof validateDiagnosticsProfile>['intents'] = []
@@ -611,6 +621,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
           onSelect: selectObject,
         }} />
         <LearningTools document={{ mode: 'vwan', topology }} onOpen={(document) => { if (document.mode === 'vwan') { reset(document.topology); setFaults([]) } }} />
+        {selection?.kind === 'spoke' && <button type="button" onClick={() => setDetailOwner(selection.id)}>{t('VNet detail')}</button>}
         <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
