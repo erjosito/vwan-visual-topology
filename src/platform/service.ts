@@ -5,6 +5,7 @@ import { parseAzNetTopology } from '../azure-net/admission'
 import { validateAzNetTopology } from '../azure-net/model'
 import { simulateAzNet, traceAzNetPair } from '../azure-net/engine'
 import { getAzNetEndpoints, azEndpointKey } from '../azure-net/endpoints'
+import { DEFAULT_HUB_TABLE } from '../hub-routing'
 import { contractVersion, engineVersion, platformLimits } from './contract'
 import type { Assessment, FlowRequirement, PlatformDocument, PlatformRequest, PlatformResult, Requirement } from './contract'
 import type { AzEndpointRef } from '../azure-net/engine'
@@ -165,6 +166,24 @@ export function executePlatform(input: unknown): PlatformResult {
       const endpoints = getAzNetEndpoints(document.topology).filter((endpoint) => ['workload', 'site'].includes(endpoint.group))
       for (const requirement of request.requirements ?? []) {
         if (requirement.kind === 'route') {
+          if (requirement.hubTableId !== undefined) {
+            const hub = document.topology.vwanHubs.find((hub) => hub.id === requirement.table)
+            const table = hub ? simulation.vwanHubRibs[hub.id] : undefined
+            const unsupportedScope = hub && (
+              ['routeTables', 'routeTablesStatus', 'routeMapAssignments'].some((field) => field in hub)
+              || document.topology.vnets.some((vnet) => vnet.vwanHubAttachment?.enabled && vnet.vwanHubAttachment.hubId === hub.id
+                && ('hubRouting' in vnet || 'hubRouting' in vnet.vwanHubAttachment))
+              || [...document.topology.erLinks, ...document.topology.vpnConnections].some((link) =>
+                link.enabled && link.targetKind === 'vwan-hub' && link.targetId === hub.id && 'hubRouting' in link)
+            )
+            if (!table || requirement.hubTableId !== DEFAULT_HUB_TABLE || unsupportedScope || simulation.warnings.length) {
+              result.assessments.push(unknown(requirement, 'An owned mixed hub default RIB with modeled routing scope is required; custom or retained unsupported hub configuration cannot be certified.'))
+            } else {
+              const routes = table.filter((route) => route.prefix === requirement.prefix && route.preferred)
+              result.assessments.push({ id: requirement.id, outcome: (!!routes.length === (requirement.expectation === 'present')) ? 'satisfied' : 'violated', evidence: routes, reasons: [] })
+            }
+            continue
+          }
           const table = simulation.subnetTables[requirement.table]
           if (!table || simulation.warnings.length) result.assessments.push(unknown(requirement, 'Missing table or model warnings prevent certification.'))
           else {

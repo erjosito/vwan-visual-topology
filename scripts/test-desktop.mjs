@@ -68,6 +68,19 @@ try {
     const result = await page.evaluate((input) => window.desktopSimulator.simulate(input), request)
     expect(result.ok).toBe(true)
     expect(result.value).toEqual(executePlatform(request))
+    if (mode === 'full') {
+      const hub = topology.vwanHubs[0]
+      const vnet = topology.vnets.find((vnet) => vnet.vwanHubAttachment?.hubId === hub.id)
+      const scoped = { ...request, operation: 'evaluate', requirements: [
+        { id: 'hub', kind: 'route', table: hub.id, hubTableId: 'defaultRouteTable', prefix: vnet.prefixes[0], expectation: 'present' },
+        { id: 'custom', kind: 'route', table: hub.id, hubTableId: 'custom', prefix: vnet.prefixes[0], expectation: 'absent' },
+        { id: 'subnet', kind: 'route', table: vnet.subnets[0].id, hubTableId: 'defaultRouteTable', prefix: vnet.prefixes[0], expectation: 'present' },
+      ] }
+      const assessed = await page.evaluate((input) => window.desktopSimulator.simulate(input), scoped)
+      expect(assessed.ok).toBe(true)
+      expect(assessed.value.assessments.map((goal) => goal.outcome)).toEqual(['satisfied', 'not assessed', 'not assessed'])
+      expect(assessed.value).toEqual(executePlatform(scoped))
+    }
     if (mode !== 'vwan') await expect(page.getByTestId('aznet-share-url-btn')).toBeDisabled()
     const localFile = join(artifacts, `roundtrip-${mode}.json`)
     await writeFile(localFile, JSON.stringify(topology))
@@ -201,6 +214,7 @@ try {
     brandedWindowsResources,
     sharedObjectDiscovery: true, providerScopedSelection: true, objectDiscoveryPreservesSavedGraph: true,
     compactDesktopPointerDiscovery: true,
+    ownedMixedHubRouteAssertions: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }
