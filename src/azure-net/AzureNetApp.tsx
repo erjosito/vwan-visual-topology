@@ -1,4 +1,5 @@
-import { useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import type { InputHTMLAttributes } from 'react'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
@@ -36,6 +37,10 @@ import {
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
 import { BgpRouteTable } from './BgpRouteTable'
+import { HubTablesEditor } from './HubTablesEditor'
+import { pruneDeletedInventory, validateInventory } from '../inventory'
+import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
+
 import { AzRouteMapsPanel } from './RouteMapsPanel'
 import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
@@ -222,6 +227,17 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
   }
 }
 
+const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+
+function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
+  value: string; deferred: boolean; onCommit: (value: string) => void
+}) {
+  const [draft, setDraft] = useState(value)
+  return <input {...props} value={deferred ? draft : value}
+    onChange={(event) => deferred ? setDraft(event.target.value) : onCommit(event.target.value)}
+    onBlur={() => { if (deferred && draft !== value) onCommit(draft) }} />
+}
+
 export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: AzureNetAppProps = {}) {
   const initialResolved = useMemo(() => {
     // Access localStorage inside loadAzWorkspace's try/catch (the getter itself may throw).
@@ -251,6 +267,15 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     defaultSelected(initialResolved.topology),
   )
   const [canvasSelection, setCanvasSelection] = useState<AzSelectedEntity>()
+  const [detailOwner, setDetailOwner] = useState<string>()
+  const [detailReturnFocus, setDetailReturnFocus] = useState<Element | null>(null)
+  const [contextReturnFocus, setContextReturnFocus] = useState<Element | null>(null)
+  const openDetail = (id: string) => {
+    setDetailReturnFocus(document.activeElement?.closest('[role="menu"]') ? contextReturnFocus : document.activeElement)
+    setContextReturnFocus(null)
+    setDetailOwner(id)
+  }
+  const [inventorySelection, setInventorySelection] = useState<string>()
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
@@ -317,6 +342,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   }, [sampleId, topology, recoveryAcknowledged, pendingUrlSample])
 
   const [testIpQuery, setTestIpQuery] = useState<string>('')
+  const [hubTableInspection, setHubTableInspection] = useState<{ hubId: string; tableId: string }>()
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
   const [captureComparison, setCaptureComparison] = useState<AzNetComparisonReport | null>(null)
   const [captureNotices, setCaptureNotices] = useState<string[]>([])
@@ -324,15 +350,23 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const compareFileInputRef = useRef<HTMLInputElement | null>(null)
 
   const commitTopology = (updater: (draft: AzNetTopology) => void) => {
+    let next: AzNetTopology
+    try {
+      next = measureAzWork('commit', () => {
+        const draft = cloneAzNetTopology(topology)
+        updater(draft)
+        pruneAzSiteRouteMaps(draft)
+        pruneAzArsRouteMaps(draft)
+        pruneDeletedInventory(draft, topology)
+        validateInventory(draft)
+        return draft
+      })
+    } catch (error) {
+      setWorkspaceNotice(error instanceof Error ? error.message : 'Inventory edit rejected.')
+      return
+    }
     setHistory((prev) => [...prev.slice(-24), cloneAzNetTopology(topology)])
     setFuture([])
-    const next = measureAzWork('commit', () => {
-      const draft = cloneAzNetTopology(topology)
-      updater(draft)
-      pruneAzSiteRouteMaps(draft)
-      pruneAzArsRouteMaps(draft)
-      return draft
-    })
     setTopology(next)
   }
 
@@ -1016,10 +1050,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
     }
     if (selected.kind === 'vwan-hub') {
       const hub = topology.vwanHubs.find((h) => h.id === selected.hubId)
+      const tableId = hubTableInspection?.hubId === selected.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE
       return {
-        title: `Virtual WAN Hub Effective RIB · ${hub?.name ?? selected.hubId}`,
-        entries: simulation.vwanHubRibs[selected.hubId] ?? [],
-        available: Boolean(hub) && !scenario.affected[selected.hubId],
+        title: `Virtual WAN Hub Effective RIB · ${hub?.name ?? selected.hubId} · ${tableId}`,
+        entries: simulation.vwanHubTables[selected.hubId]?.[tableId] ?? [],
+        available: Boolean(hub && simulation.vwanHubTables[hub.id]?.[tableId]) && !scenario.affected[selected.hubId],
       }
     }
     if (selected.kind === 'er-location') {
@@ -1039,7 +1074,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       }
     }
     return null
-  }, [routeSelection, topology, simulation, scenario.affected])
+  }, [routeSelection, topology, simulation, scenario.affected, hubTableInspection])
 
   const visibleFlagshipSamples = useMemo(
     () =>
@@ -1535,6 +1570,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `VNet · ${vnet.name} (${vnet.region})`,
         actions: [
+          { label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) },
           ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'subnet' &&
             e.ref.vnetId === vnet.id && e.group === 'workload')),
           {
@@ -1699,6 +1735,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       return {
         title: `Subnet · ${vnet.name} / ${subnet.name}`,
         actions: [
+          { label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) },
           ...pathContextActions(endpointOptions.filter((e) => e.key === `subnet:${vnet.id}:${subnet.id}`)),
           {
             label: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...',
@@ -2680,7 +2717,18 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   } : undefined)
 
   return (
-    <div className="aznet-app" data-testid="aznet-app">
+    <div className="aznet-app" data-testid="aznet-app" data-inventory-selection={inventorySelection}>
+      {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'vnet', id: detailOwner }} simulation={simulation} returnFocus={detailReturnFocus}
+        selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => commitTopology((next) => mutate(next))}
+        boundaries={[
+          ...(singleFlowForCustomIp ?? pairAnalysis?.forward ? [{ direction: 'forward' as const,
+            destination: (singleFlowForCustomIp ?? pairAnalysis!.forward)!.destinationIp,
+            evidence: (singleFlowForCustomIp ?? pairAnalysis!.forward)!.summaryReason,
+            subnetIds: (singleFlowForCustomIp ?? pairAnalysis!.forward)!.hops.flatMap((hop) => hop.subnetId ? [hop.subnetId] : []) }] : []),
+          ...(!singleFlowForCustomIp && pairAnalysis?.reverse ? [{ direction: 'reply' as const, destination: pairAnalysis.reverse.destinationIp,
+            evidence: pairAnalysis.reverse.summaryReason, subnetIds: pairAnalysis.reverse.hops.flatMap((hop) => hop.subnetId ? [hop.subnetId] : []) }] : []),
+        ]}
+        onClose={() => { setDetailOwner(undefined); setDetailReturnFocus(null) }} /></Suspense>}
       {!recoveryAcknowledged && <div role="alert" data-testid="aznet-recovery-notice">
         <strong>Saved input could not be loaded. Originals have not been overwritten.</strong>
         {recoveryEntries.map((entry, index) => <div key={index}>
@@ -2724,6 +2772,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
         </div>
 
         <div className="aznet-topbar-controls">
+          {canvasSelection && 'vnetId' in canvasSelection && <button type="button" className="aznet-btn"
+            onClick={() => openDetail(canvasSelection.vnetId)}>{t('VNet detail')}</button>}
           <WorkspaceTools creationActions={[
             { label: t('+ VNet'), testId: 'aznet-add-vnet-btn', run: addDefaultVnet },
             { label: t('+ Site'), testId: 'aznet-add-site-btn', run: () => addSiteNode() },
@@ -3058,7 +3108,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               setGroupTrace(null)
               setShowDiagnosticBadges(false)
             }}
-            onContextMenu={(target) => setContextMenu(target)}
+            onContextMenu={(target) => { setContextReturnFocus(document.activeElement); setContextMenu(target) }}
             onTogglePeeringEnabled={(peeringId, enabled) => {
               commitTopology((draft) => {
                 const p = draft.vnetPeerings.find((x) => x.id === peeringId)
@@ -3424,6 +3474,16 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                 {inspectedControlRib && (
                   <div className="aznet-card" data-testid="aznet-control-rib-card">
                     <h3>{inspectedControlRib.title}</h3>
+                    {routeSelection.kind === 'vwan-hub' && (() => {
+                      const hub = topology.vwanHubs.find((hub) => hub.id === routeSelection.hubId)
+                      if (!hub) return null
+                      const tableId = hubTableInspection?.hubId === hub.id ? hubTableInspection.tableId : DEFAULT_HUB_TABLE
+                      const coverage = simulation.vwanHubTableCoverage[hub.id]?.[tableId]
+                      return <><label>{t('Hub routing table')} <select className="aznet-select" aria-label={t('Hub routing table')}
+                        value={tableId} onChange={(event) => setHubTableInspection({ hubId: hub.id, tableId: event.target.value })}>
+                        {hubRouteTables(hub).map((table) => <option key={table.id} value={table.id}>{table.name} · {table.id}</option>)}
+                      </select></label>{!coverage?.complete && <p role="status">{t('Routing not assessed')}: {coverage?.limitations.join(' ')}</p>}</>
+                    })()}
                     <BgpRouteTable key={JSON.stringify(routeSelection)} entries={inspectedControlRib.entries} available={inspectedControlRib.available} />
                   </div>
                 )}
@@ -4264,13 +4324,14 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 <option key={reg} value={reg} />
                               ))}
                             </datalist>
-                            <input
+                            <PrefixInput
+                              key={topology.inventory ? vnet.prefixes.join(', ') : undefined}
                               type="text"
                               className="aznet-input"
                               value={vnet.prefixes.join(', ')}
+                              deferred={topology.inventory !== undefined}
                               title="VNet CIDR prefixes (comma-separated)"
-                              onChange={(e) => {
-                                const raw = e.target.value
+                              onCommit={(raw) => {
                                 commitTopology((draft) => {
                                   const v = draft.vnets.find((x) => x.id === vnet.id)
                                   if (v) {
@@ -5012,14 +5073,15 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                                 }}
                                 style={{ fontWeight: 700, width: 145 }}
                               />
-                              <input
+                              <PrefixInput
+                                key={topology.inventory ? subnet.prefix : undefined}
                                 type="text"
                                 className="aznet-input"
                                 data-testid={`aznet-subnet-prefix-${subnet.id}`}
                                 aria-label={`Subnet prefix ${subnet.name}`}
                                 value={subnet.prefix}
-                                onChange={(e) => {
-                                  const val = e.target.value
+                                deferred={topology.inventory !== undefined}
+                                onCommit={(val) => {
                                   commitTopology((draft) => {
                                     const targetV = draft.vnets.find((v) => v.id === vnet.id)
                                     const targetS = targetV?.subnets.find((s) => s.id === subnet.id)
@@ -5621,6 +5683,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             <option value="ASPath">ASPath Preference</option>
                           </select>
                         </div>
+                        <HubTablesEditor hub={hub} topology={topology} commit={commitTopology} />
                       </div>
                     ))}
 

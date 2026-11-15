@@ -96,10 +96,11 @@ describe('engine-backed explicit requirement assessment', () => {
     expect(result.document).toEqual({ mode: 'full', topology: network })
     expect(run({ ...route, prefix: '10.99.0.0/16', expectation: 'absent' }).assessments[0].outcome).toBe('satisfied')
     expect(run({ ...route, expectation: 'absent' }).assessments[0].outcome).toBe('violated')
-    for (const scope of [{ hubTableId: 'custom' }, { hubTableId: 'noneRouteTable' }, { table: 'missing' }]) {
+    for (const scope of [{ hubTableId: 'custom' }, { table: 'missing' }]) {
       expect(run({ ...route, ...scope, expectation: 'absent' }).assessments[0].outcome).toBe('not assessed')
     }
-    for (const field of ['routeTables', 'routeTablesStatus', 'routeMapAssignments']) {
+    expect(run({ ...route, hubTableId: 'noneRouteTable', expectation: 'absent' }).assessments[0].outcome).toBe('satisfied')
+    for (const field of ['routeTablesStatus', 'routeMapAssignments']) {
       const retained = structuredClone(network)
       Object.assign(retained.vwanHubs[0], { [field]: field === 'routeTablesStatus' ? 'unknown' : [] })
       const result = executePlatform({
@@ -109,9 +110,34 @@ describe('engine-backed explicit requirement assessment', () => {
       expect(result.assessments.map((goal) => goal.outcome)).toEqual(['not assessed', 'not assessed'])
       expect(result.document).toEqual({ mode: 'full', topology: retained })
     }
-    Object.assign(network.vnets[0].vwanHubAttachment!, { hubRouting: { status: 'unknown' } })
+    Object.assign(network.vnets[0].vwanHubAttachment!, {
+      hubRouting: { status: 'unknown', associatedTableId: null, propagatedTableIds: [], labels: [] },
+    })
     expect(run(route).assessments[0].outcome).toBe('not assessed')
     delete (network.vnets[0].vwanHubAttachment as unknown as Record<string, unknown>).hubRouting
     expect(JSON.stringify(network)).toBe(original)
+  })
+  it('assesses an owned explicit mixed custom table without using the default RIB', () => {
+    const topology = createEmptyAzNetTopology()
+    topology.vwanHubs.push({
+      id: 'hub', name: 'Hub', region: 'swedencentral', preference: 'ASPath',
+      routingIntent: { private: false, internet: false },
+      routeTables: [{ id: 'private', name: 'Private', labels: ['private'] }],
+    })
+    topology.vnets.push({
+      id: 'v', name: 'V', region: 'swedencentral', prefixes: ['10.1.0.0/16'], role: 'spoke',
+      subnets: [{ id: 's', name: 'S', prefix: '10.1.1.0/24' }], gateways: [], appliances: [],
+      vwanHubAttachment: {
+        hubId: 'hub', enabled: true,
+        hubRouting: { status: 'configured', associatedTableId: 'private', propagatedTableIds: ['private'], labels: ['private'] },
+      },
+    })
+    const result = executePlatform({
+      contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology },
+      requirements: ['private', 'defaultRouteTable'].map((hubTableId) => ({
+        id: hubTableId, kind: 'route', table: 'hub', hubTableId, prefix: '10.1.0.0/16', expectation: 'present',
+      })),
+    })
+    expect(result.assessments.map((assessment) => assessment.outcome)).toEqual(['satisfied', 'violated'])
   })
 })

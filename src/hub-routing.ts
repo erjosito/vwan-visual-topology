@@ -8,7 +8,7 @@ const legacyRouting: HubRoutingConfiguration = {
   status: 'configured', associatedTableId: DEFAULT_HUB_TABLE, propagatedTableIds: [DEFAULT_HUB_TABLE], labels: ['default'],
 }
 
-export function hubRouteTables(hub: Hub): HubRouteTable[] {
+export function hubRouteTables(hub: Pick<Hub, 'routeTables'>): HubRouteTable[] {
   const tables: HubRouteTable[] = [
     { id: DEFAULT_HUB_TABLE, name: 'Default', labels: ['default'] },
     { id: NONE_HUB_TABLE, name: 'None', labels: ['none'] },

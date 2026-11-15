@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { assetGraph } from '../../scripts/production-assets.mjs'
 import { exercises } from '../../src/learning/exercises'
+import { executePlatform } from '../../src/platform/service'
+import type { PlatformRequest, PlatformResult } from '../../src/platform/contract'
 
 const test = base.extend<{ artifactErrors: string[] }>({
   artifactErrors: [async ({ page }, runTest) => {
@@ -206,6 +208,18 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(workers.some((url) => /\/assets\/browser-worker-.*\.js$/.test(url))).toBe(true)
     expect(workers.some((url) => /\/assets\/diagnostics-worker-.*\.js$/.test(url))).toBe(true)
     expect(workers.every((url) => new URL(url).origin === 'http://127.0.0.1:4174')).toBe(true)
+    const detailTopology = JSON.parse(sample.toString())
+    const detailOwner = mode === 'vwan' ? detailTopology.spokes[0] : detailTopology.vnets[0]
+    const detailNode = mode === 'vwan' ? page.locator(`.spoke-node[data-node-id="${detailOwner.id}"]`) : page.getByTestId(`aznet-vnet-${detailOwner.id}`)
+    const beforeDetail = await page.evaluate((key) => localStorage.getItem(key), storageKey)
+    await detailNode.focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()
+    const detail = page.getByTestId('network-detail-dialog')
+    await expect(detail).toHaveAccessibleName(`VNet detail: ${detailOwner.name}`)
+    await expect(detail.getByRole('heading', { name: 'Workload packet probe', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(beforeDetail)
     if (mode === 'full') {
       const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'azure-net', 'hybrid-vwan-and-hub-spoke.json'), 'utf8'))
       const hub = topology.vwanHubs[0]
@@ -224,6 +238,26 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       }), { url: workers.find((url) => /\/assets\/browser-worker-.*\.js$/.test(url)), request })
       expect(assessed.assessments.map((goal) => goal.outcome)).toEqual(['satisfied', 'not assessed', 'not assessed'])
       expect(assessed.document).toEqual(request.document)
+      const subnet = vnet.subnets[0]
+      topology.inventory = {
+        workloads: [{ id: 'production-vm', name: 'Production VM', nicIds: ['production-nic'] }],
+        nics: [{ id: 'production-nic', name: 'Production NIC', owner: { kind: 'vnet', id: vnet.id },
+          ipConfigurations: [{ id: 'primary', name: 'Primary', subnetId: subnet.id, privateIp: `${subnet.prefix.split('/')[0].split('.').slice(0, 3).join('.')}.4` }] }],
+        publicIps: [],
+      }
+      const packetRequest: PlatformRequest = { contractVersion: 1, operation: 'simulate', document: { mode, topology },
+        packet: { source: { kind: 'workload', workloadId: 'production-vm', nicId: 'production-nic', ipConfigurationId: 'primary' },
+          target: { kind: 'external', address: '20.50.60.70' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443 } }
+      const packet = await page.evaluate(({ url, request }) => new Promise<PlatformResult>((resolve, reject) => {
+        const worker = new Worker(url!, { type: 'module' })
+        const timer = setTimeout(() => { worker.terminate(); reject(new Error('Production packet timed out')) }, 15000)
+        worker.onerror = () => { clearTimeout(timer); worker.terminate(); reject(new Error('Production packet worker failed')) }
+        worker.onmessage = ({ data }) => { clearTimeout(timer); worker.terminate(); resolve(data) }
+        worker.postMessage(request)
+      }), { url: workers.find((url) => /\/assets\/browser-worker-.*\.js$/.test(url)), request: packetRequest })
+      expect(packet).toEqual(executePlatform(packetRequest))
+      expect(packet.status).toBe('complete')
+      expect(packet.packet!.reply.routing).toBe('not-assessed')
     }
 
     await context.setOffline(true)

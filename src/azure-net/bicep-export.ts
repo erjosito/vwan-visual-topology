@@ -39,6 +39,12 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.inventory) warnings.push('Workload/NIC/public-IP inventory is preserved by native JSON but is not deployed by this Bicep starter.')
+  if (topology.vwanHubs.some((hub) => hub.routeTables?.length || hub.routeTablesStatus)
+    || topology.vnets.some((vnet) => vnet.vwanHubAttachment?.hubRouting)
+    || [...topology.erLinks, ...topology.vpnConnections].some((link) => link.hubRouting)) {
+    warnings.push('Mixed hub custom tables, association and propagation settings are not deployed by this Bicep starter. Preserve JSON and configure these settings explicitly before deployment.')
+  }
   if (topology.routeMaps?.length) {
     warnings.push('On-premises site route maps are simulation/device policies and are not deployed by this Azure Bicep export. Configure the corresponding site routers separately.')
   }

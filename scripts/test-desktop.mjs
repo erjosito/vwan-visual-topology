@@ -64,10 +64,28 @@ try {
     await page.goto(`app://simulator/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', ...file.split('/')), 'utf8'))
+    const inventoryOwner = mode === 'vwan' ? topology.spokes[0] : topology.vnets.find((vnet) => vnet.role === 'spoke-vnet')
+    if (mode === 'vwan') inventoryOwner.subnets = [{ id: 'desktop-subnet', name: 'Desktop subnet', prefix: inventoryOwner.prefixes[0] }]
+    const subnet = inventoryOwner.subnets[0]
+    topology.inventory = {
+      workloads: [{ id: 'desktop-vm', name: 'Desktop workload', nicIds: ['desktop-nic'] }],
+      nics: [{ id: 'desktop-nic', name: 'Desktop NIC', owner: { kind: mode === 'vwan' ? 'spoke' : 'vnet', id: inventoryOwner.id },
+        ipConfigurations: [{ id: 'desktop-ip', name: 'Primary', subnetId: subnet.id, privateIp: `${subnet.prefix.split('/')[0].split('.').slice(0, 3).join('.')}.4` }] }],
+      publicIps: [],
+    }
     const request = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
     const result = await page.evaluate((input) => window.desktopSimulator.simulate(input), request)
     expect(result.ok).toBe(true)
     expect(result.value).toEqual(executePlatform(request))
+    const packetRequest = { ...request, packet: {
+      source: { kind: 'workload', workloadId: 'desktop-vm', nicId: 'desktop-nic', ipConfigurationId: 'desktop-ip' },
+      target: { kind: 'external', address: '20.50.60.70' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443,
+    } }
+    const packet = await page.evaluate((input) => window.desktopSimulator.simulate(input), packetRequest)
+    expect(packet.ok).toBe(true)
+    expect(packet.value.status).toBe('complete')
+    expect(packet.value).toEqual(executePlatform(packetRequest))
+    expect(packet.value.packet.reply.routing).toBe('not-assessed')
     if (mode === 'full') {
       const hub = topology.vwanHubs[0]
       const vnet = topology.vnets.find((vnet) => vnet.vwanHubAttachment?.hubId === hub.id)
@@ -94,6 +112,19 @@ try {
       return mode === 'vwan' ? value : value.topology
     }, mode)
     await expect.poll(readSaved).toEqual(executePlatform({ ...request, operation: 'validate' }).document.topology)
+    const detailNode = mode === 'vwan' ? page.locator(`.spoke-node[data-node-id="${inventoryOwner.id}"]`) : page.getByTestId(`aznet-vnet-${inventoryOwner.id}`)
+    await detailNode.focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()
+    const detail = page.getByTestId('network-detail-dialog')
+    await detail.getByRole('button', { name: 'Desktop workload', exact: true }).click()
+    const workloadForm = detail.locator('form').filter({ has: page.getByRole('heading', { name: 'Selected workload', exact: true }) })
+    await workloadForm.getByLabel('Workload name', { exact: true }).fill('Edited desktop workload')
+    await workloadForm.getByRole('button', { name: 'Save workload', exact: true }).click()
+    await expect(detail.getByRole('button', { name: 'Edited desktop workload', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.reload()
+    expect((await readSaved()).inventory.workloads[0]).toEqual({ id: 'desktop-vm', name: 'Edited desktop workload', nicIds: ['desktop-nic'] })
     const originalWindow = await application.evaluate(({ BrowserWindow }) => {
       const window = BrowserWindow.getAllWindows()[0]
       const size = window.getContentSize()
@@ -215,6 +246,7 @@ try {
     sharedObjectDiscovery: true, providerScopedSelection: true, objectDiscoveryPreservesSavedGraph: true,
     compactDesktopPointerDiscovery: true,
     ownedMixedHubRouteAssertions: true,
+    ownedWorkloadPacketParity: true, originalInventoryDetailEditsPersisted: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

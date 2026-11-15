@@ -2,6 +2,8 @@ import { cidr, contains, ipv4 } from '../validation'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzSiteRouteMap } from './route-maps'
 import { applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes } from './ars-route-maps'
+import { DEFAULT_HUB_TABLE, hubRouteTables, propagatesLocally, propagatesRemotely } from '../hub-routing'
+import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
 import type { RouteMapDirection } from '../model'
 import type {
   AzAppliance,
@@ -71,6 +73,8 @@ export interface AzBgpRibEntry {
   forwardingRoutes?: AzBgpRibEntry[]
   routeMapTrace?: string[]
   connectionId?: string
+  originHubTableId?: string
+  originHubRouteId?: string
   protectedVnet?: boolean
 }
 
@@ -96,6 +100,8 @@ export interface AzSimulationResult {
   routeServerInbound?: Record<string, Record<string, AzBgpRibEntry[]>>
   routeServerOutbound?: Record<string, Record<string, AzBgpRibEntry[]>>
   vwanHubRibs: Record<string, AzBgpRibEntry[]>
+  vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>>
+  vwanHubTableCoverage: ReturnType<typeof azHubTableCoverage>
   erLocationRibs: Record<string, AzBgpRibEntry[]>
   siteRibs: Record<string, AzBgpRibEntry[]>
   warnings: string[]
@@ -131,6 +137,7 @@ export interface AzTraceHop {
   detail: string
   matchedRoute?: AzEffectiveRoute
   edgeId?: string
+  hubTableId?: string
 }
 
 export type AzTraceStatus =
@@ -143,6 +150,7 @@ export type AzTraceStatus =
   | 'dropped-peering-non-transitive'
   | 'dropped-ip-forwarding-disabled'
   | 'loop'
+  | 'not-assessed'
 
 export interface AzFlowTrace {
   source: AzEndpointRef
@@ -298,6 +306,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
   const routeServerInbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
   const routeServerOutbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
   const vwanHubRibs: Record<string, AzBgpRibEntry[]> = {}
+  const vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>> = {}
+  const vwanHubTableCoverage = azHubTableCoverage(topology)
   const sitePolicy = (siteId: string, connectionId: string, direction: RouteMapDirection, routes: AzBgpRibEntry[]) => {
     const result = applyAzSiteRouteMap(topology, siteId, connectionId, direction, routes)
     const filtered = routes.filter((route) => !result.some((candidate) =>
@@ -556,13 +566,12 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
           )
           continue
         }
-        const attachedVnets = topology.vnets.filter(
-          (v) => v.vwanHubAttachment?.enabled && v.vwanHubAttachment.hubId === hub.id,
-        )
+        const attachedVnets = azHubVnetExports(topology, hub, link.hubRouting)
         for (const vnet of attachedVnets) {
           for (const prefix of vnet.prefixes) {
             entries.push({
               id: `erloc:${loc.id}:vhub:${link.id}:${vnet.id}:${prefix}`,
+              connectionId: link.id,
               prefix,
               asPath: [12076],
               nextHopName: `${hub.name} (${link.name})`,
@@ -818,6 +827,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
             originProtocol: 'VNet',
             preferred: true,
             explanation: `Directly attached VNet ${vnet.name}`,
+            connectionId: `vhub-attach:${vnet.id}:${hub.id}`,
           })
         }
       }
@@ -871,7 +881,56 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         })
       }
     }
-    vwanHubRibs[hub.id] = chooseBgpWinners(entries, hub.preference)
+    const attachments = azHubAttachments(topology, hub.id)
+    vwanHubTables[hub.id] = Object.fromEntries(hubRouteTables(hub).map((table) => [
+      table.id, chooseBgpWinners(entries.filter((route) =>
+        propagatesLocally(azHubRouting(attachments.find((attachment) => attachment.id === route.connectionId)?.hubRouting), table)), hub.preference),
+    ]))
+  }
+
+  const localHubTables = structuredClone(vwanHubTables)
+  for (const hub of topology.vwanHubs) {
+    for (const table of hubRouteTables(hub)) {
+      const remote = topology.vwanHubs.filter((origin) => origin.id !== hub.id).flatMap((origin) => {
+        const attachments = azHubAttachments(topology, origin.id)
+        const originTables = hubRouteTables(origin)
+        return originTables.flatMap((originTable) => (localHubTables[origin.id][originTable.id] ?? [])
+          .filter((route) => route.preferred && route.prefix !== '0.0.0.0/0'
+            && propagatesRemotely(azHubRouting(attachments.find((attachment) => attachment.id === route.connectionId)?.hubRouting), originTable, table, originTables))
+          .map((route): AzBgpRibEntry => ({
+            ...route, id: JSON.stringify(['inter-hub', hub.id, table.id, origin.id, originTable.id, route.id]),
+            originHubTableId: originTable.id, originHubRouteId: route.id, connectionId: undefined,
+            nextHopKind: 'vwan-hub', nextHopId: origin.id, nextHopName: origin.name,
+            originProtocol: 'InterHub', asPath: [65520, 65520, ...route.asPath],
+            explanation: `Learned from ${origin.name} table ${originTable.name}`,
+          })))
+      })
+      vwanHubTables[hub.id][table.id] = chooseBgpWinners([...localHubTables[hub.id][table.id], ...remote], hub.preference)
+    }
+    vwanHubRibs[hub.id] = vwanHubTables[hub.id][DEFAULT_HUB_TABLE]
+  }
+
+  for (const [hubId, tables] of Object.entries(vwanHubTableCoverage)) {
+    for (const [tableId, coverage] of Object.entries(tables)) {
+      const routes = vwanHubTables[hubId][tableId]
+      const remote = routes.filter((route) => route.preferred && route.originHubTableId)
+      const ambiguous = remote.some((route) => !(vwanHubTables[route.nextHopId]?.[route.originHubTableId!] ?? [])
+        .some((origin) => origin.id === route.originHubRouteId && origin.preferred))
+        || remote.some((route) => remote.some((other) => other.nextHopId === route.nextHopId && other.prefix === route.prefix
+          && other.originHubTableId !== route.originHubTableId && other.originHubRouteId !== route.originHubRouteId))
+      const unsupportedExport = topology.erLinks.some((link) => link.enabled && link.targetKind === 'vwan-hub'
+        && link.targetId === hubId && azHubAssociation(link.hubRouting) === tableId
+        && routes.some((route) => route.preferred && (route.originProtocol === 'InterHub' || route.originProtocol === 'VPN')))
+      const staticVpn = topology.vpnConnections.some((connection) => connection.enabled && !connection.bgpEnabled
+        && connection.targetKind === 'vwan-hub' && connection.targetId === hubId)
+      if (ambiguous || unsupportedExport || staticVpn) {
+        coverage.complete = false
+        coverage.limitations = [ambiguous ? 'Remote table forwarding does not have a unique stable origin decision.'
+          : unsupportedExport ? 'Mixed hub ER export of remote or VPN-learned routes is not modeled.'
+            : 'Mixed hub static VPN return routing is not modeled.']
+      }
+      if (!coverage.complete) warnings.push(`Virtual hub ${hubId} table ${tableId}: ${coverage.limitations.join(' ')}`)
+    }
   }
 
   // 6. Push Azure routes back to On-Premises Sites (over ER and VPN)
@@ -945,7 +1004,7 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         }))
         learnedFromAzure.push(...sitePolicy(site.id, conn.id, 'inbound', received))
       } else if (conn.bgpEnabled && conn.targetKind === 'vwan-hub') {
-        const received = (vwanHubRibs[conn.targetId] ?? []).filter((route) =>
+        const received = (vwanHubTables[conn.targetId]?.[azHubAssociation(conn.hubRouting)] ?? []).filter((route) =>
           route.preferred && !(route.nextHopKind === 'site' && route.nextHopId === site.id))
           .map((route): AzBgpRibEntry => ({
             ...route, id: `site:${site.id}:vhub:${conn.id}:${route.prefix}`, connectionId: conn.id,
@@ -972,8 +1031,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
         subnet,
         gatewayRibs,
         routeServerRibs,
-        vwanHubRibs,
         routeServerOutbound,
+        vwanHubTables,
       )
     }
   }
@@ -985,6 +1044,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
     routeServerInbound,
     routeServerOutbound,
     vwanHubRibs,
+    vwanHubTables,
+    vwanHubTableCoverage,
     erLocationRibs,
     siteRibs,
     warnings,
@@ -997,8 +1058,8 @@ function compileSingleSubnetEffectiveRoutes(
   subnet: AzSubnet,
   gatewayRibs: Record<string, AzBgpRibEntry[]>,
   routeServerRibs: Record<string, AzBgpRibEntry[]>,
-  vwanHubRibs: Record<string, AzBgpRibEntry[]>,
   routeServerOutbound: Record<string, Record<string, AzBgpRibEntry[]>>,
+  vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>>,
 ): AzSubnetRouteTableResult {
   const udrTable = subnet.routeTableId
     ? topology.udrTables.find((t) => t.id === subnet.routeTableId)
@@ -1189,7 +1250,8 @@ function compileSingleSubnetEffectiveRoutes(
   if (vnet.vwanHubAttachment?.enabled) {
     const hub = topology.vwanHubs.find((h) => h.id === vnet.vwanHubAttachment!.hubId)
     if (hub) {
-      const hubWinners = (vwanHubRibs[hub.id] ?? []).filter((r) => r.preferred)
+      const tableId = azHubAssociation(vnet.vwanHubAttachment.hubRouting)
+      const hubWinners = (vwanHubTables[hub.id]?.[tableId] ?? []).filter((r) => r.preferred)
       for (const r of hubWinners) {
         if (r.nextHopKind === 'local' && r.nextHopId === vnet.id) continue
         const viaSecuredFirewall = hub.routingIntent.private
@@ -1545,13 +1607,21 @@ export function traceAzNetFlow(
     }
   }
 
+  if (Object.values(simulation.vwanHubTableCoverage).some((tables) => Object.values(tables).some((coverage) => !coverage.complete))) {
+    return {
+      source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
+      hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds,
+      summaryReason: 'Virtual hub routing scope is unknown or unsupported; reachability and isolation are not established.',
+    }
+  }
+
   const privateDestination = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ipNum))
 
   type Cursor =
     | { kind: 'subnet'; vnetId: string; subnetId: string; fromExternalVnet: boolean; viaVnra: boolean }
     | { kind: 'appliance'; vnetId: string; applianceId: string }
     | { kind: 'vnet-gateway'; vnetId: string; gatewayId: string; direction: 'egress' | 'ingress' }
-    | { kind: 'vwan-hub'; hubId: string }
+    | { kind: 'vwan-hub'; hubId: string; tableId: string }
     | { kind: 'er-location'; locationId: string; fromTargetId: string }
     | { kind: 'site'; siteId: string }
 
@@ -1636,7 +1706,7 @@ export function traceAzNetFlow(
       action: 'origin',
       detail: `Packet originates at Virtual WAN Hub ${hub?.name ?? source.hubId}`,
     })
-    cursor = { kind: 'vwan-hub', hubId: source.hubId }
+    cursor = { kind: 'vwan-hub', hubId: source.hubId, tableId: DEFAULT_HUB_TABLE }
   }
 
   // Helper to check VNet Peering traversal gates when crossing from `fromVnet` to `toVnet`
@@ -2087,7 +2157,7 @@ export function traceAzNetFlow(
             edgeId: `vhub-attach:${vnet.id}:${vwanHub.id}`,
             detail: `Forwards to attached Virtual WAN Hub ${vwanHub.name}`,
           })
-          cursor = { kind: 'vwan-hub', hubId: vwanHub.id }
+          cursor = { kind: 'vwan-hub', hubId: vwanHub.id, tableId: azHubAssociation(vnet.vwanHubAttachment?.hubRouting) }
           continue
         }
 
@@ -2789,6 +2859,18 @@ export function traceAzNetFlow(
 
     if (stepCursor.kind === 'vwan-hub') {
       const hub = topology.vwanHubs.find((h) => h.id === stepCursor.hubId)!
+      const tableId = stepCursor.tableId
+      const coverage = simulation.vwanHubTableCoverage[hub.id]?.[tableId]
+      if (!coverage?.complete) {
+        return {
+          source, destinationIp, destinationLabel: targetInfo.label,
+          status: 'not-assessed', hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds,
+          summaryReason: `Routing scope ${hub.name}/${tableId} is unknown or unsupported; reachability and isolation are not established.`,
+        }
+      }
+      const selectedHubRoute = (simulation.vwanHubTables[hub.id]?.[tableId] ?? [])
+        .filter((route) => route.preferred && cidr(route.prefix) && contains(route.prefix, ipNum))
+        .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
       if (hub.routingIntent.private) {
         const fwId = `vhub-fw:${hub.id}`
         if (!traversedApplianceIds.includes(fwId)) {
@@ -2804,18 +2886,20 @@ export function traceAzNetFlow(
       }
 
       // Check attached VNets
-      const attachedTargetVnet = topology.vnets.find(
+      const attachedTargetVnet = selectedHubRoute?.nextHopKind === 'local' ? topology.vnets.find(
         (v) =>
+          v.id === selectedHubRoute.nextHopId &&
           v.vwanHubAttachment?.enabled &&
           v.vwanHubAttachment.hubId === hub.id &&
           v.prefixes.some((p) => cidr(p) && contains(p, ipNum)),
-      )
+      ) : undefined
       if (attachedTargetVnet && attachedTargetVnet.subnets[0]) {
         pushHop({
           nodeKind: 'vwan-hub',
           nodeId: hub.id,
           nodeName: hub.name,
           action: 'vwan-transit',
+          hubTableId: tableId,
           edgeId: `vhub-attach:${attachedTargetVnet.id}:${hub.id}`,
           detail: `${hub.name} forwards over VNet connection to ${attachedTargetVnet.name}`,
         })
@@ -2855,15 +2939,22 @@ export function traceAzNetFlow(
         }
       }
 
-      const selectedHubRoute = (simulation.vwanHubRibs[hub.id] ?? [])
-        .filter((route) => route.preferred && cidr(route.prefix) && contains(route.prefix, ipNum))
-        .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
+      if (selectedHubRoute?.nextHopKind === 'vwan-hub' && selectedHubRoute.originHubTableId) {
+        const remoteHub = topology.vwanHubs.find((candidate) => candidate.id === selectedHubRoute.nextHopId)!
+        pushHop({
+          nodeKind: 'vwan-hub', nodeId: hub.id, nodeName: hub.name, action: 'vwan-transit',
+          hubTableId: tableId, edgeId: azInterHubId(hub.id, remoteHub.id),
+          detail: `${hub.name} table ${tableId} forwards to ${remoteHub.name} table ${selectedHubRoute.originHubTableId}`,
+        })
+        cursor = { kind: 'vwan-hub', hubId: remoteHub.id, tableId: selectedHubRoute.originHubTableId }
+        continue
+      }
       const vpn = topology.vpnConnections.find((connection) => connection.enabled &&
         connection.targetKind === 'vwan-hub' && connection.targetId === hub.id && connection.id === selectedHubRoute?.connectionId)
       if (vpn) {
         pushHop({
           nodeKind: 'vwan-hub', nodeId: hub.id, nodeName: hub.name, action: 'vwan-transit',
-          edgeId: vpn.id, detail: `${hub.name} forwards over S2S VPN "${vpn.name}"`,
+          edgeId: vpn.id, hubTableId: tableId, detail: `${hub.name} forwards over S2S VPN "${vpn.name}"`,
         })
         cursor = { kind: 'site', siteId: vpn.siteId }
         continue
@@ -2872,7 +2963,7 @@ export function traceAzNetFlow(
       // Check ER Links from vWAN Hub
       const erLink = topology.erLinks.find(
         (l) => l.enabled && l.targetKind === 'vwan-hub' && l.targetId === hub.id &&
-          (!selectedHubRoute?.connectionId || l.id === selectedHubRoute.connectionId),
+          l.id === selectedHubRoute?.connectionId,
       )
       if (erLink) {
         pushHop({
@@ -2880,6 +2971,7 @@ export function traceAzNetFlow(
           nodeId: hub.id,
           nodeName: hub.name,
           action: 'vwan-transit',
+          hubTableId: tableId,
           edgeId: erLink.id,
           detail: `${hub.name} forwards over ExpressRoute connection "${erLink.name}"`,
         })
@@ -2988,7 +3080,8 @@ export function traceAzNetFlow(
           edgeId: outLink?.id,
           detail: `MSEE ${loc.name} forwards to Virtual WAN Hub ${matchingEntry.nextHopName}`,
         })
-        cursor = { kind: 'vwan-hub', hubId: matchingEntry.nextHopId }
+        if (!outLink) break
+        cursor = { kind: 'vwan-hub', hubId: matchingEntry.nextHopId, tableId: azHubAssociation(outLink.hubRouting) }
         continue
       }
     }
@@ -3087,7 +3180,7 @@ export function traceAzNetFlow(
             nodeKind: 'site', nodeId: site.id, nodeName: site.name, action: 'gateway-transit',
             edgeId: connection.id, detail: `${site.name} sends packet over S2S VPN "${connection.name}" to ${best.nextHopName}`,
           })
-          cursor = best.nextHopKind === 'vwan-hub' ? { kind: 'vwan-hub', hubId: best.nextHopId }
+          cursor = best.nextHopKind === 'vwan-hub' ? { kind: 'vwan-hub', hubId: best.nextHopId, tableId: azHubAssociation(connection.hubRouting) }
             : { kind: 'appliance', vnetId: ownerVnet!.id, applianceId: best.nextHopId }
           continue
         }

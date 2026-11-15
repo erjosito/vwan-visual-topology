@@ -1,4 +1,5 @@
 import { t } from './i18n'
+import { inventoryCounts } from './inventory'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import { CanvasBackground, CanvasControls } from './CanvasPresentation'
@@ -457,6 +458,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       const standalone = !spoke.hubId
       const colorProps = destinationColors.has(spoke.id) ? destinationProps(spoke.id) : nvaSite ? destinationProps(nvaSite.id) : {}
       const effectiveLabel = spoke.label || nvaSite?.label
+      const inventory = inventoryCounts(topology, { kind: 'spoke', id: spoke.id })
       return <g key={spoke.id} data-node-id={spoke.id} data-spoke-nva={nvas.length > 0 ? true : undefined} data-standalone-vnet={standalone ? true : undefined} {...colorProps} transform={`translate(${p.x}, ${p.y})`} className={`spoke-node draggable-node ${nvas.length ? 'spoke-nva-node' : ''} ${standalone ? 'standalone-vnet-node' : ''}`} {...selectable('spoke', spoke.id, t("Select spoke {0}", spoke.name))} {...movable('spoke', spoke.id)}>
         <title>{spoke.name}: {spoke.prefixes.join(', ')}{effectiveLabel ? ` · ${effectiveLabel}` : ''}{nvaSite && nvas[0] ? ` · ${t('Spoke BGP NVA')} (${nvaSite.name} · ASN ${nvaSite.asn} · ${nvas[0].peerIp})` : ''}</title>
         <rect x="-94" y="-44" width="188" height="88" rx="12" />
@@ -464,7 +466,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
         {nvas.length > 0 && <SpokeNvaIcon spokeId={spoke.id} />}
         <DiagramNodeBadge label={nvas.length > 0 ? t("SPOKE VNET · BGP NVA") : standalone ? t("AZURE VNET") : t("SPOKE VNET")} x={-56} y={-35} width={138} tone={nvas.length ? 'info' : 'muted'} />
         <DiagramNodeText text={spoke.name} x={0} y={nvas.length > 0 ? -3 : 6} width={164} fontSize={15} anchor="middle" className="node-name" />
-        <DiagramNodeText text={`${spoke.prefixes[0] ?? ''}${spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}`} x={0} y={nvas.length > 0 ? 16 : 28} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />
+        <DiagramNodeText text={`${spoke.prefixes[0] ?? ''}${spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}${inventory.nics ? ` · VM ${inventory.workloads} / NIC ${inventory.nics}` : ''}`} x={0} y={nvas.length > 0 ? 16 : 28} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />
         {nvas.length > 0 && nvaSite && <DiagramNodeText text={`AS${nvaSite.asn} · ${nvas[0].peerIp}${nvas.length > 1 ? ` +${nvas.length - 1}` : ''}`} x={0} y={34} width={164} fontSize={10.5} anchor="middle" className="node-detail node-prefixes" weight={400} />}
         {renderCustomLabel(spoke.id, effectiveLabel, 58)}
       </g>

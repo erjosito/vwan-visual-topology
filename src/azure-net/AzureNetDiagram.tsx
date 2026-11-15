@@ -11,6 +11,8 @@ import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
 import { RouteMapPreview } from '../RouteMapPreview'
 import { azArsPolicyLinks } from './ars-route-maps'
 import { azSitePolicyLinks } from './route-maps'
+import { azInterHubLinks } from './hub-routing'
+import { inventoryCounts } from '../inventory'
 import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
 import type { AzFlowTrace } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
@@ -462,6 +464,7 @@ export function AzureNetDiagram({
   const targetKey = (kind: string, id: string) =>
     kind === 'site' || kind === 'vwan-hub' ? `${kind}:${id}` : deviceOwners.get(id)
   const connections = [
+    ...azInterHubLinks(topology),
     ...topology.vnetPeerings.map((link) => ({ id: link.id, from: `vnet:${link.vnetAId}`, to: `vnet:${link.vnetBId}` })),
     ...topology.vnets.flatMap((vnet) => vnet.vwanHubAttachment?.enabled ? [{
       id: `vhub-attach:${vnet.id}:${vnet.vwanHubAttachment.hubId}`, from: `vnet:${vnet.id}`, to: `vwan-hub:${vnet.vwanHubAttachment.hubId}`,
@@ -591,6 +594,7 @@ export function AzureNetDiagram({
     const curve = edge.from === from ? edge.curve : reverseCurve(edge.curve)
     motionEdges.set(id, { id, from, to, start: curve.start, end: curve.end, control: curve.control })
   }
+  for (const link of azInterHubLinks(topology)) addMotionEdge(link.id, link.from, link.to)
   for (const peering of topology.vnetPeerings) {
     if (peering.enabled) addMotionEdge(peering.id, `vnet:${peering.vnetAId}`, `vnet:${peering.vnetBId}`)
   }
@@ -808,6 +812,16 @@ export function AzureNetDiagram({
           )
         })}
 
+        {azInterHubLinks(topology).map((link) => {
+          const curve = connectionCurves.get(link.id)?.curve
+          if (!curve) return null
+          const forward = forwardEdges.has(link.id), reverse = reverseEdges.has(link.id)
+          return <path key={link.id} data-testid="aznet-inter-hub-edge" className="aznet-edge-path" d={curve.d}
+            fill="none" stroke={forward ? 'var(--forward)' : reverse ? 'var(--return)' : 'var(--link)'}
+            strokeWidth={forward || reverse ? 4 : 2} strokeDasharray={forward ? undefined : '7 4'}>
+            <title>{t('Virtual WAN inter-hub transit')}</title>
+          </path>
+        })}
         {/* 2. VNet-to-vWAN Hub Attachments */}
         {topology.vnets.map((vnet) => {
           const att = vnet.vwanHubAttachment
@@ -1326,8 +1340,10 @@ export function AzureNetDiagram({
                   : undefined
                 const hasPe = (subnet.privateEndpoints?.length ?? 0) > 0
                 const badgeText = rt ? `RT: ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}` : ''
+                const inventory = inventoryCounts(topology, { kind: 'vnet', id: vnet.id }, subnet.id)
+                const inventoryWidth = inventory.nics ? 90 : 0
                 const badgeW = rt ? Math.min(88, Math.max(42, badgeText.length * 4.8 + 10)) : 0
-                const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW
+                const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW - inventoryWidth
                 const labelClipId = `${tooltipId}-subnet-${vnetIndex}-${sIdx}`
                 const showSubnet = (x: number, y: number) => {
                   clearHoverTimer()
@@ -1355,7 +1371,7 @@ export function AzureNetDiagram({
                     data-testid={`aznet-subnet-${subnet.id}`}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})`}
+                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}`}
                     aria-describedby={hoverPopover?.kind === 'subnet' && hoverPopover.subnetId === subnet.id ? tooltipId : undefined}
                     onMouseEnter={(e) => showSubnet(e.clientX, e.clientY)}
                     onMouseLeave={scheduleClosePopover}
@@ -1412,6 +1428,11 @@ export function AzureNetDiagram({
                     >
                       {subnet.name}
                     </text>
+                    {inventory.nics > 0 && <g data-testid="aznet-subnet-inventory-pill">
+                      <title>{t('{0} workloads, {1} NICs, {2} public IP associations. Open VNet detail for the original entities.', inventory.workloads, inventory.nics, inventory.publicIps)}</title>
+                      <rect x={box.x + box.width - (hasPe ? 42 : 12) - 87} y={rowY + 3} width={84} height={18} rx={6} fill="var(--surface)" stroke="var(--border)" />
+                      <text x={box.x + box.width - (hasPe ? 42 : 12) - 45} y={rowY + 16} textAnchor="middle" fontSize={9} fill="var(--text)">VM {inventory.workloads} · NIC {inventory.nics}</text>
+                    </g>}
                     {rt && (() => {
                       return (
                         <g

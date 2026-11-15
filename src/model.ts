@@ -1,3 +1,5 @@
+import type { InventorySubnet, NetworkInventory } from './inventory'
+
 export type Preference = 'ExpressRoute' | 'VPN' | 'ASPath'
 export type Transport = 'ExpressRoute' | 'VPN' | 'SDWAN' | 'SpokeNVA'
 export type RouteKind = 'bgp' | 'vpn-static'
@@ -139,6 +141,7 @@ export interface Spoke {
   nvaSpokeIds?: string[]
   propagateDefaultRoute?: boolean
   hubRouting?: HubRoutingConfiguration
+  subnets?: InventorySubnet[]
 }
 
 export interface Connection {
@@ -205,6 +208,7 @@ export interface Topology {
   erLinks?: ErLink[]
   layout?: DiagramLayout
   azureImport?: AzureImportInfo
+  inventory?: NetworkInventory
 }
 
 export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink' | 'erLocation' | 'erLink'

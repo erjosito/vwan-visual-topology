@@ -1,6 +1,8 @@
 import { cidr } from '../validation'
 import { firstUsableIp, type AzEndpointRef } from './engine'
 import type { AzNetTopology, AzSubnet, AzVNet } from './model'
+import { namedEndpoints } from '../inventory'
+import { workloadEndpointKey } from '../packet-flow'
 
 export interface AzEndpointOption {
   key: string
@@ -8,7 +10,7 @@ export interface AzEndpointOption {
   ref: AzEndpointRef
   defaultIp: string
   prefix: string
-  group: 'workload' | 'infrastructure' | 'site' | 'hub' | 'internet'
+  group: 'workload' | 'infrastructure' | 'site' | 'hub' | 'internet' | 'named-workload'
 }
 
 export function azEndpointKey(ref: AzEndpointRef): string {
@@ -53,6 +55,15 @@ export function getAzNetEndpoints(topology: AzNetTopology): AzEndpointOption[] {
         group: 'site',
       })
     }
+  }
+  for (const { workload, nic, config } of namedEndpoints(topology)) {
+    if (!config.privateIp) continue
+    endpoints.push({
+      key: workloadEndpointKey({ kind: 'workload', workloadId: workload.id, nicId: nic.id, ipConfigurationId: config.id }),
+      label: `VM / NIC · ${workload.name} / ${nic.name} (${config.privateIp})`,
+      ref: { kind: 'subnet', vnetId: nic.owner.id, subnetId: config.subnetId },
+      defaultIp: config.privateIp, prefix: `${config.privateIp}/32`, group: 'named-workload',
+    })
   }
   for (const hub of topology.vwanHubs) {
     if (!hub.prefix || !cidr(hub.prefix)) continue

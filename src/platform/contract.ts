@@ -2,9 +2,10 @@ import type { Topology } from '../model'
 import type { PathNode } from '../paths'
 import type { AzNetTopology } from '../azure-net/model'
 import type { AzEndpointRef } from '../azure-net/engine'
+import type { PacketRequest, PacketResult } from '../packet-flow'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.15.1'
+export const engineVersion = '2026.11.15.2'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -38,6 +39,7 @@ export type PlatformRequest = {
   locale?: 'en' | 'ja'
   requirements?: Requirement[]
   budget?: { maxMillis?: number; maxOutputBytes?: number }
+  packet?: PacketRequest
 }
 export type Assessment = {
   id: string
@@ -55,6 +57,7 @@ export type PlatformResult = {
   assessments: Assessment[]
   errors: { code: string; message: string }[]
   limitations: string[]
+  packet?: PacketResult
 }
 
 export const platformLimits = {
@@ -72,7 +75,11 @@ export const capabilities = {
   modes: ['vwan', 'hub-spoke', 'full'],
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
   operations: ['validate', 'simulate', 'evaluate'],
-  requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or hub scope; mixed hubs support explicit defaultRouteTable only'],
+  inventory: ['optional original workload/NIC/IP-configuration/public-IP identities', 'explicit detailed subnets on VWAN spokes; no inferred VMs or addresses'],
+  packet: { operation: 'simulate', addressFamily: 'IPv4', protocols: ['tcp', 'udp'], ports: '1-65535',
+    endpoints: ['owned workload/NIC/IP-configuration tuple', 'explicit external public address'],
+    outcomes: ['reachable', 'unreachable', 'not-assessed'], readiness: 'delivery/security/NAT not assessed' },
+  requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or explicit hub table scope, subject to complete modeled coverage'],
   outcomes: ['satisfied', 'violated', 'not assessed'],
   limits: platformLimits,
   privacy: 'Local deterministic computation. No HTTP listener, files, Azure credentials or cloud calls. An external AI may receive tool inputs/results.',

@@ -29,9 +29,17 @@ server.registerTool('get_schema', {
     : [{ kind: 'subnet', vnetId: 'ID', subnetId: 'ID' }, { kind: 'site', siteId: 'ID' }],
   requirementShapes: [
     { id: 'unique-goal-id', kind: 'flow', source: 'owned endpoint', target: 'owned endpoint', sourceAddress: 'IPv4', destinationAddress: 'IPv4', expectation: 'allow or deny', optionalWaypoint: mode === 'vwan' ? 'requiredFirewallHubId' : 'requiredApplianceId' },
-    { id: 'unique-route-id', kind: 'route', table: mode === 'vwan' ? 'hub ID' : 'simulation subnet table key, or hub ID with explicit hubTableId', prefix: 'canonical IPv4 CIDR', expectation: 'present or absent', optional: mode === 'vwan' ? 'hubTableId' : 'hubTableId: defaultRouteTable only, requires an owned mixed hub' },
+    { id: 'unique-route-id', kind: 'route', table: mode === 'vwan' ? 'hub ID' : 'simulation subnet table key, or hub ID with explicit hubTableId', prefix: 'canonical IPv4 CIDR', expectation: 'present or absent', optional: 'hubTableId: exact owned table ID, subject to complete modeled coverage' },
   ],
   example: mode === 'vwan' ? vwanExample : mode === 'hub-spoke' ? hubSpokeExample : fullExample,
+  optionalPacket: { operation: 'simulate', packet: { source: { kind: 'workload', workloadId: 'ID', nicId: 'ID', ipConfigurationId: 'ID' }, target: { kind: 'external', address: 'explicit public IPv4' }, protocol: 'tcp or udp', sourcePort: '1-65535', destinationPort: '1-65535' }, result: 'packet section; independent routing probes, no delivery/security/NAT certification' },
+  inventoryShapes: {
+    workloads: [{ id: 'VM_ID', name: 'Workload name', nicIds: ['NIC_ID'], backingDeviceId: 'optional existing router ID; omit for normal VMs' }],
+    nics: [{ id: 'NIC_ID', name: 'NIC name', owner: { kind: mode === 'vwan' ? 'spoke' : 'vnet', id: 'existing network ID' },
+      ipConfigurations: [{ id: 'IP_CONFIG_ID', name: 'Primary', subnetId: 'existing owned subnet ID', privateIp: 'optional known IPv4', publicIpId: 'optional public-IP ID' }] }],
+    publicIps: [{ id: 'PUBLIC_IP_ID', name: 'Public IP name', address: 'optional known public IPv4' }],
+    location: 'optional topology.inventory; omitted addresses remain unknown; VWAN detailed subnets are explicitly declared in spoke.subnets',
+  },
   handoff: 'Review the resulting native topology JSON, then import it through the web or desktop file UI. This server does not write files or modify an open UI.',
 }))
 
@@ -45,6 +53,10 @@ server.registerTool('start_simulation', {
       document: z.object({ mode: z.enum(['vwan', 'hub-spoke', 'full']), topology: z.record(z.string(), z.unknown()) }).strict(),
       locale: z.enum(['en', 'ja']).optional(),
       requirements: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
+      packet: z.object({
+        source: z.record(z.string(), z.unknown()), target: z.record(z.string(), z.unknown()),
+        protocol: z.enum(['tcp', 'udp']), sourcePort: z.number().int().min(1).max(65535), destinationPort: z.number().int().min(1).max(65535),
+      }).strict().optional(),
       budget: z.object({ maxMillis: z.number().int().positive().max(15000).optional(), maxOutputBytes: z.number().int().positive().max(8000000).optional() }).strict().optional(),
     }).strict(),
   }, annotations,
@@ -60,14 +72,14 @@ server.registerTool('get_job', {
       contractVersion: result.contractVersion, engineVersion: result.engineVersion, revision: result.revision,
       resultStatus: result.status, errors: result.errors, limitations: result.limitations.slice(0, 20),
       assessments: result.assessments.map(({ id, outcome, reasons }) => ({ id, outcome, reasons })),
-      sections: ['document', 'simulation', 'assessments'],
+      sections: ['document', 'simulation', 'assessments', 'packet'],
     } : {}),
   })
 })
 
 server.registerTool('get_evidence', {
   description: 'Retrieve bounded JSON-text chunks of a completed job section. Concatenate all chunks in offset order before parsing; a partial chunk is not complete evidence.',
-  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
+  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments', 'packet']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
 }, async ({ handle, section, offset, limit }) => {
   const { result } = jobs.get(handle)
   if (!result) throw new Error('Job is still running.')

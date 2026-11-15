@@ -2,6 +2,7 @@ import { it, expect } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolve } from 'node:path'
+import { executePlatform } from '../src/platform/service'
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })
@@ -28,7 +29,10 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
       contractVersion: 1, operation: 'evaluate', document: { mode: 'vwan', topology },
       requirements: [{ id: 'goal', kind: 'flow', source: { kind: 'spoke', id: 's' }, target: { kind: 'spoke', id: 't' }, sourceAddress: '10.1.0.4', destinationAddress: '10.2.0.4', expectation: 'allow' }],
     }
-    expect((await call('get_schema', { mode: 'full' })).example.kind).toBe('azure-network-topology')
+    const schema = await call('get_schema', { mode: 'full' })
+    expect(schema.example.kind).toBe('azure-network-topology')
+    expect(schema.inventoryShapes.nics[0].owner.kind).toBe('vnet')
+    expect(schema.optionalPacket.operation).toBe('simulate')
     const { handle } = await call('start_simulation', { request })
     let result
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -41,6 +45,36 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
     const chunk = await call('get_evidence', { handle, section: 'assessments', offset: 0, limit: 100 })
     expect(chunk.jsonText.length).toBeLessThanOrEqual(100)
     expect(chunk.complete).toBe(false)
+    const packetRequest = {
+      contractVersion: 1, operation: 'simulate', document: { mode: 'vwan', topology: {
+        ...topology, spokes: topology.spokes.map((spoke) => ({ ...spoke, subnets: [{ id: `subnet-${spoke.id}`, name: 'App', prefix: spoke.prefixes[0] }] })),
+        inventory: {
+          workloads: [{ id: 'mcp-vm', name: 'MCP workload', nicIds: ['mcp-nic'] }],
+          nics: [{ id: 'mcp-nic', name: 'MCP NIC', owner: { kind: 'spoke', id: 's' },
+            ipConfigurations: [{ id: 'primary', name: 'Primary', subnetId: 'subnet-s', privateIp: '10.1.0.4' }] }],
+          publicIps: [],
+        },
+      } },
+      packet: { source: { kind: 'workload', workloadId: 'mcp-vm', nicId: 'mcp-nic', ipConfigurationId: 'primary' },
+        target: { kind: 'external', address: '20.50.60.70' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443 },
+    }
+    const packetJob = await call('start_simulation', { request: packetRequest })
+    let packetStatus
+    for (let attempt = 0; attempt < 100; attempt++) {
+      packetStatus = await call('get_job', { handle: packetJob.handle })
+      if (packetStatus.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    expect(packetStatus?.resultStatus).toBe('complete')
+    expect(packetStatus?.sections).toContain('packet')
+    const packetChunk = await call('get_evidence', { handle: packetJob.handle, section: 'packet', limit: 16000 })
+    expect(packetChunk.complete).toBe(true)
+    expect(JSON.parse(packetChunk.jsonText)).toEqual(executePlatform(packetRequest).packet)
+    expect(JSON.parse(packetChunk.jsonText).reply.routing).toBe('not-assessed')
+    const badPacket = await client.callTool({ name: 'start_simulation', arguments: {
+      request: { ...packetRequest, packet: { ...packetRequest.packet, sourcePort: 0 } },
+    } })
+    expect(badPacket.isError).toBe(true)
     const second = await call('start_simulation', { request })
     await call('cancel_job', { handle: second.handle })
     expect((await call('get_job', { handle: second.handle })).resultStatus).toBe('not assessed')

@@ -5,10 +5,10 @@ import { parseAzNetTopology } from '../azure-net/admission'
 import { validateAzNetTopology } from '../azure-net/model'
 import { simulateAzNet, traceAzNetPair } from '../azure-net/engine'
 import { getAzNetEndpoints, azEndpointKey } from '../azure-net/endpoints'
-import { DEFAULT_HUB_TABLE } from '../hub-routing'
 import { contractVersion, engineVersion, platformLimits } from './contract'
 import type { Assessment, FlowRequirement, PlatformDocument, PlatformRequest, PlatformResult, Requirement } from './contract'
 import type { AzEndpointRef } from '../azure-net/engine'
+import { tracePacket, validatePacketRequest } from '../packet-flow'
 
 export function admitJson(input: unknown): string {
   let items = 0
@@ -51,9 +51,13 @@ export function validateRequest(input: unknown): PlatformRequest {
     if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error('Unknown contract field; requirements must not be silently omitted.')
   }
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Request object required.')
-  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget'])
+  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet'])
   if (request.contractVersion !== contractVersion || (request.engineVersion !== undefined && request.engineVersion !== engineVersion)) throw new Error('Unsupported contract or engine version.')
   if (!['validate', 'simulate', 'evaluate'].includes(request.operation)) throw new Error('Unknown operation.')
+  if (request.packet !== undefined) {
+    if (request.operation !== 'simulate') throw new Error('Packet tracing requires the simulate operation.')
+    validatePacketRequest(request.packet)
+  }
   if (!request.document || !['vwan', 'hub-spoke', 'full'].includes(request.document.mode)) throw new Error('Explicit supported mode required.')
   keys(request.document, ['mode', 'topology'])
   if (request.locale !== undefined && !['en', 'ja'].includes(request.locale)) throw new Error('Unsupported locale.')
@@ -100,15 +104,18 @@ export function validateRequest(input: unknown): PlatformRequest {
 }
 
 function normalize(document: PlatformDocument): PlatformDocument {
+  const checkNodes = (count: number, inventory?: { workloads: unknown[]; nics: unknown[]; publicIps: unknown[] }) => {
+    if (count + (inventory ? inventory.workloads.length + inventory.nics.length + inventory.publicIps.length : 0) > platformLimits.maxNodes) throw new Error('Topology node limit exceeded.')
+  }
   if (document.mode === 'vwan') {
     const topology = validateTopology(document.topology)
-    if (topology.hubs.length + topology.spokes.length + topology.sites.length > platformLimits.maxNodes) throw new Error('Topology node limit exceeded.')
+    checkNodes(topology.hubs.length + topology.spokes.length + topology.sites.length, topology.inventory)
     return { mode: 'vwan', topology }
   }
   const topology = parseAzNetTopology(document.topology)
   const errors = validateAzNetTopology(topology)
   if (errors.length) throw new Error(errors.slice(0, 20).join('\n'))
-  if (topology.vnets.length + topology.sites.length + topology.vwanHubs.length > platformLimits.maxNodes) throw new Error('Topology node limit exceeded.')
+  checkNodes(topology.vnets.length + topology.sites.length + topology.vwanHubs.length, topology.inventory)
   return { mode: document.mode, topology }
 }
 
@@ -144,6 +151,7 @@ export function executePlatform(input: unknown): PlatformResult {
     if (document.mode === 'vwan') {
       const simulation = simulate(document.topology)
       result.simulation = simulation
+      if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)
       result.limitations = simulation.warnings
       if (!simulation.converged) result.status = 'not assessed'
       for (const requirement of request.requirements ?? []) {
@@ -162,22 +170,17 @@ export function executePlatform(input: unknown): PlatformResult {
     } else {
       const simulation = simulateAzNet(document.topology)
       result.simulation = simulation
+      if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)
       result.limitations = simulation.warnings
       const endpoints = getAzNetEndpoints(document.topology).filter((endpoint) => ['workload', 'site'].includes(endpoint.group))
       for (const requirement of request.requirements ?? []) {
         if (requirement.kind === 'route') {
           if (requirement.hubTableId !== undefined) {
             const hub = document.topology.vwanHubs.find((hub) => hub.id === requirement.table)
-            const table = hub ? simulation.vwanHubRibs[hub.id] : undefined
-            const unsupportedScope = hub && (
-              ['routeTables', 'routeTablesStatus', 'routeMapAssignments'].some((field) => field in hub)
-              || document.topology.vnets.some((vnet) => vnet.vwanHubAttachment?.enabled && vnet.vwanHubAttachment.hubId === hub.id
-                && ('hubRouting' in vnet || 'hubRouting' in vnet.vwanHubAttachment))
-              || [...document.topology.erLinks, ...document.topology.vpnConnections].some((link) =>
-                link.enabled && link.targetKind === 'vwan-hub' && link.targetId === hub.id && 'hubRouting' in link)
-            )
-            if (!table || requirement.hubTableId !== DEFAULT_HUB_TABLE || unsupportedScope || simulation.warnings.length) {
-              result.assessments.push(unknown(requirement, 'An owned mixed hub default RIB with modeled routing scope is required; custom or retained unsupported hub configuration cannot be certified.'))
+            const table = hub ? simulation.vwanHubTables[hub.id]?.[requirement.hubTableId] : undefined
+            const coverage = hub ? simulation.vwanHubTableCoverage[hub.id]?.[requirement.hubTableId] : undefined
+            if (!table || !coverage?.complete || simulation.warnings.length) {
+              result.assessments.push(unknown(requirement, 'An owned mixed hub table with complete modeled routing scope is required.'))
             } else {
               const routes = table.filter((route) => route.prefix === requirement.prefix && route.preferred)
               result.assessments.push({ id: requirement.id, outcome: (!!routes.length === (requirement.expectation === 'present')) ? 'satisfied' : 'violated', evidence: routes, reasons: [] })
@@ -202,6 +205,10 @@ export function executePlatform(input: unknown): PlatformResult {
           continue
         }
         const pair = traceAzNetPair(document.topology, simulation, source, requirement.sourceAddress, target, requirement.destinationAddress)
+        if ([pair.forward, pair.reverse].some((trace) => trace.status === 'not-assessed')) {
+          result.assessments.push(unknown(requirement, 'Incomplete mixed hub routing coverage prevents reachability or isolation certification.', pair))
+          continue
+        }
         const reachable = pair.forward.status === 'delivered' && pair.reverse.status === 'delivered'
         const waypoint = !requirement.requiredApplianceId || [pair.forward, pair.reverse].every((trace) => trace.traversedApplianceIds.includes(requirement.requiredApplianceId!))
         const satisfied = requirement.expectation === 'allow' ? reachable && waypoint : pair.forward.status !== 'delivered'

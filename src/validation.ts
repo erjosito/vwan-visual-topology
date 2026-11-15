@@ -1,5 +1,6 @@
 import type { DiagramLayout, HubRouteTable, HubRoutingConfiguration, LayoutMode, PrependRule, RouteMap, RouteMapAssignment, RouteMapRule, Topology } from './model'
 import { attachmentHubRouting, hubRouteTables, propagatesLocally, propagationLabels } from './hub-routing'
+import { validateInventory, type InventorySubnet, type NetworkInventory } from './inventory'
 
 const canonicalHubTable = (value: string) => value.toLowerCase() === 'defaultroutetable' ? 'defaultRouteTable'
   : value.toLowerCase() === 'noneroutetable' ? 'noneRouteTable' : value
@@ -243,6 +244,10 @@ export function validateTopology(input: unknown): Topology {
       ...(nvaSpokeIds?.length ? { nvaSpokeIds } : {}),
       ...(spoke.propagateDefaultRoute === true ? { propagateDefaultRoute: true } : {}),
       ...(spoke.hubRouting === undefined ? {} : { hubRouting: hubRouting(spoke.hubRouting, hubId) }),
+      ...(spoke.subnets === undefined ? {} : { subnets: array(spoke.subnets, 512, 'Spoke subnets').map((value): InventorySubnet => {
+        const subnet = record(value)
+        return { id: text(subnet.id, 'Subnet ID'), name: text(subnet.name, 'Subnet name'), prefix: text(subnet.prefix, 'Subnet prefix') }
+      }) }),
     }
   })
   for (const spoke of spokes) {
@@ -654,5 +659,7 @@ export function validateTopology(input: unknown): Topology {
     })
     if (new Set(signatures).size > 1) fail('Branch connections in a hub must propagate to the same effective route-table destinations.')
   }
+  if (root.inventory !== undefined) topology.inventory = root.inventory as NetworkInventory
+  validateInventory(topology)
   return topology
 }
