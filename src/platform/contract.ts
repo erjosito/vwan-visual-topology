@@ -4,7 +4,7 @@ import type { AzNetTopology } from '../azure-net/model'
 import type { AzEndpointRef } from '../azure-net/engine'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.14.1'
+export const engineVersion = '2026.11.15.1'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -72,7 +72,7 @@ export const capabilities = {
   modes: ['vwan', 'hub-spoke', 'full'],
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
   operations: ['validate', 'simulate', 'evaluate'],
-  requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix table presence/absence'],
+  requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or hub scope; mixed hubs support explicit defaultRouteTable only'],
   outcomes: ['satisfied', 'violated', 'not assessed'],
   limits: platformLimits,
   privacy: 'Local deterministic computation. No HTTP listener, files, Azure credentials or cloud calls. An external AI may receive tool inputs/results.',

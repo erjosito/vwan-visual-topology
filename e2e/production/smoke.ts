@@ -1,5 +1,6 @@
 import { expect, test as base, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { assetGraph } from '../../scripts/production-assets.mjs'
 import { exercises } from '../../src/learning/exercises'
 
@@ -205,6 +206,25 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(workers.some((url) => /\/assets\/browser-worker-.*\.js$/.test(url))).toBe(true)
     expect(workers.some((url) => /\/assets\/diagnostics-worker-.*\.js$/.test(url))).toBe(true)
     expect(workers.every((url) => new URL(url).origin === 'http://127.0.0.1:4174')).toBe(true)
+    if (mode === 'full') {
+      const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'azure-net', 'hybrid-vwan-and-hub-spoke.json'), 'utf8'))
+      const hub = topology.vwanHubs[0]
+      const vnet = topology.vnets.find((vnet: { vwanHubAttachment?: { hubId: string } }) => vnet.vwanHubAttachment?.hubId === hub.id)
+      const request = { contractVersion: 1, operation: 'evaluate', document: { mode, topology }, requirements: [
+        { id: 'hub', kind: 'route', table: hub.id, hubTableId: 'defaultRouteTable', prefix: vnet.prefixes[0], expectation: 'present' },
+        { id: 'custom', kind: 'route', table: hub.id, hubTableId: 'custom', prefix: vnet.prefixes[0], expectation: 'absent' },
+        { id: 'subnet', kind: 'route', table: vnet.subnets[0].id, hubTableId: 'defaultRouteTable', prefix: vnet.prefixes[0], expectation: 'present' },
+      ] }
+      const assessed = await page.evaluate(({ url, request }) => new Promise<{ assessments: { outcome: string }[]; document: unknown }>((resolve, reject) => {
+        const worker = new Worker(url!, { type: 'module' })
+        const timer = setTimeout(() => { worker.terminate(); reject(new Error('Production route assessment timed out')) }, 15000)
+        worker.onerror = () => { clearTimeout(timer); worker.terminate(); reject(new Error('Production route worker failed')) }
+        worker.onmessage = ({ data }) => { clearTimeout(timer); worker.terminate(); resolve(data) }
+        worker.postMessage(request)
+      }), { url: workers.find((url) => /\/assets\/browser-worker-.*\.js$/.test(url)), request })
+      expect(assessed.assessments.map((goal) => goal.outcome)).toEqual(['satisfied', 'not assessed', 'not assessed'])
+      expect(assessed.document).toEqual(request.document)
+    }
 
     await context.setOffline(true)
     const beforeDiscovery = await page.evaluate((key) => localStorage.getItem(key), storageKey)

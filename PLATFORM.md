@@ -127,7 +127,14 @@ document; `simulate` adds engine tables; `evaluate` also requires explicit goals
   `requiredApplianceId` (Azure-network) checks modeled inspection.
 - `route`: unique ID, exact IPv4 prefix, `present`/`absent`, and table identity.
   VWAN uses a hub ID plus optional `hubTableId`; Azure-network uses its exact
-  subnet table key (`vnetId/subnetId`).
+  simulation subnet table key (the original subnet ID). For an Azure-network
+  hub assertion, use the original hub ID as `table` and explicitly set
+  `hubTableId: "defaultRouteTable"`. This inspects the current mixed engine's
+  single hub RIB, not dedicated VWAN custom-table/propagation parity.
+  `hubTableId` never falls back to a subnet table. Missing owners, custom/None
+  scopes and retained unsupported hub-table/policy/attachment configuration
+  remain `not assessed` for both presence and absence. Native documents and
+  unknown extension fields are preserved; retention is not semantic support.
 
 Each goal is `satisfied`, `violated` or `not assessed`, with evidence/reasons.
 Missing or ambiguous ownership, unobserved imported controls, incomplete

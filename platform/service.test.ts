@@ -9,6 +9,7 @@ import { parseAzNetTopology } from '../src/azure-net/admission'
 import { translate } from '../src/messages'
 import { PlatformJobs } from './jobs'
 import type { PlatformRequest } from '../src/platform/contract'
+import { engineVersion } from '../src/platform/contract'
 import { resolve } from 'node:path'
 
 const require = createRequire(import.meta.url)
@@ -40,6 +41,27 @@ describe('browser-free platform contract', () => {
     expect(translate('ja', 'Shortest learned AS path ({0} ASNs).', 2)).not.toEqual(translate('en', 'Shortest learned AS path ({0} ASNs).', 2))
     expect(translate('en', '{0}', '{1}', 'private')).toBe('{1}')
     expect(executePlatform({ ...request(), locale: 'ja' }).simulation).toEqual(executePlatform({ ...request(), locale: 'en' }).simulation)
+  })
+
+  it('keeps owned mixed route goals identical in source, compiled Node and isolated worker execution', async () => {
+    const topology = sample('azure-net/hybrid-vwan-and-hub-spoke.json')
+    const hub = topology.vwanHubs[0]
+    const vnet = topology.vnets.find((vnet: { vwanHubAttachment?: { hubId: string } }) => vnet.vwanHubAttachment?.hubId === hub.id)
+    const input: PlatformRequest = {
+      contractVersion: 1, engineVersion, operation: 'evaluate', document: { mode: 'full', topology },
+      requirements: [
+        { id: 'hub', kind: 'route', table: hub.id, hubTableId: 'defaultRouteTable', prefix: vnet.prefixes[0], expectation: 'present' },
+        { id: 'unsupported', kind: 'route', table: hub.id, hubTableId: 'custom', prefix: vnet.prefixes[0], expectation: 'absent' },
+        { id: 'mismatch', kind: 'route', table: vnet.subnets[0].id, hubTableId: 'defaultRouteTable', prefix: vnet.prefixes[0], expectation: 'present' },
+      ],
+    }
+    const result = executePlatform(input)
+    expect(result.assessments.map((goal) => goal.outcome)).toEqual(['satisfied', 'not assessed', 'not assessed'])
+    expect(result.document).toEqual(input.document)
+    expect(compiled.executePlatform(input)).toEqual(result)
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try { expect(await jobs.run(input)).toEqual(result) }
+    finally { jobs.close() }
   })
 
   it('rejects malformed versions, duplicate/missing requirements, unsafe JSON and input limits', () => {
