@@ -216,6 +216,31 @@ temporary output before rejection; the existing VWAN UI has a narrower 2 MB
 file-import limit (Hub & Spoke/Full use 4 MB). Review/import retains those
 existing limits; the broker ceiling does not enlarge the UI's admission limit.
 Neither ceiling is a filesystem quota.
+
+The standalone `collect-azure-network.ps1` pins an explicit subscription (or
+resolves the current subscription once) on every resource read. It projects
+allowlisted non-secret fields at the CLI and serialization boundaries. Limits
+are 500 subprocesses, 20 minutes overall, 60 seconds per subprocess by default,
+2 million stdout characters, 65,536 stderr characters, 6 MB retained projected data and an
+8 MB final UTF-8 envelope; command/runtime/output limits can be lowered with
+the documented script parameters. Both process pipes are drained concurrently;
+timed-out or oversized subprocess trees are terminated. No CLI error text,
+credentials, account user records or automatic extension installation is exported.
+
+The existing capture v2 format gains additive `observationVersion: 1`,
+selected subscription/tenant/cloud context, configuration completeness,
+per-section states and per-NIC observation coverage. Succeeded-empty,
+denied, failed, timed-out, truncated, unsupported and not-requested results are
+distinct. Collection is non-atomic and completeness is a collector report,
+not a certification of the network. Import accepts older v2 captures with
+unknown coverage and disables absence-based mismatch claims for them.
+Missing/unsupported address ownership stays explicit in import warnings and
+`unknownAddressing`: unrepresentable resources/routes are omitted from the
+simulated subset, not assigned demo prefixes or endpoint IPs. Partial or
+unsupported configurations cannot earn a complete-match badge. Only adequately
+covered observations establish absent routes; present legacy observations
+remain usable. Preserve the original local capture for its inventory/provenance.
+
 Known credential fields are stripped, but captures still contain sensitive
 network/resource identifiers, observations and limitations. Partial captures
 retain warnings and must pass the existing importer before handoff.
@@ -227,6 +252,35 @@ operations and sanitized captures; a user-selected live scope/endpoint-policy
 validation remains a release gate. Explicit CLI reads can contact Azure identity
 and management endpoints according to the user's existing Azure/cloud policy.
 Disabling renderer networking does not isolate the user's CLI from Azure.
+
+### Exact web artifact and startup gates
+
+`npm run test:production` serves the already-built `dist` with its SWA static
+headers, asset caching and navigation-fallback exclusions. It does not rebuild,
+substitute the Vite dev server, emulate Azure authentication/APIs, or claim Azure
+compression/latency equivalence. CI runs the existing semantic suite and this
+additional exact-artifact suite before uploading/deploying that same `dist`.
+Production test traces have a separate output directory so other runners cannot
+delete their downloads or traces.
+
+The blocking external `theme-bootstrap.js` resolves stored/system theme before
+React/CSS paint without loosening the self-only script CSP. Inactive workspace
+roots load on demand, retaining shared dependencies, mode-specific state,
+recoverable loading/failure controls, native JSON/history and offline workers.
+
+`npm run measure:production -- <output.json>` records the initial referenced
+asset graph, settled cold-start JS/CSS requests per mode, first optional-panel
+and first inactive-workspace latency. `PRODUCTION_ROOT` selects an existing
+artifact for baseline reproduction. Gzip sizes are computed locally, not
+observed Azure transfers; loopback timing samples are not a network-performance
+promise. Compared with the published 8d9d76d artifact, the measured entry graph
+fell from 354,192 to about 128,061 local-gzip bytes, and settled per-mode requests
+from 354,192 to about 293,275–294,716 bytes. The initial request graph excludes the
+inactive workspace; the first switch now pays its loading cost. Measured local
+ready/panel/switch timings are retained separately, with neither speed nor
+peak-memory improvements assumed. CI enforces bounded entry/per-mode byte
+budgets and tests defaults/overrides, pre-paint theme, workers, optional panels,
+failure recovery and cached offline operations.
 
 ## Storage, installation and maintenance
 

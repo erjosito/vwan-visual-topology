@@ -1,4 +1,5 @@
 import { azureObjectId } from '../azure-import'
+import { cidr, ipv4 } from '../validation'
 import type { AzSimulationResult } from './engine'
 import {
   validateAzNetTopology,
@@ -35,6 +36,18 @@ export interface AzCapturedNicObservation {
   privateIp?: string
   enableIPForwarding?: boolean
   effectiveRoutes: AzCapturedEffectiveRoute[]
+  observation?: AzCaptureSection
+}
+
+export interface AzCaptureSection {
+  state: 'succeeded' | 'empty' | 'denied' | 'failed' | 'timed-out' | 'truncated' | 'unsupported' | 'not-requested'
+  complete: boolean
+}
+
+export interface AzUnknownAddressing {
+  resourceId: string
+  resourceName: string
+  field: string
 }
 
 export interface AzCapturedBgpPeerRoute {
@@ -58,12 +71,17 @@ export interface AzCapturedObservations {
   arsAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
+  observationVersion?: 1
+  configurationComplete?: boolean
+  sections?: Record<string, AzCaptureSection>
+  unknownAddressing?: AzUnknownAddressing[]
 }
 
 export interface AzNetImportResult {
   topology: AzNetTopology
   warnings: string[]
   observations?: AzCapturedObservations
+  unknownAddressing: AzUnknownAddressing[]
 }
 
 export interface AzSubnetRouteComparisonRow {
@@ -78,6 +96,7 @@ export interface AzSubnetRouteComparisonRow {
   simState: string
   matched: boolean
   note?: string
+  assessment?: 'compared' | 'unknown'
 }
 
 export interface AzSubnetComparisonSummary {
@@ -88,6 +107,8 @@ export interface AzSubnetComparisonSummary {
   matchedCount: number
   mismatchCount: number
   rows: AzSubnetRouteComparisonRow[]
+  coverage: 'complete' | 'partial' | 'unknown'
+  unknownCount: number
 }
 
 export interface AzNetComparisonReport {
@@ -96,6 +117,7 @@ export interface AzNetComparisonReport {
   subnetComparisons: AzSubnetComparisonSummary[]
   totalMatchedRoutes: number
   totalMismatchedRoutes: number
+  totalUnknownRoutes: number
 }
 
 function asObject(val: unknown, label: string): Record<string, unknown> {
@@ -111,6 +133,16 @@ function asArray(val: unknown): unknown[] {
 
 function asString(val: unknown, fallback = ''): string {
   return typeof val === 'string' ? val : fallback
+}
+
+function captureSection(value: unknown): AzCaptureSection {
+  const section = asObject(value, 'Capture section')
+  const states: AzCaptureSection['state'][] = ['succeeded', 'empty', 'denied', 'failed', 'timed-out', 'truncated', 'unsupported', 'not-requested']
+  if (!states.includes(section.state as AzCaptureSection['state']) || typeof section.complete !== 'boolean' ||
+      (section.complete && section.state !== 'succeeded' && section.state !== 'empty')) {
+    throw new Error('Invalid capture section state/completeness.')
+  }
+  return { state: section.state as AzCaptureSection['state'], complete: section.complete }
 }
 
 function armResourceName(armId: string): string {
@@ -163,6 +195,22 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
 
   const warnings: string[] = asArray(root.warnings).map((w) => String(w))
   const rgName = asString(root.resourceGroup, 'azure-rg')
+  const unknownAddressing: AzUnknownAddressing[] = []
+  const unknown = (resourceId: string, resourceName: string, field: string) => {
+    unknownAddressing.push({ resourceId, resourceName, field })
+    warnings.push(`"${resourceName}" has unknown or unsupported ${field}; no address ownership was invented for simulation.`)
+  }
+  if (root.observationVersion !== undefined && root.observationVersion !== 1) throw new Error('Unsupported capture observationVersion.')
+  const sections = root.observationVersion === 1
+    ? Object.fromEntries(Object.entries(asObject(root.sections, 'Capture sections')).map(([key, value]) => [key, captureSection(value)]))
+    : undefined
+  const configurationComplete = sections
+    ? root.configurationComplete === true && asObject(root.context, 'Capture context').cloud === 'AzureCloud' &&
+      ['account', 'vnets', 'routeTables', 'vnetGateways', 'localNetworkGateways', 'vpnConnections', 'routeServers', 'privateEndpoints', 'networkInterfaces'].every((key) => sections[key]?.complete)
+      && Object.entries(sections).filter(([key]) => !/^(nicEffectiveRoutes|arsLearnedRoutes|arsAdvertisedRoutes|vngLearnedRoutes|vngBgpPeerStatus)(:|$)/.test(key)).every(([, section]) => section.complete)
+    : undefined
+  if (!sections) warnings.push('Legacy v2 capture has unknown observation coverage. Present routes can be compared; absence is not evidence of a mismatch.')
+  else if (!configurationComplete) warnings.push('Configuration capture is incomplete or unsupported; route comparisons cannot establish a mismatch or complete agreement.')
 
   // 1. Parse Route Tables
   const udrTables: AzUdrTable[] = []
@@ -179,21 +227,27 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     const disableBgp = Boolean(props.disableBgpRoutePropagation ?? rt.disableBgpRoutePropagation)
     const rawRoutes = asArray(props.routes ?? rt.routes)
 
-    const routes: AzUdrRoute[] = rawRoutes.map((rawRoute, idx) => {
+    const routes: AzUdrRoute[] = rawRoutes.flatMap((rawRoute, idx) => {
       const r = asObject(rawRoute, 'Route')
       const rProps = r.properties && typeof r.properties === 'object' ? (r.properties as Record<string, unknown>) : r
       const rName = asString(r.name, `route-${idx + 1}`)
-      const prefix = asString(rProps.addressPrefix, '0.0.0.0/0')
-      const nextHopType = normalizeNextHopType(asString(rProps.nextHopType, 'None'))
+      const prefix = asString(rProps.addressPrefix)
+      const rawNextHop = asString(rProps.nextHopType)
+      const nextHopType = normalizeNextHopType(rawNextHop)
       const nextHopIp = asString(rProps.nextHopIpAddress) || undefined
-      return {
+      if (!cidr(prefix) || !['VirtualAppliance', 'VirtualNetworkGateway', 'VnetLocal', 'Internet', 'None'].includes(rawNextHop) ||
+          (nextHopType === 'VirtualAppliance' && ipv4(nextHopIp ?? '') === undefined)) {
+        unknown(armId, rName, 'route prefix/next hop')
+        return []
+      }
+      return [{
         id: `${id}-r-${idx + 1}`,
         name: rName,
         prefix,
         nextHopType,
         nextHopIp,
         enabled: true,
-      }
+      }]
     })
 
     udrTables.push({
@@ -217,8 +271,11 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     const customConfigs = asArray(props.customDnsConfigs)
     const firstIp =
       asString(pe.privateIp) ||
-      asString((customConfigs[0] as Record<string, unknown> | undefined)?.ipAddresses?.[0 as never]) ||
-      '10.0.0.4'
+      asString((customConfigs[0] as Record<string, unknown> | undefined)?.ipAddresses?.[0 as never])
+    if (ipv4(firstIp) === undefined) {
+      unknown(asString(pe.id), peName, 'private IP')
+      continue
+    }
     const serviceName = asString(pe.serviceName, 'privatelink.azure.net')
     const list = pesBySubnetArmId.get(subArmId) ?? []
     list.push({
@@ -306,7 +363,6 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       // Fallback: inspect VNets for a RouteServerSubnet whose ipConfigurations reference this ARS
       const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
       const arsRegex = new RegExp(`/virtualHubs/${escapedName}/`, 'i')
-      let fallbackRsVnetName = ''
       for (const rawVnet of asArray(root.vnets)) {
         const v = asObject(rawVnet, 'VirtualNetwork')
         const vName = asString(v.name, armResourceName(asString(v.id)))
@@ -314,7 +370,6 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
         for (const rawSub of asArray(vProps.subnets ?? v.subnets)) {
           const s = asObject(rawSub, 'Subnet')
           if (asString(s.name) === 'RouteServerSubnet') {
-            if (!fallbackRsVnetName) fallbackRsVnetName = vName
             const sProps = s.properties && typeof s.properties === 'object' ? (s.properties as Record<string, unknown>) : s
             for (const rawIpc of asArray(sProps.ipConfigurations ?? s.ipConfigurations)) {
               const ipc = asObject(rawIpc, 'IpConfig')
@@ -327,9 +382,6 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
           if (vnetName) break
         }
         if (vnetName) break
-      }
-      if (!vnetName && fallbackRsVnetName) {
-        vnetName = fallbackRsVnetName
       }
     }
     const peers = asArray(ars.peerings ?? props.bgpConnections).map((rawPeer) => {
@@ -348,6 +400,8 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
         hubRoutingPreference,
         peers,
       })
+    } else {
+      unknown(asString(ars.id), name, 'Route Server subnet ownership')
     }
   }
 
@@ -379,20 +433,29 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
         ? (props.addressSpace as Record<string, unknown>)
         : undefined
     const prefixes = asArray(addrSpace?.addressPrefixes ?? v.addressPrefixes).map((p) => String(p))
+    if (!prefixes.length || prefixes.some((prefix) => !cidr(prefix))) {
+      unknown(armId, name, 'address space')
+      vnetIdByArmId.delete(armId.toLowerCase())
+      vnetIdByName.delete(name.toLowerCase())
+      continue
+    }
 
     const rawSubnets = asArray(props.subnets ?? v.subnets)
-    const subnets: AzSubnet[] = rawSubnets.map((rawSub) => {
+    const subnets: AzSubnet[] = rawSubnets.flatMap((rawSub) => {
       const s = asObject(rawSub, 'Subnet')
       const sArmId = asString(s.id)
       const sName = asString(s.name, armResourceName(sArmId))
       const sId = sArmId ? azureObjectId('sub', sArmId) : `${id}-sub-${sName.toLowerCase()}`
-      if (sArmId) subnetIdByArmId.set(sArmId.toLowerCase(), sId)
 
       const sProps = s.properties && typeof s.properties === 'object' ? (s.properties as Record<string, unknown>) : s
       const prefix =
         asString(sProps.addressPrefix) ||
-        asString(asArray(sProps.addressPrefixes)[0]) ||
-        '10.0.0.0/24'
+        asString(asArray(sProps.addressPrefixes)[0])
+      if (!cidr(prefix) || asArray(sProps.addressPrefixes).length > 1) {
+        unknown(sArmId, sName, 'subnet address space')
+        return []
+      }
+      if (sArmId) subnetIdByArmId.set(sArmId.toLowerCase(), sId)
       const rtRef =
         sProps.routeTable && typeof sProps.routeTable === 'object'
           ? (sProps.routeTable as Record<string, unknown>)
@@ -410,14 +473,14 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
 
       const pes = sArmId ? pesBySubnetArmId.get(sArmId.toLowerCase()) : undefined
 
-      return {
+      return [{
         id: sId,
         name: sName,
         prefix,
         ...(routeTableId ? { routeTableId } : {}),
         ...(privateEndpointNetworkPolicies ? { privateEndpointNetworkPolicies } : {}),
         ...(pes && pes.length > 0 ? { privateEndpoints: pes } : {}),
-      }
+      }]
     })
 
     const gateways = gatewaysByVnetName.get(name.toLowerCase()) ?? []
@@ -502,7 +565,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       id,
       name,
       region: asString(v.location, 'swedencentral'),
-      prefixes: prefixes.length > 0 ? prefixes : ['10.0.0.0/16'],
+      prefixes,
       role,
       subnets,
       gateways,
@@ -638,13 +701,14 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       : []
 
     const mergedPrefixes = Array.from(new Set([...staticPrefixes, ...learnedPrefixes]))
+    if (!mergedPrefixes.length) unknown(armId, name, 'on-premises prefixes')
     const siteId = `site-${name.toLowerCase()}`
     if (armId) siteIdByArmId.set(armId.toLowerCase(), siteId)
     sites.push({
       id: siteId,
       name,
       asn,
-      prefixes: mergedPrefixes.length > 0 ? mergedPrefixes : ['10.250.0.0/16'],
+      prefixes: mergedPrefixes,
     })
   }
 
@@ -708,6 +772,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
               name: asString(er.name) || undefined,
             }
           }),
+          ...(sections ? { observation: captureSection(o.observation) } : {}),
         }
       },
     )
@@ -720,6 +785,8 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       nicEffectiveRoutes,
       arsLearnedRoutes: arsLearned,
       vngLearnedRoutes: vngLearned,
+      ...(sections ? { observationVersion: 1, configurationComplete, sections } : {}),
+      unknownAddressing,
     }
   }
 
@@ -742,7 +809,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
   const validationIssues = validateAzNetTopology(topology)
   warnings.push(...validationIssues)
 
-  return { topology, warnings, observations }
+  return { topology, warnings, observations, unknownAddressing }
 }
 
 function normalizeAzureSourceToSim(azureSource: string): string {
@@ -790,6 +857,7 @@ export function compareAzNetWithObservations(
   const subnetComparisons: AzSubnetComparisonSummary[] = []
   let totalMatchedRoutes = 0
   let totalMismatchedRoutes = 0
+  let totalUnknownRoutes = 0
 
   // Collect BGP peer /32 host prefixes from VNG learned routes (origin="Network", /32) or site tunnel endpoints
   const siteBgpPeerHostPrefixes = new Set<string>()
@@ -840,6 +908,11 @@ export function compareAzNetWithObservations(
     const simRoutes = simTable?.routes ?? []
     const matchedSimRouteIds = new Set<string>()
     const rows: AzSubnetRouteComparisonRow[] = []
+    const configurationKnown = observations.configurationComplete !== false && !observations.unknownAddressing?.length
+    const coverage = observations.observationVersion === 1
+      ? nicObs.observation?.complete && configurationKnown ? 'complete' : 'partial'
+      : 'unknown'
+    const assessPresent = configurationKnown && (!nicObs.observation || nicObs.observation.complete)
 
     const isArsRouteMatch = (
       sr: (typeof simRoutes)[number],
@@ -942,6 +1015,7 @@ export function compareAzNetWithObservations(
           azureState: azRoute.state,
           simState,
           matched,
+          assessment: assessPresent && (simMatch || coverage === 'complete') ? 'compared' : 'unknown',
           note: isArsEquivalent
             ? `Azure programs ARS-learned NVA routes as VirtualNetworkGateway -> ${azNextHopIp}`
             : isUdrVngBlackholeEquivalent
@@ -954,7 +1028,7 @@ export function compareAzNetWithObservations(
     }
 
     // Also flag any active simulator route that was completely absent from Azure's effective routes
-    for (const sr of simRoutes) {
+    for (const sr of coverage === 'complete' ? simRoutes : []) {
       if (sr.active && !matchedSimRouteIds.has(sr.id)) {
         if (sr.source === 'System' && isIgnorableAzureSystemPurposeRoute(sr.prefix, sr.nextHopType, 'Default', siteBgpPeerHostPrefixes)) {
           continue
@@ -991,10 +1065,12 @@ export function compareAzNetWithObservations(
       }
     }
 
-    const matchedCount = rows.filter((r) => r.matched).length
-    const mismatchCount = rows.filter((r) => !r.matched).length
+    const matchedCount = rows.filter((r) => r.matched && r.assessment !== 'unknown').length
+    const mismatchCount = rows.filter((r) => !r.matched && r.assessment !== 'unknown').length
+    const unknownCount = rows.filter((r) => r.assessment === 'unknown').length
     totalMatchedRoutes += matchedCount
     totalMismatchedRoutes += mismatchCount
+    totalUnknownRoutes += unknownCount
 
     subnetComparisons.push({
       vnetName: nicObs.vnetName,
@@ -1004,6 +1080,8 @@ export function compareAzNetWithObservations(
       matchedCount,
       mismatchCount,
       rows,
+      coverage,
+      unknownCount,
     })
   }
 
@@ -1013,5 +1091,6 @@ export function compareAzNetWithObservations(
     subnetComparisons,
     totalMatchedRoutes,
     totalMismatchedRoutes,
+    totalUnknownRoutes,
   }
 }

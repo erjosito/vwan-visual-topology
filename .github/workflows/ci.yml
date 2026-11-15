@@ -36,6 +36,20 @@ jobs:
           docker run --rm --init --ipc=host -e CI=true \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
             npm run test:e2e -- --workers=2
+      - name: Smoke exact production artifact with SWA headers
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          docker run --rm --init --ipc=host -e CI=true \
+            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
+            npm run test:production -- --workers=2
+          docker run --rm --init --ipc=host \
+            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
+            npm run measure:production -- test-results/production-measurements.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: production-measurements
+          path: test-results/production-measurements.json
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: static-site
@@ -45,7 +59,9 @@ jobs:
         if: failure()
         with:
           name: playwright-results
-          path: test-results/
+          path: |
+            test-results/
+            test-artifacts/production-playwright/
           retention-days: 7
 
   desktop:

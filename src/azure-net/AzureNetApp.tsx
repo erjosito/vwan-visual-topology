@@ -5747,7 +5747,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       overflowX: 'auto',
                     }}
                   >
-                    {`pwsh ./scripts/collect-azure-network.ps1 -ResourceGroupName <rg> -IncludeEffectiveRoutes -OutputPath azure-network-capture.json`}
+                    {`pwsh ./scripts/collect-azure-network.ps1 -ResourceGroupName <rg> -IncludeEffectiveRoutes -OutputFile azure-network-capture.json`}
                   </pre>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <a
@@ -5806,7 +5806,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                       >
                         <strong>
                           NIC Effective Route Comparison ({captureComparison.totalMatchedRoutes}{' '}
-                          matched, {captureComparison.totalMismatchedRoutes} mismatched)
+                          matched, {captureComparison.totalMismatchedRoutes} mismatched
+                          {captureComparison.totalUnknownRoutes > 0 && `, ${captureComparison.totalUnknownRoutes} unassessed`})
                         </strong>
                       </div>
                       {captureComparison.subnetComparisons.map((nic) => (
@@ -5817,7 +5818,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                             padding: 8,
                             background: 'var(--surface)',
                             borderRadius: 6,
-                            border: `1px solid ${nic.mismatchCount === 0 ? 'var(--success)' : 'var(--border)'}`,
+                            border: `1px solid ${nic.coverage === 'complete' && nic.mismatchCount === 0 ? 'var(--success)' : 'var(--border)'}`,
                           }}
                         >
                           <div
@@ -5836,9 +5837,11 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               )}
                             </span>
                             <span
-                              className={`aznet-badge ${nic.mismatchCount === 0 ? 'ok' : 'error'}`}
+                              className={`aznet-badge ${nic.coverage !== 'complete' ? 'info' : nic.mismatchCount === 0 ? 'ok' : 'error'}`}
                             >
-                              {nic.mismatchCount === 0
+                              {nic.coverage !== 'complete'
+                                ? `COVERAGE ${nic.coverage.toUpperCase()} (${nic.matchedCount} matched)`
+                                : nic.mismatchCount === 0
                                 ? `MATCHED (${nic.matchedCount})`
                                 : `${nic.mismatchCount} DIFF`}
                             </span>
@@ -5856,8 +5859,8 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
                               {nic.rows.map((d, idx) => (
                                 <tr key={idx}>
                                   <td>
-                                    <span className={`aznet-badge ${d.matched ? 'ok' : 'error'}`}>
-                                      {d.matched ? 'match' : 'diff'}
+                                    <span className={`aznet-badge ${d.assessment === 'unknown' ? 'info' : d.matched ? 'ok' : 'error'}`}>
+                                      {d.assessment === 'unknown' ? 'unassessed' : d.matched ? 'match' : 'diff'}
                                     </span>
                                   </td>
                                   <td>
