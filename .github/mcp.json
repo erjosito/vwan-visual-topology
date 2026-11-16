@@ -4,7 +4,7 @@
       "type": "local",
       "command": "node",
       "args": ["platform-dist/mcp.cjs"],
-      "tools": ["get_capabilities", "get_schema", "start_simulation", "get_job", "get_evidence", "cancel_job"]
+      "tools": ["get_capabilities", "get_schema", "start_simulation", "get_job", "get_evidence", "cancel_job", "start_render", "get_render_job", "get_artifact", "cancel_render", "release_render"]
     }
   }
 }

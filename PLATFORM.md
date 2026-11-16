@@ -606,11 +606,62 @@ stdio server. `.github/mcp.json` declares the repository-local server, launched
 from this repository root after building. Review/enable it through your client's
 trust flow; the configuration does not grant blanket permissions.
 
-The six tools are `get_capabilities`, `get_schema`, `start_simulation`,
+The simulation tools are `get_capabilities`, `get_schema`, `start_simulation`,
 `get_job`, `get_evidence`, `cancel_job`. They provide native examples,
 bounded JSON evidence chunks (up to 16,000 characters), explicit job status
 and requirement assessments. Concatenate all requested chunks before parsing
 JSON. Transport buffering is bounded independently of job admission.
+
+### Animated flow artifacts
+
+The path explorer offers **Export flow diagram** for an individual owned pair
+in either native provider. GIF and animated SVG loops last 1.5 or 2 seconds;
+PNG exports a still frame. Both clients use the same logical export scene and
+motion geometry, rather than a screenshot of the interactive canvas. Firewall
+inspection is expanded as a separate node. Forward/return evidence is independent;
+unknown legs have no moving traffic, and blocked legs stop at their last
+evidenced node. Up to six directional alternatives are shown without choosing a
+favorable ECMP path. Longer paths are rejected rather than silently truncated.
+The view does not expand physical interfaces or gateway internals.
+
+MCP workflow:
+
+1. Evaluate an explicit `flow` requirement and retain its job handle and ID.
+2. Call `start_render` with `handle`, `assessmentId`, and optional
+   `options: {format: "gif", durationMs: 2000, width: 1200}`.
+3. Read `get_render_job` until finished; it reports the source engine/revision,
+   assessment outcome, per-leg logical nodes, artifact length and SHA-256.
+4. Fetch `get_artifact` byte chunks (maximum 12,000 bytes). **Decode each base64
+   chunk separately**, concatenate decoded bytes in offset order, then check
+   total length and SHA-256. A caller may deliberately save the result.
+5. Use `release_render` after retrieval; `cancel_render` cancels unfinished work
+   without changing the source simulation.
+
+Rendering is optional and isolated from routing computation. Node uses a bounded
+worker with local resvg rasterization and gifenc encoding; no browser executable,
+HTTP listener, remote rendering service or shell encoder is required. The web
+client uses a local Canvas raster and the same scene/frame/encoding logic.
+Static content is rasterized once; only circle pixels change between frames.
+GIFs use 20 fps (30 or 40 frames). SVG/PNG require no GIF encoding.
+
+The codec has its own lazy bundle, and capability discovery imports only the
+small options contract, not rendering geometry. Export controls remain available
+with the workspace when offline; rendering/encoding is loaded on deliberate
+export. Measured workspace startup is about 322 KB local gzip with these controls,
+so its browser regression ceiling is 325 KB (previously 320 KB). The 140 KB
+entry-only ceiling and 1.2 MB raw workspace ceiling are unchanged; both startup
+graphs explicitly exclude the GIF codec.
+
+Render limits: width 640-1400, at most ten nodes per lane, 8 MB output,
+one active render, four retained handles, 30 seconds per job, ten-minute expiry.
+Release artifacts to free retained capacity. Expiry/cancellation never certifies
+a flow. Only existing result handles are accepted: no arbitrary HTML, URLs,
+filesystem paths, UI mutation or uploads. Labels are XML-escaped.
+Explicit browser downloads do not overwrite or import a topology.
+
+Every artifact is **illustrative routing evidence**, not a packet capture,
+Firewall permission/session test, live delivery guarantee or latency prediction.
+Animation duration is presentation-only. Raster font appearance can differ by OS.
 
 `.github/skills/network-simulation/SKILL.md` guides requirement capture,
 validation, assessment and up to three reviewed repairs, followed by explicit

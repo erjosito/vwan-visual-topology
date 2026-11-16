@@ -30,6 +30,8 @@
     "test:desktop-cli": "pwsh -NoLogo -NoProfile -File tests/desktop-azure-read.test.ps1"
   },
   "dependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "gifenc": "1.0.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
