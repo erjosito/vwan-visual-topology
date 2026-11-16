@@ -3,7 +3,7 @@ import { cidr, ipv4 } from '../validation'
 import type { AzNetTopology, AzVNet } from './model'
 import { azArsPeers, azArsSpokes } from './ars-route-maps'
 import { natGatewayForSubnet, validateInventory } from '../inventory'
-import { generateConnectivityBicep } from './connectivity-bicep'
+import { generateConnectivityBicep } from '../connectivity-bicep'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string

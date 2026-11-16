@@ -1,10 +1,12 @@
-import { canonicalLocation } from '../bicep-export'
-import type { AzNetTopology } from './model'
+import { canonicalLocation } from './bicep-export'
+import type { NetworkInventory } from './inventory'
+import type { AzVNet } from './azure-net/model'
 
 const quote = (value: string) => `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'").replaceAll('${', '\\${').replaceAll('\r', '\\r').replaceAll('\n', '\\n')}'`
 
-export function generateConnectivityBicep(topology: AzNetTopology, vnetSymbols: Map<string, string>,
-  symbol: (base: string, prefix: string) => string, defaultLocation: string, reservedPublicNames: Set<string>) {
+export function generateConnectivityBicep(topology: { inventory?: NetworkInventory; vnets: Pick<AzVNet, 'id' | 'name' | 'region' | 'subnets' | 'appliances'>[] },
+  vnetSymbols: Map<string, string>, symbol: (base: string, prefix: string) => string, defaultLocation: string,
+  reservedPublicNames: Set<string>, locationParameter = 'location') {
   const lines: string[] = [], warnings: string[] = [], nsgSymbols = new Map<string, string>()
   const inventory = topology.inventory
   let resourceCount = 0
@@ -26,7 +28,7 @@ export function generateConnectivityBicep(topology: AzNetTopology, vnetSymbols: 
   }
   const location = (ownerId?: string, region?: string) => {
     const resolved = canonicalLocation(region ?? topology.vnets.find((vnet) => vnet.id === ownerId)?.region ?? '') || defaultLocation
-    return resolved === defaultLocation ? 'location' : quote(resolved)
+    return resolved === defaultLocation ? locationParameter : quote(resolved)
   }
   const subnetReference = (ownerId: string, subnetId: string) => {
     const subnet = topology.vnets.find((vnet) => vnet.id === ownerId)?.subnets.find((subnet) => subnet.id === subnetId)
