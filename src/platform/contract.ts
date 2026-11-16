@@ -7,9 +7,10 @@ import type { WorkloadIpReference } from '../inventory'
 import type { VpnNatPacketRequest, VpnNatPacketResult } from '../vpn-nat-packet'
 import { VPN_NAT_CAPABILITIES } from '../vpn-nat'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
+import { flowExportLimits } from '../flow-export'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.16.11'
+export const engineVersion = '2026.11.16.12'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -91,6 +92,13 @@ export const capabilities = {
   modes: ['vwan', 'hub-spoke', 'full'],
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
   operations: ['validate', 'simulate', 'evaluate'],
+  rendering: {
+    formats: ['gif', 'svg', 'png'], durationsMs: [1500, 2000], ...flowExportLimits,
+    source: 'Existing flow assessment handle and exact assessmentId; independent per-leg trace evidence and topology revision.',
+    view: 'Shared logical forwarding scene; expanded Firewall hops, direction colors and stopped/unknown states. Not a screenshot of the interactive canvas.',
+    artifacts: 'Process-local, expiring, bounded base64 byte chunks. No arbitrary paths, URLs, uploads or file writes.',
+    limits: { maxConcurrent: 1, maxRetained: 4, maxMillis: 30000, lifetimeSeconds: 600 },
+  },
   mixedRouting: ['native hub tables/association/propagation', 'shared VWAN HRP selection', 'hub-owned and site-owned route maps',
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],

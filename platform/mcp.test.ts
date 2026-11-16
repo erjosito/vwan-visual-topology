@@ -2,6 +2,7 @@ import { it, expect } from 'vitest'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolve } from 'node:path'
+import { createHash } from 'node:crypto'
 import { executePlatform } from '../src/platform/service'
 import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
 import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
@@ -19,7 +20,7 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
   }
   try {
     const list = await client.listTools()
-    expect(list.tools.map((tool) => tool.name).sort()).toEqual(['cancel_job', 'get_capabilities', 'get_evidence', 'get_job', 'get_schema', 'start_simulation'])
+    expect(list.tools.map((tool) => tool.name).sort()).toEqual(['cancel_job', 'cancel_render', 'get_artifact', 'get_capabilities', 'get_evidence', 'get_job', 'get_render_job', 'get_schema', 'release_render', 'start_render', 'start_simulation'])
     expect((await call('get_capabilities')).modes).toEqual(['vwan', 'hub-spoke', 'full'])
     const topology = {
       version: 1, name: 'MCP owned spokes',
@@ -104,6 +105,84 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
     expect(stderr).toBe('')
   } finally { await client.close() }
 }, 20000)
+
+it('exports real custom-routing bypass and inspected GIF artifacts through bounded MCP chunks', async () => {
+  const client = new Client({ name: 'flow-export-test', version: '1' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  await client.connect(transport)
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    if (response.isError) throw new Error(JSON.stringify(response.content))
+    return response.structuredContent as Record<string, any>
+  }
+  const wait = async (name: string, handle: string) => {
+    const deadline = Date.now() + 35000
+    for (;;) {
+      const state = await call(name, { handle })
+      if (state.status !== 'running') return state
+      if (Date.now() > deadline) throw new Error('Job did not finish.')
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+  }
+  try {
+    const requirements = [
+      { id: 'vnet-bypass', target: { kind: 'spoke', id: 'trusted-b' }, destinationAddress: '10.20.0.4', inspect: false },
+      { id: 'branch-bypass', target: { kind: 'site', id: 'branch-a' }, destinationAddress: '10.50.0.4', inspect: false },
+      { id: 'inspected', target: { kind: 'spoke', id: 'untrusted-a' }, destinationAddress: '10.30.0.4', inspect: true },
+    ].map(({ inspect, ...goal }) => ({
+      ...goal, kind: 'flow', source: { kind: 'spoke', id: 'trusted-a' }, sourceAddress: '10.10.0.4', expectation: 'allow',
+      firewallPolicy: { hubId: 'hub-local', forward: inspect ? 'required' : 'bypassed', reverse: inspect ? 'required' : 'bypassed' },
+    }))
+    const { handle } = await call('start_simulation', { request: {
+      contractVersion: 1, operation: 'evaluate', document: { mode: 'vwan', topology: hubFirewallTopology() }, requirements,
+    } })
+    const evaluation = await wait('get_job', handle)
+    expect(evaluation.assessments.every((a: any) => a.outcome === 'satisfied')).toBe(true)
+    for (const goal of requirements) {
+      const rendered = await call('start_render', { handle, assessmentId: goal.id, options: { width: 640, durationMs: 1500 } })
+      const job = await wait('get_render_job', rendered.handle)
+      expect(job.status, JSON.stringify(job)).toBe('finished')
+      expect(job.revision).toBe(evaluation.revision)
+      expect(job.mimeType).toBe('image/gif')
+      expect(job.lanes).toHaveLength(2)
+      expect(job.lanes.every((lane: any) => lane.nodes.some((node: any) => node.kind === 'firewall') === (goal.id === 'inspected'))).toBe(true)
+      const chunks: Buffer[] = []
+      let offset = 0
+      for (;;) {
+        const chunk = await call('get_artifact', { handle: rendered.handle, offset, limit: 997 })
+        expect(chunk.offset).toBe(offset)
+        const decoded = Buffer.from(chunk.data, 'base64')
+        expect(decoded.length).toBe(chunk.nextOffset - chunk.offset)
+        chunks.push(decoded)
+        offset = chunk.nextOffset
+        if (chunk.complete) break
+      }
+      const bytes = Buffer.concat(chunks)
+      expect(bytes.length).toBe(job.byteLength)
+      expect(bytes.subarray(0, 6).toString()).toBe('GIF89a')
+      expect(createHash('sha256').update(bytes).digest('hex')).toBe(job.sha256)
+      await expect(call('get_artifact', { handle: rendered.handle, offset: job.byteLength + 1 })).rejects.toThrow()
+      await call('release_render', { handle: rendered.handle })
+      await expect(call('get_render_job', { handle: rendered.handle })).rejects.toThrow()
+    }
+    await expect(call('start_render', { handle, assessmentId: 'missing' })).rejects.toThrow()
+    const cancelled = await call('start_render', { handle, assessmentId: 'inspected' })
+    await call('cancel_render', { handle: cancelled.handle })
+    expect((await call('get_render_job', { handle: cancelled.handle })).status).toBe('cancelled')
+    await expect(call('get_artifact', { handle: cancelled.handle })).rejects.toThrow()
+    await call('release_render', { handle: cancelled.handle })
+    const retained: string[] = []
+    for (let index = 0; index < 4; index++) {
+      const job = await call('start_render', { handle, assessmentId: 'vnet-bypass', options: { format: 'svg' } })
+      expect((await wait('get_render_job', job.handle)).status).toBe('finished')
+      retained.push(job.handle)
+    }
+    await expect(call('start_render', { handle, assessmentId: 'vnet-bypass' })).rejects.toThrow('capacity')
+    await call('release_render', { handle: retained[0] })
+    const replacement = await call('start_render', { handle, assessmentId: 'vnet-bypass', options: { format: 'svg' } })
+    expect((await wait('get_render_job', replacement.handle)).status).toBe('finished')
+  } finally { await client.close() }
+}, 60000)
 
 it('assesses static hub Firewall required/bypassed legs through actual stdio with the same evidence as the local API', async () => {
   const client = new Client({ name: 'static-hub-firewall-test', version: '1' })

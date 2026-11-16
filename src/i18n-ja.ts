@@ -1,5 +1,14 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Flow export format': 'フローのエクスポート形式',
+  'Loop duration': 'ループ時間',
+  'Export flow diagram': 'フロー図をエクスポート',
+  'Cancel export': 'エクスポートをキャンセル',
+  'Rendering flow locally…': 'フローをローカルで描画しています…',
+  'Flow exported. Animation illustrates routing, not packet delivery.': 'フローをエクスポートしました。アニメーションはルーティングの説明であり、パケット配信の証拠ではありません。',
+  'Export cancelled.': 'エクスポートをキャンセルしました。',
+  'Export failed.': 'エクスポートに失敗しました。',
+  'Logical forwarding view with independent return routing; expanded firewall hops. No delivery or timing guarantee.': '復路を独立して計算し、ファイアウォールのホップを展開した論理転送図です。配信や所要時間は保証しません。',
   'Static hub Firewall routing': '静的ハブ Firewall ルーティング',
   'Firewall onward routes': 'Firewall 転送ルート',
   'Ambiguous or cyclic Firewall onward paths require exhaustive assessment; no single traffic hash or passing route is selected.': '曖昧または循環する Firewall 転送経路には網羅的な評価が必要です。単一のトラフィック ハッシュや成功する経路だけを選択しません。',

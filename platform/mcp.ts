@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { PlatformJobs } from './jobs'
+import { RenderJobs } from './render-jobs'
 import { capabilities, engineVersion } from '../src/platform/contract'
 import vwanExample from '../public/docs/samples/hub-routing-preferences.json'
 import hubSpokeExample from '../public/docs/samples/azure-net/hub-spoke-firewall-udr.json'
@@ -9,6 +10,7 @@ import fullExample from '../public/docs/samples/azure-net/hybrid-vwan-and-hub-sp
 
 const server = new McpServer({ name: 'azure-network-simulator', version: engineVersion })
 const jobs = new PlatformJobs()
+const renders = new RenderJobs()
 const reply = (data: Record<string, unknown>) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(data) }], structuredContent: data,
 })
@@ -39,6 +41,9 @@ server.registerTool('get_schema', {
   optionalStaticHubFirewall: { firewall: { id: 'original-local-firewall', name: 'Local Azure Firewall' },
     staticRoute: { name: 'inspect-private', destinationType: 'CIDR', destinations: ['10.0.0.0/8'], nextHopType: 'ResourceId', nextHop: 'original-local-firewall' },
     boundary: 'Single hub, routing intent disabled; define the route in the ingress associated hub table. Unknown targets remain unassessed.' },
+  renderRequest: { tool: 'start_render', handle: 'finished evaluation job handle', assessmentId: 'exact flow requirement ID',
+    options: { format: 'gif, svg or png', durationMs: '1500 or 2000', width: '640-1400' },
+    retrieval: 'get_render_job, then get_artifact; decode each base64 byte chunk separately and concatenate bytes in offset order. SVG includes animation; PNG is a static frame.' },
   optionalPacket: { operation: 'simulate', packet: { source: { kind: 'workload', workloadId: 'ID', nicId: 'ID', ipConfigurationId: 'ID' }, target: { kind: 'external', address: 'explicit public IPv4' }, protocol: 'tcp or udp', sourcePort: '1-65535', destinationPort: '1-65535' }, result: 'packet section; independent routing probes, no delivery/security/NAT certification' },
   optionalVpnPacket: mode === 'vwan' ? { supported: false, reason: 'Legacy v1 VWAN NAT is unsupported; use the Azure/Full Hybrid native provider.' }
     : { operation: 'simulate', vpnPacket: { connectionId: 'original NAT-associated VPN connection ID', direction: 'ingress or egress',
@@ -119,7 +124,41 @@ server.registerTool('cancel_job', {
   inputSchema: { handle: z.string().uuid() }, annotations,
 }, async ({ handle }) => { jobs.cancel(handle); return reply({ handle, cancellationRequested: true }) })
 
-process.once('SIGINT', () => { jobs.close(); void server.close() })
-process.once('SIGTERM', () => { jobs.close(); void server.close() })
-process.stdin.once('end', () => { jobs.close(); void server.close() })
+server.registerTool('start_render', {
+  description: 'Render one existing evaluated flow as a bounded GIF/SVG/PNG using its actual forward/return evidence. Local worker; no arbitrary HTML, URLs, paths or UI mutation.',
+  inputSchema: {
+    handle: z.string().uuid(), assessmentId: z.string().min(1).max(120),
+    options: z.object({ format: z.enum(['gif', 'svg', 'png']).optional(), durationMs: z.union([z.literal(1500), z.literal(2000)]).optional(),
+      width: z.number().int().min(640).max(1400).optional() }).strict().optional(),
+  }, annotations,
+}, async ({ handle, assessmentId, options }) => {
+  const { result } = jobs.get(handle)
+  if (!result) throw new Error('Simulation is still running.')
+  return reply({ handle: renders.start(result, assessmentId, options), status: 'running', lifetimeSeconds: 600 })
+})
+
+server.registerTool('get_render_job', {
+  description: 'Get render status and artifact metadata, SHA-256, source revision, per-leg logical nodes and limitations. Rendering does not change routing assessment outcomes.',
+  inputSchema: { handle: z.string().uuid() }, annotations,
+}, async ({ handle }) => reply(renders.describe(handle)))
+
+server.registerTool('get_artifact', {
+  description: 'Retrieve a finished artifact in bounded base64 byte chunks. Decode each chunk separately, concatenate bytes in offset order, then verify length and get_render_job SHA-256. No file writes.',
+  inputSchema: { handle: z.string().uuid(), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(12000).default(12000) }, annotations,
+}, async ({ handle, offset, limit }) => reply(renders.artifact(handle, offset, limit)))
+
+server.registerTool('cancel_render', {
+  description: 'Cancel one local rendering job without changing its source simulation.',
+  inputSchema: { handle: z.string().uuid() }, annotations,
+}, async ({ handle }) => { await renders.cancel(handle); return reply({ handle, cancellationRequested: true }) })
+
+server.registerTool('release_render', {
+  description: 'Release one render artifact and its retained metadata after retrieval, or cancel and release an unfinished render. Does not write or delete filesystem files.',
+  inputSchema: { handle: z.string().uuid() }, annotations,
+}, async ({ handle }) => { await renders.release(handle); return reply({ handle, released: true }) })
+
+const close = () => { renders.close(); jobs.close(); void server.close() }
+process.once('SIGINT', close)
+process.once('SIGTERM', close)
+process.stdin.once('end', close)
 void server.connect(new StdioServerTransport(process.stdin, process.stdout, { maxBufferSize: 4_100_000 })).catch(() => { jobs.close(); process.exitCode = 1 })

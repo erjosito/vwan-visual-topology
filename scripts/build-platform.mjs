@@ -6,6 +6,7 @@ const entries = {
   jobs: 'platform/jobs.ts',
   worker: 'platform/worker.ts',
   mcp: 'platform/mcp.ts',
+  'render-worker': 'platform/renderer.ts',
   'electron/main': 'platform/electron/main.ts',
   'electron/preload': 'platform/electron/preload.ts',
 }
@@ -13,7 +14,7 @@ await mkdir('platform-dist', { recursive: true })
 for (const [name, entry] of Object.entries(entries)) {
   const result = await build({
     entryPoints: [entry], outfile: `platform-dist/${name}.cjs`,
-    bundle: true, platform: 'node', target: 'node22', format: 'cjs', metafile: true, external: ['electron'],
+    bundle: true, platform: 'node', target: 'node22', format: 'cjs', metafile: true, external: ['electron', '@resvg/resvg-js'],
   })
   if (Object.keys(result.metafile.inputs).some((input) => /(?:^|\/)(?:react|react-dom|i18n\.ts|.*-worker\.ts)(?:\/|$)/.test(input.replaceAll('\\', '/')))) {
     throw new Error(`Browser/React dependency leaked into ${name}`)

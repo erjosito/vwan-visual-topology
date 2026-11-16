@@ -3,6 +3,7 @@ import type { InputHTMLAttributes } from 'react'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
+import { FlowExportControls } from '../FlowExportControls'
 import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
@@ -3622,6 +3623,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {hasInvalidCustomIp && <p role="alert">Enter a valid IPv4 destination address.</p>}
                 {(!resolvedSourceOpt || !resolvedDestOpt) && <p>Choose existing source and destination endpoints. A previously selected endpoint may have been removed.</p>}
                 {singleFlowForCustomIp && <p>Custom IP is outside the selected destination prefix. Only the forward route is known; select the owning endpoint to analyze the return path.</p>}
+                {pairAnalysis && !singleFlowForCustomIp && resolvedSourceOpt && resolvedDestOpt
+                  && ['subnet', 'site'].includes(resolvedSourceOpt.ref.kind) && ['subnet', 'site'].includes(resolvedDestOpt.ref.kind) && <FlowExportControls
+                  document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology: azDisplayResult(activeTopology, displayNames) }}
+                  flow={{ id: 'selected-flow', kind: 'flow', source: resolvedSourceOpt.ref, target: resolvedDestOpt.ref,
+                    sourceAddress: resolvedSourceOpt.defaultIp, destinationAddress: customDestIp.trim() || resolvedDestOpt.defaultIp, expectation: 'allow' }} />}
 
                 {pairAnalysis && resolvedSourceOpt && (
                   <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
