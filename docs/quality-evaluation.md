@@ -260,6 +260,10 @@ ground truth about learning.
 
 ## Human evaluation protocol
 
+The [moderator-ready formative pilot](human-evaluation-pilot.md) supplies task
+cards, assistance rules, local logging, privacy/retention prerequisites and
+separate learning/transfer steps. It contains no participant results.
+
 Before collecting anything, specify consent, opt-in/local storage, minimization,
 retention/deletion and how aggregated findings will be shared. Use synthetic
 networks, not participant/customer production topologies. Do not automatically
