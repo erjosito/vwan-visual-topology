@@ -94,6 +94,15 @@ describe.each(['vwan', 'full'] as const)('single-hub Firewall static forwarding 
     expect(evaluate('trusted-a', 'trusted-b', 'bypassed', 'bypassed', topology).assessments[0]?.outcome).toBe('satisfied')
     expect(evaluate('branch-a', 'branch-b', 'required', 'required', topology).assessments[0]?.outcome).toBe('not assessed')
   })
+
+  it('does not add Default propagation to explicit custom-table IDs when labels are empty', () => {
+    const topology = mode === 'vwan' ? hubFirewallTopology('published-vnet') : azHubFirewallTopology('published-vnet')
+    const attachments = 'spokes' in topology ? topology.spokes
+      : topology.vnets.map((vnet) => vnet.vwanHubAttachment!)
+    for (const attachment of attachments) attachment.hubRouting!.labels = []
+    expect(evaluate('trusted-a', 'untrusted-a', 'required', 'required', topology).assessments[0]?.outcome).toBe('satisfied')
+    expect(evaluate('trusted-a', 'trusted-b', 'bypassed', 'bypassed', topology).assessments[0]?.outcome).toBe('satisfied')
+  })
 })
 
 describe('hub static route precedence and onward context', () => {
