@@ -1,6 +1,7 @@
 import type { Topology } from './model'
 import { cidr, contains, validateTopology } from './validation'
 import { DEFAULT_HUB_TABLE, NONE_HUB_TABLE, attachmentHubRouting, hubRouteTables } from './hub-routing'
+import { generateConnectivityBicep } from './connectivity-bicep'
 
 export interface HubDeployment {
   hubId: string
@@ -202,7 +203,7 @@ export function generateBicep(input: Topology, settings: BicepSettings): BicepEx
   const omittedSpokesCount = topology.spokes.length - sortedSpokes.length
   const excludedSpokes = topology.spokes.filter((spoke) => !sortedSpokes.some((entry) => entry.spokeId === spoke.id)).map((spoke) => spoke.name)
   const warnings = [
-    ...(topology.inventory || topology.spokes.some((spoke) => spoke.subnets) ? ['Detailed subnets and workload/NIC/public-IP inventory are preserved by native JSON but are not deployed by this Bicep starter.'] : []),
+    ...(topology.spokes.some((spoke) => spoke.subnets) ? ['Existing VNet subnets and their subnet NSG/NAT associations are not modified by this VWAN attachment starter. Preserve native JSON and configure the reviewed target subnets explicitly.'] : []),
     ...(topology.inventory?.natGateways?.length ? ['NAT Gateway metadata is retained in native JSON; this VWAN attachment starter does not modify original VNet subnets or deploy their NAT resources.'] : []),
     ...(topology.inventory?.routerSnatPolicies?.length ? ['Explicit Firewall SNAT pools and private-range policies are retained in native JSON but are not configured by this VWAN Bicep starter.'] : []),
     'NEW-DEPLOYMENT STARTER ONLY: not an Azure clone or lossless topology export. Review target names and run Bicep build and Azure what-if externally before deployment.',
@@ -301,8 +302,45 @@ resource spokeConnections 'Microsoft.Network/virtualHubs/hubVirtualNetworkConnec
     enableInternetSecurity: conn.enableInternetSecurity
   }
 }]` : ''
+  const existingVnetSymbols = new Map(sortedSpokes.map((entry, index) => [entry.spokeId, `inventory_existing_vnet_${index}`]))
+  const selectedOwnerIds = new Set(existingVnetSymbols.keys())
+  const sourceInventory = topology.inventory
+  const scopedNics = sourceInventory?.nics.filter((nic) => selectedOwnerIds.has(nic.owner.id)
+    && !sourceInventory.workloads.some((workload) => workload.nicIds.includes(nic.id) && workload.backingDeviceId))
+  const scopedLbs = sourceInventory?.loadBalancers?.filter((lb) => selectedOwnerIds.has(lb.owner.id))
+  const scopedBindings = sourceInventory?.nsgAssociations?.filter((binding) => selectedOwnerIds.has(binding.owner.id))
+  const publicIds = new Set([...(scopedNics ?? []).flatMap((nic) => nic.ipConfigurations.flatMap((config) => config.publicIpId ? [config.publicIpId] : [])),
+    ...(scopedLbs ?? []).flatMap((lb) => lb.frontends.flatMap((frontend) => frontend.kind === 'public' ? [frontend.publicIpId] : []))])
+  const usedSymbols = new Set(['wan', 'hubs', 'hubFirewalls', 'hubRoutingIntents', 'spokeConnections',
+    'wanName', 'wanLocation', 'hubSettings', 'hubMinimumCapacity', 'securedHubSettings', 'spokeConnectionSettings', ...existingVnetSymbols.values()])
+  const connectivity = generateConnectivityBicep({
+    inventory: sourceInventory ? { ...sourceInventory, nics: scopedNics!,
+      publicIps: sourceInventory.publicIps.filter((ip) => publicIds.has(ip.id)),
+      loadBalancers: scopedLbs, nsgAssociations: scopedBindings,
+      networkSecurityGroups: sourceInventory.networkSecurityGroups?.filter((group) => scopedBindings?.some((binding) => binding.nsgId === group.id)),
+      routerDnatPolicies: [] } : undefined,
+    vnets: sortedSpokes.map((entry) => {
+      const spoke = topology.spokes.find((spoke) => spoke.id === entry.spokeId)!
+      return { id: spoke.id, name: spoke.name, region: spoke.region ?? settings.location, subnets: spoke.subnets ?? [], appliances: [] }
+    }),
+  }, existingVnetSymbols, (base) => {
+    const normalized = base.replace(/[^A-Za-z0-9_]/g, '_')
+    let result = normalized, suffix = 2
+    while (usedSymbols.has(result)) result = `${normalized}_${suffix++}`
+    usedSymbols.add(result)
+    return result
+  }, settings.location, new Set(), 'wanLocation')
+  warnings.push(...connectivity.warnings)
+  if (sourceInventory) warnings.push('Only reviewed selected-spoke NIC/NSG/Standard LB configuration is eligible for inventory export. Existing target VNets/subnets must be in the deployment subscription and correct region; original subnet NSG associations and NAT, hub DNAT, NVA forwarding/guest rules, VM attachments and excluded owners are not recreated.')
+  const existingVnetResources = connectivity.resourceCount ? sortedSpokes.map((entry) => {
+    const parts = entry.existingVnetId.trim().split('/')
+    return `resource ${existingVnetSymbols.get(entry.spokeId)} 'Microsoft.Network/virtualNetworks@2024-07-01' existing = {
+  name: ${quote(parts[8])}
+  scope: resourceGroup(${quote(parts[2])}, ${quote(parts[4])})
+}`
+  }).join('\n\n') : ''
   return {
-    resourceCount: sortedHubs.length + 1 + securedHubs.length * 2 + sortedSpokes.length,
+    resourceCount: sortedHubs.length + 1 + securedHubs.length * 2 + sortedSpokes.length + connectivity.resourceCount,
     warnings,
     text: `${warnings.map((warning) => `// ${comment(warning)}`).join('\n')}
 targetScope = 'resourceGroup'
@@ -342,6 +380,9 @@ resource hubs 'Microsoft.Network/virtualHubs@${apiVersion}' = [for hub in hubSet
     }
   }
 }]${securedResourcesBlock}${spokeResourcesBlock}
+
+${existingVnetResources}
+${connectivity.lines.join('\n')}
 
 output wanResourceId string = wan.id
 output hubResourceIds array = [for (hub, i) in hubSettings: hubs[i].id]

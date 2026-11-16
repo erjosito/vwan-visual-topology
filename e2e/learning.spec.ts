@@ -19,7 +19,7 @@ test('failed optional practice loading preserves the workspace and recovers afte
 })
 
 for (const exercise of exercises) {
-  test(`local practice persists independent drafts and grades ${exercise.starter.mode}`, async ({ page }) => {
+  test(`local practice persists independent drafts and grades ${exercise.id}`, async ({ page }) => {
     await page.goto(`/?mode=${exercise.starter.mode}`)
     await expect(page.getByTestId(exercise.starter.mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
     const storageKey = exercise.starter.mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
@@ -32,15 +32,34 @@ for (const exercise of exercises) {
     await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
     await dialog.getByLabel('Choose an exercise', { exact: true }).selectOption(exercise.id)
     await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-    await expect(dialog.getByTestId('practice-result')).toContainText(exercise.starter.mode === 'vwan' ? 'Not assessed' : 'Requirements not yet satisfied')
+    await expect(dialog.getByTestId('practice-result')).toContainText(/Not assessed|Requirements not yet satisfied/)
     await expect(dialog).not.toContainText('Practice badge (local, unverified)')
     const document = structuredClone(exercise.starter)
     if (document.mode === 'vwan') {
       document.topology.spokes[1].hubId = 'one'
       delete document.topology.spokes[1].hubRouting
-    } else {
+    } else if (exercise.id === 'peering-connect' || exercise.id === 'hybrid-connect') {
       const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
       document.topology.vnetPeerings.push({ id: 'practice-peer', name: 'Workload peering', vnetAId: 'a', vnetBId: 'b', enabled: true, aToB: flags, bToA: { ...flags } })
+    } else {
+      const inventory = document.topology.inventory!
+      if (exercise.id === 'private-explicit-egress') {
+        inventory.publicIps.push({ id: 'instance', name: 'Instance public', sku: 'Standard', allocation: 'Static', address: '20.40.50.60' })
+        inventory.nics[0].ipConfigurations[0].publicIpId = 'instance'
+      } else if (exercise.id === 'udr-before-nat') {
+        document.topology.udrTables[0].routes[0].nextHopType = 'Internet'
+      } else if (exercise.id === 'lb-probe-data-nsg') {
+        inventory.networkSecurityGroups![0].rules = inventory.networkSecurityGroups![0].rules.filter((rule) => rule.id !== 'deny-probe')
+      } else if (exercise.id === 'public-ingress-nsg') {
+        inventory.networkSecurityGroups![0].rules.push({ id: 'allow-client', name: 'AllowClient', priority: 100, direction: 'inbound', action: 'allow',
+          protocol: 'tcp', sources: ['8.8.8.8/32'], destinations: ['10.1.1.4'], sourcePorts: ['*'], destinationPorts: ['443'] })
+      } else if (exercise.id === 'dnat-response-owner') {
+        document.topology.udrTables.push({ id: 'reply', name: 'Original response owner', disableBgpRoutePropagation: false,
+          routes: [{ id: 'client', name: 'Return client', prefix: '8.8.8.8/32', nextHopType: 'VirtualAppliance', nextHopIp: '10.1.2.4', enabled: true }] })
+        document.topology.vnets[0].subnets[0].routeTableId = 'reply'
+      } else {
+        inventory.loadBalancers![0].probes[0].health[0].status = 'healthy'
+      }
     }
     const draft = JSON.stringify(document.topology, null, 2)
     await dialog.getByLabel('Practice topology JSON', { exact: true }).fill(draft)
@@ -86,6 +105,31 @@ test('corrupt practice storage stays untouched until an explicit reset', async (
   await dialog.getByRole('button', { name: 'Reset local practice progress', exact: true }).click()
   await dialog.getByRole('button', { name: 'Delete practice progress', exact: true }).click()
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), progressKey)).toEqual({ version: 1, entries: [] })
+})
+
+test('Japanese internal LB practice grades unknown and repaired health on a narrow dark screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 760 })
+  await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
+  await page.goto('/?mode=full')
+  await page.locator('[data-language-selector]').selectOption('ja')
+  await page.getByTestId('learning-open').click()
+  const dialog = page.getByRole('dialog', { name: '学習と練習', exact: true })
+  await dialog.getByRole('button', { name: '練習', exact: true }).click()
+  await dialog.locator('select').selectOption('internal-lb-health')
+  await expect(dialog.getByRole('heading', { name: '内部 LB バックエンドの不明な正常性を解決', exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: '練習の下書きを評価', exact: true }).click()
+  await expect(dialog.getByTestId('practice-result')).toContainText('評価不能')
+  const draft = structuredClone(exercises.find((exercise) => exercise.id === 'internal-lb-health')!.starter)
+  if (draft.mode === 'vwan') throw new Error('Wrong fixture')
+  draft.topology.inventory!.loadBalancers![0].probes[0].health[0].status = 'healthy'
+  await dialog.locator('textarea').fill(JSON.stringify(draft.topology, null, 2))
+  await dialog.getByRole('button', { name: '次のヒントを表示', exact: true }).click()
+  await dialog.getByRole('button', { name: '練習の下書きを評価', exact: true }).click()
+  await expect(dialog.getByTestId('practice-result')).toContainText('練習の要件を達成')
+  await expect(dialog).toContainText('練習バッジ（ローカル、未認証）')
+  expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(390)
+  await page.keyboard.press('Escape')
+  await expect(page.getByTestId('learning-open')).toBeFocused()
 })
 
 test('help is on demand, keyboard accessible and localized without changing the workspace', async ({ page }) => {

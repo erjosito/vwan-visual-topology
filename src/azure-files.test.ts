@@ -164,6 +164,43 @@ describe('offline Azure capture import', () => {
 })
 
 describe('offline Bicep export', () => {
+  it('exports selected native-spoke NIC/NSG/LB declarations against reviewed existing targets without modifying their subnets or inventing guests', () => {
+    const topology = importAzureCapture(capture()), owner = { kind: 'spoke' as const, id: topology.spokes[0].id }
+    topology.spokes[0].region = 'westeurope'
+    topology.spokes[0].subnets = [{ id: 'app', name: 'App', prefix: '10.20.1.0/24' }]
+    const target = { workloadId: 'server', nicId: 'nic', ipConfigurationId: 'ip' }
+    topology.inventory = { workloads: [{ id: 'server', name: 'Original server', nicIds: ['nic'] }],
+      nics: [{ id: 'nic', name: 'Original NIC', owner, ipConfigurations: [{ id: 'ip', name: 'Primary', subnetId: 'app', privateIp: '10.20.1.4', primary: true }] }],
+      publicIps: [{ id: 'public', name: 'Public', sku: 'Standard', allocation: 'Static', address: '20.40.50.60' }],
+      networkSecurityGroups: [{ id: 'nsg', name: 'Backend', rules: [] }],
+      nsgAssociations: [{ owner, target: { kind: 'nic', id: 'nic' }, nsgId: 'nsg' }],
+      loadBalancers: [{ id: 'lb', name: 'Service', sku: 'Standard', owner,
+        frontends: [{ id: 'front', name: 'Public', kind: 'public', publicIpId: 'public' }],
+        pools: [{ id: 'pool', name: 'Servers', members: [target] }],
+        probes: [{ id: 'probe', name: 'Health', protocol: 'tcp', port: 8080, health: [{ target, status: 'unknown' }] }],
+        rules: [{ id: 'web', name: 'Web', frontendId: 'front', poolId: 'pool', probeId: 'probe', protocol: 'tcp', frontendPort: 443, backendPort: 8443 }],
+        inboundNatRules: [], outboundRules: [] }] }
+    const settings = bicepDefaults(topology)
+    settings.spokes![0].selected = true
+    settings.spokes![0].existingVnetId = `${base}/virtualNetworks/reviewed-target`
+    const exported = generateBicep(topology, settings)
+    expect(exported.text).toContain("name: 'reviewed-target'")
+    expect(exported.text).toContain("scope: resourceGroup('11111111-1111-1111-1111-111111111111', 'network')")
+    expect(exported.text).toContain('loadBalancerBackendAddressPools: [')
+    expect(exported.text).toContain('location: wanLocation')
+    expect(exported.text).not.toMatch(/virtualMachines@|subnets: \[|health:|20\.40\.50\.60/)
+    expect(exported.warnings.join(' ')).toContain('subnet NSG/NAT associations are not modified')
+    const directory = join('test-artifacts', 'azure-files', 'bicep')
+    mkdirSync(directory, { recursive: true })
+    writeFileSync(join(directory, 'connectivity-native-vwan.bicep'), exported.text)
+    settings.spokes![0].selected = false
+    expect(generateBicep(topology, settings).text).not.toContain('networkInterfaces@')
+    settings.spokes![0].selected = true
+    topology.inventory.capture = { version: 1, configurationComplete: false, resourceIds: {} }
+    expect(generateBicep(topology, settings).text).not.toContain('networkInterfaces@')
+    expect(generateBicep(topology, settings).warnings.join(' ')).toContain('Incomplete connectivity capture')
+  })
+
   it('emits deterministic schema-checked WAN/hubs with every routing preference and no source resources', () => {
     const topology = importAzureCapture(capture())
     const singleHub = generateBicep(topology, bicepDefaults(topology)).text

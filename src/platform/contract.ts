@@ -3,10 +3,11 @@ import type { PathNode } from '../paths'
 import type { AzNetTopology } from '../azure-net/model'
 import type { AzEndpointRef } from '../azure-net/engine'
 import type { PacketRequest, PacketResult } from '../packet-flow'
+import type { WorkloadIpReference } from '../inventory'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.16.4'
+export const engineVersion = '2026.11.16.6'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -31,7 +32,16 @@ export type RouteRequirement = {
   prefix: string
   expectation: 'present' | 'absent'
 }
-export type Requirement = FlowRequirement | RouteRequirement
+export type PacketRequirement = {
+  id: string
+  kind: 'packet'
+  packet: PacketRequest
+  sourceAddress: string
+  destinationAddress: string
+  expectation: 'configured' | 'blocked'
+  requiredBackend?: WorkloadIpReference & { address: string }
+}
+export type Requirement = FlowRequirement | RouteRequirement | PacketRequirement
 export type PlatformRequest = {
   contractVersion: 1
   engineVersion?: string
@@ -101,7 +111,8 @@ export const capabilities = {
       'NAT Gateway cannot publish ingress', 'unknown/multiple router NAT, secured-hub private DNAT interfaces and forced-tunnel translation unassessed',
       'no StandardV2/IPv6/NAT64/application-rule proxy/capacity/timer predictions',
       'no Basic/Gateway/global LB, HA ports/Floating IP/DSR OS support, private-backend hairpin, live health/session migration or extra ingress translation stages'] },
-  requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or explicit hub table scope, subject to complete modeled coverage'],
+  requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or explicit hub table scope, subject to complete modeled coverage',
+    'packet: bound original IPv4 endpoints/backend, configured routing/filtering/translation and conditional response or proven initiation blocker; not runtime delivery/health certification'],
   outcomes: ['satisfied', 'violated', 'not assessed'],
   limits: platformLimits,
   privacy: 'Local deterministic computation. No HTTP listener, files, Azure credentials or cloud calls. An external AI may receive tool inputs/results.',

@@ -3,6 +3,7 @@ import { cidr, ipv4 } from '../validation'
 import type { AzNetTopology, AzVNet } from './model'
 import { azArsPeers, azArsSpokes } from './ars-route-maps'
 import { natGatewayForSubnet, validateInventory } from '../inventory'
+import { generateConnectivityBicep } from '../connectivity-bicep'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -42,7 +43,6 @@ export function generateAzNetBicep(
 
   const warnings: string[] = []
   if (topology.inventory?.routerSnatPolicies?.length) warnings.push('Firewall network-rule SNAT/private ranges and NVA guest SNAT are simulation declarations, not deployed by this Bicep starter. Preserve native JSON and configure original device policies separately.')
-  if (topology.inventory) warnings.push('Workload/NIC inventory and public IPs not owned by exported NAT Gateways are preserved by native JSON but are not deployed by this Bicep starter.')
   if (topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.defaultOutboundAccess === undefined))) {
     warnings.push('Legacy unspecified defaultOutboundAccess is preserved as unspecified; Azure deployment defaults can differ. Set it explicitly for a reproducible outbound posture.')
   }
@@ -139,6 +139,7 @@ export function generateAzNetBicep(
 
   const natSymbols = new Map<string, string>()
   const natNames = new Set<string>()
+  const natPublicNames = new Set<string>()
   const natName = (name: string) => {
     const base = name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'nat-resource'
     let value = base, suffix = 2
@@ -156,8 +157,10 @@ export function generateAzNetBicep(
       const ip = topology.inventory!.publicIps.find((ip) => ip.id === id)!
       const sym = uniqueSymbol(`nat_pip_${id}`, 'pip')
       publicSymbols.set(id, sym); resourceCount++
+      const publicName = natName(ip.name)
+      natPublicNames.add(publicName.toLowerCase())
       lines.push(`resource ${sym} 'Microsoft.Network/publicIPAddresses@2024-05-01' = {`,
-        `  name: '${natName(ip.name)}'`, `  location: ${locExpr}`,
+        `  name: '${publicName}'`, `  location: ${locExpr}`,
         `  sku: { name: 'Standard' }`, `  properties: {`, `    publicIPAddressVersion: 'IPv4'`,
         `    publicIPAllocationMethod: 'Static'`, `  }`, `}`, '')
     }
@@ -182,10 +185,13 @@ export function generateAzNetBicep(
   if (topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.internetEgressStatus))) warnings.push('Unknown captured outbound associations are not recreated by this starter. Preserve native JSON and resolve the missing configuration before deployment.')
 
   // 2. Virtual Networks and Subnets
-  const vnetSymbols = new Map<string, string>()
+  const vnetSymbols = new Map(topology.vnets.map((vnet) => [vnet.id, uniqueSymbol(`vnet_${vnet.id}`, 'vnet')]))
+  const connectivity = generateConnectivityBicep(topology, vnetSymbols, uniqueSymbol, defaultLoc, natPublicNames)
+  resourceCount += connectivity.resourceCount
+  warnings.push(...connectivity.warnings)
+  lines.push(...connectivity.lines)
   for (const vnet of topology.vnets) {
-    const sym = uniqueSymbol(`vnet_${vnet.id}`, 'vnet')
-    vnetSymbols.set(vnet.id, sym)
+    const sym = vnetSymbols.get(vnet.id)!
     resourceCount++
 
     const vnetLoc = resolveVnetLocation(vnet, defaultLoc)
@@ -225,6 +231,10 @@ export function generateAzNetBicep(
       lines.push(`        properties: {`)
       lines.push(`          addressPrefix: '${escapeBicepString(sub.prefix)}'`)
       if (sub.defaultOutboundAccess !== undefined) lines.push(`          defaultOutboundAccess: ${sub.defaultOutboundAccess}`)
+      const nsg = topology.inventory?.nsgAssociations?.find((binding) => binding.owner.id === vnet.id
+        && binding.target.kind === 'subnet' && binding.target.id === sub.id && binding.status !== 'unknown')
+      const nsgSym = nsg?.nsgId && connectivity.nsgSymbols.get(nsg.nsgId)
+      if (nsgSym) lines.push(`          networkSecurityGroup: { id: ${nsgSym}.id }`)
       const nat = natGatewayForSubnet(topology, { kind: 'vnet', id: vnet.id }, sub.id)
       if (nat) lines.push(`          natGateway: { id: ${natSymbols.get(nat.id)}.id }`)
       if (rtSym && sub.name !== 'RouteServerSubnet') {

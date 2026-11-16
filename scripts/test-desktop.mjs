@@ -386,11 +386,24 @@ try {
     expect(result.value).toEqual(executePlatform(input))
     expect(result.value.packet).toMatchObject({ ingress: 'configured', loadBalancer: { selected: backend },
       reply: { routing: 'reachable', session: 'conditional-response' } })
+    const gradeInput = { ...input, operation: 'evaluate', requirements: [{ id: 'original-lb-configured', kind: 'packet',
+      packet: input.packet, sourceAddress: internal ? '10.1.1.5' : '8.8.8.8', destinationAddress: internal ? '10.1.2.10' : '20.40.50.81',
+      requiredBackend: { ...backend, address: '10.1.1.4' }, expectation: 'configured' }] }
+    delete gradeInput.packet
+    const grade = await page.evaluate((request) => window.desktopSimulator.simulate(request), gradeInput)
+    expect(grade.ok).toBe(true)
+    expect(grade.value).toEqual(executePlatform(gradeInput))
+    expect(grade.value.assessments[0].outcome).toBe('satisfied')
     inventory.loadBalancers[0].probes[0].health[0].status = 'unknown'
     const unknown = await page.evaluate((request) => window.desktopSimulator.simulate(request), input)
     expect(unknown.ok).toBe(true)
     expect(unknown.value.packet.ingress).toBe('not-assessed')
     expect(unknown.value.packet.loadBalancer.selected).toBeUndefined()
+    gradeInput.requirements.push({ ...gradeInput.requirements[0], id: 'unknown-is-not-isolation', expectation: 'blocked' })
+    const unknownGrade = await page.evaluate((request) => window.desktopSimulator.simulate(request), gradeInput)
+    expect(unknownGrade.ok).toBe(true)
+    expect(unknownGrade.value).toEqual(executePlatform(gradeInput))
+    expect(unknownGrade.value.assessments.map((assessment) => assessment.outcome)).toEqual(['not assessed', 'not assessed'])
   }
   await page.goto('app://simulator/?mode=vwan&feedback=1')
   await page.getByTestId('vwan-app').waitFor()
