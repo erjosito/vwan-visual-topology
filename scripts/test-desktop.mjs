@@ -34,7 +34,7 @@ try {
   page.on('pageerror', (error) => failures.push(error.message))
   await page.locator('[data-testid="vwan-app"], [data-testid="aznet-app"], dialog[aria-labelledby="workspace-library-title"]').waitFor()
   await page.evaluate(() => {
-    for (const key of ['network-simulator:workspace:v1', 'network-simulator:originals:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
+    for (const key of ['network-simulator:workspace:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
   })
   await page.reload()
   await page.getByTestId('aznet-app').waitFor()
@@ -235,37 +235,35 @@ try {
       await expect(diagnostics.getByRole('region', { name: 'Diagnostic results' })).toBeVisible({ timeout: 15000 })
     }
     await page.getByTestId('learning-open').click()
-    const learning = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
+    const learning = page.getByTestId('learning-sidebar')
+    await expect(learning.locator('textarea,select,pre')).toHaveCount(0)
+    await learning.getByText('Networking reference', { exact: true }).click()
     await learning.locator('[data-concept="coverage"] summary').click()
     await expect(learning.locator('[data-concept="coverage"]')).toContainText('not certification')
-    await learning.getByRole('button', { name: 'Practice', exact: true }).click()
-    await learning.getByLabel('Choose an exercise', { exact: true }).selectOption(mode === 'vwan' ? 'vwan-connect' : mode === 'hub-spoke' ? 'peering-connect' : 'hybrid-connect')
-    const draftControl = learning.getByLabel('Practice topology JSON', { exact: true })
-    const practice = JSON.parse(await draftControl.inputValue())
-    if (mode === 'vwan') {
-      practice.spokes[1].hubId = 'one'
-      delete practice.spokes[1].hubRouting
-    } else if (mode === 'full') {
-      practice.vnets[1].vwanHubAttachment = { hubId: 'hub', enabled: true }
-    } else {
-      const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
-      practice.vnetPeerings.push({ id: 'practice-peer', name: 'Practice peering', vnetAId: 'a', vnetBId: 'b', enabled: true, aToB: flags, bToA: { ...flags } })
-    }
-    await draftControl.fill(JSON.stringify(practice, null, 2))
-    await learning.getByRole('button', { name: 'Show next hint', exact: true }).click()
-    await learning.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-    await expect(learning.getByTestId('practice-result')).toContainText('Practice requirements satisfied', { timeout: 15000 })
-    await expect(learning).toContainText('Practice badge (local, unverified)')
     const retainedWorkspace = await readSaved()
-    await page.keyboard.press('Escape')
-    await page.reload()
-    await page.getByTestId('learning-open').click()
-    await learning.getByRole('button', { name: 'Practice', exact: true }).click()
-    await learning.getByLabel('Choose an exercise', { exact: true }).selectOption(mode === 'vwan' ? 'vwan-connect' : mode === 'hub-spoke' ? 'peering-connect' : 'hybrid-connect')
-    await expect(draftControl).toHaveValue(JSON.stringify(practice, null, 2))
-    await expect(learning).toContainText('Hints used: 1/2')
+    await learning.getByRole('button', { name: 'Load practice network', exact: true }).click()
+    await learning.getByRole('button', { name: 'Cancel', exact: true }).click()
     expect(await readSaved()).toEqual(retainedWorkspace)
-    await page.keyboard.press('Escape')
+    await learning.getByRole('button', { name: 'Load practice network', exact: true }).click()
+    await learning.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
+    await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
+    await learning.getByRole('button', { name: 'Next instruction (preview)', exact: true }).click()
+    await learning.getByRole('button', { name: 'Next instruction (preview)', exact: true }).click()
+    await learning.getByRole('button', { name: 'Show me where', exact: true }).click()
+    await expect(page.getByTestId('aznet-subnet-selector')).toHaveValue('work-a')
+    await expect(page.locator('.learning-cue')).toHaveCount(1)
+    const practice = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:practice-workspace:v1')).document)
+    expect(await readSaved()).toEqual(retainedWorkspace)
+    await learning.getByRole('button', { name: 'Pause learning', exact: true }).click()
+    await page.reload()
+    await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:practice-workspace:v1')).document)).toEqual(practice)
+    await page.getByTestId('learning-open').click()
+    await expect(learning).toContainText('Instruction preview')
+    await learning.getByRole('button', { name: 'Pause learning', exact: true }).click()
+    await page.getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+    expect(await readSaved()).toEqual(retainedWorkspace)
   }
   for (const mode of ['vwan', 'full']) {
     const topology = mode === 'vwan' ? hubFirewallTopology('published-branch') : azHubFirewallTopology('published-branch')
