@@ -77,7 +77,8 @@ connectivity.
 The initial hosted-collector design was blocked by Azure Policy disabling public
 Storage networking. Its legacy CI container write grant should be removed after
 the Function is verified; removing the declaration from an incremental Bicep
-deployment alone does not delete the old assignment. Never re-enable public
+deployment alone does not delete the old assignment. This grant was removed
+from the active deployment after verification. Never re-enable public
 Storage access or add an exception to make the former hosted collector work.
 
 Deploy using an Azure identity allowed to create the resources and assign roles
@@ -116,8 +117,8 @@ diagnosing a mismatch.
 ## Configure GitHub
 
 1. Create a GitHub Actions environment named **github-statistics**. Restrict its
-   deployment branches to `main`. Required manual reviewers would also pause
-   scheduled runs, so choose that policy deliberately.
+   deployment branches to `main`. Required manual reviewers pause deployments,
+   not the Azure collection timer.
 2. Set these environment variables using the deployment outputs:
 
    | GitHub variable | Bicep output |
@@ -133,15 +134,16 @@ diagnosing a mismatch.
    GitHub PAT restricted to this repository with **Administration: read**
    (and the automatically included Metadata read permission). The token owner
    must have sufficient repository access. Do not grant Administration write.
-   Set an expiry and arrange renewal. The built-in `GITHUB_TOKEN` handles
-   public counters/releases but cannot supply the needed traffic permission.
+   Set an expiry and arrange renewal. The Function requests public
+   counters/releases without a token; the built-in `GITHUB_TOKEN` cannot
+   supply the needed traffic permission.
 4. Merge the workflow to `main`, enable it if previously paused, and manually run
    **Deploy statistics Function** once. Confirm code deployment and perform the
    authenticated manual collection described below.
    Initial Azure RBAC propagation can take time; rerun if necessary.
 
 Only the environment's managed identity federation grants Azure access.
-No Azure client secret or storage account key is stored in GitHub. The optional
+No Azure client secret or storage account key is stored in GitHub. The dedicated
 GitHub PAT is still a credential. The deployment workflow transfers it directly
 from the environment secret into encrypted Function app settings, without
 printing its value or packaging it with code. At collection time it is sent
@@ -197,6 +199,14 @@ GitHub token or raw traffic data. Requests without the key must be rejected.
 The endpoint is for deliberate first-run checks or recovery, not a public
 analytics API. Snapshot contents remain accessible only through authorized
 private-network data access.
+
+On 2026-11-16, [deployment run 43898245558](https://github.com/erjosito/vwan-visual-topology/actions/runs/43898245558)
+successfully deployed from a hosted runner with Storage public networking
+disabled. An administrator-authenticated invocation persisted the first
+snapshot and returned its ETag with traffic coverage available; an anonymous
+request returned HTTP 401. Azure also reported the expected daily timer
+binding. This verifies deployment and manual collection, not a subsequent
+scheduled execution.
 
 ## Dashboard boundary
 
