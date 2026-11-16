@@ -52,29 +52,35 @@ packaged-desktop assessment.
 
 The runner writes `test-artifacts\quality\latest.json` by default, plus raw
 Vitest/Playwright reports, browser artifacts and `scorecard.json` under a unique
-run directory. Everything stays local. CI runs the scorecard adapter tests;
-it does not automatically upload study data or claim a full evaluation.
+run directory. Local evidence stays local. CI runs the scorecard adapter tests
+and the real registered accessibility audit, retaining its raw automated reports
+for seven days. It does not upload study data or claim a full evaluation.
 
-The executable regression manifest is `scripts/quality-scorecard.mjs`, version 4.
+The executable regression manifest is `scripts/quality-scorecard.mjs`, version 5.
 Version 2 added VPN overlap NAT; version 3 adds the separately versioned
 `scripts/accessibility-scorecard.mjs` manifest/evidence adapter and
 model-contract registration seam. Version 4 registers the separate #165
 document-derived Firewall contracts and native evidence workflows, carrying their
-qualification into each metric. The combined plan hash includes all manifests:
+qualification into each metric. Version 5 registers the guided-course, guidance,
+runner and protected-practice contracts, practice isolation workflows and SVG
+accessibility regressions. A tracked-file inventory guard fails closed if new
+learning contracts or critical learning/accessibility workflows are unregistered.
+The combined plan hash includes all manifests; the expanded corpus is not
+numerically comparable to version 4:
 
 | Numeric series | Current evidence subset |
 | --- | --- |
 | Routing/packet regressions | Native routing, paths, VPN/hub contexts and overlap NAT, classic routing, egress/ingress/NSG/LB and captured comparison tests |
 | Requirement-grading regressions | Route/flow and packet requirement tests |
-| Training-contract regressions | Routing and connectivity practice/rubric/progress tests |
+| Training-contract regressions | Routing/connectivity practice, rubric, progress, guided course, guidance, runner and protected-practice safety tests |
 | Persistence/local-boundary regressions | Workspace originals/recovery, inventory, platform service and MCP tests |
 | Localization-contract regressions | Message/localization contract tests |
-| Scripted UI workflows | Canvas presentation, original VNet detail, single-workspace and VPN NAT tests |
-| Scripted training workflows | Learning/practice browser tests |
+| Scripted UI workflows | Canvas presentation, SVG accessibility, original VNet detail, single-workspace and VPN NAT tests |
+| Scripted training workflows | Learning/practice browser tests, including protected-practice isolation |
 | Scripted localization workflows | Localization browser tests |
 | Static Firewall model contracts | Hand-authored published/candidate matrices and conservative negatives in both native providers; synthetic, not live-Azure-qualified |
 | Static Firewall native workflows | Original IDs/static authoring, ingress/onward tables, per-leg worker parity, path evidence and EN/JA persistence |
-| Automated accessibility (no numeric score) | Sixteen whole-document axe samples, with rule/node counts and a serious/critical gate; see below |
+| Automated accessibility (no numeric score) | Twenty-eight whole-document axe samples, with rule/node counts and a serious/critical gate; see below |
 
 Each score is **100 x first-attempt passed cases / registered reported cases**.
 This formula applies only to registered regression/model-contract series, **never** accessibility.
@@ -116,14 +122,21 @@ is evidence, not necessarily a passing accessibility gate.
 
 The pinned development dependency is `@axe-core/playwright` **4.14.0**, with
 lockfile-resolved `axe-core` **4.14.0**. It is not shipped in the application.
-Accessibility evidence version **1** registers the Cartesian product:
+Accessibility evidence version **2** registers the Cartesian product:
 
 - EN and JA, verified through the application's language selector and HTML lang;
 - desktop **1440 x 1000/light** and narrow **390 x 844/dark**;
 - empty initial mixed workspace; opened **original VNet detail inspector** for
   one locally created VNet; opened **Workspace controls** searchable command
   palette (unfiltered, not a fictional separate command dialog); and the
-  dedicated VWAN `hub-routing-preferences` sample.
+  dedicated VWAN `hub-routing-preferences` sample; guided-learning sidebar;
+  protected-practice confirmation; and loaded two-VNet prediction task.
+
+The last three states add twelve samples beyond the historical evidence-v1
+corpus. The loaded task retains the real original VNet/subnet controls and the
+learning sidebar. Their whole-document audits must not be replaced with empty
+initial-state checks. Focused clipped-hub and loaded-practice regressions also
+run against the exact built production artifact in `test:production`.
 
 Theme and size are intentionally paired, not a full theme/viewport factorial.
 Workspace controls start closed for consistent state setup; the command-palette

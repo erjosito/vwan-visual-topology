@@ -56,7 +56,7 @@ function azFixture(full: boolean) {
 }
 
 async function menu(page: Page, node: Locator) {
-  await node.focus()
+  await (await node.getAttribute('role') === 'group' ? node.locator(':scope > .network-node') : node).focus()
   await page.keyboard.press('Shift+F10')
 }
 

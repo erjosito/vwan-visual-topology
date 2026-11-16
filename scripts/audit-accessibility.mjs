@@ -23,12 +23,27 @@ export async function auditAccessibility({ baseURL, artifacts }) {
           await context.addInitScript(({ language }) => {
             localStorage.setItem('vwan-visual-topology:language:v1', language)
             localStorage.setItem('aznet-workspace-tools:v1', 'closed')
-          }, { language: sample.language })
+          }, { language: sample.state.startsWith('learning-') ? 'en' : sample.language })
           const page = await context.newPage()
           page.setDefaultTimeout(10_000)
           page.setDefaultNavigationTimeout(15_000)
           await page.goto(new URL(sample.path, baseURL).href)
           await expect(page.getByTestId(sample.state === 'vwan-workspace' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+          if (sample.state.startsWith('learning-')) {
+            await page.getByTestId('learning-open').click()
+            const sidebar = page.getByTestId('learning-sidebar')
+            await expect(sidebar).toBeVisible()
+            if (sample.state !== 'learning-sidebar') {
+              await sidebar.getByRole('button', { name: 'Load practice network', exact: true }).click()
+              if (sample.state === 'learning-prediction') {
+                await sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
+                await sidebar.getByRole('button', { name: 'Check task', exact: true }).click()
+                await sidebar.getByRole('button', { name: 'Complete task & continue', exact: true }).click()
+                await expect(sidebar.getByRole('heading', { name: 'Predict connectivity', exact: true })).toBeVisible()
+                await expect(page.getByTestId('aznet-subnet-work-a')).toBeVisible()
+              } else await expect(sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true })).toBeVisible()
+            }
+          }
           await page.locator('header [data-language-selector]').selectOption(sample.language)
           await expect(page.locator('html')).toHaveAttribute('lang', sample.language)
           // The existing theme control sets the application's own supported preference.
@@ -58,7 +73,8 @@ export async function auditAccessibility({ baseURL, artifacts }) {
             examinedScope: {
               document: 'whole document', url: page.url(), language: sample.language,
               viewport: sample.viewport, state: sample.state,
-              fixture: sample.state === 'original-inspector' ? 'one locally created original VNet, no imported/customer data' : sample.path,
+              fixture: sample.state === 'original-inspector' ? 'one locally created original VNet, no imported/customer data'
+                : sample.state.startsWith('learning-') ? `built-in two-vnets protected-practice course: ${sample.state}` : sample.path,
               exclusions: [], disabledRules: [],
             },
           })

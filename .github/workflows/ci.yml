@@ -64,6 +64,21 @@ jobs:
           docker run --rm --init --ipc=host \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
             npm run measure:production -- test-results/production-measurements.json
+      - name: Gate the versioned whole-document accessibility sample
+        run: |
+          version=$(node -p "require('@playwright/test/package.json').version")
+          docker run --rm --init --ipc=host \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/work \
+            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
+            npm run evaluate:accessibility
+      - name: Preserve actual accessibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: automated-accessibility
+          path: test-artifacts/quality/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Preserve shared presentation acceptance screenshots
         uses: actions/upload-artifact@v4
         with:

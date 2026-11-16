@@ -1,9 +1,19 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { scoreGroup, vitestCases, playwrightCases } from './quality-scorecard.mjs'
+import { execFileSync } from 'node:child_process'
+import { scoreGroup, vitestCases, playwrightCases, unregisteredCriticalFiles } from './quality-scorecard.mjs'
 
 const plan = { id: 'example', label: 'Example', files: ['src/example.test.ts'] }
 const item = (name, outcome) => ({ name, outcome, durationMs: 1, file: 'C:\\repo\\src\\example.test.ts'.replaceAll('\\', '/') })
+
+test('new learning safety and practice workflows cannot silently escape the versioned benchmark', () => {
+  assert.deepEqual(unregisteredCriticalFiles([
+    'src/learning/runner.test.ts', 'e2e/learning.spec.ts', 'e2e/practice-workspace.spec.ts',
+    'src\\learning\\new-safety.test.ts', 'e2e/learning-new.spec.ts', 'src/unrelated.test.ts',
+  ]), ['src/learning/new-safety.test.ts', 'e2e/learning-new.spec.ts'])
+  const tracked = execFileSync('git', ['ls-files'], { cwd: new URL('../', import.meta.url), encoding: 'utf8' }).trim().split('\n')
+  assert.deepEqual(unregisteredCriticalFiles(tracked), [], 'Register new critical contracts and bump the manifest version')
+})
 
 test('missing files and empty/setup-only reports cannot score 100', () => {
   assert.equal(scoreGroup(plan, []).score, null)

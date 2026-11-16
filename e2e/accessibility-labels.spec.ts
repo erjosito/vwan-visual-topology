@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import { example } from '../src/model'
 
 const escaped = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -45,4 +46,54 @@ for (const language of ['en', 'ja']) {
     await expect(page.getByRole('main').locator('.aznet-scenario-banner')).toBeVisible()
     await expect(page.getByRole('main').locator('.canvas-controls-stack')).toBeVisible()
   })
+
+  test(`${language}: partially clipped hub labels retain their name and descriptive metadata`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.addInitScript((language) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+    }, language)
+    await page.goto('/?mode=vwan&sample=hub-routing-preferences')
+    await page.getByLabel('Theme', { exact: true }).selectOption('dark')
+    const hub = page.locator('.hub-node[data-node-id="hub-neu"]')
+    await expect(hub).toHaveAccessibleName(/North Europe Hub \(ASPath Preference\)/)
+    await expect(hub).toHaveAccessibleDescription(/North Europe/)
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+  })
+
+  for (const width of [1440, 390]) {
+    test(`${language} ${width}px: loaded practice VNets and subnets are independent accessible controls`, async ({ page }) => {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 })
+      await page.goto('/?mode=full')
+      await page.getByTestId('learning-open').click()
+      const sidebar = page.getByTestId('learning-sidebar')
+      await sidebar.getByRole('button', { name: 'Load practice network', exact: true }).click()
+      await sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
+      await sidebar.getByRole('button', { name: 'Check task', exact: true }).click()
+      await sidebar.getByRole('button', { name: 'Complete task & continue', exact: true }).click()
+      await page.locator('header [data-language-selector]').selectOption(language)
+      await page.getByLabel('Theme', { exact: true }).selectOption(width === 390 ? 'dark' : 'light')
+      const card = page.getByTestId('aznet-vnet-a')
+      const header = page.getByTestId('aznet-select-vnet-a')
+      const subnet = page.getByTestId('aznet-subnet-work-a')
+      await expect(card).toHaveAttribute('role', 'group')
+      await expect(card.locator('[role="button"] [role="button"]')).toHaveCount(0)
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+      await header.focus()
+      await page.keyboard.press('Tab')
+      await expect(subnet).toBeFocused()
+      await header.press('Enter')
+      await expect(header).toHaveAttribute('aria-pressed', 'true')
+      await header.press('Shift+F10')
+      await expect(page.getByRole('menu')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(header).toBeFocused()
+      await subnet.focus()
+      await subnet.press('Enter')
+      await expect(header).toHaveAttribute('aria-pressed', 'false')
+      await subnet.press('Shift+F10')
+      await expect(page.getByRole('menu')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(subnet).toBeFocused()
+    })
+  }
 }

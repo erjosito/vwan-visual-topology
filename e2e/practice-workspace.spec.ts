@@ -11,7 +11,7 @@ const undo = (page: Page) => page.getByRole('button', { name: /Undo/, exact: fal
 const redo = (page: Page) => page.getByRole('button', { name: /Redo/, exact: false })
 const node = (page: Page, vwan: boolean) => vwan ? page.locator('[data-node-id="a"]') : page.getByTestId('aznet-vnet-a')
 const position = (page: Page, vwan: boolean) => vwan ? node(page, vwan).getAttribute('transform')
-  : node(page, vwan).locator(':scope > rect').first().getAttribute('x')
+  : node(page, vwan).locator('.network-node-frame').getAttribute('x')
 
 async function seed(page: Page, vwan: boolean) {
   const document = structuredClone(exercises[vwan ? 0 : 1].starter)
@@ -47,7 +47,7 @@ async function confirmStart(page: Page, scenario: string) {
 }
 
 async function move(page: Page, vwan: boolean) {
-  await node(page, vwan).focus()
+  await (vwan ? node(page, vwan) : page.getByTestId('aznet-select-vnet-a')).focus()
   await page.keyboard.press(vwan ? 'Alt+ArrowRight' : 'ArrowRight')
   await expect(undo(page)).toBeEnabled()
 }
@@ -153,12 +153,12 @@ test('quota failures keep live practice accessible for export without touching n
   }, practiceWorkspaceKey)
   await move(page, false)
   await expect(bar(page).getByRole('alert')).toContainText('session only')
-  const x = await node(page, false).locator(':scope > rect').first().getAttribute('x')
+  const x = await node(page, false).locator('.network-node-frame').getAttribute('x')
   expect(await practice(page)).toEqual(saved)
   await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
   expect(await stored(page)).toEqual(originals)
   await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
-  await expect(node(page, false).locator(':scope > rect').first()).toHaveAttribute('x', x!)
+  await expect(node(page, false).locator('.network-node-frame')).toHaveAttribute('x', x!)
   await expect(bar(page).getByRole('alert')).toContainText('session only')
   expect(await practice(page)).toEqual(saved)
 })

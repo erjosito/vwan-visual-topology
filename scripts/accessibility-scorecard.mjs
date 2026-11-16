@@ -1,7 +1,7 @@
 import { digest } from './quality-scorecard.mjs'
 
 export const accessibilityPlan = {
-  id: 'automated-accessibility', version: 1,
+  id: 'automated-accessibility', version: 2,
   label: 'Local automated accessibility sample (not WCAG conformance)',
   engine: 'axe-core', engineVersion: '4.14.0',
   rules: 'all default-enabled axe rules; no exclusions or disabled rules',
@@ -10,7 +10,8 @@ export const accessibilityPlan = {
   samples: ['en', 'ja'].flatMap((language) => [
     { name: 'desktop', width: 1440, height: 1000, theme: 'light' },
     { name: 'narrow', width: 390, height: 844, theme: 'dark' },
-  ].flatMap((viewport) => ['initial-workspace', 'original-inspector', 'command-palette', 'vwan-workspace'].map((state) => ({
+  ].flatMap((viewport) => ['initial-workspace', 'original-inspector', 'command-palette', 'vwan-workspace',
+    'learning-sidebar', 'learning-confirmation', 'learning-prediction'].map((state) => ({
     id: `${language}-${viewport.name}-${state}`, language, viewport, state,
     path: state === 'vwan-workspace' ? '/?mode=vwan&sample=hub-routing-preferences' : '/',
   })))),
