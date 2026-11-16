@@ -7,10 +7,12 @@ import { HubStaticRoutesEditor } from '../HubStaticRoutesEditor'
 
 const words = (value: string) => [...new Set(value.split(',').map((word) => word.trim()).filter(Boolean))]
 
-export function HubTablesEditor({ hub, topology, commit }: {
+export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall }: {
   hub: AzVwanHub
   topology: AzNetTopology
   commit: (update: (draft: AzNetTopology) => void) => void
+  onAttach: (vnetId: string) => void
+  focusFirewall?: boolean
 }) {
   const tables = hubRouteTables(hub)
   const attachments = [
@@ -28,7 +30,7 @@ export function HubTablesEditor({ hub, topology, commit }: {
     <h4>{t('Hub routing tables')}</h4>
     <p>{t('Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.')}</p>
     <p>{t('Custom tables with routing intent and arbitrary hub next hops are not assessed. Static inspection requires a declared local Azure Firewall in a single hub.')}</p>
-    <HubStaticRoutesEditor hub={hub} onChange={(owner) => commit((draft) => {
+    <HubStaticRoutesEditor hub={hub} focusFirewall={focusFirewall} onChange={(owner) => commit((draft) => {
       const target = draft.vwanHubs.find((entry) => entry.id === hub.id)!
       target.firewall = owner.firewall
       target.routeTables = owner.routeTables
@@ -63,9 +65,7 @@ export function HubTablesEditor({ hub, topology, commit }: {
     })}>{t('Add hub table')}</button>
     <h4>{t('VNet attachments')}</h4>
     {topology.vnets.filter((vnet) => !vnet.vwanHubAttachment).map((vnet) =>
-      <button key={vnet.id} type="button" className="aznet-btn" onClick={() => commit((draft) => {
-        draft.vnets.find((entry) => entry.id === vnet.id)!.vwanHubAttachment = { hubId: hub.id, enabled: true }
-      })}>{t('Attach {0}', vnet.name)}</button>)}
+      <button key={vnet.id} type="button" className="aznet-btn" onClick={() => onAttach(vnet.id)}>{t('Attach {0}', vnet.name)}</button>)}
     {attachments.map((attachment) => {
       const config = azHubRouting(attachment.config)
       const change = (patch: Partial<HubRoutingConfiguration>) => commit((draft) => {

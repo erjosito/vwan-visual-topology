@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Hub } from './model'
 import { hubRouteTables, NONE_HUB_TABLE } from './hub-routing'
 import { cidr } from './validation'
@@ -6,8 +6,15 @@ import { t } from './i18n'
 
 type Owner = Pick<Hub, 'id' | 'firewall' | 'routeTables'>
 
-export function HubStaticRoutesEditor({ hub, onChange }: { hub: Owner; onChange: (hub: Owner) => void }) {
+export function HubStaticRoutesEditor({ hub, onChange, focusFirewall = false }: { hub: Owner; onChange: (hub: Owner) => void; focusFirewall?: boolean }) {
   const [error, setError] = useState('')
+  const declaration = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (focusFirewall) {
+      declaration.current?.focus()
+      declaration.current?.scrollIntoView({ block: 'center' })
+    }
+  }, [focusFirewall])
   const update = (tableId: string, change: (table: NonNullable<Hub['routeTables']>[number]) => void) => {
     const tables = structuredClone(hubRouteTables(hub))
     change(tables.find((table) => table.id === tableId)!)
@@ -17,7 +24,7 @@ export function HubStaticRoutesEditor({ hub, onChange }: { hub: Owner; onChange:
   return <section aria-label={t('Static hub Firewall routing')}>
     <h4>{t('Static hub Firewall routing')}</h4>
     <p>{t('Single hub only. Declare the original local Firewall identity; disable both routing intents. Static routes select inspection, not Firewall permission or application delivery.')}</p>
-    <label className="checkbox-field"><input type="checkbox" checked={!!hub.firewall} onChange={(event) => {
+    <label className="checkbox-field"><input ref={declaration} type="checkbox" checked={!!hub.firewall} onChange={(event) => {
       const owner = { ...hub }
       if (event.target.checked) owner.firewall = { id: `fw-${hub.id}`, name: 'Azure Firewall' }
       else delete owner.firewall

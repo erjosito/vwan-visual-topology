@@ -11,7 +11,7 @@ import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validati
 import { CanvasOverlay } from './CanvasOverlay'
 const HubStaticRoutesEditor = lazy(() => import('./HubStaticRoutesEditor').then((module) => ({ default: module.HubStaticRoutesEditor })))
 
-export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean }
+export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean; focusFirewall?: boolean }
 
 function Field({ title, children }: { title: string; children: ReactElement<{ 'aria-label'?: string }> }) {
   return <label className="field"><span>{title}</span>{cloneElement(children, { 'aria-label': title })}</label>
@@ -81,6 +81,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             ...(text('region') ? { region: text('region') } : {}),
             ...(customLabel ? { label: customLabel } : {}),
             ...(hubIdValue ? { hubId: hubIdValue } : {}),
+            ...(spoke?.hubRouting ? { hubRouting: structuredClone(spoke.hubRouting) } : {}),
+            ...(spoke?.subnets ? { subnets: structuredClone(spoke.subnets) } : {}),
             prefixes: prefixes(text('prefixes')),
             ...(selectedNvaSpokes.length ? { nvaSpokeIds: selectedNvaSpokes } : {}),
             ...(hubIdValue && data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}),
@@ -325,7 +327,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <Field title={t("Additional private traffic prefixes")}><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
-          <Suspense fallback={null}><HubStaticRoutesEditor hub={hubStatic} onChange={(owner) => setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })} /></Suspense>
+          <Suspense fallback={null}><HubStaticRoutesEditor hub={hubStatic} focusFirewall={request.focusFirewall} onChange={(owner) => setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })} /></Suspense>
         </>}
         {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" value={selectedSpokeHubId} onChange={(e) => setSelectedSpokeHubId(e.target.value)}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
         {request.kind === 'connection' && transportValue !== 'SpokeNVA' && <Field title={t("Hub")}><select name="hub" required defaultValue={connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}

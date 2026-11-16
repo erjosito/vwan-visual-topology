@@ -15,10 +15,11 @@ import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceMenu } from '../WorkspaceSession'
 import { useWorkspaceSession } from '../workspace-context'
-import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
+import type { ContextAction } from '../TopologyContextMenu'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
 import { CanvasOverlay } from '../CanvasOverlay'
+import { azHubGatewayConnections } from '../hub-gateways'
 import { useDeleteShortcut } from '../useDeleteShortcut'
 import {
   ALL_KNOWN_AZURE_REGIONS,
@@ -234,6 +235,9 @@ const ErLocationInfoModal = lazy(() => import('../ErLocationInfoModal').then((mo
 const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
+const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
+const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
+const TopologyContextMenu = lazy(() => import('../TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
@@ -289,6 +293,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
   const [inventorySelection, setInventorySelection] = useState<string>()
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
+  const [clearRequested, setClearRequested] = useState(false)
+  const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
+  const [firewallEditorHubId, setFirewallEditorHubId] = useState<string>()
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
   const [routeMapArsId, setRouteMapArsId] = useState<string>()
@@ -1525,6 +1532,19 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })
     })
   }
+  const attachVnetToHub = (vnetId: string, hubId: string) => {
+    commitTopology((draft) => {
+      const vnet = draft.vnets.find((entry) => entry.id === vnetId)
+      if (vnet && !vnet.vwanHubAttachment && draft.vwanHubs.some((hub) => hub.id === hubId)) {
+        vnet.vwanHubAttachment = { hubId, enabled: true }
+      }
+    })
+  }
+  const openHubConnections = (hubId: string, focusFirewall = false) => {
+    setFirewallEditorHubId(focusFirewall ? hubId : undefined)
+    setSelected({ kind: 'vwan-hub', hubId })
+    setActiveTab('editor')
+  }
   const getOrdinaryContextMenuSpec = (
     target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number },
   ): { title: string; actions: ContextAction[] } | null => {
@@ -1601,6 +1621,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         title: `VNet · ${vnet.name} (${vnet.region})`,
         actions: [
           { label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) },
+          ...(vnet.vwanHubAttachment ? [{
+            label: t('Configure virtual hub connection'),
+            onSelect: () => openHubConnections(vnet.vwanHubAttachment!.hubId),
+          }] : [{
+            label: t('Connect to virtual hub'), allowDisabledChildren: true,
+            children: topology.vwanHubs.length ? topology.vwanHubs.map((hub) => ({
+              label: hub.name,
+              onSelect: () => { attachVnetToHub(vnet.id, hub.id); openHubConnections(hub.id) },
+            })) : [{ label: t('No virtual hubs. Add a virtual hub first.'), disabled: true }],
+          }]),
           ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'subnet' &&
             e.ref.vnetId === vnet.id && e.group === 'workload')),
           {
@@ -2139,6 +2169,18 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `Virtual WAN Hub · ${hub.name}`,
         actions: [
+          { label: t(hub.firewall ? 'Configure Azure Firewall' : 'Add Azure Firewall'), onSelect: () => openHubConnections(hub.id, true) },
+          { label: t('Gateway capabilities (modeled)'), onSelect: () => setCapabilitiesHubId(hub.id) },
+          {
+            label: t('Connect to spoke'), allowDisabledChildren: true,
+            children: topology.vnets.length ? topology.vnets.map((vnet) => ({
+              label: vnet.vwanHubAttachment
+                ? t('{0} (connected to {1})', vnet.name, topology.vwanHubs.find((entry) => entry.id === vnet.vwanHubAttachment!.hubId)?.name ?? vnet.vwanHubAttachment.hubId)
+                : vnet.name,
+              disabled: !!vnet.vwanHubAttachment && vnet.vwanHubAttachment.hubId !== hub.id,
+              onSelect: () => { if (!vnet.vwanHubAttachment) attachVnetToHub(vnet.id, hub.id); openHubConnections(hub.id) },
+            })) : [{ label: t('No VNets. Add a VNet first.'), disabled: true }],
+          },
           {
             label: t('Edit Hub Route Maps'),
             onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id) },
@@ -2185,10 +2227,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           },
           {
             label: 'Configure Hub & Labels',
-            onSelect: () => {
-              setSelected({ kind: 'vwan-hub', hubId: hub.id })
-              setActiveTab('editor')
-            },
+            onSelect: () => openHubConnections(hub.id),
           },
           {
             label: 'Delete Virtual WAN Hub',
@@ -2881,10 +2920,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             type="button"
             className="aznet-btn"
             data-testid="aznet-clear-topology-btn"
-            onClick={() => loadSample('')}
-            title="Clear canvas to an empty topology"
+            onClick={() => setClearRequested(true)}
+            title={t('Clear canvas to an empty topology')}
           >
-            🗑 Clear
+            {t('Clear')}
           </button>
 
           <button
@@ -3179,7 +3218,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           />
 
           {contextMenu && contextMenuSpec && (
-            <TopologyContextMenu
+            <Suspense fallback={null}><TopologyContextMenu
               x={contextMenu.x}
               y={contextMenu.y}
               title={contextMenuSpec.title}
@@ -3189,8 +3228,15 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 setContextReturnFocus(null)
                 setContextMenu(null)
               }}
-            />
+            /></Suspense>
           )}
+          {topology.vwanHubs.filter((hub) => hub.id === capabilitiesHubId).map((hub) => <Suspense key={hub.id} fallback={null}>
+            <HubCapabilitiesDialog hub={hub} connections={azHubGatewayConnections(topology, hub.id)} onClose={() => setCapabilitiesHubId(undefined)} />
+          </Suspense>)}
+          {clearRequested && <Suspense fallback={null}><ClearTopologyDialog
+            workspace="azure-net"
+            onClose={() => setClearRequested(false)}
+            onConfirm={() => { setClearRequested(false); void loadSample('') }} /></Suspense>}
           {deletionSpec && deletionAction && (
             <CanvasOverlay title={deletionAction.label} className="object-editor" onClose={() => setDeleteTarget(null)}>
               <p>Delete <strong>{deletionSpec.title}</strong>? Associated elements and connections may also be removed. Other endpoint nodes are kept.</p>
@@ -5733,7 +5779,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             <option value="ASPath">ASPath Preference</option>
                           </select>
                         </div>
-                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} /></Suspense>
+                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} onAttach={(vnetId) => attachVnetToHub(vnetId, hub.id)} focusFirewall={firewallEditorHubId === hub.id} /></Suspense>
                         <button type="button" onClick={() => setSnatHubId(hub.id)}>{t('Firewall SNAT')}</button>
                         <form onSubmit={(event) => {
                           event.preventDefault()
