@@ -2,6 +2,22 @@ import { test, expect } from '@playwright/test'
 import { exercises } from '../src/learning/exercises'
 import { progressKey } from '../src/learning/progress'
 
+test('failed optional practice loading preserves the workspace and recovers after explicit reload', async ({ page }) => {
+  await page.route('**/src/learning/LearningDialog.tsx*', (route) => route.abort())
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  const original = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await page.getByTestId('learning-open').click()
+  await expect(page.getByRole('status').filter({ hasText: 'Learning tools could not load.' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Learn & practice', exact: true })).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
+  await page.unroute('**/src/learning/LearningDialog.tsx*')
+  await page.getByRole('button', { name: 'Reload', exact: true }).click()
+  await page.getByTestId('learning-open').click()
+  await expect(page.getByRole('dialog', { name: 'Learn & practice', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
+})
+
 for (const exercise of exercises) {
   test(`local practice persists independent drafts and grades ${exercise.starter.mode}`, async ({ page }) => {
     await page.goto(`/?mode=${exercise.starter.mode}`)

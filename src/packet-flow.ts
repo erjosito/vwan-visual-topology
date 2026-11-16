@@ -5,6 +5,7 @@ import { simulate, type Simulation } from './routing'
 import { traceNodePath, type NodePath, type PathNode } from './paths'
 import { simulateAzNet, traceAzNetFlow, type AzEndpointRef, type AzFlowTrace, type AzSimulationResult } from './azure-net/engine'
 import { applyInternetEgress } from './packet-egress'
+import { completePacketNsg, endpointNsg, type NsgAssessment, type TupleUncertainty } from './packet-security'
 
 export interface WorkloadEndpoint { kind: 'workload'; workloadId: string; nicId: string; ipConfigurationId: string }
 export type PacketEndpoint = WorkloadEndpoint | { kind: 'external'; address: string }
@@ -24,6 +25,7 @@ export interface PacketStep {
   edgeId?: string
   routeId?: string
   tableId?: string
+  uncertainty?: TupleUncertainty
 }
 export interface PacketLeg {
   direction: 'forward' | 'reply'
@@ -40,10 +42,11 @@ export interface PacketResult {
   forward: PacketLeg
   reply: PacketLeg
   delivery: 'not-assessed'
-  security: 'not-assessed'
+  security: 'denied' | 'not-assessed'
   translation: 'snat' | 'none' | 'not-assessed'
   egress?: 'configured' | 'blocked' | 'legacy-implicit' | 'not-assessed'
   limitations: string[]
+  nsg?: { forward: NsgAssessment; reply: NsgAssessment }
 }
 
 export function validatePacketRequest(input: unknown): asserts input is PacketRequest {
@@ -168,11 +171,19 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
       evidence: `Routing reaches the subnet of NIC ${to.nicId}, IP configuration ${to.ipConfigurationId}; workload delivery is not assessed.`,
     })
   }
-  const egress = applyInternetEgress(topology, request, forward, reply, nativeSimulation)
+  const sourceNsg = forward.tuple ? endpointNsg(topology, request.source, 'outbound', forward.tuple, nativeSimulation)
+    : { outcome: 'not-assessed' as const, checks: [] }
+  const egress: Pick<PacketResult, 'translation' | 'egress'> = sourceNsg.outcome === 'denied' ? { translation: 'not-assessed' as const }
+    : applyInternetEgress(topology, request, forward, reply, nativeSimulation)
+  const nsg = completePacketNsg(topology, request.target, forward, reply, sourceNsg, nativeSimulation, egress.translation)
+  if (nsg.forward.outcome === 'denied') {
+    egress.translation = forward.steps.some((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress) ? 'snat' : 'not-assessed'
+    if (request.target.kind === 'external') egress.egress = 'blocked'
+  }
   return {
     source: request.source, target: request.target, forward, reply,
-    delivery: 'not-assessed', security: 'not-assessed', ...egress,
-    limitations: ['Route and supported egress modeling do not prove NSG/firewall policy, a listener, backend health or application delivery.',
+    delivery: 'not-assessed', security: nsg.forward.outcome === 'denied' ? 'denied' : 'not-assessed', ...egress, nsg,
+    limitations: ['Supported NSG checks and route/egress modeling do not prove guest/firewall policy, a listener, backend health or application delivery.',
       reply.session ? 'The response is conditional on this modeled outbound flow; it does not permit a new Internet-initiated connection.'
         : 'The reply is a separate routing probe, not proof that the destination generates a response or that a stateful session exists.'],
   }

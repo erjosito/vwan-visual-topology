@@ -80,7 +80,10 @@ export function applyRouterSnat(topology: InventoryTopology, request: PacketRequ
   let translated = original
   const translate = (address: string, entity: PacketStep['entity'], evidence: string, preservePort = false) => {
     const next = { ...translated, sourceAddress: address, sourcePort: preservePort ? translated.sourcePort : port(translated) }
-    translations.push({ entity, before: translated, after: next, evidence }); translated = next
+    translations.push({ entity, before: translated, after: next, evidence,
+      uncertainty: { ...(policy.kind === 'firewall-network-rules' && address === appliance?.privateIp
+        ? { sourceAddressPrefixes: vnet!.subnets.filter((subnet) => subnet.id === appliance.subnetId).map((subnet) => subnet.prefix) } : {}),
+      sourcePorts: [0, 65535] } }); translated = next
   }
   if (request.target.kind !== 'external' || gateway || policy.kind === 'nva-snat') {
     if (!appliance?.privateIp) return unknown('The original router private interface is unknown; a private translated tuple was not invented.')
@@ -116,7 +119,8 @@ export function applyRouterSnat(topology: InventoryTopology, request: PacketRequ
   const routerIndex = forward.steps.findLastIndex((step) => step.entity.kind === owner.kind && step.entity.id === owner.id
     || owner.kind === 'hub' && step.entity.kind === 'vwan-hub' && step.entity.id === owner.id)
   if (routerIndex < 0) return unknown('The original translation waypoint is absent from the selected route.')
-  forward.steps = forward.steps.map((step, index) => index > routerIndex ? { ...step, before: translated, after: translated }
+  forward.steps = forward.steps.map((step, index) => index > routerIndex ? { ...step, before: translated, after: translated,
+    uncertainty: translations.at(-1)?.uncertainty }
     : step.after === null ? { ...step, after: step.before } : step)
   forward.steps.splice(routerIndex + 1, 0, ...translations)
   const back = topology.version === 1

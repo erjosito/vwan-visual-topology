@@ -14,6 +14,7 @@ function design(mode: string) {
       { id: 'nic-b', name: 'DB NIC', owner: { kind: mode === 'vwan' ? 'spoke' : 'vnet', id: 'network' }, ipConfigurations: [{ id: 'ip-b', name: 'Primary', subnetId: 'app', privateIp: '10.1.1.5' }] },
     ], publicIps: [],
   }
+
   if (mode === 'vwan') return {
     version: 1, name: 'Detail design', hubs: [], sites: [], connections: [], siteLinks: [],
     spokes: [{ id: 'network', name: 'Network', prefixes: ['10.1.0.0/16'], subnets }], inventory,
@@ -23,6 +24,93 @@ function design(mode: string) {
     subnets, gateways: [], appliances: [], x: 200, y: 200 }]
   topology.inventory = inventory
   return topology
+}
+
+for (const mode of ['vwan', 'full'] as const) {
+  test(`scoped NSG ${mode}: original edits, intersection, stateful response and Japanese narrow evidence`, async ({ page }) => {
+    const topology = design(mode), key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    await page.addInitScript(({ key, value }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(value))
+    }, { key, value: mode === 'vwan' ? topology : { sampleId: '', topology } })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(`/?mode=${mode}`)
+    await page.getByLabel('Theme', { exact: true }).selectOption('dark')
+    const node = mode === 'vwan' ? page.locator('.spoke-node[data-node-id="network"]') : page.getByTestId('aznet-vnet-network')
+    await node.click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    const dialog = page.getByTestId('network-detail-dialog'), packet = dialog.getByTestId('packet-flow-panel')
+    const subnet = dialog.getByTestId('nsg-editor-subnet-app'), nic = dialog.getByTestId('nsg-editor-nic-nic-a')
+    await subnet.locator('summary').first().click()
+    await subnet.getByLabel('NSG name', { exact: true }).fill('Subnet policy')
+    await subnet.getByRole('button', { name: 'Declare default-only NSG', exact: true }).click()
+    await subnet.getByLabel('NSG rule name', { exact: true }).fill('DenyWeb')
+    await subnet.getByLabel('NSG direction', { exact: true }).selectOption('outbound')
+    await subnet.getByLabel('NSG action', { exact: true }).selectOption('deny')
+    await subnet.getByLabel('NSG destination ports', { exact: true }).fill('443')
+    await subnet.getByRole('button', { name: 'Save NSG rule', exact: true }).click()
+    await nic.locator('summary').first().click()
+    await nic.getByLabel('NSG name', { exact: true }).fill('NIC policy')
+    await nic.getByRole('button', { name: 'Declare default-only NSG', exact: true }).click()
+    await nic.getByLabel('NSG rule name', { exact: true }).fill('AllowWeb')
+    await nic.getByLabel('NSG direction', { exact: true }).selectOption('outbound')
+    await nic.getByLabel('NSG destination ports', { exact: true }).fill('443')
+    await nic.getByRole('button', { name: 'Save NSG rule', exact: true }).click()
+    await packet.getByLabel('Packet source', { exact: true }).selectOption({ label: 'Application / App NIC / Primary (10.1.1.4)' })
+    await packet.getByLabel('Packet destination', { exact: true }).selectOption({ label: 'Database / DB NIC / Primary (10.1.1.5)' })
+    await packet.getByLabel('Destination port', { exact: true }).fill('443')
+    const trace = packet.getByRole('button', { name: 'Trace packet routing', exact: true })
+    await trace.click()
+    await expect(packet.getByRole('heading', { name: 'Forward routing: reachable', exact: true })).toBeVisible()
+    await expect(packet.getByTestId('packet-nsg-result').getByRole('heading', { name: 'NSG filtering: denied', exact: true })).toBeVisible()
+    await subnet.getByRole('button', { name: 'Delete NSG rule', exact: true }).click()
+    await expect(subnet.getByLabel('NSG rule name', { exact: true })).toHaveValue('')
+    await trace.click()
+    await expect(packet.getByTestId('packet-nsg-result').getByRole('heading', { name: 'NSG filtering: allowed', exact: true })).toBeVisible()
+    const response = packet.getByTestId('packet-nsg-result').locator('details').last()
+    await response.locator('summary').click()
+    await expect(response.getByText('Conditional response uses the allowed flow record, not newly initiated reverse rules. No live session is observed.', { exact: true })).toBeVisible()
+    const saved = JSON.parse((await page.evaluate((key) => localStorage.getItem(key), key))!)
+    const persisted = saved.topology ?? saved
+    expect(persisted.inventory.networkSecurityGroups).toHaveLength(2)
+    expect(persisted.inventory.nsgAssociations.map((binding: { target: { id: string } }) => binding.target.id).sort()).toEqual(['app', 'nic-a'])
+    expect(persisted.version).toBe(mode === 'vwan' ? 1 : 2)
+    expect(await dialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth + 1)).toBe(true)
+    const input: PlatformRequest = {
+      contractVersion: 1, operation: 'simulate', document: { mode, topology: persisted },
+      packet: {
+        source: { kind: 'workload', workloadId: 'vm:a', nicId: 'nic-a', ipConfigurationId: 'ip-a' },
+        target: { kind: 'workload', workloadId: 'vm-b', nicId: 'nic-b', ipConfigurationId: 'ip-b' },
+        protocol: 'tcp', sourcePort: 49152, destinationPort: 443
+      }
+    }
+    expect(await page.evaluate(async (input) => {
+      const module = await import(/* @vite-ignore */ '/src/platform/browser.ts')
+      return module.runBrowserSimulation(input)
+    }, input)).toEqual(executePlatform(input))
+    await page.keyboard.press('Escape')
+    if (mode === 'full') await expect(page.getByTestId('aznet-subnet-nsg-pill').locator('text')).toHaveText('NSG 2')
+    else await expect(page.getByTestId('vwan-spoke-nsg-pill').locator('text')).toHaveText('NSG 2')
+    await page.evaluate(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
+    await page.reload()
+    await node.click()
+    await page.getByRole('button', { name: 'VNet の詳細', exact: true }).click()
+    await subnet.locator('summary').first().click()
+    await expect(subnet.getByLabel('NSG の関連付け', { exact: true })).toBeVisible()
+    await expect(subnet.getByRole('button', { name: 'NSG ルールを保存', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.evaluate(() => localStorage.setItem('vwan-visual-topology:language:v1', 'en'))
+    await page.reload()
+    await node.click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Application', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Remove workload and NICs', exact: true }).click()
+    const afterDelete = JSON.parse((await page.evaluate((key) => localStorage.getItem(key), key))!)
+    const pruned = afterDelete.topology ?? afterDelete
+    expect(pruned.inventory.workloads.map((workload: { id: string }) => workload.id)).toEqual(['vm-b'])
+    expect(pruned.inventory.nics.map((nic: { id: string }) => nic.id)).toEqual(['nic-b'])
+    expect(pruned.inventory.networkSecurityGroups).toHaveLength(2)
+    expect(pruned.inventory.nsgAssociations.map((binding: { target: { id: string } }) => binding.target.id)).toEqual(['app'])
+  })
 }
 
 for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {

@@ -76,7 +76,23 @@ export function PacketFlowPanel({ topology, simulation }: { topology: InventoryT
           {leg.steps.length > 100 && <p>{t('Only the first 100 steps are displayed.')}</p>}
         </details>
       </section>)}
-      <p><strong>{t(result.translation === 'snat' ? 'Illustrative SNAT configured; delivery and security readiness: not assessed'
+      {result.nsg && <section aria-label={t('NSG filtering')} data-testid="packet-nsg-result">
+        <h4>{t('NSG filtering')}: {t(result.nsg.forward.outcome)}</h4>
+        <p>{t('NSG filtering is separate from effective routes, NAT and application delivery. Each probe assesses a new initiation; edited topology/probes never reuse live or earlier session state.')}</p>
+        {(['forward', 'reply'] as const).map((direction) => <details key={direction}>
+          <summary>{t(direction === 'forward' ? 'New-flow NSG checks' : 'Response NSG checks')}: {t(result.nsg![direction].outcome)}</summary>
+          {result.nsg![direction].conditionalResponse && <p>{t('Conditional response uses the allowed flow record, not newly initiated reverse rules. No live session is observed.')}</p>}
+          <ol>{result.nsg![direction].checks.slice(0, 100).map((check, index) => <li key={index}>
+            <code>{check.owner.id} · {check.target.kind}: {check.target.id} · {check.direction} · {check.nsgId ?? 'NSG —'}</code>
+            <p><code>{tupleText(check.tuple)}</code></p>
+            {check.ruleId && <p><code>{check.priority} · {check.ruleId}</code></p>}
+            <p>{t(check.outcome)}: {t(check.reason)}</p>
+            {check.uncertainty && <p>{t('Illustrative translated fields are not compared as exact addresses or ports.')}</p>}
+          </li>)}</ol>
+        </details>)}
+      </section>}
+      <p><strong>{t(result.security === 'denied' ? 'NSG denies this new flow; effective routes are retained.'
+        : result.translation === 'snat' ? 'Illustrative SNAT configured; delivery and security readiness: not assessed'
         : result.translation === 'none' ? 'Configured SNAT does not apply; delivery and security readiness: not assessed'
           : 'Delivery, security and translation readiness: not assessed')}</strong></p>
     </div>}

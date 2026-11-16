@@ -289,6 +289,23 @@ try {
     const translations = result.value.packet.forward.steps.filter((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress)
     expect(translations.at(-1).after.sourceAddress).toBe(native ? '20.40.50.70' : '20.40.50.60')
     if (kind === 'azure-firewall' || kind === 'nva-vm') expect(translations[0].after.sourceAddress).toBe('10.1.2.4')
+    inventory.networkSecurityGroups = [{ id: 'source-nsg', name: 'Source NSG', rules: [{ id: 'deny-web', name: 'DenyWeb',
+      priority: 100, direction: 'outbound', action: 'deny', protocol: 'tcp', sources: ['*'], destinations: ['*'],
+      sourcePorts: ['*'], destinationPorts: ['443'] }] }]
+    inventory.nsgAssociations = [{ owner: inventory.nics[0].owner, target: { kind: 'subnet', id: 'app' }, nsgId: 'source-nsg' },
+      { owner: inventory.nics[0].owner, target: { kind: 'nic', id: 'client-nic' }, nsgId: 'source-nsg' }]
+    const denied = await page.evaluate((request) => window.desktopSimulator.simulate(request), input)
+    expect(denied.ok).toBe(true)
+    expect(denied.value).toEqual(executePlatform(input))
+    expect(denied.value.packet).toMatchObject({ security: 'denied', translation: 'not-assessed', egress: 'blocked',
+      forward: { routing: 'reachable' }, nsg: { forward: { outcome: 'denied' } } })
+    expect(denied.value.packet.forward.native).toEqual(result.value.packet.forward.native)
+    expect(denied.value.packet.reply.session).toBeUndefined()
+    inventory.networkSecurityGroups[0].rulesStatus = 'unknown'
+    const unknown = await page.evaluate((request) => window.desktopSimulator.simulate(request), input)
+    expect(unknown.ok).toBe(true)
+    expect(unknown.value).toEqual(executePlatform(input))
+    expect(unknown.value.packet.nsg.forward.outcome).toBe('not-assessed')
   }
   await page.goto('app://simulator/?mode=vwan&feedback=1')
   await page.getByTestId('vwan-app').waitFor()
@@ -321,6 +338,7 @@ try {
     ownedMixedHubRouteAssertions: true,
     ownedWorkloadPacketParity: true, originalInventoryDetailEditsPersisted: true,
     explicitNatFirewallNvaAndNativeHubPacketParity: true,
+    scopedNsgDenialAndUnknownCapturePacketParity: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

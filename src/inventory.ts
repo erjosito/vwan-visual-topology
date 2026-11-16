@@ -19,6 +19,31 @@ export interface NatGateway {
   publicIpPrefixIds?: string[]
 }
 export interface RouterSnatOwner { kind: 'appliance' | 'hub'; id: string }
+export interface NetworkSecurityRule {
+  id: string
+  name: string
+  priority: number
+  direction: 'inbound' | 'outbound'
+  action: 'allow' | 'deny'
+  protocol: 'tcp' | 'udp' | 'any' | 'icmp' | 'esp' | 'ah' | 'unknown'
+  sources: string[]
+  destinations: string[]
+  sourcePorts: string[]
+  destinationPorts: string[]
+}
+export interface NetworkSecurityGroup {
+  id: string
+  name: string
+  rules: NetworkSecurityRule[]
+  rulesStatus?: 'unknown'
+  region?: string
+}
+export interface NsgAssociation {
+  owner: InventoryOwner
+  target: { kind: 'subnet' | 'nic'; id: string }
+  nsgId?: string
+  status?: 'unknown'
+}
 export type RouterSnatPolicy = {
   owner: RouterSnatOwner
   publicIpIds: string[]
@@ -39,6 +64,8 @@ export interface NetworkInventory {
   publicIpPrefixes?: PublicIpPrefix[]
   natGateways?: NatGateway[]
   routerSnatPolicies?: RouterSnatPolicy[]
+  networkSecurityGroups?: NetworkSecurityGroup[]
+  nsgAssociations?: NsgAssociation[]
 }
 export type InventoryTopology = Topology | AzNetTopology
 
@@ -233,6 +260,78 @@ export function validateInventory(topology: InventoryTopology): void {
       }
     }
   }
+  const groups=list(inventory.networkSecurityGroups??[],'network security groups').map((entry) => {
+    const group=named(entry,'NSG')
+    if(Object.keys(group).some((key) => !['id','name','rules','rulesStatus','region'].includes(key))
+      ||group.rulesStatus!==undefined&&group.rulesStatus!=='unknown') fail('unsupported NSG field or completeness status')
+    if(group.region!==undefined) text(group.region,'NSG region')
+    const priorities=new Set<string>(),ruleIds=new Set<string>(),names=new Set<string>()
+    for(const entry of list(group.rules,'NSG rules')) {
+      const rule=object(entry),id=text(rule.id,'NSG rule ID',true),name=text(rule.name,'NSG rule name')
+      if(!/^\w[\w.-]{0,78}[\w_]$|^\w$/.test(name)||names.has(name.toLowerCase())||ruleIds.has(id)) fail('invalid or duplicate NSG rule name/ID')
+      names.add(name.toLowerCase()); ruleIds.add(id)
+      if(Object.keys(rule).some((key) => !['id','name','priority','direction','action','protocol',
+        'sources','destinations','sourcePorts','destinationPorts'].includes(key))
+        ||!['inbound','outbound'].includes(String(rule.direction))||!['allow','deny'].includes(String(rule.action))
+        ||!['tcp','udp','any','icmp','esp','ah','unknown'].includes(String(rule.protocol))
+        ||!Number.isInteger(rule.priority)||Number(rule.priority)<100||Number(rule.priority)>4096) fail('invalid NSG rule')
+      const priority=`${rule.direction}:${rule.priority}`
+      if(priorities.has(priority)) fail('duplicate NSG direction/priority')
+      priorities.add(priority)
+      for(const field of ['sources','destinations']) {
+        const values=list(rule[field],`NSG ${field}`)
+        if(!values.length) fail('NSG address selectors cannot be empty')
+        let tags=0
+        for(const entry of values) {
+          const selector=text(entry,'NSG address selector')
+          if(selector==='*'||selector.toLowerCase()==='any'||ipv4(selector)!==undefined||cidr(selector)) continue
+          if(!/^asg:.+/.test(selector)&&!/^[A-Za-z][A-Za-z0-9._-]*$/.test(selector)) fail('malformed NSG address selector')
+          tags++
+        }
+        if(tags&&values.length!==1) fail('NSG service tags/ASGs cannot be combined with other address selectors')
+      }
+      for(const field of ['sourcePorts','destinationPorts']) {
+        const values=list(rule[field],`NSG ${field}`)
+        if(!values.length) fail('NSG port selectors cannot be empty')
+        for(const entry of values) {
+          const selector=text(entry,'NSG port selector')
+          if(selector==='*') continue
+          if(!/^\d{1,5}(-\d{1,5})?$/.test(selector)) fail('malformed NSG port selector')
+          const [start,end=start]=selector.split('-').map(Number)
+          if(start>end||end>65535) fail('invalid NSG port range')
+        }
+      }
+    }
+    return group
+  })
+  const bindings=new Set<string>()
+  for(const entry of list(inventory.nsgAssociations??[],'NSG associations')) {
+    const binding=object(entry),owner=object(binding.owner),target=object(binding.target)
+    if(Object.keys(binding).some((key) => !['owner','target','nsgId','status'].includes(key))
+      ||Object.keys(owner).some((key) => !['kind','id'].includes(key))
+      ||Object.keys(target).some((key) => !['kind','id'].includes(key))
+      ||binding.status!==undefined&&binding.status!=='unknown') fail('unsupported NSG association field')
+    const container=owners.find((entry) => entry.kind===owner.kind&&entry.id===owner.id)
+    const id=text(target.id,'NSG association target',true)
+    if(!container||(target.kind==='subnet'? !container.subnets.some((subnet) => subnet.id===id)
+      :target.kind!=='nic'||!nics.some((nic) => nic.id===id&&sameInventoryOwner(nic.owner as unknown as InventoryOwner,owner as unknown as InventoryOwner)))) {
+      fail('NSG association requires an original subnet/NIC owner')
+    }
+    const key=JSON.stringify([owner.kind,owner.id,target.kind,id])
+    if(target.kind==='subnet'&&['GatewaySubnet','AzureFirewallSubnet'].includes(container!.subnets.find((subnet) => subnet.id===id)!.name)
+      &&binding.status!=='unknown') fail('customer NSGs are not supported on GatewaySubnet or AzureFirewallSubnet')
+    if(bindings.has(key)) fail('duplicate NSG association')
+    bindings.add(key)
+    if(binding.nsgId===undefined&&binding.status!=='unknown') fail('NSG association needs an NSG or explicit captured uncertainty')
+    if(binding.nsgId!==undefined) {
+      const group=groups.find((group) => group.id===text(binding.nsgId,'NSG reference',true))
+      if(!group&&binding.status!=='unknown') fail('NSG association references a missing group')
+      if(group?.region&&topology.version===2) {
+        const region=topology.vnets.find((vnet) => vnet.id===owner.id)?.region
+        if(region&&String(group.region).replace(/\s/g,'').toLowerCase()!==region.replace(/\s/g,'').toLowerCase()) fail('NSG and original VNet must be in the same region')
+      }
+    }
+  }
     const snatOwners = new Set<string>()
     for (const entry of list(inventory.routerSnatPolicies ?? [], 'router SNAT policies')) {
       const policy = object(entry), owner = object(policy.owner), id = text(owner.id, 'SNAT owner', true)
@@ -302,6 +401,10 @@ export function inventoryCounts(topology: InventoryTopology, owner: InventoryOwn
   const nics = (topology.inventory?.nics ?? []).filter((nic) => sameInventoryOwner(nic.owner, owner)
     && (subnetId === undefined || nic.ipConfigurations.some((config) => config.subnetId === subnetId)))
   return {
+    nsgs: new Set((topology.inventory?.nsgAssociations ?? []).filter((binding) => sameInventoryOwner(binding.owner, owner)
+      && (subnetId === undefined || binding.target.kind === 'subnet' && binding.target.id === subnetId
+        || binding.target.kind === 'nic' && nics.some((nic) => nic.id === binding.target.id)))
+      .map((binding) => binding.nsgId ?? `unknown:${binding.target.kind}:${binding.target.id}`)).size,
     natGateways: (topology.inventory?.natGateways ?? []).filter((gateway) => sameInventoryOwner(gateway.owner, owner)
       && (subnetId === undefined || gateway.subnetIds.includes(subnetId))).length,
     nics: nics.length,
@@ -313,6 +416,11 @@ export function inventoryCounts(topology: InventoryTopology, owner: InventoryOwn
 
 export function natGatewayForSubnet(topology: InventoryTopology, owner: InventoryOwner, subnetId: string) {
   return topology.inventory?.natGateways?.find((gateway) => sameInventoryOwner(gateway.owner, owner) && gateway.subnetIds.includes(subnetId))
+}
+
+export function nsgAssociation(topology: InventoryTopology, owner: InventoryOwner, target: NsgAssociation['target']) {
+  return topology.inventory?.nsgAssociations?.find((binding) => sameInventoryOwner(binding.owner, owner)
+    && binding.target.kind === target.kind && binding.target.id === target.id)
 }
 
 export function pruneDeletedInventory(next: InventoryTopology, previous: InventoryTopology) {
@@ -345,6 +453,13 @@ export function pruneDeletedInventory(next: InventoryTopology, previous: Invento
     const hadNics = workload.nicIds.length > 0
     workload.nicIds = workload.nicIds.filter((id) => !removed.has(id))
     return !hadNics || workload.nicIds.length > 0
+  })
+  if (next.inventory.nsgAssociations) next.inventory.nsgAssociations = next.inventory.nsgAssociations.filter((binding) => {
+    const oldOwner = before.find((owner) => sameInventoryOwner(owner, binding.owner))
+    const newOwner = after.find((owner) => sameInventoryOwner(owner, binding.owner))
+    if (oldOwner && !newOwner) return false
+    return binding.target.kind === 'nic' ? !removed.has(binding.target.id)
+      : !oldOwner?.subnets.some((subnet) => subnet.id === binding.target.id) || !!newOwner?.subnets.some((subnet) => subnet.id === binding.target.id)
   })
   const backingIds = (topology: InventoryTopology) => new Set(topology.version === 1
     ? topology.connections.filter((connection) => connection.transport === 'SpokeNVA').map((connection) => connection.siteId)
