@@ -57,6 +57,7 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           const normalized = id.replace(/\\/g, '/')
+          if (normalized.includes('/node_modules/gifenc/')) return 'flow-gif-codec'
           if (normalized.includes('node_modules')) return 'vendor'
         },
       },

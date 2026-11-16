@@ -5,9 +5,9 @@ import type { NodePath } from './paths'
 import { diagramCurve } from './diagram-layout'
 import { motionPoint, motionSamples, motionTrack } from './path-motion'
 import type { MotionSegment } from './path-motion'
+import { flowExportLimits, type FlowExportOptions } from './flow-export-options'
+export { flowExportLimits, type FlowExportOptions } from './flow-export-options'
 
-export const flowExportLimits = { maxWidth: 1400, minWidth: 640, maxLanes: 6, maxNodesPerLane: 10, maxBytes: 8_000_000, fps: 20 } as const
-export type FlowExportOptions = { format?: 'gif' | 'svg' | 'png'; durationMs?: 1500 | 2000; width?: number }
 export type FlowExportNode = { id: string; label: string; detail: string; kind: 'endpoint' | 'hub' | 'firewall' | 'transit' }
 export type FlowExportLane = {
   direction: 'forward' | 'return'; status: 'delivered' | 'stopped' | 'unknown'

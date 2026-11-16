@@ -619,6 +619,14 @@ client uses a local Canvas raster and the same scene/frame/encoding logic.
 Static content is rasterized once; only circle pixels change between frames.
 GIFs use 20 fps (30 or 40 frames). SVG/PNG require no GIF encoding.
 
+The codec has its own lazy bundle, and capability discovery imports only the
+small options contract, not rendering geometry. Export controls remain available
+with the workspace when offline; rendering/encoding is loaded on deliberate
+export. Measured workspace startup is about 322 KB local gzip with these controls,
+so its browser regression ceiling is 325 KB (previously 320 KB). The 140 KB
+entry-only ceiling and 1.2 MB raw workspace ceiling are unchanged; both startup
+graphs explicitly exclude the GIF codec.
+
 Render limits: width 640-1400, at most ten nodes per lane, 8 MB output,
 one active render, four retained handles, 30 seconds per job, ten-minute expiry.
 Release artifacts to free retained capacity. Expiry/cancellation never certifies
