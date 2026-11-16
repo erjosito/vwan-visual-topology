@@ -245,6 +245,51 @@ try {
   expect(blocked).toBe(true)
   const rejected = await page.evaluate(() => window.desktopSimulator.targets({ subscriptionId: '& whoami', tenantId: 'invalid' }))
   expect(rejected.ok).toBe(false)
+  for (const kind of ['direct', 'azure-firewall', 'nva-vm', 'vwan-hub']) {
+    const native = kind === 'vwan-hub', mode = native ? 'vwan' : 'full'
+    const inventory = {
+      workloads: [{ id: 'client', name: 'Client', nicIds: ['client-nic'] }],
+      nics: [{ id: 'client-nic', name: 'Client NIC', owner: { kind: native ? 'spoke' : 'vnet', id: 'network' },
+        ipConfigurations: [{ id: 'client-ip', name: 'Primary', subnetId: 'app', privateIp: '10.1.1.4' }] }],
+      publicIps: [{ id: 'nat-ip', name: 'NAT IP', address: '20.40.50.60', sku: 'Standard', allocation: 'Static' },
+        { id: 'router-ip', name: 'Router IP', address: '20.40.50.70', sku: 'Standard', allocation: 'Static' }],
+      natGateways: [{ id: 'nat', name: 'NAT Gateway', sku: 'Standard', owner: { kind: native ? 'spoke' : 'vnet', id: 'network' },
+        subnetIds: [kind === 'direct' || native ? 'app' : 'router-subnet'], publicIpIds: ['nat-ip'] }],
+      ...(kind !== 'direct' ? { routerSnatPolicies: [kind === 'nva-vm'
+        ? { owner: { kind: 'appliance', id: 'router' }, kind: 'nva-snat', publicIpIds: ['router-ip'],
+          sourcePrefixes: ['10.1.1.0/24'], destinationPrefixes: ['0.0.0.0/0'], protocol: 'any' }
+        : { owner: { kind: native ? 'hub' : 'appliance', id: 'router' }, kind: 'firewall-network-rules',
+          publicIpIds: ['router-ip'], zoneRedundant: false }] } : {}),
+    }
+    const appSubnet = { id: 'app', name: 'App', prefix: '10.1.1.0/24', defaultOutboundAccess: false }
+    const topology = native
+      ? { version: 1, name: 'Desktop hub SNAT', hubs: [{ id: 'router', name: 'Router', region: 'westeurope', preference: 'ExpressRoute',
+        routingIntent: { internet: true, private: false, privatePrefixes: [] } }],
+        spokes: [{ id: 'network', name: 'Network', hubId: 'router', prefixes: ['10.1.0.0/16'], subnets: [appSubnet] }],
+        sites: [], connections: [], siteLinks: [], inventory }
+      : { version: 2, kind: 'azure-network-topology', name: `Desktop ${kind} SNAT`,
+        vnets: [{ id: 'network', name: 'Network', role: 'standalone', region: 'westeurope', prefixes: ['10.1.0.0/16'],
+          subnets: [{ ...appSubnet, ...(kind !== 'direct' ? { routeTableId: 'steering' } : {}) },
+            { id: 'router-subnet', name: kind === 'azure-firewall' ? 'AzureFirewallSubnet' : 'Router', prefix: '10.1.2.0/24' }],
+          gateways: [], appliances: kind === 'direct' ? [] : [{ id: 'router', name: 'Router', kind,
+            subnetId: 'router-subnet', privateIp: '10.1.2.4', enableIpForwarding: true, staticRoutes: [] }] }],
+        udrTables: kind === 'direct' ? [] : [{ id: 'steering', name: 'Steering', disableBgpRoutePropagation: false,
+          routes: [{ id: 'default', name: 'Default', prefix: '0.0.0.0/0', nextHopType: 'VirtualAppliance', nextHopIp: '10.1.2.4', enabled: true }] }],
+        vnetPeerings: [], vwanHubs: [], erLocations: [], erLinks: [], erGlobalReachLinks: [], sites: [], vpnConnections: [], siteLinks: [], inventory }
+    await page.goto(`app://simulator/?mode=${mode}`)
+    await page.getByTestId(native ? 'vwan-app' : 'aznet-app').waitFor()
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology }, packet: {
+      source: { kind: 'workload', workloadId: 'client', nicId: 'client-nic', ipConfigurationId: 'client-ip' },
+      target: { kind: 'external', address: '8.8.8.8' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443,
+    } }
+    const result = await page.evaluate((request) => window.desktopSimulator.simulate(request), input)
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual(executePlatform(input))
+    expect(result.value.packet).toMatchObject({ translation: 'snat', egress: 'configured', reply: { session: 'conditional-response', routing: 'reachable' } })
+    const translations = result.value.packet.forward.steps.filter((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress)
+    expect(translations.at(-1).after.sourceAddress).toBe(native ? '20.40.50.70' : '20.40.50.60')
+    if (kind === 'azure-firewall' || kind === 'nva-vm') expect(translations[0].after.sourceAddress).toBe('10.1.2.4')
+  }
   await page.goto('app://simulator/?mode=vwan&feedback=1')
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
@@ -275,6 +320,7 @@ try {
     compactDesktopPointerDiscovery: true,
     ownedMixedHubRouteAssertions: true,
     ownedWorkloadPacketParity: true, originalInventoryDetailEditsPersisted: true,
+    explicitNatFirewallNvaAndNativeHubPacketParity: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

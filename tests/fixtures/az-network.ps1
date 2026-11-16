@@ -15,6 +15,9 @@ if ($command -eq 'network route-table list' -and $env:MOCK_NETWORK_MODE -eq 'den
 if ($command -eq 'network vnet-gateway list' -and $env:MOCK_NETWORK_MODE -eq 'failed') {
     [Console]::Error.WriteLine('Internal error sharedKey=must-not-be-exported'); exit 1
 }
+if ($command -eq 'network nat gateway' -and $env:MOCK_NETWORK_MODE -eq 'nat-denied') {
+    [Console]::Error.WriteLine('AuthorizationFailed 403 must-not-be-exported'); exit 1
+}
 if ($command -eq 'network nic show-effective-route-table') {
     switch ($env:MOCK_NETWORK_MODE) {
         'timeout' { Start-Sleep -Seconds 30 }
@@ -42,10 +45,28 @@ if ($command -eq 'network nic show-effective-route-table') {
                 id = "$id/subnets/RouteServerSubnet"; name = 'RouteServerSubnet'; secret = 'must-not-be-exported'
                 addressPrefix = '10.82.254.0/26'
                 ipConfigurations = @(@{ id = "$prefix/virtualHubs/ars-$_/ipConfigurations/default" })
+                defaultOutboundAccess = $false
+                natGateway = if ($_ -eq 'first') { @{ id = "$prefix/natGateways/nat" } } else { $null }
             })
         }
     }
     ConvertTo-Json -InputObject @($result) -Depth 10 -Compress
+} elseif ($command -eq 'network public-ip list') {
+    if ($env:MOCK_NETWORK_MODE -eq 'nat-prefix') { '[]' } else {
+        $ip = @{ id = "$prefix/publicIPAddresses/nat-ip"; name = 'nat-ip'; sku = @{ name = 'Standard' }; publicIPAllocationMethod = 'Static'; secret = 'must-not-be-exported' }
+        if ($env:MOCK_NETWORK_MODE -ne 'nat-unallocated') { $ip.ipAddress = '20.40.50.60' }
+        ConvertTo-Json -InputObject @($ip) -Depth 10 -Compress
+    }
+} elseif ($command -eq 'network public-ip prefix') {
+    if ($env:MOCK_NETWORK_MODE -eq 'nat-prefix') {
+        ConvertTo-Json -InputObject @(@{ id = "$prefix/publicIPPrefixes/nat-prefix"; name = 'nat-prefix'; sku = @{ name = 'Standard' }; prefixLength = 31; ipPrefix = '20.40.50.64/31'; secret = 'must-not-be-exported' }) -Depth 10 -Compress
+    } else { '[]' }
+} elseif ($command -eq 'network nat gateway') {
+    $sku = if ($env:MOCK_NETWORK_MODE -eq 'nat-unsupported-sku') { 'StandardV2' } else { 'Standard' }
+    $nat = @{ id = "$prefix/natGateways/nat"; name = 'nat'; sku = @{ name = $sku }; subnets = @(@{ id = "$prefix/virtualNetworks/vnet-first/subnets/RouteServerSubnet" }); secret = 'must-not-be-exported' }
+    if ($env:MOCK_NETWORK_MODE -eq 'nat-prefix') { $nat.publicIpPrefixes = @(@{ id = "$prefix/publicIPPrefixes/nat-prefix" }) }
+    else { $nat.publicIpAddresses = @(@{ id = "$prefix/publicIPAddresses/nat-ip" }) }
+    ConvertTo-Json -InputObject @($nat) -Depth 10 -Compress
 } elseif ($command -eq 'network routeserver list') {
     $result = @('first', 'second') | ForEach-Object {
         $configuration = @{ id = "$prefix/virtualHubs/ars-$_/ipConfigurations/default" }

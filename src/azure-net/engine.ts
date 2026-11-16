@@ -1,4 +1,5 @@
 import { cidr, contains, ipv4 } from '../validation'
+import { namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
@@ -1696,6 +1697,7 @@ export function traceAzNetFlow(
   simulation: AzSimulationResult,
   source: AzEndpointRef,
   destinationIp: string,
+  options?: { sourceAddress?: string; sourceApplianceId?: string },
 ): AzFlowTrace {
   const targetInfo = locateDestinationIp(topology, destinationIp)
   const hops: AzTraceHop[] = []
@@ -1766,7 +1768,13 @@ export function traceAzNetFlow(
       action: 'origin',
       detail: `Packet originates in ${vnet?.name ?? source.vnetId} / ${subnet?.name ?? source.subnetId}`,
     })
-    cursor = { kind: 'subnet', vnetId: source.vnetId, subnetId: source.subnetId, fromExternalVnet: false, viaVnra: false }
+    if (options?.sourceApplianceId) {
+      const appliance = vnet?.appliances.find((entry) => entry.id === options.sourceApplianceId && entry.subnetId === source.subnetId
+        && entry.privateIp === options.sourceAddress)
+      if (!appliance) return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed', hops,
+        traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: 'Conditional return source does not match its original appliance interface.' }
+      cursor = { kind: 'appliance', vnetId: source.vnetId, applianceId: appliance.id }
+    } else cursor = { kind: 'subnet', vnetId: source.vnetId, subnetId: source.subnetId, fromExternalVnet: false, viaVnra: false }
   } else if (source.kind === 'site') {
     const site = topology.sites.find((s) => s.id === source.siteId)
     pushHop({
@@ -2359,7 +2367,18 @@ export function traceAzNetFlow(
       if (matched.nextHopType === 'Internet') {
         const gatewayInternetFallback = subnet.name === 'GatewaySubnet' && stepCursor.fromExternalVnet && matched.source === 'System'
         if (!targetInfo.endpoint && !privateDestination && !gatewayInternetFallback) {
-          if (subnet.defaultOutboundAccess === false) {
+          const natGateway = natGatewayForSubnet(topology, { kind: 'vnet', id: vnet.id }, subnet.id)
+          const instancePublicIp = source.kind === 'subnet' && source.vnetId === vnet.id && source.subnetId === subnet.id
+            && options?.sourceAddress && namedEndpoints(topology).some(({ nic, config }) => nic.owner.id === vnet.id
+              && config.subnetId === subnet.id && config.privateIp === options.sourceAddress && config.publicIpId)
+          if (subnet.internetEgressStatus === 'unknown' && !natGateway && !instancePublicIp) {
+            const reason = 'Captured Internet egress association is incomplete or unsupported; its absence is not proof of no outbound method.'
+            pushHop({ nodeKind: 'subnet', nodeId: subnet.id, vnetId: vnet.id, nodeName: subnet.name, subnetId: subnet.id,
+              action: 'subnet-lookup', matchedRoute: matched, detail: reason })
+            return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed', hops,
+              traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+          }
+          if (subnet.defaultOutboundAccess === false && !natGateway && !instancePublicIp) {
             pushHop({
               nodeKind: 'subnet',
               nodeId: subnet.id,
@@ -2392,7 +2411,7 @@ export function traceAzNetFlow(
             subnetName: subnet.name,
             action: 'delivered',
             matchedRoute: matched,
-            detail: `Egresses directly to Internet from ${vnet.name}/${subnet.name} (defaultOutboundAccess=true)`,
+            detail: `Egresses directly to Internet from ${vnet.name}/${subnet.name} (${natGateway ? 'explicit NAT Gateway' : instancePublicIp ? 'explicit instance public IP' : 'legacy default outbound access'}); this route probe does not assess translation or security.`,
           })
           return {
             source,
@@ -2468,6 +2487,36 @@ export function traceAzNetFlow(
             ? 'vnra-transit'
             : 'inspect-nva'
 
+      if (options?.sourceApplianceId === app.id && app.staticRoutes.some((route) => route.enabled && !cidr(route.prefix))) {
+        return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
+          hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: 'Conditional return contains an invalid enabled static prefix; reachability is not inferred.' }
+      }
+      const conditionalStatics = options?.sourceApplianceId === app.id
+        ? app.staticRoutes.filter((route) => route.enabled && cidr(route.prefix) && contains(route.prefix, ipNum))
+          .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length) : []
+      const conditionalStatic = conditionalStatics[0]
+      if (conditionalStatic && conditionalStatics.filter((route) => cidr(route.prefix)!.length === cidr(conditionalStatic.prefix)!.length).length > 1) {
+        return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
+          hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: 'Equal-prefix conditional return static routes are ambiguous.' }
+      }
+      if (conditionalStatic && conditionalStatic.nextHopKind !== 'subnet' && conditionalStatic.nextHopKind !== 'appliance') {
+        const dropped = conditionalStatic.nextHopKind === 'drop'
+        const reason = dropped ? `Conditional return is discarded by original appliance static route ${conditionalStatic.id} (${conditionalStatic.prefix}).`
+          : `Conditional return static route ${conditionalStatic.id} selects ${conditionalStatic.nextHopKind}; this return next-hop configuration is not assessed.`
+        pushHop({ nodeKind: 'appliance', nodeId: app.id, vnetId: vnet.id, nodeName: app.name, subnetId: app.subnetId,
+          action: dropped ? 'dropped' : actionKind, detail: reason })
+        return { source, destinationIp, destinationLabel: targetInfo.label, status: dropped ? 'dropped-blackhole' : 'not-assessed',
+          hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+      }
+      if (conditionalStatic?.nextHopKind === 'appliance' && !findApplianceByIp(topology, conditionalStatic.nextHopIp)) {
+        return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
+          hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: 'Conditional return static next-hop appliance is unknown.' }
+      }
+      if (conditionalStatic?.nextHopKind === 'appliance' && conditionalStatic.nextHopIp === app.privateIp) {
+        cursor = { kind: 'appliance', vnetId: vnet.id, applianceId: app.id }
+        continue
+      }
+
       // Check if this appliance has a direct S2S VPN / SD-WAN overlay tunnel to the destination site
       const directVpn = topology.vpnConnections.find((c) => {
         if (!c.enabled || c.targetKind !== 'appliance' || c.targetId !== app.id) return false
@@ -2490,7 +2539,7 @@ export function traceAzNetFlow(
       }
 
       // Check if Destination is in the SAME VNet as the appliance
-      if (targetInfo.vnet?.id === vnet.id && targetInfo.subnet) {
+      if (conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet?.id === vnet.id && targetInfo.subnet) {
         pushHop({
           nodeKind: 'appliance',
           nodeId: app.id,
@@ -2511,7 +2560,7 @@ export function traceAzNetFlow(
       }
 
       // Check if Destination is in a DIRECTLY peered VNet
-      if (targetInfo.vnet && targetInfo.subnet) {
+      if (conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet && targetInfo.subnet) {
         const directRel = getActivePeeringBetween(topology, vnet.id, targetInfo.vnet.id)
         if (directRel) {
           const check = validatePeeringTransition(vnet, targetInfo.vnet, true, app.kind === 'vnra')
@@ -2617,7 +2666,7 @@ export function traceAzNetFlow(
 
       // Check explicit appliance static routes (e.g., cross-hub NVA next hop)
       const matchingStaticRoutes = (app.staticRoutes ?? [])
-        .filter((sr) => cidr(sr.prefix) && contains(sr.prefix, ipNum))
+        .filter((sr) => (options?.sourceApplianceId !== app.id || sr.enabled) && cidr(sr.prefix) && contains(sr.prefix, ipNum))
         .sort((a, b) => (cidr(b.prefix)?.length ?? 0) - (cidr(a.prefix)?.length ?? 0))
       if (matchingStaticRoutes.length > 0) {
         const sr = matchingStaticRoutes[0]
@@ -2834,7 +2883,7 @@ export function traceAzNetFlow(
           subnetId: app.subnetId,
           action: 'delivered',
           matchedRoute: nextRoute,
-          detail: `${app.name} SNATs and egresses packet to Internet`,
+          detail: `${app.name} forwards toward Internet; translation and security are not assessed by this route probe.`,
         })
         return {
           source,

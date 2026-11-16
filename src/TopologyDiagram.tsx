@@ -466,7 +466,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
         {nvas.length > 0 && <SpokeNvaIcon spokeId={spoke.id} />}
         <DiagramNodeBadge label={nvas.length > 0 ? t("SPOKE VNET · BGP NVA") : standalone ? t("AZURE VNET") : t("SPOKE VNET")} x={-56} y={-35} width={138} tone={nvas.length ? 'info' : 'muted'} />
         <DiagramNodeText text={spoke.name} x={0} y={nvas.length > 0 ? -3 : 6} width={164} fontSize={15} anchor="middle" className="node-name" />
-        <DiagramNodeText text={`${spoke.prefixes[0] ?? ''}${spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}${inventory.nics ? ` · VM ${inventory.workloads} / NIC ${inventory.nics}` : ''}`} x={0} y={nvas.length > 0 ? 16 : 28} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />
+        <DiagramNodeText text={`${spoke.prefixes[0] ?? ''}${spoke.prefixes.length > 1 ? ` +${spoke.prefixes.length - 1}` : ''}${inventory.nics ? ` · VM ${inventory.workloads} / NIC ${inventory.nics}` : ''}${inventory.natGateways ? ` · NAT ${inventory.natGateways}` : ''}`} x={0} y={nvas.length > 0 ? 16 : 28} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />
         {nvas.length > 0 && nvaSite && <DiagramNodeText text={`AS${nvaSite.asn} · ${nvas[0].peerIp}${nvas.length > 1 ? ` +${nvas.length - 1}` : ''}`} x={0} y={34} width={164} fontSize={10.5} anchor="middle" className="node-detail node-prefixes" weight={400} />}
         {renderCustomLabel(spoke.id, effectiveLabel, 58)}
       </g>

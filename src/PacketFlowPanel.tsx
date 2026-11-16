@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import './packet-messages-ja'
 import { t } from './i18n'
 import type { InventoryTopology } from './inventory'
 import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
-import { packetEndpointOptions, tracePacket, type PacketEndpoint, type PacketResult } from './packet-flow'
+import { packetEndpointOptions, tracePacket, type FiveTuple, type PacketEndpoint, type PacketResult } from './packet-flow'
+
+const tupleText = (tuple: FiveTuple) => `${tuple.protocol.toUpperCase()} ${tuple.sourceAddress}:${tuple.sourcePort} -> ${tuple.destinationAddress}:${tuple.destinationPort}`
 
 export function PacketFlowPanel({ topology, simulation }: { topology: InventoryTopology; simulation: Simulation | AzSimulationResult }) {
   const options = packetEndpointOptions(topology, t('Address unknown'))
@@ -32,7 +35,7 @@ export function PacketFlowPanel({ topology, simulation }: { topology: InventoryT
   </label>
   return <section className="packet-panel" aria-label={t('Workload packet probe')} data-testid="packet-flow-panel">
     <h3>{t('Workload packet probe')}</h3>
-    <p>{t('Independent forward and reply routing probes. Routing success does not establish a listener, security policy, NAT or application delivery.')}</p>
+    <p>{t('Forward and reply routing, with explicit Internet egress where supported. Responses after SNAT are conditional; policy, listeners and application delivery are not assessed.')}</p>
     <form onSubmit={(event) => {
       event.preventDefault()
       try {
@@ -59,16 +62,23 @@ export function PacketFlowPanel({ topology, simulation }: { topology: InventoryT
       {[result.forward, result.reply].map((leg) => <section key={leg.direction} aria-label={t(leg.direction === 'forward' ? 'Forward routing' : 'Reply routing')}>
         <h4>{t(leg.direction === 'forward' ? 'Forward routing' : 'Reply routing')}: {t(leg.routing)}</h4>
         {leg.tuple && <code>{leg.tuple.protocol.toUpperCase()} {leg.tuple.sourceAddress}:{leg.tuple.sourcePort} → {leg.tuple.destinationAddress}:{leg.tuple.destinationPort}</code>}
-        {leg.reasons.map((reason) => <p key={reason}>{reason}</p>)}
+        {leg.session && <p><strong>{t('Conditional response, not a new Internet initiation')}</strong></p>}
+        {leg.reasons.map((reason) => <p key={reason}>{t(reason)}</p>)}
         <details><summary>{t('Routing evidence')} ({leg.steps.length})</summary>
-          <ol>{leg.steps.slice(0, 100).map((step, index) => <li key={index}><code>{step.entity.kind}: {step.entity.id}</code>{' '}{step.evidence}
+          <ol>{leg.steps.slice(0, 100).map((step, index) => <li key={index}><code>{step.entity.kind}: {step.entity.id}</code>{' '}{t(step.evidence)}
             {step.tableId && <> · {t('Hub routing table')}: <code>{step.tableId}</code></>}
+            {step.before && step.after && tupleText(step.before) !== tupleText(step.after) && <div data-testid="packet-step-tuples">
+              <p>{t('Before translation')}: <code>{tupleText(step.before)}</code></p>
+              <p>{t('After translation')}: <code>{tupleText(step.after)}</code></p>
+            </div>}
             {step.after === null && <strong> {t('Post-boundary tuple unknown')}</strong>}
           </li>)}</ol>
           {leg.steps.length > 100 && <p>{t('Only the first 100 steps are displayed.')}</p>}
         </details>
       </section>)}
-      <p><strong>{t('Delivery, security and translation readiness: not assessed')}</strong></p>
+      <p><strong>{t(result.translation === 'snat' ? 'Illustrative SNAT configured; delivery and security readiness: not assessed'
+        : result.translation === 'none' ? 'Configured SNAT does not apply; delivery and security readiness: not assessed'
+          : 'Delivery, security and translation readiness: not assessed')}</strong></p>
     </div>}
   </section>
 }

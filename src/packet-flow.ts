@@ -4,6 +4,7 @@ import type { InventoryTopology } from './inventory'
 import { simulate, type Simulation } from './routing'
 import { traceNodePath, type NodePath, type PathNode } from './paths'
 import { simulateAzNet, traceAzNetFlow, type AzEndpointRef, type AzFlowTrace, type AzSimulationResult } from './azure-net/engine'
+import { applyInternetEgress } from './packet-egress'
 
 export interface WorkloadEndpoint { kind: 'workload'; workloadId: string; nicId: string; ipConfigurationId: string }
 export type PacketEndpoint = WorkloadEndpoint | { kind: 'external'; address: string }
@@ -31,6 +32,7 @@ export interface PacketLeg {
   steps: PacketStep[]
   native?: AzFlowTrace | NodePath[]
   reasons: string[]
+  session?: 'conditional-response'
 }
 export interface PacketResult {
   source: PacketEndpoint
@@ -39,7 +41,8 @@ export interface PacketResult {
   reply: PacketLeg
   delivery: 'not-assessed'
   security: 'not-assessed'
-  translation: 'not-assessed'
+  translation: 'snat' | 'none' | 'not-assessed'
+  egress?: 'configured' | 'blocked' | 'legacy-implicit' | 'not-assessed'
   limitations: string[]
 }
 
@@ -85,6 +88,7 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
       const connected = [...inventoryOwners(topology).flatMap((owner) => owner.prefixes), ...topology.sites.flatMap((site) => site.prefixes),
         ...(topology.version === 2 ? topology.vnets.flatMap((vnet) => vnet.appliances.flatMap((device) => device.advertisedPrefixes ?? [])) : []),
         ...(topology.inventory?.publicIps.flatMap((entry) => entry.address ? [`${entry.address}/32`] : []) ?? [])]
+      connected.push(...(topology.inventory?.publicIpPrefixes?.flatMap((entry) => entry.prefix ? [entry.prefix] : []) ?? []))
       if (connected.some((prefix) => cidr(prefix) && contains(prefix, ip))) return { reason: 'A connected destination cannot be classified as Internet.' }
       return { address: ref.address, native: { kind: 'internet', ip: ref.address } as AzEndpointRef }
     }
@@ -133,8 +137,10 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
         }))), reasons: incomplete ? ['Native routing coverage is incomplete.'] : [],
       }
     }
-    const trace = traceAzNetFlow(topology, nativeSimulation as AzSimulationResult, from.native as AzEndpointRef, to.address!)
-    const owned = trace.hops.some((hop) => hop.action === 'delivered' && (to.native!.kind === 'internet' ? hop.nodeKind === 'internet'
+    const trace = traceAzNetFlow(topology, nativeSimulation as AzSimulationResult, from.native as AzEndpointRef, to.address!, { sourceAddress: packet.sourceAddress })
+    const owned = trace.hops.some((hop) => hop.action === 'delivered' && (to.native!.kind === 'internet'
+      ? hop.nodeKind === 'internet' || hop.matchedRoute?.nextHopType === 'Internet'
+        || hop.nodeKind === 'vwan-hub' && !!topology.vwanHubs.find((hub) => hub.id === hop.nodeId)?.routingIntent.internet
       : hop.vnetId === (to.native as Extract<AzEndpointRef, { kind: 'subnet' }>).vnetId
         && hop.subnetId === (to.native as Extract<AzEndpointRef, { kind: 'subnet' }>).subnetId))
     return {
@@ -162,10 +168,12 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
       evidence: `Routing reaches the subnet of NIC ${to.nicId}, IP configuration ${to.ipConfigurationId}; workload delivery is not assessed.`,
     })
   }
+  const egress = applyInternetEgress(topology, request, forward, reply, nativeSimulation)
   return {
     source: request.source, target: request.target, forward, reply,
-    delivery: 'not-assessed', security: 'not-assessed', translation: 'not-assessed',
-    limitations: ['Routing only: unchanged tuples are not proof of NAT, NSG/firewall policy, a listener, backend health or application delivery.',
-      'The reply is a separate routing probe, not proof that the destination generates a response or that a stateful session exists.'],
+    delivery: 'not-assessed', security: 'not-assessed', ...egress,
+    limitations: ['Route and supported egress modeling do not prove NSG/firewall policy, a listener, backend health or application delivery.',
+      reply.session ? 'The response is conditional on this modeled outbound flow; it does not permit a new Internet-initiated connection.'
+        : 'The reply is a separate routing probe, not proof that the destination generates a response or that a stateful session exists.'],
   }
 }

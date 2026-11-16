@@ -6,7 +6,7 @@ import type { PacketRequest, PacketResult } from '../packet-flow'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.15.3'
+export const engineVersion = '2026.11.16.1'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -83,7 +83,11 @@ export const capabilities = {
   inventory: ['optional original workload/NIC/IP-configuration/public-IP identities', 'explicit detailed subnets on VWAN spokes; no inferred VMs or addresses'],
   packet: { operation: 'simulate', addressFamily: 'IPv4', protocols: ['tcp', 'udp'], ports: '1-65535',
     endpoints: ['owned workload/NIC/IP-configuration tuple', 'explicit external public address'],
-    outcomes: ['reachable', 'unreachable', 'not-assessed'], readiness: 'delivery/security/NAT not assessed' },
+    outcomes: ['reachable', 'unreachable', 'not-assessed'], readiness: 'delivery/security not assessed',
+    translation: ['explicit direct Standard NAT Gateway and instance public IP', 'declared single-router Firewall network-rule/NVA guest SNAT',
+      'classic non-zone-redundant Firewall private handoff to Standard NAT Gateway', 'conditional inverse translation and independently checked router return routes'],
+    translationLimits: ['illustrative allocation/ports only', 'no unsolicited ingress', 'unknown/multiple router NAT and forced-tunnel translation unassessed',
+      'no StandardV2/IPv6/NAT64/application-rule proxy/capacity/timer predictions'] },
   requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or explicit hub table scope, subject to complete modeled coverage'],
   outcomes: ['satisfied', 'violated', 'not assessed'],
   limits: platformLimits,

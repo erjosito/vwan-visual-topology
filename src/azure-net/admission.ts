@@ -55,6 +55,7 @@ const schema = object({
     ...named, region: text, prefixes: strings, role: choice('hub-vnet', 'spoke-vnet', 'transit-vnet', 'shared-services', 'hub', 'spoke', 'transit', 'standalone'),
     subnets: array(object({ ...named, prefix: text }, {
       routeTableId: id, defaultOutboundAccess: bool,
+      internetEgressStatus: choice('unknown'),
       privateEndpointNetworkPolicies: choice('Disabled', 'Enabled', 'RouteTableEnabled', 'NetworkSecurityGroupEnabled'),
       privateEndpoints: array(object({ ...named, ipAddress: text, serviceName: text })),
     })),

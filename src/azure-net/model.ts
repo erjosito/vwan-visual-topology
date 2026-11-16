@@ -34,6 +34,7 @@ export interface AzSubnet {
   prefix: string
   routeTableId?: string
   defaultOutboundAccess?: boolean
+  internetEgressStatus?: 'unknown'
   privateEndpointNetworkPolicies?: AzPrivateEndpointPolicy
   privateEndpoints?: AzPrivateEndpoint[]
 }
