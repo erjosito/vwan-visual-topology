@@ -4,6 +4,24 @@ Design follow-up for #136, grounded in the existing packet/inventory contracts.
 This document defines the first implementation slices; it does not enable these
 services, deploy resources or certify application availability.
 
+## Implemented foundation (#156)
+
+The shared foundation is implemented as platform contract 2, optional native
+`application.version: 1` identity inventory, separate HTTP/DNS requests, typed
+decision/uncertainty envelopes, bounded worker execution and original-reference
+VNet detail projection. Legacy contract 1 rejects application fields explicitly;
+legacy documents without the extension retain their native meaning.
+See [the platform contract guide](../PLATFORM.md#applicationdns-contracts-foundation-156)
+and `src/application.ts` for exact admitted shapes and limits.
+
+**No service provider is enabled.** Service-specific configuration fields
+(listeners, rules, pools/groups, DNS methods/endpoints) fail admission until their
+provider children define and test those schemas. Identity declarations do not
+enable service authoring, application exercises, capture or Bicep export.
+Every foundation request reports configuration and availability as unassessed;
+it performs no service matching, DNS lookup, health check or network-leg
+fabrication. The service sections below remain the planned #157–159 boundaries.
+
 ## Boundary and evaluation
 
 Keep three different questions separate:

@@ -80,7 +80,7 @@ describe('browser-free platform contract', () => {
 
   it('rejects malformed versions, duplicate/missing requirements, unsafe JSON and input limits', () => {
     for (const input of [
-      { ...request(), contractVersion: 2 }, { ...request(), operation: 'evaluate' },
+      { ...request(), contractVersion: 3 }, { ...request(), operation: 'evaluate' },
       { ...request(), engineVersion: '' }, { ...request(), locale: '' }, { ...request(), budget: 0 },
       { ...request(), budget: { maxMillis: 15001 } },
       JSON.parse('{"__proto__":{}}'),

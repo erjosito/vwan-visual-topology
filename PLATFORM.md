@@ -39,6 +39,82 @@ native-write failures roll back the selection. If storage is unavailable, an
 explicitly unsaved in-memory design remains possible. Practice, display
 preferences and inactive native payloads are not reset by workspace selection.
 
+## Application/DNS contracts foundation (#156)
+
+Platform contract **2** adds the separate `application` operation and result
+section. Capabilities report `supportedContractVersions: [1, 2]`, application
+inventory/request version 1 and **`application.providers: []`**. Contract 1
+remains supported for existing native/packet operations but explicitly rejects
+application declarations/requests. Unknown future versions and unknown fields
+inside the application contracts fail admission rather than disappearing.
+
+Native v1/v2 documents may optionally retain `topology.application`:
+
+```json
+{
+  "version": 1,
+  "services": [
+    {
+      "id": "original-service",
+      "name": "Imported service identity",
+      "kind": "application-gateway",
+      "references": [],
+      "unsupportedFeatures": []
+    }
+  ],
+  "dnsProfiles": []
+}
+```
+
+This is **identity-only inventory**, not service configuration or support.
+`services.kind` admits `application-gateway`/`front-door`; DNS profile identities
+use `traffic-manager`. Optional service `owner` is an existing
+`{kind: "vnet" | "spoke", id}`. References are discriminated original service,
+DNS-profile, public-IP, owned subnet, workload/NIC/IP-configuration tuple, or
+owned Load Balancer frontend/pool references (see `src/application.ts` and
+`get_schema.applicationContracts`). References must exist and match owners;
+edits cannot delete a referenced endpoint while leaving a broken save.
+There are at most 32 services, 32 profiles, 64 references and 32 bounded
+unsupported-feature names per entry. Application entities count against the
+existing aggregate platform node bound. Listener/rule/member/endpoint bounds
+are reserved for provider children; those configuration fields are currently
+rejected, not silently accepted as functioning services.
+
+An application request uses `contractVersion: 2`, `operation: "application"`,
+the original native `document`, and one `application` field:
+
+- HTTP: `{version: 1, kind: "http", serviceId, client, scheme, host, port, path}`.
+  `client` is an original `{kind: "workload", workloadId, nicId,
+  ipConfigurationId}` or `{kind: "external", address: "explicit public IPv4"}`.
+  Hostnames are ASCII DNS names (lowercased, optional terminal dot removed);
+  ports are 1–65535 and scheme is `http`/`https`. Absolute paths exclude
+  queries/fragments, backslashes, dot segments and ambiguous encoded
+  separators/control characters. Percent escapes are uppercased, not decoded
+  into a guessed provider-specific matching algorithm.
+- DNS: `{version: 1, kind: "dns", profileId, resolver, name, evaluatedAt,
+  cache: "fresh"}`. Resolver uses the same original client identity shape;
+  time is caller-supplied canonical UTC, e.g. `2026-11-16T00:00:00.000Z`.
+  No wall clock, cached answer or failover timing is inferred.
+
+The ordered evidence separates DNS selection, listener matching, request
+routing, two original IPv4 TCP network legs, and conditional response
+assumptions. Absent provider facts remain explicit `null`/empty candidates,
+never fabricated addresses or packet evidence. Configuration and availability
+are separate; availability is always `not-assessed`. Unsupported providers and
+unknown prerequisites cannot produce a configured result or training grade.
+Independent definite failures may still aggregate as violations. Existing
+packet requests and native routing engines are unchanged.
+
+The EN/JA VNet detail panel inspects imported identities and highlights original
+subnet/workload cards for the selected request. These are references, not extra
+routers, global edges, or evidence that a proxy forwards an unchanged tuple.
+Inspection uses the same bounded/cancellable browser worker and headless
+executor; native export/reload/undo retains the optional inventory. Request
+drafts/results are ephemeral. No DNS, probes, TLS checks, arbitrary origin
+fetches, cloud calls or telemetry are introduced. Application Gateway,
+Traffic Manager and Front Door providers remain #157–159; no exercises, capture
+or deployment support are enabled by this foundation.
+
 ## On-demand explanations and local practice
 
 **Learn & practice** opens an optional, keyboard-accessible EN/JA panel in all

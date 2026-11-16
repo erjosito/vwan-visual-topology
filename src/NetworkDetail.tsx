@@ -11,6 +11,9 @@ import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
 import './network-detail.css'
 import { contains, ipv4 } from './validation'
+import { ApplicationFlowPanel } from './ApplicationFlowPanel'
+import { applicationProjection, validateApplicationInventory, type ApplicationResult } from './application'
+import { revisionOf } from './platform/service'
 
 export interface DetailBoundary { direction: 'forward' | 'reply'; destination: string; evidence: string; subnetIds: string[] }
 
@@ -33,6 +36,9 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
   const [subnetQuery, setSubnetQuery] = useState('')
   const [error, setError] = useState('')
   const [declarePublicIp, setDeclarePublicIp] = useState(false)
+  const [applicationEvidence, setApplicationEvidence] = useState<{ topology: InventoryTopology; result?: ApplicationResult }>()
+  const applicationResult = applicationEvidence?.topology === topology ? applicationEvidence.result : undefined
+  const applicationSelection = applicationProjection(topology, owner, applicationResult)
   const network = inventoryOwners(topology).find((entry) => sameInventoryOwner(entry, owner))
   const nics = (topology.inventory?.nics ?? []).filter((nic) => sameInventoryOwner(nic.owner, owner))
   const workloads = (topology.inventory?.workloads ?? []).filter((workload) => workload.nicIds.some((id) => nics.some((nic) => nic.id === id)))
@@ -46,6 +52,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
       update(candidate)
       pruneDeletedInventory(candidate, topology)
       validateInventory(candidate)
+      validateApplicationInventory(candidate)
       commit(update)
       setError('')
       return true
@@ -95,6 +102,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
               || (ipv4(boundary.destination) !== undefined && contains(subnet.prefix, ipv4(boundary.destination)!))).map((boundary) => boundary.direction))]
             return <article className="detail-subnet" key={subnet.id} data-testid="detail-subnet">
               <h4>{subnet.name}</h4><code>{subnet.prefix}</code>
+              {applicationSelection.subnetIds.has(subnet.id) && <p data-testid="application-subnet-reference"><strong>{t('Selected application reference')}</strong>: <code>{subnet.id}</code></p>}
               {directions.map((direction) => <p key={direction}><strong>{t(direction === 'forward' ? 'Forward routing' : 'Reply routing')}</strong></p>)}
               <p>{t('{0} NIC attachments', attached.length)}</p>
               {attached.slice(0, 10).map((nic) => {
@@ -140,6 +148,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
           {visible.map((workload) => <article key={workload.id} className="detail-workload" data-selected={selectedId === workload.id}>
             <button type="button" aria-pressed={selectedId === workload.id} onClick={() => onSelect(workload.id)}>{workload.name}</button>
             <code>{workload.id}</code>
+            {applicationSelection.workloadIds.has(workload.id) && <p data-testid="application-workload-reference"><strong>{t('Selected application reference')}</strong></p>}
             {workload.backingDeviceId && <p>{t('Existing router backing identity')}: <code>{workload.backingDeviceId}</code></p>}
             {nics.filter((nic) => workload.nicIds.includes(nic.id)).map((nic) => <div key={nic.id}>
               <strong>{nic.name}</strong>
@@ -154,6 +163,8 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
           {!workloads.length && <p>{t('No named workloads are declared. Legacy subnet probes remain available; they are not discovered VMs.')}</p>}
         </section>
       </div>
+      <ApplicationFlowPanel key={revisionOf(topology)} topology={topology} owner={owner} result={applicationResult}
+        onResult={(result) => setApplicationEvidence({ topology, result })} />
       <LoadBalancerEditor topology={topology} owner={owner} change={change} onSelect={(id) => { setQuery(''); onSelect(id) }} />
       {selected && <form key={JSON.stringify([selected, nics.filter((nic) => selected.nicIds.includes(nic.id)), topology.inventory?.publicIps])} onSubmit={(event) => {
         event.preventDefault()

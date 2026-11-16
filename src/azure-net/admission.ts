@@ -3,6 +3,7 @@ import { azArsPolicyLinks } from './ars-route-maps'
 import { DEFAULT_HUB_TABLE, hubRouteTables, propagatesLocally, propagationLabels } from '../hub-routing'
 import type { HubRoutingConfiguration } from '../model'
 import { validateInventory } from '../inventory'
+import { validateApplicationInventory } from '../application'
 import { azHubPolicyLinks } from './route-maps'
 import { isVwanNvaAsn } from '../validation'
 import { validateVpnNat } from '../vpn-nat'
@@ -280,5 +281,6 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   for (const l of topology.siteLinks) { ref(l.siteAId, topology.sites, 'Site link A'); ref(l.siteBId, topology.sites, 'Site link B') }
   for (const l of topology.erGlobalReachLinks ?? []) { ref(l.locationAId, topology.erLocations, 'Global Reach A'); ref(l.locationBId, topology.erLocations, 'Global Reach B') }
   validateInventory(topology)
+  validateApplicationInventory(topology)
   return topology
 }

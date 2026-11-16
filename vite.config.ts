@@ -6,6 +6,7 @@ const isAzureNetMode = process.env.VITE_APP_MODE === 'azure-net'
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  server: { watch: { ignored: ['**/test-artifacts/**', '**/test-results/**', '**/release/**', '**/dist/**'] } },
   plugins: [
     react(),
     ...(isAzureNetMode

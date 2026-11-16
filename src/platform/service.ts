@@ -11,6 +11,7 @@ import type { AzEndpointRef } from '../azure-net/engine'
 import { tracePacket, validatePacketRequest } from '../packet-flow'
 import { traceVpnNatPacket, validateVpnNatPacketRequest } from '../vpn-nat-packet'
 import { assessPacket } from './packet-assessment'
+import { evaluateApplication, validateApplicationRequest } from '../application'
 
 export function admitJson(input: unknown): string {
   let items = 0
@@ -53,9 +54,15 @@ export function validateRequest(input: unknown): PlatformRequest {
     if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error('Unknown contract field; requirements must not be silently omitted.')
   }
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Request object required.')
-  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket'])
-  if (request.contractVersion !== contractVersion || (request.engineVersion !== undefined && request.engineVersion !== engineVersion)) throw new Error('Unsupported contract or engine version.')
-  if (!['validate', 'simulate', 'evaluate'].includes(request.operation)) throw new Error('Unknown operation.')
+  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket', 'application'])
+  if (![1, 2].includes(request.contractVersion) || (request.engineVersion !== undefined && request.engineVersion !== engineVersion)) throw new Error('Unsupported contract or engine version.')
+  if (!['validate', 'simulate', 'evaluate', 'application'].includes(request.operation)) throw new Error('Unknown operation.')
+  if (request.contractVersion === 1 && (request.operation === 'application' || request.application !== undefined
+    || (request.document?.topology as { application?: unknown })?.application !== undefined)) throw new Error('Application contracts require contractVersion 2; legacy clients must negotiate capabilities.')
+  if (request.operation === 'application') {
+    request.application = validateApplicationRequest(request.application)
+    if (request.packet !== undefined || request.vpnPacket !== undefined || request.requirements !== undefined) throw new Error('Application evaluation is separate from packet and graded requirement operations.')
+  } else if (request.application !== undefined) throw new Error('Application request requires the application operation.')
   if (request.packet !== undefined) {
     if (request.operation !== 'simulate') throw new Error('Packet tracing requires the simulate operation.')
     validatePacketRequest(request.packet)
@@ -139,13 +146,15 @@ function normalize(document: PlatformDocument): PlatformDocument {
   }
   if (document.mode === 'vwan') {
     const topology = validateTopology(document.topology)
-    checkNodes(topology.hubs.length + topology.spokes.length + topology.sites.length, topology.inventory)
+    checkNodes(topology.hubs.length + topology.spokes.length + topology.sites.length
+      + (topology.application?.services.length ?? 0) + (topology.application?.dnsProfiles.length ?? 0), topology.inventory)
     return { mode: 'vwan', topology }
   }
   const topology = parseAzNetTopology(document.topology)
   const errors = validateAzNetTopology(topology)
   if (errors.length) throw new Error(errors.slice(0, 20).join('\n'))
-  checkNodes(topology.vnets.length + topology.sites.length + topology.vwanHubs.length, topology.inventory)
+  checkNodes(topology.vnets.length + topology.sites.length + topology.vwanHubs.length
+    + (topology.application?.services.length ?? 0) + (topology.application?.dnsProfiles.length ?? 0), topology.inventory)
   return { mode: document.mode, topology }
 }
 
@@ -175,10 +184,18 @@ export function executePlatform(input: unknown): PlatformResult {
   const result: PlatformResult = { contractVersion, engineVersion, revision: '', status: 'complete', assessments: [], errors: [], limitations: [] }
   try {
     const request = validateRequest(input)
+    result.contractVersion = request.contractVersion
     const document = normalize(request.document)
     result.revision = revisionOf(document)
     result.document = document
     if (request.operation === 'validate') return result
+    if (request.operation === 'application') {
+      result.application = evaluateApplication(document.topology, request.application!)
+      result.status = 'not assessed'
+      result.limitations = result.application.limitations
+      if (new TextEncoder().encode(JSON.stringify(result)).length > (request.budget?.maxOutputBytes ?? platformLimits.maxOutputBytes)) return incompletePlatformResult(request, 'OUTPUT_LIMIT')
+      return result
+    }
     if (document.mode === 'vwan') {
       const simulation = simulate(document.topology)
       result.simulation = simulation
@@ -267,4 +284,13 @@ export function executePlatform(input: unknown): PlatformResult {
     result.assessments = []
   }
   return result
+}
+
+export function incompletePlatformResult(request: PlatformRequest, code: string): PlatformResult {
+  return {
+    contractVersion: request.contractVersion, engineVersion, revision: '', status: 'not assessed',
+    assessments: (request.requirements ?? []).map((requirement) => ({ id: requirement.id, outcome: 'not assessed', evidence: null, reasons: [code] })),
+    errors: [{ code, message: 'Incomplete job; unchecked requirements and application decisions are not verified.' }],
+    limitations: [code],
+  }
 }

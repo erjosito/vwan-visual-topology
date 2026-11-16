@@ -1,6 +1,7 @@
 import type { DiagramLayout, HubRouteTable, HubRoutingConfiguration, LayoutMode, PrependRule, RouteMap, RouteMapAssignment, RouteMapRule, Topology } from './model'
 import { attachmentHubRouting, hubRouteTables, propagatesLocally, propagationLabels } from './hub-routing'
 import { validateInventory, type InventorySubnet, type NetworkInventory } from './inventory'
+import { validateApplicationInventory, type ApplicationInventory } from './application'
 
 const canonicalHubTable = (value: string) => value.toLowerCase() === 'defaultroutetable' ? 'defaultRouteTable'
   : value.toLowerCase() === 'noneroutetable' ? 'noneRouteTable' : value
@@ -679,5 +680,7 @@ export function validateTopology(input: unknown): Topology {
   }
   if (root.inventory !== undefined) topology.inventory = root.inventory as NetworkInventory
   validateInventory(topology)
+  if (root.application !== undefined) topology.application = root.application as ApplicationInventory
+  validateApplicationInventory(topology)
   return topology
 }

@@ -7,9 +7,12 @@ import type { WorkloadIpReference } from '../inventory'
 import type { VpnNatPacketRequest, VpnNatPacketResult } from '../vpn-nat-packet'
 import { VPN_NAT_CAPABILITIES } from '../vpn-nat'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
+import { applicationCapabilities } from '../application'
+import type { ApplicationRequest, ApplicationResult } from '../application'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.16.11'
+export const latestContractVersion = 2 as const
+export const engineVersion = '2026.11.16.12'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -46,15 +49,16 @@ export type PacketRequirement = {
 }
 export type Requirement = FlowRequirement | RouteRequirement | PacketRequirement
 export type PlatformRequest = {
-  contractVersion: 1
+  contractVersion: 1 | 2
   engineVersion?: string
   document: PlatformDocument
-  operation: 'validate' | 'simulate' | 'evaluate'
+  operation: 'validate' | 'simulate' | 'evaluate' | 'application'
   locale?: 'en' | 'ja'
   requirements?: Requirement[]
   budget?: { maxMillis?: number; maxOutputBytes?: number }
   packet?: PacketRequest
   vpnPacket?: VpnNatPacketRequest
+  application?: ApplicationRequest
 }
 export type Assessment = {
   id: string
@@ -63,7 +67,7 @@ export type Assessment = {
   reasons: string[]
 }
 export type PlatformResult = {
-  contractVersion: 1
+  contractVersion: 1 | 2
   engineVersion: string
   revision: string
   status: 'complete' | 'invalid' | 'not assessed'
@@ -74,6 +78,7 @@ export type PlatformResult = {
   limitations: string[]
   packet?: PacketResult
   vpnPacket?: VpnNatPacketResult
+  application?: ApplicationResult
 }
 
 export const platformLimits = {
@@ -87,10 +92,11 @@ export const platformLimits = {
 }
 
 export const capabilities = {
-  contractVersion, engineVersion,
+  contractVersion: latestContractVersion, supportedContractVersions: [contractVersion, latestContractVersion], engineVersion,
   modes: ['vwan', 'hub-spoke', 'full'],
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
-  operations: ['validate', 'simulate', 'evaluate'],
+  operations: ['validate', 'simulate', 'evaluate', 'application'],
+  application: applicationCapabilities,
   mixedRouting: ['native hub tables/association/propagation', 'shared VWAN HRP selection', 'hub-owned and site-owned route maps',
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],

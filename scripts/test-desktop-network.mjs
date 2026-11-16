@@ -57,6 +57,26 @@ try {
     })
     expect(result.ok).toBe(true)
     expect(result.value.status).toBe('complete')
+    topology.application = {
+      version: 1,
+      services: [{ id: 'offline-service', name: 'Declared identity only', kind: 'front-door', references: [], unsupportedFeatures: [] }],
+      dnsProfiles: [{ id: 'offline-dns', name: 'Declared DNS only', kind: 'traffic-manager', references: [], unsupportedFeatures: [] }],
+    }
+    for (const applicationRequest of [
+      { version: 1, kind: 'http', serviceId: 'offline-service', client: { kind: 'external', address: '198.51.100.10' },
+        scheme: 'https', host: 'offline.example.test', port: 443, path: '/' },
+      { version: 1, kind: 'dns', profileId: 'offline-dns', resolver: { kind: 'external', address: '198.51.100.10' },
+        name: 'offline.example.test', evaluatedAt: '2026-11-16T00:00:00.000Z', cache: 'fresh' },
+    ]) {
+      const contract = await page.evaluate((request) => window.desktopSimulator.simulate(request), {
+        contractVersion: 2, operation: 'application', document: { mode, topology }, application: applicationRequest,
+      })
+      expect(contract.ok).toBe(true)
+      expect(contract.value.status).toBe('not assessed')
+      expect(contract.value.application.configuration).toBe('not-assessed')
+      expect(contract.value.application.availability).toBe('not-assessed')
+      expect(contract.value.application.decisions.every((decision) => decision.outcome === 'not-assessed')).toBe(true)
+    }
   }
   await page.goto('app://simulator/?mode=vwan')
   await page.getByTestId('vwan-app').waitFor()
@@ -119,7 +139,7 @@ try {
     executableSha256: executablePath ? createHash('sha256').update(await readFile(executablePath)).digest('hex') : null,
     asarSha256: executablePath ? createHash('sha256').update(await readFile(join(dirname(executablePath), 'resources', 'app.asar'))).digest('hex') : null,
     evidence: 'Actual Electron + synthetic samples + reachable loopback canary; no authenticated Azure calls.',
-    scope: 'Startup, three local engine simulations, documentation, HTTP(S)/WS(S) renderer probes and session HTTP(S) probes.',
+    scope: 'Startup, three local engine simulations, six unavailable HTTP/DNS contract inspections, documentation, HTTP(S)/WS(S) renderer probes and session HTTP(S) probes.',
     canaryPositiveControl: true, explicitPacCanary: true, applicationCanaryConnections: connections,
     chromiumConnectAndResolverEvents: counts, rendererProbes: probes, sessionHttpProbes: 'blocked',
     limitations: 'Chromium net log is not an OS-wide process-tree/firewall trace or Azure CLI endpoint evidence.',
