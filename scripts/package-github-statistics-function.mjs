@@ -16,6 +16,9 @@ const files = [
   ['functions/github-statistics/host.json', 'host.json'],
   ['functions/github-statistics/index.mjs', 'functions/github-statistics/index.mjs'],
   ['functions/github-statistics/handler.mjs', 'functions/github-statistics/handler.mjs'],
+  ['functions/github-statistics/dashboard.mjs', 'functions/github-statistics/dashboard.mjs'],
+  ['functions/github-statistics/dashboard.html', 'functions/github-statistics/dashboard.html'],
+  ['functions/github-statistics/dashboard-client.js', 'functions/github-statistics/dashboard-client.js'],
   ['scripts/collect-github-statistics.mjs', 'scripts/collect-github-statistics.mjs'],
 ]
 for (const [source, target] of files) {

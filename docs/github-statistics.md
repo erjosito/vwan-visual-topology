@@ -12,6 +12,11 @@ The `Deploy statistics Function` workflow only tests and deploys code from
 accounts or public dashboard are introduced. A personal/local runner is not
 required.
 
+The private dashboard is **https://telemetry.aznet-simulator.com**. It uses
+Microsoft Entra sign-in and an explicit approved-user list; membership in the
+tenant alone does not grant access. It reuses the Function and private Storage,
+with no additional hosting plan, database or monitoring workspace.
+
 ## Collected data and interpretation
 
 Each schema-v1 snapshot records collection start/end times, repository star,
@@ -166,7 +171,7 @@ does not include a separately provisioned alerting workspace.
 ## Local checks and manual collection
 
 ```powershell
-node --test scripts\collect-github-statistics.test.mjs scripts\github-statistics-function.test.mjs
+node --test scripts\collect-github-statistics.test.mjs scripts\github-statistics-function.test.mjs scripts\github-statistics-dashboard.test.mjs
 $env:GITHUB_TOKEN = gh auth token
 # Optional: set GH_STATS_TRAFFIC_TOKEN using a suitably scoped token.
 node scripts\collect-github-statistics.mjs --repository erjosito/vwan-visual-topology --output test-artifacts\github-statistics.json
@@ -187,14 +192,15 @@ are not included.
 
 ## Manual verification
 
-The only HTTP function is `POST /api/statistics/collect`, protected with
+The manual collection endpoint is `POST /api/statistics/collect`, protected with
 `authLevel: admin`. It takes no repository, topology or storage parameters.
 Invoke it with the Function host's administrator key in the `x-functions-key`
 header, never in the URL or public logs. Retrieve the key only through an
 authorized Azure management session; do not print or save it.
 
 A successful response returns the Blob path, ETag, traffic coverage and release
-count after Storage acknowledges the conditional write. It never returns the
+count after Storage acknowledges the conditional write, plus a receipt for the
+refreshed dashboard summary. It never returns the
 GitHub token or raw traffic data. Requests without the key must be rejected.
 The endpoint is for deliberate first-run checks or recovery, not a public
 analytics API. Snapshot contents remain accessible only through authorized
@@ -208,12 +214,91 @@ request returned HTTP 401. Azure also reported the expected daily timer
 binding. This verifies deployment and manual collection, not a subsequent
 scheduled execution.
 
-## Dashboard boundary
+## Private dashboard and authorization
 
-This implementation stores source snapshots only. A future private dashboard
-can derive daily series from them. Public reporting should be a separate
-reviewed aggregate export with collection dates, definitions and coverage
-limitations; do not expose this container or its upload identity.
+The Function serves the dashboard at `/` and `/api/statistics`, its JavaScript
+at `/api/statistics/dashboard.js`, and a read-only JSON summary at
+`/api/statistics/summary`. App Service Authentication ("Easy Auth") validates
+Entra sign-in and restricts access to explicit user object IDs in one tenant.
+The application also rejects absent, malformed, wrong-tenant or unapproved
+principals. Identity headers are trusted only behind enabled Easy Auth; never
+exclude the dashboard routes from platform authentication or place keys in
+browser code. The endpoints have no caller-controlled storage/repository
+inputs, allow no writes, and return private/no-store caching headers. HTML
+loads no third-party scripts, fonts or analytics.
+
+The only authentication exclusion is `/api/statistics/collect`: it still
+requires the Function administrator key, independently of Entra browser login.
+The Azure timer does not make an HTTP request and is unaffected by Easy Auth.
+The HTTP route prefix is explicitly empty, and existing API routes include
+`api/` so the administrator endpoint retains its original URL.
+
+Set up a dedicated **single-tenant** Entra app registration and enterprise
+application before the first dashboard code deployment. Register the HTTPS
+`/.auth/login/aad/callback` URL for the custom and default Function hostnames.
+Use the existing runtime managed identity as a federated credential, with its
+principal ID as subject, the tenant's v2 issuer and audience
+`api://AzureADTokenExchange`. No client secret or Graph application permissions
+are required. The optional delegated `Dashboard.Read` API scope can preauthorize
+Azure CLI for approved-user operational verification; create the scope before
+configuring its preauthorization. The user allowlist still applies.
+
+Review and deploy `infra\github-statistics-auth.bicep` in the statistics resource
+group, passing `dashboardClientId`, `runtimeClientId` and a nonempty
+`allowedUserObjectIds` array. The template sets both platform and application
+authorization from the same list. Never commit personal object IDs in public
+parameter files. It configures
+`OVERRIDE_USE_MI_FIC_ASSERTION_CLIENTID` for secretless sign-in and preserves
+existing protected settings through a secure child deployment. After
+reapplying the base Function infrastructure, reapply this authentication
+template and dispatch the code workflow to restore protected settings.
+GitHub code deployment does not create Entra applications or change membership.
+
+Every successful collection rebuilds
+`github/<owner>/<repo>/dashboard/summary.json` from at most the last 366 UTC
+dates of raw snapshots. Daily traffic uses the latest observation of each date,
+not the sum of overlapping windows. Download growth compares stable asset IDs
+in collection order, including multiple same-day observations; new assets and
+decreasing counters start baselines. Missing observations are not zero, and
+growth across gaps is interval growth rather than exact daily usage. Raw
+snapshots retain their existing indefinite retention.
+
+Dashboard views read one compact Blob, not the entire archive. Conditional
+summary writes retry concurrent updates; a failed refresh fails the invocation
+so Azure retries, without deleting the already-persisted raw snapshot. The
+dashboard shows collection freshness and warns after 36 hours without a
+successful collection. Daily uniques are never added into monthly users.
+
+## Custom domain and HTTPS
+
+`telemetry.aznet-simulator.com` uses the existing Azure DNS zone in
+`rg-vwan-visual-topology-dev-426b`; the Function stays in its dedicated
+statistics resource group. Only the `telemetry` CNAME and `asuid.telemetry` TXT
+records are added. Existing apex and `www` application records are unchanged.
+
+Preview each deployment before applying it. Provision in this order:
+
+1. Deploy `infra\github-statistics-domain-dns.bicep` in the DNS resource group,
+   passing the Function's default hostname and `customDomainVerificationId`.
+2. After DNS resolves, deploy `infra\github-statistics-domain.bicep` in the
+   statistics resource group with `mode=bootstrap`, for the initial hostname
+   binding only.
+3. Deploy `infra\github-statistics-domain-certificate.bicep` to request the free
+   site-scoped App Service managed certificate.
+4. Deploy `infra\github-statistics-domain.bicep` again with its default
+   `mode=tls` to bind that certificate. Do not rerun bootstrap on a TLS-bound
+   hostname.
+
+The existing Function reports `siteScopedCertificatesEnabled: true`, required
+for this certificate model. Older Flex apps without that support need separate
+migration planning; do not recreate or delete an existing app automatically.
+Keep the direct CNAME and required validation records for managed renewal.
+The custom hostname uses the same Entra authorization as the default hostname;
+no public aggregate endpoint is introduced.
+
+Public reporting, if added later, must be a separate reviewed aggregate export
+with collection dates, definitions and coverage limitations. Do not expose the
+archive, summary Blob or runtime credentials publicly.
 
 References:
 [GitHub traffic API](https://docs.github.com/en/rest/metrics/traffic),

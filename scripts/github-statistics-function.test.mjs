@@ -66,3 +66,20 @@ test('missing credentials and failed collection never create a blob; storage fai
     async uploadData() { throw Object.assign(new Error('Private endpoint unavailable'), { statusCode: 403 }) },
   })), /Private endpoint unavailable/)
 })
+
+test('summary refresh runs only after persistence and failures remain retryable without losing the raw snapshot', async () => {
+  let persisted = false
+  const stored = options({ async uploadData() { persisted = true; return { etag: 'raw-etag' } } })
+  const result = await collectAndPersist({
+    ...stored,
+    async refreshSummary() { assert.equal(persisted, true); return { etag: 'summary-etag' } },
+  })
+  assert.equal(result.dashboard.etag, 'summary-etag')
+  await assert.rejects(collectAndPersist({
+    ...stored, async refreshSummary() { throw new Error('Summary unavailable') },
+  }), /Summary unavailable/)
+  await assert.rejects(collectAndPersist({
+    ...options({ async uploadData() { throw new Error('Write failed') } }),
+    async refreshSummary() { assert.fail('Refresh before persistence') },
+  }), /Write failed/)
+})

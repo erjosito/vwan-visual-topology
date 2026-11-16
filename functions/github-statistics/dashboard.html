@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Network Simulator statistics</title>
+  <style>
+    :root { color-scheme: dark; font: 16px/1.5 system-ui, sans-serif; background: #0c1424; color: #e8eef8 }
+    * { box-sizing: border-box }
+    body { max-width: 1200px; margin: auto; padding: 28px 20px 60px }
+    a { color: #8ecaff } a:focus-visible, select:focus-visible { outline: 3px solid #ffc76b; outline-offset: 4px }
+    header, .toolbar, .legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px }
+    h1 { font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0 } h2 { font-size: 1.15rem; margin-top: 0 }
+    p { margin: 8px 0 16px } .muted, small { color: #b3c1d5 }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin: 24px 0 }
+    article, section.panel { border: 1px solid #34445d; border-radius: 12px; background: #141f32; padding: 20px }
+    article strong { display: block; font-size: 1.9rem; margin: 6px 0 } article span { display: block; color: #c1ccdc; font-size: .88rem }
+    .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 410px), 1fr)); gap: 18px; margin: 18px 0 }
+    svg { width: 100%; height: auto; display: block } svg text { fill: #b3c1d5; font: 12px system-ui, sans-serif }
+    .legend { justify-content: flex-start; font-size: .85rem } .views { color: #8ecaff } .clones { color: #8de0c2 }
+    .panel { margin-top: 18px } .table-wrap { overflow: auto; max-height: 470px }
+    table { border-collapse: collapse; width: 100%; font-size: .9rem } th, td { padding: 10px 12px; border-bottom: 1px solid #34445d; text-align: right; white-space: nowrap }
+    th { position: sticky; top: 0; background: #141f32 } th:first-child, td:first-child { text-align: left }
+    td.asset { white-space: normal; overflow-wrap: anywhere; min-width: 180px; text-align: left }
+    caption { text-align: left; color: #b3c1d5; padding-bottom: 12px }
+    select { background: #141f32; color: inherit; border: 1px solid #647997; border-radius: 6px; padding: 7px }
+    #status { border-left: 4px solid #8ecaff; padding: 8px 14px; margin-top: 22px }
+    #status.warning { border-color: #ffc76b; color: #ffe0aa } [hidden] { display: none !important }
+    footer { margin-top: 26px; font-size: .9rem }
+  </style>
+  <script src="/api/statistics/dashboard.js" defer></script>
+</head>
+<body>
+  <header>
+    <div><small>PRIVATE PROJECT DASHBOARD</small><h1>Network Simulator statistics</h1></div>
+    <a href="/.auth/logout?post_logout_redirect_uri=/api/statistics">Sign out</a>
+  </header>
+  <p class="muted" id="repository">GitHub distribution and repository interest</p>
+  <p id="status" role="status" aria-live="polite">Loading the latest collected statistics...</p>
+  <p id="signin" hidden><a href="/.auth/login/aad?post_login_redirect_uri=/api/statistics">Sign in again</a></p>
+  <main id="dashboard" hidden>
+    <div class="cards" id="cards"></div>
+    <div class="toolbar">
+      <p class="muted" id="coverage"></p>
+      <label>History <select id="range"><option value="30">30 days</option><option value="90">90 days</option><option value="365">365 days</option></select></label>
+    </div>
+    <div class="charts">
+      <section class="panel"><h2>Daily repository traffic</h2><div id="traffic-chart"></div><div class="legend"><span class="views">Views</span><span class="clones">Clones</span></div></section>
+      <section class="panel"><h2>Observed download growth</h2><div id="download-chart"></div><small>Growth between observations, not installations or exact daily downloads. Missing/new baselines are not zero.</small></section>
+    </div>
+    <section class="panel">
+      <h2>Repository traffic history</h2>
+      <div class="table-wrap"><table><caption>Daily uniques are not additive. The current UTC day is partial; overlapping snapshots are deduplicated.</caption>
+        <thead><tr><th scope="col">UTC date</th><th scope="col">Views</th><th scope="col">Unique visitors</th><th scope="col">Clones</th><th scope="col">Unique cloners</th></tr></thead>
+        <tbody id="traffic-rows"></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>Download observations</h2>
+      <div class="table-wrap"><table><caption>New assets and decreasing counters start a baseline. Deleted assets are not counted as negative downloads. Growth intervals can span collection gaps.</caption>
+        <thead><tr><th scope="col">Collected (UTC)</th><th scope="col">Current-asset total</th><th scope="col">Observed growth</th><th scope="col">Interval starts (UTC)</th><th scope="col">New / reset baselines</th></tr></thead>
+        <tbody id="download-rows"></tbody>
+      </table></div>
+    </section>
+    <section class="panel">
+      <h2>Latest release asset counters</h2>
+      <div class="table-wrap"><table><caption>Cumulative counts for currently published assets. Repeat downloads, automation and maintainer testing are included.</caption>
+        <thead><tr><th scope="col">Release</th><th scope="col">Asset</th><th scope="col">Downloads</th></tr></thead><tbody id="release-rows"></tbody>
+      </table></div>
+    </section>
+  </main>
+  <footer class="muted">These are GitHub statistics, not web, Windows or MCP active users. No application activity telemetry is collected. Daily collection: 04:17 UTC. Raw snapshots stay in private Storage.</footer>
+</body>
+</html>

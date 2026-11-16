@@ -6,6 +6,7 @@ export async function collectAndPersist({
   invocationId,
   container,
   collect = collectGitHubStatistics,
+  refreshSummary,
 }) {
   if (!trafficToken) throw new Error('GH_STATS_TRAFFIC_TOKEN is required for scheduled traffic collection.')
   if (!/^[a-zA-Z0-9-]{1,128}$/.test(invocationId ?? '')) throw new Error('Invalid collection invocation ID.')
@@ -25,11 +26,13 @@ export async function collectAndPersist({
     properties = await blob.getProperties()
     status = 'already_exists'
   }
+  const dashboard = refreshSummary ? await refreshSummary() : undefined
   return {
     status,
     blobName,
     etag: properties.etag,
     traffic: snapshot.traffic.status,
     releases: snapshot.releases.length,
+    ...(dashboard ? { dashboard } : {}),
   }
 }

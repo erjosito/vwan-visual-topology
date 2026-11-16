@@ -46,7 +46,7 @@ jobs:
             fi
           done
       - name: Test collector and private persistence
-        run: node --test scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs
+        run: node --test scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs
       - name: Package locked Function dependencies
         run: |
           node scripts/package-github-statistics-function.mjs
