@@ -184,6 +184,24 @@ Raw baseline evidence is local under
 `test-artifacts\quality\2026-11-16T11-47-09-158Z-18360`.
 Keep run directories to inspect findings and compare matching manifests.
 
+### Accessibility remediation (#171)
+
+SVG node and policy buttons now retain their original action/name while naming
+their actual visible text through `aria-labelledby`, including clipped labels,
+badges, metadata and custom labels. Original full names remain available rather
+than being replaced by their shortened display. Separate positioned SVG labels
+have explicit whitespace boundaries in text alternatives. Selection, original
+IDs, context-menu previews and keyboard movement retain their existing handlers.
+The mixed workspace also exposes its existing content container as one main
+landmark without changing its layout.
+
+The same evidence-v1 audit remains unchanged: all 16 whole-document states,
+default axe rules, no exclusions or allowlists. Compare the retained baseline
+with a new clean-source run; a passing sample still requires manual review of
+incomplete checks and does not establish WCAG conformance or screen-reader
+usability. Focused browser regressions also cover EN/JA, clipped and custom
+labels, keyboard selection/movement, original persistence and narrow layout.
+
 ### Document-derived model-contract extension seam
 
 `scripts/quality-scorecard.mjs` exports initially empty

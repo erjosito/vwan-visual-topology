@@ -186,7 +186,7 @@ test('version 2 Azure captures retain observed effective-route snapshots and exp
   await upload(page, v2)
   await expect(panel(page).getByText(/Observed effective-route snapshots: West hub \(complete, 1 routes\)/)).toBeVisible()
   await confirmImport(page)
-  await page.getByRole('button', { name: 'Select hub West hub', exact: true }).click({ button: 'right' })
+  await page.getByLabel('Select hub West hub', { exact: true }).click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'BGP table', exact: true }).click()
   const inspector = page.getByRole('dialog', { name: 'BGP table · West hub', exact: true })
   const sourceGroup = inspector.getByRole('group', { name: 'Route table source', exact: true })

@@ -49,7 +49,7 @@ test('custom route inspection never substitutes Default and explains unknown con
   })
   await upload()
   const inspect = async () => {
-    await page.getByRole('button', { name: 'Select hub Observed west', exact: true }).focus()
+    await page.getByLabel('Select hub Observed west', { exact: true }).focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menuitem', { name: 'BGP table', exact: true }).click()
     await page.getByLabel('Hub route table', { exact: true }).selectOption('business')
@@ -85,7 +85,7 @@ test('comparison attaches observations without changing or transmitting the desi
   await panel(page).getByLabel('Comparison view', { exact: true }).selectOption('designed')
   await expect(panel(page).locator('.comparison-finding.match')).toHaveCount(5)
   await panel(page).getByRole('button', { name: '10.1.0.0/24', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'Select spoke Desired a', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByLabel('Select spoke Desired a', { exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.highlight-status')).toHaveCount(0)
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
   expect(external).toEqual([])

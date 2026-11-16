@@ -670,11 +670,11 @@ test('per-connection policy marks distinguish parallel links, owners and directi
   topology.sites[1].routeMapAssignments = [{ connectionId: 'policy-peer', inboundMapId: 'visual-peer-in' }]
   topology.hubs[0].routeMapAssignments = [{ connectionId: 'er-eu', inboundMapId: 'visual-hub', outboundMapId: 'visual-hub' }]
   await page.goto('/'); await importTopology(page, topology)
-  const inbound = page.getByRole('button', { name: 'Inbound route map rules for London datacenter on London primary', exact: true })
-  const backup = page.getByRole('button', { name: 'Inbound route map rules for London datacenter on London backup', exact: true })
-  const outbound = page.getByRole('button', { name: 'Outbound route map rules for London datacenter on Private WAN', exact: true })
-  const hubInbound = page.getByRole('button', { name: 'Inbound route map rules for Europe hub on London primary', exact: true })
-  const hubOutbound = page.getByRole('button', { name: 'Outbound route map rules for Europe hub on London primary', exact: true })
+  const inbound = page.getByLabel('Inbound route map rules for London datacenter on London primary', { exact: true })
+  const backup = page.getByLabel('Inbound route map rules for London datacenter on London backup', { exact: true })
+  const outbound = page.getByLabel('Outbound route map rules for London datacenter on Private WAN', { exact: true })
+  const hubInbound = page.getByLabel('Inbound route map rules for Europe hub on London primary', { exact: true })
+  const hubOutbound = page.getByLabel('Outbound route map rules for Europe hub on London primary', { exact: true })
   await expect(page.locator('.policy-badge')).toHaveCount(0)
   await expect(page.locator('.policy-marker')).toHaveCount(7)
   await expect(inbound.locator('text')).toHaveText('IN')

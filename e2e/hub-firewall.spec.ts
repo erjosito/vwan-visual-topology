@@ -21,7 +21,7 @@ for (const mode of ['vwan', 'full'] as const) {
     await expect.poll(async () => (await saved()).name).toContain('Selective Firewall')
     await page.getByLabel('Theme', { exact: true }).selectOption(mode === 'full' ? 'dark' : 'light')
     if (mode === 'vwan') {
-      await page.getByRole('button', { name: 'Select hub Local secure hub', exact: true }).focus()
+      await page.getByLabel('Select hub Local secure hub', { exact: true }).focus()
       await page.keyboard.press('Shift+F10')
       await page.getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
     } else {

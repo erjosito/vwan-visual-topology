@@ -3026,7 +3026,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       </header>
 
       {/* Main Split Workspace */}
-      <div className="aznet-workspace">
+      <div className="aznet-workspace" role="main">
         {/* Left: Interactive Compound Topology Canvas */}
         <section className="aznet-canvas-column">
           <div className="aznet-scenario-banner">
