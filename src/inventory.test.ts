@@ -79,6 +79,29 @@ describe('owned workload inventory and packet adapters', () => {
     }
   })
 
+  it.each(['vwan', 'azure-net'] as const)('validates %s NSG rules and original associations with the same admission checks', (mode) => {
+    const network = topology(mode)
+    network.inventory!.networkSecurityGroups = [{ id: 'nsg', name: 'Application NSG', rules: [{
+      id: 'web', name: 'AllowWeb', priority: 100, direction: 'inbound', action: 'allow', protocol: 'tcp',
+      sources: ['*'], destinations: ['10.1.1.4'], sourcePorts: ['*'], destinationPorts: ['443'],
+    }] }]
+    network.inventory!.nsgAssociations = [{ owner: network.inventory!.nics[0].owner,
+      target: { kind: 'subnet', id: 'app' }, nsgId: 'nsg' }]
+    validateInventory(network)
+    const cases: ((inventory: NetworkInventory) => void)[] = [
+      (inventory) => { inventory.networkSecurityGroups![0].rules.push({ ...inventory.networkSecurityGroups![0].rules[0], id: 'duplicate', name: 'Duplicate' }) },
+      (inventory) => { inventory.networkSecurityGroups![0].rules[0].sources = ['10.999.0.0/24'] },
+      (inventory) => { inventory.networkSecurityGroups![0].rules[0].destinationPorts = ['65535-65536'] },
+      (inventory) => { inventory.nsgAssociations![0].target.id = 'missing' },
+      (inventory) => { inventory.nsgAssociations![0].nsgId = 'missing' },
+    ]
+    for (const edit of cases) {
+      const changed = structuredClone(network)
+      edit(changed.inventory!)
+      expect(() => validateInventory(changed)).toThrow(/Inventory:/)
+    }
+  })
+
   it('keeps unknown addresses and unsupported Internet ingress explicitly unassessed', () => {
     const network = topology('azure-net')
     delete network.inventory!.nics[0].ipConfigurations[0].privateIp
