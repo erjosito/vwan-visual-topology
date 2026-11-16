@@ -9,6 +9,7 @@ import { contractVersion, engineVersion, platformLimits } from './contract'
 import type { Assessment, FlowRequirement, PlatformDocument, PlatformRequest, PlatformResult, Requirement } from './contract'
 import type { AzEndpointRef } from '../azure-net/engine'
 import { tracePacket, validatePacketRequest } from '../packet-flow'
+import { assessPacket } from './packet-assessment'
 
 export function admitJson(input: unknown): string {
   let items = 0
@@ -73,10 +74,21 @@ export function validateRequest(input: unknown): PlatformRequest {
   for (const requirement of request.requirements ?? []) {
     if (!requirement || typeof requirement.id !== 'string' || !requirement.id || requirement.id.length > 120 || ids.has(requirement.id)) throw new Error('Unique requirement IDs required.')
     ids.add(requirement.id)
-    if (!['flow', 'route'].includes(requirement.kind)) throw new Error('Unsupported requirement kind.')
-    keys(requirement, requirement.kind === 'flow'
+    if (!['flow', 'route', 'packet'].includes(requirement.kind)) throw new Error('Unsupported requirement kind.')
+    keys(requirement, requirement.kind === 'packet' ? ['id', 'kind', 'packet', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredBackend'] : requirement.kind === 'flow'
       ? ['id', 'kind', 'source', 'target', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredFirewallHubId', 'requiredApplianceId']
       : ['id', 'kind', 'table', 'hubTableId', 'prefix', 'expectation'])
+    if (requirement.kind === 'packet') {
+      if (!['configured', 'blocked'].includes(requirement.expectation) || ipv4(requirement.sourceAddress) === undefined || ipv4(requirement.destinationAddress) === undefined) throw new Error('Packet configuration requirement needs fixed IPv4 bindings and a supported expectation.')
+      validatePacketRequest(requirement.packet)
+      if (requirement.requiredBackend !== undefined) {
+        const backend = requirement.requiredBackend
+        if (!backend || typeof backend !== 'object' || Array.isArray(backend)) throw new Error('Original backend binding required.')
+        keys(backend, ['workloadId', 'nicId', 'ipConfigurationId', 'address'])
+        if (ipv4(backend.address) === undefined || [backend.workloadId, backend.nicId, backend.ipConfigurationId].some((id) => typeof id !== 'string' || !id || id.length > 120)) throw new Error('Original backend needs bounded identities and fixed IPv4 address.')
+      }
+      continue
+    }
     if (requirement.expectation !== (requirement.kind === 'flow' ? 'allow' : 'present') && requirement.expectation !== (requirement.kind === 'flow' ? 'deny' : 'absent')) throw new Error('Invalid expectation.')
     if (requirement.kind === 'route') {
       if (!cidr(requirement.prefix) || typeof requirement.table !== 'string' || !requirement.table || (requirement.hubTableId !== undefined && (typeof requirement.hubTableId !== 'string' || !requirement.hubTableId))) throw new Error('Route requirement needs an exact IPv4 prefix and table ID.')
@@ -158,7 +170,8 @@ export function executePlatform(input: unknown): PlatformResult {
       result.limitations = simulation.warnings
       if (!simulation.converged) result.status = 'not assessed'
       for (const requirement of request.requirements ?? []) {
-        if (requirement.kind === 'flow') result.assessments.push(vwanFlow(document, requirement))
+        if (requirement.kind === 'packet') result.assessments.push(assessPacket(document.topology, simulation, requirement))
+        else if (requirement.kind === 'flow') result.assessments.push(vwanFlow(document, requirement))
         else {
           const tableId = requirement.hubTableId ?? 'defaultRouteTable'
           const table = simulation.hubTables?.[requirement.table]?.[tableId]
@@ -178,6 +191,7 @@ export function executePlatform(input: unknown): PlatformResult {
       result.limitations = simulation.warnings
       const endpoints = getAzNetEndpoints(document.topology).filter((endpoint) => ['workload', 'site'].includes(endpoint.group))
       for (const requirement of request.requirements ?? []) {
+        if (requirement.kind === 'packet') { result.assessments.push(assessPacket(document.topology, simulation, requirement)); continue }
         if (requirement.kind === 'route') {
           if (requirement.hubTableId !== undefined) {
             const hub = document.topology.vwanHubs.find((hub) => hub.id === requirement.table)

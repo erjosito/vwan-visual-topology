@@ -1,6 +1,7 @@
 import type { PlatformDocument, Requirement } from '../platform/contract'
 import { createEmptyAzNetTopology } from '../azure-net/model'
 import type { Localized, ConceptId } from './content'
+import { connectivityExercises } from './connectivity-exercises'
 
 export type Exercise = {
   id: string
@@ -97,4 +98,5 @@ export const exercises: Exercise[] = [
     concepts: ['peering', 'contexts', 'coverage'], prerequisites: ['peering-connect'],
     starter: network('full'),
   },
+  ...connectivityExercises,
 ]

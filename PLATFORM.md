@@ -49,7 +49,7 @@ engine's reasons, not AI-inferred causes. Help does not change configuration
 or silently enable a learning mode. References load only after deliberate
 selection; external references remain blocked by the desktop host.
 
-Three exercises in `src/learning/exercises.ts` cover Virtual WAN, VNet peering
+Three routing exercises in `src/learning/exercises.ts` cover Virtual WAN, VNet peering
 and Full Hybrid connectivity. The course picker can assess/resume any exercise
 without changing the normal workspace; visual opening selects its native editor,
 and copying requires a compatible native document family. Each pins its rubric version, owned endpoint
@@ -58,6 +58,14 @@ starter intentionally has unassessable propagation scope; absence is not
 taught as verified isolation. Tests accept a one-hub or multi-hub repair,
 direct peering or NVA transit, and hub attachments or direct peering respectively.
 There is no reference-topology equality check.
+
+Six EN/JA connectivity exercises in `src/learning/connectivity-exercises.ts`
+cover explicit private-subnet egress, UDR precedence over NAT Gateway, independent
+LB probe/client NSGs, public VM ingress permissions, original DNAT return ownership
+and unknown internal LB backend health. They use fixed original IPv4/endpoint
+bindings and configuration-only packet predicates. Unknown health, allocation,
+mapping or filtering cannot certify either connectivity or isolation. Supported
+repairs are open-ended; no guest/listener or live-session readiness is certified.
 
 Practice JSON is an **independent draft**, saved locally on edits. **Open draft
 in visual editor** validates it using the shared worker and requires explicit
@@ -69,7 +77,8 @@ editing cancels pending work and visibly invalidates earlier displayed evidence.
 Changing native editors cannot display a previous editor's assessment.
 
 Local progress uses `aznet-simulator:practice:v1` in localStorage, independently
-of normal topology saves: at most three 200,000-character drafts, twenty recent
+of normal topology saves: at most nine 200,000-character drafts within the existing
+1,000,000-character aggregate storage limit, twenty recent
 attempts per exercise and a retained latest practice achievement. Attempts
 include rubric/grader versions, timestamp, engine revision fingerprint and hint
 use. Partial, unknown, malformed, mismatched or cancelled evaluations cannot
@@ -262,6 +271,14 @@ document; `simulate` adds engine tables; `evaluate` also requires explicit goals
   scopes and retained unsupported hub-table/policy/attachment configuration
   remain `not assessed` for both presence and absence. Native documents and
   unknown extension fields are preserved; retention is not semantic support.
+- `packet`: unique ID, a supported `packet` request, fixed original
+  `sourceAddress`/`destinationAddress`, and `configured`/`blocked` expectation.
+  Optional `requiredBackend` binds an original workload/NIC/IP-configuration
+  triple and its exact private `address`. Place these goals in `requirements`,
+  not the top-level simulation-only `packet` field. `configured` requires
+  supported forward mapping/routing/filtering and a supported symmetric response;
+  `blocked` checks proven initiation denial, not a broken or unknown response.
+  Missing/changed identities and unknown health/allocation/policies never pass.
 
 Each goal is `satisfied`, `violated` or `not assessed`, with evidence/reasons.
 Missing or ambiguous ownership, unobserved imported controls, incomplete
@@ -269,8 +286,8 @@ convergence or unsupported inspection never become a passing grade.
 Alternate valid designs are accepted against goals, not compared with one
 reference JSON. Unknown top-level/request/goal fields are rejected.
 
-These are steady-state model assertions, not Azure packet delivery, firewall
-rules/NAT/session enforcement, bandwidth/SLA or convergence-time guarantees.
+These are steady-state configuration assertions, not observed Azure packet
+delivery, runtime firewall/NAT/session enforcement, bandwidth/SLA or convergence-time guarantees.
 HRP edits reevaluate immediately without Azure's possible route-bounce behavior.
 
 Plain JSON admission bounds depth (32), aggregate values (100,000),
@@ -464,13 +481,9 @@ its context is not generalized to all internal/outbound flows. Standard LB
 backend admission is service-specific, including internal frontends; actual
 public ingress and LB forwarding use their separate bounded engines above.
 
-Candidate exercises, pending their dedicated practice integration: fix a NIC
-allow masked by subnet deny; distinguish response traffic from reverse initiation;
-show that private-subnet default outbound NSG permission supplies no NAT; separate
-AzureLoadBalancer probe permission from public-client permission.
-Japanese: NIC の許可とサブネットの拒否を比較する、応答と逆方向の新規通信を区別する、
-送信 NSG の許可だけでは NAT が提供されないことを確認する、プローブと利用者の許可を分ける。
-These candidates are not shipped/graded practice badges.
+The graded connectivity catalog includes explicit egress and separate LB
+probe/client permission lessons. NIC-versus-subnet denial and response-versus-
+reverse-initiation remain additional candidate lessons, not separate graded badges.
 
 References: [NSG processing and statefulness](https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview),
 [ordered subnet/NIC processing](https://learn.microsoft.com/en-us/azure/virtual-network/network-security-group-how-it-works),

@@ -28,6 +28,8 @@ server.registerTool('get_schema', {
   endpointShapes: mode === 'vwan' ? [{ kind: 'spoke', id: 'ID' }, { kind: 'site', id: 'ID' }, { kind: 'hub', id: 'ID' }]
     : [{ kind: 'subnet', vnetId: 'ID', subnetId: 'ID' }, { kind: 'site', siteId: 'ID' }],
   requirementShapes: [
+    { id: 'unique-packet-id', kind: 'packet', packet: 'explicit packet request', sourceAddress: 'fixed original IPv4', destinationAddress: 'fixed original IPv4',
+      expectation: 'configured or blocked (configuration only)', optional: 'requiredBackend: original workloadId/nicId/ipConfigurationId/address binding; no live readiness certification' },
     { id: 'unique-goal-id', kind: 'flow', source: 'owned endpoint', target: 'owned endpoint', sourceAddress: 'IPv4', destinationAddress: 'IPv4', expectation: 'allow or deny', optionalWaypoint: mode === 'vwan' ? 'requiredFirewallHubId' : 'requiredApplianceId' },
     { id: 'unique-route-id', kind: 'route', table: mode === 'vwan' ? 'hub ID' : 'simulation subnet table key, or hub ID with explicit hubTableId', prefix: 'canonical IPv4 CIDR', expectation: 'present or absent', optional: 'hubTableId: exact owned table ID, subject to complete modeled coverage' },
   ],
