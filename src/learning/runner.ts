@@ -27,7 +27,7 @@ export type TaskCompletion = {
   completedAt: string
 }
 export type RunnerFeedback = 'passed' | 'scope' | 'inspect' | 'observed' | 'peering' | 'requirements'
-  | 'answer' | 'incorrect' | 'unassessed' | 'stale' | 'cancelled'
+  | 'answer' | 'incorrect' | 'unassessed' | 'stale' | 'cancelled' | 'progress'
 export type RunnerState = {
   taskId?: string
   reviewId?: string
@@ -46,7 +46,7 @@ export type RunnerOptions = {
   evaluate: (request: PlatformRequest, signal: AbortSignal) => Promise<PlatformResult>
   changed: (state: RunnerState) => void
   completions?: TaskCompletion[]
-  completed?: (completion: TaskCompletion) => void
+  completed?: (completion: TaskCompletion) => boolean | void
 }
 
 export function orderedTasks(bundle: CourseBundle) {
@@ -184,8 +184,10 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
         awardId: task.awardId, points: task.points, title: { ...task.title }, sessionId,
         revision: live.revision, scope: live.scope, engineVersion, completedAt: new Date().toISOString(),
       }
+      try {
+        if (options.completed?.(completion) === false) { proof = undefined; feedback = 'progress'; publish(); return false }
+      } catch { proof = undefined; feedback = 'progress'; publish(); return false }
       completions.push(completion)
-      options.completed?.(completion)
     }
     if (replay) {
       replay.done.add(task.id)
@@ -215,6 +217,10 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   return {
     getSnapshot: () => state,
     assess, advance, review, replayLesson, workspaceChanged,
+    replaceProgress: (entries: readonly TaskCompletion[]) => {
+      invalidate(); completions = [...entries]; reviewId = undefined; replay = undefined
+      taskId = nextUncompleted(); sessionId = crypto.randomUUID(); publish()
+    },
     cancel: () => { invalidate('cancelled'); publish() },
     resumeCurrent: () => {
       invalidate(); reviewId = undefined; replay = undefined; taskId = nextUncompleted(); publish()

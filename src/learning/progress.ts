@@ -2,6 +2,7 @@ import { engineVersion } from '../platform/contract'
 import type { PlatformResult } from '../platform/contract'
 import { exercises } from './exercises'
 import type { Exercise } from './exercises'
+export { guidedProgressKey, parseProgressLedger, recordCompletion, earnedAwards, beltProgress } from './progress-ledger'
 
 export const progressKey = 'aznet-simulator:practice:v1'
 export const maxDraftChars = 200_000

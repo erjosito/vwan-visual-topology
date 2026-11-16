@@ -14,6 +14,7 @@ import { resolveGuidance } from './guidance'
 import { sidebarLabels as labels } from './sidebar-content'
 import { learningLabels, practiceLabels } from './practice-content'
 import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './practice-workspace'
+import { practiceOwnershipFailure } from './practice-ownership'
 import { orderedTasks, taskCompleted } from './runner'
 import { requirementDescription, runnerLabels as runnerText } from './runner-content'
 import './learning.css'
@@ -74,6 +75,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
     } catch (error) {
       if (!controller.signal.aborted) setError(text(error instanceof Error && error.message === practiceReadFailure ? practiceLabels.practiceReadFailure
         : error instanceof Error && error.message === practiceConflict ? practiceLabels.practiceConflict
+        : error instanceof Error && error.message === practiceOwnershipFailure ? practiceLabels.practiceOwnership
         : error instanceof Error && error.message === practiceSaveFailure ? practiceLabels.practiceStartFailure : labels.unavailable, language))
     } finally { if (!controller.signal.aborted) setRunning(false) }
   }
@@ -85,8 +87,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       <p className="learning-notice">{text(runnerText.preview, language)}</p>
       <p>{text(learningLabels.local, language)}</p>
       <p>{text(runnerText.session, language)}</p>
-      <p data-testid="learning-completion-count">{state.completions.filter((entry) => entry.courseId === bundle.course.id
-        && instructions.some(({ task }) => task.id === entry.taskId && task.assessmentVersion === entry.assessmentVersion)).length} / {instructions.length} {text(runnerText.completed, language)}</p>
+      <p data-testid="learning-completion-count">{instructions.filter(({ task }) => taskCompleted(bundle, state.completions, task)).length} / {instructions.length} {text(runnerText.completed, language)}</p>
       {state.replayLessonId && <p>{text(runnerText.replaying, language)}</p>}
       {reviewing && <div className="learning-notice"><p>{text(runnerText.review, language)}</p>
         <button type="button" onClick={() => runner.review()}>{text(runnerText.return, language)}</button></div>}

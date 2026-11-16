@@ -45,6 +45,24 @@ function harness(overrides: Partial<RunnerOptions> = {}) {
 }
 
 describe('evidence-gated course runner', () => {
+  it.each(['refused', 'throws'])('does not advance or reuse proof when completion recording %s', async (failure) => {
+    let accepted = false
+    const h = harness({ completed: () => {
+      if (!accepted && failure === 'throws') throw new Error('Storage conflict')
+      return accepted
+    } })
+    h.load()
+    await h.runner.assess()
+    expect(h.runner.advance()).toBe(false)
+    expect(h.state()).toMatchObject({ taskId: 'peering.load', feedback: 'progress', canContinue: false, completions: [] })
+    accepted = true
+    expect(h.runner.advance()).toBe(false)
+    await h.pass()
+    expect(h.state().completions).toHaveLength(1)
+    h.runner.replaceProgress([])
+    expect(h.state()).toMatchObject({ taskId: 'peering.load', canContinue: false, completions: [] })
+  })
+
   it('only advances after an explicit passing check on the matching protected practice canvas', async () => {
     const h = harness()
     expect(h.runner.advance()).toBe(false)

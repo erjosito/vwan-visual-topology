@@ -1,0 +1,6 @@
+.learning-status-panel { position: fixed; z-index: 80; top: 64px; right: 12px; box-sizing: border-box; width: min(390px, calc(100vw - 24px)); max-height: calc(100dvh - 80px); overflow: auto; padding: 16px; border: 2px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 4px 20px #0003; overflow-wrap: anywhere; }
+.learning-status-panel header, .learning-status-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.learning-status-panel h2 { font-size: 17px; margin: 0; }
+.learning-status-panel p { line-height: 1.5; }
+.learning-status-panel button { white-space: normal; min-height: 34px; margin-block: 4px; }
+.learning-status-panel :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
