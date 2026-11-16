@@ -826,6 +826,11 @@ mocked CLI responses for expired authentication, wrong tenant/cloud and
 explicit read-only subscription scope.
 The browser suite includes actual contract-worker parity and cancellation,
 alongside existing routing/import/UI regressions.
+It also launches real Electron for the offline application-contract workflow.
+On display-less Linux runners, run it as
+`xvfb-run -a npm run test:e2e -- --workers=2`; the matching Playwright Docker
+image used by CI includes Xvfb. Headless Chromium alone does not provide the
+display required by Electron. The test itself remains enabled and unchanged.
 
 `npm run test:desktop` launches actual Electron and checks three-mode engine
 parity, native JSON import/export/persistence, immediate HRP UI reevaluation,

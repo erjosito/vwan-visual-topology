@@ -50,7 +50,7 @@ jobs:
           version=$(node -p "require('@playwright/test/package.json').version")
           docker run --rm --init --ipc=host -e CI=true \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
-            npm run test:e2e -- --workers=2
+            xvfb-run -a npm run test:e2e -- --workers=2
       - name: Smoke exact production artifact with SWA headers
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
