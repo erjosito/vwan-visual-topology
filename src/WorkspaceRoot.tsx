@@ -2,13 +2,13 @@ import { Component, lazy, Suspense, useEffect, useEffectEvent, useRef, useState,
 import { t } from './i18n'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
-import { DesktopTools } from './DesktopTools'
 import { WorkspaceSessionContext } from './workspace-context'
 import { selectWorkspace, workspaceOriginals, workspaceStartup, workspaceStorageKeys, type WorkspaceProvider } from './workspace-session'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
 const WorkspaceLibrary = lazy(() => import('./WorkspaceLibrary').then((module) => ({ default: module.WorkspaceLibrary })))
+const DesktopTools = lazy(() => import('./DesktopTools').then((module) => ({ default: module.DesktopTools })))
 const selectionFailure = 'Workspace could not be selected or preserved. Originals have not been intentionally replaced. Export your design before freeing browser storage.'
 
 class WorkspaceBoundary extends Component<{ children: ReactNode; onRecover: () => void }, { failed: boolean }> {
@@ -122,7 +122,9 @@ export function UnifiedSimulatorRoot() {
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
       <CanvasMaximizeButton />
       {active && <>
-        <DesktopTools key={`tools:${active.provider}`} mode={active.provider === 'vwan' ? 'vwan' : 'full'} />
+        {window.desktopSimulator && <Suspense fallback={null}>
+          <DesktopTools key={`tools:${active.provider}`} mode={active.provider === 'vwan' ? 'vwan' : 'full'} />
+        </Suspense>}
         <WorkspaceBoundary key={`${active.provider}:${active.revision}`} onRecover={() => setLibraryOpen(true)}>
           <Suspense fallback={<section aria-label={t('Workspace loading')}><p role="status">{t('Loading workspace…')}</p></section>}>
             {active.provider === 'vwan' ? <App /> : <AzureNetApp simulatorMode="full" />}
