@@ -63,6 +63,7 @@ export function UnifiedSimulatorRoot() {
     if (!active) throw new Error('Choose a design workspace before starting practice.')
     const session = await loadPractice()
     await session.open(input, active.provider, () => ticket === request.current, signal)
+    if (ticket !== request.current || signal?.aborted) return
     setActive((current) => current && ({ ...current, capture: undefined }))
     setLibraryOpen(false)
   }
