@@ -157,6 +157,7 @@ try {
       window.setContentSize(390, 320)
       return previous
     })
+    await expect.poll(() => page.evaluate(() => [window.innerWidth, window.innerHeight])).toEqual([390, 320])
     await detailNode.focus()
     await page.keyboard.press('Shift+F10')
     const menu = page.getByRole('menu').first()
