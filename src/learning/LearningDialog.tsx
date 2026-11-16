@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLanguage, localizeDiagnostic } from '../i18n'
 import { contractVersion, engineVersion } from '../platform/contract'
 import type { PlatformDocument, PlatformResult } from '../platform/contract'
-import { concepts, labels, text } from './content'
+import { concepts, text } from './content'
 import type { ConceptId } from './content'
 import { Explain } from './Explain'
 import { exercises } from './exercises'
@@ -11,6 +11,7 @@ import type { Progress } from './progress'
 import './learning.css'
 import { useWorkspaceSession } from '../workspace-context'
 import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './practice-workspace'
+import { learningLabels as labels, practiceLabels } from './practice-content'
 
 export function LearningDialog({ document: workspace, onOpen, initialOpen = false }: {
   document: PlatformDocument
@@ -115,9 +116,9 @@ export function LearningDialog({ document: workspace, onOpen, initialOpen = fals
       else onOpen(admitted.document)
       close()
     } catch (error) {
-      if (job.current === controller) setError(text(error instanceof Error && error.message === practiceReadFailure ? labels.practiceReadFailure
-        : error instanceof Error && error.message === practiceConflict ? labels.practiceConflict
-        : error instanceof Error && error.message === practiceSaveFailure ? labels.practiceStartFailure : labels.invalid, language))
+      if (job.current === controller) setError(text(error instanceof Error && error.message === practiceReadFailure ? practiceLabels.practiceReadFailure
+        : error instanceof Error && error.message === practiceConflict ? practiceLabels.practiceConflict
+        : error instanceof Error && error.message === practiceSaveFailure ? practiceLabels.practiceStartFailure : labels.invalid, language))
     }
     finally { if (job.current === controller) { job.current = undefined; setRunning(false) } }
   }

@@ -12,7 +12,9 @@ accepts a copied native scenario after explicit confirmation; it does not look
 up lesson names or hardcode the curriculum. Opening/selecting lesson content must
 not invoke it implicitly. Resume the existing canvas instead of loading its
 starter again. `practice-workspace.ts` owns the separate canvas envelope; it is
-not the course progress/award ledger. See `PLATFORM.md` for exact persistence,
+not the course progress/award ledger. `practice-session.ts` loads only when
+practice exists or is explicitly started, keeping optional learning off the
+normal startup asset graph. See `PLATFORM.md` for exact persistence,
 return, recovery and same-session history behavior.
 
 ## What goes where

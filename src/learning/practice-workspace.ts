@@ -1,7 +1,8 @@
 import type { PlatformDocument } from '../platform/contract'
 import type { WorkspaceProvider } from '../workspace-session'
 
-export const practiceWorkspaceKey = 'network-simulator:practice-workspace:v1'
+import { practiceWorkspaceKey } from './practice-workspace-key'
+export { practiceWorkspaceKey } from './practice-workspace-key'
 export const practiceSaveFailure = 'Practice could not be saved. Changes remain in this session only. Return to practice and export your design before reloading.'
 export const practiceReadFailure = 'Saved practice could not be read. Its original contents have not been overwritten.'
 export const practiceConflict = 'Saved practice changed in another tab. It has not been overwritten. Reload to use that saved session.'

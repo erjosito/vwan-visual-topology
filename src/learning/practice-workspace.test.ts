@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { exercises } from './exercises'
+import { createPracticeSession } from './practice-session'
 import {
   admitPracticeDocument, explicitWorkspaceEntry, practiceConflict, practiceProvider, practiceWorkspaceKey,
   readPracticeWorkspace, writePracticeWorkspace, type PracticeWorkspace,
@@ -86,5 +87,21 @@ describe('isolated practice persistence', () => {
     }
     expect(explicitWorkspaceEntry('', '')).toBe(false)
     expect(explicitWorkspaceEntry('?theme=dark', '#section')).toBe(false)
+  })
+
+  it('rejects cancelled opens and writers from an earlier editor generation', async () => {
+    const store = storage()
+    const session = createPracticeSession({ storage: () => store, changed: () => {}, notice: () => {}, replaced: () => {} })
+    const input = record()
+    await expect(session.open(input, 'vwan', () => false)).rejects.toThrow('cancelled')
+    expect(store.getItem(practiceWorkspaceKey)).toBeNull()
+    await session.open(input, 'vwan', () => true)
+    const prior = store.getItem(practiceWorkspaceKey)
+    expect(() => session.save(record(1).document, 0)).toThrow('Practice could not be saved')
+    expect(store.getItem(practiceWorkspaceKey)).toBe(prior)
+    await session.open(record(1), 'vwan', () => true)
+    const next = store.getItem(practiceWorkspaceKey)
+    expect(() => session.save(input.document, 1)).toThrow('Practice could not be saved')
+    expect(store.getItem(practiceWorkspaceKey)).toBe(next)
   })
 })

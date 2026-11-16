@@ -4,9 +4,9 @@ import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
 import { WorkspaceSessionContext, type WorkspaceEditorHistory } from './workspace-context'
 import { selectWorkspace, workspaceOriginals, workspaceStartup, workspaceStorageKeys, type WorkspaceProvider } from './workspace-session'
-import { admitPracticeDocument, explicitWorkspaceEntry, practiceConflict, practiceProvider, practiceReadFailure, practiceSaveFailure,
-  practiceWorkspaceKey, readPracticeWorkspace, writePracticeWorkspace, type PracticeRequest, type PracticeWorkspace } from './learning/practice-workspace'
-import type { PlatformDocument } from './platform/contract'
+import { practiceWorkspaceKey } from './learning/practice-workspace-key'
+import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
+import type { PracticeSession } from './learning/practice-session'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
@@ -37,72 +37,42 @@ export function UnifiedSimulatorRoot() {
   const [practiceReady, setPracticeReady] = useState(false)
   const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict'>('')
   const [practiceEpoch, setPracticeEpoch] = useState(0)
-  const practiceGeneration = useRef(0)
-  const practiceRef = useRef<PracticeWorkspace | undefined>(undefined)
-  const practiceRaw = useRef<string | null>(null)
-  const practiceBlocked = useRef(false)
+  const practiceRef = useRef<PracticeSession | undefined>(undefined)
+  const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
   const designHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const practiceHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const { style, maximized } = useCanvasPresentation()
   const request = useRef(0)
-  const persistPractice = (next: PracticeWorkspace) => {
-    try {
-      practiceRaw.current = writePracticeWorkspace(localStorage, next, practiceRaw.current)
-      setPracticeNotice('')
-    } catch (error) {
-      const conflict = error instanceof Error && error.message === practiceConflict
-      setPracticeNotice(conflict ? 'conflict' : 'save')
-      throw new Error(conflict ? practiceConflict : practiceSaveFailure)
-    }
+  const loadPractice = () => {
+    practiceLoading.current ??= import('./learning/practice-session').then(({ createPracticeSession }) => {
+      practiceRef.current = createPracticeSession({
+        storage: () => localStorage, changed: setPractice, notice: setPracticeNotice,
+        replaced: () => { practiceHistory.current = undefined; setPracticeEpoch((epoch) => epoch + 1) },
+      })
+      return practiceRef.current
+    }).catch((error) => { practiceLoading.current = undefined; throw error })
+    return practiceLoading.current
   }
   const leavePractice = () => {
     request.current++
-    if (!practiceRef.current?.active) return
-    const next = { ...practiceRef.current, active: false }
-    practiceRef.current = next; setPractice(next)
+    practiceRef.current?.leave()
     if (!active) setLibraryOpen(true)
-    try { persistPractice(next) } catch { /* The visible notice retains the unsaved-session warning. */ }
-  }
-  const savePractice = (document: PlatformDocument) => {
-    if (!practiceRef.current?.active || practiceEpoch !== practiceGeneration.current) throw new Error(practiceSaveFailure)
-    const next = { ...practiceRef.current, document }
-    practiceRef.current = next; setPractice(next)
-    persistPractice(next)
   }
   const openPractice = async (input: PracticeRequest, signal?: AbortSignal) => {
     const ticket = ++request.current
-    if (practiceBlocked.current) throw new Error(practiceReadFailure)
-    const document = await admitPracticeDocument(input.document)
-    if (signal?.aborted || ticket !== request.current) throw new DOMException('Practice opening cancelled.', 'AbortError')
     if (!active) throw new Error('Choose a design workspace before starting practice.')
-    const next: PracticeWorkspace = { version: 1, ...input, document, active: true, returnProvider: active.provider }
-    persistPractice(next)
-    practiceGeneration.current++
-    practiceHistory.current = undefined
-    practiceRef.current = next; setPractice(next); setPracticeEpoch((epoch) => epoch + 1)
+    const session = await loadPractice()
+    await session.open(input, active.provider, () => ticket === request.current, signal)
     setActive((current) => current && ({ ...current, capture: undefined }))
     setLibraryOpen(false)
   }
   const resumePractice = () => {
     request.current++
-    if (!practiceRef.current) return
-    const next = { ...practiceRef.current, active: true, returnProvider: active?.provider ?? practiceRef.current.returnProvider }
-    try { persistPractice(next) }
-    catch (error) {
-      if (error instanceof Error && error.message === practiceConflict) return
-      // Session-only resumption keeps unsaved practice accessible for export.
-    }
-    practiceRef.current = next; setPractice(next); setLibraryOpen(false)
+    if (practiceRef.current?.resume(active?.provider)) setLibraryOpen(false)
   }
   const discardPractice = () => {
     request.current++
-    try {
-      if (localStorage.getItem(practiceWorkspaceKey) !== practiceRaw.current) throw new Error(practiceConflict)
-      localStorage.removeItem(practiceWorkspaceKey)
-      practiceRaw.current = null; practiceRef.current = undefined; practiceHistory.current = undefined
-      practiceBlocked.current = false; setPractice(undefined); setPracticeNotice('')
-      if (!active) setLibraryOpen(true)
-    } catch (error) { setPracticeNotice(error instanceof Error && error.message === practiceConflict ? 'conflict' : 'save') }
+    if (practiceRef.current?.discard() && !active) setLibraryOpen(true)
   }
   const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
     request.current++
@@ -123,22 +93,20 @@ export function UnifiedSimulatorRoot() {
   }
   const initialize = useEffectEvent(async () => {
     const ticket = ++request.current
-    let restored: PracticeWorkspace | undefined
     try {
-      practiceRaw.current = localStorage.getItem(practiceWorkspaceKey)
-      restored = await readPracticeWorkspace(practiceRaw.current)
-      if (ticket !== request.current) return
-      if (restored?.active && explicitWorkspaceEntry(location.search, location.hash)) {
-        restored = { ...restored, active: false }
-        try { persistPractice(restored) } catch { /* Explicit incoming designs take precedence, with a visible save warning. */ }
+      const raw = localStorage.getItem(practiceWorkspaceKey)
+      if (raw !== null) {
+        const session = await loadPractice()
+        await session.restore(raw, location.search, location.hash, () => ticket === request.current)
       }
-      practiceRef.current = restored; setPractice(restored)
     } catch {
       if (ticket !== request.current) return
-      practiceBlocked.current = true; setPracticeNotice('read')
+      try { (await loadPractice()).unreadable() }
+      catch { setPracticeNotice('read') }
     }
     if (ticket !== request.current) return
     setPracticeReady(true)
+    const restored = practiceRef.current?.current
     if (restored?.active) {
       setActive({ provider: restored.returnProvider, revision: 0 })
       setLibraryOpen(false)
@@ -173,26 +141,8 @@ export function UnifiedSimulatorRoot() {
   }, [])
   const openDocument = async (input: unknown) => {
     const ticket = ++request.current
-    if (practiceRef.current?.active) {
-      let document: PlatformDocument
-      if (input && typeof input === 'object' && 'kind' in input && input.kind === 'azure-vwan-capture') {
-        const { importAzureCapture } = await import('./azure-import')
-        document = { mode: 'vwan', topology: importAzureCapture(input) }
-      } else if (input && typeof input === 'object' && 'kind' in input && input.kind === 'azure-network-capture') {
-        const { importAzNetCapture } = await import('./azure-net/azure-import')
-        document = { mode: 'full', topology: importAzNetCapture(input).topology }
-      } else {
-        document = await admitPracticeDocument({
-          mode: input && typeof input === 'object' && 'version' in input && input.version === 1 ? 'vwan' : 'full',
-          topology: input,
-        } as PlatformDocument)
-      }
-      if (ticket !== request.current) return
-      const next = { ...practiceRef.current, document }
-      persistPractice(next)
-      practiceRef.current = next; setPractice(next)
-      practiceGeneration.current++
-      practiceHistory.current = undefined; setPracticeEpoch((epoch) => epoch + 1)
+    if (practiceRef.current?.current?.active) {
+      await practiceRef.current.importDocument(input, () => ticket === request.current)
       return
     }
     const commit = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
@@ -225,7 +175,7 @@ export function UnifiedSimulatorRoot() {
     } catch { if (ticket === request.current) setNotice('Workspace could not load. Your saved design has not been replaced.') }
   }
   const importSharedSnapshot = useEffectEvent(async () => {
-    if (practiceRef.current?.active && /(?:#|&)s=/.test(location.hash)) {
+    if (practiceRef.current?.current?.active && /(?:#|&)s=/.test(location.hash)) {
       const ticket = ++request.current
       try {
         const { loadAzWorkspace } = await import('./azure-net/workspace')
@@ -251,14 +201,15 @@ export function UnifiedSimulatorRoot() {
     return () => window.removeEventListener('hashchange', changed)
   }, [])
   const practicing = practice?.active === true
-  const provider = practicing ? practiceProvider(practice.document) : active?.provider
+  const provider = practicing ? practice.document.mode === 'vwan' ? 'vwan' : 'azure-net' : active?.provider
   const editorKey = practicing ? `practice:${practiceEpoch}:${provider}` : `design:${active?.provider}:${active?.revision}`
   const editorHistory = practicing ? practiceHistory : designHistory
   return <WorkspaceSessionContext value={{
     openLibrary: () => { leavePractice(); request.current++; setLibraryOpen(true) },
     openDocument, getRequestVersion: () => request.current,
     capture: practicing ? undefined : active?.capture,
-    openPractice, practice: practicing ? practice : undefined, savePractice,
+    openPractice, practice: practicing ? practice : undefined,
+    savePractice: (document) => practiceRef.current?.save(document, practiceEpoch),
     getEditorHistory: () => editorHistory.current,
     rememberEditorHistory: (value) => { editorHistory.current = value },
   }}>
