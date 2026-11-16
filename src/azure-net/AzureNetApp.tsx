@@ -8,7 +8,7 @@ import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './adm
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
-import { t } from '../i18n'
+import { t, useLanguage, documentTitles } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
@@ -18,9 +18,7 @@ import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
 import { CanvasOverlay } from '../CanvasOverlay'
-import { SampleGallery } from '../SampleGallery'
 import { useDeleteShortcut } from '../useDeleteShortcut'
-import { ErLocationInfoModal } from '../ErLocationInfoModal'
 import {
   ALL_KNOWN_AZURE_REGIONS,
   ER_PEERING_LOCATIONS_CATALOG,
@@ -37,7 +35,7 @@ import {
   importAzNetCapture,
   type AzNetComparisonReport,
 } from './azure-import'
-import { BgpRouteTable } from './BgpRouteTable'
+import { validateVpnNat } from '../vpn-nat'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 
@@ -227,6 +225,10 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const VpnNatGatewayEditor = lazy(() => import('../VpnNatEditor').then((module) => ({ default: module.VpnNatGatewayEditor })))
+const BgpRouteTable = lazy(() => import('./BgpRouteTable').then((module) => ({ default: module.BgpRouteTable })))
+const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ default: module.SampleGallery })))
+const ErLocationInfoModal = lazy(() => import('../ErLocationInfoModal').then((module) => ({ default: module.ErLocationInfoModal })))
 const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
@@ -244,6 +246,7 @@ function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttr
 }
 
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
+  const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
   const initialResolved = useMemo(() => {
     // Access localStorage inside loadAzWorkspace's try/catch (the getter itself may throw).
@@ -324,6 +327,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   })()
   const [erLocationModalState, setErLocationModalState] = useState<{
     open: boolean
+    hasOpened?: boolean
     locationName?: string
     sku?: AzErCircuitSku
     targetLocationId?: string
@@ -367,6 +371,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         pruneAzArsRouteMaps(draft)
         pruneDeletedInventory(draft, topology)
         validateInventory(draft)
+        validateVpnNat(draft)
         return draft
       })
     } catch (error) {
@@ -703,14 +708,17 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const urlSampleLoaded = useRef(false)
   useEffect(() => {
     const prevTitle = document.title
-    document.title = 'AzNet Simulator'
+    document.title = documentTitles[language]
+    return () => { document.title = prevTitle }
+  }, [language])
+
+  useEffect(() => {
     const iconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
     const prevIconHref = iconLink?.getAttribute('href')
     if (iconLink) {
       iconLink.setAttribute('href', '/favicon-aznet.svg')
     }
     return () => {
-      document.title = prevTitle
       if (iconLink && prevIconHref) iconLink.setAttribute('href', prevIconHref)
     }
   }, [])
@@ -2240,6 +2248,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             onSelect: () => {
               setErLocationModalState({
                 open: true,
+                hasOpened: true,
                 targetLocationId: loc.id,
                 locationName: loc.peeringLocation ?? loc.name,
                 sku: currentSku,
@@ -2777,7 +2786,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             <div className="aznet-brand-icon" aria-hidden="true">
               Az
             </div>
-            <h1>AzNet Simulator</h1>
+            <h1>Azure Networking Simulator</h1>
           </div>
 
           <WorkspaceMenu />
@@ -2822,6 +2831,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             onClick={() =>
               setErLocationModalState({
                 open: true,
+                hasOpened: true,
                 locationName: topology.erLocations[0]?.peeringLocation ?? topology.erLocations[0]?.name,
                 sku: topology.erLocations[0]?.sku ?? 'Standard',
                 targetLocationId: topology.erLocations[0]?.id,
@@ -3504,7 +3514,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         {hubRouteTables(hub).map((table) => <option key={table.id} value={table.id}>{table.name} · {table.id}</option>)}
                       </select></label>{!coverage?.complete && <p role="status">{t('Routing not assessed')}: {coverage?.limitations.join(' ')}</p>}</>
                     })()}
-                    <BgpRouteTable key={JSON.stringify(routeSelection)} entries={inspectedControlRib.entries} available={inspectedControlRib.available} />
+                    <Suspense fallback={null}><BgpRouteTable key={JSON.stringify(routeSelection)} entries={inspectedControlRib.entries} available={inspectedControlRib.available} /></Suspense>
                   </div>
                 )}
               </>
@@ -3999,6 +4009,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </div>
 
                 <Suspense fallback={null}>
+                {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} />}
+                {selected.kind === 'vwan-hub' && <VpnNatGatewayEditor key={selected.hubId} topology={topology} targetKind="vwan-hub" targetId={selected.hubId} commit={commitTopology} />}
                 {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
@@ -5561,6 +5573,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 onClick={() =>
                                   setErLocationModalState({
                                     open: true,
+                                    hasOpened: true,
                                     targetLocationId: loc.id,
                                     locationName: loc.peeringLocation ?? loc.name,
                                     sku: loc.sku ?? 'Standard',
@@ -5961,12 +5974,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         </CanvasOverlay>}
       </div>
 
-      {sampleGalleryOpen && <SampleGallery entries={visibleCatalogEntries} currentId={sampleId} testIdPrefix="aznet"
+      {sampleGalleryOpen && <Suspense fallback={null}><SampleGallery entries={visibleCatalogEntries} currentId={sampleId} testIdPrefix="aznet"
         hasWorkspace={topology.name !== 'Empty Topology' || !!(topology.vnets.length || topology.vwanHubs.length || topology.sites.length || topology.erLocations.length || topology.udrTables.length || topology.routeMaps?.length || topology.vnetPeerings.length || topology.erLinks.length || topology.vpnConnections.length || topology.siteLinks.length)}
-        onLoad={loadSample} onExport={handleExportJson} onClose={() => setSampleGalleryOpen(false)} />}
+        onLoad={loadSample} onExport={handleExportJson} onClose={() => setSampleGalleryOpen(false)} /></Suspense>}
 
       {/* ExpressRoute Peering Locations & Providers Modal (#43, #44) */}
-      <ErLocationInfoModal
+      {erLocationModalState.hasOpened && <Suspense fallback={null}><ErLocationInfoModal
         isOpen={erLocationModalState.open}
         initialLocationName={erLocationModalState.locationName}
         currentSku={erLocationModalState.sku}
@@ -6012,7 +6025,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             : undefined
         }
         onClose={() => setErLocationModalState((prev) => ({ ...prev, open: false }))}
-      />
+      /></Suspense>}
     </div>
   )
 }

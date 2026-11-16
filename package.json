@@ -12,6 +12,8 @@
     "test": "vitest run",
     "pretest": "npm run build:platform",
     "benchmark:diagnostics": "node scripts/benchmark-diagnostics.mjs",
+    "evaluate": "node scripts/evaluate-quality.mjs",
+    "test:evaluation": "node --test scripts/quality-scorecard.test.mjs",
     "test:collector": "pwsh -NoLogo -NoProfile -File tests/collect-azure-vwan.test.ps1 && pwsh -NoLogo -NoProfile -File tests/collect-azure-network.test.ps1",
     "test:e2e": "playwright test",
     "test:production": "node --test scripts/production-server.test.mjs && playwright test --config playwright.production.config.ts",
@@ -22,6 +24,7 @@
     "build:desktop": "npm run build && npm run build:platform && electron-builder --win --x64 --publish never",
     "desktop": "electron platform-dist/electron/main.cjs",
     "test:desktop": "node scripts/test-desktop.mjs",
+    "test:desktop-network": "node scripts/test-desktop-network.mjs",
     "test:desktop-cli": "pwsh -NoLogo -NoProfile -File tests/desktop-azure-read.test.ps1"
   },
   "dependencies": {

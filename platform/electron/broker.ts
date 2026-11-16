@@ -21,7 +21,10 @@ export const executePowerShell: Executor = (args, timeout, signal) => new Promis
   if (signal?.aborted) { reject(failure()); return }
   const child = spawn('pwsh', ['-NoLogo', '-NoProfile', '-NonInteractive', '-File', ...args], {
     windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, AZURE_EXTENSION_USE_DYNAMIC_INSTALL: 'no', POWERSHELL_TELEMETRY_OPTOUT: '1' },
+    env: {
+      ...process.env, AZURE_EXTENSION_USE_DYNAMIC_INSTALL: 'no', POWERSHELL_TELEMETRY_OPTOUT: '1',
+      AZURE_CORE_COLLECT_TELEMETRY: 'no', AZURE_LOGGING_ENABLE_LOG_FILE: 'no',
+    },
   })
   let output = '', bytes = 0, stopped = false, settled = false
   const stop = () => {

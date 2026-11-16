@@ -9,6 +9,8 @@ single Azure Resource Group using read-only Azure CLI commands.
 When -IncludeEffectiveRoutes is set, also captures NIC effective route tables (including any
 GatewaySubnet proxy NIC) and Azure Route Server learned/advertised BGP routes.
 All resource reads pin the selected subscription and project non-secret fields.
+VPN NAT is observed as gateway rule IDs and connection ingress/egress reference IDs only;
+rule mappings and secrets are not collected, and import rejects observed associations.
 Capture v2 adds observationVersion=1 and explicit section states; older v2 files remain importable.
 Limits: 500 invocations, 20 minutes overall, 60 seconds/invocation by default,
 2 million stdout characters, 65536 stderr characters, 6 MB projected data and 8 MB final UTF-8.
@@ -182,7 +184,7 @@ $route = @{ name = $true; addressPrefix = $true; nextHopType = $true; nextHopIpA
 $peer = @{ id = $true; name = $true; remoteVirtualNetwork = $ref; allowVirtualNetworkAccess = $true; allowForwardedTraffic = $true; allowGatewayTransit = $true; useRemoteGateways = $true }
 $subnet = @{ id = $true; name = $true; addressPrefix = $true; addressPrefixes = $true; routeTable = $ref; networkSecurityGroup = $ref; defaultOutboundAccess = $true; natGateway = $ref; privateEndpointNetworkPolicies = $true; serviceEndpoints = @(@{ service = $true }); ipConfigurations = @($ref) }
 $vnet = @{ id = $true; name = $true; location = $true; addressSpace = @{ addressPrefixes = $true }; subnets = @($subnet); virtualNetworkPeerings = @($peer); summarizedGatewayPrefixes = @{ addressPrefixes = $true } }
-$gateway = @{ id = $true; name = $true; gatewayType = $true; enableBgp = $true; activeActive = $true; bgpSettings = $bgp; ipConfigurations = @($ipConfiguration) }
+$gateway = @{ id = $true; name = $true; gatewayType = $true; enableBgp = $true; activeActive = $true; bgpSettings = $bgp; ipConfigurations = @($ipConfiguration); natRules = @($ref) }
 $bgpRoute = @{ network = $true; nextHop = $true; sourcePeer = $true; origin = $true; asPath = $true; localAddress = $true; weight = $true }
 $account = Invoke-AzJson 'account' @('account', 'show') @{ id = $true; tenantId = $true; environmentName = $true }
 $resolvedSubId = if ($SubscriptionId) { $SubscriptionId } elseif ($account) { [string]$account.id } else { '' }
@@ -205,7 +207,7 @@ $natGateways = @(Invoke-AzJson 'natGateways' @('network', 'nat', 'gateway', 'lis
 Write-Host "[2/6] Reading Virtual Network Gateways, Local Gateways, Connections, and Route Servers..."
 $vnetGateways = @(Invoke-AzJson 'vnetGateways' @('network', 'vnet-gateway', 'list', '-g', $ResourceGroupName) @($gateway))
 $localNetworkGateways = @(Invoke-AzJson 'localNetworkGateways' @('network', 'local-gateway', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; bgpSettings = $bgp; localNetworkAddressSpace = @{ addressPrefixes = $true } }))
-$vpnConnections = @(Invoke-AzJson 'vpnConnections' @('network', 'vpn-connection', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; enableBgp = $true; virtualNetworkGateway1 = $ref; localNetworkGateway2 = $ref }))
+$vpnConnections = @(Invoke-AzJson 'vpnConnections' @('network', 'vpn-connection', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; enableBgp = $true; virtualNetworkGateway1 = $ref; localNetworkGateway2 = $ref; ingressNatRules = @($ref); egressNatRules = @($ref) }))
 $vngLearnedRoutes = @{}
 $vngBgpPeerStatus = @{}
 if ($IncludeEffectiveRoutes) {
@@ -381,7 +383,7 @@ foreach ($section in @('nicEffectiveRoutes', 'arsLearnedRoutes', 'arsAdvertisedR
 $capture = [ordered]@{
     kind               = 'azure-network-capture'
     version            = 2
-    collectorVersion   = '2026.11.16.6'
+    collectorVersion   = '2026.11.16.10'
     connectivityVersion = 1
     observationVersion = 1
     context            = $context

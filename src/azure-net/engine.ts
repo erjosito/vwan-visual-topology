@@ -1,4 +1,5 @@
 import { cidr, contains, ipv4 } from '../validation'
+import { mappedVpnAddress, translateVpnRoutes, validateVpnNat } from '../vpn-nat'
 import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
@@ -58,6 +59,8 @@ export interface AzEffectiveRoute {
 }
 
 export interface AzBgpRibEntry {
+  natOriginalPrefix?: string
+  natRuleId?: string
   id: string
   prefix: string
   asPath: number[]
@@ -353,6 +356,7 @@ function hubAdvertisements(
 }
 
 export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
+  validateVpnNat(topology)
   let result = simulateAzNetPass(topology)
   if (!topology.vwanHubs.length && !topology.routeMaps?.some((map) => map.siteId && map.rules.some((rule) => rule.localPreference !== undefined))) return result
   const signature = (value: AzSimulationResult) => JSON.stringify([value.vwanHubTables, value.erLocationRibs, value.siteRibs])
@@ -773,7 +777,8 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           const site = topology.sites.find((s) => s.id === conn.siteId)
           if (!site) continue
           if (conn.bgpEnabled && gw.bgpEnabled) {
-            const siteRoutes = sitePolicy(site.id, conn.id, 'outbound', (siteRibs[site.id] ?? []).filter((r) => r.preferred))
+            const siteRoutes = translateVpnRoutes(topology, conn,
+              sitePolicy(site.id, conn.id, 'outbound', (siteRibs[site.id] ?? []).filter((r) => r.preferred)), 'IngressSNAT')
             for (const sr of siteRoutes) {
               entries.push({
                 ...sr,
@@ -786,7 +791,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
                 nextHopId: site.id,
                 originProtocol: 'VPN',
                 preferred: true,
-                explanation: `Learned via BGP over S2S VPN ${conn.name} from ${site.name}`,
+                explanation: `Learned via BGP over S2S VPN ${conn.name} from ${site.name}${sr.natOriginalPrefix ? `. ${sr.explanation}` : ''}`,
               })
             }
           } else {
@@ -963,7 +968,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           nextHopKind: 'site', nextHopId: site.id, originProtocol: 'VPN', preferred: true,
           explanation: `Static VPN route over ${conn.name}`, vpnStatic: true,
         }))
-      for (const sr of received) {
+      for (const sr of translateVpnRoutes(topology, conn, received, 'IngressSNAT')) {
         entries.push({
           ...sr,
           id: `vhub:${hub.id}:vpn:${conn.id}:${sr.prefix}`,
@@ -976,7 +981,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           originProtocol: 'VPN',
           hubTransport: conn.transport ?? 'VPN',
           preferred: true,
-          explanation: `Learned by vWAN Hub ${hub.name} via VPN ${conn.name}`,
+          explanation: `Learned by vWAN Hub ${hub.name} via VPN ${conn.name}${sr.natOriginalPrefix ? `. ${sr.explanation}` : ''}`,
         })
       }
     }
@@ -1092,7 +1097,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         const ownerVnet = topology.vnets.find((v) => v.gateways.some((g) => g.id === conn.targetId && g.enabled))
         const gw = ownerVnet?.gateways.find((g) => g.id === conn.targetId)
         if (!ownerVnet || !gw) continue
-        const received = advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`).map((adv): AzBgpRibEntry => ({
+        const received = (conn.nat && !conn.bgpEnabled ? [] : advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`)).map((adv): AzBgpRibEntry => ({
             id: `site:${site.id}:vpn:${conn.id}:${adv.prefix}`,
             connectionId: conn.id,
             prefix: adv.prefix,
@@ -1107,7 +1112,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
             routeMapTrace: adv.routeMapTrace,
             communities: adv.communities,
         }))
-        learnedFromAzure.push(...sitePolicy(site.id, conn.id, 'inbound', received))
+        learnedFromAzure.push(...sitePolicy(site.id, conn.id, 'inbound', translateVpnRoutes(topology, conn, received, 'EgressSNAT')))
       } else if (conn.bgpEnabled && conn.targetKind === 'appliance') {
         const ownerVnet = topology.vnets.find((vnet) => vnet.appliances.some((app) => app.id === conn.targetId))
         const app = ownerVnet?.appliances.find((app) => app.id === conn.targetId && app.bgpEnabled && app.enableIpForwarding)
@@ -1139,14 +1144,22 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       } else if (conn.targetKind === 'vwan-hub') {
         const routes = (vwanHubTables[conn.targetId]?.[azHubAssociation(conn.hubRouting)] ?? []).filter((route) =>
           route.preferred && !(route.nextHopKind === 'site' && route.nextHopId === site.id))
-        const received = hubAdvertisements(topology, conn.targetId, conn.id, routes, conn.propagateDefaultRoute, true)
+        const received = (conn.nat && !conn.bgpEnabled ? [] : hubAdvertisements(topology, conn.targetId, conn.id, routes, conn.propagateDefaultRoute, true))
           .map((route): AzBgpRibEntry => ({
             ...route, id: `site:${site.id}:vhub:${conn.id}:${route.prefix}`, connectionId: conn.id,
             asPath: conn.bgpEnabled ? [...(conn.outboundPrepend ?? []), ...route.asPath] : [],
             nextHopName: `${conn.targetId} (${conn.name})`, nextHopKind: 'vwan-hub', nextHopId: conn.targetId,
             originProtocol: 'VPN', preferred: false,
           }))
-        learnedFromAzure.push(...(conn.bgpEnabled ? sitePolicy(site.id, conn.id, 'inbound', received) : received))
+        learnedFromAzure.push(...(conn.bgpEnabled ? sitePolicy(site.id, conn.id, 'inbound', translateVpnRoutes(topology, conn, received, 'EgressSNAT')) : received))
+      }
+      if (conn.nat && (conn.targetKind !== 'vnet-gateway' || topology.vnets.some((vnet) =>
+        vnet.gateways.some((gateway) => gateway.id === conn.targetId && gateway.enabled)))) {
+        learnedFromAzure.push(...(conn.nat.onPremisesRoutes ?? []).map((prefix): AzBgpRibEntry => ({
+          id: `site:${site.id}:vpn-manual:${conn.id}:${prefix}`, prefix, asPath: [], connectionId: conn.id,
+          nextHopName: conn.name, nextHopKind: conn.targetKind, nextHopId: conn.targetId, originProtocol: 'Static',
+          preferred: false, vpnStatic: true, explanation: `Explicit on-premises static post-NAT route via ${conn.name}; not a BGP translation.`,
+        })))
       }
     }
     siteRibs[site.id] = chooseBgpWinners([...siteRibs[site.id], ...learnedFromAzure], 'ASPath', true)
@@ -1684,6 +1697,20 @@ export function locateDestinationIp(
     }
   }
 
+  for (const connection of topology.vpnConnections) {
+    const rule = connection.nat?.rules.find((rule) => contains(rule.externalMapping, ipNum))
+    if (!rule) continue
+    if (rule.mode === 'IngressSNAT') {
+      const site = topology.sites.find((site) => site.id === connection.siteId)
+      if (site) return { label: `${site.name} VPN NAT (${destinationIp})`, endpoint: { kind: 'site', siteId: site.id }, site }
+    } else if (rule.type === 'Static') {
+      const original = mappedVpnAddress(destinationIp, rule.externalMapping, rule.internalMapping)
+      const vnet = topology.vnets.find((vnet) => vnet.prefixes.some((prefix) => contains(prefix, ipv4(original)!)))
+      const subnet = vnet?.subnets.find((subnet) => contains(subnet.prefix, ipv4(original)!))
+      if (vnet && subnet) return { label: `${vnet.name} VPN NAT (${destinationIp})`,
+        endpoint: { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id }, vnet, subnet }
+    }
+  }
   return { label: `External / Internet (${destinationIp})` }
 }
 
@@ -1697,9 +1724,11 @@ export function traceAzNetFlow(
   simulation: AzSimulationResult,
   source: AzEndpointRef,
   destinationIp: string,
-  options?: { sourceAddress?: string; sourceApplianceId?: string },
+  options?: { sourceAddress?: string; sourceApplianceId?: string
+    vpnTranslation?: (connectionId: string, direction: 'ingress' | 'egress', destinationAddress: string) =>
+      { destinationAddress: string; detail: string; blocked?: string } },
 ): AzFlowTrace {
-  const targetInfo = locateDestinationIp(topology, destinationIp)
+  let targetInfo = locateDestinationIp(topology, destinationIp)
   const hops: AzTraceHop[] = []
   const traversedApplianceIds: string[] = []
   const traversedEdgeIds: string[] = []
@@ -1716,7 +1745,7 @@ export function traceAzNetFlow(
     }
   }
 
-  const ipNum = ipv4(destinationIp)
+  let ipNum = ipv4(destinationIp)!
   if (ipNum === undefined) {
     return {
       source,
@@ -1741,7 +1770,31 @@ export function traceAzNetFlow(
     }
   }
 
-  const privateDestination = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ipNum))
+  let privateDestination = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ipNum))
+  let vpnSiteDelivery: { siteId: string; internalPrefixes: string[] } | undefined
+  const crossVpn = (connectionId: string, direction: 'ingress' | 'egress'): AzFlowTrace | undefined => {
+    const connection = topology.vpnConnections.find((connection) => connection.id === connectionId)!
+    if (!connection.nat) return
+    const translated = options?.vpnTranslation?.(connectionId, direction, destinationIp)
+    if (!translated || translated.blocked) {
+      const reason = translated?.blocked ?? 'VPN NAT needs an explicit five-tuple and bounded reply assessment in the connection inspector.'
+      pushHop({ nodeKind: 'site', nodeId: connection.siteId, nodeName: connection.name, edgeId: connection.id, action: 'dropped', detail: reason })
+      return { source, destinationIp, destinationLabel: targetInfo.label, status: translated?.blocked ? 'dropped-no-route' : 'not-assessed',
+        hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+    }
+    destinationIp = translated.destinationAddress
+    ipNum = ipv4(destinationIp)!
+    targetInfo = locateDestinationIp(topology, destinationIp)
+    privateDestination = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ipNum))
+    if (direction === 'egress') {
+      vpnSiteDelivery = { siteId: connection.siteId,
+        internalPrefixes: connection.nat.rules.filter((rule) => rule.mode === 'IngressSNAT').map((rule) => rule.internalMapping) }
+      const site = topology.sites.find((site) => site.id === connection.siteId)
+      if (site) targetInfo = { label: `${site.name} VPN internal (${destinationIp})`, endpoint: { kind: 'site', siteId: site.id }, site }
+    }
+    pushHop({ nodeKind: connection.targetKind === 'vwan-hub' ? 'vwan-hub' : 'vnet-gateway',
+      nodeId: connection.targetId, nodeName: connection.name, edgeId: connection.id, action: 'gateway-transit', detail: translated.detail })
+  }
 
   type Cursor =
     | { kind: 'subnet'; vnetId: string; subnetId: string; fromExternalVnet: boolean; viaVnra: boolean }
@@ -2988,6 +3041,8 @@ export function traceAzNetFlow(
             return prefixes.some((p) => cidr(p) && contains(p, ipNum))
           })
           if (vpnConn) {
+            const blocked = crossVpn(vpnConn.id, 'egress')
+            if (blocked) return blocked
             pushHop({
               nodeKind: 'vnet-gateway',
               nodeId: gw.id,
@@ -3159,6 +3214,8 @@ export function traceAzNetFlow(
       const vpn = topology.vpnConnections.find((connection) => connection.enabled &&
         connection.targetKind === 'vwan-hub' && connection.targetId === hub.id && connection.id === selectedHubRoute?.connectionId)
       if (vpn) {
+        const blocked = crossVpn(vpn.id, 'egress')
+        if (blocked) return blocked
         pushHop({
           nodeKind: 'vwan-hub', nodeId: hub.id, nodeName: hub.name, action: 'vwan-transit',
           edgeId: vpn.id, hubTableId: tableId, detail: `${hub.name} forwards over ${vpn.transport === 'SDWAN' ? 'SD-WAN' : 'S2S VPN'} "${vpn.name}"`,
@@ -3295,7 +3352,7 @@ export function traceAzNetFlow(
 
     if (stepCursor.kind === 'site') {
       const site = topology.sites.find((s) => s.id === stepCursor.siteId)!
-      if (site.prefixes.some((p) => cidr(p) && contains(p, ipNum))) {
+      if ([...site.prefixes, ...(vpnSiteDelivery?.siteId === site.id ? vpnSiteDelivery.internalPrefixes : [])].some((p) => cidr(p) && contains(p, ipNum))) {
         pushHop({
           nodeKind: 'site',
           nodeId: site.id,
@@ -3366,6 +3423,10 @@ export function traceAzNetFlow(
             (!best.connectionId || c.id === best.connectionId),
         )
         if (ownerVnet) {
+          if (vpnConn) {
+            const blocked = crossVpn(vpnConn.id, 'ingress')
+            if (blocked) return blocked
+          }
           pushHop({
             nodeKind: 'site',
             nodeId: site.id,
@@ -3383,6 +3444,8 @@ export function traceAzNetFlow(
         const connection = topology.vpnConnections.find((connection) => connection.enabled && connection.id === best.connectionId && connection.siteId === site.id)
         const ownerVnet = topology.vnets.find((vnet) => vnet.appliances.some((app) => app.id === best.nextHopId))
         if (connection && (best.nextHopKind === 'vwan-hub' || ownerVnet)) {
+          const blocked = crossVpn(connection.id, 'ingress')
+          if (blocked) return blocked
           pushHop({
             nodeKind: 'site', nodeId: site.id, nodeName: site.name, action: 'gateway-transit',
             edgeId: connection.id, detail: `${site.name} sends packet over ${connection.transport === 'SDWAN' ? 'SD-WAN' : 'S2S VPN'} "${connection.name}" to ${best.nextHopName}`,

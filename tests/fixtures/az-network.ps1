@@ -111,7 +111,9 @@ if ($command -eq 'network nic show-effective-route-table') {
                 ipConfigurations = @(@{ id = "$prefix/virtualHubs/ars-$_/ipConfigurations/default" })
                 defaultOutboundAccess = $false
                 natGateway = if ($_ -eq 'first') { @{ id = "$prefix/natGateways/nat" } } else { $null }
-            }) + $(if ($env:MOCK_NETWORK_MODE -like 'connectivity*' -and $_ -eq 'first') {
+            }) + $(if ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -and $_ -eq 'first') {
+                @(@{ id = "$id/subnets/GatewaySubnet"; name = 'GatewaySubnet'; addressPrefix = '10.82.253.0/26' })
+            } else { @() }) + $(if ($env:MOCK_NETWORK_MODE -like 'connectivity*' -and $_ -eq 'first') {
                 @(@{ id = "$id/subnets/app"; name = 'app'; addressPrefix = '10.82.1.0/24'; defaultOutboundAccess = $false
                         networkSecurityGroup = @{ id = "$prefix/networkSecurityGroups/backend" } }
                     @{ id = "$id/subnets/AzureFirewallSubnet"; name = 'AzureFirewallSubnet'; addressPrefix = '10.82.2.0/24' })
@@ -119,6 +121,34 @@ if ($command -eq 'network nic show-effective-route-table') {
         }
     }
     ConvertTo-Json -InputObject @($result) -Depth 10 -Compress
+} elseif ($command -eq 'network vnet-gateway list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+    $gateway = @{ id = "$prefix/virtualNetworkGateways/vpn"; name = 'vpn'; gatewayType = 'Vpn'; enableBgp = $true
+        bgpSettings = @{ asn = 65515; bgpPeeringAddress = '10.82.253.4' }
+        ipConfigurations = @(@{ id = "$prefix/virtualNetworkGateways/vpn/ipConfigurations/default"
+            subnet = @{ id = "$prefix/virtualNetworks/vnet-first/subnets/GatewaySubnet" } })
+        natRules = @(); secret = 'must-not-be-exported' }
+    if ($env:MOCK_NETWORK_MODE -eq 'vpn-nat-gateway') {
+        $gateway.natRules = @(@{ id = "$prefix/virtualNetworkGateways/vpn/natRules/overlap"
+            name = 'must-not-be-exported'; internalMappings = @(@{ addressSpace = 'must-not-be-exported' })
+            externalMappings = @(@{ addressSpace = 'must-not-be-exported' }); secret = 'must-not-be-exported' })
+    }
+    ConvertTo-Json -InputObject @($gateway) -Depth 10 -Compress
+} elseif ($command -eq 'network vpn-connection list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+    $connection = @{ id = "$prefix/connections/site"; name = 'site'; enableBgp = $true
+        virtualNetworkGateway1 = @{ id = "$prefix/virtualNetworkGateways/vpn" }
+        localNetworkGateway2 = @{ id = "$prefix/localNetworkGateways/site" }
+        ingressNatRules = @(); egressNatRules = @(); sharedKey = 'must-not-be-exported' }
+    if ($env:MOCK_NETWORK_MODE -in @('vpn-nat-ingress', 'vpn-nat-egress')) {
+        $key = if ($env:MOCK_NETWORK_MODE -eq 'vpn-nat-ingress') { 'ingressNatRules' } else { 'egressNatRules' }
+        $connection[$key] = @(@{ id = "$prefix/virtualNetworkGateways/vpn/natRules/overlap"; secret = 'must-not-be-exported' })
+    }
+    ConvertTo-Json -InputObject @($connection) -Depth 10 -Compress
+} elseif ($command -eq 'network local-gateway list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+    ConvertTo-Json -InputObject @(@{ id = "$prefix/localNetworkGateways/site"; name = 'site'
+        localNetworkAddressSpace = @{ addressPrefixes = @('10.90.0.0/16') }
+        bgpSettings = @{ asn = 65001; bgpPeeringAddress = '10.90.0.4' } }) -Depth 10 -Compress
+} elseif ($command -in @('network vnet-gateway list-learned-routes', 'network vnet-gateway list-bgp-peer-status')) {
+    '{"value":[]}'
 } elseif ($command -eq 'network public-ip list') {
     if ($env:MOCK_NETWORK_MODE -eq 'nat-prefix') { '[]' } else {
         $ip = @{ id = "$prefix/publicIPAddresses/nat-ip"; name = 'nat-ip'; sku = @{ name = 'Standard' }; publicIPAllocationMethod = 'Static'; secret = 'must-not-be-exported' }

@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react'
 import { cidr } from '../validation'
 import type { AzBgpRibEntry } from './engine'
 import { Explain } from '../learning/Explain'
+import { t } from '../i18n'
+import '../vpn-nat-messages-ja'
 
 export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]; available: boolean }) {
   const [filter, setFilter] = useState('')
@@ -32,7 +34,10 @@ export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]
           {[...candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((entry) => <tr key={entry.id}
             data-prefix={prefix} data-preferred={entry.preferred} className={entry.preferred ? 'preferred-route' : 'alternative-route'}>
             <td className="route-state" aria-label={entry.preferred ? 'Preferred' : 'Alternative'}>{entry.preferred ? '*' : ''}</td>
-            <td><strong>{entry.nextHopName}</strong><small>{entry.nextHopKind === 'local' ? 'Local origin' : entry.originProtocol}</small></td>
+            <td><strong>{entry.nextHopName}</strong><small>{entry.nextHopKind === 'local' ? 'Local origin' : entry.originProtocol}</small>
+              {entry.natOriginalPrefix && <small><span>{t('Original VPN prefix')}: <code>{entry.natOriginalPrefix}</code></span>{' → '}
+                <span>{t('Translated VPN prefix')}: <code>{entry.prefix}</code></span></small>}
+            </td>
             <td className="as-path">{entry.asPath.join(' ') || '-'}</td>
             <td>{entry.communities?.join(' ') || '-'}</td>
           </tr>)}

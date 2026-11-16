@@ -6,6 +6,9 @@ $tenant = '22222222-2222-2222-2222-222222222222'
 $global:desktopWrapperMode = 'valid'
 $global:desktopWrapperCalls = [Collections.Generic.List[object]]::new()
 function az {
+    if ($env:AZURE_CORE_COLLECT_TELEMETRY -ne 'no' -or $env:AZURE_LOGGING_ENABLE_LOG_FILE -ne 'no') {
+        throw 'CLI telemetry and command-file logging must be disabled before the first read.'
+    }
     $global:desktopWrapperCalls.Add(@($args))
     $global:LASTEXITCODE = 0
     $operation = $args[0..1] -join ' '
@@ -20,6 +23,8 @@ function az {
     }
 }
 $wrapper = Join-Path $repo 'platform' 'electron' 'azure-read.ps1'
+$env:AZURE_CORE_COLLECT_TELEMETRY = 'yes'
+$env:AZURE_LOGGING_ENABLE_LOG_FILE = 'yes'
 foreach ($global:desktopWrapperMode in @('expired', 'wrong-tenant', 'wrong-cloud')) {
     $global:desktopWrapperCalls.Clear()
     $rejected = $false
@@ -36,4 +41,4 @@ foreach ($call in $global:desktopWrapperCalls) {
     if ($index -lt 0 -or $call[$index + 1] -ne $subscription) { throw 'Every resource read must retain explicit subscription scope.' }
 }
 if ($env:AZURE_EXTENSION_USE_DYNAMIC_INSTALL -ne 'no') { throw 'Dynamic extension installation must stay disabled.' }
-Write-Host 'Desktop wrapper passed: expired session, wrong tenant/cloud, fixed read-only operations and explicit scope.'
+Write-Host 'Desktop wrapper passed (mock CLI): expired session, wrong tenant/cloud, fixed read-only operations, explicit scope and inherited telemetry/logging opt-out.'

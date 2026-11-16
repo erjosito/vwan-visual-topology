@@ -109,6 +109,11 @@ are permitted and recorded, not grounds for a trusted certification claim.
 
 ## Explicit public ingress and DNAT
 
+Cross-premises VPN overlap NAT is a separate, bounded feature: see
+[VPN overlap NAT](docs/VPN-OVERLAP-NAT.md) for native-provider boundaries,
+gateway/connection inspectors, BGP translation and the optional `vpnPacket`
+simulation contract. It does not enable VPN Internet breakout or legacy-v1 NAT.
+
 The packet probe selects an original **public-IP frontend** separately from an
 external Internet address. Standard static IPv4 VM frontends map to the original
 private NIC address and preserve the client source. Associated subnet/NIC NSGs
@@ -530,7 +535,8 @@ npm run test:desktop
 `release` contains an assisted per-user NSIS installer and packaged application.
 Artifacts are unsigned **development** builds, not enterprise production
 releases. The filename/build identity uses `YYYY.MM.DD.N`; the package uses
-three-part semver. Initial builds use the default Electron icon.
+three-part semver. The application and installer use the repository's Windows
+icon resources.
 
 Electron loads local `app://simulator/` assets, not a local HTTP service.
 Sandboxing, context isolation, CSP and main-frame/origin-checked IPC are enforced.
@@ -545,6 +551,10 @@ Collection requires a native confirmation (default Cancel), chosen WAN or
 resource group, and read-only existing collectors. Authentication/scope/cloud
 checks occur before collecting. No `az login`, `account set`, dynamic extension
 installation, elevation or resource mutation is attempted.
+The broker/wrapper also override child-process CLI usage telemetry and file
+logging to disabled without changing the user's CLI configuration. Chromium
+proxy discovery is disabled for local assets; Azure CLI's separate enterprise
+proxy settings remain intact.
 
 Metadata reads stop after 60 seconds; collection after 20 minutes; combined
 stdout/stderr is capped at 2 MB and not forwarded to the renderer. Final capture
@@ -715,9 +725,12 @@ test artifacts, CI artifacts, issues or AI prompts.
 
 There is no automatic updater or background release check. Development updates
 are rebuilt/reinstalled manually; export saved JSON before upgrades.
-Before enterprise distribution, the repository maintainer must own Electron,
-Chromium/Node and dependency monitoring, patch/test cadence, supported-version
-policy, signed release approval and installer/uninstall rollback validation.
+The [desktop operations runbook](docs/desktop-operations.md) assigns repository
+maintainer runtime/dependency patching responsibility and response targets,
+separates embedded Node/Chromium from system prerequisites, and defines
+enterprise install/update/rollback/retention qualification. Named owner/backup
+acceptance, target-environment installer lifecycle tests and release approval
+remain production gates, not results of packaged-app smoke tests.
 Production signing (Azure Artifact Signing or equivalent, publisher validation),
 SmartScreen/reputation, final icons/metadata, signed download channel and release
 approvals remain external production gates. Signing alone does not guarantee
@@ -744,3 +757,11 @@ blocking. The same harness accepts `DESKTOP_EXECUTABLE` to test ASAR packaging
 and the external worker resource. It does not authenticate to Azure.
 Windows CI builds/tests the unsigned NSIS development artifacts; existing
 Ubuntu web validation and Static Web Apps deployment remain unchanged.
+
+`npm run test:desktop-network` adds an actual Chromium startup-to-shutdown
+net-log check, reachable loopback/PAC canary and HTTP(S)/WS(S) probes for both
+the app and bridge-free documentation. It also checks the session HTTP(S)
+filter independently of CSP. It accepts `DESKTOP_EXECUTABLE`, retains only
+synthetic summaries, and deletes its raw log/profile. This is not an OS-wide
+trace or live Azure CLI endpoint evidence. See the operations runbook for the
+explicit authenticated-capture scope and enterprise network-acceptance gates.

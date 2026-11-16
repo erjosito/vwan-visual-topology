@@ -4,6 +4,7 @@ export const workspaceCapabilitiesJa: Record<string, string> = {
   'Classic gateways, Azure Route Server and appliances': '従来のゲートウェイ、Azure Route Server とアプライアンス',
   'ExpressRoute, locations, SKU scope and Global Reach': 'ExpressRoute、接続場所、SKU の範囲と Global Reach',
   'BGP and static VPN connections': 'BGP および静的 VPN 接続',
+  'Bounded classic/VWAN VPN overlap NAT (Azure/Full Hybrid native provider)': '従来型 / VWAN VPN の限定的な重複アドレス NAT (Azure / Full Hybrid ネイティブ プロバイダー)',
   'Integrated SD-WAN and spoke NVA BGP peering': '統合 SD-WAN とスポーク NVA の BGP ピアリング',
   'Default, custom and None hub tables; association and propagation': 'Default、カスタム、None ハブ テーブルの関連付けと伝達',
   'Case-sensitive inter-hub label propagation': '大文字と小文字を区別するハブ間ラベル伝達',
@@ -18,6 +19,6 @@ export const workspaceCapabilitiesJa: Record<string, string> = {
   'Static hub next hops and custom hub tables combined with routing intent are not assessed by either VWAN provider.': '静的ハブ ネクスト ホップ、およびカスタム ハブ テーブルとルーティング インテントの併用は、いずれの VWAN プロバイダーでも評価されません。',
   'Hub route maps are unsupported on integrated SD-WAN. Spoke NVA policies use the hosting VNet connection. Static VPN bypasses BGP policies.': '統合 SD-WAN ではハブ ルート マップは非対応です。スポーク NVA ポリシーはホスト VNet 接続を使用します。静的 VPN は BGP ポリシーを適用しません。',
   'Incomplete or non-converged routing cannot certify reachability or isolation. Aggregate advertisements do not fill holes.': '不完全または未収束のルーティングでは、到達性や分離を保証できません。集約広告は未到達範囲を補完しません。',
-  'Internet ingress, NAT, load balancers, NSGs and application delivery remain outside the routing assessment.': 'インターネットからの受信、NAT、ロード バランサー、NSG とアプリケーション配信はルーティング評価の対象外です。',
+  'Internet ingress, translator/session behavior, load balancers and NSGs require their separate bounded packet assessment; application delivery is not certified.': 'インターネット受信、変換とセッション動作、ロード バランサー、NSG には専用の限定的パケット評価が必要です。アプリケーション配信は保証しません。',
   'Legacy designs retain their native provider and exact IDs. Automatic conversion, unified defaults and selector retirement are separate work.': '既存の設計は元のプロバイダーと正確な ID を保持します。自動変換、既定値の統一とモード選択の廃止は別の作業です。',
 }

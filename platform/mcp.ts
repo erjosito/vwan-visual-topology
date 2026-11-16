@@ -35,6 +35,11 @@ server.registerTool('get_schema', {
   ],
   example: mode === 'vwan' ? vwanExample : mode === 'hub-spoke' ? hubSpokeExample : fullExample,
   optionalPacket: { operation: 'simulate', packet: { source: { kind: 'workload', workloadId: 'ID', nicId: 'ID', ipConfigurationId: 'ID' }, target: { kind: 'external', address: 'explicit public IPv4' }, protocol: 'tcp or udp', sourcePort: '1-65535', destinationPort: '1-65535' }, result: 'packet section; independent routing probes, no delivery/security/NAT certification' },
+  optionalVpnPacket: mode === 'vwan' ? { supported: false, reason: 'Legacy v1 VWAN NAT is unsupported; use the Azure/Full Hybrid native provider.' }
+    : { operation: 'simulate', vpnPacket: { connectionId: 'original NAT-associated VPN connection ID', direction: 'ingress or egress',
+      tuple: { sourceAddress: 'original initiator IPv4', destinationAddress: 'initiator-visible destination IPv4',
+        protocol: 'tcp or udp', sourcePort: '1-65535', destinationPort: '1-65535' } },
+      result: 'vpnPacket section: original/translated tuples, native forwarding and one bounded conditional reply; no security/application delivery certification' },
   packetDestinationShapes: [{ kind: 'public-ip', publicIpId: 'original public-IP ID' },
     { kind: 'load-balancer', loadBalancerId: 'original LB ID', frontendId: 'original frontend ID' }],
   inventoryShapes: {
@@ -68,6 +73,11 @@ server.registerTool('start_simulation', {
         source: z.record(z.string(), z.unknown()), target: z.record(z.string(), z.unknown()),
         protocol: z.enum(['tcp', 'udp']), sourcePort: z.number().int().min(1).max(65535), destinationPort: z.number().int().min(1).max(65535),
       }).strict().optional(),
+      vpnPacket: z.object({
+        connectionId: z.string().min(1).max(120), direction: z.enum(['ingress', 'egress']),
+        tuple: z.object({ sourceAddress: z.string(), destinationAddress: z.string(), protocol: z.enum(['tcp', 'udp']),
+          sourcePort: z.number().int().min(1).max(65535), destinationPort: z.number().int().min(1).max(65535) }).strict(),
+      }).strict().optional(),
       budget: z.object({ maxMillis: z.number().int().positive().max(15000).optional(), maxOutputBytes: z.number().int().positive().max(8000000).optional() }).strict().optional(),
     }).strict(),
   }, annotations,
@@ -83,14 +93,14 @@ server.registerTool('get_job', {
       contractVersion: result.contractVersion, engineVersion: result.engineVersion, revision: result.revision,
       resultStatus: result.status, errors: result.errors, limitations: result.limitations.slice(0, 20),
       assessments: result.assessments.map(({ id, outcome, reasons }) => ({ id, outcome, reasons })),
-      sections: ['document', 'simulation', 'assessments', 'packet'],
+      sections: ['document', 'simulation', 'assessments', 'packet', 'vpnPacket'],
     } : {}),
   })
 })
 
 server.registerTool('get_evidence', {
   description: 'Retrieve bounded JSON-text chunks of a completed job section. Concatenate all chunks in offset order before parsing; a partial chunk is not complete evidence.',
-  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments', 'packet']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
+  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments', 'packet', 'vpnPacket']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
 }, async ({ handle, section, offset, limit }) => {
   const { result } = jobs.get(handle)
   if (!result) throw new Error('Job is still running.')

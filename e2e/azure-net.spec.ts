@@ -447,6 +447,12 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
       await page.goto(`/?mode=${mode}&keep=mode-test#retained`)
       const root = page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')
       await expect(root).toBeVisible()
+      await expect(page.getByRole('heading', { name: 'Azure Networking Simulator', exact: true })).toBeVisible()
+      await expect(page).toHaveTitle('Azure Networking Simulator')
+      await expect(page.getByTestId('unified-mode-pill')).toHaveCount(0)
+      await page.locator('header [data-language-selector]').selectOption('ja')
+      await expect(page).toHaveTitle('Azure ネットワーク シミュレーター')
+      await page.locator('header [data-language-selector]').selectOption('en')
       await page.reload()
       await expect(root).toBeVisible()
       await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
@@ -462,8 +468,8 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
   }) => {
     await page.goto('/?mode=azure-net&sample=hub-spoke-firewall-udr')
 
-    await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
-    await expect(page).toHaveTitle('AzNet Simulator')
+    await expect(page.getByRole('heading', { name: 'Azure Networking Simulator' })).toBeVisible()
+    await expect(page).toHaveTitle('Azure Networking Simulator')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/favicon-aznet.svg')
     await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
     await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()

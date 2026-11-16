@@ -4,6 +4,7 @@ import { cidr, contains, ipv4 } from '../validation'
 import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
 import { parseAzNetTopology } from './admission'
+import type { ClassicVpnNatGateway, VpnNat, VwanVpnNatGateway } from '../vpn-nat'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -64,6 +65,7 @@ export interface AzUdrTable {
 }
 
 export interface AzVnetGateway {
+  vpnNat?: ClassicVpnNatGateway
   id: string
   name: string
   kind: 'ExpressRoute' | 'Vpn'
@@ -155,6 +157,7 @@ export interface AzVnetPeering {
 }
 
 export interface AzVwanHub {
+  vpnNat?: VwanVpnNatGateway
   id: string
   name: string
   label?: string
@@ -222,6 +225,7 @@ export interface AzErLink {
 }
 
 export interface AzVpnConnection {
+  nat?: VpnNat
   id: string
   name: string
   siteId: string

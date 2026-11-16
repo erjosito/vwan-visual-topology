@@ -1,4 +1,5 @@
 #requires -Version 7.0
+param([switch]$VpnNatOnly)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $output = Join-Path $repo 'test-artifacts' 'azure-files' 'collector-network'
@@ -20,7 +21,22 @@ try {
     $env:PATH = "$output$([IO.Path]::PathSeparator)$originalPath"
     $env:MOCK_NETWORK_LOG = Join-Path $output 'requests.log'
     $env:MOCK_NETWORK_TIMEOUT_START = Join-Path $output 'timeout-start-ticks.txt'
-    foreach ($mode in @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated')) {
+    $natModes = @('vpn-nat-gateway', 'vpn-nat-ingress', 'vpn-nat-egress')
+    $modes = if ($VpnNatOnly) { $natModes } else {
+        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated') + $natModes
+    }
+    $importer = Join-Path $output 'vpn-nat-importer.cjs'
+    @'
+const { join } = require('node:path');
+const { createRequire } = require('node:module');
+const [repo, output] = process.argv.slice(2);
+createRequire(join(repo, 'package.json'))('esbuild').buildSync({
+  entryPoints: [join(repo, 'src', 'azure-net', 'azure-import.ts')], outfile: output,
+  bundle: true, platform: 'node', format: 'cjs',
+});
+'@ | node - $repo $importer
+    Assert ($LASTEXITCODE -eq 0) 'Could not build the current capture importer for collector integration.'
+    foreach ($mode in $modes) {
         $env:MOCK_NETWORK_MODE = $mode
         $file = Join-Path $output "$mode.json"
         $watch = [Diagnostics.Stopwatch]::StartNew()
@@ -43,6 +59,35 @@ try {
             Assert ($server.subnetId -eq "$prefix/virtualNetworks/vnet-$name/subnets/RouteServerSubnet") "$mode has incorrect Route Server ownership."
         }
         Assert ($capture.arsLearnedRoutes.'ars-first/same-peer'.Count -eq 1 -and $capture.arsLearnedRoutes.'ars-second/same-peer'.Count -eq 1) "$mode overwrote a same-named peer from another server."
+        if ($mode -in $natModes) {
+            $reference = "$prefix/virtualNetworkGateways/vpn/natRules/overlap"
+            $observed = switch ($mode) {
+                'vpn-nat-gateway' { $capture.vnetGateways[0].natRules }
+                'vpn-nat-ingress' { $capture.vpnConnections[0].ingressNatRules }
+                'vpn-nat-egress' { $capture.vpnConnections[0].egressNatRules }
+            }
+            Assert ($observed.Count -eq 1 -and $observed[0].id -eq $reference) "$mode lost known original VPN NAT association."
+            Assert ($observed[0].PSObject.Properties.Count -eq 1) "$mode reconstructed NAT mappings instead of observing reference IDs only."
+            Assert ($capture.configurationComplete) "$mode masked a lost NAT reference as incomplete capture."
+            $requests = Get-Content -LiteralPath $env:MOCK_NETWORK_LOG | ForEach-Object { ,($_ | ConvertFrom-Json) }
+            $gatewayRequest = $requests | Where-Object { $_[0..2] -join ' ' -eq 'network vnet-gateway list' } | Select-Object -Last 1
+            $connectionRequest = $requests | Where-Object { $_[0..2] -join ' ' -eq 'network vpn-connection list' } | Select-Object -Last 1
+            Assert (($gatewayRequest -join ' ') -match 'natRules\[\]\.\{id:id\}') "$mode did not request allowlisted gateway NAT references from Azure CLI."
+            Assert (($connectionRequest -join ' ') -match 'ingressNatRules\[\]\.\{id:id\}' -and
+                ($connectionRequest -join ' ') -match 'egressNatRules\[\]\.\{id:id\}') "$mode did not request both allowlisted connection NAT references from Azure CLI."
+            @'
+const { readFileSync } = require('node:fs');
+const { importAzNetCapture } = require(process.argv[2]);
+let rejected = false;
+try { importAzNetCapture(readFileSync(process.argv[3], 'utf8')); }
+catch (error) {
+  if (!String(error.message).includes('VPN overlap NAT capture reconstruction is unsupported')) throw error;
+  rejected = true;
+}
+if (!rejected) throw new Error('Known collected VPN NAT became healthy ordinary routing.');
+'@ | node - $importer $file
+            Assert ($LASTEXITCODE -eq 0) "$mode bypassed current importer NAT rejection."
+        }
         $expected = switch ($mode) {
             'timeout' { 'timed-out' }
             { $_ -in @('oversize','stderr-limit','long-field') } { 'truncated' }
@@ -61,6 +106,7 @@ try {
         }
         Write-Host "Passed $mode bounded capture, projections and provenance."
     }
+    if ($VpnNatOnly) { return }
     $env:MOCK_NETWORK_MODE = 'direct'
     $configFile = Join-Path $output 'configuration-only.json'
     & (Join-Path $repo 'public' 'scripts' 'collect-azure-network.ps1') -ResourceGroupName network -OutputFile $configFile -Force
