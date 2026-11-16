@@ -16,7 +16,7 @@ async function savedTopology(page: Page) {
 test('English is the default; Japanese persists without changing topology or portable JSON', async ({ page }) => {
   await page.goto('/')
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
-  await expect(page).toHaveTitle('Virtual WAN Topology Lab')
+  await expect(page).toHaveTitle('Azure Networking Simulator')
   const topology = structuredClone(example)
   topology.name = 'BGP table 日本語 {0}'
   await page.getByLabel('Import topology file').setInputFiles({
@@ -25,7 +25,7 @@ test('English is the default; Japanese persists without changing topology or por
   const saved = await savedTopology(page)
   await switchLanguage(page, 'ja')
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
-  await expect(page).toHaveTitle('Virtual WAN トポロジ ラボ')
+  await expect(page).toHaveTitle('Azure ネットワーク シミュレーター')
   await expect(page.getByLabel('トポロジ名')).toHaveValue(topology.name)
   await expect(page.getByLabel('ハブ Europe hub を選択', { exact: true })).toBeVisible()
   expect(await savedTopology(page)).toBe(saved)

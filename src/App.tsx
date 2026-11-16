@@ -621,8 +621,7 @@ function App() {
       <div className="unified-topbar-left">
         <div className="brand unified-brand">
           <div className="brand-icon unified-brand-icon" aria-hidden="true">Az</div>
-          <h1>AzNet Simulator</h1>
-          <span className="unified-mode-pill unified-mode-pill-vwan" data-testid="unified-mode-pill">Virtual WAN</span>
+          <h1>Azure Networking Simulator</h1>
         </div>
         <WorkspaceMenu />
       </div>

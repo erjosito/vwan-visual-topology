@@ -8,7 +8,7 @@ import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './adm
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
-import { t } from '../i18n'
+import { t, useLanguage, documentTitles } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
@@ -244,6 +244,7 @@ function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttr
 }
 
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
+  const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
   const initialResolved = useMemo(() => {
     // Access localStorage inside loadAzWorkspace's try/catch (the getter itself may throw).
@@ -703,14 +704,17 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const urlSampleLoaded = useRef(false)
   useEffect(() => {
     const prevTitle = document.title
-    document.title = 'AzNet Simulator'
+    document.title = documentTitles[language]
+    return () => { document.title = prevTitle }
+  }, [language])
+
+  useEffect(() => {
     const iconLink = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
     const prevIconHref = iconLink?.getAttribute('href')
     if (iconLink) {
       iconLink.setAttribute('href', '/favicon-aznet.svg')
     }
     return () => {
-      document.title = prevTitle
       if (iconLink && prevIconHref) iconLink.setAttribute('href', prevIconHref)
     }
   }, [])
@@ -2777,7 +2781,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             <div className="aznet-brand-icon" aria-hidden="true">
               Az
             </div>
-            <h1>AzNet Simulator</h1>
+            <h1>Azure Networking Simulator</h1>
           </div>
 
           <WorkspaceMenu />
