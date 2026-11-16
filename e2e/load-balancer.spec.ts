@@ -19,6 +19,62 @@ function design(internal: boolean) {
   return topology
 }
 
+test('original connectivity capture persists provenance and unknown health; denied rules never certify packet isolation', async ({ page }) => {
+  const subscription = '11111111-1111-1111-1111-111111111111'
+  const base = `/subscriptions/${subscription}/resourceGroups/network/providers/Microsoft.Network`
+  const vnet = `${base}/virtualNetworks/network`, subnet = `${vnet}/subnets/app`
+  const nic = `${base}/networkInterfaces/server`, configuration = `${nic}/ipConfigurations/primary`
+  const vm = `/subscriptions/${subscription}/resourceGroups/network/providers/Microsoft.Compute/virtualMachines/server`
+  const service = `${base}/loadBalancers/service`, pool = `${service}/backendAddressPools/servers`
+  const frontend = `${service}/frontendIPConfigurations/public`, probe = `${service}/probes/health`, pip = `${base}/publicIPAddresses/service`
+  const capture = { kind: 'azure-network-capture', version: 2, observationVersion: 1, connectivityVersion: 1,
+    resourceGroup: 'network', subscriptionId: subscription, context: { cloud: 'AzureCloud', subscriptionId: subscription },
+    configurationComplete: true, warnings: [], sections: Object.fromEntries(['publicIpAddresses', 'publicIpPrefixes', 'natGateways',
+      'networkInterfaces', 'virtualMachines', 'networkSecurityGroups', 'loadBalancers', 'azureFirewalls', 'firewallPolicies']
+      .map((key) => [key, { state: 'succeeded', complete: true }])),
+    vnets: [{ id: vnet, name: 'Original network', location: 'westeurope', addressSpace: { addressPrefixes: ['10.1.0.0/16'] },
+      subnets: [{ id: subnet, name: 'App', addressPrefix: '10.1.1.0/24', defaultOutboundAccess: false }] }],
+    networkInterfaces: [{ id: nic, name: 'Original NIC', virtualMachine: { id: vm },
+      ipConfigurations: [{ id: configuration, name: 'Primary', privateIPAddress: '10.1.1.4', primary: true, subnet: { id: subnet } }] }],
+    virtualMachines: [{ id: vm, name: 'Original server', networkProfile: { networkInterfaces: [{ id: nic }] } }],
+    publicIpAddresses: [{ id: pip, name: 'Service', sku: { name: 'Standard' }, publicIPAllocationMethod: 'Static',
+      ipAddress: '20.40.50.60', ipConfiguration: { id: frontend } }],
+    loadBalancers: [{ id: service, name: 'Original LB', sku: { name: 'Standard' },
+      frontendIPConfigurations: [{ id: frontend, name: 'Public', publicIPAddress: { id: pip } }],
+      backendAddressPools: [{ id: pool, name: 'Servers', backendIPConfigurations: [{ id: configuration }] }],
+      probes: [{ id: probe, name: 'Health', protocol: 'Tcp', port: 8080 }],
+      loadBalancingRules: [{ id: `${service}/loadBalancingRules/web`, name: 'Web', protocol: 'Tcp', frontendPort: 443, backendPort: 8443,
+        frontendIPConfiguration: { id: frontend }, backendAddressPool: { id: pool }, probe: { id: probe }, disableOutboundSnat: true }] }],
+    networkSecurityGroups: [], publicIpPrefixes: [], natGateways: [], azureFirewalls: [], firewallPolicies: [], firewallPolicyRuleCollectionGroups: [] }
+  await page.goto('/?mode=full')
+  const upload = () => page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+    name: 'original-capture.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(capture)) })
+  await upload()
+  const saved = async () => JSON.parse((await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1')))!).topology
+  await expect.poll(async () => (await saved()).inventory?.workloads[0]?.name).toBe('Original server')
+  const original = await saved(), inventory = original.inventory
+  expect(inventory.capture.configurationComplete).toBe(true)
+  expect(inventory.capture.resourceIds[inventory.workloads[0].id]).toBe(vm)
+  expect(inventory.loadBalancers[0].probes[0].health[0].status).toBe('unknown')
+  await page.reload()
+  expect((await saved()).inventory).toEqual(inventory)
+  capture.sections.networkSecurityGroups = { state: 'denied', complete: false }
+  capture.configurationComplete = false
+  await upload()
+  await expect.poll(async () => (await saved()).inventory?.capture?.configurationComplete).toBe(false)
+  const current = await saved()
+  expect(current.inventory.capture.configurationComplete).toBe(false)
+  await page.getByRole('button', { name: 'Close Azure & Bicep', exact: true }).click()
+  await page.getByTestId(`aznet-vnet-${current.vnets[0].id}`).click()
+  await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+  const packet = page.getByTestId('network-detail-dialog').getByTestId('packet-flow-panel')
+  await packet.getByLabel('Packet source', { exact: true }).selectOption('external')
+  await packet.getByLabel('Packet destination', { exact: true }).selectOption(`public:${current.inventory.publicIps[0].id}`)
+  await packet.getByLabel('External IPv4 address', { exact: true }).fill('8.8.8.8')
+  await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+  await expect(packet.getByTestId('packet-flow-result')).toContainText('Connectivity configuration capture is incomplete or unsupported')
+})
+
 for (const internal of [false, true]) {
   test(`${internal ? 'internal' : 'public'} Standard LB: original editing, independent probes, worker parity and narrow persisted IDs`, async ({ page }) => {
     await page.addInitScript((topology) => {

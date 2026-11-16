@@ -19,6 +19,7 @@ $originalPath = $env:PATH
 try {
     $env:PATH = "$output$([IO.Path]::PathSeparator)$originalPath"
     $env:MOCK_NETWORK_LOG = Join-Path $output 'requests.log'
+    $env:MOCK_NETWORK_TIMEOUT_START = Join-Path $output 'timeout-start-ticks.txt'
     foreach ($mode in @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated')) {
         $env:MOCK_NETWORK_MODE = $mode
         $file = Join-Path $output "$mode.json"
@@ -53,7 +54,11 @@ try {
         Assert ($capture.nicEffectiveRoutes[0].observation.state -eq $expected) "$mode did not distinguish NIC observation state."
         if ($mode -eq 'denied') { Assert ($capture.sections.routeTables.state -eq 'denied' -and !$capture.complete) 'Denial became successful emptiness.' }
         if ($mode -eq 'failed') { Assert ($capture.sections.vnetGateways.state -eq 'failed' -and !$capture.complete) 'Failure became successful emptiness.' }
-        if ($mode -eq 'timeout') { Assert ($watch.Elapsed.TotalSeconds -lt 35) 'Timed-out subprocess or descendant was not bounded.' }
+        if ($mode -eq 'timeout') {
+            $started = [long](Get-Content -LiteralPath $env:MOCK_NETWORK_TIMEOUT_START -Raw)
+            $timeoutElapsed = ([Diagnostics.Stopwatch]::GetTimestamp() - $started) / [Diagnostics.Stopwatch]::Frequency
+            Assert ($timeoutElapsed -lt 8) 'Timed-out subprocess or descendant was not bounded.'
+        }
         Write-Host "Passed $mode bounded capture, projections and provenance."
     }
     $env:MOCK_NETWORK_MODE = 'direct'
@@ -70,7 +75,34 @@ try {
     $budget = Get-Content $budgetFile -Raw | ConvertFrom-Json
     Assert (!$budget.configurationComplete -and $budget.sections.vnets.state -eq 'timed-out' -and $watch.Elapsed.TotalSeconds -lt 8) 'Overall deadline was not enforced.'
     Write-Host 'Passed optional observations, pinned ambient scope and overall deadline.'
+    foreach ($mode in @('connectivity', 'connectivity-denied', 'connectivity-truncated', 'connectivity-group-denied')) {
+        $env:MOCK_NETWORK_MODE = $mode
+        $file = Join-Path $output "$mode.json"
+        & (Join-Path $repo 'public' 'scripts' 'collect-azure-network.ps1') -ResourceGroupName network -SubscriptionId $subscription `
+            -OutputFile $file -Force -CommandTimeoutSeconds 5 -MaxOutputChars 16384
+        $text = Get-Content -LiteralPath $file -Raw
+        $capture = $text | ConvertFrom-Json
+        Assert (!$text.Contains('must-not-be-exported')) "$mode leaked guest, secret, health or error fields."
+        Assert ($capture.connectivityVersion -eq 1) "$mode lost the connectivity schema discriminator."
+        Assert ($capture.virtualMachines[0].networkProfile.networkInterfaces[0].id -eq "$prefix/networkInterfaces/server") "$mode lost original VM/NIC binding."
+        Assert ($capture.networkInterfaces[0].ipConfigurations[0].privateIPAddress -eq '10.82.1.4') "$mode lost SDK-cased NIC addressing."
+        Assert ($capture.networkInterfaces[0].ipConfigurations[0].loadBalancerBackendAddressPools[0].id -eq "$prefix/loadBalancers/service/backendAddressPools/servers") "$mode lost NIC pool membership."
+        Assert ($capture.publicIpAddresses[1].publicIPAllocationMethod -eq 'Static') "$mode lost SDK-cased public allocation."
+        Assert ($capture.azureFirewalls[0].ipConfigurations[0].privateIPAddress -eq '10.82.2.4') "$mode lost SDK-cased Firewall addressing."
+        if ($mode -eq 'connectivity-denied') {
+            Assert ($capture.sections.networkSecurityGroups.state -eq 'denied' -and !$capture.configurationComplete) 'Denied filtering became observed absence.'
+        } elseif ($mode -eq 'connectivity-truncated') {
+            Assert ($capture.sections.loadBalancers.state -eq 'truncated' -and !$capture.configurationComplete) 'Truncated LB configuration became observed absence.'
+        } elseif ($mode -eq 'connectivity-group-denied') {
+            Assert ($capture.sections.'firewallPolicyRuleCollectionGroups:policy'.state -eq 'denied' -and !$capture.configurationComplete) 'Denied policy group became an observed empty policy.'
+        } else {
+            Assert ($capture.configurationComplete) 'Supported nonempty configuration was not collected completely.'
+            Assert ($capture.loadBalancers[0].backendAddressPools[0].backendIPConfigurations[0].id -eq "$prefix/networkInterfaces/server/ipConfigurations/primary") 'Original LB backend was lost.'
+            Assert ($capture.firewallPolicyRuleCollectionGroups[0].groups[0].ruleCollections[0].rules[0].translatedAddress -eq '10.82.1.4') 'Original Firewall DNAT backend was lost.'
+        }
+        Write-Host "Passed $mode original connectivity projection and uncertainty."
+    }
 } finally {
     $env:PATH = $originalPath
-    Remove-Item Env:\MOCK_NETWORK_MODE, Env:\MOCK_NETWORK_LOG -ErrorAction SilentlyContinue
+    Remove-Item Env:\MOCK_NETWORK_MODE, Env:\MOCK_NETWORK_LOG, Env:\MOCK_NETWORK_TIMEOUT_START -ErrorAction SilentlyContinue
 }

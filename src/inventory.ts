@@ -144,6 +144,7 @@ export interface NetworkInventory {
   loadBalancers?: NetworkLoadBalancer[]
   networkSecurityGroups?: NetworkSecurityGroup[]
   nsgAssociations?: NsgAssociation[]
+  capture?: { version: 1; configurationComplete: boolean; resourceIds: Record<string, string> }
 }
 export type InventoryTopology = Topology | AzNetTopology
 
@@ -196,6 +197,20 @@ export function validateInventory(topology: InventoryTopology): void {
   }
   if (topology.inventory === undefined) return
   const inventory = object(topology.inventory)
+  if (inventory.capture !== undefined) {
+    const capture = object(inventory.capture), resources = object(capture.resourceIds)
+    if (Object.keys(capture).some((key) => !['version', 'configurationComplete', 'resourceIds'].includes(key))
+      || capture.version !== 1 || typeof capture.configurationComplete !== 'boolean' || Object.keys(resources).length > 4096) {
+      fail('unsupported connectivity capture provenance')
+    }
+    for (const [id, resourceId] of Object.entries(resources)) {
+      text(id, 'captured entity ID', true)
+      if (typeof resourceId !== 'string' || resourceId.length > 2048
+        || !/^\/subscriptions\/[a-f0-9-]{36}\/resourceGroups\/[^/?#\r\n]+\/providers\/Microsoft\.(Network|Compute)\/[^?#\r\n]+$/i.test(resourceId)) {
+        fail('invalid original captured resource ID')
+      }
+    }
+  }
   const ids = new Set<string>(topology.version === 1
     ? [...topology.hubs, ...topology.spokes, ...topology.sites, ...topology.connections].map((entry) => entry.id)
     : [...topology.vnets, ...topology.sites, ...topology.vwanHubs, ...topology.vnets.flatMap((vnet) => [...vnet.gateways, ...vnet.appliances, ...vnet.subnets])].map((entry) => entry.id))

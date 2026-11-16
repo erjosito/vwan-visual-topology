@@ -98,6 +98,14 @@ export function packetEndpointOptions(topology: InventoryTopology, unknownAddres
 
 export function tracePacket(topology: InventoryTopology, request: PacketRequest, simulation?: Simulation | AzSimulationResult): PacketResult {
   validatePacketRequest(request)
+  if (topology.inventory?.capture?.configurationComplete === false) {
+    const reasons = ['Connectivity configuration capture is incomplete or unsupported; missing owners, rules or services cannot prove delivery or isolation.']
+    return { source: request.source, target: request.target,
+      forward: { direction: 'forward', routing: 'not-assessed', steps: [], reasons },
+      reply: { direction: 'reply', routing: 'not-assessed', steps: [], reasons },
+      delivery: 'not-assessed', security: 'not-assessed', translation: 'not-assessed',
+      limitations: ['Configuration observation only; no live connectivity, probe health or guest policy is certified.'] }
+  }
   if (request.target.kind === 'load-balancer' || request.target.kind === 'public-ip' && topology.inventory?.loadBalancers?.some((lb) =>
     lb.frontends.some((frontend) => frontend.kind === 'public' && frontend.publicIpId === (request.target as Extract<PacketEndpoint, { kind: 'public-ip' }>).publicIpId))) {
     return traceLoadBalancer(topology, request, simulation)

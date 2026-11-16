@@ -1,6 +1,7 @@
 import { azureObjectId } from '../azure-import'
 import { cidr, ipv4 } from '../validation'
 import { importNatCapture } from './nat-capture'
+import { importConnectivityCapture } from './connectivity-capture'
 import { validateInventory } from '../inventory'
 import type { AzSimulationResult } from './engine'
 import {
@@ -527,7 +528,8 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       if (!ipForwarding && !arsPeer) continue
 
       const nicName = asString(nic.name, 'nva')
-      const appId = `app-${nicName.toLowerCase()}`
+      const nicArmId = asString(nic.id)
+      const appId = root.connectivityVersion === 1 && nicArmId ? azureObjectId('nva', nicArmId) : `app-${nicName.toLowerCase()}`
       if (arsPeer) peerApplianceIds.push(appId)
       appliances.push({
         id: appId,
@@ -817,6 +819,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
 
   const capturedInventory = importNatCapture(root, vnets, subnetIdByArmId, natGatewayBySubnet, unknown)
   if (capturedInventory) topology.inventory = capturedInventory
+  importConnectivityCapture(root, topology, subnetIdByArmId, unknown)
   validateInventory(topology)
   const validationIssues = validateAzNetTopology(topology)
   warnings.push(...validationIssues)

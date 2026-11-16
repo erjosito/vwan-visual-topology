@@ -95,4 +95,16 @@ describe('bounded original packet configuration rubrics', () => {
     try { expect(await jobs.run(request)).toEqual(result) } finally { jobs.close() }
     expect(executePlatform({ ...request, requirements: [{ ...goal(request), certifyListener: true }] }).status).toBe('invalid')
   })
+
+  it('keeps incomplete captured service scope unassessed in source, Node and isolated jobs', async () => {
+    const request = input(); healthy(request)
+    topology(request).inventory!.capture = { version: 1, configurationComplete: false, resourceIds: {} }
+    request.requirements!.push({ ...goal(request), id: 'missing-capture-is-not-isolation', expectation: 'blocked' })
+    const result = executePlatform(request)
+    expect(result.errors).toEqual([])
+    expect(result.assessments.map((assessment) => assessment.outcome)).toEqual(['not assessed', 'not assessed'])
+    expect(compiled.executePlatform(request)).toEqual(result)
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try { expect(await jobs.run(request)).toEqual(result) } finally { jobs.close() }
+  })
 })

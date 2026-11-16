@@ -119,7 +119,9 @@ function Select-CaptureFields($Data, $Shape) {
         if ($Data -isnot [Collections.IDictionary]) { throw 'FAILED' }
         $result = [ordered]@{}
         foreach ($key in $Shape.Keys) {
-            if ($null -ne $Data[$key]) { $result[$key] = Select-CaptureFields $Data[$key] $Shape[$key] }
+            $value = $Data[$key]
+            if ($null -eq $value -and $key.Contains('IP')) { $value = $Data[$key.Replace('IP', 'Ip')] }
+            if ($null -ne $value) { $result[$key] = Select-CaptureFields $value $Shape[$key] }
         }
         return $result
     }
@@ -133,9 +135,10 @@ function Get-CaptureQuery($Shape) {
     if ($Shape -is [array]) { return '[].' + (Get-CaptureQuery $Shape[0]) }
     if ($Shape -is [Collections.IDictionary]) {
         $fields = foreach ($key in $Shape.Keys) {
-            $value = if ($Shape[$key] -is [array]) { $key + (Get-CaptureQuery $Shape[$key]) }
-                elseif ($Shape[$key] -is [Collections.IDictionary]) { $key + '.' + (Get-CaptureQuery $Shape[$key]) }
-                else { $key }
+            $source = if ($key.Contains('IP')) { 'not_null(' + $key + ',' + $key.Replace('IP', 'Ip') + ')' } else { $key }
+            $value = if ($Shape[$key] -is [array]) { $source + (Get-CaptureQuery $Shape[$key]) }
+                elseif ($Shape[$key] -is [Collections.IDictionary]) { $source + '.' + (Get-CaptureQuery $Shape[$key]) }
+                else { $source }
             "${key}:$value"
         }
         return '{' + ($fields -join ',') + '}'
@@ -173,11 +176,11 @@ function Invoke-AzJson([string]$Section, [string[]]$CliArgs, $Shape) {
     }
 }
 $ref = @{ id = $true }
-$ipConfiguration = @{ id = $true; privateIPAddress = $true; subnet = $ref }
+$ipConfiguration = @{ id = $true; name = $true; privateIPAddress = $true; primary = $true; subnet = $ref; publicIPAddress = $ref; loadBalancerBackendAddressPools = @($ref); loadBalancerInboundNatRules = @($ref) }
 $bgp = @{ asn = $true; bgpPeeringAddress = $true }
 $route = @{ name = $true; addressPrefix = $true; nextHopType = $true; nextHopIpAddress = $true }
 $peer = @{ id = $true; name = $true; remoteVirtualNetwork = $ref; allowVirtualNetworkAccess = $true; allowForwardedTraffic = $true; allowGatewayTransit = $true; useRemoteGateways = $true }
-$subnet = @{ id = $true; name = $true; addressPrefix = $true; addressPrefixes = $true; routeTable = $ref; defaultOutboundAccess = $true; natGateway = $ref; privateEndpointNetworkPolicies = $true; serviceEndpoints = @(@{ service = $true }); ipConfigurations = @($ref) }
+$subnet = @{ id = $true; name = $true; addressPrefix = $true; addressPrefixes = $true; routeTable = $ref; networkSecurityGroup = $ref; defaultOutboundAccess = $true; natGateway = $ref; privateEndpointNetworkPolicies = $true; serviceEndpoints = @(@{ service = $true }); ipConfigurations = @($ref) }
 $vnet = @{ id = $true; name = $true; location = $true; addressSpace = @{ addressPrefixes = $true }; subnets = @($subnet); virtualNetworkPeerings = @($peer); summarizedGatewayPrefixes = @{ addressPrefixes = $true } }
 $gateway = @{ id = $true; name = $true; gatewayType = $true; enableBgp = $true; activeActive = $true; bgpSettings = $bgp; ipConfigurations = @($ipConfiguration) }
 $bgpRoute = @{ network = $true; nextHop = $true; sourcePeer = $true; origin = $true; asPath = $true; localAddress = $true; weight = $true }
@@ -195,7 +198,7 @@ elseif ($context.cloud -ne 'AzureCloud') { $warnings.Add('Non-public Azure cloud
 Write-Host "[1/6] Reading Route Tables and Virtual Networks in '$ResourceGroupName'..."
 $routeTables = @(Invoke-AzJson 'routeTables' @('network', 'route-table', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; disableBgpRoutePropagation = $true; routes = @($route) }))
 $vnets = @(Invoke-AzJson 'vnets' @('network', 'vnet', 'list', '-g', $ResourceGroupName) @($vnet))
-$publicIpAddresses = @(Invoke-AzJson 'publicIpAddresses' @('network', 'public-ip', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true }; ipAddress = $true; publicIPAllocationMethod = $true; publicIPAddressVersion = $true }))
+$publicIpAddresses = @(Invoke-AzJson 'publicIpAddresses' @('network', 'public-ip', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true }; ipAddress = $true; publicIPAllocationMethod = $true; publicIPAddressVersion = $true; ipConfiguration = $ref; natGateway = $ref }))
 $publicIpPrefixes = @(Invoke-AzJson 'publicIpPrefixes' @('network', 'public-ip', 'prefix', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true }; ipPrefix = $true; prefixLength = $true; publicIPAddressVersion = $true }))
 $natGateways = @(Invoke-AzJson 'natGateways' @('network', 'nat', 'gateway', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true }; subnets = @($ref); publicIpAddresses = @($ref); publicIpPrefixes = @($ref) }))
 
@@ -280,7 +283,28 @@ foreach ($rs in $rawRouteServers) {
 
 Write-Host "[3/6] Reading Private Endpoints and Network Interfaces..."
 $rawPes = @(Invoke-AzJson 'privateEndpoints' @('network', 'private-endpoint', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; subnet = $ref; customDnsConfigs = @(@{ ipAddresses = $true }); networkInterfaces = @($ref) }))
-$rawNics = @(Invoke-AzJson 'networkInterfaces' @('network', 'nic', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; enableIPForwarding = $true; virtualMachine = $ref; ipConfigurations = @($ipConfiguration) }))
+$rawNics = @(Invoke-AzJson 'networkInterfaces' @('network', 'nic', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; enableIPForwarding = $true; virtualMachine = $ref; networkSecurityGroup = $ref; ipConfigurations = @($ipConfiguration) }))
+$virtualMachines = @(Invoke-AzJson 'virtualMachines' @('vm', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; networkProfile = @{ networkInterfaces = @($ref) } }))
+$nsgRule = @{ id = $true; name = $true; priority = $true; direction = $true; access = $true; protocol = $true; sourceAddressPrefix = $true; sourceAddressPrefixes = $true; destinationAddressPrefix = $true; destinationAddressPrefixes = $true; sourcePortRange = $true; sourcePortRanges = $true; destinationPortRange = $true; destinationPortRanges = $true; sourceApplicationSecurityGroups = @($ref); destinationApplicationSecurityGroups = @($ref) }
+$networkSecurityGroups = @(Invoke-AzJson 'networkSecurityGroups' @('network', 'nsg', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; location = $true; securityRules = @($nsgRule) }))
+$lbFrontend = @{ id = $true; name = $true; publicIPAddress = $ref; privateIPAddress = $true; subnet = $ref }
+$lbPool = @{ id = $true; name = $true; backendIPConfigurations = @($ref); loadBalancerBackendAddresses = @(@{ name = $true; ipAddress = $true; virtualNetwork = $ref }); tunnelInterfaces = @(@{ identifier = $true }) }
+$lbProbe = @{ id = $true; name = $true; protocol = $true; port = $true; requestPath = $true; noHealthyBackendsBehavior = $true }
+$lbRule = @{ id = $true; name = $true; frontendIPConfiguration = $ref; backendAddressPool = $ref; backendAddressPools = @($ref); probe = $ref; protocol = $true; frontendPort = $true; backendPort = $true; loadDistribution = $true; disableOutboundSnat = $true; enableFloatingIP = $true; enableConnectionTracking = $true }
+$lbNat = @{ id = $true; name = $true; frontendIPConfiguration = $ref; backendIPConfiguration = $ref; backendAddressPool = $ref; protocol = $true; frontendPort = $true; backendPort = $true; frontendPortRangeStart = $true; frontendPortRangeEnd = $true; enableFloatingIP = $true }
+$lbOutbound = @{ id = $true; name = $true; frontendIPConfigurations = @($ref); backendAddressPool = $ref; protocol = $true }
+$loadBalancers = @(Invoke-AzJson 'loadBalancers' @('network', 'lb', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true; tier = $true }; frontendIPConfigurations = @($lbFrontend); backendAddressPools = @($lbPool); probes = @($lbProbe); loadBalancingRules = @($lbRule); inboundNatRules = @($lbNat); inboundNatPools = @($ref); outboundRules = @($lbOutbound) }))
+$firewallNatRule = @{ name = $true; ruleType = $true; protocols = $true; ipProtocols = $true; sourceAddresses = $true; sourceIpGroups = $true; destinationAddresses = $true; destinationPorts = $true; translatedAddress = $true; translatedPort = $true; translatedFqdn = $true }
+$firewallCollection = @{ id = $true; name = $true; priority = $true; ruleCollectionType = $true; action = @{ type = $true }; rules = @($firewallNatRule) }
+$azureFirewalls = @(Invoke-AzJson 'azureFirewalls' @('network', 'firewall', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ tier = $true; name = $true }; ipConfigurations = @($ipConfiguration); managementIpConfiguration = $ipConfiguration; firewallPolicy = $ref; natRuleCollections = @($firewallCollection) }))
+$firewallPolicies = @(Invoke-AzJson 'firewallPolicies' @('network', 'firewall', 'policy', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; basePolicy = $ref }))
+$firewallPolicyRuleCollectionGroups = @()
+foreach ($policy in $firewallPolicies) {
+    if ($null -eq $policy) { continue }
+    $policyName = [string]$policy.name
+    $groups = @(Invoke-AzJson "firewallPolicyRuleCollectionGroups:$policyName" @('network', 'firewall', 'policy', 'rule-collection-group', 'list', '-g', $ResourceGroupName, '--policy-name', $policyName) @(@{ id = $true; name = $true; priority = $true; ruleCollections = @($firewallCollection) }))
+    $firewallPolicyRuleCollectionGroups += @{ policyId = [string]$policy.id; groups = @($groups | Where-Object { $null -ne $_ }) }
+}
 
 $privateEndpoints = @()
 foreach ($pe in $rawPes) {
@@ -357,7 +381,8 @@ foreach ($section in @('nicEffectiveRoutes', 'arsLearnedRoutes', 'arsAdvertisedR
 $capture = [ordered]@{
     kind               = 'azure-network-capture'
     version            = 2
-    collectorVersion   = '2026.11.16.1'
+    collectorVersion   = '2026.11.16.6'
+    connectivityVersion = 1
     observationVersion = 1
     context            = $context
     configurationComplete = $configurationComplete
@@ -379,6 +404,12 @@ $capture = [ordered]@{
     routeServers         = $routeServers
     privateEndpoints     = $privateEndpoints
     networkInterfaces    = @($rawNics | Where-Object { $null -ne $_ })
+    virtualMachines      = @($virtualMachines | Where-Object { $null -ne $_ })
+    networkSecurityGroups = @($networkSecurityGroups | Where-Object { $null -ne $_ })
+    loadBalancers        = @($loadBalancers | Where-Object { $null -ne $_ })
+    azureFirewalls       = @($azureFirewalls | Where-Object { $null -ne $_ })
+    firewallPolicies     = @($firewallPolicies | Where-Object { $null -ne $_ })
+    firewallPolicyRuleCollectionGroups = $firewallPolicyRuleCollectionGroups
     nicEffectiveRoutes   = $nicEffectiveRoutes
     arsLearnedRoutes     = $arsLearnedRoutes
     arsAdvertisedRoutes  = $arsAdvertisedRoutes
