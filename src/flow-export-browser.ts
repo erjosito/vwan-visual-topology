@@ -13,9 +13,8 @@ export async function renderBrowserFlow(result: PlatformResult, assessmentId: st
   if (!context) throw new Error('Canvas rendering is unavailable.')
   const raster = (svg: string) => new Promise<Uint8ClampedArray<ArrayBuffer>>((resolve, reject) => {
     if (signal?.aborted) { reject(new Error('Export cancelled.')); return }
-    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
     const image = new Image()
-    const cleanup = () => { URL.revokeObjectURL(url); signal?.removeEventListener('abort', cancel) }
+    const cleanup = () => { signal?.removeEventListener('abort', cancel) }
     const cancel = () => { cleanup(); image.src = ''; reject(new Error('Export cancelled.')) }
     signal?.addEventListener('abort', cancel, { once: true })
     image.onload = () => {
@@ -27,7 +26,7 @@ export async function renderBrowserFlow(result: PlatformResult, assessmentId: st
       finally { cleanup() }
     }
     image.onerror = () => { cleanup(); reject(new Error('Could not rasterize the flow scene.')) }
-    image.src = url
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
   })
   if (format === 'png') {
     await raster(flowSceneSvg(scene))
