@@ -359,6 +359,7 @@ function App() {
   }
   const sampleLoaded = useRef(false)
   useEffect(() => {
+    if (workspaceSession?.practice) return
     if (sampleLoaded.current) return
     const sample = new URLSearchParams(location.search).get('sample')?.trim() ?? ''
     if (!/^[a-z0-9-]+$/.test(sample)) return
@@ -378,7 +379,7 @@ function App() {
         window.history.replaceState(null, '', url)
       })
       .catch((err) => setError(`Sample load failed: ${message(err)}`))
-  }, [clearHistory, save, setError])
+  }, [clearHistory, save, setError, workspaceSession?.practice])
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlightTableId(DEFAULT_HUB_TABLE); setHighlighting(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }

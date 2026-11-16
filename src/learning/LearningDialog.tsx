@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useLanguage, localizeDiagnostic } from '../i18n'
 import { contractVersion, engineVersion } from '../platform/contract'
 import type { PlatformDocument, PlatformResult } from '../platform/contract'
-import { concepts, labels, text } from './content'
+import { concepts, text } from './content'
 import type { ConceptId } from './content'
 import { Explain } from './Explain'
 import { exercises } from './exercises'
@@ -10,6 +10,8 @@ import { emptyProgress, entryFor, maxDraftChars, parseProgress, progressKey, rec
 import type { Progress } from './progress'
 import './learning.css'
 import { useWorkspaceSession } from '../workspace-context'
+import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './practice-workspace'
+import { learningLabels as labels, practiceLabels } from './practice-content'
 
 export function LearningDialog({ document: workspace, onOpen, initialOpen = false }: {
   document: PlatformDocument
@@ -107,10 +109,17 @@ export function LearningDialog({ document: workspace, onOpen, initialOpen = fals
       const admitted = await runBrowserSimulation({ ...request, operation: 'validate' }, controller.signal)
       if (job.current !== controller || controller.signal.aborted) return
       if (admitted.status !== 'complete' || !admitted.document) throw new Error('Invalid draft')
-      if (!matchingMode && session) await session.openDocument(admitted.document.topology)
+      if (session?.openPractice) await session.openPractice({
+        courseId: 'local-practice', scenarioId: exercise.id, document: admitted.document,
+      }, controller.signal)
+      else if (!matchingMode && session) await session.openDocument(admitted.document.topology)
       else onOpen(admitted.document)
       close()
-    } catch { if (job.current === controller) setError(text(labels.invalid, language)) }
+    } catch (error) {
+      if (job.current === controller) setError(text(error instanceof Error && error.message === practiceReadFailure ? practiceLabels.practiceReadFailure
+        : error instanceof Error && error.message === practiceConflict ? practiceLabels.practiceConflict
+        : error instanceof Error && error.message === practiceSaveFailure ? practiceLabels.practiceStartFailure : labels.invalid, language))
+    }
     finally { if (job.current === controller) { job.current = undefined; setRunning(false) } }
   }
 

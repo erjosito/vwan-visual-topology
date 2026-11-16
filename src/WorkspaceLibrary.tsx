@@ -9,12 +9,13 @@ function download(raw: string, name: string) {
   URL.revokeObjectURL(url)
 }
 
-export function WorkspaceLibrary({ required, notice, onOpen, onNew, onClose }: {
+export function WorkspaceLibrary({ required, notice, onOpen, onNew, onClose, onResumePractice }: {
   required: boolean
   notice?: string
   onOpen: (provider: WorkspaceProvider) => void
   onNew: () => void
   onClose: () => void
+  onResumePractice?: () => void
 }) {
   const language = useLanguage()
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
@@ -45,6 +46,7 @@ export function WorkspaceLibrary({ required, notice, onOpen, onNew, onClose }: {
     {notice && <p role="alert">{t(notice)}</p>}
     {required && <p role="status">{text('Choose a saved design or start empty. Neither saved family has been selected or overwritten automatically.', '保存済みデザインを選択するか、空の状態で開始してください。保存済みデータは自動で選択・上書きされていません。')}</p>}
     <button type="button" onClick={onNew}>{text('New mixed-network workspace', '新しい混在ネットワーク ワークスペース')}</button>
+    {onResumePractice && <button type="button" onClick={onResumePractice}>{text('Resume practice', '練習を再開')}</button>}
     {choices.map((choice) => <section key={choice.provider}>
       <h3>{choice.name}</h3>
       <p>{choice.provider === 'vwan' ? text('Original Virtual WAN design · compatible native editor', '元の Virtual WAN デザイン・互換ネイティブ エディター') : text('Mixed-network design', '混在ネットワーク デザイン')}</p>

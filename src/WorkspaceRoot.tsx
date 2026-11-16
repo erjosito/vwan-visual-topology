@@ -2,13 +2,17 @@ import { Component, lazy, Suspense, useEffect, useEffectEvent, useRef, useState,
 import { t } from './i18n'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
-import { WorkspaceSessionContext } from './workspace-context'
+import { WorkspaceSessionContext, type WorkspaceEditorHistory } from './workspace-context'
 import { selectWorkspace, workspaceOriginals, workspaceStartup, workspaceStorageKeys, type WorkspaceProvider } from './workspace-session'
+import { practiceWorkspaceKey } from './learning/practice-workspace-key'
+import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
+import type { PracticeSession } from './learning/practice-session'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
 const WorkspaceLibrary = lazy(() => import('./WorkspaceLibrary').then((module) => ({ default: module.WorkspaceLibrary })))
 const DesktopTools = lazy(() => import('./DesktopTools').then((module) => ({ default: module.DesktopTools })))
+const PracticeWorkspaceBar = lazy(() => import('./learning/PracticeWorkspaceBar').then((module) => ({ default: module.PracticeWorkspaceBar })))
 const selectionFailure = 'Workspace could not be selected or preserved. Originals have not been intentionally replaced. Export your design before freeing browser storage.'
 
 class WorkspaceBoundary extends Component<{ children: ReactNode; onRecover: () => void }, { failed: boolean }> {
@@ -29,12 +33,53 @@ export function UnifiedSimulatorRoot() {
   const [active, setActive] = useState<{ provider: WorkspaceProvider; revision: number; capture?: unknown }>()
   const [libraryOpen, setLibraryOpen] = useState(!startup.provider)
   const [notice, setNotice] = useState(startup.recovery ?? '')
+  const [practice, setPractice] = useState<PracticeWorkspace>()
+  const [practiceReady, setPracticeReady] = useState(false)
+  const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict'>('')
+  const [practiceEpoch, setPracticeEpoch] = useState(0)
+  const practiceRef = useRef<PracticeSession | undefined>(undefined)
+  const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
+  const designHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
+  const practiceHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const { style, maximized } = useCanvasPresentation()
   const request = useRef(0)
+  const loadPractice = () => {
+    practiceLoading.current ??= import('./learning/practice-session').then(({ createPracticeSession }) => {
+      practiceRef.current = createPracticeSession({
+        storage: () => localStorage, changed: setPractice, notice: setPracticeNotice,
+        replaced: () => { practiceHistory.current = undefined; setPracticeEpoch((epoch) => epoch + 1) },
+      })
+      return practiceRef.current
+    }).catch((error) => { practiceLoading.current = undefined; throw error })
+    return practiceLoading.current
+  }
+  const leavePractice = () => {
+    request.current++
+    practiceRef.current?.leave()
+    if (!active) setLibraryOpen(true)
+  }
+  const openPractice = async (input: PracticeRequest, signal?: AbortSignal) => {
+    const ticket = ++request.current
+    if (!active) throw new Error('Choose a design workspace before starting practice.')
+    const session = await loadPractice()
+    await session.open(input, active.provider, () => ticket === request.current, signal)
+    if (ticket !== request.current || signal?.aborted) return
+    setActive((current) => current && ({ ...current, capture: undefined }))
+    setLibraryOpen(false)
+  }
+  const resumePractice = () => {
+    request.current++
+    if (practiceRef.current?.resume(active?.provider)) setLibraryOpen(false)
+  }
+  const discardPractice = () => {
+    request.current++
+    if (practiceRef.current?.discard() && !active) setLibraryOpen(true)
+  }
   const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
     request.current++
     try {
       selectWorkspace(localStorage, provider, replacement)
+      designHistory.current = undefined
       setActive((current) => ({ provider, revision: (current?.revision ?? 0) + 1, capture }))
       setLibraryOpen(false); setNotice('')
       const url = new URL(location.href)
@@ -47,7 +92,27 @@ export function UnifiedSimulatorRoot() {
       return false
     }
   }
-  const initialize = useEffectEvent(() => {
+  const initialize = useEffectEvent(async () => {
+    const ticket = ++request.current
+    try {
+      const raw = localStorage.getItem(practiceWorkspaceKey)
+      if (raw !== null) {
+        const session = await loadPractice()
+        await session.restore(raw, location.search, location.hash, () => ticket === request.current)
+      }
+    } catch {
+      if (ticket !== request.current) return
+      try { (await loadPractice()).unreadable() }
+      catch { setPracticeNotice('read') }
+    }
+    if (ticket !== request.current) return
+    setPracticeReady(true)
+    const restored = practiceRef.current?.current
+    if (restored?.active) {
+      setActive({ provider: restored.returnProvider, revision: 0 })
+      setLibraryOpen(false)
+      return
+    }
     if (startup.provider) {
       try { selectWorkspace(localStorage, startup.provider) }
       catch {
@@ -68,10 +133,19 @@ export function UnifiedSimulatorRoot() {
   useEffect(() => {
     // Synchronize the selected native provider with external browser storage once.
     // oxlint-disable-next-line react/set-state-in-effect
-    initialize()
+    void initialize()
+    return () => {
+      // This is a request-generation counter, not a DOM ref.
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
+      request.current++
+    }
   }, [])
   const openDocument = async (input: unknown) => {
     const ticket = ++request.current
+    if (practiceRef.current?.current?.active) {
+      await practiceRef.current.importDocument(input, () => ticket === request.current)
+      return
+    }
     const commit = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
       if (ticket === request.current && !open(provider, replacement, capture)) throw new Error(selectionFailure)
     }
@@ -102,6 +176,16 @@ export function UnifiedSimulatorRoot() {
     } catch { if (ticket === request.current) setNotice('Workspace could not load. Your saved design has not been replaced.') }
   }
   const importSharedSnapshot = useEffectEvent(async () => {
+    if (practiceRef.current?.current?.active && /(?:#|&)s=/.test(location.hash)) {
+      const ticket = ++request.current
+      try {
+        const { loadAzWorkspace } = await import('./azure-net/workspace')
+        const loaded = loadAzWorkspace({ getItem: () => null }, location.hash)
+        if (loaded.recovery.length) throw new Error('Shared snapshot rejected; the active design is unchanged.')
+        if (ticket === request.current && open('azure-net')) leavePractice()
+      } catch (error) { if (ticket === request.current) setNotice(error instanceof Error ? error.message : 'Shared snapshot rejected.') }
+      return
+    }
     if (active?.provider !== 'vwan' || !/(?:#|&)s=/.test(location.hash)) return
     const ticket = ++request.current
     const hash = location.hash
@@ -117,22 +201,38 @@ export function UnifiedSimulatorRoot() {
     window.addEventListener('hashchange', changed)
     return () => window.removeEventListener('hashchange', changed)
   }, [])
-  return <WorkspaceSessionContext value={{ openLibrary: () => { request.current++; setLibraryOpen(true) }, openDocument, getRequestVersion: () => request.current, capture: active?.capture }}>
+  const practicing = practice?.active === true
+  const provider = practicing ? practice.document.mode === 'vwan' ? 'vwan' : 'azure-net' : active?.provider
+  const editorKey = practicing ? `practice:${practiceEpoch}:${provider}` : `design:${active?.provider}:${active?.revision}`
+  const editorHistory = practicing ? practiceHistory : designHistory
+  return <WorkspaceSessionContext value={{
+    openLibrary: () => { leavePractice(); request.current++; setLibraryOpen(true) },
+    openDocument, getRequestVersion: () => request.current,
+    capture: practicing ? undefined : active?.capture,
+    openPractice, practice: practicing ? practice : undefined,
+    savePractice: (document) => practiceRef.current?.save(document, practiceEpoch),
+    getEditorHistory: () => editorHistory.current,
+    rememberEditorHistory: (value) => { editorHistory.current = value },
+  }}>
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
       <CanvasMaximizeButton />
-      {active && <>
+      {(practice || practiceNotice) && <Suspense fallback={null}><PracticeWorkspaceBar active={practicing}
+        notice={practiceNotice} onReturn={leavePractice} onResume={practice ? resumePractice : undefined} onDiscard={discardPractice} /></Suspense>}
+      {!practiceReady && <p role="status">{t('Loading workspace…')}</p>}
+      {practiceReady && (active || practicing) && provider && <>
         {window.desktopSimulator && <Suspense fallback={null}>
-          <DesktopTools key={`tools:${active.provider}`} mode={active.provider === 'vwan' ? 'vwan' : 'full'} />
+          <DesktopTools key={`tools:${provider}:${practicing}`} mode={provider === 'vwan' ? 'vwan' : 'full'} />
         </Suspense>}
-        <WorkspaceBoundary key={`${active.provider}:${active.revision}`} onRecover={() => setLibraryOpen(true)}>
+        <WorkspaceBoundary key={editorKey} onRecover={() => { leavePractice(); setLibraryOpen(true) }}>
           <Suspense fallback={<section aria-label={t('Workspace loading')}><p role="status">{t('Loading workspace…')}</p></section>}>
-            {active.provider === 'vwan' ? <App /> : <AzureNetApp simulatorMode="full" />}
+            {provider === 'vwan' ? <App /> : <AzureNetApp simulatorMode="full" />}
           </Suspense>
         </WorkspaceBoundary>
       </>}
-      {libraryOpen && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}>
-        <WorkspaceLibrary required={!active} notice={notice} onOpen={open} onNew={() => { void newWorkspace() }} onClose={() => setLibraryOpen(false)} />
+      {practiceReady && libraryOpen && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}>
+        <WorkspaceLibrary required={!active} notice={notice} onOpen={open} onNew={() => { void newWorkspace() }}
+          onResumePractice={practice && !practicing ? resumePractice : undefined} onClose={() => setLibraryOpen(false)} />
       </Suspense>}
     </div>
   </WorkspaceSessionContext>

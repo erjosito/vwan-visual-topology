@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { exercises } from '../src/learning/exercises'
 import { progressKey } from '../src/learning/progress'
+import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 
 test('failed optional practice loading preserves the workspace and recovers after explicit reload', async ({ page }) => {
   await page.route('**/src/learning/LearningDialog.tsx*', (route) => route.abort())
@@ -87,9 +88,13 @@ for (const exercise of exercises) {
     expect(stored.entries.find((entry: { id: string }) => entry.id === exercise.id).attempts).toHaveLength(2)
     await dialog.getByLabel('Practice topology JSON', { exact: true }).fill(draft)
     await dialog.getByRole('button', { name: 'Open draft in visual editor', exact: true }).click()
-    await dialog.getByRole('button', { name: 'Replace workspace and open', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
     await expect(dialog).not.toBeVisible()
-    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey)).not.toBe(original)
+    await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
+    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(original)
+    const practice = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), practiceWorkspaceKey)
+    expect(practice.scenarioId).toBe(exercise.id)
+    expect(practice.document.topology).toMatchObject(document.topology)
   })
 }
 
