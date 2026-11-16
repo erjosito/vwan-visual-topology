@@ -1,8 +1,7 @@
 import { cidr } from '../validation'
 import { firstUsableIp, type AzEndpointRef } from './engine'
 import type { AzNetTopology, AzSubnet, AzVNet } from './model'
-import { namedEndpoints } from '../inventory'
-import { workloadEndpointKey } from '../packet-flow'
+import { namedEndpoints, workloadEndpointKey } from '../inventory'
 
 export interface AzEndpointOption {
   key: string

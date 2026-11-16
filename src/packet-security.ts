@@ -174,17 +174,17 @@ export function nsgScope(topology: InventoryTopology, owner: InventoryOwner, sub
 }
 
 export function endpointNsg(topology: InventoryTopology, endpoint: PacketEndpoint, direction: NsgCheck['direction'],
-  tuple: FiveTuple, simulation: Simulation | AzSimulationResult, uncertainty?: TupleUncertainty): NsgAssessment {
+  tuple: FiveTuple, simulation: Simulation | AzSimulationResult, uncertainty?: TupleUncertainty, standardPublicIngress = false): NsgAssessment {
   if (endpoint.kind !== 'workload') return { outcome: 'not-assessed', checks: [] }
   const original = namedEndpoints(topology).find(({ workload, nic, config }) => workload.id === endpoint.workloadId
     && nic.id === endpoint.nicId && config.id === endpoint.ipConfigurationId)
   if (!original) return { outcome: 'not-assessed', checks: [] }
   return assessEndpointNsg(topology, original.nic.owner, original.nic.id, original.config.subnetId, direction, tuple,
-    { ...nsgScope(topology, original.nic.owner, original.config.subnetId, simulation), ...(uncertainty ? { uncertainty } : {}) })
+    { ...nsgScope(topology, original.nic.owner, original.config.subnetId, simulation), standardPublicIngress, ...(uncertainty ? { uncertainty } : {}) })
 }
 
 function transitNsg(topology: InventoryTopology, forward: PacketLeg, simulation: Simulation | AzSimulationResult,
-  translation: 'snat' | 'none' | 'not-assessed'): NsgCheck[] {
+  translation: 'snat' | 'none' | 'not-assessed', publicIngressApplianceId?: string): NsgCheck[] {
   if (!forward.tuple || !forward.native) return []
   const checks: NsgCheck[] = []
   const assess = (owner: InventoryOwner, deviceId: string, subnetId: string, before: FiveTuple, after: FiveTuple,
@@ -196,7 +196,9 @@ function transitNsg(topology: InventoryTopology, forward: PacketLeg, simulation:
     for (const direction of ['inbound', 'outbound'] as const) {
       const tuple = direction === 'inbound' ? before : after
       const comparedUncertainty = direction === 'outbound' ? uncertainty : inboundUncertainty
-      const context = { ...nsgScope(topology, owner, subnetId, simulation), ...(comparedUncertainty ? { uncertainty: comparedUncertainty } : {}) }
+      const context = { ...nsgScope(topology, owner, subnetId, simulation),
+        standardPublicIngress: direction === 'inbound' && deviceId === publicIngressApplianceId,
+        ...(comparedUncertainty ? { uncertainty: comparedUncertainty } : {}) }
       if (endpoint) checks.push(...assessEndpointNsg(topology, owner, endpoint.nic.id, subnetId, direction, tuple, context).checks)
       else {
         checks.push(assessNsgPoint(topology, owner, { kind: 'subnet', id: subnetId }, direction, tuple, context))
@@ -248,19 +250,20 @@ function transitNsg(topology: InventoryTopology, forward: PacketLeg, simulation:
 }
 
 export function completePacketNsg(topology: InventoryTopology, target: PacketEndpoint, forward: PacketLeg, reply: PacketLeg,
-  source: NsgAssessment, simulation: Simulation | AzSimulationResult, translation: 'snat' | 'none' | 'not-assessed') {
+  source: NsgAssessment, simulation: Simulation | AzSimulationResult, translation: 'snat' | 'none' | 'not-assessed',
+  standardPublicIngress = false, publicIngressApplianceId?: string) {
   const checks = [...source.checks]
   const unknownRouter = Array.isArray(forward.native)
     ? forward.native.some((path) => path.firewalls?.length || path.sourceNvaSpokeId || path.nvaSpokeId)
     : forward.native?.hops.some((hop) => hop.nodeKind === 'appliance' || hop.nodeKind === 'vnet-gateway'
       || hop.nodeKind === 'vwan-hub' && hop.action === 'inspect-firewall')
-  if (source.outcome !== 'denied') checks.push(...transitNsg(topology, forward, simulation, translation))
+  if (source.outcome !== 'denied') checks.push(...transitNsg(topology, forward, simulation, translation, publicIngressApplianceId))
   if (!checks.some((check) => check.outcome === 'denied') && forward.routing === 'reachable' && target.kind === 'workload' && forward.tuple) {
     const last = forward.steps.at(-1)
     const translated = forward.steps.some((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress)
     const uncertainty = last?.uncertainty ?? (translation !== 'none' && !translated && unknownRouter
       ? { sourceAddressPrefixes: ['0.0.0.0/0'], sourcePorts: [0, 65535] as [number, number] } : undefined)
-    checks.push(...endpointNsg(topology, target, 'inbound', last?.after ?? forward.tuple, simulation, uncertainty).checks)
+    checks.push(...endpointNsg(topology, target, 'inbound', last?.after ?? forward.tuple, simulation, uncertainty, standardPublicIngress).checks)
   }
   const outcome = checks.some((check) => check.outcome === 'denied') ? 'denied' as const
     : source.outcome === 'not-assessed' || checks.some((check) => check.outcome === 'not-assessed')

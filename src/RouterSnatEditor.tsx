@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import './packet-messages-ja'
 import { t } from './i18n'
 import { validateInventory, type InventoryTopology, type PublicIp, type RouterSnatOwner, type RouterSnatPolicy } from './inventory'
+import { DnatEditor } from './DnatEditor'
 
 export function RouterSnatEditor({ topology, owner, name, kind, change }: {
   topology: InventoryTopology; owner: RouterSnatOwner; name: string; kind: RouterSnatPolicy['kind']
@@ -82,6 +83,11 @@ export function RouterSnatDialog({ topology, owner, name, commit, onClose }: {
     <header className="row dialog-heading"><h2>{t('Firewall SNAT')}: {name}</h2><button onClick={() => dialog.current?.close()}>{t('Close')}</button></header>
     {error && <p role="alert">{error}</p>}
     <RouterSnatEditor topology={topology} owner={owner} name={name} kind="firewall-network-rules" change={(update) => {
+      try {
+        const next = structuredClone(topology); update(next); validateInventory(next); commit(update); setError(''); return true
+      } catch (error) { setError(error instanceof Error ? error.message : t('Inventory edit failed.')); return false }
+    }} />
+    <DnatEditor topology={topology} owner={owner} name={name} kind="firewall-dnat" change={(update) => {
       try {
         const next = structuredClone(topology); update(next); validateInventory(next); commit(update); setError(''); return true
       } catch (error) { setError(error instanceof Error ? error.message : t('Inventory edit failed.')); return false }
