@@ -1,8 +1,60 @@
-import type { AzNetTopology } from './azure-net/model'
+import type { AzNetTopology, AzVpnConnection } from './azure-net/model'
 import { simulateAzNet, traceAzNetFlow, type AzEndpointRef, type AzSimulationResult } from './azure-net/engine'
 import type { FiveTuple, PacketLeg, PacketStep } from './packet-flow'
-import { contains, ipv4 } from './validation'
-import { reverseVpnTuple, sameVpnTuple, translateVpnTuple, validateVpnNat, type VpnNatSession } from './vpn-nat'
+import { cidr, contains, formatIpv4, ipv4 } from './validation'
+import { mappedVpnAddress, validateVpnNat } from './vpn-nat'
+
+export interface VpnNatBinding { ruleId: string; before: FiveTuple; after: FiveTuple }
+export interface VpnNatSession { connectionId: string; direction: 'ingress' | 'egress'; bindings: VpnNatBinding[] }
+export interface VpnNatTranslation {
+  tuple: FiveTuple
+  bindings: VpnNatBinding[]
+  session: VpnNatSession
+  blocked?: string
+}
+const reverse = (tuple: FiveTuple): FiveTuple => ({ ...tuple, sourceAddress: tuple.destinationAddress, destinationAddress: tuple.sourceAddress,
+  sourcePort: tuple.destinationPort, destinationPort: tuple.sourcePort })
+export const reverseVpnTuple = reverse
+export const sameVpnTuple = (a: FiveTuple, b: FiveTuple) => a.sourceAddress === b.sourceAddress && a.destinationAddress === b.destinationAddress
+  && a.sourcePort === b.sourcePort && a.destinationPort === b.destinationPort && a.protocol === b.protocol
+
+/** Session is local to one assessed forward/reply pair; it is not evidence of live gateway state. */
+export function translateVpnTuple(connection: AzVpnConnection, tuple: FiveTuple, direction: 'ingress' | 'egress', reply?: VpnNatSession): VpnNatTranslation {
+  const session: VpnNatSession = { connectionId: connection.id, direction, bindings: [] }
+  let current = { ...tuple }
+  const result = (blocked?: string): VpnNatTranslation => ({ tuple: current, bindings: session.bindings, session, ...(blocked ? { blocked } : {}) })
+  if (reply) {
+    if (reply.connectionId !== connection.id || reply.direction === direction || !reply.bindings.length || !sameVpnTuple(tuple, reverse(reply.bindings.at(-1)!.after))) {
+      return result('Reply does not match the assessed VPN connection and reverse five-tuple.')
+    }
+    for (const binding of [...reply.bindings].reverse()) {
+      if (!sameVpnTuple(current, reverse(binding.after))) return result('Reply is outside the bounded VPN NAT session.')
+      const before = current
+      current = reverse(binding.before)
+      session.bindings.push({ ruleId: binding.ruleId, before, after: current })
+    }
+    return result()
+  }
+  const sourceMode = direction === 'ingress' ? 'IngressSNAT' : 'EgressSNAT'
+  for (const field of ['destinationAddress', 'sourceAddress'] as const) {
+    const isSource = field === 'sourceAddress'
+    const rules = connection.nat?.rules.filter((rule) => (rule.mode === sourceMode) === isSource
+      && ipv4(current[field]) !== undefined && contains(isSource ? rule.internalMapping : rule.externalMapping, ipv4(current[field])!))
+      .sort((a, b) => cidr(isSource ? b.internalMapping : b.externalMapping)!.length - cidr(isSource ? a.internalMapping : a.externalMapping)!.length) ?? []
+    const rule = rules[0]
+    if (!rule) continue
+    if (!isSource && rule.type === 'Dynamic') return result('Dynamic VPN NAT permits initiation only from the internal mapping; no assessed session exists.')
+    const before = { ...current }
+    if (rule.type === 'Static') current[field] = mappedVpnAddress(current[field], isSource ? rule.internalMapping : rule.externalMapping, isSource ? rule.externalMapping : rule.internalMapping)
+    else {
+      // One isolated modeled allocation, not an Azure allocator or a capacity/port-preservation prediction.
+      current.sourceAddress = formatIpv4(cidr(rule.externalMapping)!.network)
+      current.sourcePort = 49152
+    }
+    session.bindings.push({ ruleId: rule.id, before, after: { ...current } })
+  }
+  return result()
+}
 
 export interface VpnNatPacketRequest {
   connectionId: string

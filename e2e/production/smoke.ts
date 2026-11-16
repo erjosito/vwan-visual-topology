@@ -112,6 +112,17 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.keyboard.press('Escape')
     await expect(tools).toHaveCount(0)
     await expect(toolsOpener).toBeFocused()
+    if (mode !== 'vwan') {
+      expect(graph.files.some(({ path }: { path: string }) => /\/ErLocationInfoModal-/.test(path))).toBe(false)
+      const locationOpener = page.getByTestId('aznet-open-er-locations-btn')
+      await locationOpener.click()
+      const locations = page.getByTestId('er-location-info-modal')
+      await locations.getByRole('searchbox').fill('Frankfurt')
+      await locations.getByTestId('close-er-location-info-modal').click()
+      await locationOpener.click()
+      await expect(locations.getByRole('searchbox')).toHaveValue('Frankfurt')
+      await locations.getByTestId('close-er-location-info-modal').click()
+    }
     const panelStart = performance.now()
     if (mode === 'vwan') {
       await page.getByRole('button', { name: 'Azure files', exact: true }).click()
