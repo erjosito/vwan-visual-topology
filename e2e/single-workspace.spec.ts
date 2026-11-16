@@ -178,6 +178,55 @@ for (const provider of ['vwan', 'full']) {
   })
 }
 
+for (const operation of ['openTopology', 'collect'] as const) {
+  test(`a delayed desktop ${operation} cannot import into a newly selected workspace`, async ({ page }) => {
+    await page.addInitScript(({ operation, content }) => {
+      const delayed = () => new Promise((resolve) => Reflect.set(window, 'releaseDesktopResult', () => resolve({
+        ok: true, value: { name: 'previous-workspace.json', content },
+      })))
+      Object.defineProperty(window, 'desktopSimulator', { value: {
+        openTopology: operation === 'openTopology' ? delayed : async () => ({ ok: true, value: null }),
+        collect: delayed,
+        accounts: async () => ({ ok: true, value: {
+          cloud: { name: 'AzureCloud', resourceManager: 'https://management.azure.com/' },
+          accounts: [{ id: 'subscription', tenantId: 'tenant', name: 'Test subscription', state: 'Enabled' }],
+        } }),
+        targets: async () => ({ ok: true, value: { wans: [{ id: 'wan-id', name: 'Test WAN' }], groups: [] } }),
+      } })
+      Reflect.set(window, 'desktopImportEvents', 0)
+      document.addEventListener('change', (event) => {
+        if (event.target instanceof HTMLInputElement && event.target.hasAttribute('data-desktop-import')) {
+          Reflect.set(window, 'desktopImportEvents', Reflect.get(window, 'desktopImportEvents') + 1)
+        }
+      })
+    }, { operation, content: JSON.stringify(operation === 'openTopology' ? example : { ...observationFixture(), version: 1 }) })
+    await page.goto('/')
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
+    if (operation === 'openTopology') await page.getByRole('button', { name: 'Open local JSON', exact: true }).click()
+    else {
+      await page.getByText('Read-only local Azure collection', { exact: true }).click()
+      await page.getByRole('combobox', { name: 'Capture type', exact: true }).selectOption('vwan')
+      await page.getByRole('button', { name: 'Read existing Azure session', exact: true }).click()
+      await page.getByRole('combobox', { name: 'Select subscription and tenant', exact: true }).selectOption('subscription')
+      await page.getByRole('button', { name: 'Read available collection targets', exact: true }).click()
+      await page.getByRole('combobox', { name: 'Virtual WAN', exact: true }).selectOption('wan-id')
+      await page.getByRole('button', { name: 'Collect and review locally', exact: true }).click()
+    }
+    await page.getByTestId('workspace-library-open').click()
+    await page.getByRole('button', { name: 'New mixed-network workspace', exact: true }).click()
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
+    const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    await page.evaluate(async () => {
+      Reflect.get(window, 'releaseDesktopResult')()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(await page.evaluate(() => Reflect.get(window, 'desktopImportEvents'))).toBe(0)
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
+  })
+}
+
 test('fresh desktop offers both capture families without changing the editable workspace', async ({ page }) => {
   await page.addInitScript((capture) => Object.defineProperty(window, 'desktopSimulator', { value: {
     accounts: async () => ({ ok: true, value: {
