@@ -11,6 +11,7 @@ import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
+import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceMenu } from '../WorkspaceSession'
@@ -295,6 +296,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     })
   }, [workspaceSession, topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, pendingUrlSample])
   const [activeTab, setActiveTab] = useState<InspectorTab | null>(null)
+  const [guidanceNavigation, setGuidanceNavigation] = useState(false)
+  const [guidanceRevision, setGuidanceRevision] = useState(0)
+  const [frameRequest, setFrameRequest] = useState<{ vnetId: string; revision: number }>()
+  const guidanceRoot = useRef<HTMLDivElement>(null)
   const [selected, setInspectedEntity] = useState<AzSelectedEntity>(() =>
     defaultSelected(initialResolved.topology),
   )
@@ -324,6 +329,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setCanvasSelection(entity)
   }
   const inspectRoutes = (entity: AzSelectedEntity) => {
+    setGuidanceNavigation(false)
     setSelected(entity)
     setRouteInspection(entity)
     setActiveTab('routes')
@@ -1759,8 +1765,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           },
           {
             label: 'Peer with VNet',
+            guidanceAnchor: guidanceAnchor('peer-menu', vnet.id),
             disabled: peerableVnets.length === 0,
             children: peerableVnets.map((other) => ({
+              guidanceAnchor: guidanceAnchor('peer-target', vnet.id, other.id),
               label: `${other.name} (${other.region})`,
               onSelect: () => {
                 commitTopology((draft) => {
@@ -2809,7 +2817,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   } : undefined)
 
   return (
-    <div className="aznet-app" data-testid="aznet-app" data-inventory-selection={inventorySelection}>
+    <div ref={guidanceRoot} className="aznet-app" data-testid="aznet-app" data-learning-scope="azure-net" data-inventory-selection={inventorySelection}>
       {snatHubId && <Suspense fallback={null}><RouterSnatDialog topology={topology} owner={{ kind: 'hub', id: snatHubId }}
         name={topology.vwanHubs.find((hub) => hub.id === snatHubId)?.name ?? snatHubId}
         commit={(mutate) => commitTopology((next) => mutate(next))} onClose={() => setSnatHubId(undefined)} /></Suspense>}
@@ -2878,7 +2886,26 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             onSelect: setCanvasSelection,
           }} />
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
-            onOpen={(document) => { if (document.mode !== 'vwan') applyLoadedTopology('practice', document.topology) }} />
+            onGuide={(cue) => {
+              if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
+              setContextMenu(null)
+              setGuidanceRevision((revision) => revision + 1)
+              if (cue.action === 'peering.command') {
+                const entity = { kind: 'vnet' as const, vnetId: cue.params.vnetAId }
+                setSelected(entity)
+                setActiveTab(null)
+                setContextReturnFocus(null)
+                const bounds = guidanceRoot.current?.querySelector('[data-learning-canvas]')?.getBoundingClientRect()
+                setContextMenu({ kind: 'entity', entity, x: (bounds?.left ?? 0) + 60, y: (bounds?.top ?? 0) + 60 })
+                setFrameRequest({ vnetId: cue.params.vnetAId, revision: guidanceRevision + 1 })
+              } else {
+                const entity = { kind: 'subnet' as const, vnetId: cue.params.vnetId, subnetId: cue.params.subnetId }
+                if (cue.action === 'routes.open') inspectRoutes(entity)
+                else { setSelected(entity); setActiveTab('editor') }
+                setFrameRequest({ vnetId: cue.params.vnetId, revision: guidanceRevision + 1 })
+              }
+              setGuidanceNavigation(true)
+            }} />
           <button
             type="button"
             className="aznet-btn aznet-btn-gallery"
@@ -3141,6 +3168,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           </div>}
 
           <AzureNetDiagram
+            frameRequest={frameRequest}
             topology={topology}
             onResetLayout={() => commitTopology((next) => {
               for (const node of [...next.vnets, ...next.vwanHubs, ...next.erLocations, ...next.sites]) {
@@ -3199,7 +3227,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               setGroupTrace(null)
               setShowDiagnosticBadges(false)
             }}
-            onContextMenu={(target) => { setContextReturnFocus(document.activeElement); setContextMenu(target) }}
+            onContextMenu={(target) => { setGuidanceNavigation(false); setContextReturnFocus(document.activeElement); setContextMenu(target) }}
             onTogglePeeringEnabled={(peeringId, enabled) => {
               commitTopology((draft) => {
                 const p = draft.vnetPeerings.find((x) => x.id === peeringId)
@@ -3241,11 +3269,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
           {contextMenu && contextMenuSpec && (
             <Suspense fallback={null}><TopologyContextMenu
+              focusOnOpen={!guidanceNavigation}
               x={contextMenu.x}
               y={contextMenu.y}
               title={contextMenuSpec.title}
               actions={contextMenuSpec.actions}
               onClose={() => {
+                setGuidanceNavigation(false)
                 if (contextReturnFocus?.isConnected && 'focus' in contextReturnFocus) (contextReturnFocus as HTMLElement).focus({ preventScroll: true })
                 setContextReturnFocus(null)
                 setContextMenu(null)
@@ -3281,6 +3311,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
           onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
         {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
+          key={guidanceRevision}
+          focusOnOpen={!guidanceNavigation}
           title={{
             routes: 'Effective routes',
             tracer: 'Path explorer',
@@ -3289,7 +3321,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             azure: 'Azure & Bicep',
           }[activeTab]}
           className={`aznet-inspector-window${activeTab === 'routes' ? ' aznet-routes-window' : ''}`}
-          onClose={() => setActiveTab(null)}
+          onClose={() => { setActiveTab(null); setGuidanceNavigation(false) }}
         >
           <nav className="aznet-tabs">
             <button
@@ -3419,7 +3451,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         </div>
                       </div>
 
-                      <div className="table-scroll"><table className="aznet-route-table" data-testid="aznet-effective-route-table">
+                      <div className="table-scroll"><table className="aznet-route-table" data-testid="aznet-effective-route-table"
+                        data-learning-anchor={routeSelection.kind === 'subnet' ? guidanceAnchor('effective-table', routeSelection.vnetId, routeSelection.subnetId) : undefined}>
                         <thead>
                           <tr>
                             <th>State</th>
@@ -3452,6 +3485,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             return (
                               <tr
                                 key={route.id}
+                                data-learning-anchor={routeSelection.kind === 'subnet' ? guidanceAnchor('effective-prefix', routeSelection.vnetId, routeSelection.subnetId, route.prefix) : undefined}
                                 className={`aznet-route-row ${
                                   route.active ? '' : 'suppressed'
                                 } ${isLpmWinner || isFwdMatch || isRetMatch ? 'lpm-winner' : ''}`}
@@ -4936,7 +4970,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           </thead>
                           <tbody>
                             {rt.routes.map((r) => (
-                              <tr key={r.id}>
+                              <tr key={r.id} data-learning-anchor={selected.kind === 'subnet' ? guidanceAnchor('udr-route', selected.vnetId, selected.subnetId, rt.id, r.id) : undefined}>
                                 <td>
                                   <input
                                     type="checkbox"

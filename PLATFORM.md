@@ -126,9 +126,8 @@ or silently enable a learning mode. References load only after deliberate
 selection; external references remain blocked by the desktop host.
 
 Three routing exercises in `src/learning/exercises.ts` cover Virtual WAN, VNet peering
-and Full Hybrid connectivity. The course picker can assess/resume any exercise
-without changing the normal workspace; visual opening selects its native editor,
-and copying requires a compatible native document family. Each pins its rubric version, owned endpoint
+and Full Hybrid connectivity. These legacy content/assessment fixtures remain
+tested; their JSON draft picker is no longer learner-facing. Each pins its rubric version, owned endpoint
 IDs/addresses, requirements, preparation, concept links and hints. The VWAN
 starter intentionally has unassessable propagation scope; absence is not
 taught as verified isolation. Tests accept a one-hub or multi-hub repair,
@@ -143,15 +142,28 @@ bindings and configuration-only packet predicates. Unknown health, allocation,
 mapping or filtering cannot certify either connectivity or isolation. Supported
 repairs are open-ended; no guest/listener or live-session readiness is certified.
 
-Practice JSON is an **independent draft**, saved locally on edits. **Open draft
-in visual editor** validates it using the shared worker and requires explicit
-confirmation before opening a **protected practice workspace**. Normal designs
-are not replaced. After visual editing,
-reopen learning and **Copy workspace configuration into practice** before
-assessment. Copying does not include temporary failure overlays. **Assess
-practice draft** grades that exact snapshot using the P1 browser-worker adapter;
-editing cancels pending work and visibly invalidates earlier displayed evidence.
-Changing native editors cannot display a previous editor's assessment.
+The lazy, non-modal learning sidebar presents ordered tasks from
+`course-examples.ts` as an explicitly **unassessed instruction preview**.
+Previous/next preview wording only; they grant no completion, unlock, points or
+belt. The root keeps the preview cursor and pause/resume state across native
+editor switches in memory, not across reload. Raw JSON, raw requirements,
+exercise selection menus and engine payloads are not exposed in the sidebar.
+Confirmed **Load practice network** validates the starter using the shared
+worker before opening a **protected practice workspace**. Opening/resuming the
+sidebar does not reload or reset a canvas; loading a starter always confirms
+replacement of any existing practice edits.
+
+**Show me where** resolves typed action IDs and exact entity/table/route/prefix
+parameters, not translated labels, selectors from content, coordinates or
+synthetic clicks. Native adapters select/frame the source object and open its
+inspector or context menu. Nested destinations are outlined when the learner
+opens the submenu. Matching prefix candidates are outlined together; an absent
+prefix highlights the exact subnet table instead. Dashed learning outlines are
+pointer-transparent and separate from routing/path evidence. They follow
+scroll, resize, pan/zoom and inspector movement; missing, disabled, covered or
+closed targets get an explicit reason and an explicit reveal retry. Navigation
+never mutates topology, awards credit or answers quizzes, and never costs
+points. Focus stays put unless **Focus highlighted control** is requested.
 
 The root owns one separate practice canvas in
 `network-simulator:practice-workspace:v1`, including stable course/scenario IDs,
@@ -164,8 +176,8 @@ inside their respective native documents. Display preferences stay shared.
 during the same page session; reload restores documents/layouts, not undo stacks.
 An active saved practice resumes on ordinary reload. Explicit mode, sample and
 shared-snapshot links take precedence and leave practice available to resume.
-Panel reopen and exercise selection do not reload a starter; only confirmed
-visual opening replaces the previous practice canvas.
+Panel reopen and instruction navigation do not reload a starter; only confirmed
+starter loading replaces the previous practice canvas.
 
 Initial practice persistence must succeed before a starter opens. Subsequent
 save failures keep the latest practice in memory with a visible session-only
@@ -174,10 +186,10 @@ preserved and blocks replacement until confirmed **Discard practice workspace**,
 which deletes only the practice-canvas key, not drafts, achievements, preferences
 or normal designs. Known stale writes/discards refuse to overwrite another
 tab's saved practice; this is not atomic multi-tab ownership or synchronization.
-The existing picker/draft assessment remains transitional: the guided sidebar,
-task runner and awarded-points progression are separate learning-epic stages.
+The evidence-gated task runner and awarded-points progression remain subsequent
+learning-epic stages (#180/#183); this preview does not claim their behavior.
 
-Local progress uses `aznet-simulator:practice:v1` in localStorage, independently
+Retained legacy progress uses `aznet-simulator:practice:v1` in localStorage, independently
 of normal topology saves: at most nine 200,000-character drafts within the existing
 1,000,000-character aggregate storage limit, twenty recent
 attempts per exercise and a retained latest practice achievement. Attempts
@@ -188,7 +200,8 @@ older rubric/grader awards request reassessment rather than becoming current
 certification. Finishing later unsuccessful attempts does not erase a prior
 practice achievement.
 
-Progress is per browser origin or Electron profile, **not encrypted,
+The sidebar does not write or reset this legacy ledger. Retained
+progress is per browser origin or Electron profile, **not encrypted,
 account-backed or synchronized**; simultaneous tabs use last-write-wins saves.
 Storage corruption is preserved until deliberate reset; unavailable/full
 storage is reported as session-only. Reset requires confirmation and does not

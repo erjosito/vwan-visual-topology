@@ -37,6 +37,7 @@ export function UnifiedSimulatorRoot() {
   const [practiceReady, setPracticeReady] = useState(false)
   const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict'>('')
   const [practiceEpoch, setPracticeEpoch] = useState(0)
+  const [learningView, setLearningView] = useState<{ open: boolean; taskId?: string }>({ open: false })
   const practiceRef = useRef<PracticeSession | undefined>(undefined)
   const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
   const designHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
@@ -213,6 +214,7 @@ export function UnifiedSimulatorRoot() {
     savePractice: (document) => practiceRef.current?.save(document, practiceEpoch),
     getEditorHistory: () => editorHistory.current,
     rememberEditorHistory: (value) => { editorHistory.current = value },
+    learningView, setLearningView,
   }}>
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}

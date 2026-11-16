@@ -25,20 +25,25 @@ async function seed(page: Page, vwan: boolean) {
   await expect(node(page, vwan)).toBeVisible()
 }
 
-async function start(page: Page, scenario: string) {
-  await page.getByTestId('learning-open').click()
-  const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-  await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-  await dialog.getByLabel('Choose an exercise', { exact: true }).selectOption(scenario)
-  await dialog.getByRole('button', { name: 'Open draft in visual editor', exact: true }).click()
+async function start(page: Page) {
+  const dialog = page.getByTestId('learning-sidebar')
+  if (!await dialog.isVisible()) await page.getByTestId('learning-open').click()
+  await dialog.getByRole('button', { name: 'Load practice network', exact: true }).click()
   return dialog
 }
 
 async function confirmStart(page: Page, scenario: string) {
-  const dialog = await start(page, scenario)
+  const dialog = await start(page)
   await dialog.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
   await expect(bar(page)).toContainText('your normal design is kept separately')
-  await expect(page.getByRole('dialog', { name: 'Learn & practice', exact: true })).not.toBeVisible()
+  await page.getByTestId('learning-sidebar').getByRole('button', { name: 'Pause learning', exact: true }).click()
+  if (scenario === 'vwan-connect') {
+    await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+      name: 'practice-native.json', mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(exercises[0].starter.topology)),
+    })
+    await expect(node(page, true)).toBeVisible()
+  }
 }
 
 async function move(page: Page, vwan: boolean) {
@@ -54,9 +59,9 @@ for (const vwan of [true, false]) {
     const originals = await stored(page)
     const designPosition = await position(page, vwan)
     const scenario = vwan ? 'vwan-connect' : 'peering-connect'
-    const dialog = await start(page, scenario)
+    const dialog = await start(page)
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await page.keyboard.press('Escape')
+    await dialog.getByRole('button', { name: 'Pause learning', exact: true }).click()
     expect(await stored(page)).toEqual(originals)
     expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBeNull()
     await confirmStart(page, scenario)
@@ -70,10 +75,9 @@ for (const vwan of [true, false]) {
     const practicePosition = await position(page, vwan)
     const edited = (await practice(page)).document
     await page.getByTestId('learning-open').click()
-    const reopened = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-    await reopened.getByRole('button', { name: 'Practice', exact: true }).click()
-    await reopened.getByLabel('Choose an exercise', { exact: true }).selectOption(vwan ? 'peering-connect' : 'vwan-connect')
-    await page.keyboard.press('Escape')
+    const reopened = page.getByTestId('learning-sidebar')
+    await reopened.getByText('Course outline (read only)', { exact: true }).click()
+    await reopened.getByRole('button', { name: 'Pause learning', exact: true }).click()
     expect((await practice(page)).document).toEqual(edited)
     await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
     await expect(undo(page)).toBeEnabled()
@@ -132,7 +136,7 @@ test('quota failures keep live practice accessible for export without touching n
       return original.call(this, name, value)
     }
   }, practiceWorkspaceKey)
-  const dialog = await start(page, 'peering-connect')
+  const dialog = await start(page)
   await dialog.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
   await expect(dialog.getByRole('alert')).toContainText('Practice could not be saved')
   expect(await stored(page)).toEqual(originals)
@@ -170,7 +174,7 @@ test('corrupt practice requires scoped discard and cannot erase independent draf
   await page.goto('/?mode=full')
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   await expect(bar(page).getByRole('alert')).toContainText('original contents have not been overwritten')
-  const dialog = await start(page, 'vwan-connect')
+  const dialog = await start(page)
   await dialog.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
   await expect(dialog.getByRole('alert')).toContainText('Saved practice could not be read')
   const progress = await page.evaluate((key) => localStorage.getItem(key), progressKey)
@@ -199,7 +203,7 @@ test('abandoning a delayed starter cannot replace later design edits', async ({ 
     await gate
     await route.continue().catch(() => {})
   })
-  const dialog = await start(page, 'peering-connect')
+  const dialog = await start(page)
   await dialog.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
   await expect.poll(() => waiting).toBe(true)
   await page.keyboard.press('Escape')

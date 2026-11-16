@@ -1,0 +1,28 @@
+import type { Localized } from './content'
+
+export const sidebarLabels = {
+  preview: { en: 'Instruction preview — task verification, unlocks and points are not enabled yet. Next previews wording; it does not complete a task.', ja: '手順のプレビューです。タスクの検証、ロック解除、ポイントはまだ有効ではありません。「次へ」は次の手順を表示するだけで、タスクを完了しません。' },
+  instructions: { en: 'Instruction preview', ja: '手順のプレビュー' },
+  pause: { en: 'Pause learning', ja: '学習を一時停止' },
+  next: { en: 'Next instruction (preview)', ja: '次の手順（プレビュー）' },
+  previous: { en: 'Previous instruction (preview)', ja: '前の手順（プレビュー）' },
+  load: { en: 'Load practice network', ja: '練習ネットワークを読み込む' },
+  loaded: { en: 'This scenario is already open. Continue with the existing practice canvas; loading again resets its edits.', ja: 'このシナリオは開いています。現在の練習キャンバスで続けてください。再読み込みすると編集内容がリセットされます。' },
+  confirm: { en: 'Open protected practice workspace', ja: '保護された練習ワークスペースを開く' },
+  replace: { en: 'Load this starter into a separate practice canvas? Your normal design is kept. Any existing practice canvas and its edits will be replaced. No Azure resources are deployed.', ja: 'この初期構成を別の練習キャンバスに読み込みますか。通常の設計は保持されます。既存の練習キャンバスと編集内容は置き換わります。Azure リソースはデプロイしません。' },
+  cancel: { en: 'Cancel', ja: 'キャンセル' },
+  loading: { en: 'Loading practice locally...', ja: '練習をローカルで読み込み中...' },
+  show: { en: 'Show me where', ja: '場所を表示' },
+  stop: { en: 'Clear guidance', ja: '案内を消す' },
+  focus: { en: 'Focus highlighted control', ja: '強調された操作にフォーカス' },
+  navigation: { en: 'Navigation help never costs points and never changes configuration or answers questions.', ja: '操作場所の案内でポイントは減りません。構成の変更や質問への回答も行いません。' },
+  location: { en: 'Learning cue (not routing evidence). Follow the outlined control; open its submenu to reveal the exact destination. For routes, all matching prefix rows are outlined, or the exact subnet table if the prefix is absent.', ja: '学習用の案内です。経路の根拠ではありません。枠で示した操作のサブメニューを開くと、対象が表示されます。ルートでは一致するすべてのプレフィックス行、存在しない場合は対象サブネットのテーブルを示します。' },
+  unavailable: { en: 'The exact control is closed, hidden, off screen or covered. Use Show me where again to reveal it safely.', ja: '対象の操作は閉じているか、非表示、画面外、または他の要素の背後にあります。「場所を表示」で再表示してください。' },
+  provider: { en: 'This guidance needs the mixed-network editor. Load the lesson practice network; your normal design is preserved.', ja: 'この案内には混合ネットワーク エディターが必要です。レッスンの練習ネットワークを読み込んでください。通常の設計は保持されます。' },
+  entity: { en: 'The exact lesson object or route no longer exists. Check the current canvas, or explicitly reload the starter to recover. Nothing was changed.', ja: '対象のオブジェクトまたはルートがありません。現在のキャンバスを確認するか、初期構成を明示的に再読み込みしてください。変更は行っていません。' },
+  association: { en: 'This subnet is no longer associated with the lesson route table. Check the association or explicitly reload the starter. No other table was highlighted.', ja: 'このサブネットはレッスンのルート テーブルに関連付けられていません。関連付けを確認するか、初期構成を明示的に再読み込みしてください。別のテーブルは強調表示していません。' },
+  peered: { en: 'These VNets already have a peering, so the create command is unavailable. Inspect the existing peering yourself; guidance does not verify completion.', ja: 'この VNet 間には既にピアリングがあるため、作成コマンドは使用できません。既存のピアリングを確認してください。案内では完了を検証しません。' },
+  scope: { en: 'Open this lesson in its protected practice canvas before requesting guidance. Your normal design will not be navigated or edited.', ja: '案内を使用するには、このレッスンを保護された練習キャンバスに開いてください。通常の設計の操作や編集は行いません。' },
+  outline: { en: 'Course outline (read only)', ja: 'コースの概要（読み取り専用）' },
+  help: { en: 'Networking reference', ja: 'ネットワークの参考情報' },
+} satisfies Record<string, Localized>

@@ -2,7 +2,6 @@ import { expect, test as base, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { assetGraph } from '../../scripts/production-assets.mjs'
-import { exercises } from '../../src/learning/exercises'
 import { executePlatform } from '../../src/platform/service'
 import type { PlatformRequest, PlatformResult } from '../../src/platform/contract'
 
@@ -187,7 +186,7 @@ test('a delayed or failed inactive workspace retains loading/recovery controls a
 })
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
-  test(`${mode}: production workers, P3 practice, native JSON/history and cached offline routes stay local`, async ({ page, context }) => {
+  test(`${mode}: production workers, guided practice, native JSON/history and cached offline routes stay local`, async ({ page, context }) => {
     const workers: string[] = []
     const external: string[] = []
     page.on('worker', (worker) => workers.push(worker.url()))
@@ -199,22 +198,15 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const storageKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
     const original = await page.evaluate((key) => localStorage.getItem(key), storageKey)
     await page.getByTestId('learning-open').click()
-    const practice = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-    await practice.getByRole('button', { name: 'Practice', exact: true }).click()
-    await practice.getByLabel('Choose an exercise', { exact: true }).selectOption(exercises.find((exercise) => exercise.starter.mode === mode)!.id)
-    const draft = structuredClone(exercises.find((exercise) => exercise.starter.mode === mode)!.starter)
-    if (draft.mode === 'vwan') {
-      draft.topology.spokes[1].hubId = 'one'
-      delete draft.topology.spokes[1].hubRouting
-    } else {
-      const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
-      draft.topology.vnetPeerings.push({ id: 'production-peer', name: 'Workload peering', vnetAId: 'a', vnetBId: 'b', enabled: true, aToB: flags, bToA: { ...flags } })
-    }
-    await practice.getByLabel('Practice topology JSON', { exact: true }).fill(JSON.stringify(draft.topology))
-    await practice.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-    await expect(practice.getByTestId('practice-result')).toContainText('Practice requirements satisfied')
+    const practice = page.getByTestId('learning-sidebar')
+    await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
+    await practice.getByRole('button', { name: 'Load practice network', exact: true }).click()
+    await practice.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
+    await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
+    await practice.getByRole('button', { name: 'Pause learning', exact: true }).click()
+    await page.getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await ready(page, mode)
     expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(original)
-    await page.keyboard.press('Escape')
 
     const sample = await readFile(mode === 'vwan' ? 'public/docs/samples/hub-routing-preferences.json' : 'public/docs/samples/azure-net/hub-spoke-firewall-udr.json')
     await page.locator('input[data-desktop-import]').setInputFiles({ name: 'native.json', mimeType: 'application/json', buffer: sample })
@@ -342,9 +334,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey)
     expect(mode === 'vwan' ? saved : saved.topology).toEqual(JSON.parse(native.toString()))
     await page.getByTestId('learning-open').click()
-    await practice.getByRole('button', { name: 'Practice', exact: true }).click()
-    await practice.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-    await expect(practice.getByTestId('practice-result')).toContainText('Practice requirements satisfied')
+    await expect(practice).toContainText('Instruction preview')
+    await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
     expect(external).toEqual([])
     await context.setOffline(false)
   })

@@ -2,10 +2,14 @@
 
 Stage 1 of #176 / #179. The `course-*` files are **author-time contracts and
 examples**; importing them does not activate a course runner or award points.
-Stage 2 (#182) adds a protected canvas beneath the transitional nine-exercise
-modal; its independent draft/achievement storage and routing engines remain
-unchanged. Sidebar, semantic guidance, runner, progression and full-curriculum
-delivery are tracked separately in #178, #180, #183, #184 and #181.
+Stage 2 (#182) adds a protected canvas. Stage 3 (#178) replaces the old modal
+with a lazy, non-modal sidebar and semantic navigation assistance. The sidebar
+shows the ordered example instructions as an explicitly **unassessed preview**:
+previous/next change presentation only, not completion, unlocks, awards or belts.
+The preview cursor and pause/resume state survive editor switches in memory,
+not reload. No legacy JSON draft, raw requirements or engine payload is shown.
+Existing independent draft/achievement storage is retained untouched. The
+evidence-gated runner, progression and full curriculum remain #180/#183/#184.
 
 The root's `openPractice({ courseId, scenarioId, document }, signal)` session API
 accepts a copied native scenario after explicit confirmation; it does not look
@@ -31,8 +35,15 @@ return, recovery and same-session history behavior.
 Use declarative TypeScript data and the existing `{ en, ja }` convention. No
 callbacks, scripts, CSS selectors, translated-label matching or synthetic clicks.
 The Zod discriminated unions are the typed registry of supported semantic check
-and action IDs. Actual runtime adapters belong to later stages; registration here
-does not pretend a handler or visual cue is already implemented.
+and action IDs. `guidance.ts` resolves the three shipped actions to scoped
+semantic anchors; the mixed editor reveals them using its own selection,
+route-inspection and context-menu handlers. `TopologyContextMenu` carries command
+identity separately from translated labels. The sidebar has no lesson-specific
+branches and executes no assessed edits. `GuidanceHighlight` outlines the exact
+visible registered targets without touching routing/path classes. Missing or
+disabled controls get a localized reason; closed/moved inspectors can be
+revealed again explicitly. Adding a supported control requires its resolver,
+native reveal adapter and anchor, never a lesson-specific sidebar branch.
 
 ## Planned white-to-black ladder
 

@@ -2,15 +2,15 @@ import { t } from './i18n'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 
-export function CanvasOverlay({ title, children, onClose, className = '' }: {
-  title: string; children: ReactNode; onClose: () => void; className?: string
+export function CanvasOverlay({ title, children, onClose, className = '', focusOnOpen = true }: {
+  title: string; children: ReactNode; onClose: () => void; className?: string; focusOnOpen?: boolean
 }) {
   const panel = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState<{ x: number; y: number }>()
   const drag = useRef<{ x: number; y: number; left: number; top: number } | undefined>(undefined)
   useEffect(() => {
     const element = panel.current!
-    if (!element.contains(document.activeElement)) element.focus({ preventScroll: true })
+    if (focusOnOpen && !element.contains(document.activeElement)) element.focus({ preventScroll: true })
     const observer = new ResizeObserver(() => setPosition((current) => {
       if (!current) return current
       const parent = element.offsetParent as HTMLElement
@@ -21,7 +21,7 @@ export function CanvasOverlay({ title, children, onClose, className = '' }: {
     observer.observe(element)
     observer.observe(element.offsetParent!)
     return () => observer.disconnect()
-  }, [])
+  }, [focusOnOpen])
   return <div ref={panel} role="dialog" tabIndex={-1} aria-label={title} className={`canvas-overlay ${className}`} style={position ? { left: position.x, top: position.y, right: 'auto' } : undefined} onKeyDown={(event) => {
     if (event.key === 'Escape') { event.stopPropagation(); onClose() }
   }}>

@@ -2,29 +2,35 @@ import { useEffect, useRef, useState } from 'react'
 import { t } from '../i18n'
 import type { PlatformDocument } from '../platform/contract'
 import type { LearningDialog } from './LearningDialog'
+import type { CourseGuidance } from './course-contract'
+import { useWorkspaceSession } from '../workspace-context'
 
 export function LearningTools(props: {
   document: PlatformDocument
-  onOpen: (document: PlatformDocument) => void
+  onGuide?: (cue: CourseGuidance) => void
 }) {
+  const session = useWorkspaceSession()
+  const [localView, setLocalView] = useState<{ open: boolean; taskId?: string }>({ open: false })
+  const view = session?.learningView ?? localView
+  const setView = session?.setLearningView ?? setLocalView
+  const trigger = useRef<HTMLButtonElement>(null)
   const [Panel, setPanel] = useState<typeof LearningDialog>()
-  const [loading, setLoading] = useState(false)
   const [failed, setFailed] = useState(false)
-  const lifetime = useRef(0)
-  useEffect(() => () => { lifetime.current++ }, [])
-  const open = async () => {
-    const ticket = lifetime.current
-    setLoading(true); setFailed(false)
-    try {
-      const { LearningDialog } = await import('./LearningDialog')
-      if (ticket === lifetime.current) setPanel(() => LearningDialog)
-    } catch { if (ticket === lifetime.current) setFailed(true) }
-    finally { if (ticket === lifetime.current) setLoading(false) }
-  }
-  if (Panel) return <Panel {...props} initialOpen />
+  const loading = view.open && !Panel && !failed
+  useEffect(() => {
+    if (!view.open || Panel || failed) return
+    let active = true
+    import('./LearningDialog').then(({ LearningDialog }) => {
+      if (active) setPanel(() => LearningDialog)
+    }, () => { if (active) setFailed(true) })
+    return () => { active = false }
+  }, [view.open, Panel, failed])
   return <>
-    <button type="button" data-testid="learning-open" disabled={loading} aria-busy={loading}
-      onClick={() => { void open() }}>{t('Learn & practice')}</button>
+    <button ref={trigger} type="button" data-testid="learning-open" disabled={loading} aria-busy={loading} aria-expanded={view.open} aria-controls={view.open && Panel ? 'learning-sidebar' : undefined}
+      onClick={() => setView({ ...view, open: !view.open })}>{t('Learn & practice')}</button>
+    {view.open && Panel && <Panel document={props.document} onGuide={props.onGuide} taskId={view.taskId}
+      onTask={(taskId) => setView({ open: true, taskId })}
+      onPause={() => { setView({ ...view, open: false }); trigger.current?.focus({ preventScroll: true }) }} />}
     {failed && <p role="status">{t('Learning tools could not load. Your workspace is unchanged; reload to retry.')}
       <button type="button" onClick={() => window.location.reload()}>{t('Reload')}</button></p>}
   </>

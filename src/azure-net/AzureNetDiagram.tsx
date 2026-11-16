@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { Fragment, useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
 import { CanvasBackground, CanvasControls } from '../CanvasPresentation'
@@ -45,6 +45,7 @@ export interface AzRouteMapSelection {
 }
 
 interface AzureNetDiagramProps {
+  frameRequest?: { vnetId: string; revision: number }
   faults?: import('../failures').FaultMap
   risks?: Record<string, number>
   onRisk?: (id: string) => void
@@ -218,6 +219,7 @@ function computePositions(topology: AzNetTopology): {
 
 export function AzureNetDiagram({
   topology,
+  frameRequest,
   faults = {},
   risks = {},
   onRisk,
@@ -328,6 +330,15 @@ export function AzureNetDiagram({
     return () => window.removeEventListener('keydown', cancel)
   }, [dragState])
   const positions = computePositions(topology)
+  const frameGuidance = useEffectEvent(() => {
+    const box = frameRequest && positions.vnets[frameRequest.vnetId]
+    if (box) { setZoom(1); setPan({ x: box.x - 100, y: box.y - 100 }) }
+  })
+  useEffect(() => {
+    if (!frameRequest) return
+    const frame = requestAnimationFrame(() => frameGuidance())
+    return () => cancelAnimationFrame(frame)
+  }, [frameRequest])
   if (preview) {
     const collection = preview.kind === 'vnet' ? positions.vnets : preview.kind === 'vwan-hub' ? positions.vwanHubs : preview.kind === 'er-location' ? positions.erLocations : positions.sites
     if (collection[preview.id]) collection[preview.id] = { ...collection[preview.id], x: preview.x, y: preview.y }
@@ -664,6 +675,7 @@ export function AzureNetDiagram({
         ref={svgRef}
         className="aznet-diagram-svg"
         data-testid="aznet-diagram-svg"
+        data-learning-canvas
         viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
         onPointerDownCapture={(event) => {
           closePolicyPreview()

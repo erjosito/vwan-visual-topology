@@ -2,7 +2,7 @@ import { t } from './i18n'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { contextActionDisabled as actionDisabled } from './context-actions'
 
-export interface ContextAction { label: string; run?: () => void; onSelect?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean; allowDisabledChildren?: boolean }
+export interface ContextAction { label: string; guidanceAnchor?: string; run?: () => void; onSelect?: () => void; children?: ContextAction[]; disabled?: boolean; danger?: boolean; allowDisabledChildren?: boolean }
 
 function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'right', focusOnOpen, onBack, onClose }: {
   x?: number; y?: number; title: string; actions: ContextAction[]; anchor?: HTMLButtonElement
@@ -67,7 +67,7 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
       }
     }}>
       <div role="presentation" className="context-menu-title">{onBack && <button role="menuitem" className="submenu-back" aria-label={t("Back from {0}", title)} onClick={onBack}><span aria-hidden="true" className="menu-chevron back" /></button>}<span>{title}</span></div>
-      {actions.map((action, index) => <button key={index} ref={(element) => { buttons.current[index] = element }} data-action role="menuitem" className={`${action.danger ? 'danger' : ''} ${opened?.index === index ? 'submenu-active' : ''}`} disabled={actionDisabled(action)}
+      {actions.map((action, index) => <button key={index} ref={(element) => { buttons.current[index] = element }} data-action data-learning-anchor={action.guidanceAnchor} role="menuitem" className={`${action.danger ? 'danger' : ''} ${opened?.index === index ? 'submenu-active' : ''}`} disabled={actionDisabled(action)}
         aria-haspopup={action.children?.length ? 'menu' : undefined} aria-expanded={action.children?.length ? !actionDisabled(action) && opened?.index === index : undefined}
         onPointerEnter={(event) => {
           if (event.pointerType === 'touch' || actionDisabled(action)) return
@@ -85,17 +85,18 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
   </>
 }
 
-export function TopologyContextMenu({ x, y, title, actions, onClose }: {
-  x: number; y: number; title: string; actions: ContextAction[]; onClose: () => void
+export function TopologyContextMenu({ x, y, title, actions, onClose, focusOnOpen = true }: {
+  x: number; y: number; title: string; actions: ContextAction[]; onClose: () => void; focusOnOpen?: boolean
 }) {
   const tree = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest('[data-learning-menu-navigation]')) return
       if (!tree.current?.contains(event.target as Node)) onClose()
     }
     document.addEventListener('pointerdown', dismiss, true)
     return () => document.removeEventListener('pointerdown', dismiss, true)
   }, [onClose])
 
-  return <div ref={tree} className="context-menu-tree"><MenuLevel key={`${x}:${y}`} x={x} y={y} title={title} actions={actions} focusOnOpen onClose={onClose} /></div>
+  return <div ref={tree} className="context-menu-tree"><MenuLevel key={`${x}:${y}`} x={x} y={y} title={title} actions={actions} focusOnOpen={focusOnOpen} onClose={onClose} /></div>
 }
