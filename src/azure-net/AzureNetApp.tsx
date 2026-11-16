@@ -3170,7 +3170,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               y={contextMenu.y}
               title={contextMenuSpec.title}
               actions={contextMenuSpec.actions}
-              onClose={() => setContextMenu(null)}
+              onClose={() => {
+                if (contextReturnFocus?.isConnected && 'focus' in contextReturnFocus) (contextReturnFocus as HTMLElement).focus({ preventScroll: true })
+                setContextReturnFocus(null)
+                setContextMenu(null)
+              }}
             />
           )}
           {deletionSpec && deletionAction && (

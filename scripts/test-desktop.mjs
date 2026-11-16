@@ -149,6 +149,32 @@ try {
     await workloadForm.getByRole('button', { name: 'Save workload', exact: true }).click()
     await expect(detail.getByRole('button', { name: 'Edited desktop workload', exact: true })).toBeVisible()
     await page.keyboard.press('Escape')
+    await expect(detailNode).toBeFocused()
+    const menuWindow = await application.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      const previous = { size: window.getContentSize(), minimum: window.getMinimumSize() }
+      window.setMinimumSize(0, 0)
+      window.setContentSize(390, 320)
+      return previous
+    })
+    await detailNode.focus()
+    await page.keyboard.press('Shift+F10')
+    const menu = page.getByRole('menu').first()
+    expect(await menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+    await page.keyboard.press('End')
+    expect(await menu.evaluate((element) => {
+      const focused = document.activeElement
+      if (!focused || !element.contains(focused)) return false
+      const bounds = element.getBoundingClientRect(), item = focused.getBoundingClientRect()
+      return item.top >= bounds.top && item.bottom <= bounds.bottom
+    })).toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(detailNode).toBeFocused()
+    await application.evaluate(({ BrowserWindow }, previous) => {
+      const window = BrowserWindow.getAllWindows()[0]
+      window.setMinimumSize(...previous.minimum)
+      window.setContentSize(...previous.size)
+    }, menuWindow)
     await page.reload()
     expect((await readSaved()).inventory.workloads[0]).toEqual({ id: 'desktop-vm', name: 'Edited desktop workload', nicIds: ['desktop-nic'] })
     const originalWindow = await application.evaluate(({ BrowserWindow }) => {
