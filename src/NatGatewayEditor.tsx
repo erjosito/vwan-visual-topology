@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import './packet-messages-ja'
 import { t } from './i18n'
 import { natGatewayForSubnet, sameInventoryOwner, type InventoryOwner, type InventoryTopology } from './inventory'
 

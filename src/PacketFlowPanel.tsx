@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import './packet-messages-ja'
 import { t } from './i18n'
 import type { InventoryTopology } from './inventory'
 import type { Simulation } from './routing'

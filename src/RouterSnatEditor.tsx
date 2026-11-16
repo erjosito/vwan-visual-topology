@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import './packet-messages-ja'
 import { t } from './i18n'
 import { validateInventory, type InventoryTopology, type PublicIp, type RouterSnatOwner, type RouterSnatPolicy } from './inventory'
 
