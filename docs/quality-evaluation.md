@@ -153,6 +153,18 @@ them. Report sample sizes and uncertainty intervals for outcome rates.
 Collect post-task ease and a validated satisfaction questionnaire only under
 its proper administration/scoring rules. Satisfaction is not effectiveness,
 and a 0–100 questionnaire score is not a percent of tasks passed.
+For SUS, preserve its standard scoring (odd responses minus one, five minus
+even responses, sum times 2.5), and report sample size, uncertainty, language
+and participant profile. The resulting score is neither a percentage nor,
+without an appropriate reference distribution, a percentile. Verify instrument
+reuse terms before embedding questions; do not assume an ad-hoc Japanese
+translation is validated. Do not equate an average from a small convenience
+sample with a population benchmark.
+
+For a task's independent binary outcomes, report a Wilson interval rather than
+a zero-width normal interval when all participants pass/fail. Repeated tasks
+from one person are clustered observations, not extra independent participants;
+use per-task rates or an appropriate participant-clustered analysis.
 
 ### Training and explanations
 
@@ -173,3 +185,33 @@ before claiming the application caused improvement.
 
 Until those studies run, report these dimensions as **not measured**, not zero,
 not 100, and not an AI-generated estimate.
+
+## Research basis and limits
+
+Reviewed 2026-11-16. The project-specific metric manifest, 0–4 review anchors,
+initial suite selection and hard gates are design choices, not weights or
+certification thresholds endorsed by these sources.
+
+- [W3C accessibility evaluation guidance](https://www.w3.org/WAI/test-evaluate/)
+  explains why tools must be complemented by knowledgeable human evaluation.
+- [WCAG 2.2](https://www.w3.org/TR/WCAG22/) supplies accessibility success
+  criteria, not an automatic numeric rating of the app.
+- [WCAG evaluation methodology](https://www.w3.org/TR/WCAG-EM/) informs the
+  scope/exploration/representative-sample/evaluate/report process.
+- [Accessibility Conformance Testing](https://www.w3.org/WAI/standards-guidelines/act/)
+  distinguishes individual automated, semi-automated and manual rule outcomes
+  from a complete conformance determination.
+- [MeasuringU's SUS guidance](https://measuringu.com/sus/) and
+  [sample-size/interval discussion](https://measuringu.com/sample-sizes-for-sus-ci/)
+  are secondary methodological references, not a normative benchmark for this
+  simulator. No primary instrument license or validated Japanese instrument
+  was established by this investigation.
+- [ISO 9241-11:2018 catalog](https://www.iso.org/standard/63500.html) is relevant
+  to the effectiveness/efficiency/satisfaction framing. Its full text was not
+  available for this review; no compliance claim or quoted standard is made.
+
+The proposed training study and expert review are local evaluation protocols,
+not a validated pedagogical scale. Reliability must be estimated from
+independent ratings and reported disagreements; merely employing two reviewers
+does not establish it. No defensible cross-dimension weights or overall
+product-quality scale were established.
