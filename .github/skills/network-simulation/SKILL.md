@@ -43,3 +43,18 @@ to an open simulator canvas. No generic shell or collection tool is provided.
 The simulator models steady-state routing, not elapsed Azure convergence,
 traffic delivery, firewall rules/NAT/session enforcement or vendor internals.
 It reevaluates HRP changes immediately and does not require route bouncing.
+
+## Optional flow diagrams
+
+When runtime capabilities include `rendering`, use `start_render` with a
+completed evaluation handle and exact flow `assessmentId`. Options select
+GIF/animated SVG/PNG, 1500/2000 ms and width 640-1400. Read `get_render_job`,
+then fetch all `get_artifact` chunks. Decode each base64 chunk separately and
+concatenate bytes by offset; verify total length and SHA-256 before handing off.
+Use `release_render` after retrieval or `cancel_render` to stop unwanted work.
+Saving an artifact requires separate caller file-write authorization.
+
+The shared logical scene expands Firewall hops and preserves independent
+forward/return and unknown/stopped states. It is not a screenshot of the current
+canvas or proof of packet delivery, permissions, sessions or elapsed timing.
+Do not label unknowns as successes or interpret circle speed as latency.
