@@ -1,7 +1,7 @@
 import type { CourseBundle } from './course-contract'
 import { courseScenarios } from './course-scenarios'
 
-// Contract fixtures only: not imported by the existing learning UI.
+// Representative instruction preview, not an activated assessment/award runner.
 export const exampleCourse: CourseBundle = {
   schemaVersion: 1,
   course: {

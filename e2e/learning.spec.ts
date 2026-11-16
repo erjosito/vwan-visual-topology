@@ -1,207 +1,175 @@
-import { test, expect } from '@playwright/test'
-import { exercises } from '../src/learning/exercises'
-import { progressKey } from '../src/learning/progress'
+import { test, expect, type Page } from '@playwright/test'
+import { guidanceAnchor } from '../src/learning/guidance'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
+import { exampleCourse } from '../src/learning/course-examples'
 
-test('failed optional practice loading preserves the workspace and recovers after explicit reload', async ({ page }) => {
+const sidebar = (page: Page) => page.getByTestId('learning-sidebar')
+const cue = (page: Page) => page.locator('.learning-cue')
+const saved = (page: Page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), practiceWorkspaceKey)
+const anchor = (page: Page, ...scope: string[]) => page.locator(`[data-learning-anchor=${JSON.stringify(guidanceAnchor(...scope))}]`)
+
+async function open(page: Page) {
+  await page.goto('/?mode=full')
+  await page.getByTestId('learning-open').click()
+  await expect(sidebar(page)).toBeVisible()
+}
+async function load(page: Page) {
+  await sidebar(page).getByRole('button', { name: 'Load practice network', exact: true }).click()
+  await sidebar(page).getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
+  await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
+  await expect(sidebar(page).getByRole('button', { name: 'Next instruction (preview)', exact: true })).toBeEnabled()
+}
+async function next(page: Page, count = 1) {
+  for (let index = 0; index < count; index++) await sidebar(page).getByRole('button', { name: 'Next instruction (preview)', exact: true }).click()
+}
+
+test('sidebar is non-modal, has no JSON or picker, confirms loading and pauses without losing its place', async ({ page }) => {
+  await open(page)
+  const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await expect(sidebar(page).locator('textarea,select,pre')).toHaveCount(0)
+  await expect(sidebar(page)).toContainText('task verification, unlocks and points are not enabled')
+  await expect(page.locator('dialog[open]')).toHaveCount(0)
+  await sidebar(page).getByRole('button', { name: 'Load practice network', exact: true }).click()
+  await sidebar(page).getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+  await load(page)
+  await next(page, 2)
+  await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Return to my design', exact: true }).click()
+  await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
+  await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
+  await expect(sidebar(page).getByRole('status')).toContainText('Open this lesson in its protected practice canvas')
+  await expect(cue(page)).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+  await sidebar(page).getByRole('button', { name: 'Pause learning', exact: true }).click()
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(page.getByTestId('learning-open')).toBeFocused()
+  await page.getByTestId('learning-open').click()
+  await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
+})
+
+test('exact subnet routes recover after closure, selection changes, movement and resize without stealing focus', async ({ page }) => {
+  await open(page); await load(page); await next(page, 2)
+  const original = (await saved(page)).document
+  const show = sidebar(page).getByRole('button', { name: 'Show me where', exact: true })
+  await show.click()
+  await expect(show).toBeFocused()
+  await expect(page.getByTestId('aznet-subnet-selector')).toHaveValue('work-a')
+  await expect(cue(page)).toHaveCount(1)
+  const table = page.getByTestId('aznet-effective-route-table')
+  await expect(table).toHaveAttribute('data-learning-anchor', guidanceAnchor('effective-table', 'a', 'work-a'))
+  await page.getByRole('button', { name: 'Move Effective routes to left', exact: true }).click()
+  await expect.poll(async () => Math.abs((await cue(page).boundingBox())!.x - (await table.boundingBox())!.x)).toBeLessThan(3)
+  await page.getByTestId('aznet-subnet-selector').selectOption('work-b')
+  await expect(cue(page)).toHaveCount(0)
+  await expect(sidebar(page).getByRole('status')).toContainText('closed, hidden, off screen or covered')
+  await show.click()
+  await expect(page.getByTestId('aznet-subnet-selector')).toHaveValue('work-a')
+  await expect(cue(page)).toHaveCount(1)
+  await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+  await expect(cue(page)).toHaveCount(0)
+  await show.click()
+  await expect(cue(page)).toHaveCount(1)
+  await page.setViewportSize({ width: 1100, height: 850 })
+  await expect.poll(async () => (await cue(page).boundingBox())!.width).toBeGreaterThan(10)
+  expect((await saved(page)).document).toEqual(original)
+})
+
+test('nested peering cues name A-to-B, follow the submenu and never execute its configuration', async ({ page }) => {
+  await open(page); await load(page); await next(page, 3)
+  const original = (await saved(page)).document
+  const show = sidebar(page).getByRole('button', { name: 'Show me where', exact: true })
+  await show.click()
+  await expect(show).toBeFocused()
+  const parent = anchor(page, 'peer-menu', 'a')
+  await expect(parent).toBeVisible()
+  await expect(cue(page)).toHaveCount(1)
+  await sidebar(page).getByRole('button', { name: 'Focus highlighted control', exact: true }).click()
+  await expect(parent).toBeFocused()
+  await page.keyboard.press('ArrowRight')
+  const destination = anchor(page, 'peer-target', 'a', 'b')
+  await expect(destination).toBeFocused()
+  await expect.poll(async () => Math.abs((await cue(page).boundingBox())!.y - (await destination.boundingBox())!.y)).toBeLessThan(3)
+  expect((await saved(page)).document).toEqual(original)
+  await page.keyboard.press('Enter')
+  await expect(sidebar(page).getByRole('status')).toContainText('already have a peering')
+  await expect(cue(page)).toHaveCount(0)
+  expect((await saved(page)).document.topology.vnetPeerings).toHaveLength(1)
+  await show.click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
+})
+
+test('route-table guidance scopes prefix candidates and exact route, preserves typing, and recovers from missing association', async ({ page }) => {
+  await open(page); await load(page); await next(page, 7); await load(page); await next(page)
+  const original = (await saved(page)).document
+  await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
+  await expect(cue(page)).toHaveCount(2)
+  await next(page)
+  await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
+  const route = anchor(page, 'udr-route', 'a', 'work-a', 'blocking', 'drop-b')
+  await expect(route.locator('input').nth(1)).toHaveValue('Drop B')
+  await expect(cue(page)).toHaveCount(1)
+  expect((await saved(page)).document).toEqual(original)
+  const name = route.locator('input').nth(1)
+  await name.fill('Learner drop route')
+  await expect(name).toBeFocused()
+  await expect(cue(page)).toHaveCount(1)
+  await page.getByTestId('aznet-delete-rt-blocking').click()
+  await expect(sidebar(page).getByRole('status')).toContainText('no longer associated')
+  await expect(cue(page)).toHaveCount(0)
+  await load(page)
+  await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
+  await expect(route.locator('input').nth(1)).toHaveValue('Drop B')
+  await expect(cue(page)).toHaveCount(1)
+})
+
+test('missing-target guidance does not select another entity or award legacy credit', async ({ page }) => {
+  const document = structuredClone(exampleCourse.scenarios[0].document)
+  if (document.mode === 'vwan') throw new Error('Wrong fixture')
+  document.topology.vnets[0].subnets = []
+  await page.addInitScript(({ document, key }) => {
+    localStorage.setItem(key, JSON.stringify({ version: 1, courseId: 'azure-networking-preview', scenarioId: 'two-vnets', returnProvider: 'azure-net', active: true, document }))
+    localStorage.setItem('aznet-simulator:practice:v1', 'legacy original')
+  }, { document, key: practiceWorkspaceKey })
+  await page.goto('/')
+  await page.getByTestId('learning-open').click()
+  await next(page, 2)
+  const original = await saved(page)
+  await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
+  await expect(sidebar(page).getByRole('status')).toContainText('no longer exists')
+  await expect(cue(page)).toHaveCount(0)
+  expect(await saved(page)).toEqual(original)
+  expect(await page.evaluate(() => localStorage.getItem('aznet-simulator:practice:v1'))).toBe('legacy original')
+})
+
+test('Japanese dark reduced-motion narrow sidebar leaves the canvas usable and restores keyboard focus', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
+  await open(page); await load(page); await next(page, 3)
+  await page.locator('header [data-language-selector]').selectOption('ja')
+  await expect(sidebar(page)).toContainText('次の手順（プレビュー）')
+  const bounds = (await sidebar(page).boundingBox())!
+  expect(bounds.x).toBeGreaterThanOrEqual(0)
+  expect(bounds.x + bounds.width).toBeLessThanOrEqual(390)
+  expect(bounds.height).toBeLessThan(844 / 2)
+  await sidebar(page).getByRole('button', { name: '場所を表示', exact: true }).click()
+  await expect(cue(page)).toHaveCount(1)
+  await sidebar(page).getByRole('button', { name: '学習を一時停止', exact: true }).focus()
+  await page.keyboard.press('Escape')
+  await expect(sidebar(page)).toHaveCount(0)
+  await expect(cue(page)).toHaveCount(0)
+  await expect(page.getByTestId('learning-open')).toBeFocused()
+})
+
+test('failed optional sidebar loading preserves the canvas and supports explicit reload recovery', async ({ page }) => {
   await page.route('**/src/learning/LearningDialog.tsx*', (route) => route.abort())
   await page.goto('/?mode=full')
-  await expect(page.getByTestId('aznet-app')).toBeVisible()
-  const original = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
   await page.getByTestId('learning-open').click()
-  await expect(page.getByRole('status').filter({ hasText: 'Learning tools could not load.' })).toBeVisible()
-  await expect(page.getByRole('dialog', { name: 'Learn & practice', exact: true })).toHaveCount(0)
-  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
+  await expect(page.getByRole('status').filter({ hasText: 'Learning tools could not load' })).toBeVisible()
+  await expect(sidebar(page)).toHaveCount(0)
   await page.unroute('**/src/learning/LearningDialog.tsx*')
   await page.getByRole('button', { name: 'Reload', exact: true }).click()
   await page.getByTestId('learning-open').click()
-  await expect(page.getByRole('dialog', { name: 'Learn & practice', exact: true })).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
-})
-
-for (const exercise of exercises) {
-  test(`local practice persists independent drafts and grades ${exercise.id}`, async ({ page }) => {
-    await page.goto(`/?mode=${exercise.starter.mode}`)
-    await expect(page.getByTestId(exercise.starter.mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
-    const storageKey = exercise.starter.mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
-    if (exercise.starter.mode !== 'vwan') {
-      await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey)).not.toBeNull()
-    }
-    const original = await page.evaluate((key) => localStorage.getItem(key), storageKey)
-    await page.getByTestId('learning-open').click()
-    const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-    await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-    await dialog.getByLabel('Choose an exercise', { exact: true }).selectOption(exercise.id)
-    await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-    await expect(dialog.getByTestId('practice-result')).toContainText(/Not assessed|Requirements not yet satisfied/)
-    await expect(dialog).not.toContainText('Practice badge (local, unverified)')
-    const document = structuredClone(exercise.starter)
-    if (document.mode === 'vwan') {
-      document.topology.spokes[1].hubId = 'one'
-      delete document.topology.spokes[1].hubRouting
-    } else if (exercise.id === 'peering-connect' || exercise.id === 'hybrid-connect') {
-      const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
-      document.topology.vnetPeerings.push({ id: 'practice-peer', name: 'Workload peering', vnetAId: 'a', vnetBId: 'b', enabled: true, aToB: flags, bToA: { ...flags } })
-    } else {
-      const inventory = document.topology.inventory!
-      if (exercise.id === 'private-explicit-egress') {
-        inventory.publicIps.push({ id: 'instance', name: 'Instance public', sku: 'Standard', allocation: 'Static', address: '20.40.50.60' })
-        inventory.nics[0].ipConfigurations[0].publicIpId = 'instance'
-      } else if (exercise.id === 'udr-before-nat') {
-        document.topology.udrTables[0].routes[0].nextHopType = 'Internet'
-      } else if (exercise.id === 'lb-probe-data-nsg') {
-        inventory.networkSecurityGroups![0].rules = inventory.networkSecurityGroups![0].rules.filter((rule) => rule.id !== 'deny-probe')
-      } else if (exercise.id === 'public-ingress-nsg') {
-        inventory.networkSecurityGroups![0].rules.push({ id: 'allow-client', name: 'AllowClient', priority: 100, direction: 'inbound', action: 'allow',
-          protocol: 'tcp', sources: ['8.8.8.8/32'], destinations: ['10.1.1.4'], sourcePorts: ['*'], destinationPorts: ['443'] })
-      } else if (exercise.id === 'dnat-response-owner') {
-        document.topology.udrTables.push({ id: 'reply', name: 'Original response owner', disableBgpRoutePropagation: false,
-          routes: [{ id: 'client', name: 'Return client', prefix: '8.8.8.8/32', nextHopType: 'VirtualAppliance', nextHopIp: '10.1.2.4', enabled: true }] })
-        document.topology.vnets[0].subnets[0].routeTableId = 'reply'
-      } else {
-        inventory.loadBalancers![0].probes[0].health[0].status = 'healthy'
-      }
-    }
-    const draft = JSON.stringify(document.topology, null, 2)
-    await dialog.getByLabel('Practice topology JSON', { exact: true }).fill(draft)
-    await dialog.getByRole('button', { name: 'Show next hint', exact: true }).click()
-    await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-    await expect(dialog.getByTestId('practice-result')).toContainText('Practice requirements satisfied')
-    await expect(dialog).toContainText('Practice badge (local, unverified)')
-    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(original)
-    await dialog.getByRole('button', { name: 'Open draft in visual editor', exact: true }).click()
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
-    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(original)
-    await page.keyboard.press('Escape')
-    await expect(page.getByTestId('learning-open')).toBeFocused()
-    await page.reload()
-    await page.getByTestId('learning-open').click()
-    await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-    await dialog.getByLabel('Choose an exercise', { exact: true }).selectOption(exercise.id)
-    await expect(dialog.getByLabel('Practice topology JSON', { exact: true })).toHaveValue(draft)
-    await expect(dialog).toContainText('Hints used: 1/2')
-    await expect(dialog).toContainText('Practice badge (local, unverified)')
-    await dialog.getByLabel('Practice topology JSON', { exact: true }).fill('not JSON')
-    await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-    await expect(dialog.getByRole('alert')).toContainText('Invalid or oversized')
-    const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), progressKey)
-    expect(stored.entries.find((entry: { id: string }) => entry.id === exercise.id).attempts).toHaveLength(2)
-    await dialog.getByLabel('Practice topology JSON', { exact: true }).fill(draft)
-    await dialog.getByRole('button', { name: 'Open draft in visual editor', exact: true }).click()
-    await dialog.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
-    await expect(dialog).not.toBeVisible()
-    await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
-    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(original)
-    const practice = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), practiceWorkspaceKey)
-    expect(practice.scenarioId).toBe(exercise.id)
-    expect(practice.document.topology).toMatchObject(document.topology)
-  })
-}
-
-test('corrupt practice storage stays untouched until an explicit reset', async ({ page }) => {
-  await page.addInitScript((key) => localStorage.setItem(key, 'original damaged progress'), progressKey)
-  await page.goto('/?mode=hub-spoke')
-  await page.getByTestId('learning-open').click()
-  const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-  await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-  await expect(dialog.getByRole('status')).toContainText('original contents have not been overwritten')
-  await dialog.getByLabel('Practice topology JSON', { exact: true }).fill('{}')
-  expect(await page.evaluate((key) => localStorage.getItem(key), progressKey)).toBe('original damaged progress')
-  await dialog.getByRole('button', { name: 'Reset local practice progress', exact: true }).click()
-  await dialog.getByRole('button', { name: 'Delete practice progress', exact: true }).click()
-  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), progressKey)).toEqual({ version: 1, entries: [] })
-})
-
-test('Japanese internal LB practice grades unknown and repaired health on a narrow dark screen', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 760 })
-  await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
-  await page.goto('/?mode=full')
-  await page.locator('[data-language-selector]').selectOption('ja')
-  await page.getByTestId('learning-open').click()
-  const dialog = page.getByRole('dialog', { name: '学習と練習', exact: true })
-  await dialog.getByRole('button', { name: '練習', exact: true }).click()
-  await dialog.locator('select').selectOption('internal-lb-health')
-  await expect(dialog.getByRole('heading', { name: '内部 LB バックエンドの不明な正常性を解決', exact: true })).toBeVisible()
-  await dialog.getByRole('button', { name: '練習の下書きを評価', exact: true }).click()
-  await expect(dialog.getByTestId('practice-result')).toContainText('評価不能')
-  const draft = structuredClone(exercises.find((exercise) => exercise.id === 'internal-lb-health')!.starter)
-  if (draft.mode === 'vwan') throw new Error('Wrong fixture')
-  draft.topology.inventory!.loadBalancers![0].probes[0].health[0].status = 'healthy'
-  await dialog.locator('textarea').fill(JSON.stringify(draft.topology, null, 2))
-  await dialog.getByRole('button', { name: '次のヒントを表示', exact: true }).click()
-  await dialog.getByRole('button', { name: '練習の下書きを評価', exact: true }).click()
-  await expect(dialog.getByTestId('practice-result')).toContainText('練習の要件を達成')
-  await expect(dialog).toContainText('練習バッジ（ローカル、未認証）')
-  expect((await dialog.boundingBox())!.width).toBeLessThanOrEqual(390)
-  await page.keyboard.press('Escape')
-  await expect(page.getByTestId('learning-open')).toBeFocused()
-})
-
-test('help is on demand, keyboard accessible and localized without changing the workspace', async ({ page }) => {
-  await page.goto('/?mode=vwan')
-  await page.locator('[data-language-selector]').selectOption('ja')
-  await page.getByTestId('learning-open').focus()
-  await page.keyboard.press('Enter')
-  const dialog = page.getByRole('dialog', { name: '学習と練習', exact: true })
-  await expect(dialog).toBeVisible()
-  await expect(dialog.locator('details[open]')).toHaveCount(0)
-  await dialog.locator('[data-concept="hrp"] summary').focus()
-  await page.keyboard.press('Enter')
-  await expect(dialog.locator('[data-concept="hrp"]')).toContainText('即座に再評価')
-  await page.keyboard.press('Escape')
-  await expect(page.getByTestId('learning-open')).toBeFocused()
-})
-
-test('an edited draft invalidates the displayed result and storage failures remain explicit', async ({ page }) => {
-  await page.addInitScript((key) => {
-    const original = Storage.prototype.setItem
-    Storage.prototype.setItem = function (name, value) {
-      if (name === key) throw new Error('Quota exceeded')
-      return original.call(this, name, value)
-    }
-  }, progressKey)
-  await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
-  const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-  await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-  await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-  await expect(dialog.getByTestId('practice-result')).toBeVisible()
-  await dialog.getByLabel('Practice topology JSON', { exact: true }).fill('{}')
-  await expect(dialog.getByTestId('practice-result')).toContainText('The draft changed')
-  await expect(dialog.getByRole('status').filter({ hasText: 'session only' })).toBeVisible()
-})
-
-test('learning remains contained on narrow dark screens and cannot retain another mode result', async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 760 })
-  await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
-  await page.goto('/?mode=hub-spoke')
-  await page.getByTestId('learning-open').click()
-  const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-  const bounds = await dialog.boundingBox()
-  expect(bounds!.width).toBeLessThanOrEqual(390)
-  await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-  await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-  await expect(dialog.getByTestId('practice-result')).toBeVisible()
-  await page.keyboard.press('Escape')
-  await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
-  await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-  await expect(dialog.getByTestId('practice-result')).toHaveCount(0)
-  await expect(dialog).toContainText('Connect workloads in Full Hybrid')
-})
-
-test('the course picker keeps foreign-mode drafts independent and grades their actual mode', async ({ page }) => {
-  await page.goto('/?mode=hub-spoke')
-  await page.getByTestId('learning-open').click()
-  const dialog = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
-  await dialog.getByRole('button', { name: 'Practice', exact: true }).click()
-  await dialog.getByLabel('Choose an exercise', { exact: true }).selectOption('vwan-connect')
-  await expect(dialog.getByRole('button', { name: 'Open draft in visual editor', exact: true })).toBeEnabled()
-  await dialog.getByRole('button', { name: 'Assess practice draft', exact: true }).click()
-  await expect(dialog.getByTestId('practice-result')).toContainText('Not assessed')
-  await expect(dialog).not.toContainText('Invalid or oversized')
-  await dialog.getByLabel('Choose an exercise', { exact: true }).selectOption('peering-connect')
-  await expect(dialog.getByTestId('practice-result')).toHaveCount(0)
-  await expect(dialog.getByRole('button', { name: 'Open draft in visual editor', exact: true })).toBeEnabled()
+  await expect(sidebar(page)).toBeVisible()
 })

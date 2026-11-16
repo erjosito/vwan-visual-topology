@@ -1,196 +1,119 @@
-import { useEffect, useRef, useState } from 'react'
-import { useLanguage, localizeDiagnostic } from '../i18n'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useLanguage } from '../i18n'
+import type { PlatformDocument } from '../platform/contract'
 import { contractVersion, engineVersion } from '../platform/contract'
-import type { PlatformDocument, PlatformResult } from '../platform/contract'
-import { concepts, text } from './content'
-import type { ConceptId } from './content'
-import { Explain } from './Explain'
-import { exercises } from './exercises'
-import { emptyProgress, entryFor, maxDraftChars, parseProgress, progressKey, recordAttempt } from './progress'
-import type { Progress } from './progress'
-import './learning.css'
 import { useWorkspaceSession } from '../workspace-context'
+import { concepts, text, type ConceptId } from './content'
+import { exampleCourse as bundle } from './course-examples'
+import type { CourseGuidance } from './course-contract'
+import { Explain } from './Explain'
+import { GuidanceHighlight } from './GuidanceHighlight'
+import { focusGuidanceTarget } from './guidance-anchors'
+import { resolveGuidance } from './guidance'
+import { sidebarLabels as labels } from './sidebar-content'
+import { learningLabels, practiceLabels } from './practice-content'
 import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './practice-workspace'
-import { learningLabels as labels, practiceLabels } from './practice-content'
+import './learning.css'
 
-export function LearningDialog({ document: workspace, onOpen, initialOpen = false }: {
+const instructions = bundle.course.lessonOrder.flatMap((id) => {
+  const lesson = bundle.lessons.find((item) => item.id === id)!
+  return lesson.taskOrder.map((taskId) => ({ lesson, task: lesson.tasks.find((item) => item.id === taskId)! }))
+})
+
+export function LearningDialog({ document: workspace, onGuide, onPause, taskId, onTask }: {
   document: PlatformDocument
-  onOpen: (document: PlatformDocument) => void
-  initialOpen?: boolean
+  onGuide?: (cue: CourseGuidance) => void
+  onPause: () => void
+  taskId?: string
+  onTask: (id: string) => void
 }) {
-  const language = useLanguage()
-  const session = useWorkspaceSession()
-  const [open, setOpen] = useState(initialOpen)
-  const [tab, setTab] = useState<'concepts' | 'practice'>('concepts')
-  const [exerciseId, setExerciseId] = useState(() => exercises.find((item) => item.starter.mode === workspace.mode)!.id)
-  const [initial] = useState(() => {
-    try {
-      const raw = localStorage.getItem(progressKey)
-      return { progress: raw ? parseProgress(raw) : emptyProgress(), blocked: false }
-    } catch { return { progress: emptyProgress(), blocked: true } }
-  })
-  const [progress, setProgress] = useState(initial.progress)
-  const [blocked, setBlocked] = useState(initial.blocked)
-  const [saveStatus, setSaveStatus] = useState<'saved' | 'saveFailed' | 'damaged'>(initial.blocked ? 'damaged' : 'saved')
-  const [error, setError] = useState('')
-  const [result, setResult] = useState<{ draft: string; value: PlatformResult }>()
+  const language = useLanguage(), session = useWorkspaceSession()
+  const index = Math.max(0, instructions.findIndex((item) => item.task.id === taskId))
+  const { lesson, task } = instructions[index]
+  const [confirm, setConfirm] = useState(false)
   const [running, setRunning] = useState(false)
-  const [confirm, setConfirm] = useState<'open' | 'reset'>()
-  const dialog = useRef<HTMLDialogElement>(null)
-  const trigger = useRef<HTMLButtonElement>(null)
+  const [error, setError] = useState('')
+  const [cue, setCue] = useState<CourseGuidance>()
+  const [visible, setVisible] = useState(false)
+  const [guideRequest, setGuideRequest] = useState(0)
   const job = useRef<AbortController | undefined>(undefined)
-  const exercise = exercises.find((item) => item.id === exerciseId)!
-  const matchingMode = (exercise.starter.mode === 'vwan') === (workspace.mode === 'vwan')
-  const entry = entryFor(progress, exercise)
-  const last = entry.attempts.at(-1)
-  const outcomeLabel = (outcome: 'satisfied' | 'violated' | 'not assessed') =>
-    text(outcome === 'satisfied' ? labels.passed : outcome === 'violated' ? labels.violated : labels.unknown, language)
-
+  const panel = useRef<HTMLElement>(null)
+  const inPractice = session?.practice?.courseId === bundle.course.id && session.practice.scenarioId === lesson.scenarioId
+  const plan = useMemo(() => cue && inPractice ? resolveGuidance(workspace, cue) : undefined, [workspace, cue, inPractice])
   useEffect(() => {
-    if (open) dialog.current?.showModal()
-    else dialog.current?.close()
-    return () => { job.current?.abort(); job.current = undefined }
-  }, [open])
-
-  const close = () => {
-    job.current?.abort(); job.current = undefined
-    setRunning(false); setConfirm(undefined); setOpen(false)
-    dialog.current?.close()
-    trigger.current?.focus()
+    document.body.classList.add('learning-sidebar-open')
+    return () => { document.body.classList.remove('learning-sidebar-open'); job.current?.abort() }
+  }, [])
+  const move = (offset: number) => {
+    job.current?.abort(); setRunning(false); setConfirm(false); setError(''); setCue(undefined); setVisible(false)
+    onTask(instructions[index + offset].task.id)
+    panel.current?.scrollTo({ top: 0 })
   }
-  const store = (next: Progress, reset = false) => {
-    setProgress(next)
-    if (blocked && !reset) return
-    try {
-      const serialized = JSON.stringify(next)
-      parseProgress(serialized)
-      localStorage.setItem(progressKey, serialized)
-      setBlocked(false); setSaveStatus('saved')
-    } catch { setSaveStatus('saveFailed') }
-  }
-  const draftChange = (draft: string) => {
-    if (draft.length > maxDraftChars) { setError(text(labels.invalid, language)); return }
-    job.current?.abort(); job.current = undefined; setRunning(false)
-    setError(''); setConfirm(undefined)
-    store({ ...progress, entries: [...progress.entries.filter((item) => item.id !== entry.id), { ...entry, draft }] })
-  }
-  const input = () => {
-    if (entry.draft.length > maxDraftChars) throw new Error(text(labels.invalid, language))
-    return {
-      contractVersion, engineVersion, operation: 'evaluate' as const,
-      document: { mode: exercise.starter.mode, topology: JSON.parse(entry.draft) },
-      requirements: exercise.requirements,
-    }
-  }
-  const assess = async () => {
-    job.current?.abort()
+  const load = async () => {
     const controller = new AbortController()
-    job.current = controller
-    const draft = entry.draft
-    setError(''); setResult(undefined); setRunning(true)
+    job.current?.abort(); job.current = controller
+    setRunning(true); setError(''); setCue(undefined)
     try {
+      if (!session?.openPractice) throw new Error('unavailable')
+      const scenario = bundle.scenarios.find((item) => item.id === lesson.scenarioId)!
       const { runBrowserSimulation } = await import('../platform/browser')
-      if (job.current !== controller || controller.signal.aborted) return
-      const value = await runBrowserSimulation(input(), controller.signal)
-      if (job.current !== controller || controller.signal.aborted) return
-      setResult({ draft, value })
-      store(recordAttempt(progress, exercise, value, draft))
-    } catch { if (job.current === controller) setError(text(labels.invalid, language)) }
-    finally { if (job.current === controller) { job.current = undefined; setRunning(false) } }
-  }
-  const openDraft = async () => {
-    setConfirm(undefined); setError(''); setRunning(true)
-    const controller = new AbortController()
-    job.current = controller
-    try {
-      const request = input()
-      const { runBrowserSimulation } = await import('../platform/browser')
-      if (job.current !== controller || controller.signal.aborted) return
-      const admitted = await runBrowserSimulation({ ...request, operation: 'validate' }, controller.signal)
-      if (job.current !== controller || controller.signal.aborted) return
-      if (admitted.status !== 'complete' || !admitted.document) throw new Error('Invalid draft')
-      if (session?.openPractice) await session.openPractice({
-        courseId: 'local-practice', scenarioId: exercise.id, document: admitted.document,
-      }, controller.signal)
-      else if (!matchingMode && session) await session.openDocument(admitted.document.topology)
-      else onOpen(admitted.document)
-      close()
+      if (controller.signal.aborted) return
+      const admitted = await runBrowserSimulation({ contractVersion, engineVersion, operation: 'validate', document: structuredClone(scenario.document) }, controller.signal)
+      if (controller.signal.aborted) return
+      if (admitted.status !== 'complete' || !admitted.document) throw new Error('Invalid scenario')
+      await session.openPractice({ courseId: bundle.course.id, scenarioId: scenario.id, document: admitted.document }, controller.signal)
+      if (!controller.signal.aborted) setConfirm(false)
     } catch (error) {
-      if (job.current === controller) setError(text(error instanceof Error && error.message === practiceReadFailure ? practiceLabels.practiceReadFailure
+      if (!controller.signal.aborted) setError(text(error instanceof Error && error.message === practiceReadFailure ? practiceLabels.practiceReadFailure
         : error instanceof Error && error.message === practiceConflict ? practiceLabels.practiceConflict
-        : error instanceof Error && error.message === practiceSaveFailure ? practiceLabels.practiceStartFailure : labels.invalid, language))
-    }
-    finally { if (job.current === controller) { job.current = undefined; setRunning(false) } }
+        : error instanceof Error && error.message === practiceSaveFailure ? practiceLabels.practiceStartFailure : labels.unavailable, language))
+    } finally { if (!controller.signal.aborted) setRunning(false) }
   }
-
-  return <>
-    <button ref={trigger} type="button" data-testid="learning-open" onClick={() => setOpen(true)}>{text(labels.learn, language)}</button>
-    <dialog ref={dialog} className="learning-dialog" aria-labelledby={`learning-title-${workspace.mode}`} onCancel={(event) => { event.preventDefault(); close() }}>
-      <header><h2 id={`learning-title-${workspace.mode}`}>{text(labels.learn, language)}</h2><button type="button" onClick={close}>{text(labels.close, language)}</button></header>
-      <nav aria-label={text(labels.learn, language)}>
-        <button type="button" aria-pressed={tab === 'concepts'} onClick={() => { setTab('concepts'); setConfirm(undefined) }}>{text(labels.concepts, language)}</button>
-        <button type="button" aria-pressed={tab === 'practice'} onClick={() => { setTab('practice'); setConfirm(undefined) }}>{text(labels.practice, language)}</button>
-      </nav>
-      {tab === 'concepts' ? <section aria-label={text(labels.concepts, language)}>
-        {(Object.keys(concepts) as ConceptId[]).map((concept) => <Explain key={concept} concept={concept} />)}
-      </section> : <section aria-label={text(labels.practice, language)}>
-        <p className="learning-notice">{text(labels.local, language)}</p>
-        <label>{text(labels.exercise, language)} <select aria-label={text(labels.exercise, language)} value={exerciseId} disabled={running} onChange={(event) => {
-          setExerciseId(event.target.value); setResult(undefined); setError(''); setConfirm(undefined)
-        }}>{exercises.map((item) => <option key={item.id} value={item.id}>{text(item.title, language)}</option>)}</select></label>
-        <h3>{text(exercise.title, language)}</h3>
-        <p>{text(exercise.objective, language)}</p>
-        {!!exercise.prerequisites.length && <p>{text(labels.prerequisite, language)}: {exercise.prerequisites.map((id) => text(exercises.find((item) => item.id === id)!.title, language)).join(', ')}</p>}
-        <h4>{text(labels.requirements, language)} · v{exercise.version}</h4>
-        <pre>{JSON.stringify(exercise.requirements, null, 2)}</pre>
-        {exercise.concepts.map((concept) => <Explain key={concept} concept={concept} />)}
-        <label className="learning-draft">{text(labels.draft, language)}
-          <textarea aria-label={text(labels.draft, language)} spellCheck={false} maxLength={maxDraftChars} value={entry.draft} onChange={(event) => draftChange(event.target.value)} />
-        </label>
-        <div className="learning-actions">
-          <button type="button" disabled={running || !matchingMode} onClick={() => draftChange(JSON.stringify(workspace.topology, null, 2))}>{text(labels.useWorkspace, language)}</button>
-          <button type="button" disabled={running || (!matchingMode && !session)} onClick={() => setConfirm('open')}>{text(labels.openEditor, language)}</button>
-          <button type="button" disabled={running} onClick={() => { void assess() }}>{text(running ? labels.running : labels.assess, language)}</button>
-          {running && <button type="button" onClick={() => { job.current?.abort(); job.current = undefined; setRunning(false) }}>{text(labels.cancel, language)}</button>}
-          <button type="button" disabled={entry.hints === exercise.hints.length || running} onClick={() => store({ ...progress, entries: [...progress.entries.filter((item) => item.id !== entry.id), { ...entry, hints: entry.hints + 1 }] })}>{text(labels.hint, language)}</button>
-        </div>
-        {!matchingMode && <p>{text(labels.matchingMode, language)}</p>}
-        {confirm === 'open' && <div className="learning-notice" role="alert">
+  return createPortal(<>
+    <aside ref={panel} id="learning-sidebar" className="learning-sidebar" aria-labelledby="learning-title" data-testid="learning-sidebar" onKeyDown={(event) => {
+      if (event.key === 'Escape') { event.stopPropagation(); onPause() }
+    }}>
+      <header><h2 id="learning-title">{text(learningLabels.learn, language)}</h2><button type="button" onClick={onPause}>{text(labels.pause, language)}</button></header>
+      <p className="learning-notice">{text(labels.preview, language)}</p>
+      <p>{text(learningLabels.local, language)}</p>
+      <p>{index + 1} / {instructions.length}</p>
+      <h3>{text(lesson.title, language)}</h3>
+      <p>{text(lesson.objective, language)}</p>
+      <section aria-labelledby="learning-task">
+        <h4 id="learning-task" aria-live="polite">{text(task.title, language)}</h4>
+        <p>{text(task.instruction, language)}</p>
+        {inPractice && <p>{text(labels.loaded, language)}</p>}
+        <button type="button" disabled={running} onClick={() => { setConfirm(true); setError('') }}>{text(labels.load, language)}</button>
+        {confirm && <div className="learning-notice">
           <p>{text(labels.replace, language)}</p>
-          <button type="button" disabled={running} onClick={() => { void openDraft() }}>{text(labels.confirm, language)}</button>
-          <button type="button" onClick={() => setConfirm(undefined)}>{text(labels.cancel, language)}</button>
+          <button type="button" disabled={running} onClick={() => { void load() }}>{text(running ? labels.loading : labels.confirm, language)}</button>
+          <button type="button" onClick={() => { job.current?.abort(); setRunning(false); setConfirm(false) }}>{text(labels.cancel, language)}</button>
         </div>}
-        <p>{text(labels.hints, language)}: {entry.hints}/{exercise.hints.length}</p>
-        {exercise.hints.slice(0, entry.hints).map((hint, index) => <p key={index}>{text(hint, language)}</p>)}
-        <p role="status">{text(labels[saveStatus], language)}</p>
         {error && <p role="alert">{error}</p>}
-        {result && <div data-testid="practice-result">
-          <h4>{last ? outcomeLabel(last.outcome) : text(labels.unknown, language)}</h4>
-          {result.draft !== entry.draft && <p role="status">{text(labels.stale, language)}</p>}
-          {result.value.errors.map((item) => <p key={item.code}>{localizeDiagnostic(item.message, language)}</p>)}
-          {result.value.assessments.map((item) => <p key={item.id}><code>{item.id}</code>: {outcomeLabel(item.outcome)}</p>)}
-          <details><summary>{text(labels.details, language)}</summary><pre>{JSON.stringify(result.value, null, 2)}</pre></details>
+        <p>{text(labels.navigation, language)}</p>
+        {task.guidanceIds.map((id) => {
+          const guidance = bundle.guidance.find((item) => item.id === id)!
+          return <div key={id}><p>{text(guidance.instruction, language)}</p><button type="button" onClick={() => {
+            setCue(guidance); setVisible(false)
+            setGuideRequest((request) => request + 1)
+            if (inPractice && !resolveGuidance(workspace, guidance).reason) onGuide?.(guidance)
+          }}>{text(labels.show, language)}</button></div>
+        })}
+        {cue && <div>
+          <p role="status">{text(!inPractice ? labels.scope : plan?.reason ? labels[plan.reason] : visible ? labels.location : labels.unavailable, language)}</p>
+          {visible && plan?.anchors && <button type="button" data-learning-menu-navigation onClick={() => focusGuidanceTarget(plan.anchors)}>{text(labels.focus, language)}</button>}
+          <button type="button" onClick={() => setCue(undefined)}>{text(labels.stop, language)}</button>
         </div>}
-        <h3>{text(labels.history, language)}</h3>
-        <ul>{exercises.map((item) => {
-          const saved = entryFor(progress, item)
-          const attempts = saved.attempts
-          const passed = saved.achievement
-          return <li key={item.id}>
-            <strong>{text(item.title, language)}</strong>: {passed ? <>
-              {text(labels.badge, language)} · {passed.at} · {passed.engine} · v{passed.exerciseVersion} · {text(labels.hints, language)}: {passed.hints}
-              {(passed.engine !== engineVersion || passed.exerciseVersion !== item.version) && <p>{text(labels.older, language)}</p>}
-            </> : text(labels.fresh, language)}
-            {!!attempts.length && <details><summary>{attempts.length} · {text(labels.history, language)}</summary><ul>{[...attempts].reverse().map((attempt, index) => <li key={index}>{attempt.at} · {outcomeLabel(attempt.outcome)} · {attempt.engine} · v{attempt.exerciseVersion} · {text(labels.hints, language)}: {attempt.hints}</li>)}</ul></details>}
-          </li>
-        })}</ul>
-        <button type="button" disabled={running} onClick={() => setConfirm('reset')}>{text(labels.reset, language)}</button>
-        {confirm === 'reset' && <div role="alert">
-          <p>{text(labels.resetConfirm, language)}</p>
-          <button type="button" onClick={() => { store(emptyProgress(), true); setResult(undefined); setError(''); setConfirm(undefined) }}>{text(labels.resetNow, language)}</button>
-          <button type="button" onClick={() => setConfirm(undefined)}>{text(labels.cancel, language)}</button>
-        </div>}
-      </section>}
-    </dialog>
-  </>
+        {task.hints.map((hint, hintIndex) => <details key={hintIndex}><summary>{text(learningLabels.hint, language)} {hintIndex + 1}</summary><p>{text(hint, language)}</p></details>)}
+      </section>
+      <nav className="learning-actions" aria-label={text(labels.instructions, language)}>
+        <button type="button" disabled={!index || running} onClick={() => move(-1)}>{text(labels.previous, language)}</button>
+        <button type="button" disabled={index === instructions.length - 1 || running || !inPractice} onClick={() => move(1)}>{text(labels.next, language)}</button>
+      </nav>
+      <details><summary>{text(labels.outline, language)}</summary><ol>{instructions.map((item) => <li key={item.task.id} aria-current={item.task.id === task.id ? 'step' : undefined}>{text(item.task.title, language)}</li>)}</ol></details>
+      <details><summary>{text(labels.help, language)}</summary>{(Object.keys(concepts) as ConceptId[]).map((id) => <Explain key={id} concept={id} />)}</details>
+    </aside>
+    {plan?.anchors && <GuidanceHighlight key={guideRequest} anchors={plan.anchors} onVisibility={setVisible} />}
+  </>, document.body)
 }

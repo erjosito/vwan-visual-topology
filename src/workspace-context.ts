@@ -19,6 +19,8 @@ export const WorkspaceSessionContext = createContext<{
   savePractice?: (document: PlatformDocument) => void
   getEditorHistory?: () => WorkspaceEditorHistory | undefined
   rememberEditorHistory?: (history: WorkspaceEditorHistory) => void
+  learningView?: { open: boolean; taskId?: string }
+  setLearningView?: (view: { open: boolean; taskId?: string }) => void
 } | undefined>(undefined)
 
 export const useWorkspaceSession = () => useContext(WorkspaceSessionContext)
