@@ -488,6 +488,21 @@ function App() {
         { label: t("Open path explorer"), run: () => openPath(contextSelection as PathNode, 'to') },
       ] : []),
       ...(contextSelection.kind === 'hub' ? [
+        {
+          label: t('Connect to spoke'), allowDisabledChildren: true,
+          children: topology.spokes.length ? topology.spokes.map((spoke) => ({
+            label: spoke.hubId ? t('{0} (connected to {1})', spoke.name, topology.hubs.find((hub) => hub.id === spoke.hubId)?.name ?? spoke.hubId)
+              : spoke.nvaSpokeIds?.length ? t('{0} (connected through an NVA)', spoke.name) : spoke.name,
+            disabled: !!spoke.hubId && spoke.hubId !== contextSelection.id || !!spoke.nvaSpokeIds?.length,
+            run: () => {
+              if (!spoke.hubId) update((next) => {
+                const original = next.spokes.find((entry) => entry.id === spoke.id)
+                if (original && !original.hubId && !original.nvaSpokeIds?.length) original.hubId = contextSelection.id
+              })
+              setEditorRequest({ kind: 'spoke', id: spoke.id })
+            },
+          })) : [{ label: t('No VNets. Add a VNet first.'), disabled: true }],
+        },
         ...(topology.hubs.find((h) => h.id === contextSelection.id)?.firewall || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [{ label: t("Show firewall routes"), run: () => showRoutes(contextSelection, true) }] : []),
         { label: t("Add spoke"), run: () => setEditorRequest({ kind: 'spoke', hubId: contextSelection.id }) },
         { label: t("Add connected site"), run: () => setEditorRequest({ kind: 'site', hubId: contextSelection.id }) },
@@ -500,6 +515,21 @@ function App() {
         { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', siteId: contextSelection.id }) },
       ] : []),
       ...(contextSelection.kind === 'spoke' ? [
+        ...(spokeObj?.hubId || spokeObj?.nvaSpokeIds?.length ? [{
+          label: t('Configure virtual hub connection'), run: () => setEditorRequest(contextSelection),
+        }] : [{
+          label: t('Connect to virtual hub'), allowDisabledChildren: true,
+          children: topology.hubs.length ? topology.hubs.map((hub) => ({
+            label: hub.name,
+            run: () => {
+              update((next) => {
+                const original = next.spokes.find((entry) => entry.id === contextSelection.id)
+                if (original && !original.hubId && !original.nvaSpokeIds?.length) original.hubId = hub.id
+              })
+              setEditorRequest(contextSelection)
+            },
+          })) : [{ label: t('No virtual hubs. Add a virtual hub first.'), disabled: true }],
+        }]),
         ...(spokeObj?.hubId ? [
           ...(spokeNvaConn && spokeNvaSite ? [
             { label: t("Configure BGP NVA"), run: () => setEditorRequest({ kind: 'site', id: spokeNvaSite.id, spokeId: spokeObj.id }) },

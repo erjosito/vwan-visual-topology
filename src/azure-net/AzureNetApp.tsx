@@ -1526,6 +1526,18 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })
     })
   }
+  const attachVnetToHub = (vnetId: string, hubId: string) => {
+    commitTopology((draft) => {
+      const vnet = draft.vnets.find((entry) => entry.id === vnetId)
+      if (vnet && !vnet.vwanHubAttachment && draft.vwanHubs.some((hub) => hub.id === hubId)) {
+        vnet.vwanHubAttachment = { hubId, enabled: true }
+      }
+    })
+  }
+  const openHubConnections = (hubId: string) => {
+    setSelected({ kind: 'vwan-hub', hubId })
+    setActiveTab('editor')
+  }
   const getOrdinaryContextMenuSpec = (
     target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number },
   ): { title: string; actions: ContextAction[] } | null => {
@@ -1602,6 +1614,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         title: `VNet · ${vnet.name} (${vnet.region})`,
         actions: [
           { label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) },
+          ...(vnet.vwanHubAttachment ? [{
+            label: t('Configure virtual hub connection'),
+            onSelect: () => openHubConnections(vnet.vwanHubAttachment!.hubId),
+          }] : [{
+            label: t('Connect to virtual hub'), allowDisabledChildren: true,
+            children: topology.vwanHubs.length ? topology.vwanHubs.map((hub) => ({
+              label: hub.name,
+              onSelect: () => { attachVnetToHub(vnet.id, hub.id); openHubConnections(hub.id) },
+            })) : [{ label: t('No virtual hubs. Add a virtual hub first.'), disabled: true }],
+          }]),
           ...pathContextActions(endpointOptions.filter((e) => e.ref.kind === 'subnet' &&
             e.ref.vnetId === vnet.id && e.group === 'workload')),
           {
@@ -2140,6 +2162,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `Virtual WAN Hub · ${hub.name}`,
         actions: [
+          {
+            label: t('Connect to spoke'), allowDisabledChildren: true,
+            children: topology.vnets.length ? topology.vnets.map((vnet) => ({
+              label: vnet.vwanHubAttachment
+                ? t('{0} (connected to {1})', vnet.name, topology.vwanHubs.find((entry) => entry.id === vnet.vwanHubAttachment!.hubId)?.name ?? vnet.vwanHubAttachment.hubId)
+                : vnet.name,
+              disabled: !!vnet.vwanHubAttachment && vnet.vwanHubAttachment.hubId !== hub.id,
+              onSelect: () => { if (!vnet.vwanHubAttachment) attachVnetToHub(vnet.id, hub.id); openHubConnections(hub.id) },
+            })) : [{ label: t('No VNets. Add a VNet first.'), disabled: true }],
+          },
           {
             label: t('Edit Hub Route Maps'),
             onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id) },
@@ -5733,7 +5765,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             <option value="ASPath">ASPath Preference</option>
                           </select>
                         </div>
-                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} /></Suspense>
+                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} onAttach={(vnetId) => attachVnetToHub(vnetId, hub.id)} /></Suspense>
                         <button type="button" onClick={() => setSnatHubId(hub.id)}>{t('Firewall SNAT')}</button>
                         <form onSubmit={(event) => {
                           event.preventDefault()

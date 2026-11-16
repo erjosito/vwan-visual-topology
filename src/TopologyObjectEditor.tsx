@@ -81,6 +81,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             ...(text('region') ? { region: text('region') } : {}),
             ...(customLabel ? { label: customLabel } : {}),
             ...(hubIdValue ? { hubId: hubIdValue } : {}),
+            ...(spoke?.hubRouting ? { hubRouting: structuredClone(spoke.hubRouting) } : {}),
+            ...(spoke?.subnets ? { subnets: structuredClone(spoke.subnets) } : {}),
             prefixes: prefixes(text('prefixes')),
             ...(selectedNvaSpokes.length ? { nvaSpokeIds: selectedNvaSpokes } : {}),
             ...(hubIdValue && data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}),

@@ -9,6 +9,82 @@ async function saved(page: Page, mode: string) {
   }, mode)
 }
 
+for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
+  test(`${mode} ${language}: reciprocal hub connections preserve originals and reject silent reattachment`, async ({ page }) => {
+    const text = (value: string) => translate(language, value)
+    const native = hubFirewallTopology()
+    delete native.hubs[0].firewall
+    for (const table of native.hubs[0].routeTables!) table.staticRoutes = []
+    native.hubs.push({ ...structuredClone(native.hubs[0]), id: 'other-hub', name: 'Other hub' })
+    for (const spoke of native.spokes.slice(0, 2)) { delete spoke.hubId; delete spoke.hubRouting }
+    native.spokes[2].subnets = [{ id: 'original-subnet', name: 'Original subnet', prefix: '10.30.0.0/24' }]
+    native.spokes[3].hubId = 'other-hub'
+    const mixed = azHubFirewallTopology()
+    mixed.vwanHubs = structuredClone(native.hubs)
+    for (const vnet of mixed.vnets.slice(0, 2)) delete vnet.vwanHubAttachment
+    mixed.vnets[3].vwanHubAttachment!.hubId = 'other-hub'
+    await page.addInitScript((language) => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
+    await page.setViewportSize(language === 'ja' ? { width: 390, height: 1000 } : { width: 1440, height: 1000 })
+    await page.goto(`/?mode=${mode}`)
+    const upload = (topology: unknown) => page.locator('input[type="file"]').first().setInputFiles({
+      name: 'synthetic-connections.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await upload(mode === 'vwan' ? native : mixed)
+    await expect.poll(async () => (await saved(page, mode))?.name).toContain('Selective Firewall')
+    const node = (id: string, hub = false) => mode === 'vwan'
+      ? page.locator(`[data-node-id="${id}"]`)
+      : page.getByTestId(`aznet-${hub ? 'vwanhub' : 'vnet'}-${id}`)
+    const menu = async (id: string, hub = false) => { await node(id, hub).focus(); await page.keyboard.press('Shift+F10') }
+    const original = await saved(page, mode)
+    await menu('trusted-a')
+    await page.getByRole('menuitem', { name: text('Connect to virtual hub'), exact: true }).click()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    await expect(node('trusted-a')).toBeFocused()
+    expect(await saved(page, mode)).toEqual(original)
+    await menu('trusted-a')
+    await page.getByRole('menuitem', { name: text('Connect to virtual hub'), exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Local secure hub', exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await menu('hub-local', true)
+    await page.getByRole('menuitem', { name: text('Connect to spoke'), exact: true }).click()
+    await page.getByRole('menuitem', { name: 'trusted-b', exact: true }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    const connected = await saved(page, mode)
+    const originals = mode === 'vwan' ? connected.spokes : connected.vnets
+    expect(originals.map((entry: { id: string }) => entry.id)).toEqual(['trusted-a', 'trusted-b', 'untrusted-a', 'untrusted-b'])
+    for (const entry of originals.slice(0, 2)) expect(mode === 'vwan' ? entry.hubId : entry.vwanHubAttachment.hubId).toBe('hub-local')
+    expect(originals[0].prefixes).toEqual(['10.10.0.0/16'])
+    await menu('hub-local', true)
+    await page.getByRole('menuitem', { name: text('Connect to spoke'), exact: true }).click()
+    await expect(page.getByRole('menuitem', { name: translate(language, '{0} (connected to {1})', 'untrusted-b', 'Other hub'), exact: true })).toBeDisabled()
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('Escape')
+    expect(await saved(page, mode)).toEqual(connected)
+    await menu('untrusted-a')
+    await expect(page.getByRole('menuitem', { name: text('Connect to virtual hub'), exact: true })).toHaveCount(0)
+    await page.getByRole('menuitem', { name: text('Configure virtual hub connection'), exact: true }).click()
+    if (mode === 'vwan') {
+      await page.getByRole('button', { name: text('Save changes'), exact: true }).click()
+      const current = (await saved(page, mode)).spokes[2]
+      expect(current.hubRouting).toEqual(native.spokes[2].hubRouting)
+      expect(current.subnets).toEqual(native.spokes[2].subnets)
+    } else await page.keyboard.press('Escape')
+    await menu('hub-local', true)
+    await page.getByRole('menuitem', { name: text(mode === 'vwan' ? 'BGP table' : 'Inspect Virtual WAN Hub Effective RIB'), exact: true }).click()
+    await expect(page.getByRole('dialog').locator('tr[data-prefix="10.10.0.0/16"][data-preferred="true"]')).toContainText('trusted-a')
+    await page.keyboard.press('Escape')
+    const result = await saved(page, mode)
+    await page.reload()
+    await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+    expect(await saved(page, mode)).toEqual(result)
+    await upload(result)
+    await expect.poll(async () => await saved(page, mode)).toEqual(result)
+  })
+}
+
 for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja'] as const) {
   test(`${mode} ${language}: clear is explicit, safely focused and preserves unrelated local data`, async ({ page }) => {
     const text = (value: string) => translate(language, value)

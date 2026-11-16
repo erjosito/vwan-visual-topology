@@ -1,5 +1,12 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Connect to virtual hub': '仮想ハブに接続',
+  'Configure virtual hub connection': '仮想ハブ接続を構成',
+  'Connect to spoke': 'スポークに接続',
+  'No virtual hubs. Add a virtual hub first.': '仮想ハブがありません。先に仮想ハブを追加してください。',
+  'No VNets. Add a VNet first.': 'VNet がありません。先に VNet を追加してください。',
+  '{0} (connected to {1})': '{0} ({1} に接続済み)',
+  '{0} (connected through an NVA)': '{0} (NVA 経由で接続済み)',
   'Clear canvas to an empty topology': 'キャンバスを空のトポロジにクリア',
   'Clear all objects from the current topology? This replaces the saved topology in this workspace and cannot be undone. Export JSON first if you need a backup. Other workspaces, preferences and training progress are kept.': '現在のトポロジのすべてのオブジェクトをクリアしますか? このワークスペースの保存済みトポロジが置き換わり、元に戻せません。必要に応じて先に JSON をエクスポートしてください。他のワークスペース、設定、学習の進行状況は保持されます。',
   'Static hub Firewall routing': '静的ハブ Firewall ルーティング',
