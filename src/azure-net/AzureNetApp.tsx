@@ -2868,7 +2868,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         <div className="aznet-topbar-controls">
           {canvasSelection && 'vnetId' in canvasSelection && <button type="button" className="aznet-btn"
             onClick={() => openDetail(canvasSelection.vnetId)}>{t('VNet detail')}</button>}
-          <WorkspaceTools creationActions={[
+          <WorkspaceTools dismissRequest={guidanceRevision} creationActions={[
             { label: t('+ VNet'), testId: 'aznet-add-vnet-btn', run: addDefaultVnet },
             { label: t('+ Site'), testId: 'aznet-add-site-btn', run: () => addSiteNode() },
             { label: t('+ ER location'), testId: 'aznet-add-erloc-btn', run: () => addErLocationNode() },
@@ -3550,6 +3550,17 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           })}
                         </tbody>
                       </table></div>
+
+                      {workspaceSession?.learningView?.open && !workspaceSession.learningState?.reviewId
+                        && workspaceSession.learningState?.observation
+                        && routeSelection.kind === 'subnet'
+                        && routeSelection.vnetId === workspaceSession.learningState.observation.vnetId
+                        && routeSelection.subnetId === workspaceSession.learningState.observation.subnetId
+                        && inspectedSubnetTable.subnetId === workspaceSession.learningState.observation.subnetId
+                        && <p><button type="button" data-testid="learning-record-inspection"
+                          onClick={() => workspaceSession.reportLearningObservation?.(workspaceSession.learningState!.observation!)}>
+                          {language === 'ja' ? '確認を記録' : 'Record inspection'}: {workspaceSession.learningState.observation.prefix}
+                        </button></p>}
 
                       {inspectedSubnetTable.suppressedBgpRoutes.length > 0 && (
                         <div

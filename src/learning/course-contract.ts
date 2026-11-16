@@ -13,7 +13,8 @@ const peering = z.strictObject({ vnetAId: entityId, vnetBId: entityId })
 export const courseCheckSchema = z.discriminatedUnion('kind', [
   z.strictObject({ id, kind: z.literal('scenario.loaded'), params: z.strictObject({ scenarioId: id }) }),
   z.strictObject({ id, kind: z.literal('routes.inspected'), params: routeScope }),
-  z.strictObject({ id, kind: z.literal('vnet.peered'), params: peering }),
+  z.strictObject({ id, kind: z.literal('vnet.peered'),
+    params: peering.extend({ requirements: z.array(z.custom<Requirement>()).min(1).max(64) }) }),
   z.strictObject({
     id, kind: z.literal('requirements.satisfied'),
     params: z.strictObject({ requirements: z.array(z.custom<Requirement>()).min(1).max(64) }),

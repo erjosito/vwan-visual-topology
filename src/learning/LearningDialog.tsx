@@ -14,23 +14,35 @@ import { resolveGuidance } from './guidance'
 import { sidebarLabels as labels } from './sidebar-content'
 import { learningLabels, practiceLabels } from './practice-content'
 import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './practice-workspace'
+import { orderedTasks, taskCompleted } from './runner'
+import { requirementDescription, runnerLabels as runnerText } from './runner-content'
 import './learning.css'
 
-const instructions = bundle.course.lessonOrder.flatMap((id) => {
-  const lesson = bundle.lessons.find((item) => item.id === id)!
-  return lesson.taskOrder.map((taskId) => ({ lesson, task: lesson.tasks.find((item) => item.id === taskId)! }))
-})
+const instructions = orderedTasks(bundle)
 
-export function LearningDialog({ document: workspace, onGuide, onPause, taskId, onTask }: {
+type PanelProps = {
   document: PlatformDocument
   onGuide?: (cue: CourseGuidance) => void
   onPause: () => void
-  taskId?: string
-  onTask: (id: string) => void
-}) {
+}
+
+export function LearningDialog(props: PanelProps) {
+  const session = useWorkspaceSession()
+  if (!session?.learningState || !session.learning) return null
+  return <LearningPanel key={session.learningState.reviewId ?? session.learningState.taskId ?? 'complete'} {...props} />
+}
+
+function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const language = useLanguage(), session = useWorkspaceSession()
-  const index = Math.max(0, instructions.findIndex((item) => item.task.id === taskId))
+  const runner = session!.learning!, state = session!.learningState!
+  const done = !state.taskId && !state.reviewId
+  const reviewing = !!state.reviewId
+  const index = Math.max(0, instructions.findIndex((item) => item.task.id === (state.reviewId ?? state.taskId)))
   const { lesson, task } = instructions[index]
+  const check = bundle.checks.find((item) => item.id === task.checkId)!
+  const requirements = 'requirements' in check.params ? check.params.requirements : []
+  const [answerId, setAnswerId] = useState<string>()
+  const [replayConfirm, setReplayConfirm] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
@@ -45,11 +57,6 @@ export function LearningDialog({ document: workspace, onGuide, onPause, taskId, 
     document.body.classList.add('learning-sidebar-open')
     return () => { document.body.classList.remove('learning-sidebar-open'); job.current?.abort() }
   }, [])
-  const move = (offset: number) => {
-    job.current?.abort(); setRunning(false); setConfirm(false); setError(''); setCue(undefined); setVisible(false)
-    onTask(instructions[index + offset].task.id)
-    panel.current?.scrollTo({ top: 0 })
-  }
   const load = async () => {
     const controller = new AbortController()
     job.current?.abort(); job.current = controller
@@ -75,22 +82,36 @@ export function LearningDialog({ document: workspace, onGuide, onPause, taskId, 
       if (event.key === 'Escape') { event.stopPropagation(); onPause() }
     }}>
       <header><h2 id="learning-title">{text(learningLabels.learn, language)}</h2><button type="button" onClick={onPause}>{text(labels.pause, language)}</button></header>
-      <p className="learning-notice">{text(labels.preview, language)}</p>
+      <p className="learning-notice">{text(runnerText.preview, language)}</p>
       <p>{text(learningLabels.local, language)}</p>
-      <p>{index + 1} / {instructions.length}</p>
+      <p>{text(runnerText.session, language)}</p>
+      <p data-testid="learning-completion-count">{state.completions.filter((entry) => entry.courseId === bundle.course.id
+        && instructions.some(({ task }) => task.id === entry.taskId && task.assessmentVersion === entry.assessmentVersion)).length} / {instructions.length} {text(runnerText.completed, language)}</p>
+      {state.replayLessonId && <p>{text(runnerText.replaying, language)}</p>}
+      {reviewing && <div className="learning-notice"><p>{text(runnerText.review, language)}</p>
+        <button type="button" onClick={() => runner.review()}>{text(runnerText.return, language)}</button></div>}
+      {done ? <section><h3>{text(runnerText.done, language)}</h3><p>{text(runnerText.doneDetail, language)}</p></section> : <>
       <h3>{text(lesson.title, language)}</h3>
       <p>{text(lesson.objective, language)}</p>
-      <section aria-labelledby="learning-task">
+      <section aria-labelledby="learning-task" data-testid="learning-task" data-task-id={task.id}>
         <h4 id="learning-task" aria-live="polite">{text(task.title, language)}</h4>
         <p>{text(task.instruction, language)}</p>
+        <p>{task.points} {text(runnerText.points, language)}</p>
         {inPractice && <p>{text(labels.loaded, language)}</p>}
-        <button type="button" disabled={running} onClick={() => { setConfirm(true); setError('') }}>{text(labels.load, language)}</button>
+        {!reviewing && <button type="button" disabled={running || state.running} onClick={() => { runner.cancel(); setConfirm(true); setError('') }}>{text(labels.load, language)}</button>}
         {confirm && <div className="learning-notice">
           <p>{text(labels.replace, language)}</p>
           <button type="button" disabled={running} onClick={() => { void load() }}>{text(running ? labels.loading : labels.confirm, language)}</button>
           <button type="button" onClick={() => { job.current?.abort(); setRunning(false); setConfirm(false) }}>{text(labels.cancel, language)}</button>
         </div>}
         {error && <p role="alert">{error}</p>}
+        {check.kind === 'quiz.answered' && <fieldset disabled={reviewing || state.running || running || !inPractice}>
+          <legend>{text(check.params.question, language)}</legend>
+          {check.params.choices.map((choice) => <label className="learning-choice" key={choice.id}>
+            <input type="radio" name={`answer-${task.id}`} value={choice.id} checked={answerId === choice.id}
+              onChange={() => { runner.cancel(); setAnswerId(choice.id) }} />{text(choice.text, language)}
+          </label>)}
+        </fieldset>}
         <p>{text(labels.navigation, language)}</p>
         {task.guidanceIds.map((id) => {
           const guidance = bundle.guidance.find((item) => item.id === id)!
@@ -106,12 +127,40 @@ export function LearningDialog({ document: workspace, onGuide, onPause, taskId, 
           <button type="button" onClick={() => setCue(undefined)}>{text(labels.stop, language)}</button>
         </div>}
         {task.hints.map((hint, hintIndex) => <details key={hintIndex}><summary>{text(learningLabels.hint, language)} {hintIndex + 1}</summary><p>{text(hint, language)}</p></details>)}
+        {!reviewing && <div className="learning-actions">
+          <button type="button" disabled={running || state.running} onClick={() => { void runner.assess(answerId) }}>{text(state.running ? runnerText.checking : runnerText.check, language)}</button>
+          {state.running && <button type="button" onClick={() => runner.cancel()}>{text(runnerText.cancel, language)}</button>}
+        </div>}
+        {!reviewing && state.feedback && <div role="status" data-testid="learning-feedback">
+          <p>{text(runnerText[state.feedback], language)}</p>
+          {state.explanation && <p>{text(state.explanation, language)}</p>}
+          {!!state.unmet.length && <ul>{state.unmet.map((id) => {
+            const requirement = requirements.find((entry) => entry.id === id)
+            return requirement && <li key={id}>{text(requirementDescription(requirement), language)}</li>
+          })}</ul>}
+        </div>}
       </section>
-      <nav className="learning-actions" aria-label={text(labels.instructions, language)}>
-        <button type="button" disabled={!index || running} onClick={() => move(-1)}>{text(labels.previous, language)}</button>
-        <button type="button" disabled={index === instructions.length - 1 || running || !inPractice} onClick={() => move(1)}>{text(labels.next, language)}</button>
+      {!reviewing && <nav className="learning-actions" aria-label={text(runnerText.current, language)}>
+        <button type="button" disabled={!state.canContinue || running} onClick={() => runner.advance()}>{text(runnerText.continue, language)}</button>
+      </nav>}
+      </>}
+      <div className="learning-actions">
+        <button type="button" disabled={state.running || running} onClick={() => setReplayConfirm(true)}>{text(runnerText.replay, language)}</button>
+        {state.replayLessonId && <button type="button" onClick={() => runner.resumeCurrent()}>{text(runnerText.return, language)}</button>}
+      </div>
+      {replayConfirm && <div className="learning-notice"><p>{text(runnerText.replayNotice, language)}</p>
+        <button type="button" onClick={() => { setReplayConfirm(false); runner.replayLesson(lesson.id) }}>{text(runnerText.replayConfirm, language)}</button>
+        <button type="button" onClick={() => setReplayConfirm(false)}>{text(labels.cancel, language)}</button>
+      </div>}
+      <nav aria-label={text(runnerText.outline, language)}><details><summary>{text(runnerText.outline, language)}</summary><ol>{instructions.map((item) => {
+        const completed = taskCompleted(bundle, state.completions, item.task)
+        const current = item.task.id === state.taskId
+        return <li key={item.task.id} aria-current={current ? 'step' : undefined}>
+          {completed ? <button type="button" onClick={() => runner.review(item.task.id)}>{text(item.task.title, language)} — {text(runnerText.completed, language)}</button>
+            : <span>{text(item.task.title, language)} — {text(current ? runnerText.current : runnerText.locked, language)}</span>}
+        </li>
+      })}</ol></details>
       </nav>
-      <details><summary>{text(labels.outline, language)}</summary><ol>{instructions.map((item) => <li key={item.task.id} aria-current={item.task.id === task.id ? 'step' : undefined}>{text(item.task.title, language)}</li>)}</ol></details>
       <details><summary>{text(labels.help, language)}</summary>{(Object.keys(concepts) as ConceptId[]).map((id) => <Explain key={id} concept={id} />)}</details>
     </aside>
     {plan?.anchors && <GuidanceHighlight key={guideRequest} anchors={plan.anchors} onVisibility={setVisible} />}

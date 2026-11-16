@@ -48,14 +48,15 @@ function checkScope(
           && vnet.subnets.some((subnet) => subnet.id === params.subnetId)),
       `${definition.id} needs an owned subnet and exact IPv4 prefix`)
     }
-  } else if ('requirements' in params) {
+  } else if (!('requirements' in params)) {
+    requireContent(kind === 'quiz.answered', `unsupported check ${definition.id}`)
+  }
+  if ('requirements' in params) {
     validateRequest({ contractVersion: 1, operation: 'evaluate', document, requirements: params.requirements })
     const result = executePlatform({ contractVersion: 1, operation: 'evaluate', document, requirements: params.requirements })
     requireContent(result.status === 'complete' && result.assessments.length === params.requirements.length
       && result.assessments.every((assessment) => assessment.outcome !== 'not assessed'),
     `${definition.id} has no fully assessed starter path: ${result.errors.map((error) => error.message).join('; ')}`)
-  } else {
-    requireContent(kind === 'quiz.answered', `unsupported check ${definition.id}`)
   }
 }
 
@@ -121,7 +122,7 @@ export function validateCourse(input: unknown): CourseBundle {
         if (check.kind === 'routes.inspected' || check.kind === 'vnet.peered') {
           const action = check.kind === 'routes.inspected' ? 'routes.open' : 'peering.command'
           requireContent(target.action === action
-            && Object.entries(check.params).every(([key, value]) =>
+            && Object.entries(check.params).filter(([key]) => key !== 'requirements').every(([key, value]) =>
               Object.entries(target.params).some(([targetKey, targetValue]) => targetKey === key && targetValue === value)),
           `mismatched guidance scope for ${task.id}`)
         }
