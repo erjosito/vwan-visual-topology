@@ -11,6 +11,8 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $env:AZURE_EXTENSION_USE_DYNAMIC_INSTALL = 'no'
+$env:AZURE_CORE_COLLECT_TELEMETRY = 'no'
+$env:AZURE_LOGGING_ENABLE_LOG_FILE = 'no'
 $null = Get-Command az -ErrorAction Stop
 function Read-Az([string[]]$Arguments) {
     $raw = & az @Arguments --only-show-errors --output json 2>$null

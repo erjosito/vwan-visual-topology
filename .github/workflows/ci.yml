@@ -91,11 +91,14 @@ jobs:
       - run: npm run test:desktop-cli
       - run: npm run build:desktop
       - run: npm run test:desktop
+      - run: npm run test:desktop-network
       - name: Smoke packaged offline application
         shell: pwsh
         run: |
           $env:DESKTOP_EXECUTABLE = Join-Path (Get-Location) 'release\win-unpacked\Azure Network Simulator.exe'
           npm run test:desktop
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run test:desktop-network
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Record development installer checksum
         shell: pwsh

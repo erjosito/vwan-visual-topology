@@ -1,11 +1,36 @@
 import { it, expect, vi } from 'vitest'
 import { AzureBroker, scopeArguments, executePowerShell } from './broker'
-import { readFile, writeFile, access, mkdtemp, rm } from 'node:fs/promises'
+import { readFile, writeFile, access, mkdtemp, mkdir, rm } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { tmpdir } from 'node:os'
 
 const subscriptionId = '00000000-0000-4000-8000-000000000002', tenantId = '00000000-0000-4000-8000-000000000001'
 const target = `/subscriptions/${subscriptionId}/resourceGroups/fixture-network/providers/Microsoft.Network/virtualWans/fixture-wan`
+
+it('overrides inherited telemetry and file logging settings in the actual PowerShell child without changing its parent', async () => {
+  const root = resolve('test-artifacts', 'desktop')
+  await mkdir(root, { recursive: true })
+  const directory = await mkdtemp(join(root, 'environment-'))
+  const script = join(directory, 'environment.ps1')
+  vi.stubEnv('AZURE_CORE_COLLECT_TELEMETRY', 'yes')
+  vi.stubEnv('AZURE_LOGGING_ENABLE_LOG_FILE', 'yes')
+  try {
+    await writeFile(script, `@{
+      telemetry = $env:AZURE_CORE_COLLECT_TELEMETRY
+      logging = $env:AZURE_LOGGING_ENABLE_LOG_FILE
+      extensions = $env:AZURE_EXTENSION_USE_DYNAMIC_INSTALL
+      powershellTelemetry = $env:POWERSHELL_TELEMETRY_OPTOUT
+    } | ConvertTo-Json -Compress`)
+    expect(JSON.parse(await executePowerShell([script], 20000))).toEqual({
+      telemetry: 'no', logging: 'no', extensions: 'no', powershellTelemetry: '1',
+    })
+    expect(process.env.AZURE_CORE_COLLECT_TELEMETRY).toBe('yes')
+    expect(process.env.AZURE_LOGGING_ENABLE_LOG_FILE).toBe('yes')
+  } finally {
+    vi.unstubAllEnvs()
+    await rm(directory, { recursive: true, force: true })
+  }
+}, 25000)
 
 it('rejects malformed scope, wrong subscription, shell arguments and concurrent collection before process execution', async () => {
   let invoked = 0

@@ -24,6 +24,7 @@
     "build:desktop": "npm run build && npm run build:platform && electron-builder --win --x64 --publish never",
     "desktop": "electron platform-dist/electron/main.cjs",
     "test:desktop": "node scripts/test-desktop.mjs",
+    "test:desktop-network": "node scripts/test-desktop-network.mjs",
     "test:desktop-cli": "pwsh -NoLogo -NoProfile -File tests/desktop-azure-read.test.ps1"
   },
   "dependencies": {

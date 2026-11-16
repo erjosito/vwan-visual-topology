@@ -6,6 +6,9 @@ import { AzureBroker, type Scope, type Collection } from './broker'
 import { PlatformJobs } from '../jobs'
 import { admitJson } from '../../src/platform/service'
 
+// Local assets need no proxy; avoid Chromium's automatic PAC/WPAD discovery.
+// The explicitly invoked Azure CLI keeps its independent enterprise proxy settings.
+app.commandLine.appendSwitch('no-proxy-server')
 protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
 app.setAppUserModelId('com.github.erjosito.aznet-simulator')
 if (app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', resolve(app.commandLine.getSwitchValue('user-data-dir')))
