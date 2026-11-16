@@ -18,6 +18,7 @@ import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
 import { CanvasOverlay } from '../CanvasOverlay'
+import { ClearTopologyDialog } from '../ClearTopologyDialog'
 import { useDeleteShortcut } from '../useDeleteShortcut'
 import {
   ALL_KNOWN_AZURE_REGIONS,
@@ -288,6 +289,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
   const [inventorySelection, setInventorySelection] = useState<string>()
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
+  const [clearRequested, setClearRequested] = useState(false)
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
   const [routeMapArsId, setRouteMapArsId] = useState<string>()
@@ -2880,10 +2882,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             type="button"
             className="aznet-btn"
             data-testid="aznet-clear-topology-btn"
-            onClick={() => loadSample('')}
-            title="Clear canvas to an empty topology"
+            onClick={() => setClearRequested(true)}
+            title={t('Clear canvas to an empty topology')}
           >
-            🗑 Clear
+            {t('Clear')}
           </button>
 
           <button
@@ -3190,6 +3192,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               }}
             />
           )}
+          {clearRequested && <ClearTopologyDialog
+            description={t('Clear all objects from the current topology? This replaces the saved topology in this workspace and cannot be undone. Export JSON first if you need a backup. Other workspaces, preferences and training progress are kept.')}
+            onClose={() => setClearRequested(false)}
+            onConfirm={() => { setClearRequested(false); void loadSample('') }} />}
           {deletionSpec && deletionAction && (
             <CanvasOverlay title={deletionAction.label} className="object-editor" onClose={() => setDeleteTarget(null)}>
               <p>Delete <strong>{deletionSpec.title}</strong>? Associated elements and connections may also be removed. Other endpoint nodes are kept.</p>

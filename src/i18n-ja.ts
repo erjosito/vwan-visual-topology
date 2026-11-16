@@ -1,5 +1,7 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Clear canvas to an empty topology': 'キャンバスを空のトポロジにクリア',
+  'Clear all objects from the current topology? This replaces the saved topology in this workspace and cannot be undone. Export JSON first if you need a backup. Other workspaces, preferences and training progress are kept.': '現在のトポロジのすべてのオブジェクトをクリアしますか? このワークスペースの保存済みトポロジが置き換わり、元に戻せません。必要に応じて先に JSON をエクスポートしてください。他のワークスペース、設定、学習の進行状況は保持されます。',
   'Static hub Firewall routing': '静的ハブ Firewall ルーティング',
   'Firewall onward routes': 'Firewall 転送ルート',
   'Ambiguous or cyclic Firewall onward paths require exhaustive assessment; no single traffic hash or passing route is selected.': '曖昧または循環する Firewall 転送経路には網羅的な評価が必要です。単一のトラフィック ハッシュや成功する経路だけを選択しません。',
