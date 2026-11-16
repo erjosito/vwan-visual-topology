@@ -142,11 +142,13 @@ bindings and configuration-only packet predicates. Unknown health, allocation,
 mapping or filtering cannot certify either connectivity or isolation. Supported
 repairs are open-ended; no guest/listener or live-session readiness is certified.
 
-The lazy, non-modal learning sidebar presents ordered tasks from
-`course-examples.ts` as an explicitly **unassessed instruction preview**.
-Previous/next preview wording only; they grant no completion, unlock, points or
-belt. The root keeps the preview cursor and pause/resume state across native
-editor switches in memory, not across reload. Raw JSON, raw requirements,
+The lazy, non-modal learning sidebar runs two assessed example lessons from
+`course-examples.ts`. `runner.ts` is the single progression authority: scoped
+setup, observation, direct-peering configuration plus engine outcome, open-design
+requirements, and quizzes unlock the next task only after a passing current
+check and explicit **Complete task & continue**. The root keeps task/completion
+and pause/resume state across native editor switches in memory, not across reload.
+Raw JSON, raw requirements,
 exercise selection menus and engine payloads are not exposed in the sidebar.
 Confirmed **Load practice network** validates the starter using the shared
 worker before opening a **protected practice workspace**. Opening/resuming the
@@ -164,6 +166,19 @@ scroll, resize, pan/zoom and inspector movement; missing, disabled, covered or
 closed targets get an explicit reason and an explicit reveal retry. Navigation
 never mutates topology, awards credit or answers quizzes, and never costs
 points. Focus stays put unless **Focus highlighted control** is requested.
+Guidance dismisses an occluding workspace-controls pane without changing its
+saved preference; it can still be reopened explicitly. Observation requires
+**Record inspection: prefix** inside the exact scoped native routes inspector.
+Its token cannot carry across tasks, revisions, replacement or replay.
+
+Pending checks and passing candidates bind the live editor's monotonic revision,
+practice scope, runtime session, course/content/task and assessment version.
+Edits, edit/undo, reset, pause and provider changes abort or discard old evidence.
+Unknown/incomplete/unsupported engine assessments never pass; quizzes have
+answer-specific retry feedback. Completed-task review is historical, not proof
+that today's canvas is still valid. Explicit lesson replay preserves history
+and cannot emit duplicate completion events. Newly inserted/revised unmet
+tasks gate the next uncompleted task even if later historical records exist.
 
 The root owns one separate practice canvas in
 `network-simulator:practice-workspace:v1`, including stable course/scenario IDs,
@@ -186,8 +201,9 @@ preserved and blocks replacement until confirmed **Discard practice workspace**,
 which deletes only the practice-canvas key, not drafts, achievements, preferences
 or normal designs. Known stale writes/discards refuse to overwrite another
 tab's saved practice; this is not atomic multi-tab ownership or synchronization.
-The evidence-gated task runner and awarded-points progression remain subsequent
-learning-epic stages (#180/#183); this preview does not claim their behavior.
+Durable completion/award storage, points and belts remain #183. This stage
+emits stable scoped completion events but does not claim durable awards or a
+complete white-to-black-belt curriculum (#184).
 
 Retained legacy progress uses `aznet-simulator:practice:v1` in localStorage, independently
 of normal topology saves: at most nine 200,000-character drafts within the existing

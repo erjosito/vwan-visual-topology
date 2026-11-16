@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import { t } from './i18n'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
@@ -7,6 +7,7 @@ import { selectWorkspace, workspaceOriginals, workspaceStartup, workspaceStorage
 import { practiceWorkspaceKey } from './learning/practice-workspace-key'
 import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
 import type { PracticeSession } from './learning/practice-session'
+import type { CourseRunner, RunnerState } from './learning/runner'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
@@ -37,18 +38,49 @@ export function UnifiedSimulatorRoot() {
   const [practiceReady, setPracticeReady] = useState(false)
   const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict'>('')
   const [practiceEpoch, setPracticeEpoch] = useState(0)
-  const [learningView, setLearningView] = useState<{ open: boolean; taskId?: string }>({ open: false })
+  const [learningView, setLearningView] = useState({ open: false })
+  const [learning, setLearning] = useState<CourseRunner>()
+  const [learningState, setLearningState] = useState<RunnerState>()
+  const learningRef = useRef<CourseRunner | undefined>(undefined)
+  const learningLoading = useRef<Promise<CourseRunner> | undefined>(undefined)
+  const learningRevision = useRef(0)
   const practiceRef = useRef<PracticeSession | undefined>(undefined)
   const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
   const designHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const practiceHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const { style, maximized } = useCanvasPresentation()
   const request = useRef(0)
+  const loadLearning = useCallback(() => {
+    learningLoading.current ??= import('./learning/learning-session').then(({ createLearningSession }) => {
+      const runner = createLearningSession({
+        changed: setLearningState,
+        workspace: () => {
+          const current = practiceRef.current?.current
+          if (!current?.active) return undefined
+          const cached = practiceHistory.current
+          const document = cached?.provider === 'vwan' && current.document.mode === 'vwan'
+            ? { mode: 'vwan' as const, topology: cached.topology }
+            : cached?.provider === 'azure-net' && current.document.mode !== 'vwan'
+              ? { mode: current.document.mode, topology: cached.topology } : current.document
+          return { practice: { ...current, document }, revision: learningRevision.current, scope: request.current }
+        },
+      })
+      learningRef.current = runner
+      setLearning(runner)
+      return runner
+    }).catch((error) => { learningLoading.current = undefined; throw error })
+    return learningLoading.current
+  }, [])
   const loadPractice = () => {
     practiceLoading.current ??= import('./learning/practice-session').then(({ createPracticeSession }) => {
       practiceRef.current = createPracticeSession({
-        storage: () => localStorage, changed: setPractice, notice: setPracticeNotice,
-        replaced: () => { practiceHistory.current = undefined; setPracticeEpoch((epoch) => epoch + 1) },
+        storage: () => localStorage,
+        changed: (next) => { setPractice(next); learningRef.current?.workspaceChanged() },
+        notice: setPracticeNotice,
+        replaced: () => {
+          practiceHistory.current = undefined; learningRevision.current++
+          setPracticeEpoch((epoch) => epoch + 1)
+        },
       })
       return practiceRef.current
     }).catch((error) => { practiceLoading.current = undefined; throw error })
@@ -213,8 +245,17 @@ export function UnifiedSimulatorRoot() {
     openPractice, practice: practicing ? practice : undefined,
     savePractice: (document) => practiceRef.current?.save(document, practiceEpoch),
     getEditorHistory: () => editorHistory.current,
-    rememberEditorHistory: (value) => { editorHistory.current = value },
-    learningView, setLearningView,
+    rememberEditorHistory: (value) => {
+      const changed = editorHistory.current?.topology !== value.topology
+      editorHistory.current = value
+      if (practicing && changed) { learningRevision.current++; learningRef.current?.workspaceChanged() }
+    },
+    learningView, setLearningView: (view) => {
+      if (!view.open) learningRef.current?.cancel()
+      setLearningView(view)
+    },
+    loadLearning, learning, learningState,
+    reportLearningObservation: (event) => learningRef.current?.observe(event),
   }}>
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}

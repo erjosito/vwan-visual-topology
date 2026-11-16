@@ -1,12 +1,12 @@
 import type { CourseBundle } from './course-contract'
 import { courseScenarios } from './course-scenarios'
 
-// Representative instruction preview, not an activated assessment/award runner.
+// Two assessed examples; the complete white-to-black curriculum is a separate content stage.
 export const exampleCourse: CourseBundle = {
   schemaVersion: 1,
   course: {
-    id: 'azure-networking-preview', contentVersion: 1, publication: 'preview',
-    title: { en: 'Guided course contract examples', ja: 'ガイド付きコースの契約例' },
+    id: 'azure-networking-preview', contentVersion: 2, publication: 'preview',
+    title: { en: 'Azure networking: guided practice', ja: 'Azure ネットワーク: ガイド付き練習' },
     lessonOrder: ['direct-peering', 'route-override'],
     belts: [
       { id: 'white', name: { en: 'White belt', ja: '白帯' }, color: '#ffffff', pointsRequired: 0, checkpointTaskIds: [] },
@@ -40,7 +40,7 @@ export const exampleCourse: CourseBundle = {
           checkId: 'inspect-a', guidanceIds: ['routes-a'], hints: [],
         },
         {
-          id: 'peering.connect', assessmentVersion: 1, awardId: 'peering.connect', points: 30,
+          id: 'peering.connect', assessmentVersion: 2, awardId: 'peering.connect', points: 30,
           title: { en: 'Peer VNet A with VNet B', ja: 'VNet A と VNet B をピアリングする' },
           instruction: { en: 'Create a direct enabled peering with virtual network access allowed in both directions.', ja: '両方向の仮想ネットワーク アクセスを許可した直接ピアリングを作成して有効にします。' },
           checkId: 'peer-a-b', guidanceIds: ['peer-command'],
@@ -75,7 +75,7 @@ export const exampleCourse: CourseBundle = {
         {
           id: 'override.load', assessmentVersion: 1, awardId: 'override.load', points: 5,
           title: { en: 'Load the conflicting route', ja: '競合ルートを読み込む' },
-          instruction: { en: 'Load the checkpoint starter explicitly; the original practice attempt remains separate.', ja: 'チェックポイントの初期構成を明示的に読み込みます。元の練習は別に保持されます。' },
+          instruction: { en: 'Confirm loading the checkpoint starter. It replaces the previous practice canvas, not your normal design.', ja: 'チェックポイントの初期構成の読み込みを確認します。以前の練習キャンバスは置き換わりますが、通常の設計は保持されます。' },
           checkId: 'load-override', guidanceIds: [], hints: [],
         },
         {
@@ -104,7 +104,11 @@ export const exampleCourse: CourseBundle = {
     { id: 'load-peering', kind: 'scenario.loaded', params: { scenarioId: 'two-vnets' } },
     { id: 'load-override', kind: 'scenario.loaded', params: { scenarioId: 'peered-with-drop' } },
     { id: 'inspect-a', kind: 'routes.inspected', params: { vnetId: 'a', subnetId: 'work-a', prefix: '10.2.0.0/16' } },
-    { id: 'peer-a-b', kind: 'vnet.peered', params: { vnetAId: 'a', vnetBId: 'b' } },
+    { id: 'peer-a-b', kind: 'vnet.peered', params: { vnetAId: 'a', vnetBId: 'b', requirements: [
+      { id: 'direct-route', kind: 'route', table: 'work-a', prefix: '10.2.0.0/16', expectation: 'present' },
+      { id: 'direct-flow', kind: 'flow', source: { kind: 'subnet', vnetId: 'a', subnetId: 'work-a' },
+        target: { kind: 'subnet', vnetId: 'b', subnetId: 'work-b' }, sourceAddress: '10.1.1.4', destinationAddress: '10.2.1.4', expectation: 'allow' },
+    ] } },
     {
       id: 'connected', kind: 'requirements.satisfied',
       params: { requirements: [

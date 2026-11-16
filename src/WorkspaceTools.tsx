@@ -50,8 +50,9 @@ function ActionList({ actions, query, parents = [], onRun }: {
   })}</ul>
 }
 
-export function WorkspaceTools<Selection>({ creationActions, getSelection, inventory }: {
+export function WorkspaceTools<Selection>({ creationActions, getSelection, inventory, dismissRequest = 0 }: {
   creationActions: WorkspaceAction[]
+  dismissRequest?: number
   getSelection?: () => { title: string; actions: ContextAction[] } | null | undefined
   inventory?: {
     getObjects: () => readonly WorkspaceObject<Selection>[]
@@ -62,7 +63,8 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
   const id = useId()
   const language = useLanguage()
   const capabilityText = (message: string) => language === 'ja' ? workspaceCapabilitiesJa[message] ?? message : message
-  const [open, setOpen] = useState(initialOpen)
+  const [visibility, setVisibility] = useState(() => ({ open: initialOpen(), request: dismissRequest }))
+  const open = visibility.open && visibility.request === dismissRequest
   const [search, setSearch] = useState('')
   const [top, setTop] = useState(0)
   const [objectsOpen, setObjectsOpen] = useState(false)
@@ -90,7 +92,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
   }, [])
   const changeOpen = (next: boolean, restoreFocus = false) => {
     focusSearch.current = next
-    setOpen(next)
+    setVisibility({ open: next, request: dismissRequest })
     try { localStorage.setItem(storageKey, next ? 'open' : 'closed') } catch { /* Keep the in-session choice. */ }
     if (restoreFocus) opener.current?.focus({ preventScroll: true })
   }

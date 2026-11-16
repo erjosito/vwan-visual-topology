@@ -76,7 +76,7 @@ for (const vwan of [true, false]) {
     const edited = (await practice(page)).document
     await page.getByTestId('learning-open').click()
     const reopened = page.getByTestId('learning-sidebar')
-    await reopened.getByText('Course outline (read only)', { exact: true }).click()
+    await reopened.getByText('Learning path and completed-task review', { exact: true }).click()
     await reopened.getByRole('button', { name: 'Pause learning', exact: true }).click()
     expect((await practice(page)).document).toEqual(edited)
     await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()

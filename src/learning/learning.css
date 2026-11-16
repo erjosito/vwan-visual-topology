@@ -31,6 +31,7 @@
 .learning-sidebar h3 { font-size: 17px; }
 .learning-sidebar h4 { font-size: 16px; }
 .learning-sidebar p { line-height: 1.5; }
+.learning-choice { display: flex; gap: 8px; align-items: baseline; margin-block: 12px; }
 .learning-sidebar-open :is(.aznet-topbar, .unified-topbar) { flex-wrap: wrap; max-height: 180px; overflow: auto; }
 .learning-sidebar-open .unified-topbar-controls { flex-basis: 100%; justify-content: flex-start; }
 .learning-sidebar button { white-space: normal; min-height: 32px; }

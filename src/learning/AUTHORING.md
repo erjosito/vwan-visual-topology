@@ -1,15 +1,31 @@
 # Guided course authoring contract
 
-Stage 1 of #176 / #179. The `course-*` files are **author-time contracts and
-examples**; importing them does not activate a course runner or award points.
-Stage 2 (#182) adds a protected canvas. Stage 3 (#178) replaces the old modal
-with a lazy, non-modal sidebar and semantic navigation assistance. The sidebar
-shows the ordered example instructions as an explicitly **unassessed preview**:
-previous/next change presentation only, not completion, unlocks, awards or belts.
-The preview cursor and pause/resume state survive editor switches in memory,
-not reload. No legacy JSON draft, raw requirements or engine payload is shown.
-Existing independent draft/achievement storage is retained untouched. The
-evidence-gated runner, progression and full curriculum remain #180/#183/#184.
+The `course-*` files define declarative content (#179); importing them does not
+execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
+and evidence-gated runner (#180) activate two representative assessed lessons.
+The root owns the runner across editor switches and pause/resume. Completion
+history currently lives in this open app session, not across reload. Durable
+awards/belts and the full curriculum remain #183/#184. No legacy JSON draft,
+raw requirements or engine payload is shown; legacy storage stays untouched.
+
+`runner.ts` is the single progression authority. Supported check kinds dispatch
+to reusable checks, never lesson-ID branches. A passing candidate is bound to
+course/content/task/assessment identity, runtime session, practice scope and a
+monotonic live-editor revision. **Complete task & continue** rechecks that binding,
+records one scoped completion event and unlocks the next unmet task. Edits
+(including edit/undo), replacement, provider/active-practice changes, cancellation,
+review and replay cannot reuse pending or previous evidence. Shared-worker
+requirements must have an exact, complete assessment set; unknown, unsupported,
+failed or cancelled evaluation never passes.
+
+**Show me where** is not observation evidence. The exact native subnet inspector
+offers **Record inspection: prefix** only for the current scoped observation
+request. Its short-lived token is task/session/revision-specific; repeated use of
+the same check definition in another task requires a new observation. Quizzes
+separately check interpretation with answer-specific feedback and free retries.
+Past completion does not certify the current canvas. Completed tasks can be
+reviewed, future tasks remain locked, and explicit lesson replay rechecks each
+step without deleting history or emitting repeat completion credit.
 
 The root's `openPractice({ courseId, scenarioId, document }, signal)` session API
 accepts a copied native scenario after explicit confirmation; it does not look
@@ -31,6 +47,7 @@ return, recovery and same-session history behavior.
 | `course-contract.ts` | A genuinely new reusable task/check/action shape |
 | `course-validation.ts` | Validation for a new shape/scope, not individual lesson IDs |
 | `course.test.ts` | Content validation and real-engine failure/solution fixtures |
+| `runner.ts`, `runner.test.ts` | Reusable progression, current-revision checks, completion events and cancellation |
 
 Use declarative TypeScript data and the existing `{ en, ja }` convention. No
 callbacks, scripts, CSS selectors, translated-label matching or synthetic clicks.
@@ -97,7 +114,7 @@ registered primitive/adapter with tests; do not introduce a lesson-ID switch.
 | --- | --- |
 | `scenario.loaded` | Explicitly admitted `scenarioId` in the current practice session, not a title comparison |
 | `routes.inspected` | Exact owned `vnetId`, `subnetId`, IPv4 `prefix`; observation only, not proof of comprehension |
-| `vnet.peered` | Distinct owned `vnetAId`/`vnetBId`; direct enabled peering and access in both directions |
+| `vnet.peered` | Distinct owned `vnetAId`/`vnetBId`; direct enabled peering, access in both directions, and explicit shared-engine `requirements` for its outcome |
 | `requirements.satisfied` | Existing platform requirements, all assessed and satisfied for the current document revision |
 | `quiz.answered` | Localized question/choices/feedback, unique choice IDs and one declared correct choice |
 
@@ -122,7 +139,7 @@ guidance target must be used so its scenario scope is actually validated.
 ## Versioning, insertion and historical awards
 
 The policy is exported as `courseCompatibilityPolicy` for downstream stages.
-It is a contract, not a new progress implementation.
+The runner consumes these stable identities; durable award storage follows in #183.
 
 | Change | Required action |
 | --- | --- |

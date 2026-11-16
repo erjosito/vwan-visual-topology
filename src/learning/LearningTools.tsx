@@ -10,26 +10,26 @@ export function LearningTools(props: {
   onGuide?: (cue: CourseGuidance) => void
 }) {
   const session = useWorkspaceSession()
-  const [localView, setLocalView] = useState<{ open: boolean; taskId?: string }>({ open: false })
+  const [localView, setLocalView] = useState({ open: false })
   const view = session?.learningView ?? localView
   const setView = session?.setLearningView ?? setLocalView
   const trigger = useRef<HTMLButtonElement>(null)
   const [Panel, setPanel] = useState<typeof LearningDialog>()
   const [failed, setFailed] = useState(false)
   const loading = view.open && !Panel && !failed
+  const loadLearning = session?.loadLearning
   useEffect(() => {
     if (!view.open || Panel || failed) return
     let active = true
-    import('./LearningDialog').then(({ LearningDialog }) => {
+    Promise.all([import('./LearningDialog'), loadLearning?.()]).then(([{ LearningDialog }]) => {
       if (active) setPanel(() => LearningDialog)
     }, () => { if (active) setFailed(true) })
     return () => { active = false }
-  }, [view.open, Panel, failed])
+  }, [view.open, Panel, failed, loadLearning])
   return <>
     <button ref={trigger} type="button" data-testid="learning-open" disabled={loading} aria-busy={loading} aria-expanded={view.open} aria-controls={view.open && Panel ? 'learning-sidebar' : undefined}
       onClick={() => setView({ ...view, open: !view.open })}>{t('Learn & practice')}</button>
-    {view.open && Panel && <Panel document={props.document} onGuide={props.onGuide} taskId={view.taskId}
-      onTask={(taskId) => setView({ open: true, taskId })}
+    {view.open && Panel && <Panel document={props.document} onGuide={props.onGuide}
       onPause={() => { setView({ ...view, open: false }); trigger.current?.focus({ preventScroll: true }) }} />}
     {failed && <p role="status">{t('Learning tools could not load. Your workspace is unchanged; reload to retry.')}
       <button type="button" onClick={() => window.location.reload()}>{t('Reload')}</button></p>}

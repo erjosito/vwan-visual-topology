@@ -334,7 +334,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey)
     expect(mode === 'vwan' ? saved : saved.topology).toEqual(JSON.parse(native.toString()))
     await page.getByTestId('learning-open').click()
-    await expect(practice).toContainText('Instruction preview')
+    await expect(practice).toContainText('Two assessed lessons are available')
     await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
     expect(external).toEqual([])
     await context.setOffline(false)
