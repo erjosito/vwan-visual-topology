@@ -195,12 +195,28 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       'Unsupported Azure Network capture format. Expected kind="azure-network-capture" and version=2.',
     )
   }
+  for (const key of ['vnetGateways', 'vpnConnections']) {
+    if (root[key] !== undefined && root[key] !== null && !Array.isArray(root[key])) {
+      throw new Error(`Malformed VPN NAT capture ${key}: expected a resource array; NAT declarations cannot be silently discarded.`)
+    }
+  }
   for (const raw of [...asArray(root.vnetGateways), ...asArray(root.vpnConnections)]) {
     const resource = asObject(raw, 'VPN NAT capture resource')
-    const properties = resource.properties && typeof resource.properties === 'object'
-      ? resource.properties as Record<string, unknown> : resource
-    if (['natRules', 'ingressNatRules', 'egressNatRules'].some((key) => asArray(properties[key]).length)) {
-      throw new Error('VPN overlap NAT capture reconstruction is unsupported. Author explicit original gateway/connection mappings in native JSON; NAT associations cannot be silently discarded.')
+    const declarations = [resource]
+    if (resource.properties && typeof resource.properties === 'object' && !Array.isArray(resource.properties)) {
+      declarations.push(resource.properties as Record<string, unknown>)
+    }
+    for (const declaration of declarations) {
+      for (const key of ['natRules', 'ingressNatRules', 'egressNatRules']) {
+        const associations = declaration[key]
+        if (associations === undefined || associations === null) continue
+        if (!Array.isArray(associations)) {
+          throw new Error(`Malformed VPN NAT capture ${key}: expected an array of references or null; NAT declarations cannot be silently discarded.`)
+        }
+        if (associations.length) {
+          throw new Error('VPN overlap NAT capture reconstruction is unsupported. Author explicit original gateway/connection mappings in native JSON; NAT associations cannot be silently discarded.')
+        }
+      }
     }
   }
 

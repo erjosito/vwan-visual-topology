@@ -21,6 +21,20 @@ describe.each(['classic', 'vwan'] as const)('%s VPN overlap NAT', (provider) => 
     topology.vnets[0].gateways.forEach((gateway) => { delete gateway.vpnNat })
     topology.vwanHubs.forEach((hub) => { delete hub.vpnNat })
     expect(parseAzNetTopology(topology)).toEqual(topology)
+    expect(() => simulateAzNet(topology)).not.toThrow()
+  })
+
+  it.each((['gateway', 'connection'] as const).flatMap((owner) =>
+    [false, 0, null, ''].map((value) => ({ owner, value }))))('rejects explicit malformed $owner NAT: $value', ({ owner, value }) => {
+    const topology = vpnNatFixture(provider)
+    if (owner === 'gateway') {
+      delete topology.vpnConnections[0].nat
+      const gateway = provider === 'classic' ? topology.vnets[0].gateways[0] : topology.vwanHubs[0]
+      Object.assign(gateway, { vpnNat: value })
+    } else Object.assign(topology.vpnConnections[0], { nat: value })
+    expect(() => parseAzNetTopology(topology)).toThrow(/VPN NAT: expected a configuration object/)
+    expect(() => simulateAzNet(topology)).toThrow(/VPN NAT: expected a configuration object/)
+    expect(executePlatform({ contractVersion: 1, operation: 'simulate', document: { mode: 'full', topology } }).status).toBe('invalid')
   })
 
   it('translates exact learned and advertised BGP prefixes in the existing native RIBs', () => {
@@ -148,6 +162,45 @@ describe.each(['classic', 'vwan'] as const)('%s VPN overlap NAT', (provider) => 
   })
 })
 
+describe.each([
+  ['vnetGateways', 'natRules'],
+  ['vpnConnections', 'ingressNatRules'],
+  ['vpnConnections', 'egressNatRules'],
+] as const)('captured %s.%s admission', (section, field) => {
+  const capture = (resource: Record<string, unknown>) => ({
+    kind: 'azure-network-capture', version: 2, [section]: [resource],
+  })
+
+  it('rejects a malformed resource collection containing known NAT', () => {
+    const root = { ...capture({}), [section]: { [field]: [{ id: 'original-azure-nat-rule' }] } }
+    expect(() => importAzNetCapture(root)).toThrow(/Malformed VPN NAT capture/)
+  })
+
+  it.each(['flattened', 'properties'] as const)('rejects known %s associations', (placement) => {
+    const declaration = { [field]: [{ id: 'original-azure-nat-rule' }] }
+    const resource = placement === 'flattened' ? declaration : { properties: declaration }
+    expect(() => importAzNetCapture(capture(resource))).toThrow(/capture reconstruction is unsupported/)
+  })
+
+  it.each((['flattened', 'properties'] as const).flatMap((placement) =>
+    [{ id: 'original-azure-nat-rule' }, {}, 'original-azure-nat-rule', true, false, 0, ''].map((value) =>
+      ({ placement, value }))))('rejects malformed $placement declaration: $value', ({ placement, value }) => {
+    const declaration = { [field]: value }
+    const resource = placement === 'flattened' ? declaration : { properties: declaration }
+    expect(() => importAzNetCapture(capture(resource))).toThrow(/Malformed VPN NAT capture/)
+  })
+
+  it('does not let empty ARM properties hide a flattened known association', () => {
+    expect(() => importAzNetCapture(capture({ [field]: [{ id: 'original-azure-nat-rule' }], properties: {} })))
+      .toThrow(/capture reconstruction is unsupported/)
+  })
+
+  it.each([undefined, null, []])('retains captures with absent or empty associations: %s', (value) => {
+    expect(() => importAzNetCapture(capture({ [field]: value }))).not.toThrow()
+    expect(() => importAzNetCapture(capture({ properties: { [field]: value } }))).not.toThrow()
+  })
+})
+
 describe('VPN NAT capability admission', () => {
   it('rejects legacy NAT fields instead of dropping them, while preserving old saves', () => {
     expect(validateTopology(structuredClone(example))).toBeDefined()
@@ -201,6 +254,32 @@ describe('VPN NAT capability admission', () => {
     nat.rules.push({ id: 'peer', name: 'Peer', type: 'Static', mode: 'IngressSNAT', internalMapping: '10.0.0.9/32', externalMapping: '192.168.3.9/32' })
     nat.bgpPeerTranslatedIp = '192.168.3.9'
     expect(() => validateVpnNat(topology)).not.toThrow()
+    nat.rules.reverse()
+    expect(() => validateVpnNat(topology)).not.toThrow()
+  })
+
+  it.each([
+    { mode: 'IngressSNAT', bgpEnabled: true, peer: '172.20.0.1', translatedPeer: '172.20.0.1' },
+    { mode: 'IngressSNAT', bgpEnabled: false, peer: '10.0.0.9', translatedPeer: '192.168.3.9' },
+    { mode: 'EgressSNAT', bgpEnabled: true, peer: '10.0.0.9', translatedPeer: '192.168.1.9' },
+  ] as const)('rejects non-peer host overrides: $mode, BGP $bgpEnabled, peer $peer', ({ mode, bgpEnabled, peer, translatedPeer }) => {
+    const topology = vpnNatFixture('vwan'), connection = topology.vpnConnections[0], nat = connection.nat!
+    connection.bgpEnabled = bgpEnabled
+    nat.bgpPeerIp = peer
+    nat.bgpPeerTranslatedIp = translatedPeer
+    Object.assign(nat.rules.find((rule) => rule.mode === mode)!, { type: 'Dynamic',
+      externalMapping: mode === 'IngressSNAT' ? '192.168.1.0/28' : '192.168.2.0/28', ipConfigurationId: '0' })
+    nat.rules.push({ id: 'host', name: 'Host override', type: 'Static', mode,
+      internalMapping: '10.0.0.9/32', externalMapping: '192.168.3.9/32' })
+    expect(() => validateVpnNat(topology)).toThrow(/ambiguous internal mapping ranges/)
+    nat.rules.reverse()
+    expect(() => validateVpnNat(topology)).toThrow(/ambiguous internal mapping ranges/)
+  })
+
+  it('does not exempt unrelated static /32 mappings from exact BGP prefix admission', () => {
+    const topology = vpnNatFixture('vwan')
+    Object.assign(topology.vpnConnections[0].nat!.rules[0], { internalMapping: '10.0.0.9/32', externalMapping: '192.168.3.9/32' })
+    expect(() => validateVpnNat(topology)).toThrow(/exact ingress internal mapping prefixes/)
   })
 
   it('does not apply classic SKU or static instance rules to the VWAN resource model', () => {

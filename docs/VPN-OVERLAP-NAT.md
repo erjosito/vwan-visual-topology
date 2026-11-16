@@ -50,6 +50,10 @@ provider-specific optional `ipConfigurationId` token above.
 * Dynamic pools must not be larger than their internal range; classic external
   pools are limited to `/26` or smaller. A dynamic rule identity belongs to one
   connection only. Initiation must come from the internal-mapping side.
+  The only overlapping internal-range exception is a VWAN **ingress** static
+  rule for the exact declared `bgpPeerIp/32`, with BGP enabled, inside a dynamic
+  ingress mapping. The documented BGP-peer exception does not enable arbitrary
+  static host overrides, egress overrides or non-BGP overlaps.
   The isolated illustrative allocation uses the first external address and
   port `49152`; it is **not** Azure's allocator, a port-preservation claim,
   capacity/exhaustion modeling, or live session state.
@@ -118,11 +122,19 @@ reply state is asserted. A complete forward route does not establish a return
 route, and no response is assessed after an incomplete forward path.
 
 Optional fields persist in native JSON, browser saves/history and share
-documents without a topology version change. Bicep export explicitly warns
+documents without a topology version change. Only an absent (`undefined`) NAT
+declaration means no NAT: explicit `false`, `0`, `null` or empty-string gateway,
+hub and connection configurations are rejected. Bicep export explicitly warns
 that it does **not** deploy an equivalent NAT configuration. Azure capture
 reconstruction of NAT rules is not implemented: captures containing known
 gateway/connection NAT associations are rejected rather than silently
-discarding them. No resources are created by this feature.
+discarding them. The standalone network collector retains only gateway
+`natRules[].id` and connection `ingressNatRules[].id`/`egressNatRules[].id`
+under its existing bounded allowlist; it does not collect mappings or secrets.
+Malformed association shapes are rejected by the importer, not treated as empty
+arrays. Absent/null or empty association arrays remain compatible with older
+capture formats. This does not extend the legacy v1 WAN collector's structural
+scope. No resources are created by this feature.
 
 ## Headless/worker contract
 
@@ -161,3 +173,6 @@ static bidirectional and dynamic internal-side initiation, paired replies,
 independent native return blackholes, exact/missing BGP associations,
 manual post-NAT routes, public translated ranges without Internet breakout,
 validation/rejection, persistence, EN/JA inspectors and worker/headless parity.
+`tests\collect-azure-network.test.ps1 -VpnNatOnly` runs the real standalone
+collector against gateway-only, ingress-only and egress-only NAT fixtures and
+verifies each emitted capture is rejected by the current importer.

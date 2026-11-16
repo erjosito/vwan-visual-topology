@@ -57,8 +57,8 @@ export function validateVpnNat(topology: AzNetTopology): void {
     if (Object.keys(input as object).some((key) => !keys.includes(key))) fail('unsupported configuration field or NAT mode.')
   }
   const gatewayOwners = [
-    ...topology.vnets.flatMap((vnet) => vnet.gateways.filter((gateway) => gateway.vpnNat).map((gateway) => ({ gateway, classic: true }))),
-    ...topology.vwanHubs.filter((hub) => hub.vpnNat).map((gateway) => ({ gateway, classic: false })),
+    ...topology.vnets.flatMap((vnet) => vnet.gateways.filter((gateway) => gateway.vpnNat !== undefined).map((gateway) => ({ gateway, classic: true }))),
+    ...topology.vwanHubs.filter((hub) => hub.vpnNat !== undefined).map((gateway) => ({ gateway, classic: false })),
   ]
   for (const { gateway, classic } of gatewayOwners) {
     const config = gateway.vpnNat!
@@ -70,13 +70,13 @@ export function validateVpnNat(topology: AzNetTopology): void {
   }
   const associations: { connection: AzVpnConnection; rule: VpnNatRule }[] = []
   for (const connection of topology.vpnConnections) {
-    if (!connection.nat) continue
+    if (connection.nat === undefined) continue
     const nat = connection.nat
     record(nat, ['purpose', 'connectionType', 'trafficSelectors', 'rules', 'bgpPeerIp', 'bgpPeerTranslatedIp', 'onPremisesRoutes'])
     if (nat.purpose !== 'overlap' || nat.connectionType !== 'IPsec' || nat.trafficSelectors !== 'route-based'
       || connection.transport === 'SDWAN' || connection.targetKind === 'appliance') fail('only route-based cross-premises IPsec overlap NAT is supported.')
     const gateway = vpnNatGateway(topology, connection)
-    if (!gateway) fail('declare the original gateway capability before attaching rules.')
+    if (gateway === undefined) fail('declare the original gateway capability before attaching rules.')
     if (connection.targetKind === 'vnet-gateway' && connection.bgpEnabled
       && !topology.vnets.flatMap((vnet) => vnet.gateways).find((gateway) => gateway.id === connection.targetId)?.bgpEnabled) fail('BGP-enabled NAT connections require BGP enabled on the classic gateway.')
     if (nat.onPremisesRoutes !== undefined && (!Array.isArray(nat.onPremisesRoutes) || nat.onPremisesRoutes.length > 500
@@ -84,6 +84,9 @@ export function validateVpnNat(topology: AzNetTopology): void {
     if ([nat.bgpPeerIp, nat.bgpPeerTranslatedIp].some((peer) => peer !== undefined && (typeof peer !== 'string' || ipv4(peer) === undefined))) fail('declared BGP peers must be IPv4 addresses.')
     if (!Array.isArray(nat.rules) || nat.rules.length < 1 || nat.rules.length > 500) fail('declare 1–500 connection-owned mapping rules.')
     const ids = new Set<string>()
+    const isBgpPeerRule = (rule: VpnNatRule) => connection.targetKind === 'vwan-hub' && connection.bgpEnabled
+      && rule.mode === 'IngressSNAT' && rule.type === 'Static' && nat.bgpPeerIp !== undefined
+      && rule.internalMapping === `${nat.bgpPeerIp}/32`
     for (const rule of nat.rules) {
       record(rule, ['id', 'name', 'type', 'mode', 'internalMapping', 'externalMapping', 'ipConfigurationId'])
       if (typeof rule.id !== 'string' || !rule.id || rule.id.length > 120 || ids.has(rule.id)) fail('unique bounded rule IDs required.')
@@ -99,9 +102,8 @@ export function validateVpnNat(topology: AzNetTopology): void {
         if (rule.type === 'Dynamic' ? !['0', '1'].includes(rule.ipConfigurationId ?? '') : rule.ipConfigurationId !== undefined) fail('VWAN dynamic rules require instance 0 or 1; static rules apply to both instances.')
       } else if (rule.ipConfigurationId !== 'default') fail('classic single-instance rules require IP configuration default.')
       const own = nat.rules.filter((other) => other !== rule && other.mode === rule.mode && overlaps(rule.internalMapping, other.internalMapping))
-      if (own.some((other) => !(connection.targetKind === 'vwan-hub'
-        && (rule.type === 'Static' && internal!.length === 32 && other.type === 'Dynamic'
-          || other.type === 'Static' && cidr(other.internalMapping)?.length === 32 && rule.type === 'Dynamic')))) fail('ambiguous internal mapping ranges.')
+      if (own.some((other) => !(isBgpPeerRule(rule) && other.type === 'Dynamic'
+        || isBgpPeerRule(other) && rule.type === 'Dynamic'))) fail('ambiguous internal mapping ranges.')
       associations.push({ connection, rule })
     }
     if (connection.bgpEnabled) {
@@ -116,7 +118,7 @@ export function validateVpnNat(topology: AzNetTopology): void {
       if (topology.vnets.some((vnet) => vnet.prefixes.some((prefix) => inRange(prefix, nat.bgpPeerTranslatedIp!)))) fail('configured BGP peer overlaps an Azure VNet address space.')
       if (gateway!.bgpRouteTranslation) {
         const prefixes = topology.sites.find((site) => site.id === connection.siteId)?.prefixes ?? []
-        if (nat.rules.some((rule) => rule.mode === 'IngressSNAT' && !(rule.type === 'Static' && cidr(rule.internalMapping)?.length === 32)
+        if (nat.rules.some((rule) => rule.mode === 'IngressSNAT' && !isBgpPeerRule(rule)
           && prefixes.some((prefix) => overlaps(prefix, rule.internalMapping) && prefix !== rule.internalMapping))) fail('BGP must advertise exact ingress internal mapping prefixes, not aggregates or more-specifics.')
       }
     }
