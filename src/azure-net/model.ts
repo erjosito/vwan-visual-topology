@@ -1,5 +1,6 @@
 import type { HubRouteTable, HubRoutingConfiguration, LayoutMode, NodePosition, Preference, RouteMap, RouteMapAssignment } from '../model'
 import type { NetworkInventory } from '../inventory'
+import type { ApplicationInventory } from '../application'
 import { cidr, contains, ipv4 } from '../validation'
 import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
@@ -269,6 +270,7 @@ export interface AzNetTopology {
   siteLinks: AzSiteLink[]
   allowBranchToBranchTraffic?: boolean
   inventory?: NetworkInventory
+  application?: ApplicationInventory
   layout?: {
     mode: LayoutMode
     positions: Partial<Record<LayoutMode, Record<string, NodePosition>>>

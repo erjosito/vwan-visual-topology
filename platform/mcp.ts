@@ -66,6 +66,19 @@ server.registerTool('get_schema', {
         frontendPort: 443, backendPort: 8443, disableOutboundSnat: true }], inboundNatRules: [], outboundRules: [] }],
     location: 'optional topology.inventory; omitted addresses remain unknown; VWAN detailed subnets are explicitly declared in spoke.subnets',
   },
+  applicationContracts: {
+    contractVersion: 2, operation: 'application', providers: [],
+    inventory: { location: 'optional topology.application', version: 1,
+      services: [{ id: 'original-service', name: 'Declared identity only', kind: 'application-gateway or front-door',
+        owner: 'optional original VNet/spoke owner', references: [], unsupportedFeatures: [] }],
+      dnsProfiles: [{ id: 'original-profile', name: 'Declared identity only', kind: 'traffic-manager', references: [], unsupportedFeatures: [] }] },
+    http: { version: 1, kind: 'http', serviceId: 'original-service', client: 'original workload tuple or explicit external public IPv4',
+      scheme: 'http or https', host: 'app.example.test', port: 443, path: '/' },
+    dns: { version: 1, kind: 'dns', profileId: 'original-profile', resolver: 'original workload tuple or explicit external public IPv4',
+      name: 'app.example.test', evaluatedAt: '2026-11-16T00:00:00.000Z', cache: 'fresh' },
+    evidence: 'application section: ordered typed decisions, original references, configuration outcome, uncertainty and permanently unverified availability.',
+    boundary: 'No service provider/configuration authoring, DNS queries, probes, origin fetches, HTTP/TLS availability or application training grades. Unknown service configuration fields fail admission.',
+  },
   handoff: 'Review the resulting native topology JSON, then import it through the web or desktop file UI. This server does not write files or modify an open UI.',
 }))
 
@@ -73,12 +86,13 @@ server.registerTool('start_simulation', {
   description: 'Start an isolated bounded validation/simulation/evaluation job. Requirements must be explicit, uniquely identified and fully represented. Returns an expiring session-local handle, not a passing grade.',
   inputSchema: {
     request: z.object({
-      contractVersion: z.literal(1),
+      contractVersion: z.union([z.literal(1), z.literal(2)]),
       engineVersion: z.string().optional(),
-      operation: z.enum(['validate', 'simulate', 'evaluate']),
+      operation: z.enum(['validate', 'simulate', 'evaluate', 'application']),
       document: z.object({ mode: z.enum(['vwan', 'hub-spoke', 'full']), topology: z.record(z.string(), z.unknown()) }).strict(),
       locale: z.enum(['en', 'ja']).optional(),
       requirements: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
+      application: z.record(z.string(), z.unknown()).optional(),
       packet: z.object({
         source: z.record(z.string(), z.unknown()), target: z.record(z.string(), z.unknown()),
         protocol: z.enum(['tcp', 'udp']), sourcePort: z.number().int().min(1).max(65535), destinationPort: z.number().int().min(1).max(65535),
@@ -103,14 +117,14 @@ server.registerTool('get_job', {
       contractVersion: result.contractVersion, engineVersion: result.engineVersion, revision: result.revision,
       resultStatus: result.status, errors: result.errors, limitations: result.limitations.slice(0, 20),
       assessments: result.assessments.map(({ id, outcome, reasons }) => ({ id, outcome, reasons })),
-      sections: ['document', 'simulation', 'assessments', 'packet', 'vpnPacket'],
+      sections: ['document', 'simulation', 'assessments', 'packet', 'vpnPacket', 'application'],
     } : {}),
   })
 })
 
 server.registerTool('get_evidence', {
   description: 'Retrieve bounded JSON-text chunks of a completed job section. Concatenate all chunks in offset order before parsing; a partial chunk is not complete evidence.',
-  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments', 'packet', 'vpnPacket']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
+  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments', 'packet', 'vpnPacket', 'application']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
 }, async ({ handle, section, offset, limit }) => {
   const { result } = jobs.get(handle)
   if (!result) throw new Error('Job is still running.')

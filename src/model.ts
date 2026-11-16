@@ -1,4 +1,5 @@
 import type { InventorySubnet, NetworkInventory } from './inventory'
+import type { ApplicationInventory } from './application'
 
 export type Preference = 'ExpressRoute' | 'VPN' | 'ASPath'
 export type Transport = 'ExpressRoute' | 'VPN' | 'SDWAN' | 'SpokeNVA'
@@ -216,6 +217,7 @@ export interface Topology {
   layout?: DiagramLayout
   azureImport?: AzureImportInfo
   inventory?: NetworkInventory
+  application?: ApplicationInventory
 }
 
 export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink' | 'erLocation' | 'erLink'
