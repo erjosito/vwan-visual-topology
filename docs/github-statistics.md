@@ -93,6 +93,18 @@ Restore the variable/deploy after reapplying base infrastructure that replaces
 app settings. Existing dashboard authentication and private Storage remain
 unchanged.
 
+On 2026-11-16, [SWA metrics deployment 43931033007](https://github.com/erjosito/vwan-visual-topology/actions/runs/43931033007)
+passed all 20 focused statistics tests and deployed successfully. The existing
+runtime identity received Reader on the production SWA resource only. A real
+administrator-triggered collection returned private raw/summary Blob ETags,
+and approved-user API/browser checks confirmed the persisted web section.
+The initial 90-day backfill contained 19 days with measured site hits; all
+reported-error samples were unavailable, not zero. Live desktop/mobile
+rendering and range selection passed. Anonymous summary/collection requests
+returned HTTP 401, and Storage public networking, public Blob access and shared
+keys remained disabled. This verifies manual collection, not a later scheduled
+timer execution.
+
 For later aggregation:
 
 - Traffic windows overlap. For each repository/metric/UTC date, use the daily
