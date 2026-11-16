@@ -168,3 +168,23 @@ test('compact desktop-height workspace keeps pointer discovery and focused conte
   await expect(heading).toBeInViewport()
   expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
 })
+
+test('focused VWAN discovery remains visible after the shared status header reflows', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 640 })
+  await page.addInitScript(() => Object.defineProperty(window, 'desktopSimulator', { value: {} }))
+  await page.goto('/?mode=vwan&sample=hub-routing-preferences')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
+  const topology = await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))
+  const hub = topology.hubs[0]
+  const tools = page.getByRole('complementary', { name: toolsName, exact: true })
+  await tools.getByRole('searchbox').fill(hub.id)
+  await tools.getByRole('button', { name: `Select Virtual WAN hub: ${hub.name}`, exact: true }).click()
+  const heading = tools.locator('h3[tabindex="-1"]')
+  await expect(heading).toBeFocused()
+  const header = page.locator('header.unified-topbar')
+  const height = (await header.boundingBox())!.height
+  await header.evaluate((header) => { header.style.paddingBottom = '70px' })
+  await expect.poll(async () => (await header.boundingBox())!.height).toBeGreaterThan(height)
+  await expect(heading).toBeInViewport({ ratio: 0.99 })
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))).toEqual(topology)
+})

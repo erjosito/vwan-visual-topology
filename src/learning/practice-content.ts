@@ -40,6 +40,7 @@ export const learningLabels = {
 } satisfies Record<string, Localized>
 
 export const practiceLabels = {
+  practiceOwnership: { en: 'Another tab owns practice, or exclusive local storage access is unavailable. Return to your design in that tab or close it, then resume practice here. Normal designs are unaffected.', ja: '別のタブが練習を所有しているか、排他的なローカル保存を利用できません。そのタブで自分の設計に戻るかタブを閉じてから、ここで練習を再開してください。通常の設計には影響しません。' },
   practiceWorkspace: { en: 'Practice workspace', ja: '練習ワークスペース' },
   practiceProtected: { en: 'Practice canvas — your normal design is kept separately.', ja: '練習キャンバス — 通常の設計は別に保持されています。' },
   practiceAvailable: { en: 'Separate practice workspace', ja: '独立した練習ワークスペース' },

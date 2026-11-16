@@ -91,7 +91,8 @@ describe('isolated practice persistence', () => {
 
   it('rejects cancelled opens and writers from an earlier editor generation', async () => {
     const store = storage()
-    const session = createPracticeSession({ storage: () => store, changed: () => {}, notice: () => {}, replaced: () => {} })
+    const session = createPracticeSession({ storage: () => store, changed: () => {}, notice: () => {}, replaced: () => {},
+      ownership: { owned: true, acquire: async () => true, release: () => {} } })
     const input = record()
     await expect(session.open(input, 'vwan', () => false)).rejects.toThrow('cancelled')
     expect(store.getItem(practiceWorkspaceKey)).toBeNull()

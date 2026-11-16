@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { t } from './i18n'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
@@ -8,6 +8,7 @@ import { practiceWorkspaceKey } from './learning/practice-workspace-key'
 import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
 import type { PracticeSession } from './learning/practice-session'
 import type { CourseRunner, RunnerState } from './learning/runner'
+import { createProgressLedger, guidedProgressKey, legacyProgressKey } from './learning/progress-ledger'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
@@ -36,7 +37,7 @@ export function UnifiedSimulatorRoot() {
   const [notice, setNotice] = useState(startup.recovery ?? '')
   const [practice, setPractice] = useState<PracticeWorkspace>()
   const [practiceReady, setPracticeReady] = useState(false)
-  const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict'>('')
+  const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict' | 'ownership'>('')
   const [practiceEpoch, setPracticeEpoch] = useState(0)
   const [learningView, setLearningView] = useState({ open: false })
   const [learning, setLearning] = useState<CourseRunner>()
@@ -48,12 +49,16 @@ export function UnifiedSimulatorRoot() {
   const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
   const designHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const practiceHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
+  const [progress] = useState(() => createProgressLedger(() => localStorage))
+  const learningProgress = useSyncExternalStore(progress.subscribe, progress.getSnapshot)
   const { style, maximized } = useCanvasPresentation()
   const request = useRef(0)
   const loadLearning = useCallback(() => {
     learningLoading.current ??= import('./learning/learning-session').then(({ createLearningSession }) => {
       const runner = createLearningSession({
         changed: setLearningState,
+        completions: progress.getSnapshot().ledger?.completions,
+        completed: (completion) => progress.record(completion, practiceRef.current?.owns === true),
         workspace: () => {
           const current = practiceRef.current?.current
           if (!current?.active) return undefined
@@ -70,7 +75,18 @@ export function UnifiedSimulatorRoot() {
       return runner
     }).catch((error) => { learningLoading.current = undefined; throw error })
     return learningLoading.current
-  }, [])
+  }, [progress])
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage || (event.key !== null && ![guidedProgressKey, legacyProgressKey].includes(event.key))) return
+      const owned = practiceRef.current?.owns === true
+      progress.externalChange(owned)
+      if (owned) learningRef.current?.cancel()
+      else learningRef.current?.replaceProgress(progress.getSnapshot().ledger?.completions ?? [])
+    }
+    window.addEventListener('storage', changed)
+    return () => window.removeEventListener('storage', changed)
+  }, [progress])
   const loadPractice = () => {
     practiceLoading.current ??= import('./learning/practice-session').then(({ createPracticeSession }) => {
       practiceRef.current = createPracticeSession({
@@ -100,13 +116,24 @@ export function UnifiedSimulatorRoot() {
     setActive((current) => current && ({ ...current, capture: undefined }))
     setLibraryOpen(false)
   }
-  const resumePractice = () => {
-    request.current++
-    if (practiceRef.current?.resume(active?.provider)) setLibraryOpen(false)
+  const resumePractice = async () => {
+    const ticket = ++request.current
+    if (await practiceRef.current?.resume(active?.provider, () => ticket === request.current)) setLibraryOpen(false)
   }
-  const discardPractice = () => {
-    request.current++
-    if (practiceRef.current?.discard() && !active) setLibraryOpen(true)
+  const discardPractice = async () => {
+    const ticket = ++request.current
+    if (await practiceRef.current?.discard(() => ticket === request.current) && !active) setLibraryOpen(true)
+  }
+  const writeProgress = async (reset = false, expected?: typeof learningProgress) => {
+    if (reset && progress.getSnapshot() !== expected) return false
+    const session = await loadPractice()
+    if (!await session.acquire()) return false
+    try {
+      if (reset && progress.getSnapshot() !== expected) return false
+      const success = reset ? progress.reset(session.owns) : progress.retry(session.owns)
+      if (success && reset) learningRef.current?.replaceProgress([])
+      return success
+    } finally { session.release() }
   }
   const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
     request.current++
@@ -256,6 +283,9 @@ export function UnifiedSimulatorRoot() {
     },
     loadLearning, learning, learningState,
     reportLearningObservation: (event) => learningRef.current?.observe(event),
+    learningProgress, resetLearningProgress: (expected) => writeProgress(true, expected),
+    retryLearningProgress: () => writeProgress(),
+    backupLearningProgress: progress.backup,
   }}>
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}

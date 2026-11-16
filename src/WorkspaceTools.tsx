@@ -103,7 +103,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     }
   }, [open])
   useEffect(() => {
-    if (focusSelection.current) {
+    if (focusSelection.current || selectionHeading.current === document.activeElement) {
       focusSelection.current = false
       const target = selectionHeading.current ?? input.current
       target?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
