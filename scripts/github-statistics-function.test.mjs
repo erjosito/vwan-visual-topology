@@ -1,0 +1,68 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { collectAndPersist } from '../functions/github-statistics/handler.mjs'
+
+const snapshot = {
+  repository: 'owner/project',
+  collectedAt: '2026-11-16T04:17:00Z',
+  releases: [{ id: 1 }],
+  traffic: { status: 'available' },
+}
+
+function options(blob) {
+  return {
+    repository: 'owner/project',
+    trafficToken: 'do-not-persist-this-token',
+    invocationId: 'invocation-123',
+    collect: async ({ repository, trafficToken }) => {
+      assert.equal(repository, snapshot.repository)
+      assert.equal(trafficToken, 'do-not-persist-this-token')
+      return snapshot
+    },
+    container: {
+      getBlockBlobClient(name) {
+        assert.equal(name, 'github/owner/project/snapshots/2026/11/16/function-invocation-123.json')
+        return blob
+      },
+    },
+  }
+}
+
+test('persists an immutable snapshot and returns only a verified storage receipt', async () => {
+  const result = await collectAndPersist(options({
+    async uploadData(data, settings) {
+      assert.equal(settings.conditions.ifNoneMatch, '*')
+      assert.equal(settings.blobHTTPHeaders.blobContentType, 'application/json')
+      assert.deepEqual(JSON.parse(data.toString()), snapshot)
+      assert.ok(!data.toString().includes('do-not-persist-this-token'))
+      return { etag: 'storage-receipt' }
+    },
+  }))
+  assert.deepEqual(result, {
+    status: 'created',
+    blobName: 'github/owner/project/snapshots/2026/11/16/function-invocation-123.json',
+    etag: 'storage-receipt',
+    traffic: 'available',
+    releases: 1,
+  })
+})
+
+test('an invocation retry checks the existing blob rather than overwriting it', async () => {
+  const result = await collectAndPersist(options({
+    async uploadData() { throw Object.assign(new Error('Already stored'), { statusCode: 412 }) },
+    async getProperties() { return { etag: 'original-receipt' } },
+  }))
+  assert.equal(result.status, 'already_exists')
+  assert.equal(result.etag, 'original-receipt')
+})
+
+test('missing credentials and failed collection never create a blob; storage failures propagate', async () => {
+  const neverUpload = { async uploadData() { assert.fail('Unexpected write') } }
+  await assert.rejects(collectAndPersist({ ...options(neverUpload), trafficToken: '' }), /required/)
+  await assert.rejects(collectAndPersist({
+    ...options(neverUpload), collect: async () => { throw new Error('GitHub unavailable') },
+  }), /GitHub unavailable/)
+  await assert.rejects(collectAndPersist(options({
+    async uploadData() { throw Object.assign(new Error('Private endpoint unavailable'), { statusCode: 403 }) },
+  })), /Private endpoint unavailable/)
+})

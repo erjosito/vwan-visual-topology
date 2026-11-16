@@ -1,11 +1,16 @@
 # Daily GitHub statistics
 
-The `GitHub statistics` workflow collects one snapshot daily at approximately
-04:17 UTC, or on manual dispatch from `main`. GitHub schedules can be delayed.
-It uses Node.js without installing packages and stores JSON in private Azure
-Blob Storage, not expiring Actions artifacts or a public Git branch.
-No Azure Function, app instrumentation, user account, or public dashboard is
-introduced.
+A Node.js Azure Function collects one snapshot daily at **04:17 UTC**. It uses
+Flex Consumption with 512 MB instances, zero always-ready instances and a
+dedicated VNet integration subnet. Azure Storage public network access, anonymous
+Blob access and shared-key authentication remain disabled. One Blob private
+endpoint and a linked private DNS zone provide host, deployment-package and
+snapshot connectivity inside the dedicated statistics resource group.
+
+The `Deploy statistics Function` workflow only tests and deploys code from
+`main`; it has no daily collection schedule. No app usage telemetry, project
+accounts or public dashboard are introduced. A personal/local runner is not
+required.
 
 ## Collected data and interpretation
 
@@ -18,8 +23,10 @@ identities of visitors/stargazers, referrers and visited paths are not retained.
 An optional separate GitHub token enables the last 14 days of daily repository
 views/clones and unique visitor/cloner estimates, plus GitHub's window totals.
 Without that token, `traffic.status` is `not_configured`, not zero. A configured
-token that fails, an API/rate-limit error, or a failed upload fails the workflow;
-no partial snapshot is uploaded. Review failed runs and expired-token notices.
+token that fails, an API/rate-limit error, or a failed upload fails collection;
+no partial snapshot is uploaded. The Function requires this token so that
+scheduled collection cannot silently lose traffic coverage. Review failed
+invocations and expired-token notices.
 
 These are distribution and repository-interest metrics, **not active users or
 installations**. Downloads include repeat downloads, automation and maintainer
@@ -42,8 +49,10 @@ For later aggregation:
   net change, not the number of new events.
 
 Snapshots use
-`github/<owner>/<repo>/snapshots/YYYY/MM/DD/<run-id>-<attempt>.json`.
-Reruns create separate snapshots without overwriting earlier ones. There is no
+`github/<owner>/<repo>/snapshots/YYYY/MM/DD/function-<invocation-id>.json`.
+New invocations create separate snapshots; conditional writes prevent
+overwrites, and repeated delivery of the same invocation checks the stored
+receipt. There is no
 automatic expiry; review storage cost/retention as history grows. Blob and
 container soft deletion provide a 30-day accidental-deletion recovery window,
 not an independent backup or immutable archive.
@@ -51,22 +60,32 @@ not an independent backup or immutable archive.
 ## Provision private storage
 
 Review the standalone subscription-scope template
-`infra\github-statistics.bicep`. It creates a dedicated resource group, an LRS
-storage account, a private `github-statistics` container, a managed identity,
-GitHub environment federation, and a container-scoped Storage Blob Data
-Contributor assignment. It does not change application hosting.
+`infra\github-statistics.bicep`. It creates the dedicated resource group and LRS
+Storage account, private `github-statistics` and `function-deployments`
+containers, deployment and runtime identities, GitHub federation, an FC1 plan,
+Function app, VNet, Blob private endpoint and private DNS configuration. It does
+not change the web/desktop/MCP application hosting or add an always-on server.
 
-Public blob access and shared-key authentication are disabled. The storage
-network endpoint is public so GitHub-hosted runners can connect, but reads and
-writes require Azure authorization. The workflow identity can manage blobs
-(including deletion) only in this container; it has no subscription-wide
-Contributor role. A dashboard reader should get a separate Blob Data Reader
-assignment rather than reusing the uploader identity.
+The runtime identity has **Storage Blob Data Owner on the dedicated statistics
+account**, as required for host locks/keys as well as deployment and snapshot
+operations. It cannot access unrelated storage. The GitHub identity has
+**Website Contributor only on this Function app**, allowing code deployment and
+protected settings updates, not subscription-wide Contributor. A dashboard
+reader should receive a separate data-reader assignment and private network
+connectivity.
+
+The initial hosted-collector design was blocked by Azure Policy disabling public
+Storage networking. Its legacy CI container write grant should be removed after
+the Function is verified; removing the declaration from an incremental Bicep
+deployment alone does not delete the old assignment. Never re-enable public
+Storage access or add an exception to make the former hosted collector work.
 
 Deploy using an Azure identity allowed to create the resources and assign roles
 (for example, Contributor plus Role Based Access Control Administrator at the
-appropriate scope). This creates billable Azure storage; review the what-if
-before deployment.
+appropriate scope). This creates billable private networking and storage; review the what-if
+before deployment. The main fixed costs are one private endpoint and private
+DNS zone. No NAT Gateway, VPN gateway, DNS Private Resolver or Premium plan is
+required for this isolated timer workload.
 
 ```powershell
 az login
@@ -106,35 +125,46 @@ diagnosing a mismatch.
    | `AZURE_STATS_CLIENT_ID` | `clientId` |
    | `AZURE_STATS_TENANT_ID` | `tenantId` |
    | `AZURE_STATS_STORAGE_ACCOUNT` | `storageAccount` |
+   | `AZURE_STATS_SUBSCRIPTION_ID` | `subscriptionId` |
+   | `AZURE_STATS_FUNCTION_APP` | `functionAppName` |
+   | `AZURE_STATS_RESOURCE_GROUP` | Resource group name used for deployment |
 
-3. Optionally add environment secret `GH_STATS_TRAFFIC_TOKEN`: a fine-grained
+3. Add environment secret `GH_STATS_TRAFFIC_TOKEN`: a fine-grained
    GitHub PAT restricted to this repository with **Administration: read**
    (and the automatically included Metadata read permission). The token owner
    must have sufficient repository access. Do not grant Administration write.
    Set an expiry and arrange renewal. The built-in `GITHUB_TOKEN` handles
    public counters/releases but cannot supply the needed traffic permission.
-4. Merge the workflow to `main`, enable Actions if needed, and manually run
-   **GitHub statistics** once. Confirm success and the blob's existence.
+4. Merge the workflow to `main`, enable it if previously paused, and manually run
+   **Deploy statistics Function** once. Confirm code deployment and perform the
+   authenticated manual collection described below.
    Initial Azure RBAC propagation can take time; rerun if necessary.
 
 Only the environment's managed identity federation grants Azure access.
 No Azure client secret or storage account key is stored in GitHub. The optional
-GitHub PAT is still a credential and is sent only to GitHub traffic endpoints.
-Azure login deliberately does not select a subscription: container-only data
-permissions need not grant subscription discovery, and upload uses the storage
-account's data endpoint directly.
-Snapshots are deliberately not uploaded as workflow artifacts or printed in
-logs, since logs/artifacts may be accessible to repository visitors.
+GitHub PAT is still a credential. The deployment workflow transfers it directly
+from the environment secret into encrypted Function app settings, without
+printing its value or packaging it with code. At collection time it is sent
+only to GitHub traffic endpoints. Do not copy a broad personal CLI token into
+automation. Rotate the dedicated read token by updating the environment secret
+and dispatching the deployment workflow again.
 
-GitHub may disable schedules in public repositories after 60 days without
-repository activity. Monitor workflow execution, not just snapshot contents.
-Enable appropriate workflow failure notifications and periodically verify the
-latest snapshot age.
+Code is pushed to the authenticated Function SCM deployment endpoint using
+Flex OneDeploy. The runtime/deployment identity, not the hosted runner, must
+reach private deployment storage. Deployment and the first collection must be
+tested end to end; a successful ARM deployment alone does not establish this
+connectivity. Do not temporarily expose Storage to fix deployment failures.
+
+The Azure timer retries failures up to three times at 15-minute intervals and
+does not run automatically on host startup. It is independent of GitHub's
+inactive-repository schedule suspension. Monitor Azure Function execution and
+snapshot freshness, not only successful code deployments. Initial monitoring
+does not include a separately provisioned alerting workspace.
 
 ## Local checks and manual collection
 
 ```powershell
-node --test scripts\collect-github-statistics.test.mjs
+node --test scripts\collect-github-statistics.test.mjs scripts\github-statistics-function.test.mjs
 $env:GITHUB_TOKEN = gh auth token
 # Optional: set GH_STATS_TRAFFIC_TOKEN using a suitably scoped token.
 node scripts\collect-github-statistics.mjs --repository erjosito/vwan-visual-topology --output test-artifacts\github-statistics.json
@@ -143,7 +173,30 @@ Remove-Item Env:GITHUB_TOKEN
 
 The collector refuses to overwrite an existing output file; choose a fresh
 filename for another local run. `test-artifacts` is already ignored by Git.
-The workflow requires only `contents: read` and `id-token: write`.
+The workflow requires only `contents: read` and `id-token: write`. Runtime
+dependencies are isolated in `functions\github-statistics\package.json` and its
+lockfile; the simulator application does not acquire Azure SDK dependencies.
+
+`scripts\package-github-statistics-function.mjs` stages only the Function
+sources, the shared collector, host configuration and locked manifest under
+`test-artifacts`. The deployment workflow installs production dependencies in
+that staging folder and uploads a ZIP. Credentials and collected snapshots
+are not included.
+
+## Manual verification
+
+The only HTTP function is `POST /api/statistics/collect`, protected with
+`authLevel: admin`. It takes no repository, topology or storage parameters.
+Invoke it with the Function host's administrator key in the `x-functions-key`
+header, never in the URL or public logs. Retrieve the key only through an
+authorized Azure management session; do not print or save it.
+
+A successful response returns the Blob path, ETag, traffic coverage and release
+count after Storage acknowledges the conditional write. It never returns the
+GitHub token or raw traffic data. Requests without the key must be rejected.
+The endpoint is for deliberate first-run checks or recovery, not a public
+analytics API. Snapshot contents remain accessible only through authorized
+private-network data access.
 
 ## Dashboard boundary
 
@@ -155,4 +208,5 @@ limitations; do not expose this container or its upload identity.
 References:
 [GitHub traffic API](https://docs.github.com/en/rest/metrics/traffic),
 [Azure Login with OIDC](https://github.com/Azure/login#login-with-openid-connect-oidc-recommended),
-[scheduled workflow limitations](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+[Flex Consumption](https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan),
+[Functions storage requirements](https://learn.microsoft.com/azure/azure-functions/storage-considerations).

@@ -1,9 +1,14 @@
-name: GitHub statistics
+name: Deploy statistics Function
 
 on:
-  schedule:
-    - cron: '17 4 * * *'
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - functions/github-statistics/**
+      - scripts/collect-github-statistics.mjs
+      - scripts/package-github-statistics-function.mjs
+      - .github/workflows/github-statistics.yml
 
 permissions:
   contents: read
@@ -13,10 +18,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  collect:
+  deploy:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: github-statistics
     permissions:
       contents: read
@@ -30,44 +35,57 @@ jobs:
         env:
           AZURE_CLIENT_ID: ${{ vars.AZURE_STATS_CLIENT_ID }}
           AZURE_TENANT_ID: ${{ vars.AZURE_STATS_TENANT_ID }}
-          AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STATS_STORAGE_ACCOUNT }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_STATS_SUBSCRIPTION_ID }}
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
         run: |
-          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_STORAGE_ACCOUNT; do
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_FUNCTION_APP AZURE_RESOURCE_GROUP; do
             if [ -z "${!name}" ]; then
               echo "::error::Missing configuration: $name. See docs/github-statistics.md."
               exit 1
             fi
           done
-      - name: Test collector
-        run: node --test scripts/collect-github-statistics.test.mjs
-      - name: Collect snapshot
-        id: snapshot
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          GH_STATS_TRAFFIC_TOKEN: ${{ secrets.GH_STATS_TRAFFIC_TOKEN }}
+      - name: Test collector and private persistence
+        run: node --test scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs
+      - name: Package locked Function dependencies
         run: |
-          node scripts/collect-github-statistics.mjs --output test-artifacts/github-statistics.json
-          day=$(node --input-type=module -e "import fs from 'node:fs'; console.log(JSON.parse(fs.readFileSync('test-artifacts/github-statistics.json')).collectedAt.slice(0, 10).replaceAll('-', '/'))")
-          echo "blob=github/${GITHUB_REPOSITORY}/snapshots/${day}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json" >> "$GITHUB_OUTPUT"
+          node scripts/package-github-statistics-function.mjs
+          npm ci --omit=dev --prefix test-artifacts/github-statistics-function
+          cd test-artifacts/github-statistics-function
+          zip -q -r ../github-statistics-function.zip .
       - name: Sign in to Azure without a stored credential
         uses: azure/login@v2
         with:
           client-id: ${{ vars.AZURE_STATS_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_STATS_TENANT_ID }}
-          allow-no-subscriptions: true
-      - name: Persist private snapshot
+          subscription-id: ${{ vars.AZURE_STATS_SUBSCRIPTION_ID }}
+      - name: Configure protected traffic credential
         env:
-          AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STATS_STORAGE_ACCOUNT }}
-          SNAPSHOT_BLOB: ${{ steps.snapshot.outputs.blob }}
+          TRAFFIC_TOKEN: ${{ secrets.GH_STATS_TRAFFIC_TOKEN }}
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
         run: |
-          az storage blob upload \
-            --account-name "$AZURE_STORAGE_ACCOUNT" \
-            --container-name github-statistics \
-            --name "$SNAPSHOT_BLOB" \
-            --file test-artifacts/github-statistics.json \
-            --auth-mode login \
-            --overwrite false \
-            --content-type application/json \
+          if [ -z "$TRAFFIC_TOKEN" ]; then
+            echo "::error::GH_STATS_TRAFFIC_TOKEN is required."
+            exit 1
+          fi
+          az functionapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_FUNCTION_APP" \
+            --settings "GH_STATS_TRAFFIC_TOKEN=$TRAFFIC_TOKEN" \
             --only-show-errors \
             --output none
-          echo "Snapshot saved to private Azure Blob Storage. No statistics were published." >> "$GITHUB_STEP_SUMMARY"
+      - name: Deploy Function package
+        env:
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_FUNCTION_APP" \
+            --src test-artifacts/github-statistics-function.zip \
+            --build-remote false \
+            --timeout 600 \
+            --only-show-errors \
+            --output none
+          echo "Function package deployed. Daily collection runs in Azure, not GitHub Actions." >> "$GITHUB_STEP_SUMMARY"

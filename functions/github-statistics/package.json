@@ -1,0 +1,16 @@
+{
+  "name": "github-statistics-function",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "functions/github-statistics/index.mjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@azure/functions": "4.17.1",
+    "@azure/identity": "4.14.1",
+    "@azure/storage-blob": "12.34.0",
+    "vwan-visual-topology": "file:../../../../../../../Repos/vwan-visual-topology"
+  }
+}

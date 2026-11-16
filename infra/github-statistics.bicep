@@ -36,8 +36,24 @@ module storage './github-statistics-storage.bicep' = {
   }
 }
 
+module collector './github-statistics-function.bicep' = {
+  name: 'github-statistics-function'
+  scope: resourceGroup
+  params: {
+    location: location
+    storageAccountName: storage.outputs.storageAccount
+    automationPrincipalId: storage.outputs.automationPrincipalId
+    tags: tags
+  }
+}
+
 output resourceGroupId string = resourceGroup.id
 output storageAccount string = storage.outputs.storageAccount
 output container string = storage.outputs.container
 output clientId string = storage.outputs.clientId
 output tenantId string = tenant().tenantId
+output functionAppName string = collector.outputs.functionAppName
+output functionAppId string = collector.outputs.functionAppId
+output functionUrl string = collector.outputs.functionUrl
+output runtimeClientId string = collector.outputs.runtimeClientId
+output subscriptionId string = subscription().subscriptionId

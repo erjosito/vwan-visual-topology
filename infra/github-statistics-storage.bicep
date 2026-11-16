@@ -18,7 +18,7 @@ resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
     allowBlobPublicAccess: false
     allowSharedKeyAccess: false
     defaultToOAuthAuthentication: true
-    publicNetworkAccess: 'Enabled'
+    publicNetworkAccess: 'Disabled'
   }
 }
 
@@ -63,16 +63,7 @@ resource federation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedI
   }
 }
 
-resource uploadRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(container.id, identity.id, 'blob-data-contributor')
-  scope: container
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
-    principalId: identity.properties.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
 output storageAccount string = storage.name
 output container string = container.name
 output clientId string = identity.properties.clientId
+output automationPrincipalId string = identity.properties.principalId
