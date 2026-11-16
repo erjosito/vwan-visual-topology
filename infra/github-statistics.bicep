@@ -11,8 +11,8 @@ param resourceGroupName string = 'rg-network-simulator-statistics'
 @maxLength(24)
 param storageAccountName string = 'stnetstats${uniqueString(subscription().id, resourceGroupName)}'
 
-@description('GitHub owner/repository permitted to upload snapshots.')
-param repository string = 'erjosito/vwan-visual-topology'
+@description('Exact GitHub environment OIDC subject, including immutable owner/repository IDs when enabled.')
+param githubOidcSubject string = 'repo:erjosito@9462396/vwan-visual-topology@1437213205:environment:github-statistics'
 
 var tags = {
   project: 'vwan-visual-topology'
@@ -31,7 +31,7 @@ module storage './github-statistics-storage.bicep' = {
   params: {
     location: location
     storageAccountName: storageAccountName
-    repository: repository
+    githubOidcSubject: githubOidcSubject
     tags: tags
   }
 }

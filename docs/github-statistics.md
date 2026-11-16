@@ -75,9 +75,24 @@ az deployment sub what-if --name github-statistics --location westeurope --templ
 az deployment sub create --name github-statistics --location westeurope --template-file infra\github-statistics.bicep --query properties.outputs --output json
 ```
 
-Override `repository`, `resourceGroupName`, `storageAccountName` or `location`
-using deployment parameters as needed. Do not point the deployment at unrelated
-existing resources.
+Override `githubOidcSubject`, `resourceGroupName`, `storageAccountName` or
+`location` using deployment parameters as needed. Do not point the deployment
+at unrelated existing resources.
+
+The default OIDC subject matches this repository's immutable-ID subject. For
+another repository, inspect its OIDC configuration before deploying:
+
+```powershell
+gh api repos/<owner>/<repository>/actions/oidc/customization/sub
+```
+
+For the default environment-based subject, append
+`:environment:github-statistics` to the returned `sub_claim_prefix` and pass it
+as `githubOidcSubject`. Repositories using a custom subject template must use
+that template's actual emitted subject instead. Do not disable immutable
+subjects to make a name-only federation work. The subject in Azure must exactly
+match GitHub's token; Azure Login prints the issuer, subject and audience when
+diagnosing a mismatch.
 
 ## Configure GitHub
 

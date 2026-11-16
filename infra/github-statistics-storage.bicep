@@ -1,6 +1,6 @@
 param location string
 param storageAccountName string
-param repository string
+param githubOidcSubject string
 param tags object
 
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -56,7 +56,7 @@ resource federation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedI
   name: 'github-statistics-environment'
   properties: {
     issuer: 'https://token.actions.githubusercontent.com'
-    subject: 'repo:${repository}:environment:github-statistics'
+    subject: githubOidcSubject
     audiences: [
       'api://AzureADTokenExchange'
     ]
