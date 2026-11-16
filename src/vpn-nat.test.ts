@@ -195,7 +195,9 @@ describe.each([
       .toThrow(/capture reconstruction is unsupported/)
   })
 
-  it.each([undefined, null, []])('retains captures with absent or empty associations: %s', (value) => {
+  it.each([
+    { label: 'absent', value: undefined }, { label: 'null', value: null }, { label: 'empty array', value: [] },
+  ])('retains captures with absent or empty associations: $label', ({ value }) => {
     expect(() => importAzNetCapture(capture({ [field]: value }))).not.toThrow()
     expect(() => importAzNetCapture(capture({ properties: { [field]: value } }))).not.toThrow()
   })
