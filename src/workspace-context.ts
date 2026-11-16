@@ -5,7 +5,7 @@ import type { PlatformDocument } from './platform/contract'
 import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
 
 export type WorkspaceEditorHistory =
-  | { provider: 'vwan'; topology: Topology; past: Topology[]; future: Topology[]; error: string; backup: string }
+  | { provider: 'vwan'; topology: Topology; past: Topology[]; future: Topology[]; error: string; saveError: string; backup: string }
   | { provider: 'azure-net'; topology: AzNetTopology; sampleId: string; past: AzNetTopology[]; future: AzNetTopology[];
       recovery: { source: string; raw: string; message: string }[]; recoveryAcknowledged: boolean; pendingUrlSample: string }
 

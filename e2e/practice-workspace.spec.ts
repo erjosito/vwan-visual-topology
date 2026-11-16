@@ -329,3 +329,24 @@ test('resuming after a normal provider change remembers the current return desig
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   expect(await stored(page)).toEqual(originals)
 })
+
+test('returning to an unsaved normal VWAN design retains its edit and storage warning', async ({ page }) => {
+  await seed(page, true)
+  const originals = await stored(page)
+  await page.evaluate(() => {
+    const original = Storage.prototype.setItem
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'vwan-visual-topology:v1') throw new Error('Normal document exceeds quota')
+      return original.call(this, key, value)
+    }
+  })
+  await move(page, true)
+  const editedPosition = await position(page, true)
+  const warning = page.getByText('Browser storage is unavailable or full. Export JSON to preserve your topology.', { exact: true })
+  await expect(warning).toBeVisible()
+  await confirmStart(page, 'vwan-connect')
+  await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+  await expect(warning).toBeVisible()
+  expect(await position(page, true)).toBe(editedPosition)
+  expect(await stored(page)).toEqual(originals)
+})

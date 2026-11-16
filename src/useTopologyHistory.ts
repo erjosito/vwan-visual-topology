@@ -47,12 +47,12 @@ export function useTopologyHistory({
   const [history, setHistory] = useState<{ past: Topology[]; future: Topology[] }>(() =>
     cached?.provider === 'vwan' ? { past: cached.past, future: cached.future } : { past: [], future: [] })
   const [error, setError] = useState(initial.error)
-  const [saveError, setSaveError] = useState('')
+  const [saveError, setSaveError] = useState(() => cached?.provider === 'vwan' ? cached.saveError : '')
   useLayoutEffect(() => {
     session?.rememberEditorHistory?.({
-      provider: 'vwan', topology, past: history.past, future: history.future, error, backup: initial.backup,
+      provider: 'vwan', topology, past: history.past, future: history.future, error, saveError, backup: initial.backup,
     })
-  }, [session, topology, history, error, initial.backup])
+  }, [session, topology, history, error, saveError, initial.backup])
 
   const persist = (next: Topology) => {
     try {
