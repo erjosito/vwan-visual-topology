@@ -4,6 +4,45 @@ import { executePlatform } from '../src/platform/service'
 import type { PlatformRequest } from '../src/platform/contract'
 
 for (const mode of ['vwan', 'full'] as const) {
+  test(`${mode}: ID-only propagation retains bidirectional Firewall inspection in the browser worker`, async ({ page }) => {
+    const document = mode === 'vwan'
+      ? { mode, topology: hubFirewallTopology('published-vnet') }
+      : { mode, topology: azHubFirewallTopology('published-vnet') }
+    if (document.mode === 'vwan') {
+      document.topology.spokes = document.topology.spokes.filter((spoke) => spoke.id !== 'untrusted-b')
+      document.topology.sites = []
+      document.topology.connections = []
+      for (const spoke of document.topology.spokes) spoke.hubRouting!.labels = []
+    } else {
+      document.topology.vnets = document.topology.vnets.filter((vnet) => vnet.id !== 'untrusted-b')
+      document.topology.sites = []
+      document.topology.vpnConnections = []
+      for (const vnet of document.topology.vnets) vnet.vwanHubAttachment!.hubRouting!.labels = []
+    }
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'id-only-firewall.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(document.topology)),
+    })
+    const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    await expect.poll(() => page.evaluate((key) => {
+      const saved = JSON.parse(localStorage.getItem(key) ?? '{}')
+      return saved.topology?.name ?? saved.name
+    }, key)).toBe(document.topology.name)
+    const request: PlatformRequest = { contractVersion: 1, operation: 'evaluate', document, requirements: [{
+      id: 'id-only-inspection', kind: 'flow',
+      source: mode === 'vwan' ? { kind: 'spoke', id: 'untrusted-a' } : { kind: 'subnet', vnetId: 'untrusted-a', subnetId: 'sub-untrusted-a' },
+      target: mode === 'vwan' ? { kind: 'spoke', id: 'trusted-a' } : { kind: 'subnet', vnetId: 'trusted-a', subnetId: 'sub-trusted-a' },
+      sourceAddress: '10.30.0.4', destinationAddress: '10.10.0.4', expectation: 'allow',
+      firewallPolicy: { hubId: 'hub-local', forward: 'required', reverse: 'required' },
+    }] }
+    const result = await page.evaluate(async (request) => {
+      const { runBrowserSimulation } = await import('/src/platform/browser.ts')
+      return await runBrowserSimulation(request)
+    }, request)
+    expect(result).toEqual(executePlatform(request))
+    expect(result.assessments[0].outcome).toBe('satisfied')
+  })
+
   test(`${mode}: original static Firewall declarations, native handoff, worker evidence and EN/JA persistence`, async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))

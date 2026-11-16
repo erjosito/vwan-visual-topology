@@ -146,6 +146,19 @@ describe('hub route-table contexts', () => {
     expect(traceNodePath(topology, simulation, { kind: 'hub', id: 'a' }, '10.2.3.4', undefined, 'red')[0].siteId).toBe('red-b')
   })
 
+  it('limits ID-only propagation to the selected local table while retaining the empty-config fallback', () => {
+    const topology = fixture()
+    topology.spokes[0].hubRouting = { ...routing('red', 'red'), propagatedTableIds: ['red'], labels: [] }
+    let simulation = simulate(validateTopology(topology))
+    expect(simulation.hubTables!.a.red.some((row) => row.prefix === '10.1.0.0/16')).toBe(true)
+    expect(simulation.hubTables!.a.defaultRouteTable.some((row) => row.prefix === '10.1.0.0/16')).toBe(false)
+    expect(simulation.hubTables!.b.defaultRouteTable.some((row) => row.prefix === '10.1.0.0/16')).toBe(false)
+    topology.spokes[0].hubRouting!.propagatedTableIds = []
+    simulation = simulate(validateTopology(topology))
+    expect(simulation.hubTables!.a.defaultRouteTable.some((row) => row.prefix === '10.1.0.0/16')).toBe(true)
+    expect(simulation.hubTables!.b.defaultRouteTable.some((row) => row.prefix === '10.1.0.0/16')).toBe(true)
+  })
+
   it('uses case-sensitive target labels without requiring the same label on an origin table', () => {
     const topology = fixture()
     topology.spokes = ['a', 'b'].map((hubId, index) => ({

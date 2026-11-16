@@ -47,7 +47,7 @@ export function attachmentHubRouting(topology: Topology, attachmentId: string): 
 export function propagationLabels(config: HubRoutingConfiguration): string[] {
   if (config.labels.includes('none') || config.propagatedTableIds.includes(NONE_HUB_TABLE)) return []
   if (config.labels.length) return config.labels
-  return ['default']
+  return config.propagatedTableIds.length ? [] : ['default']
 }
 
 export function propagatesLocally(config: HubRoutingConfiguration, table: HubRouteTable): boolean {
