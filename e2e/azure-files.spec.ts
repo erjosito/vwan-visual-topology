@@ -34,7 +34,7 @@ async function confirmImport(page: Page) {
 
 test('Azure captures preview without replacement, cancel cleanly, and retain limitations through reload/native JSON', async ({ page }) => {
   const externalRequests: string[] = []
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   const appOrigin = new URL(page.url()).origin
   page.on('request', (request) => { if (new URL(request.url()).origin !== appOrigin) externalRequests.push(request.url()) })
   const original = await saved(page)
@@ -64,7 +64,7 @@ test('Azure captures preview without replacement, cancel cleanly, and retain lim
 })
 
 test('partial imports disclose omissions, require renewed acknowledgement, and reject malformed files without changing the workspace', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   const original = await saved(page)
   await upload(page, capture())
   await panel(page).getByLabel('I understand this is a structure-only import, not verified Azure routing.').check()
@@ -88,7 +88,7 @@ test('partial imports disclose omissions, require renewed acknowledgement, and r
 })
 
 test('Bicep download uses explicit reviewed infrastructure settings and invalidates a stale preview', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   await upload(page, capture()); await confirmImport(page)
   await page.getByRole('button', { name: 'Azure files', exact: true }).click()
   await expect(panel(page).getByLabel('Infrastructure CIDR for West hub')).toHaveValue('10.250.0.0/23')
@@ -118,7 +118,7 @@ test('Bicep download uses explicit reviewed infrastructure settings and invalida
 })
 
 test('secured hubs cannot be exported as unsecured; excluding them is explicit', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   const input = capture()
   const secured = structuredClone(input.hubs[0])
   secured.id = `${base}/virtualHubs/secured`; secured.name = 'Secured hub'; secured.addressPrefix = '10.251.0.0/23'; secured.connections = []
@@ -144,7 +144,7 @@ test('secured hubs cannot be exported as unsecured; excluding them is explicit',
 })
 
 test('version 2 Azure captures retain observed effective-route snapshots and expose the Hub BGP table source switch (#3)', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   const v2 = {
     ...capture(),
     version: 2,
@@ -197,7 +197,7 @@ test('version 2 Azure captures retain observed effective-route snapshots and exp
 })
 
 test('collector downloads the exact reviewable script from a static asset, with no Azure authentication', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   const original = await saved(page)
   await page.getByRole('button', { name: 'Azure files', exact: true }).click()
   const link = panel(page).getByRole('link', { name: 'Download Azure collector' })

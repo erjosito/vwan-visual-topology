@@ -11,7 +11,8 @@ for (const desktop of [false, true]) {
     await expect(page.getByTestId('vwan-app')).toBeVisible()
     await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
     await expect(page.getByRole('button', { name: '+ Hub', exact: true })).toBeEnabled()
-    await expect(page.getByTestId('simulator-mode-full')).toBeEnabled()
+    await expect(page.getByTestId('workspace-library-open')).toBeEnabled()
+    await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
     await page.getByRole('button', { name: 'Sample topologies', exact: true }).click()
     await page.getByRole('dialog', { name: 'Sample topologies', exact: true }).getByRole('button', { name: 'Load sample topology', exact: true }).first().click()
     await expect(page.locator('.hub-node')).toHaveCount(example.hubs.length)
@@ -23,6 +24,9 @@ for (const desktop of [false, true]) {
     const sample = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'hub-routing-preferences.json'), 'utf8'))
     await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue(sample.name)
     await expect(page.locator('.hub-node')).toHaveCount(sample.hubs.length)
+    await page.getByLabel('Topology name', { exact: true }).fill('Edited URL sample')
+    await page.reload()
+    await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Edited URL sample')
   })
 
   test(`${host} VWAN preserves damaged saved data without silently displaying a sample`, async ({ page }) => {

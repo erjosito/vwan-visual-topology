@@ -319,24 +319,26 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
 })
 
 test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
-  for (const [hostname, defaultMode] of [['aznet-simulator.com', 'hub-spoke'], ['vwan-simulator.com', 'vwan']]) {
-    test(`defaults ${hostname} to ${defaultMode} without overriding explicit modes or reloads`, async ({ page, baseURL }) => {
+  for (const hostname of ['aznet-simulator.com', 'vwan-simulator.com']) {
+    test(`defaults ${hostname} to the same mixed workspace and preserves compatible imports`, async ({ page, baseURL }) => {
+      await page.addInitScript(() => {
+        if (!sessionStorage.getItem('fresh-host-arranged')) {
+          localStorage.removeItem('vwan-visual-topology:v1')
+          sessionStorage.setItem('fresh-host-arranged', '1')
+        }
+      })
       await page.route(`https://${hostname}/**`, async (route) => {
         const url = new URL(route.request().url())
         await route.fulfill({ response: await route.fetch({ url: new URL(url.pathname + url.search, baseURL).href }) })
       })
       await page.goto(`https://${hostname}/`)
-      await expect(page.getByTestId(`simulator-mode-${defaultMode}`)).toHaveAttribute('aria-pressed', 'true')
-      await expect(page.getByTestId(defaultMode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
-      await page.getByTestId('simulator-mode-full').click()
+      await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
+      await expect(page.getByTestId('aznet-app')).toBeVisible()
       await page.reload()
-      await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByTestId('aznet-app')).toBeVisible()
       await page.goto(`https://${hostname}/?mode=hub-spoke&sample=hub-spoke-firewall-udr`)
-      await expect(page.getByTestId('simulator-mode-hub-spoke')).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
       await page.goto(`https://${hostname}/?mode=vwan`)
-      await expect(page.getByTestId('simulator-mode-vwan')).toHaveAttribute('aria-pressed', 'true')
       await expect(page.getByTestId('vwan-app')).toBeVisible()
     })
   }
@@ -440,16 +442,16 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(newSelector).toHaveValue('Stockholm')
   })
 
-  test('preserves every selected simulator mode across reloads from a URL without a mode', async ({ page }) => {
-    await page.goto('/?keep=mode-test#retained')
-    for (const [mode, label] of [['hub-spoke', 'Hub & Spoke'], ['full', 'Full Hybrid'], ['vwan', 'Virtual WAN']]) {
-      await page.getByTestId(`simulator-mode-${mode}`).click()
-      await expect(page.getByTestId('unified-mode-pill')).toHaveText(label)
+  test('consumes legacy aliases once, preserves native workspace selection and retains unrelated URL state', async ({ page }) => {
+    for (const mode of ['hub-spoke', 'full', 'vwan']) {
+      await page.goto(`/?mode=${mode}&keep=mode-test#retained`)
+      const root = page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')
+      await expect(root).toBeVisible()
       await page.reload()
-      await expect(page.getByTestId('unified-mode-pill')).toHaveText(label)
-      await expect(page.getByTestId(`simulator-mode-${mode}`)).toHaveAttribute('aria-pressed', 'true')
+      await expect(root).toBeVisible()
+      await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
       const url = new URL(page.url())
-      expect(url.searchParams.get('mode')).toBe(mode === 'full' ? 'azure-net' : mode)
+      expect(url.searchParams.get('mode')).toBeNull()
       expect(url.searchParams.get('keep')).toBe('mode-test')
       expect(url.hash).toBe('#retained')
     }
@@ -503,30 +505,14 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('aznet-vnet-vnet-hub-neu')).toBeVisible()
   })
 
-  test('supports Unified Mode Switcher (Full / Hub & Spoke-Only / vWAN-Only), URL hash state sharing (#s=...), Internet egress tracing, and Effective Route trace badges', async ({
+  test('supports all samples without mode restrictions, URL hash sharing, Internet tracing and native label compatibility', async ({
     page,
   }) => {
     await page.goto('/?mode=azure-net&sample=hub-spoke-firewall-udr')
 
-    // 1. Mode switcher toggles between Full Hybrid, Hub & Spoke-Only, and Virtual WAN-Only
-    await expect(page.getByTestId('simulator-mode-switch')).toBeVisible()
-    await page.getByTestId('simulator-mode-hub-spoke').click()
-    await expect(page).toHaveURL(/mode=hub-spoke/)
-
-    // In Hub & Spoke-Only mode, sample dropdown hides vWAN Hub samples
-    const sampleOptions = await page
-      .getByTestId('aznet-sample-select')
-      .locator('option')
-      .allTextContents()
-    expect(sampleOptions.some((t) => t.includes('Hybrid Secured vWAN Hub'))).toBe(false)
-
-    // Switch to vWAN-Only mode and back to Full Hybrid mode
-    await page.getByTestId('simulator-mode-vwan').click()
-    await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
-    await expect(page.getByTestId('unified-mode-pill')).toHaveText('Virtual WAN')
-    await page.getByTestId('simulator-mode-full').click()
-    await expect(page.getByRole('heading', { name: 'AzNet Simulator' })).toBeVisible()
-    await expect(page.getByTestId('unified-mode-pill')).toHaveText('Full Hybrid')
+    await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
+    await expect(page.getByTestId('aznet-sample-select')).toBeVisible()
+    await expect(page.getByTestId('aznet-sample-select').locator('option[value="hybrid-vwan-and-hub-spoke"]')).toHaveText('Hybrid Virtual WAN Secured Hub + Classic Hub-and-Spoke')
 
     // 2. Public Internet endpoint in Path Tracer + Subnet Default Outbound Access toggle
     await openNodeMenu(page, 'aznet-subnet-sub-app-web')
@@ -556,7 +542,9 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('aznet-node-label-vnet-hub-weu')).toContainText('Transit Inspection Hub')
 
     // Switch to vWAN-Only mode and set a custom diagram label on Europe hub
-    await page.getByTestId('simulator-mode-vwan').click()
+    await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
+    await page.getByTestId('workspace-library-open').click()
+    await page.getByRole('button', { name: 'Open saved design: Global branch network', exact: true }).click()
     await page.getByLabel('Select hub Europe hub', { exact: true }).focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menu').getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
@@ -568,31 +556,15 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await expect(page.getByTestId('node-label-eu')).toContainText('Core EMEA Hub')
   })
 
-  test('supports issues #35-#42: pinned mode switcher, context menus, peering & compact Route Table popovers, VNet element controls, and site/ER deletion', async ({
+  test('supports shared workspace access, context menus, compact popovers, VNet element controls and site deletion', async ({
     page,
   }) => {
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
 
-    // #35: Mode switcher stays at a fixed position across all 3 modes
     await expect(page.getByTestId('aznet-app')).toBeVisible()
-    const switchBoxHubSpoke = await page.getByTestId('simulator-mode-switch').boundingBox()
-    expect(switchBoxHubSpoke).not.toBeNull()
-    await page.getByTestId('simulator-mode-full').click()
-    await expect(page.getByTestId('simulator-mode-full')).toHaveAttribute('aria-pressed', 'true')
-    const switchBoxFull = await page.getByTestId('simulator-mode-switch').boundingBox()
-    expect(switchBoxFull).not.toBeNull()
-    expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxFull?.x ?? 0))).toBeLessThanOrEqual(4)
-    expect(Math.abs((switchBoxHubSpoke?.y ?? 0) - (switchBoxFull?.y ?? 0))).toBeLessThanOrEqual(4)
-
-    await page.getByTestId('simulator-mode-vwan').click()
-    await expect(page.getByTestId('vwan-app')).toBeVisible()
-    const switchBoxVwan = await page.getByTestId('simulator-mode-switch').boundingBox()
-    expect(switchBoxVwan).not.toBeNull()
-    expect(Math.abs((switchBoxHubSpoke?.x ?? 0) - (switchBoxVwan?.x ?? 0))).toBeLessThanOrEqual(4)
-    expect(Math.abs((switchBoxHubSpoke?.y ?? 0) - (switchBoxVwan?.y ?? 0))).toBeLessThanOrEqual(4)
-
-    // Switch back to Hub & Spoke-Only mode
-    await page.getByTestId('simulator-mode-hub-spoke').click()
+    await page.getByTestId('workspace-library-open').click()
+    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('One active design')
+    await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
 
     await expect(page.getByTestId('aznet-subnet-sub-app-web')).not.toContainText('GWroutes:OFF')
     await expect(page.getByTestId('aznet-subnet-rt-badge-sub-app-web')).toContainText('RT-Spokes')

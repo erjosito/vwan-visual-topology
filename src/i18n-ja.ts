@@ -1,5 +1,12 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Workspace': 'ワークスペース',
+  'Capture type': '取得データの種類',
+  'Workspace could not be selected or preserved. Originals have not been intentionally replaced. Export your design before freeing browser storage.': 'ワークスペースを選択または保持できませんでした。原本は意図的に置き換えられていません。ブラウザーのストレージを空ける前にデザインをエクスポートしてください。',
+  'Workspace storage could not preserve the original. Export the saved design before freeing storage.': '原本をストレージに保持できませんでした。ストレージを空ける前に保存済みデザインをエクスポートしてください。',
+  'The workspace selection could not be read. Choose a saved design; originals have not been replaced.': 'ワークスペースの選択を読み取れませんでした。保存済みデザインを選択してください。原本は置き換えられていません。',
+  'Workspace storage is unavailable or damaged. Saved originals have not been replaced.': 'ワークスペースのストレージが利用できないか破損しています。保存済みの原本は置き換えられていません。',
+  'Shared snapshot rejected; the active design is unchanged.': '共有スナップショットは拒否されました。現在のデザインは変更されていません。',
   'Capability coverage': '機能の対応範囲',
   'Capability': '機能',
   'Dedicated VWAN': '専用 VWAN',

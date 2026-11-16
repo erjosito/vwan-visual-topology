@@ -11,7 +11,9 @@ import { measureAzWork, recordAzWork } from './performance'
 import { t } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { Explain } from '../learning/Explain'
-import { SimulatorModeSwitch, type SimulatorMode } from '../SimulatorModeSwitch'
+import type { SimulatorMode } from '../SimulatorModeSwitch'
+import { WorkspaceMenu } from '../WorkspaceSession'
+import { useWorkspaceSession } from '../workspace-context'
 import { TopologyContextMenu, type ContextAction } from '../TopologyContextMenu'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
@@ -240,7 +242,8 @@ function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttr
     onBlur={() => { if (deferred && draft !== value) onCommit(draft) }} />
 }
 
-export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: AzureNetAppProps = {}) {
+export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
+  const workspaceSession = useWorkspaceSession()
   const initialResolved = useMemo(() => {
     // Access localStorage inside loadAzWorkspace's try/catch (the getter itself may throw).
     const stored = loadAzWorkspace({ getItem: (key) => window.localStorage.getItem(key) }, window.location.hash)
@@ -435,19 +438,13 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
   const [reviewFindingIds, setReviewFindingIds] = useState<string[] | null>(null)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
   const sampleRequest = useRef(0)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   const [shareCopied, setShareCopied] = useState<boolean>(false)
   const [contextMenu, setContextMenu] = useState<AzContextMenuTarget | null>(null)
-
-  const handleChangeSimulatorMode = (nextMode: SimulatorMode) => {
-    if (nextMode === 'hub-spoke' && topology.vwanHubs.length > 0) {
-      commitTopology((draft) => {
-        draft.vwanHubs = []
-        draft.erLinks = draft.erLinks.filter((l) => l.targetKind !== 'vwan-hub')
-        draft.vpnConnections = draft.vpnConnections.filter((c) => c.targetKind !== 'vwan-hub')
-      })
-    }
-    onChangeSimulatorMode?.(nextMode)
-  }
 
   const handleShareUrl = () => {
     try {
@@ -646,6 +643,23 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
       })
     }
   }
+  const applyCapture = (raw: unknown) => {
+    const imported = importAzNetCapture(raw)
+    const admitted = parseAzNetTopology(imported.topology)
+    const importedComparison = imported.observations
+      ? compareAzNetWithObservations(admitted, simulateAzNet(admitted), imported.observations) : null
+    applyLoadedTopology('', admitted)
+    setCaptureNotices(imported.warnings)
+    setCaptureComparison(importedComparison)
+    setWorkspaceNotice('')
+    setActiveTab('azure')
+  }
+  const importSessionCapture = useEffectEvent(() => { if (workspaceSession?.capture) applyCapture(workspaceSession.capture) })
+  useEffect(() => {
+    // Apply the capture handed off by the external workspace session.
+    // oxlint-disable-next-line react/set-state-in-effect
+    if (workspaceSession?.capture) importSessionCapture()
+  }, [workspaceSession?.capture])
 
   const importLiveSnapshot = useEffectEvent(() => {
     if (!/(?:#|&)s=/.test(window.location.hash)) return
@@ -2760,18 +2774,9 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               Az
             </div>
             <h1>AzNet Simulator</h1>
-            <span className="aznet-preview-pill" data-testid="unified-mode-pill">
-              {simulatorMode === 'hub-spoke' ? 'Hub & Spoke' : 'Full Hybrid'}
-            </span>
           </div>
 
-          {onChangeSimulatorMode && (
-            <SimulatorModeSwitch
-              mode={simulatorMode}
-              onChange={handleChangeSimulatorMode}
-              variant="aznet"
-            />
-          )}
+          <WorkspaceMenu />
         </div>
 
         <div className="aznet-topbar-controls">
@@ -2938,6 +2943,7 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
           <input
             data-desktop-import
             ref={fileInputRef}
+            aria-label={t('Import topology file')}
             type="file"
             accept="application/json"
             style={{ display: 'none' }}
@@ -2945,20 +2951,23 @@ export function AzureNetApp({ simulatorMode = 'full', onChangeSimulatorMode }: A
               const file = e.target.files?.[0]
               e.target.value = ''
               if (!file) return
+              const request = ++sampleRequest.current
               try {
                 if (file.size > AZNET_MAX_JSON_LENGTH) throw new Error('JSON exceeds 4 MB limit.')
+                const workspaceRequest = workspaceSession?.getRequestVersion()
                 const text = await file.text()
+                if (!mounted.current || request !== sampleRequest.current || workspaceRequest !== workspaceSession?.getRequestVersion()) return
                 const raw: unknown = JSON.parse(text)
+                if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-vwan-capture' && workspaceSession) {
+                  await workspaceSession.openDocument(raw)
+                  return
+                }
+                if (raw && typeof raw === 'object' && 'version' in raw && raw.version === 1 && !('kind' in raw) && workspaceSession) {
+                  await workspaceSession.openDocument(raw)
+                  return
+                }
                 if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-network-capture') {
-                  const imported = importAzNetCapture(raw)
-                  const admitted = parseAzNetTopology(imported.topology)
-                  const importedComparison = imported.observations
-                    ? compareAzNetWithObservations(admitted, simulateAzNet(admitted), imported.observations) : null
-                  applyLoadedTopology('', admitted)
-                  setCaptureNotices(imported.warnings)
-                  setCaptureComparison(importedComparison)
-                  setWorkspaceNotice('')
-                  setActiveTab('azure')
+                  applyCapture(raw)
                   return
                 }
                 applyLoadedTopology('', parseAzNetJson(text))

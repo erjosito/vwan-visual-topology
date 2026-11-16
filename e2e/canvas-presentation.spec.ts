@@ -181,7 +181,7 @@ test('canvas style survives mode changes and synchronizes tabs without sharing t
   await page.getByLabel('Canvas style', { exact: true }).selectOption('dots')
   await page.getByLabel('Connection style', { exact: true }).selectOption('straight')
   for (const mode of ['hub-spoke', 'full', 'vwan']) {
-    await page.getByTestId(`simulator-mode-${mode}`).click()
+    await page.goto(`/?mode=${mode}`)
     await expect(page.getByLabel('Canvas style', { exact: true })).toHaveValue('dots')
     await expect(page.getByLabel('Connection style', { exact: true })).toHaveValue('straight')
     await expect(page.locator('[data-canvas-pattern="dots"] circle')).toHaveCount(1)

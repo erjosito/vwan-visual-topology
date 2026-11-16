@@ -26,28 +26,24 @@ const test = base.extend<{ artifactErrors: string[] }>({
 
 async function ready(page: Page, mode: string) {
   await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
-  await expect(page.getByTestId(`simulator-mode-${mode}`)).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
 }
 
-for (const [hostname, defaultMode] of [
-  ['vwan-simulator.com', 'vwan'], ['www.vwan-simulator.com', 'vwan'],
-  ['aznet-simulator.com', 'hub-spoke'], ['www.aznet-simulator.com', 'hub-spoke'],
-]) {
-  test(`${hostname}: dedicated default, query aliases and full override use the same artifact`, async ({ page }) => {
+for (const hostname of ['vwan-simulator.com', 'www.vwan-simulator.com', 'aznet-simulator.com', 'www.aznet-simulator.com']) {
+  test(`${hostname}: shared empty default and compatible aliases use the same artifact`, async ({ page }) => {
     const origin = `http://${hostname}:4174`
     await page.goto(`${origin}/`)
-    await ready(page, defaultMode)
-    await expect(page.locator(defaultMode === 'vwan' ? '.diagram [data-node-id]' : '[data-testid^="aznet-vnet-"]')).toHaveCount(0)
+    await ready(page, 'full')
+    await expect(page.locator('[data-testid^="aznet-vnet-"]')).toHaveCount(0)
     await page.goto(`${origin}/?mode=unknown`)
-    await ready(page, defaultMode)
-    const override = defaultMode === 'vwan' ? 'hub-spoke' : 'vwan'
-    await page.goto(`${origin}/workspace?mode=${override === 'vwan' ? 'vwan-only' : 'vnet'}`)
-    await ready(page, override)
+    await ready(page, 'full')
+    await page.goto(`${origin}/workspace?mode=vwan-only`)
+    await ready(page, 'vwan')
     await page.reload()
-    await ready(page, override)
+    await ready(page, 'vwan')
     await page.goto(`${origin}/?mode=full`)
     await ready(page, 'full')
-    await expect(page).toHaveURL(/mode=azure-net/)
+    expect(new URL(page.url()).searchParams.has('mode')).toBe(false)
   })
 }
 
@@ -133,11 +129,16 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await expect(gallery).toHaveCount(0)
     await expect(galleryOpener).toBeFocused()
     const firstOptionalPanelMs = performance.now() - panelStart
-    const nextMode = mode === 'vwan' ? 'hub-spoke' : 'vwan'
+    if (mode === 'vwan') await page.getByLabel('Topology name', { exact: true }).fill('Preserved production design')
+    const nextMode = mode === 'vwan' ? 'full' : 'vwan'
     const switchStart = performance.now()
-    await page.getByTestId(`simulator-mode-${nextMode}`).click()
+    const file = nextMode === 'vwan' ? 'public/docs/samples/hub-routing-preferences.json' : 'public/docs/samples/azure-net/hub-spoke-firewall-udr.json'
+    await page.locator('input[data-desktop-import]').setInputFiles({ name: 'compatible.json', mimeType: 'application/json', buffer: await readFile(file) })
     await ready(page, nextMode)
-    await page.getByTestId(`simulator-mode-${mode}`).click()
+    await page.getByTestId('workspace-library-open').click()
+    await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: /^Open saved design:/ }).filter({
+      hasText: mode === 'vwan' ? 'Preserved production design' : 'Empty Topology',
+    }).click()
     await ready(page, mode)
     await testInfo.attach('startup-local-measurement', {
       body: JSON.stringify({ readyMs, firstOptionalPanelMs, firstInactiveWorkspaceMs: performance.now() - switchStart, graph, compression: 'local gzip; not Azure transfer' }, null, 2),
@@ -157,13 +158,16 @@ test('a delayed or failed inactive workspace retains loading/recovery controls a
     await pending
     await route.abort()
   })
-  await page.getByTestId('simulator-mode-hub-spoke').click()
+  await page.locator('input[data-desktop-import]').setInputFiles({
+    name: 'mixed.json', mimeType: 'application/json', buffer: await readFile('public/docs/samples/azure-net/hub-spoke-firewall-udr.json'),
+  })
   await expect(page.getByRole('status').filter({ hasText: 'Loading workspace' })).toBeVisible()
   release()
   await expect(page.getByRole('alert')).toContainText('Workspace could not load')
   await expect(page.getByRole('button', { name: 'Reload workspace', exact: true })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
-  await page.getByTestId('simulator-mode-vwan').click()
+  await page.getByRole('button', { name: 'Workspace', exact: true }).click()
+  await page.getByRole('button', { name: 'Open saved design: Saved recovery design', exact: true }).click()
   await ready(page, 'vwan')
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Saved recovery design')
 })
@@ -183,6 +187,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.getByTestId('learning-open').click()
     const practice = page.getByRole('dialog', { name: 'Learn & practice', exact: true })
     await practice.getByRole('button', { name: 'Practice', exact: true }).click()
+    await practice.getByLabel('Choose an exercise', { exact: true }).selectOption(exercises.find((exercise) => exercise.starter.mode === mode)!.id)
     const draft = structuredClone(exercises.find((exercise) => exercise.starter.mode === mode)!.starter)
     if (draft.mode === 'vwan') {
       draft.topology.spokes[1].hubId = 'one'

@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { chromium } from '@playwright/test'
 import { createProductionServer } from './production-server.mjs'
@@ -36,7 +36,10 @@ try {
     await (mode === 'vwan' ? page.getByRole('button', { name: 'Close Azure files', exact: true }) : page.getByTestId('aznet-close-sample-gallery-btn')).click()
     const nextMode = mode === 'vwan' ? 'hub-spoke' : 'vwan'
     const switchStart = performance.now()
-    await page.getByTestId(`simulator-mode-${nextMode}`).click()
+    const file = nextMode === 'vwan' ? 'public/docs/samples/hub-routing-preferences.json' : 'public/docs/samples/azure-net/hub-spoke-firewall-udr.json'
+    await page.locator('input[data-desktop-import]').setInputFiles({
+      name: 'compatible.json', mimeType: 'application/json', buffer: await readFile(file),
+    })
     await page.getByTestId(nextMode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     result.modes.push({ mode, readyMs, initialRequests, firstOptionalPanelMs, firstInactiveWorkspaceMs: performance.now() - switchStart })
     await context.close()

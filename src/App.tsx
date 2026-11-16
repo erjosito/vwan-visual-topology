@@ -1,9 +1,8 @@
 import { t, localizeDiagnostic, useLanguage, documentTitles } from './i18n'
-import { LanguageSelector } from './LanguageSelector'
 import { LearningTools } from './learning/LearningTools'
-import { SimulatorModeSwitch } from './SimulatorModeSwitch'
-import type { SimulatorMode } from './SimulatorModeSwitch'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { WorkspaceMenu } from './WorkspaceSession'
+import { useWorkspaceSession } from './workspace-context'
+import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
 import type { LayoutMode, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
@@ -31,7 +30,6 @@ import { VpnRoutingWizard } from './VpnRoutingWizard'
 import { AzureFilesPanel } from './AzureFilesPanel'
 import { AzureComparisonPanel } from './AzureComparisonPanel'
 import type { ComparisonSession } from './AzureComparisonPanel'
-import { FeedbackDialog } from './FeedbackDialog'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { RoutingIssuesPanel } from './RoutingIssuesPanel'
 import { describeDiagnosticsProgress, diagnosticFlowCount, routingRevision, summarizeCoverage, validateDiagnosticsProfile } from './diagnostics'
@@ -104,12 +102,8 @@ const VWAN_SAMPLE_GALLERY: Array<{
   },
 ]
 
-interface AppProps {
-  simulatorMode?: SimulatorMode
-  onChangeSimulatorMode?: (mode: SimulatorMode) => void
-}
-
-function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
+function App() {
+  const workspaceSession = useWorkspaceSession()
   const language = useLanguage()
   useEffect(() => {
     document.documentElement.lang = language
@@ -123,7 +117,6 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [clearRequested, setClearRequested] = useState(false)
   const [erLocationModal, setErLocationModal] = useState<{ open: boolean; peeringLocation?: string; sku?: ErCircuitSku; targetAzureRegion?: string; erLocationId?: string }>({ open: false })
-  const [feedbackOpen, setFeedbackOpen] = useState(() => !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1')
   const [panel, setPanel] = useState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>()
   const [comparisonSession, setComparisonSession] = useState<ComparisonSession>()
   const [diagnosticHighlight, setDiagnosticHighlight] = useState<{ revision: string; findingId: string; paths: GroupPath[] }>()
@@ -268,6 +261,11 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const [groupTrace, setGroupTrace] = useState<{ group: PathGroup; direction: PathDirection }>()
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
   const simulation = useMemo(() => simulate(activeTopology), [activeTopology])
   const nvaSiteIds = useMemo(() => embeddedSpokeNvaSiteIds(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
@@ -364,9 +362,13 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
         return validateTopology(await res.json())
       })
       .then((loaded) => {
+        if (!mounted.current) return
         clearHistory()
         save(loaded, false)
         setRouter({ kind: 'hub', id: loaded.hubs[0]?.id ?? '' })
+        const url = new URL(location.href)
+        url.searchParams.delete('sample')
+        window.history.replaceState(null, '', url)
       })
       .catch((err) => setError(`Sample load failed: ${message(err)}`))
   }, [clearHistory, save, setError])
@@ -378,7 +380,7 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
     setSelection(value)
   }
   useDeleteShortcut(selection && !scenario.affected[selection.id] && topologyObject(topology, selection) && !editorRequest &&
-    !clearRequested && !feedbackOpen && !erLocationModal.open ? () => {
+    !clearRequested && !erLocationModal.open ? () => {
       setContextMenu(undefined)
       setEditorRequest({ ...selection, deleting: true })
     } : undefined)
@@ -559,17 +561,30 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
   const importTopology = async (file?: File) => {
     if (!file) return
     const revision = ++importRequest.current
+    const workspaceRequest = workspaceSession?.getRequestVersion()
     setPendingAzureImport(undefined)
     try {
       if (file.size > 2_000_000) throw new Error('Topology files must be smaller than 2 MB.')
       const input: unknown = JSON.parse(await file.text())
-      if (revision !== importRequest.current) return
+      if (!mounted.current || revision !== importRequest.current || workspaceRequest !== workspaceSession?.getRequestVersion()) return
+      if (input && typeof input === 'object' && 'kind' in input
+        && ['azure-network-topology', 'azure-network-capture'].includes(String(input.kind)) && workspaceSession) {
+        await workspaceSession.openDocument(input)
+        return
+      }
       if (input && typeof input === 'object' && 'kind' in input && input.kind === 'azure-vwan-capture') {
         const next = importAzureCapture(input)
         setPendingAzureImport({ revision, topology: next }); setError(''); setPanel('azure')
       } else reset(validateTopology(input))
     } catch (error) { if (revision === importRequest.current) setError(`Import rejected: ${message(error)}`) }
   }
+  const importSessionCapture = useEffectEvent(() => {
+    if (!workspaceSession?.capture) return
+    const next = importAzureCapture(workspaceSession.capture)
+    setPendingAzureImport({ revision: ++importRequest.current, topology: next })
+    setError(''); setPanel('azure')
+  })
+  useEffect(() => { if (workspaceSession?.capture) importSessionCapture() }, [workspaceSession?.capture])
   const pathTitle = (path: NodePath) => [
     'sourceName' in path ? path.sourceName : sourceNode?.name, ...(path.sourceSiteHops?.slice(1).map((id) => topology.sites.find((s) => s.id === id)?.name) ?? []),
     topology.connections.find((c) => c.id === path.sourceConnectionId)?.name,
@@ -604,9 +619,9 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
           <h1>AzNet Simulator</h1>
           <span className="unified-mode-pill unified-mode-pill-vwan" data-testid="unified-mode-pill">Virtual WAN</span>
         </div>
-        {onChangeSimulatorMode && <SimulatorModeSwitch mode={simulatorMode} onChange={onChangeSimulatorMode} variant="vwan" />}
+        <WorkspaceMenu />
       </div>
-      <div className="actions unified-topbar-controls"><LanguageSelector />
+      <div className="actions unified-topbar-controls">
         <WorkspaceTools creationActions={[
           { label: t('+ Hub'), run: () => setEditorRequest({ kind: 'hub' }) },
           { label: t('+ VNet'), run: () => setEditorRequest({ kind: 'spoke' }) },
@@ -622,9 +637,8 @@ function App({ simulatorMode = 'vwan', onChangeSimulatorMode }: AppProps = {}) {
         }} />
         <LearningTools document={{ mode: 'vwan', topology }} onOpen={(document) => { if (document.mode === 'vwan') { reset(document.topology); setFaults([]) } }} />
         {selection?.kind === 'spoke' && <button type="button" onClick={() => setDetailOwner(selection.id)}>{t('VNet detail')}</button>}
-        <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t("Feedback")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+        <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
-    {feedbackOpen && <FeedbackDialog onClose={() => setFeedbackOpen(false)} />}
     {panel === 'samples' && <SampleGallery entries={VWAN_SAMPLE_GALLERY} testIdPrefix="vwan"
       hasWorkspace={topology.name !== 'New topology' || !!(topology.hubs.length || topology.spokes.length || topology.sites.length || topology.connections.length || topology.routeMaps?.length || topology.erLocations?.length)}
       onLoad={loadGallerySample} onExport={() => exportTopology()} onClose={closePanel} />}

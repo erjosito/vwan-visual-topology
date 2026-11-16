@@ -9,12 +9,14 @@ import { exercises } from './exercises'
 import { emptyProgress, entryFor, maxDraftChars, parseProgress, progressKey, recordAttempt } from './progress'
 import type { Progress } from './progress'
 import './learning.css'
+import { useWorkspaceSession } from '../workspace-context'
 
 export function LearningTools({ document: workspace, onOpen }: {
   document: PlatformDocument
   onOpen: (document: PlatformDocument) => void
 }) {
   const language = useLanguage()
+  const session = useWorkspaceSession()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'concepts' | 'practice'>('concepts')
   const [exerciseId, setExerciseId] = useState(() => exercises.find((item) => item.starter.mode === workspace.mode)!.id)
@@ -35,7 +37,7 @@ export function LearningTools({ document: workspace, onOpen }: {
   const trigger = useRef<HTMLButtonElement>(null)
   const job = useRef<AbortController | undefined>(undefined)
   const exercise = exercises.find((item) => item.id === exerciseId)!
-  const matchingMode = exercise.starter.mode === workspace.mode
+  const matchingMode = (exercise.starter.mode === 'vwan') === (workspace.mode === 'vwan')
   const entry = entryFor(progress, exercise)
   const last = entry.attempts.at(-1)
   const outcomeLabel = (outcome: 'satisfied' | 'violated' | 'not assessed') =>
@@ -103,7 +105,8 @@ export function LearningTools({ document: workspace, onOpen }: {
       const admitted = await runBrowserSimulation({ ...request, operation: 'validate' }, controller.signal)
       if (job.current !== controller || controller.signal.aborted) return
       if (admitted.status !== 'complete' || !admitted.document) throw new Error('Invalid draft')
-      onOpen(admitted.document)
+      if (!matchingMode && session) await session.openDocument(admitted.document.topology)
+      else onOpen(admitted.document)
       close()
     } catch { if (job.current === controller) setError(text(labels.invalid, language)) }
     finally { if (job.current === controller) { job.current = undefined; setRunning(false) } }
@@ -135,7 +138,7 @@ export function LearningTools({ document: workspace, onOpen }: {
         </label>
         <div className="learning-actions">
           <button type="button" disabled={running || !matchingMode} onClick={() => draftChange(JSON.stringify(workspace.topology, null, 2))}>{text(labels.useWorkspace, language)}</button>
-          <button type="button" disabled={running || !matchingMode} onClick={() => setConfirm('open')}>{text(labels.openEditor, language)}</button>
+          <button type="button" disabled={running || (!matchingMode && !session)} onClick={() => setConfirm('open')}>{text(labels.openEditor, language)}</button>
           <button type="button" disabled={running} onClick={() => { void assess() }}>{text(running ? labels.running : labels.assess, language)}</button>
           {running && <button type="button" onClick={() => { job.current?.abort(); job.current = undefined; setRunning(false) }}>{text(labels.cancel, language)}</button>}
           <button type="button" disabled={entry.hints === exercise.hints.length || running} onClick={() => store({ ...progress, entries: [...progress.entries.filter((item) => item.id !== entry.id), { ...entry, hints: entry.hints + 1 }] })}>{text(labels.hint, language)}</button>
