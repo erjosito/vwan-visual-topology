@@ -1,5 +1,5 @@
 import { t, localizeDiagnostic } from './i18n'
-import { cloneElement, useState } from 'react'
+import { cloneElement, lazy, Suspense, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
@@ -9,6 +9,7 @@ import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topolog
 import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
+const HubStaticRoutesEditor = lazy(() => import('./HubStaticRoutesEditor').then((module) => ({ default: module.HubStaticRoutesEditor })))
 
 export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean }
 
@@ -24,6 +25,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const [error, setError] = useState('')
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
   const hub = topology.hubs.find((h) => h.id === request.id)
+  const [hubStatic, setHubStatic] = useState(() => ({ id: hub?.id ?? crypto.randomUUID(), firewall: hub?.firewall, routeTables: hub?.routeTables }))
   const spoke = topology.spokes.find((s) => s.id === request.id)
   const site = topology.sites.find((s) => s.id === request.id)
   const connection = topology.connections.find((c) => c.id === request.id)
@@ -65,6 +67,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         if (request.kind === 'hub') {
           const value = {
             ...hub, id, name, label: customLabel, region: text('region'), preference: text('preference') as Preference,
+            firewall: hubStatic.firewall, routeTables: hubStatic.routeTables,
             routingIntent: { private: data.has('privateIntent'), internet: data.has('internetIntent'), privatePrefixes: prefixes(text('privatePrefixes')) },
           }
           if (hub) next.hubs[next.hubs.findIndex((h) => h.id === id)] = value
@@ -322,6 +325,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <Field title={t("Additional private traffic prefixes")}><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
+          <Suspense fallback={null}><HubStaticRoutesEditor hub={hubStatic} onChange={(owner) => setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })} /></Suspense>
         </>}
         {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" value={selectedSpokeHubId} onChange={(e) => setSelectedSpokeHubId(e.target.value)}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
         {request.kind === 'connection' && transportValue !== 'SpokeNVA' && <Field title={t("Hub")}><select name="hub" required defaultValue={connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}

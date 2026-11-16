@@ -42,6 +42,7 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.vwanHubs.some((hub) => hub.firewall)) warnings.push('Declared local hub Firewall identities and static inspection are not deployed by this Bicep starter; preserve native JSON. This is not an equivalent inspection deployment.')
   if (topology.vpnConnections.some((connection) => connection.nat)) warnings.push('VPN overlap NAT rules, gateway capabilities, instance associations and BGP translation are not deployed by this Bicep starter. Preserve native JSON; generated gateways/connections are not an equivalent NAT deployment.')
   if (topology.inventory?.routerSnatPolicies?.length) warnings.push('Firewall network-rule SNAT/private ranges and NVA guest SNAT are simulation declarations, not deployed by this Bicep starter. Preserve native JSON and configure original device policies separately.')
   if (topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.defaultOutboundAccess === undefined))) {

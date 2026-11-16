@@ -287,7 +287,7 @@ function App() {
   }, [tracing, source, target, activeTopology, simulation, destination, groupTrace, sourceContextId])
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
-  const activeView = routeView === 'firewall' && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView
+  const activeView = routeView === 'firewall' && !hub?.firewall && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView
   const erRouting = useMemo(() => router.kind === 'erLocation' ? erLocationBgpTable(activeTopology, simulation, router.id) : [],
     [activeTopology, simulation, router.kind, router.id])
   const decisions = router.kind === 'erLocation' ? erRouting
@@ -487,7 +487,7 @@ function App() {
         { label: t("Open path explorer"), run: () => openPath(contextSelection as PathNode, 'to') },
       ] : []),
       ...(contextSelection.kind === 'hub' ? [
-        ...(topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [{ label: t("Show firewall routes"), run: () => showRoutes(contextSelection, true) }] : []),
+        ...(topology.hubs.find((h) => h.id === contextSelection.id)?.firewall || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.private || topology.hubs.find((h) => h.id === contextSelection.id)?.routingIntent.internet ? [{ label: t("Show firewall routes"), run: () => showRoutes(contextSelection, true) }] : []),
         { label: t("Add spoke"), run: () => setEditorRequest({ kind: 'spoke', hubId: contextSelection.id }) },
         { label: t("Add connected site"), run: () => setEditorRequest({ kind: 'site', hubId: contextSelection.id }) },
         { label: t("Connect existing site"), disabled: !topology.sites.length, run: () => setEditorRequest({ kind: 'connection', hubId: contextSelection.id }) },

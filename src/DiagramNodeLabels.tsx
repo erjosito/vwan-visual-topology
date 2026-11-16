@@ -1,6 +1,7 @@
 import { useId } from 'react'
 
-export function DiagramNodeText({ text, title = text, x, y, width, fontSize = 12.5, className = '', fill, anchor = 'start', weight = 600 }: {
+export function DiagramNodeText({ id, text, title = text, x, y, width, fontSize = 12.5, className = '', fill, anchor = 'start', weight = 600 }: {
+  id?: string;
   text: string; x: number; y: number; width: number; fontSize?: number; className?: string; fill?: string;
   anchor?: 'start' | 'middle'; weight?: number; title?: string
 }) {
@@ -16,19 +17,21 @@ export function DiagramNodeText({ text, title = text, x, y, width, fontSize = 12
     end++
   }
   const display = advances.reduce((sum, advance) => sum + advance, 0) <= width ? text : characters.slice(0, end).join('') + '\u2026'
+  // Positioned SVG labels still need word boundaries in their combined text alternative.
   return <g className={`network-node-label ${className}`} fill={fill ?? 'var(--text)'}>
     <title>{title}</title>
     <defs><clipPath id={clip}><rect x={anchor === 'middle' ? x - width / 2 : x} y={y - fontSize * 1.15} width={width} height={fontSize * 1.6} /></clipPath></defs>
-    <text x={x} y={y} textAnchor={anchor} fontSize={fontSize} fontWeight={weight} fill={fill} clipPath={`url(#${clip})`}>{display}</text>
+    <text id={id} x={x} y={y} textAnchor={anchor} fontSize={fontSize} fontWeight={weight} fill={fill} clipPath={`url(#${clip})`}>{display}{' '}</text>
   </g>
 }
 
-export function DiagramNodeBadge({ label, x, y, width, tone = 'muted', title = label }: {
+export function DiagramNodeBadge({ id, label, x, y, width, tone = 'muted', title = label }: {
+  id?: string;
   label: string; x: number; y: number; width: number; tone?: 'muted' | 'info' | 'warning' | 'success' | 'purple'; title?: string
 }) {
   return <g className={`network-node-badge tone-${tone}`}>
     <title>{title}</title>
     <rect x={x} y={y} width={width} height={20} rx={5} />
-    <DiagramNodeText text={label} title={title} x={x + width / 2} y={y + 13.5} width={width - 10} fontSize={9.5} anchor="middle" fill="currentColor" weight={700} />
+    <DiagramNodeText id={id} text={label} title={title} x={x + width / 2} y={y + 13.5} width={width - 10} fontSize={9.5} anchor="middle" fill="currentColor" weight={700} />
   </g>
 }

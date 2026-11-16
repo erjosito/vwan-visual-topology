@@ -1,4 +1,5 @@
 import type { Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
+import { cidr } from './validation'
 
 export const DEFAULT_HUB_TABLE = 'defaultRouteTable'
 export const NONE_HUB_TABLE = 'noneRouteTable'
@@ -19,6 +20,21 @@ export function hubRouteTables(hub: Pick<Hub, 'routeTables'>): HubRouteTable[] {
     else tables[index] = table
   }
   return tables
+}
+
+type FirewallHub = Pick<Hub, 'firewall'> & { routingIntent: Pick<Hub['routingIntent'], 'private' | 'internet'> }
+
+export function supportsHubStaticTable(hub: FirewallHub, table: HubRouteTable, hubCount: number): boolean {
+  return hubCount === 1 && !!hub.firewall?.id.trim() && !!hub.firewall.name.trim()
+    && !hub.routingIntent.private && !hub.routingIntent.internet && table.id !== NONE_HUB_TABLE
+    && !!table.staticRoutes?.length && table.staticRoutes.every((route) =>
+      route.destinationType === 'CIDR' && route.nextHopType === 'ResourceId' && route.nextHop === hub.firewall!.id
+      && !!route.name.trim() && route.destinations.length > 0 && route.destinations.every((prefix) => !!cidr(prefix)))
+}
+
+export function hubStaticPrefixes(hub: FirewallHub, table: HubRouteTable, hubCount: number) {
+  return supportsHubStaticTable(hub, table, hubCount) ? table.staticRoutes!.flatMap((route, index) =>
+    [...new Set(route.destinations)].map((prefix) => ({ prefix, name: route.name, index }))) : []
 }
 
 export function attachmentHubRouting(topology: Topology, attachmentId: string): HubRoutingConfiguration {
@@ -61,7 +77,7 @@ export function hubTableCoverage(topology: Topology): Record<string, Record<stri
       && !hubRouteTables(hub).some((table) => propagatesLocally(config, table))
   })
   const unsupportedSources = topology.hubs.flatMap((hub) => hubRouteTables(hub)
-    .filter((table) => table.staticRoutes?.length || ((hub.routingIntent.private || hub.routingIntent.internet)
+    .filter((table) => table.staticRoutes?.length && !supportsHubStaticTable(hub, table, topology.hubs.length) || ((hub.routingIntent.private || hub.routingIntent.internet)
       && hubRouteTables(hub).some((entry) => ![DEFAULT_HUB_TABLE, NONE_HUB_TABLE].includes(entry.id))))
     .map((table) => ({ hubId: hub.id, table })))
   return Object.fromEntries(topology.hubs.map((hub) => [hub.id, Object.fromEntries(hubRouteTables(hub).map((table) => {

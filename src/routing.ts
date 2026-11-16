@@ -5,7 +5,7 @@ import type { SiteRoute, SiteRouting } from './bgp'
 import { azureRoutesAtSites } from './site-routing'
 import { downstreamSpokesForNvaSpoke, downstreamVnetForAddress, resolveAttachment } from './topology-graph'
 import { evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
-import { attachmentHubRouting, DEFAULT_HUB_TABLE, hubRouteTables, hubTableCoverage, propagatesLocally, propagatesRemotely } from './hub-routing'
+import { attachmentHubRouting, DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, hubTableCoverage, propagatesLocally, propagatesRemotely } from './hub-routing'
 
 export function checkErHubLinkCompatibility(topology: Topology, hubLink: ErLink) {
   const hub = hubLink.hubId ? topology.hubs.find((h) => h.id === hubLink.hubId) : undefined
@@ -25,7 +25,7 @@ export interface Candidate {
   asPath: number[]
   localPreference?: number
   weight?: number
-  kind: RouteKind | 'system' | 'policy'
+  kind: RouteKind | 'system' | 'policy' | 'hub-static'
   transport: Transport | 'VNet' | 'Firewall' | 'Internet'
   connectionId: string
   siteId: string
@@ -40,6 +40,7 @@ export interface Candidate {
   erSiteLinkId?: string
   erHubLinkId?: string
   nvaSpokeId?: string
+  staticRouteName?: string
 }
 
 export interface Decision {
@@ -83,6 +84,7 @@ export function chooseVwanHubRoutes(hub: Pick<Hub, 'preference'>, prefix: string
       explanation.push(reason)
     }
   }
+  filter('Static hub routes override learned routes for the same prefix.', (r) => r.kind === 'hub-static')
   filter('Directly connected spoke system routes override BGP routes for the same prefix.', (r) => r.kind === 'system' && !r.remote)
   if (selected.some((r) => r.remote && r.secureOrigin)) {
     filter('Remote routes from private-routing-intent hubs take precedence over unsecured remote ExpressRoute paths.',
@@ -313,6 +315,15 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
     else if (seen.has(nextSignature)) break
     seen.add(nextSignature)
   }
+  for (const hub of topology.hubs) for (const table of contexts[hub.id]) {
+    const statics = hubStaticPrefixes(hub, table, topology.hubs.length).map(({ prefix, name, index }): Candidate => ({
+      key: JSON.stringify(['hub-static', hub.id, table.id, index, prefix]), prefix, asPath: [], kind: 'hub-static',
+      transport: 'Firewall', connectionId: hub.firewall!.id, siteId: '', originHubId: hub.id,
+      originTableId: table.id, remote: false,
+      staticRouteName: name,
+    }))
+    if (statics.length) hubTables[hub.id][table.id] = decide(hub, [...hubTables[hub.id][table.id].flatMap((row) => row.candidates), ...statics])
+  }
   const tables = Object.fromEntries(topology.hubs.map((hub) => [hub.id, hubTables[hub.id][DEFAULT_HUB_TABLE]]))
   const tableCoverage = hubTableCoverage(topology)
   for (const hub of topology.hubs) for (const table of contexts[hub.id]) {
@@ -364,7 +375,9 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   if (topology.siteLinks.length) warnings.push('On-premises links use shortest-AS-path BGP, exact-prefix export allowlists, ASN loop prevention, and up to 32 equal paths per prefix. Azure-originated routes are shown as outbound advertisements but are not reimported into Azure through the site mesh. Local preference, MED, communities, and vendor export rules are not simulated.')
   const privateHubs = topology.hubs.filter((h) => h.routingIntent.private)
   if (privateHubs.length > 0 && privateHubs.length !== topology.hubs.length) warnings.push('Mixed private-routing-intent and unsecured hubs can produce asymmetric paths in Azure. The model assumes Default propagation from unsecured hubs; validate all return paths.')
-  const firewallTables = Object.fromEntries(topology.hubs.map((hub) => [hub.id, tables[hub.id]]))
+  const firewallTables = Object.fromEntries(topology.hubs.map((hub) => [hub.id,
+    hub.routeTables?.some((table) => hubStaticPrefixes(hub, table, topology.hubs.length).length)
+      ? decide(hub, local[hub.id]) : tables[hub.id]]))
   const policyRoute = (hub: Hub, prefix: string, internet = false): Candidate => ({
     key: `${hub.id}:policy:${prefix}`, prefix, asPath: [], kind: 'policy',
     transport: internet ? 'Internet' : 'Firewall', connectionId: `firewall:${hub.id}`,
@@ -393,7 +406,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   }))
   // Use route provenance, not AS-path contents: summaries can clear contributor ASNs.
   const branchExportEligible = (route: Candidate): boolean =>
-    (topology.allowBranchToBranchTraffic !== false || route.transport === 'VNet' || route.kind === 'policy')
+    (topology.allowBranchToBranchTraffic !== false || route.transport === 'VNet' || route.kind === 'policy' || route.kind === 'hub-static')
     && (route.transport !== 'SpokeNVA' || !topology.spokes.some((spoke) =>
       spoke.prefixes.some((prefix) => cidr(prefix)!.length < cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network))))
   if (topology.allowBranchToBranchTraffic === false) {
@@ -517,7 +530,8 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
         append({ hubs, firewalls: inspected, steps: [...details, `Azure Firewall in ${name}: no matching forwarding route.`], status: 'unreachable', termination: 'firewall-no-route', lookupPrefix: policyPrefix })
         return
       }
-      details.push(`Azure Firewall in ${name}: longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`)
+      const firewall = topology.hubs.find((hub) => hub.id === current)?.firewall
+      details.push(`Azure Firewall in ${name}${firewall ? ` (${firewall.name}, ${firewall.id})` : ''}: separate onward lookup, longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`)
     }
     const resolve = <T extends { prefix: string; remote?: boolean; forwardingRoutes?: T[] }>(route: T): T[] => {
       if (route.remote || !route.forwardingRoutes) return [route]

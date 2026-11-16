@@ -15,6 +15,7 @@ import { connectionBend, fitDiagram } from './connection-geometry'
 import { useCanvasPresentation } from './useCanvasPresentation'
 import { NetworkNodeIcon as NodeIcon } from './NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from './DiagramNodeLabels'
+import { DiagramButton } from './DiagramButton'
 import { RouteMapPreview } from './RouteMapPreview'
 import { PathMotion } from './PathMotion'
 import type { MotionFlow, MotionSegment } from './PathMotion'
@@ -323,14 +324,14 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
           <path transform={`translate(${p.x},${p.y}) rotate(${angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow-halo" />
           <path transform={`translate(${p.x},${p.y}) rotate(${angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow" />
         </g>
-        <g className={`policy-marker ${direction} ${link.enabled ? '' : 'is-down'} clickable`} data-connection-id={link.id} data-router-id={owner.id} data-direction={direction} transform={`translate(${position.x},${position.y})`} {...selectable(owner.kind, owner.id, label, () => onShowRouteMapRules(owner, direction, link.id), { router: owner, connectionId: link.id, direction })} aria-pressed={undefined}
+        <DiagramButton className={`policy-marker ${direction} ${link.enabled ? '' : 'is-down'} clickable`} data-connection-id={link.id} data-router-id={owner.id} data-direction={direction} transform={`translate(${position.x},${position.y})`} {...selectable(owner.kind, owner.id, label, () => onShowRouteMapRules(owner, direction, link.id), { router: owner, connectionId: link.id, direction })} aria-pressed={undefined}
           aria-describedby={preview && preview.owner.id === owner.id && preview.connectionId === link.id && preview.direction === direction && previewMap ? previewId : undefined}
           onPointerEnter={(event) => { cancelPreviewClose(); setPreview({ owner, connectionId: link.id, direction, anchor: event.currentTarget }) }}
           onPointerLeave={leavePreview}
           onFocus={(event) => { cancelPreviewClose(); setPreview({ owner, connectionId: link.id, direction, anchor: event.currentTarget }) }}
           onBlur={closePreview}>
           <rect x="-23" y="-11" width="46" height="22" rx="7" /><path className="policy-filter" d="M -17 -5 H -7 L -10 0 V 5 L -14 3 V 0 Z" /><text x="7" y="4">{t(direction === 'inbound' ? 'IN' : 'OUT')}</text>
-        </g>
+        </DiagramButton>
       </Fragment>
     })
   }))
@@ -447,9 +448,9 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       return <>
     {topology.hubs.map((hub) => {
       const p = point(hub.id)
-      const secured = hub.routingIntent.private || hub.routingIntent.internet
+      const secured = Boolean(hub.firewall) || hub.routingIntent.private || hub.routingIntent.internet
       const firewallActive = secured && (tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId)
-      return <g key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, t("Select hub {0}", hub.name))} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{hub.label ? ` · ${hub.label}` : ''}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic')].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title><rect x="-112" y="-48" width="224" height="96" rx="12" /><NodeIcon kind="hub" secured={secured} /><DiagramNodeBadge label={secured ? t("SECURED VIRTUAL HUB") : t("VIRTUAL HUB")} x={-54} y={-34} width={152} tone={secured ? 'warning' : 'info'} /><DiagramNodeText text={hub.name} x={0} y={6} width={200} fontSize={15} anchor="middle" className="node-name" /><DiagramNodeText text={hub.region} x={0} y={29} width={200} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />{renderCustomLabel(hub.id, hub.label, 62)}</g>
+      return <DiagramButton key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, t("Select hub {0}", hub.name))} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{hub.label ? ` · ${hub.label}` : ''}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic'), !hub.routingIntent.private && !hub.routingIntent.internet && hub.firewall?.name].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title><rect x="-112" y="-48" width="224" height="96" rx="12" /><NodeIcon kind="hub" secured={secured} /><DiagramNodeBadge label={secured ? t("SECURED VIRTUAL HUB") : t("VIRTUAL HUB")} x={-54} y={-34} width={152} tone={secured ? 'warning' : 'info'} /><DiagramNodeText text={hub.name} x={0} y={6} width={200} fontSize={15} anchor="middle" className="node-name" /><DiagramNodeText text={hub.region} x={0} y={29} width={200} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />{renderCustomLabel(hub.id, hub.label, 62)}</DiagramButton>
     })}
     {topology.spokes.map((spoke) => {
       const p = point(spoke.id)
@@ -459,7 +460,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       const colorProps = destinationColors.has(spoke.id) ? destinationProps(spoke.id) : nvaSite ? destinationProps(nvaSite.id) : {}
       const effectiveLabel = spoke.label || nvaSite?.label
       const inventory = inventoryCounts(topology, { kind: 'spoke', id: spoke.id })
-      return <g key={spoke.id} data-node-id={spoke.id} data-spoke-nva={nvas.length > 0 ? true : undefined} data-standalone-vnet={standalone ? true : undefined} {...colorProps} transform={`translate(${p.x}, ${p.y})`} className={`spoke-node draggable-node ${nvas.length ? 'spoke-nva-node' : ''} ${standalone ? 'standalone-vnet-node' : ''}`} {...selectable('spoke', spoke.id, t("Select spoke {0}", spoke.name))} {...movable('spoke', spoke.id)}>
+      return <DiagramButton key={spoke.id} data-node-id={spoke.id} data-spoke-nva={nvas.length > 0 ? true : undefined} data-standalone-vnet={standalone ? true : undefined} {...colorProps} transform={`translate(${p.x}, ${p.y})`} className={`spoke-node draggable-node ${nvas.length ? 'spoke-nva-node' : ''} ${standalone ? 'standalone-vnet-node' : ''}`} {...selectable('spoke', spoke.id, t("Select spoke {0}", spoke.name))} {...movable('spoke', spoke.id)}>
         <title>{spoke.name}: {spoke.prefixes.join(', ')}{effectiveLabel ? ` · ${effectiveLabel}` : ''}{nvaSite && nvas[0] ? ` · ${t('Spoke BGP NVA')} (${nvaSite.name} · ASN ${nvaSite.asn} · ${nvas[0].peerIp})` : ''}</title>
         <rect x="-94" y="-44" width="188" height="88" rx="12" />
         <NodeIcon kind="spoke" />
@@ -479,18 +480,18 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
           <rect x={inventory.nsgs ? -46 : -90} y="31" width="36" height="11" rx="4" fill="var(--surface)" stroke="var(--border)" />
           <text x={inventory.nsgs ? -28 : -72} y="39" textAnchor="middle" fontSize="8" fill="var(--text)">LB {inventory.loadBalancers}</text>
         </g>}
-      </g>
+      </DiagramButton>
     })}
     {topology.sites.filter((site) => !nvaSiteMap.has(site.id)).map((site) => {
       const p = point(site.id)
-      return <g key={site.id} data-node-id={site.id} {...destinationProps(site.id)} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, t("Select site {0}", site.name))} {...movable('site', site.id)}><title>{site.name}{site.label ? ` · ${site.label}` : ''}  {t("· ASN")} {site.asn}  {t("· Originated prefix:")} {site.prefixes.join(', ') || t('none')}</title><rect x="-94" y="-44" width="188" height="88" rx="12" /><NodeIcon kind="site" /><DiagramNodeBadge label={t("ON-PREMISES")} x={-56} y={-35} width={138} /><DiagramNodeText text={site.name} x={0} y={-3} width={164} fontSize={15} anchor="middle" className="node-name" /><DiagramNodeText text={`ASN ${site.asn}`} x={0} y={16} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} /><DiagramNodeText text={site.prefixes[0] ? `${site.prefixes[0]}${site.prefixes.length > 1 ? ` +${site.prefixes.length - 1}` : ''}` : t("No assigned prefix")} x={0} y={34} width={164} fontSize={10.5} anchor="middle" className="node-detail node-prefixes" weight={400} />{renderCustomLabel(site.id, site.label, 58)}</g>
+      return <DiagramButton key={site.id} data-node-id={site.id} {...destinationProps(site.id)} transform={`translate(${p.x}, ${p.y})`} className="site-node draggable-node" {...selectable('site', site.id, t("Select site {0}", site.name))} {...movable('site', site.id)}><title>{site.name}{site.label ? ` · ${site.label}` : ''}  {t("· ASN")} {site.asn}  {t("· Originated prefix:")} {site.prefixes.join(', ') || t('none')}</title><rect x="-94" y="-44" width="188" height="88" rx="12" /><NodeIcon kind="site" /><DiagramNodeBadge label={t("ON-PREMISES")} x={-56} y={-35} width={138} /><DiagramNodeText text={site.name} x={0} y={-3} width={164} fontSize={15} anchor="middle" className="node-name" /><DiagramNodeText text={`ASN ${site.asn}`} x={0} y={16} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} /><DiagramNodeText text={site.prefixes[0] ? `${site.prefixes[0]}${site.prefixes.length > 1 ? ` +${site.prefixes.length - 1}` : ''}` : t("No assigned prefix")} x={0} y={34} width={164} fontSize={10.5} anchor="middle" className="node-detail node-prefixes" weight={400} />{renderCustomLabel(site.id, site.label, 58)}</DiagramButton>
     })}
     {(topology.erLocations ?? []).map((location) => {
       const p = point(location.id)
       const skuLabel = location.sku ?? 'Standard'
       const grActive = Boolean(location.globalReachEnabled || (location.globalReachLocationIds && location.globalReachLocationIds.length > 0))
       const detailLabel = `ER ${skuLabel}${grActive ? ' · Global Reach' : ''}`
-      return <g key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}{location.peeringLocation ? ` (${location.peeringLocation})` : ''} · SKU {skuLabel}{grActive ? ' · Global Reach enabled' : ''}{location.label ? ` · ${location.label}` : ''}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="12" /><NodeIcon kind="erLocation" /><DiagramNodeBadge label={t("ER LOCATION")} x={-56} y={-35} width={138} tone="purple" /><DiagramNodeText text={location.name} x={0} y={6} width={164} fontSize={15} anchor="middle" className="node-name" /><DiagramNodeText text={detailLabel} x={0} y={28} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />{renderCustomLabel(location.id, location.label, 58)}</g>
+      return <DiagramButton key={location.id} data-node-id={location.id} {...destinationProps(location.id)} transform={`translate(${p.x}, ${p.y})`} className="er-location-node draggable-node" {...selectable('erLocation', location.id, t("Select ER location {0}", location.name))} {...movable('erLocation', location.id)}><title>{location.name}{location.peeringLocation ? ` (${location.peeringLocation})` : ''} · SKU {skuLabel}{grActive ? ' · Global Reach enabled' : ''}{location.label ? ` · ${location.label}` : ''}  {t("· ExpressRoute peering location")}</title><rect x="-94" y="-44" width="188" height="88" rx="12" /><NodeIcon kind="erLocation" /><DiagramNodeBadge label={t("ER LOCATION")} x={-56} y={-35} width={138} tone="purple" /><DiagramNodeText text={location.name} x={0} y={6} width={164} fontSize={15} anchor="middle" className="node-name" /><DiagramNodeText text={detailLabel} x={0} y={28} width={164} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />{renderCustomLabel(location.id, location.label, 58)}</DiagramButton>
     })}
       </>
     })()}

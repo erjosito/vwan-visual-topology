@@ -75,6 +75,7 @@ const diagnosticShapes: Record<string, { priority?: number; slots: Record<string
   // that themselves contain diagnostic-looking text; the final CIDR delimiter is structural.
   '{0}: longest prefix {1}. {2}': { priority: 10, slots: { 0: '[\\s\\S]*', 1: networkPrefix } },
   'Azure Firewall in {0}: longest prefix {1}. {2}': { priority: 11, slots: { 0: '[\\s\\S]*', 1: networkPrefix } },
+  'Azure Firewall in {0}: separate onward lookup, longest prefix {1}. {2}': { priority: 12, slots: { 0: '[\\s\\S]*', 1: networkPrefix } },
   '{0} wins the ExpressRoute versus S2S VPN comparison.': { slots: { 0: 'ExpressRoute|VPN' } },
   '{0} equal-cost paths remain; no single traffic hash is predicted.': { slots: { 0: '\\d+' } },
   '{0} equal-cost paths remain (maximum 32).': { slots: { 0: '\\d+' } },
@@ -86,6 +87,7 @@ const diagnosticShapes: Record<string, { priority?: number; slots: Record<string
 }
 const selectionReasonMessages = new Set([
   'Directly connected spoke system routes override BGP routes for the same prefix.',
+  'Static hub routes override learned routes for the same prefix.',
   'Remote routes from private-routing-intent hubs take precedence over unsecured remote ExpressRoute paths.',
   'Shortest learned AS path ({0} ASNs, including inter-hub prepends).',
   'Local connections are preferred over remote-hub connections.',
@@ -138,7 +140,7 @@ export function localizeDiagnostic(message: string, locale: Language = language)
       if (index === '0' && ['Import rejected: {0}', 'Saved topology could not be loaded: {0}. The saved data has not been overwritten.'].includes(template)) {
         return localizeDiagnostic(value, locale)
       }
-      if (index === '2' && ['{0}: longest prefix {1}. {2}', 'Azure Firewall in {0}: longest prefix {1}. {2}'].includes(template)) {
+      if (index === '2' && ['{0}: longest prefix {1}. {2}', 'Azure Firewall in {0}: longest prefix {1}. {2}', 'Azure Firewall in {0}: separate onward lookup, longest prefix {1}. {2}'].includes(template)) {
         return localizeSelectionExplanation(value, locale)
       }
       return value

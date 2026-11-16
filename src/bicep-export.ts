@@ -85,6 +85,7 @@ export function bicepDefaults(topology: Topology): BicepSettings {
 export function hubExportBlocker(topology: Topology, hubId: string, entry?: HubDeployment): string | undefined {
   const hub = topology.hubs.find((hub) => hub.id === hubId)
   if (!hub) return 'This hub no longer exists.'
+  if (hub.firewall) return 'Declared local hub Firewall identities and static inspection are not exportable yet; preserve native JSON rather than deploy a different design.'
   if (topology.azureImport?.hubs.find((item) => item.hubId === hubId)?.limitations.length) return 'This imported hub has unsupported or incompletely captured configuration; exclude it.'
   if (hub.routeTablesStatus === 'unknown' || hubRouteTables(hub).some((table) => ![DEFAULT_HUB_TABLE, NONE_HUB_TABLE].includes(table.id)
     || table.staticRoutes?.length || (table.id === DEFAULT_HUB_TABLE && (table.labels.length !== 1 || table.labels[0] !== 'default')))) {

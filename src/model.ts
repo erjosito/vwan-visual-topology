@@ -20,6 +20,7 @@ export interface Hub {
   routeMapAssignments?: RouteMapAssignment[]
   routeTables?: HubRouteTable[]
   routeTablesStatus?: 'captured' | 'unknown'
+  firewall?: { id: string; name: string }
 }
 
 export interface HubRouteTable {
@@ -27,6 +28,12 @@ export interface HubRouteTable {
   name: string
   labels: string[]
   staticRoutes?: { name: string; destinationType: string; destinations: string[]; nextHopType: string; nextHop: string }[]
+}
+
+export interface HubFirewallPolicy {
+  hubId: string
+  forward: 'required' | 'bypassed'
+  reverse: 'required' | 'bypassed'
 }
 
 export interface HubRoutingConfiguration {

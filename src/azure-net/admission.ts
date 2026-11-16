@@ -86,7 +86,10 @@ const schema = object({
   }, { disablePeeringRoutePropagation: bool })),
   vwanHubs: array(object({
     ...named, region: text, preference: choice('ExpressRoute', 'VPN', 'ASPath'), routingIntent: object({ private: bool, internet: bool }, { privatePrefixes: strings }),
-  }, { ...positioned, prefix: text, routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown'), routeMapAssignments: array(assignment) })),
+  }, { ...positioned, prefix: text, firewall: object({ id: (v, p) => {
+    text(v, p)
+    if (!(v as string).trim() || (v as string).length > 2048) fail(p, 'expected a nonempty local Firewall ID of at most 2048 characters')
+  }, name: text }), routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown'), routeMapAssignments: array(assignment) })),
   erLocations: array(object(named, { ...positioned, globalReachEnabled: bool, sku: choice('Local', 'Standard', 'Premium'), peeringLocation: text })),
   erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { weight: number, prepend: asns, hubRouting, learnSiteRoutes: bool, propagateDefaultRoute: bool })),
   sites: array(object({ ...named, asn, prefixes: strings }, { ...positioned, routeMapAssignments: array(assignment) })),
@@ -174,7 +177,8 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   const allAppliances = topology.vnets.flatMap((vnet) => vnet.appliances)
   const gateways = topology.vnets.flatMap((vnet) => vnet.gateways)
   unique([...topology.vnets, ...topology.vwanHubs, ...topology.erLocations, ...topology.sites, ...topology.udrTables,
-    ...topology.vnetPeerings, ...topology.erLinks, ...(topology.erGlobalReachLinks ?? []), ...topology.vpnConnections, ...topology.siteLinks])
+    ...topology.vnetPeerings, ...topology.erLinks, ...(topology.erGlobalReachLinks ?? []), ...topology.vpnConnections, ...topology.siteLinks,
+    ...topology.vwanHubs.flatMap((hub) => hub.firewall ? [hub.firewall] : [])])
   for (const hub of topology.vwanHubs) unique(hub.routeTables ?? [], new Set())
   const policies = (owner: { routeMaps?: AzNetTopology['routeMaps']; routeMapAssignments?: { connectionId: string; inboundMapId?: string; outboundMapId?: string }[] }, links: { id: string }[]) => {
     unique(owner.routeMaps ?? [])

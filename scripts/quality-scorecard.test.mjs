@@ -11,6 +11,12 @@ test('missing files and empty/setup-only reports cannot score 100', () => {
   assert.equal(scoreGroup(plan, [item('one', 'passed')], { completed: false }).status, 'not-assessed')
 })
 
+test('model-contract qualification survives scoring and never supplies credit for missing evidence', () => {
+  const documentDerived = { ...plan, qualification: 'Synthetic, not live-Azure-qualified' }
+  assert.equal(scoreGroup(documentDerived, [item('one', 'passed')]).qualification, documentDerived.qualification)
+  assert.equal(scoreGroup(documentDerived, []).score, null)
+})
+
 test('failures, skipped and flaky cases remain in denominator and identities constrain comparison', () => {
   const result = scoreGroup(plan, [item('one', 'passed'), item('two', 'failed'), item('three', 'skipped'), item('four', 'flaky')])
   assert.equal(result.score, 25)
