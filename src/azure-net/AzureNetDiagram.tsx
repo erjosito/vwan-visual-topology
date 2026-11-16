@@ -1355,7 +1355,8 @@ export function AzureNetDiagram({
                 const hasPe = (subnet.privateEndpoints?.length ?? 0) > 0
                 const badgeText = rt ? `RT: ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}` : ''
                 const inventory = inventoryCounts(topology, { kind: 'vnet', id: vnet.id }, subnet.id)
-                const inventoryWidth = inventory.nics ? 90 : 0
+                const hasNat = inventory.natGateways > 0 || subnet.internetEgressStatus === 'unknown'
+                const inventoryWidth = (inventory.nics ? 90 : 0) + (hasNat ? 38 : 0)
                 const badgeW = rt ? Math.min(88, Math.max(42, badgeText.length * 4.8 + 10)) : 0
                 const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW - inventoryWidth
                 const labelClipId = `${tooltipId}-subnet-${vnetIndex}-${sIdx}`
@@ -1385,7 +1386,7 @@ export function AzureNetDiagram({
                     data-testid={`aznet-subnet-${subnet.id}`}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}`}
+                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}`}
                     aria-describedby={hoverPopover?.kind === 'subnet' && hoverPopover.subnetId === subnet.id ? tooltipId : undefined}
                     onMouseEnter={(e) => showSubnet(e.clientX, e.clientY)}
                     onMouseLeave={scheduleClosePopover}
@@ -1442,6 +1443,11 @@ export function AzureNetDiagram({
                     >
                       {subnet.name}
                     </text>
+                    {hasNat && <g data-testid="aznet-subnet-nat-pill">
+                      <title>{t(subnet.internetEgressStatus ? 'Unknown captured association' : 'NAT Gateway association; open VNet detail')}</title>
+                      <rect x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - 36} y={rowY + 3} width={33} height={18} rx={6} fill="var(--surface)" stroke="var(--border)" />
+                      <text x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - 20} y={rowY + 16} textAnchor="middle" fontSize={9} fill="var(--text)">{subnet.internetEgressStatus ? 'NAT?' : 'NAT'}</text>
+                    </g>}
                     {inventory.nics > 0 && <g data-testid="aznet-subnet-inventory-pill">
                       <title>{t('{0} workloads, {1} NICs, {2} public IP associations. Open VNet detail for the original entities.', inventory.workloads, inventory.nics, inventory.publicIps)}</title>
                       <rect x={box.x + box.width - (hasPe ? 42 : 12) - 87} y={rowY + 3} width={84} height={18} rx={6} fill="var(--surface)" stroke="var(--border)" />

@@ -2,6 +2,7 @@ import { canonicalLocation, type BicepExport } from '../bicep-export'
 import { cidr, ipv4 } from '../validation'
 import type { AzNetTopology, AzVNet } from './model'
 import { azArsPeers, azArsSpokes } from './ars-route-maps'
+import { natGatewayForSubnet, validateInventory } from '../inventory'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -31,6 +32,7 @@ export function generateAzNetBicep(
   topology: AzNetTopology,
   options: AzNetBicepOptions = {},
 ): BicepExport {
+  validateInventory(topology)
   const defaultLoc =
     canonicalLocation(options.defaultLocation ?? '') ||
     canonicalLocation(topology.vnets[0]?.region ?? '') ||
@@ -39,7 +41,11 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
-  if (topology.inventory) warnings.push('Workload/NIC/public-IP inventory is preserved by native JSON but is not deployed by this Bicep starter.')
+  if (topology.inventory?.routerSnatPolicies?.length) warnings.push('Firewall network-rule SNAT/private ranges and NVA guest SNAT are simulation declarations, not deployed by this Bicep starter. Preserve native JSON and configure original device policies separately.')
+  if (topology.inventory) warnings.push('Workload/NIC inventory and public IPs not owned by exported NAT Gateways are preserved by native JSON but are not deployed by this Bicep starter.')
+  if (topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.defaultOutboundAccess === undefined))) {
+    warnings.push('Legacy unspecified defaultOutboundAccess is preserved as unspecified; Azure deployment defaults can differ. Set it explicitly for a reproducible outbound posture.')
+  }
   if (topology.vwanHubs.some((hub) => hub.routeTables?.length || hub.routeTablesStatus)
     || topology.vnets.some((vnet) => vnet.vwanHubAttachment?.hubRouting)
     || [...topology.erLinks, ...topology.vpnConnections].some((link) => link.hubRouting)) {
@@ -131,6 +137,50 @@ export function generateAzNetBicep(
     lines.push('')
   }
 
+  const natSymbols = new Map<string, string>()
+  const natNames = new Set<string>()
+  const natName = (name: string) => {
+    const base = name.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '').slice(0, 70) || 'nat-resource'
+    let value = base, suffix = 2
+    while (natNames.has(value.toLowerCase())) value = `${base}-${suffix++}`
+    natNames.add(value.toLowerCase())
+    if (value !== name) warnings.push(`NAT resource name '${name}' is exported as '${value}' for a new Azure deployment.`)
+    return escapeBicepString(value)
+  }
+  for (const gateway of topology.inventory?.natGateways ?? []) {
+    const owner = topology.vnets.find((vnet) => vnet.id === gateway.owner.id)!
+    const gatewayLocation = resolveVnetLocation(owner, defaultLoc)
+    const locExpr = gatewayLocation === defaultLoc ? 'location' : `'${escapeBicepString(gatewayLocation)}'`
+    const publicSymbols = new Map<string, string>(), prefixSymbols = new Map<string, string>()
+    for (const id of gateway.publicIpIds) {
+      const ip = topology.inventory!.publicIps.find((ip) => ip.id === id)!
+      const sym = uniqueSymbol(`nat_pip_${id}`, 'pip')
+      publicSymbols.set(id, sym); resourceCount++
+      lines.push(`resource ${sym} 'Microsoft.Network/publicIPAddresses@2024-05-01' = {`,
+        `  name: '${natName(ip.name)}'`, `  location: ${locExpr}`,
+        `  sku: { name: 'Standard' }`, `  properties: {`, `    publicIPAddressVersion: 'IPv4'`,
+        `    publicIPAllocationMethod: 'Static'`, `  }`, `}`, '')
+    }
+    for (const id of gateway.publicIpPrefixIds ?? []) {
+      const prefix = topology.inventory!.publicIpPrefixes!.find((prefix) => prefix.id === id)!
+      const sym = uniqueSymbol(`nat_prefix_${id}`, 'prefix')
+      prefixSymbols.set(id, sym); resourceCount++
+      lines.push(`resource ${sym} 'Microsoft.Network/publicIPPrefixes@2024-05-01' = {`,
+        `  name: '${natName(prefix.name)}'`, `  location: ${locExpr}`,
+        `  sku: { name: 'Standard' }`, `  properties: {`, `    publicIPAddressVersion: 'IPv4'`,
+        `    prefixLength: ${prefix.prefixLength}`, `  }`, `}`, '')
+    }
+    const sym = uniqueSymbol(`nat_${gateway.id}`, 'nat')
+    natSymbols.set(gateway.id, sym); resourceCount++
+    lines.push(`resource ${sym} 'Microsoft.Network/natGateways@2024-05-01' = {`,
+      `  name: '${natName(gateway.name)}'`, `  location: ${locExpr}`,
+      `  sku: { name: 'Standard' }`, `  properties: {`, `    publicIpAddresses: [`,
+      ...gateway.publicIpIds.map((id) => `      { id: ${publicSymbols.get(id)}.id }`), `    ]`, `    publicIpPrefixes: [`,
+      ...(gateway.publicIpPrefixIds ?? []).map((id) => `      { id: ${prefixSymbols.get(id)}.id }`), `    ]`, `  }`, `}`, '')
+  }
+  if (natSymbols.size) warnings.push('Standard NAT Gateway resources and their public pools are exported. Azure allocates new public addresses; recorded addresses and illustrative SNAT ports are not pinned. Review zone, capacity and security requirements before deployment.')
+  if (topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.internetEgressStatus))) warnings.push('Unknown captured outbound associations are not recreated by this starter. Preserve native JSON and resolve the missing configuration before deployment.')
+
   // 2. Virtual Networks and Subnets
   const vnetSymbols = new Map<string, string>()
   for (const vnet of topology.vnets) {
@@ -174,6 +224,9 @@ export function generateAzNetBicep(
       lines.push(`        name: '${escapeBicepString(sub.name)}'`)
       lines.push(`        properties: {`)
       lines.push(`          addressPrefix: '${escapeBicepString(sub.prefix)}'`)
+      if (sub.defaultOutboundAccess !== undefined) lines.push(`          defaultOutboundAccess: ${sub.defaultOutboundAccess}`)
+      const nat = natGatewayForSubnet(topology, { kind: 'vnet', id: vnet.id }, sub.id)
+      if (nat) lines.push(`          natGateway: { id: ${natSymbols.get(nat.id)}.id }`)
       if (rtSym && sub.name !== 'RouteServerSubnet') {
         lines.push(`          routeTable: {`)
         lines.push(`            id: ${rtSym}.id`)

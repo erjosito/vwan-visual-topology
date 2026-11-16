@@ -1,5 +1,7 @@
 import { azureObjectId } from '../azure-import'
 import { cidr, ipv4 } from '../validation'
+import { importNatCapture } from './nat-capture'
+import { validateInventory } from '../inventory'
 import type { AzSimulationResult } from './engine'
 import {
   validateAzNetTopology,
@@ -413,6 +415,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
   const vnetIdByArmId = new Map<string, string>()
   const vnetIdByName = new Map<string, string>()
   const subnetIdByArmId = new Map<string, string>()
+  const natGatewayBySubnet = new Map<string, string>()
   const rawPeeringsToResolve: Array<{
     sourceVnetId: string
     sourceVnetName: string
@@ -472,11 +475,17 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
           : undefined
 
       const pes = sArmId ? pesBySubnetArmId.get(sArmId.toLowerCase()) : undefined
+      const natGatewayArm = asString(asObject(sProps.natGateway ?? {}, 'Subnet NAT Gateway').id).toLowerCase()
+      if (natGatewayArm) natGatewayBySubnet.set(sId, natGatewayArm)
+      const defaultOutboundAccess = sProps.defaultOutboundAccess
+      if (defaultOutboundAccess !== undefined && typeof defaultOutboundAccess !== 'boolean') throw new Error('Captured defaultOutboundAccess must be a boolean.')
 
       return [{
         id: sId,
         name: sName,
         prefix,
+        ...(typeof defaultOutboundAccess === 'boolean' ? { defaultOutboundAccess } : {}),
+        ...(natGatewayArm ? { internetEgressStatus: 'unknown' as const } : {}),
         ...(routeTableId ? { routeTableId } : {}),
         ...(privateEndpointNetworkPolicies ? { privateEndpointNetworkPolicies } : {}),
         ...(pes && pes.length > 0 ? { privateEndpoints: pes } : {}),
@@ -806,6 +815,9 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     siteLinks: [],
   }
 
+  const capturedInventory = importNatCapture(root, vnets, subnetIdByArmId, natGatewayBySubnet, unknown)
+  if (capturedInventory) topology.inventory = capturedInventory
+  validateInventory(topology)
   const validationIssues = validateAzNetTopology(topology)
   warnings.push(...validationIssues)
 

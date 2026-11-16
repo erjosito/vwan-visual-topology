@@ -1,4 +1,4 @@
-import { cidr, contains, ipv4 } from './validation'
+import { cidr, contains, formatIpv4, ipv4 } from './validation'
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 
@@ -7,8 +7,39 @@ export interface InventoryOwner { kind: 'spoke' | 'vnet'; id: string }
 export interface Workload { id: string; name: string; nicIds: string[]; backingDeviceId?: string }
 export interface NicIpConfiguration { id: string; name: string; subnetId: string; privateIp?: string; publicIpId?: string }
 export interface NetworkNic { id: string; name: string; owner: InventoryOwner; ipConfigurations: NicIpConfiguration[] }
-export interface PublicIp { id: string; name: string; address?: string }
-export interface NetworkInventory { workloads: Workload[]; nics: NetworkNic[]; publicIps: PublicIp[] }
+export interface PublicIp { id: string; name: string; address?: string; sku?: 'Standard' | 'Basic' | 'StandardV2'; allocation?: 'Static' | 'Dynamic' }
+export interface PublicIpPrefix { id: string; name: string; sku: 'Standard'; prefixLength: number; prefix?: string }
+export interface NatGateway {
+  id: string
+  name: string
+  sku: 'Standard'
+  owner: InventoryOwner
+  subnetIds: string[]
+  publicIpIds: string[]
+  publicIpPrefixIds?: string[]
+}
+export interface RouterSnatOwner { kind: 'appliance' | 'hub'; id: string }
+export type RouterSnatPolicy = {
+  owner: RouterSnatOwner
+  publicIpIds: string[]
+} & ({
+  kind: 'firewall-network-rules'
+  privateRanges?: string[]
+  zoneRedundant?: boolean
+} | {
+  kind: 'nva-snat'
+  sourcePrefixes: string[]
+  destinationPrefixes: string[]
+  protocol: 'tcp' | 'udp' | 'any'
+})
+export interface NetworkInventory {
+  workloads: Workload[]
+  nics: NetworkNic[]
+  publicIps: PublicIp[]
+  publicIpPrefixes?: PublicIpPrefix[]
+  natGateways?: NatGateway[]
+  routerSnatPolicies?: RouterSnatPolicy[]
+}
 export type InventoryTopology = Topology | AzNetTopology
 
 export function inventoryOwners(topology: InventoryTopology) {
@@ -73,6 +104,8 @@ export function validateInventory(topology: InventoryTopology): void {
   const publicAddresses = new Set<string>()
   const publicIps = list(inventory.publicIps, 'public IPs').map((entry) => {
     const row = named(entry, 'public IP')
+    if (row.sku !== undefined && !['Standard', 'Basic', 'StandardV2'].includes(String(row.sku))) fail('unsupported public IP SKU')
+    if (row.allocation !== undefined && !['Static', 'Dynamic'].includes(String(row.allocation))) fail('unsupported public IP allocation')
     if (row.address !== undefined) {
       const address = text(row.address, 'public IP address')
       if (!publicIpv4(address) || publicAddresses.has(address)) fail(`invalid or duplicate public address ${address}`)
@@ -81,6 +114,59 @@ export function validateInventory(topology: InventoryTopology): void {
     return row
   })
   const addresses = new Set<string>(), publicAssociations = new Set<string>()
+  const publicPrefixes = list(inventory.publicIpPrefixes ?? [], 'public IP prefixes').map((entry) => {
+    const row = named(entry, 'public IP prefix')
+    if (row.sku !== 'Standard' || !Number.isInteger(row.prefixLength) || Number(row.prefixLength) < 28 || Number(row.prefixLength) > 31) {
+      fail('public IP prefixes support Standard IPv4 /28-/31 only')
+    }
+    if (row.prefix !== undefined) {
+      const prefix = cidr(text(row.prefix, 'public IP prefix'))
+      if (!prefix || prefix.length !== row.prefixLength || ipv4(String(row.prefix).split('/')[0]) !== prefix.network
+        || !publicIpv4(formatIpv4(prefix.network)) || !publicIpv4(formatIpv4(prefix.network + 2 ** (32 - prefix.length) - 1))) {
+        fail('invalid or non-public IPv4 prefix')
+      }
+    }
+    return row
+  })
+  for (let index = 0; index < publicPrefixes.length; index++) {
+    const prefix = publicPrefixes[index]
+    if (prefix.prefix && publicPrefixes.slice(0, index).some((other) => other.prefix
+      && (contains(String(other.prefix), cidr(String(prefix.prefix))!.network) || contains(String(prefix.prefix), cidr(String(other.prefix))!.network)))) {
+      fail('overlapping public IP prefixes')
+    }
+  }
+  const subnetAssociations = new Set<string>(), prefixAssociations = new Set<string>()
+  for (const entry of list(inventory.natGateways ?? [], 'NAT gateways')) {
+    const gateway = named(entry, 'NAT gateway'), owner = object(gateway.owner)
+    if (gateway.sku !== 'Standard') fail('only Standard IPv4 NAT Gateway is supported')
+    const container = owners.find((entry) => entry.kind === owner.kind && entry.id === owner.id)
+    if (!container) fail('NAT Gateway requires one original VNet/spoke owner; managed virtual hubs are not supported')
+    const subnets = new Set<string>()
+    for (const value of list(gateway.subnetIds, 'NAT Gateway subnet references')) {
+      const id = text(value, 'NAT Gateway subnet reference', true), subnet = container!.subnets.find((subnet) => subnet.id === id)
+      const key = JSON.stringify([owner.kind, owner.id, id])
+      if (!subnet || subnets.has(id) || subnetAssociations.has(key)) fail('missing, duplicate or multiply associated NAT Gateway subnet')
+      if (subnet!.name.toLowerCase() === 'gatewaysubnet') fail('NAT Gateway cannot associate with GatewaySubnet')
+      subnets.add(id); subnetAssociations.add(key)
+    }
+    let publicCount = 0
+    for (const value of list(gateway.publicIpIds, 'NAT Gateway public IP references')) {
+      const id = text(value, 'NAT Gateway public IP reference', true), ip = publicIps.find((entry) => entry.id === id)
+      if (!ip || ip.sku !== 'Standard' || ip.allocation !== 'Static' || publicAssociations.has(id)) {
+        fail('NAT Gateway needs uniquely associated Standard static public IPs')
+      }
+      publicAssociations.add(id); publicCount++
+    }
+    for (const value of list(gateway.publicIpPrefixIds ?? [], 'NAT Gateway public IP prefix references')) {
+      const id = text(value, 'public IP prefix reference', true), prefix = publicPrefixes.find((entry) => entry.id === id)
+      if (!prefix || prefixAssociations.has(id)) fail('missing or multiply associated NAT Gateway public IP prefix')
+      if (prefix!.prefix && publicIps.some((ip) => ip.address && contains(String(prefix!.prefix), ipv4(String(ip.address))!))) {
+        fail('a NAT Gateway prefix cannot also contain an allocated public IP')
+      }
+      prefixAssociations.add(id); publicCount += 2 ** (32 - Number(prefix!.prefixLength))
+    }
+    if (publicCount < 1 || publicCount > 16) fail('Standard NAT Gateway requires 1-16 public IPv4 addresses, including prefixes')
+  }
   const nics = list(inventory.nics, 'NICs').map((entry) => {
     const nic = named(entry, 'NIC'), owner = object(nic.owner)
     const container = owners.find((entry) => entry.kind === owner.kind && entry.id === owner.id)
@@ -105,7 +191,11 @@ export function validateInventory(topology: InventoryTopology): void {
       }
       if (config.publicIpId !== undefined) {
         const id = text(config.publicIpId, 'public IP reference', true)
-        if (!publicIps.some((entry) => entry.id === id) || publicAssociations.has(id)) fail(`missing or multiply associated public IP ${id}`)
+        const ip = publicIps.find((entry) => entry.id === id)
+        if (!ip || publicAssociations.has(id)) fail(`missing or multiply associated public IP ${id}`)
+        if (subnetAssociations.has(JSON.stringify([owner.kind, owner.id, config.subnetId])) && ip!.sku !== undefined && ip!.sku !== 'Standard') {
+          fail('NAT Gateway subnets cannot contain NICs with non-Standard public IPs')
+        }
         publicAssociations.add(id)
       }
     }
@@ -143,6 +233,57 @@ export function validateInventory(topology: InventoryTopology): void {
       }
     }
   }
+    const snatOwners = new Set<string>()
+    for (const entry of list(inventory.routerSnatPolicies ?? [], 'router SNAT policies')) {
+      const policy = object(entry), owner = object(policy.owner), id = text(owner.id, 'SNAT owner', true)
+      const fields = ['owner', 'kind', 'publicIpIds', ...(policy.kind === 'firewall-network-rules'
+        ? ['privateRanges', 'zoneRedundant'] : ['sourcePrefixes', 'destinationPrefixes', 'protocol'])]
+      if (Object.keys(policy).some((field) => !fields.includes(field)) || Object.keys(owner).some((field) => !['kind', 'id'].includes(field))) {
+        fail('unsupported router SNAT selector or field')
+      }
+      const key = JSON.stringify([owner.kind, id])
+      const appliance = topology.version === 2 ? topology.vnets.flatMap((vnet) => vnet.appliances).find((device) => device.id === id) : undefined
+      const hub = topology.version === 1 ? topology.hubs.find((hub) => hub.id === id) : topology.vwanHubs.find((hub) => hub.id === id)
+      if (snatOwners.has(key) || (owner.kind === 'hub' ? !hub : owner.kind !== 'appliance' || !appliance)) fail('missing or duplicate original SNAT owner')
+      snatOwners.add(key)
+      if (policy.kind === 'firewall-network-rules') {
+        if (owner.kind === 'appliance' && appliance?.kind !== 'azure-firewall') fail('Firewall SNAT requires an original Firewall')
+        if (policy.zoneRedundant !== undefined && typeof policy.zoneRedundant !== 'boolean') fail('invalid Firewall zone redundancy')
+        if (policy.zoneRedundant === true && appliance && topology.version === 2) {
+          const vnet = topology.vnets.find((vnet) => vnet.appliances.some((device) => device.id === id))!
+          if (natGatewayForSubnet(topology, { kind: 'vnet', id: vnet.id }, appliance.subnetId)) fail('Standard NAT Gateway does not support zone-redundant Firewall integration')
+        }
+        if (policy.privateRanges !== undefined) {
+          const ranges = list(policy.privateRanges, 'Firewall private ranges')
+          if (!ranges.length) fail('custom Firewall ranges cannot be empty; use 255.255.255.255/32 for always-SNAT')
+          for (const range of ranges) {
+            const value = text(range, 'Firewall private range')
+            if (value !== 'IANAPrivateRanges' && !cidr(value) && ipv4(value) === undefined) fail('invalid Firewall private range')
+          }
+        }
+      } else if (policy.kind === 'nva-snat') {
+        if (owner.kind !== 'appliance' || appliance?.kind !== 'nva-vm') fail('NVA SNAT requires an original NVA')
+        if (!['tcp', 'udp', 'any'].includes(String(policy.protocol))) fail('unsupported NVA SNAT protocol')
+        for (const field of ['sourcePrefixes', 'destinationPrefixes']) {
+          if (!list(policy[field], field).length) fail('NVA SNAT matching requires explicit prefixes')
+          for (const prefix of list(policy[field], field)) if (!cidr(text(prefix, field))) fail('invalid NVA SNAT prefix')
+        }
+      } else fail('unsupported router SNAT policy')
+      const references = list(policy.publicIpIds, 'router public IP references')
+      if (references.length > 16) fail('router public pools support at most 16 addresses')
+      const poolIds = new Set<string>()
+      for (const value of references) {
+        const id = text(value, 'router public IP reference', true), ip = publicIps.find((entry) => entry.id === id)
+        const backingNic = topology.inventory.nics.some((nic) => topology.inventory!.workloads.some((workload) =>
+          workload.backingDeviceId === owner.id && workload.nicIds.includes(nic.id)) && nic.ipConfigurations.some((config) =>
+          config.publicIpId === id && config.privateIp === appliance?.privateIp))
+        if (!ip || poolIds.has(id) || publicAssociations.has(id) && !backingNic || ip.sku !== 'Standard' || ip.allocation !== 'Static') {
+          fail('router SNAT needs uniquely associated Standard static public IPs')
+        }
+        poolIds.add(id)
+        publicAssociations.add(id)
+      }
+    }
 }
 
 export interface NamedEndpoint {
@@ -161,6 +302,8 @@ export function inventoryCounts(topology: InventoryTopology, owner: InventoryOwn
   const nics = (topology.inventory?.nics ?? []).filter((nic) => sameInventoryOwner(nic.owner, owner)
     && (subnetId === undefined || nic.ipConfigurations.some((config) => config.subnetId === subnetId)))
   return {
+    natGateways: (topology.inventory?.natGateways ?? []).filter((gateway) => sameInventoryOwner(gateway.owner, owner)
+      && (subnetId === undefined || gateway.subnetIds.includes(subnetId))).length,
     nics: nics.length,
     workloads: (topology.inventory?.workloads ?? []).filter((workload) => workload.nicIds.some((id) => nics.some((nic) => nic.id === id))).length,
     publicIps: new Set(nics.flatMap((nic) => nic.ipConfigurations.filter((config) => subnetId === undefined || config.subnetId === subnetId)
@@ -168,9 +311,26 @@ export function inventoryCounts(topology: InventoryTopology, owner: InventoryOwn
   }
 }
 
+export function natGatewayForSubnet(topology: InventoryTopology, owner: InventoryOwner, subnetId: string) {
+  return topology.inventory?.natGateways?.find((gateway) => sameInventoryOwner(gateway.owner, owner) && gateway.subnetIds.includes(subnetId))
+}
+
 export function pruneDeletedInventory(next: InventoryTopology, previous: InventoryTopology) {
   if (!next.inventory || !previous.inventory) return
   const before = inventoryOwners(previous), after = inventoryOwners(next)
+  const routerExists = (topology: InventoryTopology, owner: RouterSnatOwner) => owner.kind === 'hub'
+    ? (topology.version === 1 ? topology.hubs : topology.vwanHubs).some((hub) => hub.id === owner.id)
+    : topology.version === 2 && topology.vnets.some((vnet) => vnet.appliances.some((device) => device.id === owner.id))
+  if (next.inventory.routerSnatPolicies) next.inventory.routerSnatPolicies = next.inventory.routerSnatPolicies.filter((policy) =>
+    !routerExists(previous, policy.owner) || routerExists(next, policy.owner))
+  if (next.inventory.natGateways) next.inventory.natGateways = next.inventory.natGateways.filter((gateway) => {
+    const oldOwner = before.find((owner) => sameInventoryOwner(owner, gateway.owner))
+    const newOwner = after.find((owner) => sameInventoryOwner(owner, gateway.owner))
+    if (oldOwner && !newOwner) return false
+    gateway.subnetIds = gateway.subnetIds.filter((id) => !oldOwner?.subnets.some((subnet) => subnet.id === id)
+      || newOwner?.subnets.some((subnet) => subnet.id === id))
+    return true
+  })
   const oldNics = new Set(previous.inventory.nics.map((nic) => nic.id))
   next.inventory.nics = next.inventory.nics.filter((nic) => {
     const oldOwner = before.find((owner) => sameInventoryOwner(owner, nic.owner))

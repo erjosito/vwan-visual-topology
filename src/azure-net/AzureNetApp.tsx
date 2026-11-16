@@ -37,7 +37,6 @@ import {
   importAzNetCapture,
   type AzNetComparisonReport,
 } from './azure-import'
-import { generateAzNetBicep } from './bicep-export'
 import { BgpRouteTable } from './BgpRouteTable'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
@@ -228,6 +227,8 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
+const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
@@ -273,6 +274,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   )
   const [canvasSelection, setCanvasSelection] = useState<AzSelectedEntity>()
   const [detailOwner, setDetailOwner] = useState<string>()
+  const [snatHubId, setSnatHubId] = useState<string>()
   const [detailReturnFocus, setDetailReturnFocus] = useState<Element | null>(null)
   const [contextReturnFocus, setContextReturnFocus] = useState<Element | null>(null)
   const openDetail = (id: string) => {
@@ -414,7 +416,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulateAzNet(activeTopology)), [activeTopology])
   const simulation = useMemo(() => azDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
   const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
-  const bicepExport = useMemo(() => generateAzNetBicep(topology), [topology])
 
   const rawEndpointOptions = useMemo(() => getAzNetEndpoints(routingTopology), [routingTopology])
   const endpointOptions = useMemo(() => azDisplayResult(rawEndpointOptions, displayNames), [rawEndpointOptions, displayNames])
@@ -2735,6 +2736,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
   return (
     <div className="aznet-app" data-testid="aznet-app" data-inventory-selection={inventorySelection}>
+      {snatHubId && <Suspense fallback={null}><RouterSnatDialog topology={topology} owner={{ kind: 'hub', id: snatHubId }}
+        name={topology.vwanHubs.find((hub) => hub.id === snatHubId)?.name ?? snatHubId}
+        commit={(mutate) => commitTopology((next) => mutate(next))} onClose={() => setSnatHubId(undefined)} /></Suspense>}
       {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'vnet', id: detailOwner }} simulation={simulation} returnFocus={detailReturnFocus}
         selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => commitTopology((next) => mutate(next))}
         boundaries={[
@@ -5702,6 +5706,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           </select>
                         </div>
                         <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} /></Suspense>
+                        <button type="button" onClick={() => setSnatHubId(hub.id)}>{t('Firewall SNAT')}</button>
                         <form onSubmit={(event) => {
                           event.preventDefault()
                           const prefixes = String(new FormData(event.currentTarget).get('prefixes') ?? '').split(/[,\s]+/).filter(Boolean)
@@ -5945,72 +5950,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   )}
                 </div>
 
-                <div className="aznet-card" data-testid="aznet-bicep-export-card">
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 6,
-                    }}
-                  >
-                    <h3 style={{ margin: 0 }}>
-                      2. Deployable Azure Bicep Template ({bicepExport.resourceCount} resources)
-                    </h3>
-                    <button
-                      type="button"
-                      className="aznet-btn aznet-btn-primary"
-                      data-testid="aznet-download-bicep-btn"
-                      disabled={!bicepExport.text}
-                      onClick={() => {
-                        const blob = new Blob([bicepExport.text], { type: 'text/plain' })
-                        const url = URL.createObjectURL(blob)
-                        const a = document.createElement('a')
-                        a.href = url
-                        a.download = `${topology.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'azure-net-topology'}.bicep`
-                        a.click()
-                        URL.revokeObjectURL(url)
-                      }}
-                    >
-                      ⬇ Download .bicep
-                    </button>
-                  </div>
-                  {bicepExport.warnings.length > 0 && (
-                    <div
-                      style={{
-                        marginBottom: 8,
-                        padding: 8,
-                        background: 'var(--surface-muted)',
-                        border: '1px solid var(--warning)',
-                        borderRadius: 6,
-                        fontSize: 11.5,
-                        color: 'var(--warning)',
-                      }}
-                    >
-                      <strong>Deployment Notes:</strong>
-                      <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                        {bicepExport.warnings.map((w, idx) => (
-                          <li key={idx}>{w}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  <pre
-                    data-testid="aznet-bicep-code"
-                    style={{
-                      maxHeight: 360,
-                      overflow: 'auto',
-                      padding: 10,
-                      background: 'var(--surface-muted)',
-                      color: 'var(--text-muted)',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      margin: 0,
-                    }}
-                  >
-                    {bicepExport.text || '// Fix topology validation errors to generate Bicep'}
-                  </pre>
-                </div>
+                <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzBicepExport topology={topology} /></Suspense>
               </>
             )}
           </div>

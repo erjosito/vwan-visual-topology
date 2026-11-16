@@ -19,7 +19,7 @@ $originalPath = $env:PATH
 try {
     $env:PATH = "$output$([IO.Path]::PathSeparator)$originalPath"
     $env:MOCK_NETWORK_LOG = Join-Path $output 'requests.log'
-    foreach ($mode in @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope')) {
+    foreach ($mode in @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated')) {
         $env:MOCK_NETWORK_MODE = $mode
         $file = Join-Path $output "$mode.json"
         $watch = [Diagnostics.Stopwatch]::StartNew()
@@ -29,6 +29,13 @@ try {
         $text = Get-Content -LiteralPath $file -Raw
         $capture = $text | ConvertFrom-Json
         Assert (!$text.Contains('must-not-be-exported')) "$mode leaked raw fields or CLI error text."
+        Assert ($capture.vnets[0].subnets[0].defaultOutboundAccess -eq $false) "$mode lost the explicit private-subnet setting."
+        Assert ($capture.vnets[1].subnets[0].natGateway.id -eq "$prefix/natGateways/nat") "$mode lost the original NAT association."
+        if ($mode -eq 'nat-denied') {
+            Assert ($capture.sections.natGateways.state -eq 'denied' -and !$capture.configurationComplete) 'NAT denial became successful absence.'
+        } else { Assert ($capture.natGateways.Count -eq 1) "$mode lost NAT Gateway metadata." }
+        if ($mode -eq 'nat-prefix') { Assert ($capture.publicIpPrefixes[0].prefixLength -eq 31) 'Public prefix size was not preserved.' }
+        if ($mode -eq 'nat-unallocated') { Assert (!$capture.publicIpAddresses[0].ipAddress) 'An unknown public address was invented.' }
         Assert ($capture.observationVersion -eq 1 -and $capture.version -eq 2) "$mode lost compatible versioned provenance."
         foreach ($name in @('first', 'second')) {
             $server = $capture.routeServers | Where-Object name -eq "ars-$name"

@@ -266,11 +266,40 @@ Private/connected destinations and known public-IP associations are not
 reclassified as Internet. The result's `packet` section preserves endpoint
 identities and independently reports forward/reply `reachable`, `unreachable`
 or `not-assessed` routing, original route/edge/table references and five-tuples.
-The reply swaps addresses/ports as a separate hypothetical routing probe,
-not proof that a response or session exists. Unknown addressing or coverage
-remains not assessed; unsupported boundary translation has a null post-tuple.
+Without supported translation, reply routing is a separate hypothetical probe.
+Explicit direct Standard NAT Gateway (including public prefixes) and instance
+public-IP egress expose illustrative SNAT tuples and `conditional-response`
+inverse mapping, not unsolicited Internet initiation. Private subnet defaults
+are preserved exactly; an Internet route without an outbound method is blocked.
+Selected UDR/router/gateway routes precede source-subnet NAT.
+
+Optional `inventory.routerSnatPolicies` reference one original `hub` or
+`appliance`, never a copied router. `firewall-network-rules` supports Standard
+static `publicIpIds`, optional `privateRanges` (default `IANAPrivateRanges`:
+RFC1918 + RFC6598), and declared `zoneRedundant`. Custom exclusions replace the
+defaults; never/always sentinels are `0.0.0.0/0` and `255.255.255.255/32`.
+`nva-snat` declares one source/destination CIDR and TCP/UDP matching rule, with
+explicit `sourcePrefixes`, `destinationPrefixes`, `protocol` (`tcp`, `udp`,
+`any`) and router `publicIpIds`. Matching guest traffic SNATs to the original
+private interface before its public outbound mapping.
+NVA rules currently reference native-v2 appliances; legacy native-v1 site/spoke
+NVA NAT remains unassessed. Known StandardV2 instance mappings are unsupported.
+Unknown captured subnet NAT associations remain unknown even with a declared
+NIC/router public pool; explicitly resolve the subnet association before
+claiming an ultimate public mapping.
+
+Classic non-zone-redundant Firewall + Standard NAT Gateway uses an illustrative
+Firewall **private** handoff then the NAT Gateway public address, not two public
+NATs. Router responses independently check routing back to the original NIC
+after inverse translation, including declared static discard/next-hop rules.
+Unknown allocations, multiple-router NAT, unsupported forced-tunnel translation,
+custom Firewall exclusions combined with NAT Gateway, StandardV2/IPv6/NAT64,
+application-rule proxying, dynamic ports/capacity/timers remain unassessed.
+For private SNAT, the configured interface is only a representative of backend
+allocation. Translation is `snat`, `none`, or `not-assessed`; `egress` separately
+distinguishes configured, blocked, legacy-implicit and unknown behavior.
 Public-IP association alone establishes neither inbound DNAT nor a listener.
-Delivery, security and translation readiness always remain not assessed.
+Delivery and security readiness remain not assessed.
 The MCP schema and bounded `packet` evidence section expose the same contract;
 web workers, Node workers and offline Electron use the same adapters.
 Node/browser jobs have a hard 15-second ceiling and 8 MB result ceiling; callers

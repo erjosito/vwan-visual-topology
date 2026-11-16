@@ -203,6 +203,8 @@ export function generateBicep(input: Topology, settings: BicepSettings): BicepEx
   const excludedSpokes = topology.spokes.filter((spoke) => !sortedSpokes.some((entry) => entry.spokeId === spoke.id)).map((spoke) => spoke.name)
   const warnings = [
     ...(topology.inventory || topology.spokes.some((spoke) => spoke.subnets) ? ['Detailed subnets and workload/NIC/public-IP inventory are preserved by native JSON but are not deployed by this Bicep starter.'] : []),
+    ...(topology.inventory?.natGateways?.length ? ['NAT Gateway metadata is retained in native JSON; this VWAN attachment starter does not modify original VNet subnets or deploy their NAT resources.'] : []),
+    ...(topology.inventory?.routerSnatPolicies?.length ? ['Explicit Firewall SNAT pools and private-range policies are retained in native JSON but are not configured by this VWAN Bicep starter.'] : []),
     'NEW-DEPLOYMENT STARTER ONLY: not an Azure clone or lossless topology export. Review target names and run Bicep build and Azure what-if externally before deployment.',
     securedHubs.length || sortedSpokes.length
       ? 'Creates one Standard Virtual WAN, selected hubs, and explicitly configured AZFW_Hub firewalls / routingIntent / existing-VNet connections. No VNets, gateways, ER resources, VPN/on-premises sites, NVAs, route maps, firewall policies or observed routes are created.'

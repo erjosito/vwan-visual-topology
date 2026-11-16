@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { t } from './i18n'
 import { inventoryOwners, sameInventoryOwner, validateInventory, type InventoryOwner, type InventoryTopology } from './inventory'
 import { PacketFlowPanel } from './PacketFlowPanel'
+import { NatGatewayEditor } from './NatGatewayEditor'
+import { RouterSnatEditor } from './RouterSnatEditor'
 import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
 import './network-detail.css'
@@ -68,7 +70,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
       <button ref={closeButton} type="button" onClick={close} aria-label={t('Close VNet detail')}>{t('Close')}</button></header>
     {!network ? <p role="status">{t('The original network is no longer available. No replacement network is shown.')}</p> : <>
       <p><code>{owner.id}</code> · {network.prefixes.join(', ')}</p>
-      <p>{t('This is a view of the original topology. Workloads are endpoints, not extra routers. NAT, load balancers and NSGs are not modeled here.')}</p>
+      <p>{t('This is a view of the original topology. Workloads are endpoints, not extra routers. Explicit Internet egress can be declared per subnet; load balancers and NSGs are not modeled here.')}</p>
       {error && <p role="alert" className="notice error">{error}</p>}
       {boundaries.length > 0 && <section aria-label={t('Selected flow boundaries')}>
         <h3>{t('Selected flow boundaries')}</h3>
@@ -100,6 +102,11 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
                 </p>
               })}
               {attached.length > 10 && <p>{t('Additional attachments are listed on the workload cards.')}</p>}
+              <NatGatewayEditor topology={topology} owner={owner} subnetId={subnet.id} change={change} />
+              {topology.version === 2 && topology.vnets.find((vnet) => vnet.id === owner.id)?.appliances
+                .filter((device) => device.subnetId === subnet.id && device.kind !== 'vnra').map((device) =>
+                  <RouterSnatEditor key={device.id} topology={topology} owner={{ kind: 'appliance', id: device.id }} name={device.name}
+                    kind={device.kind === 'azure-firewall' ? 'firewall-network-rules' : 'nva-snat'} change={change} />)}
             </article>
           })}
           {network.subnets.length > 100 && <p>{t('Only the first 100 subnets are displayed. All original subnet identities are preserved.')}</p>}
@@ -195,7 +202,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
             id: configId, name: 'Primary', subnetId: String(data.get('subnet')),
             ...(address ? { privateIp: address } : {}), ...(data.get('publicIp') ? { publicIpId } : {}),
           }] })
-          if (data.get('publicIp')) inventory.publicIps.push({ id: publicIpId, name: `${name} public IP`, ...(publicAddress ? { address: publicAddress } : {}) })
+          if (data.get('publicIp')) inventory.publicIps.push({ id: publicIpId, name: `${name} public IP`, sku: 'Standard', allocation: 'Static', ...(publicAddress ? { address: publicAddress } : {}) })
         })) { form.reset(); setDeclarePublicIp(false); onSelect(id) }
       }}>
         <h3>{t('Add named workload')}</h3>

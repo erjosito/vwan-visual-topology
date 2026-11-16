@@ -177,7 +177,7 @@ $ipConfiguration = @{ id = $true; privateIPAddress = $true; subnet = $ref }
 $bgp = @{ asn = $true; bgpPeeringAddress = $true }
 $route = @{ name = $true; addressPrefix = $true; nextHopType = $true; nextHopIpAddress = $true }
 $peer = @{ id = $true; name = $true; remoteVirtualNetwork = $ref; allowVirtualNetworkAccess = $true; allowForwardedTraffic = $true; allowGatewayTransit = $true; useRemoteGateways = $true }
-$subnet = @{ id = $true; name = $true; addressPrefix = $true; addressPrefixes = $true; routeTable = $ref; privateEndpointNetworkPolicies = $true; serviceEndpoints = @(@{ service = $true }); ipConfigurations = @($ref) }
+$subnet = @{ id = $true; name = $true; addressPrefix = $true; addressPrefixes = $true; routeTable = $ref; defaultOutboundAccess = $true; natGateway = $ref; privateEndpointNetworkPolicies = $true; serviceEndpoints = @(@{ service = $true }); ipConfigurations = @($ref) }
 $vnet = @{ id = $true; name = $true; location = $true; addressSpace = @{ addressPrefixes = $true }; subnets = @($subnet); virtualNetworkPeerings = @($peer); summarizedGatewayPrefixes = @{ addressPrefixes = $true } }
 $gateway = @{ id = $true; name = $true; gatewayType = $true; enableBgp = $true; activeActive = $true; bgpSettings = $bgp; ipConfigurations = @($ipConfiguration) }
 $bgpRoute = @{ network = $true; nextHop = $true; sourcePeer = $true; origin = $true; asPath = $true; localAddress = $true; weight = $true }
@@ -195,6 +195,9 @@ elseif ($context.cloud -ne 'AzureCloud') { $warnings.Add('Non-public Azure cloud
 Write-Host "[1/6] Reading Route Tables and Virtual Networks in '$ResourceGroupName'..."
 $routeTables = @(Invoke-AzJson 'routeTables' @('network', 'route-table', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; disableBgpRoutePropagation = $true; routes = @($route) }))
 $vnets = @(Invoke-AzJson 'vnets' @('network', 'vnet', 'list', '-g', $ResourceGroupName) @($vnet))
+$publicIpAddresses = @(Invoke-AzJson 'publicIpAddresses' @('network', 'public-ip', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true }; ipAddress = $true; publicIPAllocationMethod = $true; publicIPAddressVersion = $true }))
+$publicIpPrefixes = @(Invoke-AzJson 'publicIpPrefixes' @('network', 'public-ip', 'prefix', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true }; ipPrefix = $true; prefixLength = $true; publicIPAddressVersion = $true }))
+$natGateways = @(Invoke-AzJson 'natGateways' @('network', 'nat', 'gateway', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; sku = @{ name = $true }; subnets = @($ref); publicIpAddresses = @($ref); publicIpPrefixes = @($ref) }))
 
 Write-Host "[2/6] Reading Virtual Network Gateways, Local Gateways, Connections, and Route Servers..."
 $vnetGateways = @(Invoke-AzJson 'vnetGateways' @('network', 'vnet-gateway', 'list', '-g', $ResourceGroupName) @($gateway))
@@ -354,7 +357,7 @@ foreach ($section in @('nicEffectiveRoutes', 'arsLearnedRoutes', 'arsAdvertisedR
 $capture = [ordered]@{
     kind               = 'azure-network-capture'
     version            = 2
-    collectorVersion   = '2026.11.14.1'
+    collectorVersion   = '2026.11.16.1'
     observationVersion = 1
     context            = $context
     configurationComplete = $configurationComplete
@@ -367,6 +370,9 @@ $capture = [ordered]@{
     warnings           = @($warnings)
     routeTables          = @($routeTables | Where-Object { $null -ne $_ })
     vnets                = @($vnets | Where-Object { $null -ne $_ })
+    publicIpAddresses    = @($publicIpAddresses | Where-Object { $null -ne $_ })
+    publicIpPrefixes     = @($publicIpPrefixes | Where-Object { $null -ne $_ })
+    natGateways          = @($natGateways | Where-Object { $null -ne $_ })
     vnetGateways         = @($vnetGateways | Where-Object { $null -ne $_ })
     localNetworkGateways = @($localNetworkGateways | Where-Object { $null -ne $_ })
     vpnConnections       = @($vpnConnections | Where-Object { $null -ne $_ })

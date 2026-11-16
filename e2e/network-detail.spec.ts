@@ -138,6 +138,173 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   }
 }
 
+for (const narrow of [false, true]) {
+  test(`explicit NAT Gateway: ${narrow ? 'narrow dark and Japanese' : 'wide light'} direct egress, tuple evidence and original-state persistence`, async ({ page }) => {
+    const topology = design('full')
+    if (topology.version !== 2) throw new Error('Mixed topology required')
+    topology.vnets[0].subnets[0].defaultOutboundAccess = false
+    await page.addInitScript((topology) => {
+      if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    }, topology)
+    await page.setViewportSize({ width: narrow ? 390 : 1440, height: narrow ? 844 : 1000 })
+    await page.goto('/?mode=full')
+    await page.getByLabel('Theme', { exact: true }).selectOption(narrow ? 'dark' : 'light')
+    const node = page.getByTestId('aznet-vnet-network')
+    await node.click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    const dialog = page.getByTestId('network-detail-dialog'), editor = dialog.getByTestId('nat-gateway-editor')
+    const packet = dialog.getByTestId('packet-flow-panel')
+    await packet.getByRole('combobox', { name: 'Packet source', exact: true }).selectOption({ label: 'Application / App NIC / Primary (10.1.1.4)' })
+    await packet.getByRole('combobox', { name: 'Packet destination', exact: true }).selectOption('external')
+    await packet.getByLabel('External IPv4 address', { exact: true }).fill('8.8.8.8')
+    const trace = packet.getByRole('button', { name: 'Trace packet routing', exact: true })
+    await trace.click()
+    await expect(packet.getByRole('heading', { name: 'Forward routing: unreachable', exact: true })).toBeVisible()
+    await editor.locator('summary').click()
+    await editor.getByLabel('NAT Gateway name', { exact: true }).fill('Declared egress')
+    await editor.getByRole('button', { name: 'Add NAT Gateway', exact: true }).click()
+    await trace.click()
+    await expect(packet.getByRole('heading', { name: 'Forward routing: reachable', exact: true })).toBeVisible()
+    await expect(packet.getByText('Delivery, security and translation readiness: not assessed', { exact: true })).toBeVisible()
+    await editor.getByLabel('Public IPv4 address (blank means unknown)', { exact: true }).fill('20.40.50.60')
+    await editor.getByRole('button', { name: 'Save NAT Gateway', exact: true }).click()
+    await trace.click()
+    await expect(packet.getByText('Conditional response, not a new Internet initiation', { exact: true })).toBeVisible()
+    await expect(packet.getByText('Illustrative SNAT configured; delivery and security readiness: not assessed', { exact: true })).toBeVisible()
+    await packet.getByRole('region', { name: 'Forward routing', exact: true }).locator('summary').click()
+    await expect(packet.getByTestId('packet-step-tuples').first()).toContainText('10.1.1.4:49152')
+    await expect(packet.getByTestId('packet-step-tuples').first()).toContainText('20.40.50.60:')
+    expect(await dialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth + 1)).toBe(true)
+    const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    const persisted = await read()
+    expect(persisted.vnets[0].subnets[0].defaultOutboundAccess).toBe(false)
+    expect(persisted.inventory.natGateways[0]).toMatchObject({ owner: { kind: 'vnet', id: 'network' }, subnetIds: ['app'] })
+    const input: PlatformRequest = { contractVersion: 1, operation: 'simulate', document: { mode: 'full', topology: persisted },
+      packet: { source: { kind: 'workload', workloadId: 'vm:a', nicId: 'nic-a', ipConfigurationId: 'ip-a' },
+        target: { kind: 'external', address: '8.8.8.8' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443 } }
+    const worker = await page.evaluate(async (input) => {
+      const module = await import(/* @vite-ignore */ '/src/platform/browser.ts')
+      return module.runBrowserSimulation(input)
+    }, input)
+    expect(worker).toEqual(executePlatform(input))
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('aznet-subnet-nat-pill')).toHaveCount(1)
+    await page.reload()
+    await node.click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    await editor.locator('summary').click()
+    await expect(editor.getByLabel('Public IPv4 address (blank means unknown)', { exact: true })).toHaveValue('20.40.50.60')
+    await editor.getByRole('button', { name: 'Remove NAT Gateway from all associated subnets', exact: true }).click()
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('aznet-subnet-nat-pill')).toHaveCount(0)
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect(page.getByTestId('aznet-subnet-nat-pill')).toHaveCount(1)
+    expect((await read()).inventory.natGateways[0].id).toBe(persisted.inventory.natGateways[0].id)
+    if (narrow) {
+      await page.evaluate(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
+      await page.reload()
+      await node.focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'VNet の詳細を開く', exact: true }).click()
+      await editor.locator('summary').click()
+      await expect(editor.getByLabel('NAT Gateway 名', { exact: true })).toBeVisible()
+      await expect(editor.getByRole('button', { name: 'NAT Gateway を保存', exact: true })).toBeVisible()
+      expect(await dialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth + 1)).toBe(true)
+    }
+  })
+}
+
+for (const kind of ['azure-firewall', 'nva-vm'] as const) {
+  test(`${kind}: original-router SNAT and its own subnet NAT Gateway preserve translated tuples and conditional returns`, async ({ page }) => {
+    const topology = design('full')
+    if (topology.version !== 2) throw new Error('Mixed topology required')
+    topology.vnets[0].subnets[0].defaultOutboundAccess = false
+    topology.vnets[0].subnets[0].routeTableId = 'steering'
+    topology.vnets[0].subnets.push({ id: 'router-subnet', name: kind === 'azure-firewall' ? 'AzureFirewallSubnet' : 'Router subnet', prefix: '10.1.2.0/24' })
+    topology.vnets[0].appliances = [{ id: 'router', name: 'Original router', kind, subnetId: 'router-subnet',
+      privateIp: '10.1.2.4', enableIpForwarding: true, staticRoutes: [] }]
+    topology.udrTables = [{ id: 'steering', name: 'Steering', disableBgpRoutePropagation: false,
+      routes: [{ id: 'default', name: 'Default', prefix: '0.0.0.0/0', nextHopType: 'VirtualAppliance', nextHopIp: '10.1.2.4', enabled: true }] }]
+    await page.addInitScript((topology) => {
+      if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    }, topology)
+    await page.setViewportSize({ width: kind === 'nva-vm' ? 390 : 1440, height: 1000 })
+    await page.goto('/?mode=full')
+    await page.getByLabel('Theme', { exact: true }).selectOption(kind === 'nva-vm' ? 'dark' : 'light')
+    await page.getByTestId('aznet-vnet-network').click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    const dialog = page.getByTestId('network-detail-dialog')
+    const editor = dialog.getByTestId('router-snat-editor')
+    await editor.locator('summary').click()
+    await editor.getByLabel('Router public IPv4 pool (comma-separated; ? means unknown; blank means no declared pool)', { exact: true }).fill('20.40.50.70')
+    await editor.getByRole('button', { name: 'Save router SNAT', exact: true }).click()
+    const nat = dialog.getByTestId('detail-subnet').filter({ hasText: '10.1.2.0/24' }).getByTestId('nat-gateway-editor')
+    await nat.locator('summary').click()
+    await nat.getByLabel('NAT Gateway name', { exact: true }).fill('Router egress')
+    await nat.getByLabel('Public IPv4 addresses (comma-separated; blank means unknown)', { exact: true }).fill('20.40.50.60')
+    await nat.getByRole('button', { name: 'Add NAT Gateway', exact: true }).click()
+    const packet = dialog.getByTestId('packet-flow-panel')
+    await packet.getByRole('combobox', { name: 'Packet source', exact: true }).selectOption({ label: 'Application / App NIC / Primary (10.1.1.4)' })
+    await packet.getByRole('combobox', { name: 'Packet destination', exact: true }).selectOption('external')
+    await packet.getByLabel('External IPv4 address', { exact: true }).fill('8.8.8.8')
+    await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+    await expect(packet.getByRole('heading', { name: 'Reply routing: reachable', exact: true })).toBeVisible()
+    await packet.getByRole('region', { name: 'Forward routing', exact: true }).locator('summary').click()
+    const tuples = packet.getByRole('region', { name: 'Forward routing', exact: true }).getByTestId('packet-step-tuples')
+    await expect(tuples).toHaveCount(2)
+    await expect(tuples.nth(0)).toContainText('10.1.2.4:')
+    await expect(tuples.nth(1)).toContainText('20.40.50.60:')
+    const persisted = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    expect(persisted.inventory.routerSnatPolicies[0]).toMatchObject({ owner: { kind: 'appliance', id: 'router' } })
+    expect(persisted.inventory.natGateways[0].subnetIds).toEqual(['router-subnet'])
+    const input: PlatformRequest = { contractVersion: 1, operation: 'simulate', document: { mode: 'full', topology: persisted },
+      packet: { source: { kind: 'workload', workloadId: 'vm:a', nicId: 'nic-a', ipConfigurationId: 'ip-a' },
+        target: { kind: 'external', address: '8.8.8.8' }, protocol: 'tcp', sourcePort: 49152, destinationPort: 443 } }
+    const worker = await page.evaluate(async (input) => {
+      const module = await import(/* @vite-ignore */ '/src/platform/browser.ts')
+      return module.runBrowserSimulation(input)
+    }, input)
+    expect(worker).toEqual(executePlatform(input))
+    expect(await dialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth + 1)).toBe(true)
+    if (kind === 'nva-vm') {
+      await page.keyboard.press('Escape')
+      await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+      await page.getByTestId('aznet-vnet-network').focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'VNet の詳細を開く', exact: true }).click()
+      await editor.locator('summary').click()
+      await expect(editor.getByRole('button', { name: 'ルーター SNAT を保存', exact: true })).toBeVisible()
+      await expect(editor).toContainText('IP 転送だけでは NAT は有効になりません。')
+      expect(await dialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth + 1)).toBe(true)
+    }
+  })
+}
+
+test('explicitly resolving an unknown captured association is required before claiming instance public egress', async ({ page }) => {
+  const topology = design('full')
+  if (topology.version !== 2) throw new Error('Mixed topology required')
+  topology.vnets[0].subnets[0].defaultOutboundAccess = false
+  topology.vnets[0].subnets[0].internetEgressStatus = 'unknown'
+  topology.inventory!.publicIps.push({ id: 'pip', name: 'Instance IP', address: '20.40.50.60', sku: 'Standard', allocation: 'Static' })
+  topology.inventory!.nics[0].ipConfigurations[0].publicIpId = 'pip'
+  await page.addInitScript((topology) => localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology })), topology)
+  await page.goto('/?mode=full')
+  await page.getByTestId('aznet-vnet-network').click()
+  await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+  const dialog = page.getByTestId('network-detail-dialog'), editor = dialog.getByTestId('nat-gateway-editor')
+  const packet = dialog.getByTestId('packet-flow-panel')
+  await packet.getByRole('combobox', { name: 'Packet source', exact: true }).selectOption({ label: 'Application / App NIC / Primary (10.1.1.4)' })
+  await packet.getByRole('combobox', { name: 'Packet destination', exact: true }).selectOption('external')
+  await packet.getByLabel('External IPv4 address', { exact: true }).fill('8.8.8.8')
+  await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+  await expect(packet.getByText('Delivery, security and translation readiness: not assessed', { exact: true })).toBeVisible()
+  await editor.locator('summary').click()
+  await editor.getByRole('combobox', { name: 'NAT Gateway association', exact: true }).selectOption({ label: 'No explicit NAT Gateway' })
+  await packet.getByRole('button', { name: 'Trace packet routing', exact: true }).click()
+  await expect(packet.getByText('Illustrative SNAT configured; delivery and security readiness: not assessed', { exact: true })).toBeVisible()
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].internetEgressStatus)).toBeUndefined()
+})
+
 test('mixed hub controls preserve association, expose a label-propagated custom RIB and render inter-hub transit', async ({ page }) => {
   const topology = design('full')
   if (topology.version !== 2) throw new Error('Mixed topology required')
