@@ -7,6 +7,7 @@ import { applicationFixture, applicationPlatformRequest } from '../tests/fixture
 import { executePlatform } from '../src/platform/service'
 import { translate } from '../src/messages'
 import '../src/application-messages-ja'
+import '../src/network-detail-messages-ja'
 
 for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   for (const locale of ['en', 'ja'] as const) {

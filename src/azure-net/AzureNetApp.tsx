@@ -37,7 +37,7 @@ import {
 } from './azure-import'
 import { validateVpnNat } from '../vpn-nat'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
-import { validateApplicationInventory } from '../application'
+import { validateApplicationInventory } from '../application-inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 
 import { pruneAzSiteRouteMaps } from './route-maps'

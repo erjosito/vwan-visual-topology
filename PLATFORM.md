@@ -831,6 +831,10 @@ On display-less Linux runners, run it as
 `xvfb-run -a npm run test:e2e -- --workers=2`; the matching Playwright Docker
 image used by CI includes Xvfb. Headless Chromium alone does not provide the
 display required by Electron. The test itself remains enabled and unchanged.
+Native application inventory admission stays on the synchronous import path,
+but request/evidence evaluation and detail-only Japanese catalogs stay with
+their lazy inspection UI. Both the entry and active-workspace production
+asset budgets remain enforced by the existing production smoke suite.
 
 `npm run test:desktop` launches actual Electron and checks three-mode engine
 parity, native JSON import/export/persistence, immediate HRP UI reevaluation,

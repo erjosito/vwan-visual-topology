@@ -1,6 +1,21 @@
 import { registerJapaneseMessages } from './messages'
 
 registerJapaneseMessages({
+  'Workload packet probe': 'ワークロード パケット プローブ',
+  'Independent forward and reply routing probes. Routing success does not establish a listener, security policy, NAT or application delivery.': '往路と応答のルーティングを個別に調査します。ルーティングの成功は、リスナー、セキュリティ ポリシー、NAT、アプリケーション配信の成立を意味しません。',
+  'Select an IP configuration': 'IP 構成を選択',
+  'Explicit Internet endpoint': '明示的なインターネット エンドポイント',
+  'Trace packet routing': 'パケット ルーティングを追跡',
+  'Select both packet endpoints.': '両方のパケット エンドポイントを選択してください。',
+  'Packet probe failed.': 'パケット プローブに失敗しました。',
+  'Showing up to 100 matching IP configurations. Search to narrow the list.': '一致する IP 構成を最大 100 件表示します。検索して絞り込んでください。',
+  'The topology or probe changed. Run the probe again for current evidence.': 'トポロジまたはプローブが変更されました。最新の結果を得るには、プローブを再実行してください。',
+  'Post-boundary tuple unknown': '境界通過後のタプルは不明',
+  'Only the first 100 steps are displayed.': '最初の 100 ステップのみ表示します。',
+  'Delivery, security and translation readiness: not assessed': '配信、セキュリティ、アドレス変換の準備状態: 未評価',
+  'Illustrative SNAT configured; delivery and security readiness: not assessed': '例示的な SNAT を構成済み。配信とセキュリティの準備状態: 未評価',
+  'Conditional response, not a new Internet initiation': '条件付き応答。インターネットからの新規接続ではありません',
+  'Forward and reply routing, with explicit Internet egress where supported. Responses after SNAT are conditional; policy, listeners and application delivery are not assessed.': '往路と応答のルーティング、および対応する明示的なインターネット送信を調査します。SNAT 後の応答は条件付きであり、ポリシー、リスナー、アプリケーション配信は未評価です。',
   'Edit inbound NAT': '受信 NAT を編集',
   'New inbound NAT': '新しい受信 NAT',
   'Save inbound NAT': '受信 NAT を保存',

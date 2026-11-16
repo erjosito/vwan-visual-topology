@@ -7,7 +7,7 @@ import type { WorkloadIpReference } from '../inventory'
 import type { VpnNatPacketRequest, VpnNatPacketResult } from '../vpn-nat-packet'
 import { VPN_NAT_CAPABILITIES } from '../vpn-nat'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
-import { applicationCapabilities } from '../application'
+import { applicationCapabilities } from '../application-inventory'
 import type { ApplicationRequest, ApplicationResult } from '../application'
 
 export const contractVersion = 1 as const
