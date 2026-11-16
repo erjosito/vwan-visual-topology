@@ -6,7 +6,7 @@ import type { PacketRequest, PacketResult } from '../packet-flow'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.16.2'
+export const engineVersion = '2026.11.16.3'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -83,7 +83,7 @@ export const capabilities = {
   inventory: ['optional original workload/NIC/IP-configuration/public-IP identities', 'explicit detailed subnets on VWAN spokes; no inferred VMs or addresses',
     'optional original subnet/NIC NSG associations and bounded rule declarations'],
   packet: { operation: 'simulate', addressFamily: 'IPv4', protocols: ['tcp', 'udp'], ports: '1-65535',
-    endpoints: ['owned workload/NIC/IP-configuration tuple', 'explicit external public address'],
+    endpoints: ['owned workload/NIC/IP-configuration tuple', 'explicit external public address', 'original Standard static public-IP ingress frontend'],
     outcomes: ['reachable', 'unreachable', 'not-assessed'], readiness: 'NSG denial assessed separately; delivery and guest/firewall readiness not assessed',
     nsg: ['ordered subnet/NIC new-flow intersection and first-priority/default-rule evidence',
       'original NVA backing subnet/NIC checks at private pre/post-guest-SNAT tuples',
@@ -91,8 +91,10 @@ export const capabilities = {
       'conditional responses, not persistent/live sessions or new reverse initiations',
       'unknown capture/dynamic selectors/illustrative domains remain unassessed'],
     translation: ['explicit direct Standard NAT Gateway and instance public IP', 'declared single-router Firewall network-rule/NVA guest SNAT',
-      'classic non-zone-redundant Firewall private handoff to Standard NAT Gateway', 'conditional inverse translation and independently checked router return routes'],
-    translationLimits: ['illustrative allocation/ports only', 'no unsolicited ingress', 'unknown/multiple router NAT and forced-tunnel translation unassessed',
+      'classic non-zone-redundant Firewall private handoff to Standard NAT Gateway', 'conditional inverse translation and independently checked router return routes',
+      'Standard public VM private-destination mapping', 'explicit single original Firewall/NVA public DNAT with private-tuple filters and response-owner routing'],
+    translationLimits: ['illustrative allocation/ports only', 'unsolicited ingress requires an explicitly selected supported frontend and permission',
+      'NAT Gateway cannot publish ingress', 'unknown/multiple router NAT, secured-hub private DNAT interfaces and forced-tunnel translation unassessed',
       'no StandardV2/IPv6/NAT64/application-rule proxy/capacity/timer predictions'] },
   requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or explicit hub table scope, subject to complete modeled coverage'],
   outcomes: ['satisfied', 'violated', 'not assessed'],

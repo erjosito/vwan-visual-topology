@@ -5,6 +5,7 @@ import { PacketFlowPanel } from './PacketFlowPanel'
 import { NatGatewayEditor } from './NatGatewayEditor'
 import { RouterSnatEditor } from './RouterSnatEditor'
 import { NsgEditor } from './NsgEditor'
+import { DnatEditor } from './DnatEditor'
 import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
 import './network-detail.css'
@@ -107,9 +108,12 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
               <NatGatewayEditor topology={topology} owner={owner} subnetId={subnet.id} change={change} />
               <NsgEditor topology={topology} owner={owner} target={{ kind: 'subnet', id: subnet.id }} change={change} />
               {topology.version === 2 && topology.vnets.find((vnet) => vnet.id === owner.id)?.appliances
-                .filter((device) => device.subnetId === subnet.id && device.kind !== 'vnra').map((device) =>
-                  <RouterSnatEditor key={device.id} topology={topology} owner={{ kind: 'appliance', id: device.id }} name={device.name}
-                    kind={device.kind === 'azure-firewall' ? 'firewall-network-rules' : 'nva-snat'} change={change} />)}
+                .filter((device) => device.subnetId === subnet.id && device.kind !== 'vnra').map((device) => <div key={device.id}>
+                  <RouterSnatEditor topology={topology} owner={{ kind: 'appliance', id: device.id }} name={device.name}
+                    kind={device.kind === 'azure-firewall' ? 'firewall-network-rules' : 'nva-snat'} change={change} />
+                  <DnatEditor topology={topology} owner={{ kind: 'appliance', id: device.id }} name={device.name}
+                    kind={device.kind === 'azure-firewall' ? 'firewall-dnat' : 'nva-dnat'} change={change} />
+                </div>)}
             </article>
           })}
           {network.subnets.length > 100 && <p>{t('Only the first 100 subnets are displayed. All original subnet identities are preserved.')}</p>}
@@ -219,7 +223,9 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
         <label>{t('Public IPv4 address (blank means unknown)')}<input name="publicAddress" disabled={!declarePublicIp} /></label>
         <button type="submit" disabled={!network.subnets.length}>{t('Add workload and NIC')}</button>
       </form>
-      <PacketFlowPanel topology={topology} simulation={simulation} />
+      <PacketFlowPanel topology={topology} simulation={simulation} onHighlight={(id) => {
+        if (workloads.some((workload) => workload.id === id)) { setQuery(''); onSelect(id) }
+      }} />
     </>}
   </dialog>
 }

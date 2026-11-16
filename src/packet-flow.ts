@@ -1,14 +1,15 @@
 import { cidr, contains, ipv4 } from './validation'
-import { inventoryOwners, namedEndpoints, publicIpv4 } from './inventory'
+import { inventoryOwners, namedEndpoints, publicIpv4, workloadEndpointKey } from './inventory'
 import type { InventoryTopology } from './inventory'
 import { simulate, type Simulation } from './routing'
 import { traceNodePath, type NodePath, type PathNode } from './paths'
 import { simulateAzNet, traceAzNetFlow, type AzEndpointRef, type AzFlowTrace, type AzSimulationResult } from './azure-net/engine'
 import { applyInternetEgress } from './packet-egress'
 import { completePacketNsg, endpointNsg, type NsgAssessment, type TupleUncertainty } from './packet-security'
+import { tracePublicIngress } from './packet-ingress'
 
 export interface WorkloadEndpoint { kind: 'workload'; workloadId: string; nicId: string; ipConfigurationId: string }
-export type PacketEndpoint = WorkloadEndpoint | { kind: 'external'; address: string }
+export type PacketEndpoint = WorkloadEndpoint | { kind: 'external'; address: string } | { kind: 'public-ip'; publicIpId: string }
 export interface FiveTuple {
   sourceAddress: string
   destinationAddress: string
@@ -43,8 +44,9 @@ export interface PacketResult {
   reply: PacketLeg
   delivery: 'not-assessed'
   security: 'denied' | 'not-assessed'
-  translation: 'snat' | 'none' | 'not-assessed'
+  translation: 'snat' | 'dnat' | 'snat-dnat' | 'none' | 'not-assessed'
   egress?: 'configured' | 'blocked' | 'legacy-implicit' | 'not-assessed'
+  ingress?: 'configured' | 'blocked' | 'not-assessed'
   limitations: string[]
   nsg?: { forward: NsgAssessment; reply: NsgAssessment }
 }
@@ -63,6 +65,11 @@ export function validatePacketRequest(input: unknown): asserts input is PacketRe
     if (endpoint.kind === 'external') {
       if (Object.keys(endpoint).some((key) => !['kind', 'address'].includes(key)) || typeof endpoint.address !== 'string'
         || !publicIpv4(endpoint.address)) throw new Error('External endpoint requires an explicit public IPv4 address.')
+    } else if (endpoint.kind === 'public-ip') {
+      if (endpoint === request.source || Object.keys(endpoint).some((key) => !['kind', 'publicIpId'].includes(key))
+        || typeof endpoint.publicIpId !== 'string' || !endpoint.publicIpId || endpoint.publicIpId.length > 120) {
+        throw new Error('Public-IP endpoints are destination-only and require an original public-IP ID.')
+      }
     } else if (endpoint.kind === 'workload') {
       if (Object.keys(endpoint).some((key) => !['kind', 'workloadId', 'nicId', 'ipConfigurationId'].includes(key))
         || [endpoint.workloadId, endpoint.nicId, endpoint.ipConfigurationId].some((id) => typeof id !== 'string' || !id || id.length > 120)) {
@@ -72,9 +79,7 @@ export function validatePacketRequest(input: unknown): asserts input is PacketRe
   }
 }
 
-export function workloadEndpointKey(ref: WorkloadEndpoint): string {
-  return JSON.stringify(['workload', ref.workloadId, ref.nicId, ref.ipConfigurationId])
-}
+export { workloadEndpointKey } from './inventory'
 
 export function packetEndpointOptions(topology: InventoryTopology, unknownAddressLabel = 'address unknown') {
   return namedEndpoints(topology).map(({ workload, nic, config }) => {
@@ -85,7 +90,9 @@ export function packetEndpointOptions(topology: InventoryTopology, unknownAddres
 
 export function tracePacket(topology: InventoryTopology, request: PacketRequest, simulation?: Simulation | AzSimulationResult): PacketResult {
   validatePacketRequest(request)
+  if (request.target.kind === 'public-ip') return tracePublicIngress(topology, request, simulation)
   const resolve = (ref: PacketEndpoint) => {
+    if (ref.kind === 'public-ip') return { reason: 'Public-IP endpoints require the explicit ingress path.' }
     if (ref.kind === 'external') {
       const ip = ipv4(ref.address)!
       const connected = [...inventoryOwners(topology).flatMap((owner) => owner.prefixes), ...topology.sites.flatMap((site) => site.prefixes),
@@ -124,7 +131,7 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
     if (!packet || from.reason || to.reason) return { direction, routing: 'not-assessed', steps: [], reasons: [from.reason, to.reason].filter((reason): reason is string => !!reason) }
     if ((direction === 'forward' ? request.source : request.target).kind === 'external') return {
       direction, routing: 'not-assessed', tuple: packet, steps: [],
-      reasons: ['Public IP association is inventory only; inbound listener, DNAT and security readiness are not modeled.'],
+      reasons: ['Internet-to-private-workload initiation requires an explicitly selected public frontend or another supported ingress service; an inventory association is not a selected mapping.'],
     }
     if (topology.version === 1) {
       if (from.native!.kind === 'internet') return { direction, routing: 'not-assessed', tuple: packet, steps: [], reasons: ['Inbound Internet forwarding is not modeled.'] }
@@ -175,7 +182,8 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
     : { outcome: 'not-assessed' as const, checks: [] }
   const egress: Pick<PacketResult, 'translation' | 'egress'> = sourceNsg.outcome === 'denied' ? { translation: 'not-assessed' as const }
     : applyInternetEgress(topology, request, forward, reply, nativeSimulation)
-  const nsg = completePacketNsg(topology, request.target, forward, reply, sourceNsg, nativeSimulation, egress.translation)
+  const nsg = completePacketNsg(topology, request.target, forward, reply, sourceNsg, nativeSimulation,
+    egress.translation === 'snat' ? 'snat' : egress.translation === 'none' ? 'none' : 'not-assessed')
   if (nsg.forward.outcome === 'denied') {
     egress.translation = forward.steps.some((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress) ? 'snat' : 'not-assessed'
     if (request.target.kind === 'external') egress.egress = 'blocked'

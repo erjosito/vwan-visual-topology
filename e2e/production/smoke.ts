@@ -91,6 +91,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const graph = await assetGraph([...requests])
     expect(graph.localGzipBytes).toBeLessThanOrEqual(320_000)
     expect(graph.rawBytes).toBeLessThanOrEqual(1_200_000)
+    expect(graph.files.some(({ path }: { path: string }) => /\/packet-flow-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => mode === 'vwan' ? /\/AzureNetApp-/.test(path) : /\/App-/.test(path))).toBe(false)
     const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
     await expect(tools).toBeVisible()

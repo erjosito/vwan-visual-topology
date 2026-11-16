@@ -8,7 +8,9 @@ import { packetEndpointOptions, tracePacket, type FiveTuple, type PacketEndpoint
 
 const tupleText = (tuple: FiveTuple) => `${tuple.protocol.toUpperCase()} ${tuple.sourceAddress}:${tuple.sourcePort} -> ${tuple.destinationAddress}:${tuple.destinationPort}`
 
-export function PacketFlowPanel({ topology, simulation }: { topology: InventoryTopology; simulation: Simulation | AzSimulationResult }) {
+export function PacketFlowPanel({ topology, simulation, onHighlight }: {
+  topology: InventoryTopology; simulation: Simulation | AzSimulationResult; onHighlight?: (id: string) => void
+}) {
   const options = packetEndpointOptions(topology, t('Address unknown'))
   const [source, setSource] = useState('')
   const [target, setTarget] = useState('')
@@ -23,19 +25,23 @@ export function PacketFlowPanel({ topology, simulation }: { topology: InventoryT
   const result = submitted?.key === currentKey ? submitted.result : undefined
   const visible = options.filter((option) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 100)
   const resolve = (key: string): PacketEndpoint | undefined => key === 'external'
-    ? { kind: 'external', address: externalAddress } : options.find((option) => option.key === key)?.ref
+    ? { kind: 'external', address: externalAddress } : key.startsWith('public:')
+      ? { kind: 'public-ip', publicIpId: key.slice('public:'.length) } : options.find((option) => option.key === key)?.ref
   const select = (kind: 'source' | 'target', value: string, change: (value: string) => void) => <label>
     {t(kind === 'source' ? 'Packet source' : 'Packet destination')}
     <select value={value} onChange={(event) => change(event.target.value)} aria-label={t(kind === 'source' ? 'Packet source' : 'Packet destination')}>
       <option value="">{t('Select an IP configuration')}</option>
       <option value="external">{t('Explicit Internet endpoint')}</option>
+      {kind === 'target' && topology.inventory?.publicIps.map((ip) => <option key={ip.id} value={`public:${ip.id}`}>
+        {t('Public ingress frontend')}: {ip.name} ({ip.address ?? t('Address unknown')})
+      </option>)}
       {value && !visible.some((option) => option.key === value) && options.find((option) => option.key === value) && <option value={value}>{options.find((option) => option.key === value)!.label}</option>}
       {visible.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
     </select>
   </label>
   return <section className="packet-panel" aria-label={t('Workload packet probe')} data-testid="packet-flow-panel">
     <h3>{t('Workload packet probe')}</h3>
-    <p>{t('Forward and reply routing, with explicit Internet egress where supported. Responses after SNAT are conditional; policy, listeners and application delivery are not assessed.')}</p>
+    <p>{t('Forward/reply routing with explicit Internet egress, public ingress and private-tuple NSGs where supported. Inverse translations are conditional responses, not new reverse initiations; listeners and application delivery remain unassessed.')}</p>
     <form onSubmit={(event) => {
       event.preventDefault()
       try {
@@ -59,6 +65,11 @@ export function PacketFlowPanel({ topology, simulation }: { topology: InventoryT
     {error && <p role="alert">{error}</p>}
     {submitted && !result && <p role="status">{t('The topology or probe changed. Run the probe again for current evidence.')}</p>}
     {result && <div data-testid="packet-flow-result">
+      {result.ingress && <p><strong>{t('Public ingress')}: {t(result.ingress)}</strong></p>}
+      {result.ingress && result.forward.steps.filter((step) => step.entity.kind === 'workload').map((step) => <p key={step.entity.id}>
+        {t('Translated destination')}: <code>{step.entity.id}</code>{' '}
+        {onHighlight && <button type="button" onClick={() => onHighlight(step.entity.id)}>{t('Highlight original backend')}</button>}
+      </p>)}
       {[result.forward, result.reply].map((leg) => <section key={leg.direction} aria-label={t(leg.direction === 'forward' ? 'Forward routing' : 'Reply routing')}>
         <h4>{t(leg.direction === 'forward' ? 'Forward routing' : 'Reply routing')}: {t(leg.routing)}</h4>
         {leg.tuple && <code>{leg.tuple.protocol.toUpperCase()} {leg.tuple.sourceAddress}:{leg.tuple.sourcePort} → {leg.tuple.destinationAddress}:{leg.tuple.destinationPort}</code>}
@@ -92,6 +103,7 @@ export function PacketFlowPanel({ topology, simulation }: { topology: InventoryT
         </details>)}
       </section>}
       <p><strong>{t(result.security === 'denied' ? 'NSG denies this new flow; effective routes are retained.'
+        : result.translation === 'dnat' || result.translation === 'snat-dnat' ? 'Explicit ingress translation assessed; listener and application delivery remain unassessed.'
         : result.translation === 'snat' ? 'Illustrative SNAT configured; delivery and security readiness: not assessed'
         : result.translation === 'none' ? 'Configured SNAT does not apply; delivery and security readiness: not assessed'
           : 'Delivery, security and translation readiness: not assessed')}</strong></p>

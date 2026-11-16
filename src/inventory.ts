@@ -19,6 +19,27 @@ export interface NatGateway {
   publicIpPrefixIds?: string[]
 }
 export interface RouterSnatOwner { kind: 'appliance' | 'hub'; id: string }
+export interface WorkloadIpReference { workloadId: string; nicId: string; ipConfigurationId: string }
+export function workloadEndpointKey(ref: WorkloadIpReference & { kind: 'workload' }): string {
+  return JSON.stringify(['workload', ref.workloadId, ref.nicId, ref.ipConfigurationId])
+}
+export interface DnatRule {
+  id: string
+  name: string
+  priority: number
+  protocol: 'tcp' | 'udp'
+  sourcePrefixes: string[]
+  publicIpId: string
+  frontendPort: number
+  target: WorkloadIpReference
+  translatedPort: number
+}
+export type RouterDnatPolicy = {
+  owner: RouterSnatOwner
+  publicIpIds: string[]
+  rules: DnatRule[]
+  rulesStatus?: 'unknown'
+} & ({ kind: 'firewall-dnat' } | { kind: 'nva-dnat'; sourceTranslation: 'preserve' | 'interface' })
 export interface NetworkSecurityRule {
   id: string
   name: string
@@ -64,6 +85,7 @@ export interface NetworkInventory {
   publicIpPrefixes?: PublicIpPrefix[]
   natGateways?: NatGateway[]
   routerSnatPolicies?: RouterSnatPolicy[]
+  routerDnatPolicies?: RouterDnatPolicy[]
   networkSecurityGroups?: NetworkSecurityGroup[]
   nsgAssociations?: NsgAssociation[]
 }
@@ -383,6 +405,58 @@ export function validateInventory(topology: InventoryTopology): void {
         publicAssociations.add(id)
       }
     }
+  const dnatOwners = new Set<string>(), dnatPublicOwners = new Map<string, string>()
+  for (const entry of list(inventory.routerDnatPolicies ?? [], 'router DNAT policies')) {
+    const policy = object(entry), owner = object(policy.owner), id = text(owner.id, 'DNAT owner', true)
+    const key = JSON.stringify([owner.kind, id])
+    const device = topology.version === 2 ? topology.vnets.flatMap((vnet) => vnet.appliances).find((device) => device.id === id) : undefined
+    const hub = topology.version === 1 ? topology.hubs.find((hub) => hub.id === id) : topology.vwanHubs.find((hub) => hub.id === id)
+    if (dnatOwners.has(key) || (owner.kind === 'hub' ? !hub : owner.kind !== 'appliance' || !device)) fail('missing or duplicate original DNAT owner')
+    dnatOwners.add(key)
+    if (Object.keys(policy).some((field) => !['owner', 'kind', 'publicIpIds', 'rules', 'rulesStatus',
+      ...(policy.kind === 'nva-dnat' ? ['sourceTranslation'] : [])].includes(field))
+      || Object.keys(owner).some((field) => !['kind', 'id'].includes(field))
+      || policy.rulesStatus !== undefined && policy.rulesStatus !== 'unknown') fail('unsupported DNAT policy field')
+    if (policy.kind === 'firewall-dnat' ? owner.kind === 'appliance' && device?.kind !== 'azure-firewall'
+      : policy.kind !== 'nva-dnat' || owner.kind !== 'appliance' || device?.kind !== 'nva-vm'
+        || !['preserve', 'interface'].includes(String(policy.sourceTranslation))) fail('unsupported original DNAT service or source translation')
+    const pool = new Set<string>()
+    for (const value of list(policy.publicIpIds, 'DNAT public IP references')) {
+      const ipId = text(value, 'DNAT public IP reference', true), ip = publicIps.find((ip) => ip.id === ipId)
+      const snat = topology.inventory.routerSnatPolicies?.find((policy) => policy.publicIpIds.includes(ipId))
+      const backing = topology.inventory.nics.some((nic) => topology.inventory!.workloads.some((workload) =>
+        workload.backingDeviceId === id && workload.nicIds.includes(nic.id)) && nic.ipConfigurations.some((config) =>
+        config.publicIpId === ipId && config.privateIp === device?.privateIp))
+      if (!ip || ip.sku !== 'Standard' || ip.allocation !== 'Static' || pool.has(ipId) || dnatPublicOwners.has(ipId)
+        || publicAssociations.has(ipId) && !(snat && snat.owner.kind === owner.kind && snat.owner.id === id || backing)) {
+        fail('DNAT needs uniquely owned Standard static public IPs; only the same original router may share its SNAT pool or backing NIC')
+      }
+      pool.add(ipId); dnatPublicOwners.set(ipId, key)
+    }
+    if (!pool.size || pool.size > 16) fail('DNAT requires 1-16 original public IPs')
+    const priorities = new Set<number>(), ruleIds = new Set<string>()
+    for (const value of list(policy.rules, 'DNAT rules')) {
+      const rule = object(value), ruleId = text(rule.id, 'DNAT rule ID', true)
+      text(rule.name, 'DNAT rule name')
+      if (Object.keys(rule).some((field) => !['id', 'name', 'priority', 'protocol', 'sourcePrefixes', 'publicIpId',
+        'frontendPort', 'target', 'translatedPort'].includes(field))
+        || ruleIds.has(ruleId) || !Number.isInteger(rule.priority) || Number(rule.priority) < 100 || Number(rule.priority) > 65000
+        || priorities.has(Number(rule.priority)) || !['tcp', 'udp'].includes(String(rule.protocol))
+        || !pool.has(String(rule.publicIpId))
+        || [rule.frontendPort, rule.translatedPort].some((port) => !Number.isInteger(port) || Number(port) < 1 || Number(port) > 65535)) {
+        fail('invalid or duplicate DNAT rule identity, priority, protocol, frontend or ports')
+      }
+      priorities.add(Number(rule.priority)); ruleIds.add(ruleId)
+      const sources = list(rule.sourcePrefixes, 'DNAT source prefixes')
+      if (!sources.length || sources.some((prefix) => !cidr(text(prefix, 'DNAT source prefix')))) fail('DNAT requires explicit IPv4 source prefixes')
+      const target = object(rule.target)
+      if (Object.keys(target).some((field) => !['workloadId', 'nicId', 'ipConfigurationId'].includes(field))) fail('unsupported DNAT target field')
+      for (const field of ['workloadId', 'nicId', 'ipConfigurationId']) text(target[field], `DNAT target ${field}`, true)
+      const endpoint = namedEndpoints(topology).find(({ workload, nic, config }) => workload.id === target.workloadId
+        && nic.id === target.nicId && config.id === target.ipConfigurationId)
+      if (!endpoint || endpoint.workload.backingDeviceId) fail('DNAT target must reference an original non-router workload NIC/IP configuration')
+    }
+  }
 }
 
 export interface NamedEndpoint {
@@ -431,6 +505,8 @@ export function pruneDeletedInventory(next: InventoryTopology, previous: Invento
     : topology.version === 2 && topology.vnets.some((vnet) => vnet.appliances.some((device) => device.id === owner.id))
   if (next.inventory.routerSnatPolicies) next.inventory.routerSnatPolicies = next.inventory.routerSnatPolicies.filter((policy) =>
     !routerExists(previous, policy.owner) || routerExists(next, policy.owner))
+  if (next.inventory.routerDnatPolicies) next.inventory.routerDnatPolicies = next.inventory.routerDnatPolicies.filter((policy) =>
+    !routerExists(previous, policy.owner) || routerExists(next, policy.owner))
   if (next.inventory.natGateways) next.inventory.natGateways = next.inventory.natGateways.filter((gateway) => {
     const oldOwner = before.find((owner) => sameInventoryOwner(owner, gateway.owner))
     const newOwner = after.find((owner) => sameInventoryOwner(owner, gateway.owner))
@@ -467,5 +543,9 @@ export function pruneDeletedInventory(next: InventoryTopology, previous: Invento
   const oldDevices = backingIds(previous), newDevices = backingIds(next)
   for (const workload of next.inventory.workloads) {
     if (workload.backingDeviceId && oldDevices.has(workload.backingDeviceId) && !newDevices.has(workload.backingDeviceId)) delete workload.backingDeviceId
+  }
+  for (const policy of next.inventory.routerDnatPolicies ?? []) {
+    policy.rules = policy.rules.filter((rule) => namedEndpoints(next).some(({ workload, nic, config }) =>
+      workload.id === rule.target.workloadId && nic.id === rule.target.nicId && config.id === rule.target.ipConfigurationId))
   }
 }

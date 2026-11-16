@@ -306,6 +306,46 @@ try {
     expect(unknown.ok).toBe(true)
     expect(unknown.value).toEqual(executePlatform(input))
     expect(unknown.value.packet.nsg.forward.outcome).toBe('not-assessed')
+    if (!native) {
+      const ingressTopology = structuredClone(topology), ingressInventory = ingressTopology.inventory
+      ingressInventory.networkSecurityGroups[0] = { id: 'source-nsg', name: 'Backend NSG', rules: [{
+        id: 'allow-ingress', name: 'AllowIngress', priority: 100, direction: 'inbound', action: 'allow', protocol: 'tcp',
+        sources: [kind === 'direct' ? '8.8.8.8/32' : '10.1.2.0/24'], destinations: ['10.1.1.4'],
+        sourcePorts: ['*'], destinationPorts: [kind === 'direct' ? '443' : '8443'],
+      }] }
+      const frontendId = kind === 'direct' ? 'instance-ingress' : 'router-ip'
+      if (kind === 'direct') {
+        ingressInventory.publicIps.push({ id: frontendId, name: 'Instance ingress', sku: 'Standard', allocation: 'Static', address: '20.40.50.80' })
+        ingressInventory.nics[0].ipConfigurations[0].publicIpId = frontendId
+      } else {
+        const base = { owner: { kind: 'appliance', id: 'router' }, publicIpIds: [frontendId], rules: [{
+          id: 'ingress-web', name: 'Ingress web', priority: 100, protocol: 'tcp', sourcePrefixes: ['8.8.8.8/32'],
+          publicIpId: frontendId, frontendPort: 443,
+          target: { workloadId: 'client', nicId: 'client-nic', ipConfigurationId: 'client-ip' }, translatedPort: 8443,
+        }] }
+        ingressInventory.routerDnatPolicies = [kind === 'azure-firewall' ? { ...base, kind: 'firewall-dnat' }
+          : { ...base, kind: 'nva-dnat', sourceTranslation: 'interface' }]
+        if (kind === 'nva-vm') {
+          ingressInventory.workloads.push({ id: 'router-vm', name: 'Router VM', backingDeviceId: 'router', nicIds: ['router-nic'] })
+          ingressInventory.nics.push({ id: 'router-nic', name: 'Router NIC', owner: { kind: 'vnet', id: 'network' },
+            ipConfigurations: [{ id: 'router-config', name: 'Primary', subnetId: 'router-subnet', privateIp: '10.1.2.4' }] })
+          ingressInventory.networkSecurityGroups.push({ id: 'router-nsg', name: 'Router NSG', rules: [{
+            id: 'allow-router', name: 'AllowRouter', priority: 100, direction: 'inbound', action: 'allow', protocol: 'tcp',
+            sources: ['8.8.8.8/32'], destinations: ['10.1.2.4'], sourcePorts: ['*'], destinationPorts: ['443'],
+          }] })
+          ingressInventory.nsgAssociations.push({ owner: { kind: 'vnet', id: 'network' }, target: { kind: 'nic', id: 'router-nic' }, nsgId: 'router-nsg' })
+        }
+      }
+      const ingressInput = { ...input, document: { mode, topology: ingressTopology }, packet: {
+        source: { kind: 'external', address: '8.8.8.8' }, target: { kind: 'public-ip', publicIpId: frontendId },
+        protocol: 'tcp', sourcePort: 49152, destinationPort: 443,
+      } }
+      const ingress = await page.evaluate((request) => window.desktopSimulator.simulate(request), ingressInput)
+      expect(ingress.ok).toBe(true)
+      expect(ingress.value).toEqual(executePlatform(ingressInput))
+      expect(ingress.value.packet).toMatchObject({ ingress: 'configured', reply: { routing: 'reachable', session: 'conditional-response' } })
+      expect(ingress.value.packet.reply.steps.at(-1).after.sourceAddress).toBe(kind === 'direct' ? '20.40.50.80' : '20.40.50.70')
+    }
   }
   await page.goto('app://simulator/?mode=vwan&feedback=1')
   await page.getByTestId('vwan-app').waitFor()
@@ -339,6 +379,7 @@ try {
     ownedWorkloadPacketParity: true, originalInventoryDetailEditsPersisted: true,
     explicitNatFirewallNvaAndNativeHubPacketParity: true,
     scopedNsgDenialAndUnknownCapturePacketParity: true,
+    explicitVmFirewallNvaIngressAndResponseOwnerParity: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

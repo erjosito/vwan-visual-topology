@@ -98,6 +98,56 @@ starter, materially different passing designs, and failures/unknown coverage.
 Review content and assistance policy before expanding the corpus; local hints
 are permitted and recorded, not grounds for a trusted certification claim.
 
+## Explicit public ingress and DNAT
+
+The packet probe selects an original **public-IP frontend** separately from an
+external Internet address. Standard static IPv4 VM frontends map to the original
+private NIC address and preserve the client source. Associated subnet/NIC NSGs
+must allow the private tuple; absent or default-only NSGs do not publish a
+public VM listener. An arbitrary Internet-to-private-workload probe does not
+select that mapping. NAT Gateway never publishes unsolicited ingress.
+
+Original Firewall/NVA detail controls declare frontend allocations and bounded
+TCP/UDP DNAT rules: explicit source CIDRs, unique rule priorities, frontend
+ports, original workload/NIC/IP-configuration targets and translated ports.
+First matching priority wins; unknown captured rules are not permissions.
+Frontends may share the **same router's** SNAT pool or backing NIC association,
+not another service's allocation. Editing and native save/load retain original
+service, rule and target identities. Removing a target prunes dependent rules
+without deleting shared frontend allocations.
+
+Firewall public DNAT also translates the client source to an illustrative
+address in its original **AzureFirewallSubnet**, preserving the source port.
+Backend NSGs compare that subnet domain, not the Internet client or a predicted
+instance allocation. NVA rules explicitly preserve the client source or SNAT to
+the original private interface. Platform public-IP mapping and original NVA
+inbound NSGs precede guest DNAT; outbound NSGs see its post-guest private tuple.
+Public NVA VM interfaces require NSG permission too. Missing backing NICs remain
+unassessed. A denial stops packet evidence at the enforcement stage while
+retaining native routes.
+
+Replies are conditional on this allowed new flow and must reach the original
+translation owner before inverse mapping. Private source translation routes
+back to that original interface/subnet; preserved-client NVA responses require
+an actual route through the NVA. Black holes, bypasses, extra routers and
+more-specific routes that distinguish possible Firewall instance addresses are
+reported rather than silently applying an inverse. NAT Gateway's precedence for
+**new outbound** flows does not replace an existing VM/router ingress-response
+owner. Nothing certifies a listener, guest firewall, health or application
+delivery, and there is no persistent/live session ledger.
+
+Public VM mappings are retained in both native families, but native-v1 does not
+invent an unmodeled direct NIC Internet return route. Appliance DNAT forwarding
+and return assessment use native-v2 original appliances and routes. Secured-hub
+private interfaces, private/forced-tunnel DNAT, multiple translating services,
+IPv6, vendor-specific policies and load-balanced frontend selection remain
+unassessed or separate work. Current cloud capture/Bicep and existing practice
+rubrics do not claim these new declarations; #135 tracks their integration.
+Candidate exercises include absent/default/explicit ingress NSGs, Firewall
+source-subnet filters and preserved-client NVA asymmetry, not new graded badges.
+
+Reference: [Azure Firewall NAT behaviors](https://techcommunity.microsoft.com/blog/azurenetworksecurityblog/azure-firewall-nat-behaviors/3825834).
+
 ## Clients and data flow
 
 | Client | Execution and persistence | Network / privilege boundary |
