@@ -3,6 +3,7 @@ import type { HubRoutingConfiguration } from '../model'
 import { t } from '../i18n'
 import type { AzNetTopology, AzVwanHub } from './model'
 import { azHubRouting } from './hub-routing'
+import { HubStaticRoutesEditor } from '../HubStaticRoutesEditor'
 
 const words = (value: string) => [...new Set(value.split(',').map((word) => word.trim()).filter(Boolean))]
 
@@ -26,7 +27,12 @@ export function HubTablesEditor({ hub, topology, commit }: {
   return <section aria-label={t('Hub routing tables')} data-testid="aznet-hub-tables-editor">
     <h4>{t('Hub routing tables')}</h4>
     <p>{t('Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.')}</p>
-    <p>{t('Custom tables with routing intent, static hub next hops and mixed ER export of remote or VPN routes are not assessed. Hub route-map editing remains available in the dedicated VWAN workspace.')}</p>
+    <p>{t('Custom tables with routing intent and arbitrary hub next hops are not assessed. Static inspection requires a declared local Azure Firewall in a single hub.')}</p>
+    <HubStaticRoutesEditor hub={hub} onChange={(owner) => commit((draft) => {
+      const target = draft.vwanHubs.find((entry) => entry.id === hub.id)!
+      target.firewall = owner.firewall
+      target.routeTables = owner.routeTables
+    })} />
     {hub.routeTablesStatus === 'unknown' && <p role="status">
       {t('Hub table scope is unknown. Editing tables does not establish that the captured scope is complete.')}
       {' '}<button type="button" className="aznet-btn" onClick={() => commit((draft) => {

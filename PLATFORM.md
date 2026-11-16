@@ -345,8 +345,10 @@ reused. No duplicate router/site is created. The NVA inspector and connection
 inspector expose these controls; hub/site policy markers retain exact owned
 connection IDs, keyboard activation and rule previews.
 
-Custom tables combined with routing intent and static hub next hops remain
-not assessed in both VWAN providers. Unknown propagation and incomplete table
+Custom tables combined with routing intent and unsupported static hub next hops remain
+not assessed in both VWAN providers. The bounded single-hub local Firewall subset
+and per-direction inspection predicates are documented in
+[static Firewall routing](docs/hub-firewall-static-routing.md). Unknown propagation and incomplete table
 scope remain conservative; retained source is not proof of isolation. Bicep
 starters explicitly warn about omitted hub policies, branch controls and NVA
 peerings; native JSON/share URLs preserve them. Dedicated controls, legacy

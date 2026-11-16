@@ -147,13 +147,20 @@ export function traceNodePath(topology: Topology, simulation: Simulation, source
       const combinedSourceErLinkIds = [...(route.erLinkIds ?? []), ...(erHub ? [connection.id, erHub.id] : [])]
       return traceFlow(topology, simulation, hubId, destination, attachmentHubRouting(topology, erHub?.id ?? connection.id).associatedTableId ?? '').map((path) => {
         const loop = path.siteHops?.some((id) => route.sitePath.includes(id))
+        const unsupportedInspection = path.firewalls?.some((id) => {
+          const hub = topology.hubs.find((hub) => hub.id === id)
+          return hub?.firewall && !hub.routingIntent.private && !hub.routingIntent.internet && hub.routeTables?.some((table) => table.staticRoutes?.length)
+        })
+          && path.terminalKind === 'site'
         return {
           ...path, sourceConnectionId: connection.id, sourceSiteHops: route.sitePath, sourceSiteLinkIds: route.siteLinkIds,
           ...(connection.kind === 'connection' && connection.spokeId ? { sourceNvaSpokeId: connection.spokeId } : {}),
           ...(combinedSourceErLinkIds.length ? { sourceErLinkIds: combinedSourceErLinkIds } : {}),
-          status: loop ? 'loop' : path.status,
-          termination: loop ? 'loop' : path.termination,
-          steps: [...steps, `Enter Azure via ${connection.name}${erHub ? ` → ${topology.erLocations?.find((location) => location.id === erHub.locationId)?.name} → ${erHub.name}` : ''}.`, ...path.steps, ...(loop ? ['The selected Azure route returns to the source-side site path.'] : [])],
+          status: unsupportedInspection ? 'unknown' : loop ? 'loop' : path.status,
+          termination: unsupportedInspection ? 'unknown-context' : loop ? 'loop' : path.termination,
+          steps: [...steps, `Enter Azure via ${connection.name}${erHub ? ` → ${topology.erLocations?.find((location) => location.id === erHub.locationId)?.name} → ${erHub.name}` : ''}.`, ...path.steps,
+            ...(unsupportedInspection ? ['Static hub Firewall branch-to-branch inspection is not supported; use routing intent.'] : []),
+            ...(loop ? ['The selected Azure route returns to the source-side site path.'] : [])],
         }
       })
     })

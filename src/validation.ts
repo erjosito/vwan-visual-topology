@@ -195,6 +195,14 @@ export function validateTopology(input: unknown): Topology {
       region: text(hub.region, 'Region'), preference: hub.preference,
       routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') },
       ...(routeTables === undefined ? {} : { routeTables }),
+      ...(hub.firewall === undefined ? {} : { firewall: (() => {
+        const firewall = record(hub.firewall)
+        const firewallId = firewall.id
+        if (typeof firewallId !== 'string' || !firewallId.trim() || firewallId.length > 2048 || firewallId.includes('\0')) fail('Invalid local hub Firewall ID.')
+        if (ids.has(firewallId as string)) fail(`Duplicate ID: ${firewallId}`)
+        ids.add(firewallId as string)
+        return { id: firewallId as string, name: text(firewall.name, 'Local hub Firewall name') }
+      })() }),
       ...(hub.routeTablesStatus === undefined ? {} : { routeTablesStatus: hub.routeTablesStatus }),
       ...(hub.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(hub.routeMapAssignments) }) } as Topology['hubs'][number]
   })

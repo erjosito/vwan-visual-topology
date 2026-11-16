@@ -81,7 +81,7 @@ export function validateRequest(input: unknown): PlatformRequest {
     ids.add(requirement.id)
     if (!['flow', 'route', 'packet'].includes(requirement.kind)) throw new Error('Unsupported requirement kind.')
     keys(requirement, requirement.kind === 'packet' ? ['id', 'kind', 'packet', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredBackend'] : requirement.kind === 'flow'
-      ? ['id', 'kind', 'source', 'target', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredFirewallHubId', 'requiredApplianceId']
+      ? ['id', 'kind', 'source', 'target', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredFirewallHubId', 'requiredApplianceId', 'firewallPolicy']
       : ['id', 'kind', 'table', 'hubTableId', 'prefix', 'expectation'])
     if (requirement.kind === 'packet') {
       if (!['configured', 'blocked'].includes(requirement.expectation) || ipv4(requirement.sourceAddress) === undefined || ipv4(requirement.destinationAddress) === undefined) throw new Error('Packet configuration requirement needs fixed IPv4 bindings and a supported expectation.')
@@ -115,6 +115,16 @@ export function validateRequest(input: unknown): PlatformRequest {
         }
       }
       if ([requirement.requiredFirewallHubId, requirement.requiredApplianceId].some((id) => id !== undefined && (typeof id !== 'string' || !id))) throw new Error('Invalid inspection waypoint.')
+      if (requirement.firewallPolicy !== undefined) {
+        const policy = requirement.firewallPolicy
+        if (!policy || typeof policy !== 'object' || Array.isArray(policy)) throw new Error('Invalid Firewall policy.')
+        keys(policy, ['hubId', 'forward', 'reverse'])
+        if (typeof policy.hubId !== 'string' || !policy.hubId || policy.hubId.length > 120
+          || !['required', 'bypassed'].includes(policy.forward) || !['required', 'bypassed'].includes(policy.reverse)
+          || requirement.expectation !== 'allow' || requirement.requiredFirewallHubId !== undefined || requirement.requiredApplianceId !== undefined) {
+          throw new Error('Firewall policy requires an owned hub, explicit per-leg required/bypassed predicates and allow; do not combine waypoint formats.')
+        }
+      }
     }
   }
   return request
@@ -150,6 +160,7 @@ function vwanFlow(document: Extract<PlatformDocument, { mode: 'vwan' }>, require
       sourcePrefix: `${requirement.sourceAddress}/32`, destinationPrefix: `${requirement.destinationAddress}/32`,
       expectation: requirement.expectation,
       ...(requirement.requiredFirewallHubId ? { requiredFirewallHubId: requirement.requiredFirewallHubId } : {}),
+      ...(requirement.firewallPolicy ? { firewallPolicy: requirement.firewallPolicy } : {}),
     }],
   })
   const report = analyzeRouting(document.topology, profile, { maxCells: 100, maxProbes: 200, maxFindings: 100, maxMillis: 2000 })
@@ -224,8 +235,14 @@ export function executePlatform(input: unknown): PlatformResult {
         const sourceOwners = owners(requirement.sourceAddress), targetOwners = owners(requirement.destinationAddress)
         if (sourceOwners.length !== 1 || targetOwners.length !== 1
           || azEndpointKey(sourceOwners[0].ref) !== azEndpointKey(source) || azEndpointKey(targetOwners[0].ref) !== azEndpointKey(target)
-          || simulation.warnings.length || requirement.requiredFirewallHubId) {
+          || simulation.warnings.length) {
           result.assessments.push(unknown(requirement, 'Ambiguous/missing owned endpoint or unsupported model coverage.'))
+          continue
+        }
+        const firewallHubId = requirement.firewallPolicy?.hubId ?? requirement.requiredFirewallHubId
+        const firewallHub = document.topology.vwanHubs.find((hub) => hub.id === firewallHubId)
+        if (firewallHubId && (!firewallHub || !(firewallHub.firewall || firewallHub.routingIntent.private || firewallHub.routingIntent.internet))) {
+          result.assessments.push(unknown(requirement, 'The asserted Firewall hub is missing or has no declared Firewall.'))
           continue
         }
         const pair = traceAzNetPair(document.topology, simulation, source, requirement.sourceAddress, target, requirement.destinationAddress)
@@ -234,7 +251,9 @@ export function executePlatform(input: unknown): PlatformResult {
           continue
         }
         const reachable = pair.forward.status === 'delivered' && pair.reverse.status === 'delivered'
-        const waypoint = !requirement.requiredApplianceId || [pair.forward, pair.reverse].every((trace) => trace.traversedApplianceIds.includes(requirement.requiredApplianceId!))
+        const waypoint = (!requirement.requiredApplianceId || [pair.forward, pair.reverse].every((trace) => trace.traversedApplianceIds.includes(requirement.requiredApplianceId!)))
+          && (!firewallHub || ([['forward', requirement.firewallPolicy?.forward ?? 'required'], ['reverse', requirement.firewallPolicy?.reverse ?? 'required']] as const)
+            .every(([leg, expectation]) => pair[leg].traversedApplianceIds.includes(firewallHub.firewall?.id ?? `vhub-fw:${firewallHub.id}`) === (expectation === 'required')))
         const satisfied = requirement.expectation === 'allow' ? reachable && waypoint : pair.forward.status !== 'delivered'
         result.assessments.push({ id: requirement.id, outcome: satisfied ? 'satisfied' : 'violated', evidence: pair, reasons: [] })
       }

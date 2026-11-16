@@ -5,7 +5,7 @@ import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
 import { applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes } from './ars-route-maps'
-import { DEFAULT_HUB_TABLE, hubRouteTables, propagatesLocally, propagatesRemotely } from '../hub-routing'
+import { DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, propagatesLocally, propagatesRemotely } from '../hub-routing'
 import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
 import type { RouteMapDirection, Transport } from '../model'
 import type {
@@ -68,7 +68,7 @@ export interface AzBgpRibEntry {
   sourceVnetId?: string
   nextHopName: string
   nextHopIp?: string
-  nextHopKind: 'er-location' | 'site' | 'vnet-gateway' | 'appliance' | 'vwan-hub' | 'local'
+  nextHopKind: 'er-location' | 'site' | 'vnet-gateway' | 'appliance' | 'vwan-hub' | 'local' | 'hub-firewall'
   nextHopId: string
   originProtocol: 'ExpressRoute' | 'VPN' | 'BGP-NVA' | 'VNet' | 'InterHub' | 'Static'
   preferred: boolean
@@ -86,6 +86,7 @@ export interface AzBgpRibEntry {
   hubTransport?: Transport | 'VNet'
   secureOrigin?: boolean
   localPreference?: number
+  staticRouteName?: string
 }
 
 export interface AzSubnetRouteTableResult {
@@ -111,6 +112,7 @@ export interface AzSimulationResult {
   routeServerInbound?: Record<string, Record<string, AzBgpRibEntry[]>>
   routeServerOutbound?: Record<string, Record<string, AzBgpRibEntry[]>>
   vwanHubRibs: Record<string, AzBgpRibEntry[]>
+  vwanFirewallRibs: Record<string, AzBgpRibEntry[]>
   vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>>
   vwanHubTableCoverage: ReturnType<typeof azHubTableCoverage>
   erLocationRibs: Record<string, AzBgpRibEntry[]>
@@ -319,8 +321,8 @@ function chooseHubWinners(hub: { id: string; preference: 'ExpressRoute' | 'VPN' 
     const routes = entries.filter((route) => route.prefix === prefix)
     const candidates = routes.map((route): Candidate => ({
       key: route.id, prefix, asPath: route.asPath, weight: route.weight,
-      kind: route.originProtocol === 'VNet' ? 'system' : route.vpnStatic ? 'vpn-static' : 'bgp',
-      transport: route.hubTransport ?? (route.originProtocol === 'VNet' ? 'VNet' : route.originProtocol === 'BGP-NVA' ? 'SpokeNVA' : route.originProtocol === 'VPN' ? 'VPN' : 'ExpressRoute'),
+      kind: route.nextHopKind === 'hub-firewall' ? 'hub-static' : route.originProtocol === 'VNet' ? 'system' : route.vpnStatic ? 'vpn-static' : 'bgp',
+      transport: route.nextHopKind === 'hub-firewall' ? 'Firewall' : route.hubTransport ?? (route.originProtocol === 'VNet' ? 'VNet' : route.originProtocol === 'BGP-NVA' ? 'SpokeNVA' : route.originProtocol === 'VPN' ? 'VPN' : 'ExpressRoute'),
       connectionId: route.connectionId ?? '', siteId: '', originHubId: route.originHubTableId ? route.nextHopId : hub.id,
       remote: Boolean(route.originHubTableId), secureOrigin: route.secureOrigin,
     }))
@@ -339,7 +341,7 @@ function hubAdvertisements(
 ): AzBgpRibEntry[] {
   const hub = topology.vwanHubs.find((hub) => hub.id === hubId)!
   const selected = routes.filter((route) => route.preferred && (propagateDefault || route.prefix !== '0.0.0.0/0')
-    && (!branch || topology.allowBranchToBranchTraffic !== false || route.originProtocol === 'VNet' || route.hubTransport === 'VNet'))
+    && (!branch || topology.allowBranchToBranchTraffic !== false || route.originProtocol === 'VNet' || route.hubTransport === 'VNet' || route.nextHopKind === 'hub-firewall'))
   if (propagateDefault && hub.routingIntent.internet) {
     selected.splice(0, selected.length, ...selected.filter((route) => route.prefix !== '0.0.0.0/0'), {
       id: `hub-internet:${hubId}:${connectionId}`, prefix: '0.0.0.0/0', asPath: [], nextHopName: hub.name,
@@ -905,6 +907,8 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     }
   }
 
+  // Firewall onward routing uses local connection routes, independently of ingress propagation.
+  const vwanFirewallRibs: Record<string, AzBgpRibEntry[]> = {}
   // 5. Populate Virtual WAN Hubs (for Hybrid topologies)
   for (const hub of topology.vwanHubs) {
     const entries: AzBgpRibEntry[] = []
@@ -1015,6 +1019,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       return [...routes.filter((route) => route.vpnStatic), ...applyAzHubRouteMap(
         topology, hub.id, connectionId, 'inbound', routes.filter((route) => !route.vpnStatic))]
     })
+    vwanFirewallRibs[hub.id] = chooseHubWinners(hub, imported)
     vwanHubTables[hub.id] = Object.fromEntries(hubRouteTables(hub).map((table) => [
       table.id, chooseHubWinners(hub, imported.filter((route) =>
         propagatesLocally(azHubRouting(attachments.find((attachment) => attachment.id === route.connectionId)?.hubRouting), table))),
@@ -1043,6 +1048,17 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       })
       vwanHubTables[hub.id][table.id] = chooseHubWinners(hub, [...localHubTables[hub.id][table.id], ...remote])
     }
+    vwanHubRibs[hub.id] = vwanHubTables[hub.id][DEFAULT_HUB_TABLE]
+  }
+
+  for (const hub of topology.vwanHubs) for (const table of hubRouteTables(hub)) {
+    const statics = hubStaticPrefixes(hub, table, topology.vwanHubs.length).map(({ prefix, name, index }): AzBgpRibEntry => ({
+      id: JSON.stringify(['hub-static', hub.id, table.id, index, prefix]), prefix, asPath: [],
+      nextHopKind: 'hub-firewall', nextHopId: hub.firewall!.id, nextHopName: hub.firewall!.name,
+      originProtocol: 'Static', preferred: true, explanation: `Static hub route ${name}`,
+      staticRouteName: name,
+    }))
+    if (statics.length) vwanHubTables[hub.id][table.id] = chooseHubWinners(hub, [...vwanHubTables[hub.id][table.id], ...statics])
     vwanHubRibs[hub.id] = vwanHubTables[hub.id][DEFAULT_HUB_TABLE]
   }
 
@@ -1192,6 +1208,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     routeServerInbound,
     routeServerOutbound,
     vwanHubRibs,
+    vwanFirewallRibs,
     vwanHubTables,
     vwanHubTableCoverage,
     erLocationRibs,
@@ -3120,9 +3137,43 @@ export function traceAzNetFlow(
         selectedHubRoute = selectedHubRoute.forwardingRoutes.filter((route) => contains(route.prefix, ipNum))
           .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
       }
+      if (selectedHubRoute?.nextHopKind === 'hub-firewall') {
+        if (source.kind === 'site' && targetInfo.endpoint?.kind === 'site') {
+          return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed', hops,
+            traversedApplianceIds, traversedEdgeIds, traversedVnetIds,
+            summaryReason: 'Static hub Firewall branch-to-branch inspection is not supported; use routing intent.' }
+        }
+        const firewall = hub.firewall!
+        traversedApplianceIds.push(firewall.id)
+        pushHop({ nodeKind: 'vwan-hub', nodeId: hub.id, nodeName: firewall.name, action: 'inspect-firewall',
+          hubTableId: tableId, detail: `Static hub route ${selectedHubRoute.staticRouteName} (${selectedHubRoute.prefix}) selects ${firewall.name} [${firewall.id}]. Firewall policy and delivery are not assessed.` })
+        let onward = (simulation.vwanFirewallRibs[hub.id] ?? [])
+          .filter((route) => route.preferred && contains(route.prefix, ipNum))
+          .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)
+        const onwardContexts = new Set<AzBgpRibEntry>()
+        while (true) {
+          const longest = onward[0] ? cidr(onward[0].prefix)!.length : -1
+          if (new Set(onward.filter((route) => cidr(route.prefix)!.length === longest)
+            .map((route) => JSON.stringify([route.nextHopKind, route.nextHopId, route.connectionId]))).size > 1
+            || onward[0] && onwardContexts.has(onward[0])) {
+            return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed', hops,
+              traversedApplianceIds, traversedEdgeIds, traversedVnetIds,
+              summaryReason: 'Ambiguous or cyclic Firewall onward paths require exhaustive assessment; no single traffic hash or passing route is selected.' }
+          }
+          selectedHubRoute = onward[0]
+          if (!selectedHubRoute?.forwardingRoutes) break
+          onwardContexts.add(selectedHubRoute)
+          onward = selectedHubRoute.forwardingRoutes.filter((route) => contains(route.prefix, ipNum))
+            .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)
+        }
+        pushHop({ nodeKind: 'vwan-hub', nodeId: hub.id, nodeName: firewall.name,
+          action: selectedHubRoute ? 'vwan-transit' : 'dropped', hubTableId: 'firewall-onward',
+          detail: selectedHubRoute ? `Separate Firewall onward lookup selects ${selectedHubRoute.prefix} via ${selectedHubRoute.nextHopName}.`
+            : 'No matching Firewall onward route; the ingress static route is not reused.' })
+      }
       const intentPrivateDestination = privateDestination || hub.routingIntent.privatePrefixes?.some((prefix) => contains(prefix, ipNum))
       if (hub.routingIntent.private && intentPrivateDestination) {
-        const fwId = `vhub-fw:${hub.id}`
+        const fwId = hub.firewall?.id ?? `vhub-fw:${hub.id}`
         if (!traversedApplianceIds.includes(fwId)) {
           traversedApplianceIds.push(fwId)
           pushHop({
@@ -3165,7 +3216,7 @@ export function traceAzNetFlow(
 
       // Check if attached vWAN Hub has Internet Routing Intent for public Internet destinations
       if (!targetInfo.endpoint && !intentPrivateDestination && hub.routingIntent.internet) {
-        const fwId = `vhub-fw:${hub.id}`
+        const fwId = hub.firewall?.id ?? `vhub-fw:${hub.id}`
         if (!traversedApplianceIds.includes(fwId)) {
           traversedApplianceIds.push(fwId)
         }
@@ -3514,10 +3565,10 @@ export function traceAzNetPair(
     }
   }
   for (const hub of topology.vwanHubs) {
-    if (hub.routingIntent.private) {
-      const id = `vhub-fw:${hub.id}`
+    if (hub.firewall || hub.routingIntent.private) {
+      const id = hub.firewall?.id ?? `vhub-fw:${hub.id}`
       statefulIds.add(id)
-      applianceNames.set(id, `${hub.name} Secured Hub Firewall`)
+      applianceNames.set(id, hub.firewall?.name ?? `${hub.name} Secured Hub Firewall`)
     }
   }
 

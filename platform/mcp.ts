@@ -28,12 +28,17 @@ server.registerTool('get_schema', {
   endpointShapes: mode === 'vwan' ? [{ kind: 'spoke', id: 'ID' }, { kind: 'site', id: 'ID' }, { kind: 'hub', id: 'ID' }]
     : [{ kind: 'subnet', vnetId: 'ID', subnetId: 'ID' }, { kind: 'site', siteId: 'ID' }],
   requirementShapes: [
+    { kind: 'flow', expectation: 'allow', firewallPolicy: { hubId: 'original hub ID', forward: 'required or bypassed', reverse: 'required or bypassed' },
+      note: 'Optional per-leg inspection predicate; independent return routing; do not combine with legacy waypoint fields. This is not a Firewall permission or delivery assertion.' },
     { id: 'unique-packet-id', kind: 'packet', packet: 'explicit packet request', sourceAddress: 'fixed original IPv4', destinationAddress: 'fixed original IPv4',
       expectation: 'configured or blocked (configuration only)', optional: 'requiredBackend: original workloadId/nicId/ipConfigurationId/address binding; no live readiness certification' },
     { id: 'unique-goal-id', kind: 'flow', source: 'owned endpoint', target: 'owned endpoint', sourceAddress: 'IPv4', destinationAddress: 'IPv4', expectation: 'allow or deny', optionalWaypoint: mode === 'vwan' ? 'requiredFirewallHubId' : 'requiredApplianceId' },
     { id: 'unique-route-id', kind: 'route', table: mode === 'vwan' ? 'hub ID' : 'simulation subnet table key, or hub ID with explicit hubTableId', prefix: 'canonical IPv4 CIDR', expectation: 'present or absent', optional: 'hubTableId: exact owned table ID, subject to complete modeled coverage' },
   ],
   example: mode === 'vwan' ? vwanExample : mode === 'hub-spoke' ? hubSpokeExample : fullExample,
+  optionalStaticHubFirewall: { firewall: { id: 'original-local-firewall', name: 'Local Azure Firewall' },
+    staticRoute: { name: 'inspect-private', destinationType: 'CIDR', destinations: ['10.0.0.0/8'], nextHopType: 'ResourceId', nextHop: 'original-local-firewall' },
+    boundary: 'Single hub, routing intent disabled; define the route in the ingress associated hub table. Unknown targets remain unassessed.' },
   optionalPacket: { operation: 'simulate', packet: { source: { kind: 'workload', workloadId: 'ID', nicId: 'ID', ipConfigurationId: 'ID' }, target: { kind: 'external', address: 'explicit public IPv4' }, protocol: 'tcp or udp', sourcePort: '1-65535', destinationPort: '1-65535' }, result: 'packet section; independent routing probes, no delivery/security/NAT certification' },
   optionalVpnPacket: mode === 'vwan' ? { supported: false, reason: 'Legacy v1 VWAN NAT is unsupported; use the Azure/Full Hybrid native provider.' }
     : { operation: 'simulate', vpnPacket: { connectionId: 'original NAT-associated VPN connection ID', direction: 'ingress or egress',

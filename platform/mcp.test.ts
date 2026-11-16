@@ -4,6 +4,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolve } from 'node:path'
 import { executePlatform } from '../src/platform/service'
 import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
+import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })
@@ -101,5 +102,42 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
     const invalid = await client.callTool({ name: 'start_simulation', arguments: { request: { ...request, operation: 'deploy' } } })
     expect(invalid.isError).toBe(true)
     expect(stderr).toBe('')
+  } finally { await client.close() }
+}, 20000)
+
+it('assesses static hub Firewall required/bypassed legs through actual stdio with the same evidence as the local API', async () => {
+  const client = new Client({ name: 'static-hub-firewall-test', version: '1' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  await client.connect(transport)
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    expect(response.isError).not.toBe(true)
+    return response.structuredContent as Record<string, any>
+  }
+  try {
+    expect((await call('get_capabilities')).staticHubFirewall.scope).toContain('Single hub')
+    for (const mode of ['vwan', 'full'] as const) {
+      const schema = await call('get_schema', { mode })
+      expect(schema.optionalStaticHubFirewall.staticRoute.nextHop).toBe(schema.optionalStaticHubFirewall.firewall.id)
+      const request = { contractVersion: 1, operation: 'evaluate', document: { mode,
+        topology: mode === 'vwan' ? hubFirewallTopology('published-branch') : azHubFirewallTopology('published-branch') },
+      requirements: [{ id: 'asymmetric', kind: 'flow',
+        source: mode === 'vwan' ? { kind: 'spoke', id: 'untrusted-a' } : { kind: 'subnet', vnetId: 'untrusted-a', subnetId: 'sub-untrusted-a' },
+        target: mode === 'vwan' ? { kind: 'spoke', id: 'trusted-a' } : { kind: 'subnet', vnetId: 'trusted-a', subnetId: 'sub-trusted-a' },
+        sourceAddress: '10.30.0.4', destinationAddress: '10.10.0.4', expectation: 'allow',
+        firewallPolicy: { hubId: 'hub-local', forward: 'bypassed', reverse: 'required' } }] }
+      const { handle } = await call('start_simulation', { request })
+      let result
+      for (let attempt = 0; attempt < 100; attempt++) {
+        result = await call('get_job', { handle })
+        if (result.status === 'finished') break
+        await new Promise((resolve) => setTimeout(resolve, 20))
+      }
+      expect(result?.resultStatus).toBe('complete')
+      expect(result?.assessments[0].outcome).toBe('satisfied')
+      const evidence = await call('get_evidence', { handle, section: 'assessments', limit: 16000 })
+      expect(evidence.complete).toBe(true)
+      expect(JSON.parse(evidence.jsonText)).toEqual(executePlatform(request).assessments)
+    }
   } finally { await client.close() }
 }, 20000)

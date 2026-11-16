@@ -158,6 +158,7 @@ export interface AzVnetPeering {
 
 export interface AzVwanHub {
   vpnNat?: VwanVpnNatGateway
+  firewall?: { id: string; name: string }
   id: string
   name: string
   label?: string

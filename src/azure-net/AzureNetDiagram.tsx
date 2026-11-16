@@ -1588,10 +1588,13 @@ export function AzureNetDiagram({
           const box = positions.vwanHubs[hub.id]
           if (!box) return null
           const isSelected = selected?.kind === 'vwan-hub' && selected.hubId === hub.id
+          const inspected = [...forwardTraces, ...reverseTraces].some((trace) => trace.hops.some((hop) =>
+            hop.nodeId === hub.id && hop.action === 'inspect-firewall'))
           return (
             <g
               key={hub.id}
               data-testid={`aznet-vwanhub-${hub.id}`}
+              data-firewall-traversed={inspected ? 'true' : undefined}
               className="network-node"
               aria-pressed={isSelected}
               data-simulated-failed={faults[hub.id] ? 'true' : undefined}
@@ -1638,10 +1641,11 @@ export function AzureNetDiagram({
                 height={box.height}
                 rx={12}
                 fill="var(--surface-muted)"
-                stroke={isSelected ? 'var(--accent)' : 'var(--info)'}
+                stroke={inspected ? 'var(--warning)' : isSelected ? 'var(--accent)' : 'var(--info)'}
                 strokeWidth={isSelected ? 2.6 : 1.8}
               />
-              <NetworkNodeIcon kind="hub" secured={hub.routingIntent.private || hub.routingIntent.internet} x={box.x + 25} y={box.y + 20} size={24} />
+              <title>{inspected ? t('Selected route traverses the local Firewall; this is not delivery or policy proof.') : hub.name}</title>
+              <NetworkNodeIcon kind="hub" secured={Boolean(hub.firewall) || hub.routingIntent.private || hub.routingIntent.internet} x={box.x + 25} y={box.y + 20} size={24} />
               <DiagramNodeText text={hub.name} x={box.x + 43} y={box.y + 24} width={box.width - 55} weight={700} />
               <DiagramNodeText text={`vWAN Hub${hub.prefix ? ` (${hub.prefix})` : ''} · Pref: ${hub.preference}`} x={box.x + 14} y={box.y + 42} width={box.width - 28} fontSize={10.5} weight={400} />
               <DiagramNodeText text={`Private: ${hub.routingIntent.private ? 'On' : 'Off'} · Internet: ${hub.routingIntent.internet ? 'On' : 'Off'}`} title={`Routing Intent: Private ${hub.routingIntent.private ? 'On' : 'Off'} / Internet ${hub.routingIntent.internet ? 'On' : 'Off'}`} x={box.x + 14} y={box.y + 60} width={box.width - 28} fontSize={10} fill="var(--info)" />

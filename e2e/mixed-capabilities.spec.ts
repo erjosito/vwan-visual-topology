@@ -101,7 +101,7 @@ test('all native providers expose searchable capability boundaries without mutat
     await tools.getByRole('searchbox').fill('spoke NVA')
     const matrix = tools.getByTestId('workspace-capabilities')
     await expect(matrix.getByRole('rowheader', { name: 'Integrated SD-WAN and spoke NVA BGP peering', exact: true })).toBeVisible()
-    await expect(matrix).toContainText('Static hub next hops')
+    await expect(matrix).toContainText('Static hub Firewall routing requires one hub and a declared local Firewall.')
     expect(await page.evaluate(() => [localStorage.getItem('vwan-visual-topology:v1'), localStorage.getItem('aznet-visual-topology:v1')])).toEqual(original)
   }
 })

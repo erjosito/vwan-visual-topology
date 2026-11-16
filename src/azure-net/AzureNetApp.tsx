@@ -8,7 +8,7 @@ import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './adm
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
-import { t, useLanguage, documentTitles } from '../i18n'
+import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
@@ -354,7 +354,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [sampleId, topology, recoveryAcknowledged, pendingUrlSample])
 
   const [testIpQuery, setTestIpQuery] = useState<string>('')
-  const [hubTableInspection, setHubTableInspection] = useState<{ hubId: string; tableId: string }>()
+  const [hubTableInspection, setHubTableInspection] = useState<{ hubId: string; tableId: string; firewall?: boolean }>()
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
   const [captureComparison, setCaptureComparison] = useState<AzNetComparisonReport | null>(null)
   const [captureNotices, setCaptureNotices] = useState<string[]>([])
@@ -1077,9 +1077,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (selected.kind === 'vwan-hub') {
       const hub = topology.vwanHubs.find((h) => h.id === selected.hubId)
       const tableId = hubTableInspection?.hubId === selected.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE
+      const firewall = hubTableInspection?.hubId === selected.hubId && hubTableInspection.firewall && hub?.firewall
       return {
-        title: `Virtual WAN Hub Effective RIB · ${hub?.name ?? selected.hubId} · ${tableId}`,
-        entries: simulation.vwanHubTables[selected.hubId]?.[tableId] ?? [],
+        title: `Virtual WAN Hub Effective RIB · ${hub?.name ?? selected.hubId} · ${firewall ? t('Firewall onward routes') : tableId}`,
+        entries: firewall ? simulation.vwanFirewallRibs[selected.hubId] ?? [] : simulation.vwanHubTables[selected.hubId]?.[tableId] ?? [],
         available: Boolean(hub && simulation.vwanHubTables[hub.id]?.[tableId]) && !scenario.affected[selected.hubId],
       }
     }
@@ -3510,7 +3511,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       const tableId = hubTableInspection?.hubId === hub.id ? hubTableInspection.tableId : DEFAULT_HUB_TABLE
                       const coverage = simulation.vwanHubTableCoverage[hub.id]?.[tableId]
                       return <><label>{t('Hub routing table')} <select className="aznet-select" aria-label={t('Hub routing table')}
-                        value={tableId} onChange={(event) => setHubTableInspection({ hubId: hub.id, tableId: event.target.value })}>
+                        value={hubTableInspection?.hubId === hub.id && hubTableInspection.firewall ? '' : tableId}
+                        onChange={(event) => setHubTableInspection({ hubId: hub.id, tableId: event.target.value || DEFAULT_HUB_TABLE, firewall: event.target.value === '' })}>
+                        {hub.firewall && <option value="">{t('Firewall onward routes')}</option>}
                         {hubRouteTables(hub).map((table) => <option key={table.id} value={table.id}>{table.name} · {table.id}</option>)}
                       </select></label>{!coverage?.complete && <p role="status">{t('Routing not assessed')}: {coverage?.limitations.join(' ')}</p>}</>
                     })()}
@@ -3679,7 +3682,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               Hop {hop.index}: {hop.nodeName}
                               {hop.subnetName ? ` / ${hop.subnetName}` : ''}
                             </strong>
-                            <div style={{ marginTop: 2 }}>{hop.detail}</div>
+                            <div style={{ marginTop: 2 }}>{localizeDiagnostic(hop.detail)}</div>
                             {hop.matchedRoute && (
                               <div style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 2 }}>
                                 Matched: <code>{hop.matchedRoute.prefix}</code> →{' '}
@@ -3714,7 +3717,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 Hop {hop.index}: {hop.nodeName}
                                 {hop.subnetName ? ` / ${hop.subnetName}` : ''}
                               </strong>
-                              <div style={{ marginTop: 2 }}>{hop.detail}</div>
+                              <div style={{ marginTop: 2 }}>{localizeDiagnostic(hop.detail)}</div>
                               {hop.matchedRoute && (
                                 <div style={{ fontSize: 10.5, color: 'var(--text)', marginTop: 2 }}>
                                   Matched: <code>{hop.matchedRoute.prefix}</code> →{' '}

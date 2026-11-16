@@ -2,9 +2,12 @@ import { _electron as electron, expect } from '@playwright/test'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve, join } from 'node:path'
 import { createRequire } from 'node:module'
+import { build } from 'esbuild'
 
 const artifacts = resolve('test-artifacts', 'desktop')
 await mkdir(artifacts, { recursive: true })
+await build({ entryPoints: [resolve('tests', 'fixtures', 'hub-firewall.ts')], bundle: true, platform: 'node',
+  format: 'cjs', outfile: join(artifacts, 'hub-firewall-fixture.cjs') })
 const executablePath = process.env.DESKTOP_EXECUTABLE
 let brandedWindowsResources = false
 if (executablePath) {
@@ -23,6 +26,7 @@ const application = await electron.launch({
 })
 const require = createRequire(import.meta.url)
 const { executePlatform } = require('../platform-dist/service.cjs')
+const { hubFirewallTopology, azHubFirewallTopology } = require(join(artifacts, 'hub-firewall-fixture.cjs'))
 const outbound = [], failures = []
 try {
   const page = await application.firstWindow()
@@ -263,6 +267,37 @@ try {
     expect(await readSaved()).toEqual(retainedWorkspace)
     await page.keyboard.press('Escape')
   }
+  for (const mode of ['vwan', 'full']) {
+    const topology = mode === 'vwan' ? hubFirewallTopology('published-branch') : azHubFirewallTopology('published-branch')
+    await page.goto(`app://simulator/?mode=${mode}`)
+    await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'static-firewall-native.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const saved = () => page.evaluate((mode) => {
+      const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'))
+      return mode === 'vwan' ? value : value.topology
+    }, mode)
+    const canonical = executePlatform({ contractVersion: 1, operation: 'validate', document: { mode, topology } }).document.topology
+    await expect.poll(saved).toEqual(canonical)
+    const request = { contractVersion: 1, operation: 'evaluate', document: { mode, topology }, requirements: [{
+      id: 'original-firewall', kind: 'flow',
+      source: mode === 'vwan' ? { kind: 'spoke', id: 'untrusted-a' } : { kind: 'subnet', vnetId: 'untrusted-a', subnetId: 'sub-untrusted-a' },
+      target: mode === 'vwan' ? { kind: 'spoke', id: 'trusted-a' } : { kind: 'subnet', vnetId: 'trusted-a', subnetId: 'sub-trusted-a' },
+      sourceAddress: '10.30.0.4', destinationAddress: '10.10.0.4', expectation: 'allow',
+      firewallPolicy: { hubId: 'hub-local', forward: 'bypassed', reverse: 'required' },
+    }] }
+    const result = await page.evaluate((request) => window.desktopSimulator.simulate(request), request)
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual(executePlatform(request))
+    expect(result.value.assessments[0].outcome).toBe('satisfied')
+    request.requirements[0].firewallPolicy.forward = 'required'
+    const mismatch = await page.evaluate((request) => window.desktopSimulator.simulate(request), request)
+    expect(mismatch.ok).toBe(true)
+    expect(mismatch.value.assessments[0].outcome).toBe('violated')
+    await page.reload()
+    expect(await saved()).toEqual(canonical)
+  }
   expect(outbound).toEqual([])
   expect(failures).toEqual([])
   const blocked = await page.evaluate(async () => {
@@ -466,6 +501,7 @@ try {
     scopedNsgDenialAndUnknownCapturePacketParity: true,
     explicitVmFirewallNvaIngressAndResponseOwnerParity: true,
     originalPublicPrivateAndNativeSpokeLbPacketParity: true,
+    originalStaticHubFirewallPerLegParityAndNativeRoundTrip: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

@@ -1,4 +1,4 @@
-import type { Topology } from '../model'
+import type { HubFirewallPolicy, Topology } from '../model'
 import type { PathNode } from '../paths'
 import type { AzNetTopology } from '../azure-net/model'
 import type { AzEndpointRef } from '../azure-net/engine'
@@ -9,7 +9,7 @@ import { VPN_NAT_CAPABILITIES } from '../vpn-nat'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.16.10'
+export const engineVersion = '2026.11.16.11'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -25,6 +25,7 @@ export type FlowRequirement = {
   expectation: 'allow' | 'deny'
   requiredFirewallHubId?: string
   requiredApplianceId?: string
+  firewallPolicy?: HubFirewallPolicy
 }
 export type RouteRequirement = {
   id: string
@@ -93,6 +94,13 @@ export const capabilities = {
   mixedRouting: ['native hub tables/association/propagation', 'shared VWAN HRP selection', 'hub-owned and site-owned route maps',
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],
+  staticHubFirewall: {
+    scope: 'Single hub, declared original hub.firewall ID/name, routing intent disabled, CIDR/ResourceId routes to that ID only.',
+    forwarding: 'Longest prefix, then static over learned for equal prefixes; independent local-connection Firewall onward and return lookups.',
+    assertions: 'flow firewallPolicy: {hubId, forward: required|bypassed, reverse: required|bypassed}, with expectation allow.',
+    excluded: ['multi-hub static inspection', 'static branch-to-branch inspection', 'arbitrary IP/resource next hops and spoke NVAs',
+      'routing intent combined with hub statics', 'unobserved capture reconstruction', 'Firewall policy, sessions, packet/application delivery'],
+  },
   workspace: { capabilities: workspaceCapabilities, limitations: workspaceCapabilityLimits },
   vpnNat: { operation: 'simulate', requestField: 'vpnPacket', modes: ['hub-spoke', 'full'], providers: VPN_NAT_CAPABILITIES,
     endpoints: 'One original connectionId, ingress/egress initiation and explicit IPv4 TCP/UDP tuple. Replies are assessed only within that forward request.',

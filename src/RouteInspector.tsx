@@ -60,7 +60,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
     const link = [...topology.connections, ...topology.siteLinks, ...(topology.erLinks ?? [])].find((link) => link.id === peer.id)
     return link && !link.enabled ? peer.name.slice(0, -7) + t(' (down)') : peer.name
   }
-  const label = (route: Candidate) => `${route.remote ? t("Remote hub · ") : ''}${route.transport === 'VNet' ? t("VNet connection") : route.transport === 'Firewall' ? 'Azure Firewall' : route.transport === 'Internet' ? t('Internet') : transportLabels[route.transport]} · ${route.kind === 'system' ? t("System") : route.kind === 'policy' ? t("Routing intent") : t(routeLabels[route.kind])}`
+  const label = (route: Candidate) => `${route.remote ? t("Remote hub · ") : ''}${route.transport === 'VNet' ? t("VNet connection") : route.transport === 'Firewall' ? 'Azure Firewall' : route.transport === 'Internet' ? t('Internet') : transportLabels[route.transport]} · ${route.kind === 'system' ? t("System") : route.kind === 'policy' ? t("Routing intent") : route.kind === 'hub-static' ? t('Static hub route') : t(routeLabels[route.kind])}`
   const bgpGroups: Group[] = site ? [...new Set((siteRouting?.candidates[site.id] ?? []).map((r) => r.prefix))]
     .sort((a, b) => cidr(a)!.network - cidr(b)!.network || cidr(a)!.length - cidr(b)!.length)
     .map((prefix) => {
@@ -90,8 +90,9 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
           ...(preferred.length > 1 ? [t("{0} equal-cost paths remain (maximum 32).", preferred.length)] : []),
         ],
       }
-    }) : (location ? erRouting : hub && tableId !== DEFAULT_HUB_TABLE ? simulation.hubTables?.[hub.id]?.[tableId] ?? []
-      : (view === 'bgp' ? simulation.bgpTables : view === 'firewall' ? simulation.firewallTables : simulation.tables)[router.id] ?? []).map((d) => ({
+    }) : (location ? erRouting : view === 'firewall' ? simulation.firewallTables[router.id] ?? []
+      : hub && tableId !== DEFAULT_HUB_TABLE ? simulation.hubTables?.[hub.id]?.[tableId] ?? []
+      : (view === 'bgp' ? simulation.bgpTables : simulation.tables)[router.id] ?? []).map((d) => ({
       prefix: d.prefix, explanation: d.explanation,
       candidates: d.candidates.map((r) => {
         const exit = (topology.connections.find((c) => c.id === r.connectionId) ?? topology.spokes.find((s) => s.id === r.connectionId) ?? topology.erLinks?.find((link) => link.id === r.connectionId))?.name
@@ -100,7 +101,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
           : attachment?.siteId ? topology.sites.find((site) => site.id === attachment.siteId) : undefined
         return {
           key: r.key, asPath: r.asPath, preferred: d.selected.some((s) => s.key === r.key), source: label(r),
-          nextHop: location ? peer?.name : r.remote ? topology.hubs.find((h) => h.id === r.originHubId)?.name : r.transport === 'Firewall' ? 'Azure Firewall' : r.transport === 'Internet' ? t("Internet egress") : exit,
+          nextHop: location ? peer?.name : r.remote ? topology.hubs.find((h) => h.id === r.originHubId)?.name : r.transport === 'Firewall' ? hub?.firewall?.name ?? 'Azure Firewall' : r.transport === 'Internet' ? t("Internet egress") : exit,
           via: location || r.remote ? exit : r.erLocationId ? topology.erLocations?.find((location) => location.id === r.erLocationId)?.name : undefined,
         }
       }),
@@ -131,7 +132,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
       </>}
       {hub && mode === 'bgp' && observedSnapshot && <div className="field"><span>{t("Route table source")}</span><div className="segmented-toggle" role="group" aria-label={t("Route table source")}><button type="button" className={activeSource === 'simulated' ? 'primary' : undefined} aria-pressed={activeSource === 'simulated'} onClick={() => setTableSource('simulated')}>{t("Simulated")}</button><button type="button" className={activeSource === 'azure' ? 'primary' : undefined} aria-pressed={activeSource === 'azure'} onClick={() => setTableSource('azure')}>{t("Azure snapshot")}</button></div></div>}
       {hub && mode === 'bgp' && activeSource === 'simulated' && <><label className="field"><span>{t("Hub routing preference")}</span><select aria-label={t("Hub routing preference")} value={hub.preference} onChange={(e) => onPreference(e.target.value as Preference)}>{Object.entries(preferenceLabels).map(([v, name]) => <option key={v} value={v}>{t(name)}</option>)}</select></label>
-        {tableId === DEFAULT_HUB_TABLE && <label className="field"><span>{t("Route view")}</span><select aria-label={t("Route view")} value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">{t("BGP table (before routing intent)")}</option><option value="hub">{t("Hub forwarding table")}</option><option value="firewall" disabled={!hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label>}</>}
+        {tableId === DEFAULT_HUB_TABLE && <label className="field"><span>{t("Route view")}</span><select aria-label={t("Route view")} value={view} onChange={(e) => onView(e.target.value as 'bgp' | 'hub' | 'firewall')}><option value="bgp">{t("BGP table (before routing intent)")}</option><option value="hub">{t("Hub forwarding table")}</option><option value="firewall" disabled={!hub.firewall && !hub.routingIntent.private && !hub.routingIntent.internet}>Azure Firewall</option></select></label>}</>}
     </div>
     {hub && <Explain concept="hrp" />}
     {hub && mode === 'bgp' && <p className="muted">{t('Table labels')}: <code>{tableChoices.find((table) => table.id === tableId)?.labels.join(', ') || '—'}</code></p>}

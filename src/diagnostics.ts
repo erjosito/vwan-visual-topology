@@ -1,4 +1,4 @@
-import type { ObjectSelection, Topology } from './model'
+import type { HubFirewallPolicy, ObjectSelection, Topology } from './model'
 import { english } from './messages'
 import type { MessageRenderer } from './messages'
 import type { Simulation } from './routing'
@@ -19,6 +19,7 @@ export type DiagnosticIntent = {
   destinationPrefix: string
   expectation: 'allow' | 'deny'
   requiredFirewallHubId?: string
+  firewallPolicy?: HubFirewallPolicy
 }
 export type ExportConstraint = {
   id: string
@@ -96,7 +97,7 @@ const messages = {
   'summary-hole': ['Aggregate forwarding gap', 'A selected aggregate has no known contributing route for this address cell.'],
   'wrong-exit': ['Wrong destination exit', 'A selected branch terminates at the Internet or a different owner instead of the declared endpoint.'],
   asymmetric: ['Asymmetric physical path sets', 'Forward physical paths and reversed return paths differ. Asymmetry alone is not a demonstrated fault; ECMP hash pairing is unknown.'],
-  firewall: ['Required inspection waypoint is bypassed', 'A selected branch does not traverse the required modeled firewall. Firewall rules, NAT and session enforcement are not modeled.'],
+  firewall: ['Firewall inspection requirement is not met', 'A selected path does not match the required or bypassed Firewall predicate for its direction. Routing evidence does not prove Firewall permission or session establishment.'],
   ownership: ['Duplicate or overlapping IP ranges', 'Distinct sites or VNets declare overlapping IP ranges. This makes destination ownership ambiguous, but does not prove duplicate addresses on live hosts. Repeated BGP advertisements alone are not duplicate addressing.'],
   unknown: ['Routing result is not fully assessed', 'Missing ownership, unsupported model behavior, nonconvergence or truncated coverage prevents a definitive intent assessment.'],
   export: ['Route advertisement constraint violated', 'The scoped after-policy advertisement differs from the declared constraint. Before-policy evidence distinguishes filtering and summarization.'],
@@ -236,12 +237,20 @@ export function validateDiagnosticsProfile(input: unknown): DiagnosticsProfile {
   const root = object(input, ['version', 'intents', 'failureAnalysis', 'exportConstraints'])
   if (root.version !== 1 || typeof root.failureAnalysis !== 'boolean') return fail()
   const intents = array(root.intents).map((value): DiagnosticIntent => {
-    const entry = object(value, ['id', 'source', 'target', 'sourcePrefix', 'destinationPrefix', 'expectation', 'requiredFirewallHubId'])
+    const entry = object(value, ['id', 'source', 'target', 'sourcePrefix', 'destinationPrefix', 'expectation', 'requiredFirewallHubId', 'firewallPolicy'])
     if (entry.expectation !== 'allow' && entry.expectation !== 'deny') return fail()
+    let firewallPolicy: HubFirewallPolicy | undefined
+    if (entry.firewallPolicy !== undefined) {
+      const policy = object(entry.firewallPolicy, ['hubId', 'forward', 'reverse'])
+      if (entry.expectation !== 'allow' || entry.requiredFirewallHubId !== undefined
+        || !['required', 'bypassed'].includes(policy.forward as string) || !['required', 'bypassed'].includes(policy.reverse as string)) return fail()
+      firewallPolicy = { hubId: text(policy.hubId), forward: policy.forward as HubFirewallPolicy['forward'], reverse: policy.reverse as HubFirewallPolicy['reverse'] }
+    }
     return {
       id: id(entry.id), source: node(entry.source, ['hub', 'site', 'spoke']), target: node(entry.target, ['hub', 'site', 'spoke']),
       sourcePrefix: range(entry.sourcePrefix), destinationPrefix: range(entry.destinationPrefix), expectation: entry.expectation,
       ...(entry.requiredFirewallHubId === undefined ? {} : { requiredFirewallHubId: text(entry.requiredFirewallHubId) }),
+      ...(firewallPolicy ? { firewallPolicy } : {}),
     }
   })
   const exportConstraints = root.exportConstraints === undefined ? undefined : array(root.exportConstraints).map((value): ExportConstraint => {
@@ -965,12 +974,16 @@ function* routingAnalysisSteps(topology: Topology, profile: DiagnosticsProfile, 
       ...(intent.expectation === 'allow' ? modelLimits(state, intent.target, sourceCell.address, reverse) : [])]
     if (!owned(state, intent.source, sourceCell.address, reverse) || !owned(state, intent.target, targetCell.address, forward)) reasons.push(limits.ownership)
     if (intent.requiredFirewallHubId && !state.topology.hubs.some((hub) => hub.id === intent.requiredFirewallHubId)) reasons.push(limits.inspection)
+    if (intent.firewallPolicy && !state.topology.hubs.some((hub) => hub.id === intent.firewallPolicy!.hubId
+      && (hub.firewall || hub.routingIntent.private || hub.routingIntent.internet))) reasons.push(limits.inspection)
     if ([...forward, ...reverse].some((path) => path.termination === 'unknown-context')) reasons.push(limits.hubContext)
     if ([...forward, ...reverse].some((path) => path.traceComplete === false && path.termination !== 'unknown-context')) reasons.push(limits.trace)
     if (!forward.length || (intent.expectation === 'allow' && !reverse.length)) reasons.push(limits.ownership)
     const f = forward.filter((path) => delivered(path, intent.target)).length
     const r = reverse.filter((path) => delivered(path, intent.source)).length
-    const inspection = !intent.requiredFirewallHubId || [...forward, ...reverse].every((path) => path.firewalls?.includes(intent.requiredFirewallHubId!))
+    const inspection = (!intent.requiredFirewallHubId || [...forward, ...reverse].every((path) => path.firewalls?.includes(intent.requiredFirewallHubId!)))
+      && (!intent.firewallPolicy || ([[forward, intent.firewallPolicy.forward], [reverse, intent.firewallPolicy.reverse]] as const)
+        .every(([paths, expectation]) => paths.every((path) => Boolean(path.firewalls?.includes(intent.firewallPolicy!.hubId)) === (expectation === 'required'))))
     return { forward, reverse, reasons: [...new Set(reasons)], f, r, inspection, success: f === forward.length && r === reverse.length && inspection }
   }
   type Baseline = { intent: DiagnosticIntent; source: Cell; target: Cell }
