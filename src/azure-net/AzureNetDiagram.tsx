@@ -1356,7 +1356,7 @@ export function AzureNetDiagram({
                 const badgeText = rt ? `RT: ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}` : ''
                 const inventory = inventoryCounts(topology, { kind: 'vnet', id: vnet.id }, subnet.id)
                 const hasNat = inventory.natGateways > 0 || subnet.internetEgressStatus === 'unknown'
-                const inventoryWidth = (inventory.nics ? 90 : 0) + (hasNat ? 38 : 0)
+                const inventoryWidth = (inventory.nics ? 90 : 0) + (hasNat ? 38 : 0) + (inventory.nsgs ? 42 : 0)
                 const badgeW = rt ? Math.min(88, Math.max(42, badgeText.length * 4.8 + 10)) : 0
                 const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW - inventoryWidth
                 const labelClipId = `${tooltipId}-subnet-${vnetIndex}-${sIdx}`
@@ -1447,6 +1447,11 @@ export function AzureNetDiagram({
                       <title>{t(subnet.internetEgressStatus ? 'Unknown captured association' : 'NAT Gateway association; open VNet detail')}</title>
                       <rect x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - 36} y={rowY + 3} width={33} height={18} rx={6} fill="var(--surface)" stroke="var(--border)" />
                       <text x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - 20} y={rowY + 16} textAnchor="middle" fontSize={9} fill="var(--text)">{subnet.internetEgressStatus ? 'NAT?' : 'NAT'}</text>
+                    </g>}
+                    {inventory.nsgs > 0 && <g data-testid="aznet-subnet-nsg-pill">
+                      <title>NSG {inventory.nsgs}</title>
+                      <rect x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - (hasNat ? 38 : 0) - 40} y={rowY + 3} width={37} height={18} rx={6} fill="var(--surface)" stroke="var(--border)" />
+                      <text x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - (hasNat ? 38 : 0) - 21} y={rowY + 16} textAnchor="middle" fontSize={9} fill="var(--text)">NSG {inventory.nsgs}</text>
                     </g>}
                     {inventory.nics > 0 && <g data-testid="aznet-subnet-inventory-pill">
                       <title>{t('{0} workloads, {1} NICs, {2} public IP associations. Open VNet detail for the original entities.', inventory.workloads, inventory.nics, inventory.publicIps)}</title>

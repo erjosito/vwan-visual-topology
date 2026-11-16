@@ -1,6 +1,9 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
   'Workspace': 'ワークスペース',
+  'Learn & practice': '学習と練習',
+  'Learning tools could not load. Your workspace is unchanged; reload to retry.': '学習ツールを読み込めませんでした。ワークスペースは変更されていません。再読み込みしてお試しください。',
+  'Reload': '再読み込み',
   'Firewall SNAT': 'Firewall SNAT',
   'Capture type': '取得データの種類',
   'Workspace could not be selected or preserved. Originals have not been intentionally replaced. Export your design before freeing browser storage.': 'ワークスペースを選択または保持できませんでした。原本は意図的に置き換えられていません。ブラウザーのストレージを空ける前にデザインをエクスポートしてください。',

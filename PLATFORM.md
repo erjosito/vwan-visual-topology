@@ -224,7 +224,8 @@ starters explicitly warn about omitted hub policies, branch controls and NVA
 peerings; native JSON/share URLs preserve them. Dedicated controls, legacy
 documents, practice progress and all mode selectors remain available. Automatic
 legacy-save/URL migration, unified defaults and selector retirement are #138,
-not part of this capability bridge. Internet/NAT/LB/NSG engines are separate work.
+not part of this capability bridge. Supported Internet egress and NSG packet
+contracts are described below; public ingress and Load Balancers remain separate work.
 
 Optional `topology.inventory` contains `workloads`, `nics` and `publicIps`.
 A workload has `id`, `name`, `nicIds` and an optional existing router
@@ -299,7 +300,8 @@ For private SNAT, the configured interface is only a representative of backend
 allocation. Translation is `snat`, `none`, or `not-assessed`; `egress` separately
 distinguishes configured, blocked, legacy-implicit and unknown behavior.
 Public-IP association alone establishes neither inbound DNAT nor a listener.
-Delivery and security readiness remain not assessed.
+Delivery and guest/firewall readiness remain not assessed; supported NSG denial
+is reported separately from routing and translation.
 The MCP schema and bounded `packet` evidence section expose the same contract;
 web workers, Node workers and offline Electron use the same adapters.
 Node/browser jobs have a hard 15-second ceiling and 8 MB result ceiling; callers
@@ -313,6 +315,59 @@ minutes. Evidence handles are not resumable computation or a semantic cache.
 The document revision is an informational non-cryptographic fingerprint,
 not a provenance/security hash. Existing UI diagnostic continuation remains
 available through its existing UI, not this initial service contract.
+
+### Original subnet/NIC NSGs
+
+Optional `inventory.networkSecurityGroups` contain original `id`, `name`, `rules`,
+optional `region` and `rulesStatus: "unknown"`. Rules declare unique names/IDs and
+direction/priority pairs (100–4096), inbound/outbound direction, allow/deny,
+TCP/UDP/any, source/destination IPv4/CIDR selectors and individual/ranged ports.
+`inventory.nsgAssociations` bind one original `{kind:"spoke"|"vnet",id}` owner and
+`{kind:"subnet"|"nic",id}` target to an `nsgId`, or preserve `status:"unknown"`.
+No copied subnet/NIC or inferred association is created. Legacy optional absence
+survives round-trip; removing an original target prunes its association, not
+unassociated original NSG resources. Known GatewaySubnet/AzureFirewallSubnet
+customer NSG associations are rejected; captured uncertainty remains visible.
+
+`packet.nsg.forward`/`reply` report `allowed`, `denied` or `not-assessed`, ordered
+checks, original owner/target, NSG/rule ID, priority, direction and five-tuple.
+Outbound checks run NIC then subnet before public SNAT; inbound checks run subnet
+then NIC on private tuples. Original NVA backing subnet/NIC checks surround
+declared private guest SNAT. An unknown NVA interface/NIC or earlier translator
+does not establish filtering permission. A deny stops packet-tuple evidence,
+not the underlying native effective routes. `packet.security: "denied"` means
+an NSG denies this new initiation; an NSG allow never certifies full security,
+guest forwarding, a listener or application delivery.
+
+Built-in defaults retain priorities 65000/65001/65500. VirtualNetwork is resolved
+from original owner and native local/peering/BGP/UDR scope, never blanket RFC1918;
+incomplete coverage remains unknown. Internet excludes known scoped VNet prefixes.
+AzureLoadBalancer allows only explicit health-probe context, not arbitrary public
+clients. Dynamic tags/ASGs and unsupported protocols remain unassessed, never
+wildcard-allowed. Illustrative translated address/port domains are compared as
+domains, not exact allocated values.
+
+Each invocation is a fresh initiation against the current topology. For a fully
+NSG-allowed flow, a response may reuse its bounded hypothetical flow record,
+reversing known enforcement tuples without applying new reverse-initiation rules.
+Unknown return translation prevents exact response NSG evidence. No persistent
+session ledger, Azure state inspection or timer/capacity behavior is modeled.
+Standard public VM/LB ingress's associated-NSG requirement is service-specific;
+its context is not generalized to internal/outbound flows. Actual public ingress
+and Load Balancer forwarding remain gated by their separate engines.
+
+Candidate exercises, pending their dedicated practice integration: fix a NIC
+allow masked by subnet deny; distinguish response traffic from reverse initiation;
+show that private-subnet default outbound NSG permission supplies no NAT; separate
+AzureLoadBalancer probe permission from public-client permission.
+Japanese: NIC の許可とサブネットの拒否を比較する、応答と逆方向の新規通信を区別する、
+送信 NSG の許可だけでは NAT が提供されないことを確認する、プローブと利用者の許可を分ける。
+These candidates are not shipped/graded practice badges.
+
+References: [NSG processing and statefulness](https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview),
+[ordered subnet/NIC processing](https://learn.microsoft.com/en-us/azure/virtual-network/network-security-group-how-it-works),
+[service-tag scope](https://learn.microsoft.com/en-us/azure/virtual-network/service-tags-overview),
+[Firewall subnet restrictions](https://learn.microsoft.com/en-us/azure/firewall/firewall-faq).
 
 ## Local MCP / Copilot skill
 

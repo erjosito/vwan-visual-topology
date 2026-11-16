@@ -6,7 +6,7 @@ import type { PacketRequest, PacketResult } from '../packet-flow'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.16.1'
+export const engineVersion = '2026.11.16.2'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -80,10 +80,16 @@ export const capabilities = {
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],
   workspace: { capabilities: workspaceCapabilities, limitations: workspaceCapabilityLimits },
-  inventory: ['optional original workload/NIC/IP-configuration/public-IP identities', 'explicit detailed subnets on VWAN spokes; no inferred VMs or addresses'],
+  inventory: ['optional original workload/NIC/IP-configuration/public-IP identities', 'explicit detailed subnets on VWAN spokes; no inferred VMs or addresses',
+    'optional original subnet/NIC NSG associations and bounded rule declarations'],
   packet: { operation: 'simulate', addressFamily: 'IPv4', protocols: ['tcp', 'udp'], ports: '1-65535',
     endpoints: ['owned workload/NIC/IP-configuration tuple', 'explicit external public address'],
-    outcomes: ['reachable', 'unreachable', 'not-assessed'], readiness: 'delivery/security not assessed',
+    outcomes: ['reachable', 'unreachable', 'not-assessed'], readiness: 'NSG denial assessed separately; delivery and guest/firewall readiness not assessed',
+    nsg: ['ordered subnet/NIC new-flow intersection and first-priority/default-rule evidence',
+      'original NVA backing subnet/NIC checks at private pre/post-guest-SNAT tuples',
+      'scoped VirtualNetwork/Internet and explicit AzureLoadBalancer probe context',
+      'conditional responses, not persistent/live sessions or new reverse initiations',
+      'unknown capture/dynamic selectors/illustrative domains remain unassessed'],
     translation: ['explicit direct Standard NAT Gateway and instance public IP', 'declared single-router Firewall network-rule/NVA guest SNAT',
       'classic non-zone-redundant Firewall private handoff to Standard NAT Gateway', 'conditional inverse translation and independently checked router return routes'],
     translationLimits: ['illustrative allocation/ports only', 'no unsolicited ingress', 'unknown/multiple router NAT and forced-tunnel translation unassessed',
@@ -92,5 +98,5 @@ export const capabilities = {
   outcomes: ['satisfied', 'violated', 'not assessed'],
   limits: platformLimits,
   privacy: 'Local deterministic computation. No HTTP listener, files, Azure credentials or cloud calls. An external AI may receive tool inputs/results.',
-  excluded: ['elapsed Azure convergence/history', 'firewall rules/NAT/session enforcement', 'application or packet delivery', 'unobserved imported controls', 'identity and verified badges'],
+  excluded: ['elapsed Azure convergence/history', 'guest/firewall rules and dynamic NAT/live-session enforcement', 'application or packet delivery', 'unobserved imported controls', 'identity and verified badges'],
 }

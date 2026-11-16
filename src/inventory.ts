@@ -317,6 +317,8 @@ export function validateInventory(topology: InventoryTopology): void {
         fail('NSG association requires an original subnet/NIC owner')
       }
       const key = JSON.stringify([owner.kind, owner.id, target.kind, id])
+      if (target.kind === 'subnet' && ['GatewaySubnet', 'AzureFirewallSubnet'].includes(container!.subnets.find((subnet) => subnet.id === id)!.name)
+        && binding.status !== 'unknown') fail('customer NSGs are not supported on GatewaySubnet or AzureFirewallSubnet')
       if (bindings.has(key)) fail('duplicate NSG association')
       bindings.add(key)
       if (binding.nsgId === undefined && binding.status !== 'unknown') fail('NSG association needs an NSG or explicit captured uncertainty')
@@ -399,6 +401,10 @@ export function inventoryCounts(topology: InventoryTopology, owner: InventoryOwn
   const nics = (topology.inventory?.nics ?? []).filter((nic) => sameInventoryOwner(nic.owner, owner)
     && (subnetId === undefined || nic.ipConfigurations.some((config) => config.subnetId === subnetId)))
   return {
+    nsgs: new Set((topology.inventory?.nsgAssociations ?? []).filter((binding) => sameInventoryOwner(binding.owner, owner)
+      && (subnetId === undefined || binding.target.kind === 'subnet' && binding.target.id === subnetId
+        || binding.target.kind === 'nic' && nics.some((nic) => nic.id === binding.target.id)))
+      .map((binding) => binding.nsgId ?? `unknown:${binding.target.kind}:${binding.target.id}`)).size,
     natGateways: (topology.inventory?.natGateways ?? []).filter((gateway) => sameInventoryOwner(gateway.owner, owner)
       && (subnetId === undefined || gateway.subnetIds.includes(subnetId))).length,
     nics: nics.length,
