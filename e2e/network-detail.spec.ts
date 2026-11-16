@@ -97,6 +97,19 @@ for (const mode of ['vwan', 'full'] as const) {
     await subnet.locator('summary').first().click()
     await expect(subnet.getByLabel('NSG の関連付け', { exact: true })).toBeVisible()
     await expect(subnet.getByRole('button', { name: 'NSG ルールを保存', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.evaluate(() => localStorage.setItem('vwan-visual-topology:language:v1', 'en'))
+    await page.reload()
+    await node.click()
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Application', exact: true }).click()
+    await dialog.getByRole('button', { name: 'Remove workload and NICs', exact: true }).click()
+    const afterDelete = JSON.parse((await page.evaluate((key) => localStorage.getItem(key), key))!)
+    const pruned = afterDelete.topology ?? afterDelete
+    expect(pruned.inventory.workloads.map((workload: { id: string }) => workload.id)).toEqual(['vm-b'])
+    expect(pruned.inventory.nics.map((nic: { id: string }) => nic.id)).toEqual(['nic-b'])
+    expect(pruned.inventory.networkSecurityGroups).toHaveLength(2)
+    expect(pruned.inventory.nsgAssociations.map((binding: { target: { id: string } }) => binding.target.id)).toEqual(['app'])
   })
 }
 

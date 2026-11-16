@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { t } from './i18n'
-import { inventoryOwners, sameInventoryOwner, validateInventory, type InventoryOwner, type InventoryTopology } from './inventory'
+import { inventoryOwners, pruneDeletedInventory, sameInventoryOwner, validateInventory, type InventoryOwner, type InventoryTopology } from './inventory'
 import { PacketFlowPanel } from './PacketFlowPanel'
 import { NatGatewayEditor } from './NatGatewayEditor'
 import { RouterSnatEditor } from './RouterSnatEditor'
@@ -42,6 +42,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
     try {
       const candidate = structuredClone(topology)
       update(candidate)
+      pruneDeletedInventory(candidate, topology)
       validateInventory(candidate)
       commit(update)
       setError('')
