@@ -5,7 +5,7 @@ import type { AzNetTopology } from './azure-net/model'
 export interface InventorySubnet { id: string; name: string; prefix: string }
 export interface InventoryOwner { kind: 'spoke' | 'vnet'; id: string }
 export interface Workload { id: string; name: string; nicIds: string[]; backingDeviceId?: string }
-export interface NicIpConfiguration { id: string; name: string; subnetId: string; privateIp?: string; publicIpId?: string }
+export interface NicIpConfiguration { id: string; name: string; subnetId: string; privateIp?: string; publicIpId?: string; primary?: boolean }
 export interface NetworkNic { id: string; name: string; owner: InventoryOwner; ipConfigurations: NicIpConfiguration[] }
 export interface PublicIp { id: string; name: string; address?: string; sku?: 'Standard' | 'Basic' | 'StandardV2'; allocation?: 'Static' | 'Dynamic' }
 export interface PublicIpPrefix { id: string; name: string; sku: 'Standard'; prefixLength: number; prefix?: string }
@@ -20,6 +20,61 @@ export interface NatGateway {
 }
 export interface RouterSnatOwner { kind: 'appliance' | 'hub'; id: string }
 export interface WorkloadIpReference { workloadId: string; nicId: string; ipConfigurationId: string }
+export type LoadBalancerFrontend = { id: string; name: string } & (
+  { kind: 'public'; publicIpId: string } | { kind: 'private'; subnetId: string; privateIp?: string })
+export interface LoadBalancerPool { id: string; name: string; members: WorkloadIpReference[]; membersStatus?: 'unknown' }
+export interface LoadBalancerProbe {
+  id: string
+  name: string
+  protocol: 'tcp' | 'http' | 'https'
+  port: number
+  requestPath?: string
+  health: { target: WorkloadIpReference; status: 'healthy' | 'unhealthy' | 'unknown' }[]
+}
+export interface LoadBalancerRule {
+  id: string
+  name: string
+  frontendId: string
+  poolId: string
+  probeId: string
+  protocol: 'tcp' | 'udp' | 'all'
+  frontendPort: number
+  backendPort: number
+  affinity?: 'none' | 'client-ip' | 'client-ip-protocol'
+  disableOutboundSnat?: boolean
+  floatingIp?: boolean
+  haPorts?: boolean
+}
+export interface LoadBalancerInboundNatRule {
+  id: string
+  name: string
+  frontendId: string
+  poolId: string
+  target: WorkloadIpReference
+  protocol: 'tcp' | 'udp'
+  frontendPort: number
+  backendPort: number
+}
+export interface LoadBalancerOutboundRule {
+  id: string
+  name: string
+  frontendIds: string[]
+  poolId: string
+  protocol: 'tcp' | 'udp' | 'any'
+}
+export interface NetworkLoadBalancer {
+  id: string
+  name: string
+  sku: 'Standard'
+  owner: InventoryOwner
+  frontends: LoadBalancerFrontend[]
+  pools: LoadBalancerPool[]
+  probes: LoadBalancerProbe[]
+  rules: LoadBalancerRule[]
+  inboundNatRules: LoadBalancerInboundNatRule[]
+  outboundRules: LoadBalancerOutboundRule[]
+  rulesStatus?: 'unknown'
+}
 export function workloadEndpointKey(ref: WorkloadIpReference & { kind: 'workload' }): string {
   return JSON.stringify(['workload', ref.workloadId, ref.nicId, ref.ipConfigurationId])
 }
@@ -86,6 +141,7 @@ export interface NetworkInventory {
   natGateways?: NatGateway[]
   routerSnatPolicies?: RouterSnatPolicy[]
   routerDnatPolicies?: RouterDnatPolicy[]
+  loadBalancers?: NetworkLoadBalancer[]
   networkSecurityGroups?: NetworkSecurityGroup[]
   nsgAssociations?: NsgAssociation[]
 }
@@ -221,9 +277,12 @@ export function validateInventory(topology: InventoryTopology): void {
     const container = owners.find((entry) => entry.kind === owner.kind && entry.id === owner.id)
     if (!container) fail(`NIC ${nic.id} references a missing owner`)
     const configs = new Set<string>()
+    let primaries = 0
     for (const value of list(nic.ipConfigurations, 'IP configurations')) {
       const config = object(value), id = text(config.id, 'IP configuration ID', true)
       text(config.name, 'IP configuration name')
+      if (config.primary !== undefined && typeof config.primary !== 'boolean') fail('invalid NIC primary IPv4 configuration')
+      if (config.primary === true && ++primaries > 1) fail('a NIC cannot have multiple primary IPv4 configurations')
       if (configs.has(id)) fail(`duplicate IP configuration ${id}`)
       configs.add(id)
       const subnet = container!.subnets.find((subnet) => subnet.id === config.subnetId)
@@ -457,6 +516,157 @@ export function validateInventory(topology: InventoryTopology): void {
       if (!endpoint || endpoint.workload.backingDeviceId) fail('DNAT target must reference an original non-router workload NIC/IP configuration')
     }
   }
+  const endpoints = namedEndpoints(topology)
+  const endpointReference = (value: unknown) => {
+    const target = object(value)
+    if (Object.keys(target).some((field) => !['workloadId', 'nicId', 'ipConfigurationId'].includes(field))) fail('unsupported LB backend reference')
+    for (const field of ['workloadId', 'nicId', 'ipConfigurationId']) text(target[field], `LB backend ${field}`, true)
+    const endpoint = endpoints.find(({ workload, nic, config }) => workload.id === target.workloadId
+      && nic.id === target.nicId && config.id === target.ipConfigurationId)
+    if (!endpoint) fail('LB backend requires an original workload/NIC/IP configuration')
+    return endpoint!
+  }
+  const supportedFields = (row: Record<string, unknown>, fields: string[], label: string) => {
+    if (Object.keys(row).some((field) => !fields.includes(field))) fail(`unsupported ${label} field`)
+  }
+  const port = (value: unknown) => Number.isInteger(value) && Number(value) >= 1 && Number(value) <= 65535
+  const publicFrontendOwners = new Set([...publicAssociations, ...dnatPublicOwners.keys()])
+  for (const value of list(inventory.loadBalancers ?? [], 'load balancers')) {
+    const lb = named(value, 'load balancer'), owner = object(lb.owner)
+    supportedFields(lb, ['id', 'name', 'sku', 'owner', 'frontends', 'pools', 'probes', 'rules', 'inboundNatRules', 'outboundRules', 'rulesStatus'], 'LB')
+    supportedFields(owner, ['kind', 'id'], 'LB owner')
+    const container = owners.find((entry) => sameInventoryOwner(entry, owner as unknown as InventoryOwner))
+    if (!container || lb.sku !== 'Standard' || lb.rulesStatus !== undefined && lb.rulesStatus !== 'unknown') {
+      fail('LB requires an original network owner, regional Standard SKU and known/unknown rule completeness')
+    }
+    const frontends = list(lb.frontends, 'LB frontends').map((entry) => {
+      const frontend = named(entry, 'LB frontend')
+      supportedFields(frontend, ['id', 'name', 'kind', ...(frontend.kind === 'public' ? ['publicIpId'] : ['subnetId', 'privateIp'])], 'LB frontend')
+      if (frontend.kind === 'public') {
+        const id = text(frontend.publicIpId, 'LB public IP reference', true), ip = publicIps.find((ip) => ip.id === id)
+        if (!ip || ip.sku !== 'Standard' || ip.allocation !== 'Static' || publicFrontendOwners.has(id)) {
+          fail('LB frontend requires a uniquely owned Standard static public IP')
+        }
+        publicFrontendOwners.add(id)
+      } else if (frontend.kind === 'private') {
+        const subnet = container!.subnets.find((subnet) => subnet.id === frontend.subnetId)
+        if (!subnet || ['GatewaySubnet', 'AzureFirewallSubnet'].includes(subnet.name)) fail('internal LB requires an original supported subnet')
+        if (frontend.privateIp !== undefined) {
+          const address = text(frontend.privateIp, 'LB private frontend address'), ip = ipv4(address), range = cidr(subnet!.prefix)!
+          const key = JSON.stringify([owner.kind, owner.id, address])
+          const collision = topology.version === 2
+            ? topology.vnets.find((vnet) => vnet.id === owner.id)?.appliances.some((device) => device.privateIp === address)
+              || topology.vnets.find((vnet) => vnet.id === owner.id)?.subnets.some((subnet) => subnet.privateEndpoints?.some((endpoint) => endpoint.ipAddress === address))
+            : topology.connections.some((connection) => connection.transport === 'SpokeNVA' && connection.spokeId === owner.id && connection.peerIp === address)
+          if (ip === undefined || !contains(subnet!.prefix, ip) || ip < range.network + 4
+            || ip >= range.network + 2 ** (32 - range.length) - 1 || addresses.has(key) || collision
+            || container!.subnets.filter((subnet) => contains(subnet.prefix, ip)).length !== 1) fail('invalid, reserved or colliding internal LB address')
+          addresses.add(key)
+        }
+      } else fail('unsupported LB frontend kind')
+      return frontend
+    })
+    if (new Set(frontends.map((frontend) => frontend.kind)).size > 1) fail('a regional LB cannot mix public and internal frontends')
+    const pools = list(lb.pools, 'LB pools').map((entry) => {
+      const pool = named(entry, 'LB pool')
+      supportedFields(pool, ['id', 'name', 'members', 'membersStatus'], 'LB pool')
+      if (pool.membersStatus !== undefined && pool.membersStatus !== 'unknown') fail('unsupported LB membership completeness')
+      const members = new Set<string>()
+      for (const member of list(pool.members, 'LB members')) {
+        const endpoint = endpointReference(member), key = workloadEndpointKey({ kind: 'workload', ...member as WorkloadIpReference })
+        if (!sameInventoryOwner(endpoint.nic.owner, owner as unknown as InventoryOwner) || members.has(key)) {
+          fail('LB backends must be unique original NIC associations in the same VNet')
+        }
+        if (['gatewaysubnet', 'azurefirewallsubnet'].includes(container!.subnets.find((subnet) => subnet.id === endpoint.config.subnetId)!.name.toLowerCase())) {
+          fail('LB VM backends cannot occupy managed gateway/Firewall subnets')
+        }
+        if (endpoint.config.publicIpId && publicIps.find((ip) => ip.id === endpoint.config.publicIpId)?.sku !== 'Standard') {
+          fail('Standard LB backends cannot have unknown or non-Standard instance public IP SKUs')
+        }
+        if (topology.version === 2 && endpoint.workload.backingDeviceId && topology.vnets
+          .flatMap((vnet) => vnet.appliances).find((device) => device.id === endpoint.workload.backingDeviceId)?.kind !== 'nva-vm') {
+          fail('a managed Azure Firewall is not a VM LB backend')
+        }
+        members.add(key)
+      }
+      return pool
+    })
+    const memberInPool = (pool: Record<string, unknown>, target: unknown) => {
+      const endpoint = endpointReference(target)
+      return (pool.members as WorkloadIpReference[]).some((member) => member.workloadId === endpoint.workload.id
+        && member.nicId === endpoint.nic.id && member.ipConfigurationId === endpoint.config.id)
+    }
+    const probes = list(lb.probes, 'LB probes').map((entry) => {
+      const probe = named(entry, 'LB probe')
+      supportedFields(probe, ['id', 'name', 'protocol', 'port', 'requestPath', 'health'], 'LB probe')
+      if (!['tcp', 'http', 'https'].includes(String(probe.protocol)) || !port(probe.port)) fail('invalid LB health probe')
+      if (probe.requestPath !== undefined && (probe.protocol === 'tcp' || !text(probe.requestPath, 'LB probe path').startsWith('/'))) fail('invalid LB probe request path')
+      const health = new Set<string>()
+      for (const entry of list(probe.health, 'LB declared health')) {
+        const state = object(entry)
+        supportedFields(state, ['target', 'status'], 'LB health')
+        const endpoint = endpointReference(state.target), key = workloadEndpointKey({ kind: 'workload', ...state.target as WorkloadIpReference })
+        if (!sameInventoryOwner(endpoint.nic.owner, owner as unknown as InventoryOwner) || !pools.some((pool) => memberInPool(pool, state.target))
+          || health.has(key) || !['healthy', 'unhealthy', 'unknown'].includes(String(state.status))) fail('invalid or duplicate original LB probe health')
+        health.add(key)
+      }
+      return probe
+    })
+    const matches = new Set<string>()
+    const match = (rule: Record<string, unknown>) => {
+      const frontend = frontends.find((frontend) => frontend.id === rule.frontendId), pool = pools.find((pool) => pool.id === rule.poolId)
+      if (!frontend || !pool) fail('LB rule requires original frontend and pool references')
+      const key = JSON.stringify([rule.frontendId, rule.protocol, rule.frontendPort])
+      if (matches.has(key) || rule.protocol === 'all' && [...matches].some((key) => JSON.parse(key)[0] === rule.frontendId)
+        || [...matches].some((key) => JSON.parse(key)[0] === rule.frontendId && JSON.parse(key)[1] === 'all')) {
+        fail('overlapping LB frontend rule or inbound NAT match')
+      }
+      matches.add(key)
+      return { frontend: frontend!, pool: pool! }
+    }
+    const rules = list(lb.rules, 'LB rules').map((entry) => {
+      const rule = named(entry, 'LB rule')
+      supportedFields(rule, ['id', 'name', 'frontendId', 'poolId', 'probeId', 'protocol', 'frontendPort', 'backendPort',
+        'affinity', 'disableOutboundSnat', 'floatingIp', 'haPorts'], 'LB rule')
+      for (const field of ['disableOutboundSnat', 'floatingIp', 'haPorts']) if (rule[field] !== undefined && typeof rule[field] !== 'boolean') fail('invalid LB rule flag')
+      if (rule.affinity !== undefined && !['none', 'client-ip', 'client-ip-protocol'].includes(String(rule.affinity))) fail('unsupported LB affinity')
+      const { frontend } = match(rule)
+      if (!probes.some((probe) => probe.id === rule.probeId)) fail('LB rule requires an original health probe')
+      if (rule.haPorts === true) {
+        if (frontend.kind !== 'private' || rule.protocol !== 'all' || rule.frontendPort !== 0 || rule.backendPort !== 0) fail('HA ports require internal Standard, protocol All and ports 0')
+      } else if (!['tcp', 'udp'].includes(String(rule.protocol)) || !port(rule.frontendPort) || !port(rule.backendPort)) fail('invalid ordinary LB rule protocol/ports')
+      return rule
+    })
+    for (const entry of list(lb.inboundNatRules, 'LB inbound NAT rules')) {
+      const rule = named(entry, 'LB inbound NAT rule')
+      supportedFields(rule, ['id', 'name', 'frontendId', 'poolId', 'target', 'protocol', 'frontendPort', 'backendPort'], 'LB inbound NAT rule')
+      const { pool } = match(rule)
+      if (!['tcp', 'udp'].includes(String(rule.protocol)) || !port(rule.frontendPort) || !port(rule.backendPort)
+        || !memberInPool(pool, rule.target)) fail('LB inbound NAT requires a specific original pool member and supported protocol/ports')
+    }
+    const outboundMatches = new Set<string>()
+    for (const entry of list(lb.outboundRules, 'LB outbound rules')) {
+      const rule = named(entry, 'LB outbound rule')
+      supportedFields(rule, ['id', 'name', 'frontendIds', 'poolId', 'protocol'], 'LB outbound rule')
+      const pool = pools.find((pool) => pool.id === rule.poolId)
+      if (!pool || !['tcp', 'udp', 'any'].includes(String(rule.protocol))) fail('invalid LB outbound pool/protocol')
+      if ((pool!.members as WorkloadIpReference[]).some((member) => endpointReference(member).config.primary === false)) fail('IPv4 LB outbound rules cannot reference secondary IP configurations')
+      const references = list(rule.frontendIds, 'LB outbound frontend references'), seen = new Set<string>()
+      if (!references.length || references.length > 16) fail('LB outbound rule requires 1-16 public frontends')
+      for (const value of references) {
+        const id = text(value, 'LB outbound frontend reference', true), frontend = frontends.find((frontend) => frontend.id === id)
+        if (!frontend || frontend.kind !== 'public' || seen.has(id)) fail('LB outbound requires unique original public frontend references')
+        if (rules.some((rule) => rule.frontendId === id && rule.disableOutboundSnat !== true)) fail('disable load-balancing-rule outbound SNAT before adding an explicit outbound rule')
+        const protocols = rule.protocol === 'any' ? ['tcp', 'udp'] : [String(rule.protocol)]
+        for (const protocol of protocols) {
+          const key = JSON.stringify([rule.poolId, id, protocol])
+          if (outboundMatches.has(key)) fail('overlapping LB outbound rule')
+          outboundMatches.add(key)
+        }
+        seen.add(id)
+      }
+    }
+  }
 }
 
 export interface NamedEndpoint {
@@ -471,10 +681,34 @@ export function namedEndpoints(topology: InventoryTopology): NamedEndpoint[] {
   }))
 }
 
+export function loadBalancerOutboundCandidates(topology: InventoryTopology, target: WorkloadIpReference, protocol?: 'tcp' | 'udp') {
+  const endpoint = namedEndpoints(topology).find(({ workload, nic, config }) => workload.id === target.workloadId
+    && nic.id === target.nicId && config.id === target.ipConfigurationId)
+  if (!endpoint) return []
+  const primaryKnown = endpoint.config.primary === true || endpoint.config.primary === undefined && endpoint.nic.ipConfigurations.length === 1
+  return (topology.inventory?.loadBalancers ?? []).flatMap((lb) => lb.pools.flatMap((pool) => {
+    if (!pool.members.some((member) => member.workloadId === target.workloadId && member.nicId === target.nicId
+      && member.ipConfigurationId === target.ipConfigurationId)) return []
+    const explicit = lb.outboundRules.filter((rule) => rule.poolId === pool.id && (!protocol || rule.protocol === 'any' || rule.protocol === protocol))
+      .map((rule) => ({ lb, pool, ruleId: rule.id, primaryKnown, unsupported: false,
+        frontends: lb.frontends.filter((frontend) => frontend.kind === 'public' && rule.frontendIds.includes(frontend.id)) }))
+    const implicit = lb.rules.filter((rule) => rule.poolId === pool.id && rule.disableOutboundSnat !== true
+      && (!protocol || rule.protocol === protocol || rule.protocol === 'all')
+      && lb.frontends.some((frontend) => frontend.id === rule.frontendId && frontend.kind === 'public'))
+      .map((rule) => ({ lb, pool, ruleId: rule.id, primaryKnown, unsupported: rule.haPorts === true || rule.floatingIp === true,
+        frontends: lb.frontends.filter((frontend) => frontend.id === rule.frontendId) }))
+    return [...explicit, ...implicit]
+  }))
+}
+
 export function inventoryCounts(topology: InventoryTopology, owner: InventoryOwner, subnetId?: string) {
   const nics = (topology.inventory?.nics ?? []).filter((nic) => sameInventoryOwner(nic.owner, owner)
     && (subnetId === undefined || nic.ipConfigurations.some((config) => config.subnetId === subnetId)))
   return {
+    loadBalancers: (topology.inventory?.loadBalancers ?? []).filter((lb) => sameInventoryOwner(lb.owner, owner)
+      && (subnetId === undefined || lb.frontends.some((frontend) => frontend.kind === 'private' && frontend.subnetId === subnetId)
+        || lb.pools.some((pool) => pool.members.some((member) => nics.some((nic) => nic.id === member.nicId
+          && nic.ipConfigurations.some((config) => config.id === member.ipConfigurationId && config.subnetId === subnetId)))))).length,
     nsgs: new Set((topology.inventory?.nsgAssociations ?? []).filter((binding) => sameInventoryOwner(binding.owner, owner)
       && (subnetId === undefined || binding.target.kind === 'subnet' && binding.target.id === subnetId
         || binding.target.kind === 'nic' && nics.some((nic) => nic.id === binding.target.id)))
@@ -548,4 +782,22 @@ export function pruneDeletedInventory(next: InventoryTopology, previous: Invento
     policy.rules = policy.rules.filter((rule) => namedEndpoints(next).some(({ workload, nic, config }) =>
       workload.id === rule.target.workloadId && nic.id === rule.target.nicId && config.id === rule.target.ipConfigurationId))
   }
+  if (next.inventory.loadBalancers) next.inventory.loadBalancers = next.inventory.loadBalancers.filter((lb) => {
+    const oldOwner = before.find((owner) => sameInventoryOwner(owner, lb.owner)), newOwner = after.find((owner) => sameInventoryOwner(owner, lb.owner))
+    if (oldOwner && !newOwner) return false
+    lb.frontends = lb.frontends.filter((frontend) => frontend.kind !== 'private'
+      || !oldOwner?.subnets.some((subnet) => subnet.id === frontend.subnetId) || newOwner?.subnets.some((subnet) => subnet.id === frontend.subnetId))
+    const exists = (target: WorkloadIpReference) => namedEndpoints(next).some(({ workload, nic, config }) =>
+      workload.id === target.workloadId && nic.id === target.nicId && config.id === target.ipConfigurationId)
+    for (const pool of lb.pools) pool.members = pool.members.filter(exists)
+    for (const probe of lb.probes) probe.health = probe.health.filter((state) => exists(state.target)
+      && lb.pools.some((pool) => pool.members.some((member) => workloadEndpointKey({ kind: 'workload', ...member }) === workloadEndpointKey({ kind: 'workload', ...state.target }))))
+    lb.inboundNatRules = lb.inboundNatRules.filter((rule) => exists(rule.target) && lb.frontends.some((frontend) => frontend.id === rule.frontendId))
+    lb.rules = lb.rules.filter((rule) => lb.frontends.some((frontend) => frontend.id === rule.frontendId))
+    lb.outboundRules = lb.outboundRules.filter((rule) => {
+      rule.frontendIds = rule.frontendIds.filter((id) => lb.frontends.some((frontend) => frontend.id === id))
+      return rule.frontendIds.length > 0
+    })
+    return true
+  })
 }

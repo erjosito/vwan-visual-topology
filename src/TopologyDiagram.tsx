@@ -474,6 +474,11 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
           <rect x="-90" y="31" width="40" height="11" rx="4" fill="var(--surface)" stroke="var(--border)" />
           <text x="-70" y="39" textAnchor="middle" fontSize="8" fill="var(--text)">NSG {inventory.nsgs}</text>
         </g>}
+        {inventory.loadBalancers > 0 && !nvas.length && <g data-testid="vwan-spoke-lb-pill">
+          <title>{t('Standard Load Balancers')}: {inventory.loadBalancers}</title>
+          <rect x={inventory.nsgs ? -46 : -90} y="31" width="36" height="11" rx="4" fill="var(--surface)" stroke="var(--border)" />
+          <text x={inventory.nsgs ? -28 : -72} y="39" textAnchor="middle" fontSize="8" fill="var(--text)">LB {inventory.loadBalancers}</text>
+        </g>}
       </g>
     })}
     {topology.sites.filter((site) => !nvaSiteMap.has(site.id)).map((site) => {

@@ -347,6 +347,51 @@ try {
       expect(ingress.value.packet.reply.steps.at(-1).after.sourceAddress).toBe(kind === 'direct' ? '20.40.50.80' : '20.40.50.70')
     }
   }
+  for (const [native, internal] of [[false, false], [false, true], [true, true]]) {
+    const owner = { kind: native ? 'spoke' : 'vnet', id: 'network' }
+    const backend = { workloadId: 'server', nicId: 'nic', ipConfigurationId: 'ip' }
+    const subnets = [{ id: 'app', name: 'App', prefix: '10.1.1.0/24', defaultOutboundAccess: false },
+      { id: 'front', name: 'Frontend', prefix: '10.1.2.0/24', defaultOutboundAccess: false }]
+    const inventory = {
+      publicIps: [{ id: 'public', name: 'LB public', sku: 'Standard', allocation: 'Static', address: '20.40.50.81' }],
+      workloads: [{ id: 'server', name: 'Server', nicIds: ['nic'] }, { id: 'client', name: 'Client', nicIds: ['client-nic'] }],
+      nics: [{ id: 'nic', name: 'Server NIC', owner, ipConfigurations: [{ id: 'ip', name: 'Primary', subnetId: 'app', privateIp: '10.1.1.4', primary: true }] },
+        { id: 'client-nic', name: 'Client NIC', owner, ipConfigurations: [{ id: 'client-ip', name: 'Primary', subnetId: 'app', privateIp: '10.1.1.5', primary: true }] }],
+      networkSecurityGroups: [{ id: 'nsg', name: 'Backend NSG', rules: internal ? [] : [{ id: 'web', name: 'AllowWeb', priority: 100,
+        direction: 'inbound', action: 'allow', protocol: 'tcp', sources: ['8.8.8.8/32'], destinations: ['10.1.1.4'], sourcePorts: ['*'], destinationPorts: ['8443'] }] }],
+      nsgAssociations: [{ owner, target: { kind: 'nic', id: 'nic' }, nsgId: 'nsg' }],
+      loadBalancers: [{ id: 'lb', name: 'Application LB', sku: 'Standard', owner,
+        frontends: [internal ? { id: 'lb-front', name: 'Internal', kind: 'private', subnetId: 'front', privateIp: '10.1.2.10' }
+          : { id: 'lb-front', name: 'Public', kind: 'public', publicIpId: 'public' }],
+        pools: [{ id: 'pool', name: 'Servers', members: [backend] }],
+        probes: [{ id: 'probe', name: 'Health', protocol: 'tcp', port: 8080, health: [{ target: backend, status: 'healthy' }] }],
+        rules: [{ id: 'rule', name: 'Web', frontendId: 'lb-front', poolId: 'pool', probeId: 'probe', protocol: 'tcp',
+          frontendPort: 443, backendPort: 8443, disableOutboundSnat: true }], inboundNatRules: [], outboundRules: [] }],
+    }
+    const topology = native ? { version: 1, name: 'Native private LB',
+      hubs: [{ id: 'hub', name: 'Hub', region: 'westeurope', preference: 'ExpressRoute', routingIntent: { internet: false, private: false, privatePrefixes: [] } }],
+      spokes: [{ id: 'network', name: 'Network', hubId: 'hub', prefixes: ['10.1.0.0/16'], subnets }],
+      sites: [], connections: [], siteLinks: [], inventory }
+      : { version: 2, kind: 'azure-network-topology', name: 'Mixed LB',
+        vnets: [{ id: 'network', name: 'Network', role: 'standalone', region: 'westeurope', prefixes: ['10.1.0.0/16'], subnets, gateways: [], appliances: [] }],
+        udrTables: [], vnetPeerings: [], vwanHubs: [], erLocations: [], erLinks: [], erGlobalReachLinks: [], sites: [], vpnConnections: [], siteLinks: [], inventory }
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode: native ? 'vwan' : 'full', topology }, packet: {
+      source: internal ? { kind: 'workload', workloadId: 'client', nicId: 'client-nic', ipConfigurationId: 'client-ip' }
+        : { kind: 'external', address: '8.8.8.8' },
+      target: internal ? { kind: 'load-balancer', loadBalancerId: 'lb', frontendId: 'lb-front' } : { kind: 'public-ip', publicIpId: 'public' },
+      protocol: 'tcp', sourcePort: 49152, destinationPort: 443,
+    } }
+    const result = await page.evaluate((request) => window.desktopSimulator.simulate(request), input)
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual(executePlatform(input))
+    expect(result.value.packet).toMatchObject({ ingress: 'configured', loadBalancer: { selected: backend },
+      reply: { routing: 'reachable', session: 'conditional-response' } })
+    inventory.loadBalancers[0].probes[0].health[0].status = 'unknown'
+    const unknown = await page.evaluate((request) => window.desktopSimulator.simulate(request), input)
+    expect(unknown.ok).toBe(true)
+    expect(unknown.value.packet.ingress).toBe('not-assessed')
+    expect(unknown.value.packet.loadBalancer.selected).toBeUndefined()
+  }
   await page.goto('app://simulator/?mode=vwan&feedback=1')
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
@@ -380,6 +425,7 @@ try {
     explicitNatFirewallNvaAndNativeHubPacketParity: true,
     scopedNsgDenialAndUnknownCapturePacketParity: true,
     explicitVmFirewallNvaIngressAndResponseOwnerParity: true,
+    originalPublicPrivateAndNativeSpokeLbPacketParity: true,
   }, null, 2))
   console.log('Desktop smoke passed: three-mode parity, native file import, offline assets, narrow IPC and blocked outbound integrations.')
 } finally { await application.close() }

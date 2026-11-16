@@ -7,9 +7,11 @@ import { simulateAzNet, traceAzNetFlow, type AzEndpointRef, type AzFlowTrace, ty
 import { applyInternetEgress } from './packet-egress'
 import { completePacketNsg, endpointNsg, type NsgAssessment, type TupleUncertainty } from './packet-security'
 import { tracePublicIngress } from './packet-ingress'
+import { traceLoadBalancer, type LoadBalancerPacketAssessment } from './packet-load-balancer'
 
 export interface WorkloadEndpoint { kind: 'workload'; workloadId: string; nicId: string; ipConfigurationId: string }
 export type PacketEndpoint = WorkloadEndpoint | { kind: 'external'; address: string } | { kind: 'public-ip'; publicIpId: string }
+  | { kind: 'load-balancer'; loadBalancerId: string; frontendId: string }
 export interface FiveTuple {
   sourceAddress: string
   destinationAddress: string
@@ -47,6 +49,7 @@ export interface PacketResult {
   translation: 'snat' | 'dnat' | 'snat-dnat' | 'none' | 'not-assessed'
   egress?: 'configured' | 'blocked' | 'legacy-implicit' | 'not-assessed'
   ingress?: 'configured' | 'blocked' | 'not-assessed'
+  loadBalancer?: LoadBalancerPacketAssessment
   limitations: string[]
   nsg?: { forward: NsgAssessment; reply: NsgAssessment }
 }
@@ -70,6 +73,11 @@ export function validatePacketRequest(input: unknown): asserts input is PacketRe
         || typeof endpoint.publicIpId !== 'string' || !endpoint.publicIpId || endpoint.publicIpId.length > 120) {
         throw new Error('Public-IP endpoints are destination-only and require an original public-IP ID.')
       }
+    } else if (endpoint.kind === 'load-balancer') {
+      if (endpoint === request.source || Object.keys(endpoint).some((key) => !['kind', 'loadBalancerId', 'frontendId'].includes(key))
+        || [endpoint.loadBalancerId, endpoint.frontendId].some((id) => typeof id !== 'string' || !id || id.length > 120)) {
+        throw new Error('Load Balancer endpoints are destination-only and require original service/frontend identities.')
+      }
     } else if (endpoint.kind === 'workload') {
       if (Object.keys(endpoint).some((key) => !['kind', 'workloadId', 'nicId', 'ipConfigurationId'].includes(key))
         || [endpoint.workloadId, endpoint.nicId, endpoint.ipConfigurationId].some((id) => typeof id !== 'string' || !id || id.length > 120)) {
@@ -90,8 +98,13 @@ export function packetEndpointOptions(topology: InventoryTopology, unknownAddres
 
 export function tracePacket(topology: InventoryTopology, request: PacketRequest, simulation?: Simulation | AzSimulationResult): PacketResult {
   validatePacketRequest(request)
+  if (request.target.kind === 'load-balancer' || request.target.kind === 'public-ip' && topology.inventory?.loadBalancers?.some((lb) =>
+    lb.frontends.some((frontend) => frontend.kind === 'public' && frontend.publicIpId === (request.target as Extract<PacketEndpoint, { kind: 'public-ip' }>).publicIpId))) {
+    return traceLoadBalancer(topology, request, simulation)
+  }
   if (request.target.kind === 'public-ip') return tracePublicIngress(topology, request, simulation)
   const resolve = (ref: PacketEndpoint) => {
+    if (ref.kind === 'load-balancer') return { reason: 'Load Balancer endpoints require their explicit service path.' }
     if (ref.kind === 'public-ip') return { reason: 'Public-IP endpoints require the explicit ingress path.' }
     if (ref.kind === 'external') {
       const ip = ipv4(ref.address)!

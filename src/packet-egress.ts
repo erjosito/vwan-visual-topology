@@ -1,4 +1,4 @@
-import { namedEndpoints, natGatewayForSubnet, type InventoryTopology } from './inventory'
+import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet, type InventoryTopology } from './inventory'
 import { cidr, formatIpv4 } from './validation'
 import type { FiveTuple, PacketLeg, PacketRequest, PacketResult } from './packet-flow'
 import { applyRouterSnat } from './packet-snat'
@@ -20,12 +20,13 @@ export function applyInternetEgress(topology: InventoryTopology, request: Packet
     workload.id === source.workloadId && nic.id === source.nicId && config.id === source.ipConfigurationId)
   if (!entry || !forward.tuple || !forward.native) return { translation: 'not-assessed', egress: 'not-assessed' }
   const native = forward.native
+  const candidates = loadBalancerOutboundCandidates(topology, source, request.protocol)
   if (Array.isArray(native) || native.traversedApplianceIds.length || native.hops.some((hop) => hop.nodeKind === 'vwan-hub' || hop.nodeKind === 'vnet-gateway')) {
     forward.reasons.push('The selected route leaves through a router or managed hub. A source-subnet NAT Gateway does not override that route; router translation is not assessed.')
     return { translation: 'not-assessed', egress: 'not-assessed' }
   }
   if (forward.routing !== 'reachable') return {
-    translation: 'not-assessed', egress: native.status === 'dropped-no-outbound-access' ? 'blocked' : 'not-assessed',
+    translation: 'not-assessed', egress: candidates.length ? 'not-assessed' : native.status === 'dropped-no-outbound-access' ? 'blocked' : 'not-assessed',
   }
   const terminal = native.hops.at(-1)
   if (terminal?.nodeKind !== 'subnet' || terminal.vnetId !== entry.nic.owner.id || terminal.subnetId !== entry.config.subnetId
@@ -48,6 +49,7 @@ export function applyInternetEgress(topology: InventoryTopology, request: Packet
   }
   let publicAddress: string | undefined
   let entity: { kind: string; id: string }
+  let lbRuleId: string | undefined
   if (gateway) {
     if (gateway.publicIpIds.length) publicAddress = topology.inventory?.publicIps.find((ip) => ip.id === gateway.publicIpIds[0])?.address
     else {
@@ -58,6 +60,22 @@ export function applyInternetEgress(topology: InventoryTopology, request: Packet
   } else if (instanceIp) {
     publicAddress = instanceIp.address
     entity = { kind: 'public-ip', id: instanceIp.id }
+  } else if (candidates.length) {
+    const mappings = new Set(candidates.map((candidate) => JSON.stringify([candidate.lb.id, candidate.pool.id,
+      candidate.frontends.map((frontend) => frontend.id).sort()])))
+    const candidate = [...candidates].sort((a, b) => a.ruleId < b.ruleId ? -1 : a.ruleId > b.ruleId ? 1 : 0)[0]
+    if (mappings.size !== 1 || candidates.some((entry) => !entry.primaryKnown || entry.unsupported || entry.lb.rulesStatus === 'unknown'
+      || entry.pool.membersStatus === 'unknown')) {
+      forward.reasons.push('Load Balancer outbound ownership, primary IPv4 association or supported rule coverage is unknown or ambiguous.')
+      return { translation: 'not-assessed', egress: 'not-assessed' }
+    }
+    const frontend = [...candidate.frontends].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)[0]
+    publicAddress = frontend?.kind === 'public' ? topology.inventory?.publicIps.find((ip) => ip.id === frontend.publicIpId)?.address : undefined
+    entity = { kind: 'load-balancer', id: candidate.lb.id }
+    lbRuleId = candidate.ruleId
+  } else if (subnet?.defaultOutboundAccess === false) {
+    forward.reasons.push('No explicit outbound method matches this packet protocol. An internal frontend or inbound NAT rule does not supply Internet SNAT.')
+    return { translation: 'not-assessed', egress: 'blocked' }
   } else {
     forward.reasons.push('Legacy implicit outbound access: the existing subnet default is preserved, but its dynamic public address and response translation are unknown.')
     return { translation: 'not-assessed', egress: 'legacy-implicit' }
@@ -68,12 +86,13 @@ export function applyInternetEgress(topology: InventoryTopology, request: Packet
   }
   const original = forward.tuple
   const translated: FiveTuple = { ...original, sourceAddress: publicAddress,
-    sourcePort: gateway ? 1024 + (original.sourcePort * 31 + original.destinationPort) % 64512 : original.sourcePort }
+    sourcePort: gateway || lbRuleId ? 1024 + (original.sourcePort * 31 + original.destinationPort) % 64512 : original.sourcePort }
   const explanation = gateway
     ? 'Standard NAT Gateway takes precedence over instance public IPs and Load Balancer outbound rules on this direct Internet route. The selected pool address and SNAT port are illustrative, not Azure allocation or capacity predictions.'
-    : 'Explicit instance public IP outbound mapping. This does not publish an inbound listener or establish security permission.'
+    : lbRuleId ? 'The declared public Load Balancer outbound configuration supplies SNAT after route selection. Instance public IP and NAT Gateway take precedence. Pool address/port choice is illustrative; proprietary allocation, exhaustion, timers and live sessions are unassessed.'
+      : 'Explicit instance public IP outbound mapping. This does not publish an inbound listener or establish security permission.'
   forward.steps = forward.steps.map((step) => step.after === null ? { ...step, after: step.before } : step)
-  forward.steps.push({ entity, before: original, after: translated, evidence: explanation })
+  forward.steps.push({ entity, before: original, after: translated, evidence: explanation, ...(lbRuleId ? { routeId: lbRuleId } : {}) })
   reply.tuple = reverse(translated)
   reply.routing = 'reachable'
   reply.session = 'conditional-response'

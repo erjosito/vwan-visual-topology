@@ -6,6 +6,7 @@ import { NatGatewayEditor } from './NatGatewayEditor'
 import { RouterSnatEditor } from './RouterSnatEditor'
 import { NsgEditor } from './NsgEditor'
 import { DnatEditor } from './DnatEditor'
+import { LoadBalancerEditor } from './LoadBalancerEditor'
 import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
 import './network-detail.css'
@@ -73,7 +74,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
       <button ref={closeButton} type="button" onClick={close} aria-label={t('Close VNet detail')}>{t('Close')}</button></header>
     {!network ? <p role="status">{t('The original network is no longer available. No replacement network is shown.')}</p> : <>
       <p><code>{owner.id}</code> · {network.prefixes.join(', ')}</p>
-      <p>{t('This is a view of the original topology. Workloads are endpoints, not extra routers. Internet egress and original subnet/NIC NSGs can be declared here; load balancers are not modeled yet.')}</p>
+      <p>{t('This is a view of the original topology. Workloads are endpoints, not extra routers. Declare original NSGs, NAT, ingress and Standard Load Balancers without adding global Internet links.')}</p>
       {error && <p role="alert" className="notice error">{error}</p>}
       {boundaries.length > 0 && <section aria-label={t('Selected flow boundaries')}>
         <h3>{t('Selected flow boundaries')}</h3>
@@ -153,6 +154,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
           {!workloads.length && <p>{t('No named workloads are declared. Legacy subnet probes remain available; they are not discovered VMs.')}</p>}
         </section>
       </div>
+      <LoadBalancerEditor topology={topology} owner={owner} change={change} onSelect={(id) => { setQuery(''); onSelect(id) }} />
       {selected && <form key={JSON.stringify([selected, nics.filter((nic) => selected.nicIds.includes(nic.id)), topology.inventory?.publicIps])} onSubmit={(event) => {
         event.preventDefault()
         const data = new FormData(event.currentTarget)
@@ -165,6 +167,9 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
               const address = String(data.get(JSON.stringify(['privateIp', nic.id, config.id]))).trim()
               if (address) config.privateIp = address
               else delete config.privateIp
+              const primary = String(data.get(JSON.stringify(['primary', nic.id, config.id])))
+              if (primary === 'unknown') delete config.primary
+              else config.primary = primary === 'primary'
               if (config.publicIpId) {
                 const publicIp = inventory.publicIps.find((entry) => entry.id === config.publicIpId)!
                 const address = String(data.get(JSON.stringify(['publicIp', publicIp.id]))).trim()
@@ -182,6 +187,10 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
           <legend>{nic.name}</legend>
           <label>{t('NIC name')}<input name={JSON.stringify(['nicName', nic.id])} required defaultValue={nic.name} maxLength={120} /></label>
           {nic.ipConfigurations.map((config) => <div key={config.id}>
+            <label>{config.name} · {t('IPv4 association role')}<select name={JSON.stringify(['primary', nic.id, config.id])}
+              aria-label={`${config.name} · ${t('IPv4 association role')}`} defaultValue={config.primary === undefined ? 'unknown' : config.primary ? 'primary' : 'secondary'}>
+              <option value="unknown">{t('Unknown')}</option><option value="primary">{t('Primary')}</option><option value="secondary">{t('Secondary')}</option>
+            </select></label>
             <label>{config.name} · {t('Private IPv4 address (blank means unknown)')}
               <input name={JSON.stringify(['privateIp', nic.id, config.id])} defaultValue={config.privateIp ?? ''} />
             </label>
@@ -207,7 +216,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
           const inventory = draft.inventory ??= { workloads: [], nics: [], publicIps: [] }
           inventory.workloads.push({ id, name, nicIds: [nicId] })
           inventory.nics.push({ id: nicId, name: `${name} NIC`, owner, ipConfigurations: [{
-            id: configId, name: 'Primary', subnetId: String(data.get('subnet')),
+            id: configId, name: 'Primary', primary: true, subnetId: String(data.get('subnet')),
             ...(address ? { privateIp: address } : {}), ...(data.get('publicIp') ? { publicIpId } : {}),
           }] })
           if (data.get('publicIp')) inventory.publicIps.push({ id: publicIpId, name: `${name} public IP`, sku: 'Standard', allocation: 'Static', ...(publicAddress ? { address: publicAddress } : {}) })
