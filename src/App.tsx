@@ -10,14 +10,13 @@ import { simulate } from './routing'
 import { ipv4, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
 import type { DiagramContextMenu } from './TopologyDiagram'
-import { TopologyContextMenu } from './TopologyContextMenu'
 import type { ContextAction } from './TopologyContextMenu'
 import { TopologyObjectEditor } from './TopologyObjectEditor'
 import type { EditorRequest } from './TopologyObjectEditor'
 import { ErLocationInfoModal } from './ErLocationInfoModal'
 import type { ErCircuitSku } from './er-locations-catalog'
 import { CanvasOverlay } from './CanvasOverlay'
-import { ClearTopologyDialog } from './ClearTopologyDialog'
+import { hubGatewayConnections } from './hub-gateways'
 import { SampleGallery } from './SampleGallery'
 import { WorkspaceTools } from './WorkspaceTools'
 import { vwanWorkspaceIdentity, vwanWorkspaceObjects } from './workspace-objects'
@@ -51,6 +50,9 @@ import { FailurePanel } from './FailurePanel'
 import { pruneDeletedInventory } from './inventory'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const HubCapabilitiesDialog = lazy(() => import('./HubCapabilitiesDialog'))
+const ClearTopologyDialog = lazy(() => import('./ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
+const TopologyContextMenu = lazy(() => import('./TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const AzureFilesPanel = lazy(() => import('./AzureFilesPanel').then((module) => ({ default: module.AzureFilesPanel })))
 const RouterSnatDialog = lazy(() => import('./RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const storageKey = 'vwan-visual-topology:v1'
@@ -119,6 +121,7 @@ function App() {
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [snatHubId, setSnatHubId] = useState<string>()
   const [clearRequested, setClearRequested] = useState(false)
+  const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [erLocationModal, setErLocationModal] = useState<{ open: boolean; peeringLocation?: string; sku?: ErCircuitSku; targetAzureRegion?: string; erLocationId?: string }>({ open: false })
   const [panel, setPanel] = useState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>()
   const [comparisonSession, setComparisonSession] = useState<ComparisonSession>()
@@ -383,7 +386,7 @@ function App() {
     setSelection(value)
   }
   useDeleteShortcut(selection && !scenario.affected[selection.id] && topologyObject(topology, selection) && !editorRequest &&
-    !clearRequested && !erLocationModal.open ? () => {
+    !clearRequested && !capabilitiesHubId && !erLocationModal.open ? () => {
       setContextMenu(undefined)
       setEditorRequest({ ...selection, deleting: true })
     } : undefined)
@@ -488,6 +491,9 @@ function App() {
         { label: t("Open path explorer"), run: () => openPath(contextSelection as PathNode, 'to') },
       ] : []),
       ...(contextSelection.kind === 'hub' ? [
+        { label: t(topology.hubs.find((hub) => hub.id === contextSelection.id)?.firewall ? 'Configure Azure Firewall' : 'Add Azure Firewall'),
+          run: () => setEditorRequest({ kind: 'hub', id: contextSelection.id, focusFirewall: true }) },
+        { label: t('Gateway capabilities (modeled)'), run: () => setCapabilitiesHubId(contextSelection.id) },
         {
           label: t('Connect to spoke'), allowDisabledChildren: true,
           children: topology.spokes.length ? topology.spokes.map((spoke) => ({
@@ -773,15 +779,18 @@ function App() {
             if (editorRequest.deleting && nodeKey(value) === nodeKey(router)) { setPanel(undefined); setHighlighting(false) }
             else if (editorRequest.deleting && mapRouter && nodeKey(value) === nodeKey(mapRouter) && (panel === 'maps' || panel === 'rules' || panel === 'static')) setPanel(undefined)
           }} />}
-          {clearRequested && <ClearTopologyDialog
-            description={t("Remove all hubs, sites, spokes, ER locations, connections, route maps and saved layouts? This replaces the workspace saved in this browser and cannot be undone. Export JSON first if you need a backup.")}
+          {topology.hubs.filter((hub) => hub.id === capabilitiesHubId).map((hub) => <Suspense key={hub.id} fallback={null}>
+            <HubCapabilitiesDialog hub={hub} connections={hubGatewayConnections(topology, hub.id)} onClose={() => setCapabilitiesHubId(undefined)} />
+          </Suspense>)}
+          {clearRequested && <Suspense fallback={null}><ClearTopologyDialog
+            workspace="vwan"
             onClose={() => setClearRequested(false)}
-            onConfirm={() => { reset(validateTopology({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })); setZoom(1) }} />}
+            onConfirm={() => { reset(validateTopology({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })); setZoom(1) }} /></Suspense>}
         </div>
         <div className="legend"><span><i className="legend-line er" />ExpressRoute</span><span><i className="legend-line vpn" />VPN</span><span><i className="legend-line sdwan" />SD-WAN</span><span><i className="legend-line preferred" />{t("Preferred / flow path")}</span><span><b className="policy-tag inbound">{t("IN")}</b><b className="policy-tag outbound">{t("OUT")}</b>{t("Per-connection maps · near owning router · click for rules")}</span><span className="live-dot">{simulation.converged ? t("Routes calculated") : t("Provisional routes")}</span></div>
       </section>
     </main>
-    {contextMenu && <TopologyContextMenu key={contextSelection ? nodeKey(contextSelection) : 'canvas'} x={contextMenu.x} y={contextMenu.y} title={contextSelection ? t("{0} actions: {1}", t(objectLabels[contextSelection.kind]), contextObject?.name ?? '') : t("Canvas actions")} actions={contextActions} onClose={() => { contextMenu.invoker.focus({ preventScroll: true }); setContextMenu(undefined) }} />}
+    {contextMenu && <Suspense fallback={null}><TopologyContextMenu key={contextSelection ? nodeKey(contextSelection) : 'canvas'} x={contextMenu.x} y={contextMenu.y} title={contextSelection ? t("{0} actions: {1}", t(objectLabels[contextSelection.kind]), contextObject?.name ?? '') : t("Canvas actions")} actions={contextActions} onClose={() => { contextMenu.invoker.focus({ preventScroll: true }); setContextMenu(undefined) }} /></Suspense>}
     <footer>{t("Calculated locally in your browser · Export JSON for portable backups")}</footer>
   </div>
 }

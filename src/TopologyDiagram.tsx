@@ -15,6 +15,7 @@ import { connectionBend, fitDiagram } from './connection-geometry'
 import { useCanvasPresentation } from './useCanvasPresentation'
 import { NetworkNodeIcon as NodeIcon } from './NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from './DiagramNodeLabels'
+import { hubGatewayConnections, hubGatewayLabel } from './hub-gateways'
 import { DiagramButton } from './DiagramButton'
 import { RouteMapPreview } from './RouteMapPreview'
 import { PathMotion } from './PathMotion'
@@ -450,7 +451,15 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       const p = point(hub.id)
       const secured = Boolean(hub.firewall) || hub.routingIntent.private || hub.routingIntent.internet
       const firewallActive = secured && (tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId)
-      return <DiagramButton key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, t("Select hub {0}", hub.name))} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}><title>{hub.name} · {hub.region}{hub.label ? ` · ${hub.label}` : ''}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic'), !hub.routingIntent.private && !hub.routingIntent.internet && hub.firewall?.name].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title><rect x="-112" y="-48" width="224" height="96" rx="12" /><NodeIcon kind="hub" secured={secured} /><DiagramNodeBadge label={secured ? t("SECURED VIRTUAL HUB") : t("VIRTUAL HUB")} x={-54} y={-34} width={152} tone={secured ? 'warning' : 'info'} /><DiagramNodeText text={hub.name} x={0} y={6} width={200} fontSize={15} anchor="middle" className="node-name" /><DiagramNodeText text={hub.region} x={0} y={29} width={200} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />{renderCustomLabel(hub.id, hub.label, 62)}</DiagramButton>
+      return <DiagramButton key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, t("Select hub {0}", hub.name))} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}>
+        <title>{hub.name} · {hub.region}{hub.label ? ` · ${hub.label}` : ''}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic'), !hub.routingIntent.private && !hub.routingIntent.internet && hub.firewall?.name].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title>
+        <rect x="-112" y="-48" width="224" height="96" rx="12" /><NodeIcon kind="hub" secured={secured} />
+        <DiagramNodeBadge label={secured ? t("SECURED VIRTUAL HUB") : t("VIRTUAL HUB")} x={-54} y={-34} width={152} tone={secured ? 'warning' : 'info'} />
+        <DiagramNodeText text={hub.name} x={0} y={6} width={200} fontSize={15} anchor="middle" className="node-name" />
+        <DiagramNodeText text={hub.region} x={0} y={26} width={200} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />
+        <DiagramNodeText text={hubGatewayLabel(hubGatewayConnections(topology, hub.id))} title={t('Enabled/defined modeled connections')} x={0} y={42} width={200} fontSize={9} anchor="middle" className="node-detail" weight={400} />
+        {renderCustomLabel(hub.id, hub.label, 62)}
+      </DiagramButton>
     })}
     {topology.spokes.map((spoke) => {
       const p = point(spoke.id)

@@ -1,5 +1,10 @@
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Add Azure Firewall': 'Azure Firewall を追加',
+  'Configure Azure Firewall': 'Azure Firewall を構成',
+  'Gateway capabilities (modeled)': 'ゲートウェイ機能 (モデル)',
+  'Modeled VPN {0}/{1} · ER {2}/{3}': 'モデル: VPN {0}/{1} · ER {2}/{3}',
+  'Enabled/defined modeled connections': '有効な接続数/定義済みの接続数 (モデル)',
   'Connect to virtual hub': '仮想ハブに接続',
   'Configure virtual hub connection': '仮想ハブ接続を構成',
   'Connect to spoke': 'スポークに接続',
@@ -8,7 +13,6 @@ export const ja: Record<string, string> = {
   '{0} (connected to {1})': '{0} ({1} に接続済み)',
   '{0} (connected through an NVA)': '{0} (NVA 経由で接続済み)',
   'Clear canvas to an empty topology': 'キャンバスを空のトポロジにクリア',
-  'Clear all objects from the current topology? This replaces the saved topology in this workspace and cannot be undone. Export JSON first if you need a backup. Other workspaces, preferences and training progress are kept.': '現在のトポロジのすべてのオブジェクトをクリアしますか? このワークスペースの保存済みトポロジが置き換わり、元に戻せません。必要に応じて先に JSON をエクスポートしてください。他のワークスペース、設定、学習の進行状況は保持されます。',
   'Static hub Firewall routing': '静的ハブ Firewall ルーティング',
   'Firewall onward routes': 'Firewall 転送ルート',
   'Ambiguous or cyclic Firewall onward paths require exhaustive assessment; no single traffic hash or passing route is selected.': '曖昧または循環する Firewall 転送経路には網羅的な評価が必要です。単一のトラフィック ハッシュや成功する経路だけを選択しません。',
@@ -523,7 +527,6 @@ export const ja: Record<string, string> = {
   'Microsoft hub routing preference': 'Microsoft のハブ ルーティングの優先順位',
   'Microsoft route-map behavior and limitations': 'Microsoft のルート マップの動作と制限事項',
   'Load example (replaces workspace)': 'サンプルを読み込む (ワークスペースを置換)',
-  'Remove all hubs, sites, spokes, ER locations, connections, route maps and saved layouts? This replaces the workspace saved in this browser and cannot be undone. Export JSON first if you need a backup.': 'すべてのハブ、サイト、スポーク、ER ピアリングの場所、接続、ルート マップ、保存済みレイアウトを削除しますか? このブラウザーに保存したワークスペースが置き換わり、元に戻せません。必要に応じて先に JSON をエクスポートしてください。',
   'Cancel clearing': 'クリアをキャンセル',
   'Clear all objects': 'すべてのオブジェクトをクリア',
   'Preferred / flow path': '優先ルート / フローのパス',

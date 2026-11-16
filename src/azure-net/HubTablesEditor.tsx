@@ -7,11 +7,12 @@ import { HubStaticRoutesEditor } from '../HubStaticRoutesEditor'
 
 const words = (value: string) => [...new Set(value.split(',').map((word) => word.trim()).filter(Boolean))]
 
-export function HubTablesEditor({ hub, topology, commit, onAttach }: {
+export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall }: {
   hub: AzVwanHub
   topology: AzNetTopology
   commit: (update: (draft: AzNetTopology) => void) => void
   onAttach: (vnetId: string) => void
+  focusFirewall?: boolean
 }) {
   const tables = hubRouteTables(hub)
   const attachments = [
@@ -29,7 +30,7 @@ export function HubTablesEditor({ hub, topology, commit, onAttach }: {
     <h4>{t('Hub routing tables')}</h4>
     <p>{t('Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.')}</p>
     <p>{t('Custom tables with routing intent and arbitrary hub next hops are not assessed. Static inspection requires a declared local Azure Firewall in a single hub.')}</p>
-    <HubStaticRoutesEditor hub={hub} onChange={(owner) => commit((draft) => {
+    <HubStaticRoutesEditor hub={hub} focusFirewall={focusFirewall} onChange={(owner) => commit((draft) => {
       const target = draft.vwanHubs.find((entry) => entry.id === hub.id)!
       target.firewall = owner.firewall
       target.routeTables = owner.routeTables

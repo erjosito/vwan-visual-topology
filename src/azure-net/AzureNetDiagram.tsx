@@ -5,6 +5,8 @@ import { CanvasBackground, CanvasControls } from '../CanvasPresentation'
 import { centerOfBox, connectionBend, fitDiagram, reverseCurve } from '../connection-geometry'
 import { NetworkNodeIcon } from '../NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from '../DiagramNodeLabels'
+import { DiagramButton } from '../DiagramButton'
+import { azHubGatewayConnections, hubGatewayLabel } from '../hub-gateways'
 import { useCanvasPresentation } from '../useCanvasPresentation'
 import type { RouteMap, RouteMapAssignment, RouteMapDirection } from '../model'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
@@ -1591,7 +1593,7 @@ export function AzureNetDiagram({
           const inspected = [...forwardTraces, ...reverseTraces].some((trace) => trace.hops.some((hop) =>
             hop.nodeId === hub.id && hop.action === 'inspect-firewall'))
           return (
-            <g
+            <DiagramButton
               key={hub.id}
               data-testid={`aznet-vwanhub-${hub.id}`}
               data-firewall-traversed={inspected ? 'true' : undefined}
@@ -1649,6 +1651,7 @@ export function AzureNetDiagram({
               <DiagramNodeText text={hub.name} x={box.x + 43} y={box.y + 24} width={box.width - 55} weight={700} />
               <DiagramNodeText text={`vWAN Hub${hub.prefix ? ` (${hub.prefix})` : ''} · Pref: ${hub.preference}`} x={box.x + 14} y={box.y + 42} width={box.width - 28} fontSize={10.5} weight={400} />
               <DiagramNodeText text={`Private: ${hub.routingIntent.private ? 'On' : 'Off'} · Internet: ${hub.routingIntent.internet ? 'On' : 'Off'}`} title={`Routing Intent: Private ${hub.routingIntent.private ? 'On' : 'Off'} / Internet ${hub.routingIntent.internet ? 'On' : 'Off'}`} x={box.x + 14} y={box.y + 60} width={box.width - 28} fontSize={10} fill="var(--info)" />
+              <DiagramNodeText text={hubGatewayLabel(azHubGatewayConnections(topology, hub.id))} title={t('Enabled/defined modeled connections')} x={box.x + 14} y={box.y + 75} width={box.width - 28} fontSize={9} weight={400} />
               {hub.label?.trim() ? (
                 <g
                   data-testid={`aznet-node-label-${hub.id}`}
@@ -1677,7 +1680,7 @@ export function AzureNetDiagram({
                   </text>
                 </g>
               ) : null}
-            </g>
+            </DiagramButton>
           )
         })}
 

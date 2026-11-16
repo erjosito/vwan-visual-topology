@@ -1,12 +1,84 @@
 import { expect, test, type Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
 import { translate } from '../src/messages'
+import '../src/hub-dialog-messages-ja'
 
 async function saved(page: Page, mode: string) {
   return page.evaluate((mode) => {
     const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1')!)
     return mode === 'vwan' ? value : value.topology
   }, mode)
+}
+
+for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
+  test(`${mode} ${language}: discover Firewall without intent and inspect honest derived gateway capabilities`, async ({ page }, testInfo) => {
+    const text = (value: string) => translate(language, value)
+    const native = hubFirewallTopology()
+    delete native.hubs[0].firewall
+    for (const table of native.hubs[0].routeTables!) table.staticRoutes = []
+    native.connections[1].enabled = false
+    native.erLocations = [{ id: 'er-local', name: 'Modeled ER' }]
+    native.erLinks = [{ id: 'hub-er', name: 'Disabled hub ER', locationId: 'er-local', hubId: 'hub-local', enabled: false, learnSiteRoutes: false, hubRouting: structuredClone(native.connections[0].hubRouting) }]
+    const mixed = azHubFirewallTopology()
+    mixed.vwanHubs = structuredClone(native.hubs)
+    mixed.vpnConnections[1].enabled = false
+    mixed.erLocations = structuredClone(native.erLocations)
+    mixed.erLinks = [{ id: 'hub-er', name: 'Disabled hub ER', locationId: 'er-local', targetKind: 'vwan-hub', targetId: 'hub-local', enabled: false, hubRouting: structuredClone(native.connections[0].hubRouting) }]
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.addInitScript((language) => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
+    await page.setViewportSize(language === 'ja' ? { width: 390, height: 1000 } : { width: 1440, height: 1000 })
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'synthetic-capabilities.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(mode === 'vwan' ? native : mixed)),
+    })
+    await expect.poll(async () => (await saved(page, mode))?.name).toContain('Selective Firewall')
+    const original = await saved(page, mode)
+    const node = mode === 'vwan' ? page.locator('[data-node-id="hub-local"]') : page.getByTestId('aznet-vwanhub-hub-local')
+    await expect(node).toHaveAccessibleName(/VPN 1\/2 · ER 0\/1/)
+    await node.screenshot({ path: testInfo.outputPath('modeled-hub.png') })
+    const menu = async () => { await node.focus(); await page.keyboard.press('Shift+F10') }
+    await menu()
+    await page.getByRole('menuitem', { name: text('Gateway capabilities (modeled)'), exact: true }).click()
+    const capabilities = page.getByRole('dialog', { name: text('Gateway capabilities (modeled)'), exact: true })
+    await expect(capabilities).toBeVisible()
+    await expect(capabilities.getByTestId('hub-gateway-vpn-branch-a')).toContainText(text('Enabled'))
+    await expect(capabilities.getByTestId('hub-gateway-vpn-branch-b')).toContainText(text('Disabled'))
+    await expect(capabilities.getByTestId('hub-gateway-hub-er')).toContainText(text('Disabled'))
+    await expect(capabilities).toContainText(text('Derived from this topology, not explicit gateway inventory or live observations. SKU, public addresses and provisioning state are unknown.'))
+    await expect(capabilities).toContainText(text('No explicit local Firewall declaration.'))
+    expect((await new AxeBuilder({ page }).include('dialog[open]').analyze()).violations).toEqual([])
+    await capabilities.screenshot({ path: testInfo.outputPath('modeled-gateways.png') })
+    await page.keyboard.press('Escape')
+    await expect(capabilities).toHaveCount(0)
+    await expect(node).toBeFocused()
+    expect(await saved(page, mode)).toEqual(original)
+    await menu()
+    await page.getByRole('menuitem', { name: text('Add Azure Firewall'), exact: true }).click()
+    const declaration = page.getByRole('checkbox', { name: text('Declare local Azure Firewall'), exact: true })
+    await expect(declaration).toBeFocused()
+    await expect(declaration).not.toBeChecked()
+    await declaration.check()
+    await page.getByRole('textbox', { name: text('Local Firewall name'), exact: true }).fill('Declared original Firewall')
+    await page.getByRole('textbox', { name: text('Local Firewall name'), exact: true }).press('Tab')
+    if (mode === 'vwan') await page.getByRole('button', { name: text('Save changes'), exact: true }).click()
+    else await page.keyboard.press('Escape')
+    const result = await saved(page, mode)
+    const key = mode === 'vwan' ? 'hubs' : 'vwanHubs'
+    expect(result[key][0]).toEqual({ ...original[key][0], firewall: { id: 'fw-hub-local', name: 'Declared original Firewall' } })
+    expect(result[mode === 'vwan' ? 'connections' : 'vpnConnections']).toEqual(original[mode === 'vwan' ? 'connections' : 'vpnConnections'])
+    expect(result.erLinks).toEqual(original.erLinks)
+    await menu()
+    await page.getByRole('menuitem', { name: text('Configure Azure Firewall'), exact: true }).click()
+    await expect(declaration).toBeChecked()
+    await expect(page.getByRole('textbox', { name: text('Local Firewall ID'), exact: true })).toHaveValue('fw-hub-local')
+    await page.keyboard.press('Escape')
+    await page.reload()
+    await expect(node).toBeVisible()
+    expect(await saved(page, mode)).toEqual(result)
+    expect(errors).toEqual([])
+  })
 }
 
 for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
