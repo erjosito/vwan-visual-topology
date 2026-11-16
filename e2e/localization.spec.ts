@@ -290,7 +290,7 @@ test('Interactive documentation supports English and Japanese and syncs with sim
   await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image')
 
   await page.goto('/')
-  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /Virtual WAN Topology Lab/)
+  await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', 'Azure Networking Simulator')
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', 'https://vwan-simulator.com/og-image.png')
   const ogImgResp = await page.request.get('/og-image.png')
   expect(ogImgResp.status()).toBe(200)

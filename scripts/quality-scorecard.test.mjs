@@ -1,0 +1,44 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { scoreGroup, vitestCases, playwrightCases } from './quality-scorecard.mjs'
+
+const plan = { id: 'example', label: 'Example', files: ['src/example.test.ts'] }
+const item = (name, outcome) => ({ name, outcome, durationMs: 1, file: 'C:\\repo\\src\\example.test.ts'.replaceAll('\\', '/') })
+
+test('missing files and empty/setup-only reports cannot score 100', () => {
+  assert.equal(scoreGroup(plan, []).score, null)
+  assert.equal(scoreGroup({ ...plan, files: [...plan.files, 'missing.ts'] }, [item('one', 'passed')]).score, null)
+  assert.equal(scoreGroup(plan, [item('one', 'passed')], { completed: false }).status, 'not-assessed')
+})
+
+test('failures, skipped and flaky cases remain in denominator and identities constrain comparison', () => {
+  const result = scoreGroup(plan, [item('one', 'passed'), item('two', 'failed'), item('three', 'skipped'), item('four', 'flaky')])
+  assert.equal(result.score, 25)
+  assert.equal(result.total, 4)
+  assert.equal(result.status, 'failed')
+  assert.equal(scoreGroup(plan, [item('one', 'flaky')]).status, 'partial')
+  assert.notEqual(result.caseSetSha256, scoreGroup(plan, [item('one', 'passed')]).caseSetSha256)
+  assert.throws(() => scoreGroup(plan, [item('same', 'passed'), item('same', 'passed')]), /Duplicate/)
+})
+
+test('Vitest adapter normalizes Windows paths and preserves skipped/failing cases', () => {
+  const cases = vitestCases({ testResults: [{ name: 'C:\\repo\\src\\example.test.ts', assertionResults: [
+    { fullName: 'one', status: 'passed' }, { fullName: 'two', status: 'pending' }, { fullName: 'three', status: 'failed' },
+  ] }] })
+  assert.equal(scoreGroup(plan, cases).score, 33.33)
+  assert.throws(() => vitestCases({}), /Invalid/)
+})
+
+test('Playwright retries and expected failures never become first-attempt passes', () => {
+  const cases = playwrightCases({ config: { rootDir: 'C:/repo' }, suites: [{ title: 'file', suites: [{ title: 'group', specs: [
+    { file: 'src/example.test.ts', title: 'flaky', tests: [{ projectName: 'chromium', expectedStatus: 'passed', results: [
+      { status: 'failed', duration: 2 }, { status: 'passed', duration: 3 },
+    ] }] },
+    { file: 'src/example.test.ts', title: 'known failure', tests: [{ expectedStatus: 'failed', results: [{ status: 'failed' }] }] },
+    { file: 'src/example.test.ts', title: 'timeout', tests: [{ expectedStatus: 'passed', results: [{ status: 'timedOut' }] }] },
+  ] }] }] })
+  assert.deepEqual(cases.map((entry) => entry.outcome), ['flaky', 'skipped', 'failed'])
+  assert.equal(cases[0].durationMs, 5)
+  assert.equal(scoreGroup(plan, cases).score, 0)
+  assert.throws(() => playwrightCases({}), /Invalid/)
+})

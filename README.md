@@ -1,12 +1,16 @@
-# Virtual WAN Topology Lab
+# Azure Networking Simulator
 
-A browser-based Azure Virtual WAN topology designer and **explainable planning simulator**. No Azure credentials, backend, database, or telemetry are needed for simulation. Optional online feedback opens a pre-filled issue in the public feedback repository without OAuth consent or topology uploads.
+A browser-based Azure networking topology designer and **explainable planning simulator** for Virtual WAN and classic networks. No Azure credentials, backend, database, or telemetry are needed for simulation. Optional online feedback opens a pre-filled issue in the public feedback repository without OAuth consent or topology uploads.
 
 **Live app:** https://vwan-simulator.com or https://aznet-simulator.com. Both websites and Windows desktop start with one empty mixed-network workspace when there is no saved design. There is no architecture-mode selector. Browser-saved designs remain separate per origin.
 
 **Routing behavior and prioritized application recommendations:** [ROUTING-LOGIC.md](ROUTING-LOGIC.md).
 
 **Local platform (development):** [PLATFORM.md](PLATFORM.md) documents the shared browser/Node service, local stdio MCP/Copilot skill and unsigned Windows Electron build, including privacy boundaries, supported requirements and production release gates. The existing web UI remains browser-local; no hosting migration or cloud progress backend is introduced.
+
+**Quality evaluation:** [the scorecard](docs/quality-evaluation.md) separates automated regression conformance from human usability and learning outcomes. Run `npm run evaluate` or `npm run evaluate -- --browser` for a versioned local JSON report; passing tests do not imply a perfect usability, training or Azure-fidelity score.
+
+**Future L7/DNS design:** [the scoped contract](docs/l7-dns-design.md) separates Application Gateway/Front Door proxy legs from Traffic Manager DNS answers. These services are planned, not implemented.
 
 **Recorded-lab validation:** the [Round 2 VWAN summarization pilot](https://github.com/erjosito/net-lab-builder/tree/main/labs/vwan-routemap-summarization) replays archived VPN-branch prefix/AS-path observations without redeploying Azure. The [pinned evidence fixture and native topologies](verification/issue-98-routemap-archive.json) cover the B2B-on/no-map baseline and ER-only outbound summarization. This exposed and corrected an empty summary AS path: non-ER hub exports now retain the originating `65515` while stripping contributor ASNs. This is scoped BGP-advertisement validation, not proof of forwarding, convergence, B2B-disabled behavior, or the AS-path-filtering mitigation.
 
