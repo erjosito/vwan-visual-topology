@@ -46,6 +46,8 @@ function route(topology: InventoryTopology, simulation: Simulation | AzSimulatio
     ...(hop.hubTableId ? { tableId: hop.hubTableId } : {}) })) }
 }
 
+export { route as traceInventoryPacketLeg }
+
 export function tracePublicIngress(topology: InventoryTopology, request: PacketRequest, simulation?: Simulation | AzSimulationResult): PacketResult {
   const result: PacketResult = { source: request.source, target: request.target,
     forward: { direction: 'forward', routing: 'not-assessed', steps: [], reasons: [] },

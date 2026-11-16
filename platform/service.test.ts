@@ -21,6 +21,20 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it('counts original NSG and Load Balancer entities against the existing platform node bound', () => {
+    const owner = { kind: 'spoke', id: 'network' }
+    const topology = { version: 1, name: 'Bounded services', hubs: [], sites: [], connections: [], siteLinks: [],
+      spokes: [{ id: 'network', name: 'Network', prefixes: ['10.1.0.0/16'], subnets: [] }],
+      inventory: { workloads: [], nics: [], publicIps: [],
+        networkSecurityGroups: Array.from({ length: 256 }, (_, index) => ({ id: `nsg-${index}`, name: `NSG ${index}`, rules: [] })),
+        loadBalancers: Array.from({ length: 255 }, (_, index) => ({ id: `lb-${index}`, name: `LB ${index}`, sku: 'Standard', owner,
+          frontends: [], pools: [], probes: [], rules: [], inboundNatRules: [], outboundRules: [] })) } }
+    const input = { contractVersion: 1, operation: 'validate', document: { mode: 'vwan', topology } }
+    expect(executePlatform(input).status).toBe('complete')
+    topology.inventory.loadBalancers.push({ ...topology.inventory.loadBalancers[0], id: 'one-too-many' })
+    expect(executePlatform(input)).toMatchObject({ status: 'invalid', errors: [{ message: 'Topology node limit exceeded.' }] })
+    expect(compiled.executePlatform(input)).toEqual(executePlatform(input))
+  })
   it.each([
     ['vwan', 'hub-routing-preferences.json'],
     ['hub-spoke', 'azure-net/hub-spoke-firewall-udr.json'],

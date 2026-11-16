@@ -140,13 +140,69 @@ Public VM mappings are retained in both native families, but native-v1 does not
 invent an unmodeled direct NIC Internet return route. Appliance DNAT forwarding
 and return assessment use native-v2 original appliances and routes. Secured-hub
 private interfaces, private/forced-tunnel DNAT, multiple translating services,
-IPv6, vendor-specific policies and load-balanced frontend selection remain
+IPv6 and vendor-specific policies remain
 unassessed or separate work. Current cloud capture/Bicep and existing practice
 rubrics do not claim these new declarations; #135 tracks their integration.
 Candidate exercises include absent/default/explicit ingress NSGs, Firewall
 source-subnet filters and preserved-client NVA asymmetry, not new graded badges.
 
 Reference: [Azure Firewall NAT behaviors](https://techcommunity.microsoft.com/blog/azurenetworksecurityblog/azure-firewall-nat-behaviors/3825834).
+
+## Original regional Standard Load Balancer
+
+Optional `inventory.loadBalancers` retains one original VNet/spoke owner,
+public **Standard static public-IP** or private subnet frontends, original
+VM/NIC/IP-configuration backend pools, TCP/HTTP/HTTPS probes with explicitly
+declared healthy/unhealthy/unknown status, ordinary TCP/UDP rules and affinity,
+specific inbound NAT, and public outbound rules. Shared service and allocation
+IDs survive native saves and subnet/detail views; deleting an original backend
+or frontend prunes dependent associations rather than inventing substitutes.
+
+Public initiation selects the original public-IP allocation from an explicit
+Internet client. Internal initiation selects
+`{kind:"load-balancer",loadBalancerId,frontendId}` from an original private
+workload. It requires the existing native route to the private frontend and a
+reachable, non-translating return to the original client. Frontends do not add
+BGP/UDR routes. Backend-to-own-internal-frontend access is explicitly blocked.
+Extra appliance/gateway translation stages are unassessed.
+
+Each ordinary rule independently checks original backend addressing, declared
+health and probe NSGs before displaying **known eligible** backends. Probe
+transport filtering uses Azure's `168.63.129.16` source and TCP for TCP/HTTP/HTTPS,
+not a simulated HTTP listener or live probe timer. An associated subnet/NIC NSG
+must independently permit client data to the mapped private backend tuple.
+Unhealthy/denied probes cannot select a new backend; missing health, address or
+filter evidence remains unknown. Selection hashes stable original references
+and the declared five-tuple/client-IP affinity for **illustration**, not Azure's
+proprietary algorithm, an observed selection or existing-flow migration.
+
+Ordinary non-floating rules preserve the client source and map frontend address/
+port to an original backend. Inbound NAT targets its specific association without
+consulting health probes. Only reachable symmetric responses conditionally
+inverse-map the original frontend owner; return black holes and unsupported
+additional translating routers cannot claim an inverse or application delivery.
+Native-v1 retains private spoke frontend routing but does not invent direct NIC
+Internet return/egress paths.
+
+On native-v2 direct Internet routes, new-flow precedence is selected router/UDR,
+then Standard NAT Gateway, instance public IP, and public LB outbound SNAT.
+Explicit outbound rules use supported original primary IPv4 associations;
+ordinary public rules may supply implicit SNAT unless disabled. Internal
+frontends and inbound NAT alone supply no egress. Unknown primary role,
+membership/rule completeness, incompatible or missing allocation and ambiguous/
+unsupported coverage remain unassessed. Address/port allocation and capacity
+are illustrative. Explicit outbound rules require disabling overlapping inbound
+rule SNAT. This precedence never replaces an established LB ingress response.
+
+Public HA ports are rejected. Valid internal HA/Floating IP declarations are
+retained but packet forwarding stays explicitly unsupported; no silent DNAT,
+DSR backend OS readiness or next-hop NVA destination rewrite is inferred.
+Basic/Gateway/global LB, IPv6, VMSS orchestration, proprietary hashing, live
+health/sessions, SNAT exhaustion and L7/WAF are outside this slice. #135 still
+tracks allowlisted Azure capture/import/Bicep and new graded-learning integration.
+
+References: [components](https://learn.microsoft.com/en-us/azure/load-balancer/components),
+[outbound rules](https://learn.microsoft.com/en-us/azure/load-balancer/outbound-rules).
 
 ## Clients and data flow
 
@@ -275,7 +331,8 @@ peerings; native JSON/share URLs preserve them. Dedicated controls, legacy
 documents, practice progress and all mode selectors remain available. Automatic
 legacy-save/URL migration, unified defaults and selector retirement are #138,
 not part of this capability bridge. Supported Internet egress and NSG packet
-contracts are described below; public ingress and Load Balancers remain separate work.
+contracts are described here; public ingress and Standard Load Balancers have
+their separate bounded packet contracts above.
 
 Optional `topology.inventory` contains `workloads`, `nics` and `publicIps`.
 A workload has `id`, `name`, `nicIds` and an optional existing router
@@ -403,8 +460,9 @@ reversing known enforcement tuples without applying new reverse-initiation rules
 Unknown return translation prevents exact response NSG evidence. No persistent
 session ledger, Azure state inspection or timer/capacity behavior is modeled.
 Standard public VM/LB ingress's associated-NSG requirement is service-specific;
-its context is not generalized to internal/outbound flows. Actual public ingress
-and Load Balancer forwarding remain gated by their separate engines.
+its context is not generalized to all internal/outbound flows. Standard LB
+backend admission is service-specific, including internal frontends; actual
+public ingress and LB forwarding use their separate bounded engines above.
 
 Candidate exercises, pending their dedicated practice integration: fix a NIC
 allow masked by subnet deny; distinguish response traffic from reverse initiation;

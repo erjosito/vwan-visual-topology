@@ -24,9 +24,13 @@ export function PacketFlowPanel({ topology, simulation, onHighlight }: {
   const currentKey = JSON.stringify([topology, source, target, externalAddress, protocol, sourcePort, destinationPort])
   const result = submitted?.key === currentKey ? submitted.result : undefined
   const visible = options.filter((option) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 100)
+  const lbOptions = (topology.inventory?.loadBalancers ?? []).flatMap((lb) => lb.frontends.filter((frontend) => frontend.kind === 'private')
+    .map((frontend) => ({ key: JSON.stringify(['lb', lb.id, frontend.id]), ref: { kind: 'load-balancer' as const, loadBalancerId: lb.id, frontendId: frontend.id },
+      label: `${t('Internal LB frontend')}: ${lb.name} / ${frontend.name} (${frontend.kind === 'private' ? frontend.privateIp ?? t('Address unknown') : ''})` })))
+  const visibleLbs = lbOptions.filter((option) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 100)
   const resolve = (key: string): PacketEndpoint | undefined => key === 'external'
     ? { kind: 'external', address: externalAddress } : key.startsWith('public:')
-      ? { kind: 'public-ip', publicIpId: key.slice('public:'.length) } : options.find((option) => option.key === key)?.ref
+      ? { kind: 'public-ip', publicIpId: key.slice('public:'.length) } : lbOptions.find((option) => option.key === key)?.ref ?? options.find((option) => option.key === key)?.ref
   const select = (kind: 'source' | 'target', value: string, change: (value: string) => void) => <label>
     {t(kind === 'source' ? 'Packet source' : 'Packet destination')}
     <select value={value} onChange={(event) => change(event.target.value)} aria-label={t(kind === 'source' ? 'Packet source' : 'Packet destination')}>
@@ -35,6 +39,9 @@ export function PacketFlowPanel({ topology, simulation, onHighlight }: {
       {kind === 'target' && topology.inventory?.publicIps.map((ip) => <option key={ip.id} value={`public:${ip.id}`}>
         {t('Public ingress frontend')}: {ip.name} ({ip.address ?? t('Address unknown')})
       </option>)}
+      {kind === 'target' && lbOptions.find((option) => option.key === value) && !visibleLbs.some((option) => option.key === value)
+        && <option value={value}>{lbOptions.find((option) => option.key === value)!.label}</option>}
+      {kind === 'target' && visibleLbs.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
       {value && !visible.some((option) => option.key === value) && options.find((option) => option.key === value) && <option value={value}>{options.find((option) => option.key === value)!.label}</option>}
       {visible.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
     </select>
@@ -65,7 +72,20 @@ export function PacketFlowPanel({ topology, simulation, onHighlight }: {
     {error && <p role="alert">{error}</p>}
     {submitted && !result && <p role="status">{t('The topology or probe changed. Run the probe again for current evidence.')}</p>}
     {result && <div data-testid="packet-flow-result">
-      {result.ingress && <p><strong>{t('Public ingress')}: {t(result.ingress)}</strong></p>}
+      {result.ingress && <p><strong>{t(result.loadBalancer ? 'Load Balancer ingress' : 'Public ingress')}: {t(result.ingress)}</strong></p>}
+      {result.loadBalancer && <section data-testid="packet-lb-result" aria-label={t('Load Balancer selection')}>
+        <h4>{t('Load Balancer selection')}: <code>{result.loadBalancer.id} · {result.loadBalancer.ruleId}</code></h4>
+        <p>{t('Illustrative new-flow selection, not an observed Azure hash or session. Unknown health stays unknown; client data rules are evaluated separately.')}</p>
+        <p>{t('Known eligible backends')}: {result.loadBalancer.eligible.length}</p>
+        {result.loadBalancer.selected && <p>{t('Illustrative backend')}: <code>{result.loadBalancer.selected.workloadId} · {result.loadBalancer.selected.nicId} · {result.loadBalancer.selected.ipConfigurationId}</code></p>}
+        <details><summary>{t('Independent probe checks')} ({result.loadBalancer.probes.length})</summary>
+          {result.loadBalancer.probes.slice(0, 100).map((probe) => <article key={JSON.stringify(probe.target)}>
+            <code>{probe.target.workloadId} · {probe.target.nicId}</code>
+            <p>{t('Declared backend health (unverified)')}: {t(probe.declared)} · {t(probe.eligibility)}</p>
+            {probe.checks.map((check, index) => <p key={index}><code>{check.nsgId ?? 'NSG —'} · {check.ruleId ?? check.target.id}</code> · {t(check.outcome)}: {t(check.reason)}</p>)}
+          </article>)}
+        </details>
+      </section>}
       {result.ingress && result.forward.steps.filter((step) => step.entity.kind === 'workload').map((step) => <p key={step.entity.id}>
         {t('Translated destination')}: <code>{step.entity.id}</code>{' '}
         {onHighlight && <button type="button" onClick={() => onHighlight(step.entity.id)}>{t('Highlight original backend')}</button>}

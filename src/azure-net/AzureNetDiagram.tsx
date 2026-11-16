@@ -1356,7 +1356,7 @@ export function AzureNetDiagram({
                 const badgeText = rt ? `RT: ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}` : ''
                 const inventory = inventoryCounts(topology, { kind: 'vnet', id: vnet.id }, subnet.id)
                 const hasNat = inventory.natGateways > 0 || subnet.internetEgressStatus === 'unknown'
-                const inventoryWidth = (inventory.nics ? 90 : 0) + (hasNat ? 38 : 0) + (inventory.nsgs ? 42 : 0)
+                const inventoryWidth = (inventory.nics ? 90 : 0) + (hasNat ? 38 : 0) + (inventory.nsgs ? 42 : 0) + (inventory.loadBalancers ? 38 : 0)
                 const badgeW = rt ? Math.min(88, Math.max(42, badgeText.length * 4.8 + 10)) : 0
                 const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW - inventoryWidth
                 const labelClipId = `${tooltipId}-subnet-${vnetIndex}-${sIdx}`
@@ -1386,7 +1386,7 @@ export function AzureNetDiagram({
                     data-testid={`aznet-subnet-${subnet.id}`}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}`}
+                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}${inventory.loadBalancers ? ` · LB ${inventory.loadBalancers}` : ''}`}
                     aria-describedby={hoverPopover?.kind === 'subnet' && hoverPopover.subnetId === subnet.id ? tooltipId : undefined}
                     onMouseEnter={(e) => showSubnet(e.clientX, e.clientY)}
                     onMouseLeave={scheduleClosePopover}
@@ -1452,6 +1452,11 @@ export function AzureNetDiagram({
                       <title>NSG {inventory.nsgs}</title>
                       <rect x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - (hasNat ? 38 : 0) - 40} y={rowY + 3} width={37} height={18} rx={6} fill="var(--surface)" stroke="var(--border)" />
                       <text x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - (hasNat ? 38 : 0) - 21} y={rowY + 16} textAnchor="middle" fontSize={9} fill="var(--text)">NSG {inventory.nsgs}</text>
+                    </g>}
+                    {inventory.loadBalancers > 0 && <g data-testid="aznet-subnet-lb-pill">
+                      <title>{t('Standard Load Balancers')}: {inventory.loadBalancers}</title>
+                      <rect x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - (hasNat ? 38 : 0) - (inventory.nsgs ? 42 : 0) - 36} y={rowY + 3} width={33} height={18} rx={6} fill="var(--surface)" stroke="var(--border)" />
+                      <text x={box.x + box.width - (hasPe ? 42 : 12) - (inventory.nics ? 90 : 0) - (hasNat ? 38 : 0) - (inventory.nsgs ? 42 : 0) - 20} y={rowY + 16} textAnchor="middle" fontSize={9} fill="var(--text)">LB {inventory.loadBalancers}</text>
                     </g>}
                     {inventory.nics > 0 && <g data-testid="aznet-subnet-inventory-pill">
                       <title>{t('{0} workloads, {1} NICs, {2} public IP associations. Open VNet detail for the original entities.', inventory.workloads, inventory.nics, inventory.publicIps)}</title>

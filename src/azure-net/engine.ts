@@ -1,5 +1,5 @@
 import { cidr, contains, ipv4 } from '../validation'
-import { namedEndpoints, natGatewayForSubnet } from '../inventory'
+import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
@@ -2371,14 +2371,20 @@ export function traceAzNetFlow(
           const instancePublicIp = source.kind === 'subnet' && source.vnetId === vnet.id && source.subnetId === subnet.id
             && options?.sourceAddress && namedEndpoints(topology).some(({ nic, config }) => nic.owner.id === vnet.id
               && config.subnetId === subnet.id && config.privateIp === options.sourceAddress && config.publicIpId)
-          if (subnet.internetEgressStatus === 'unknown' && !natGateway && !instancePublicIp) {
+          const lbEndpoint = source.kind === 'subnet' && source.vnetId === vnet.id && source.subnetId === subnet.id
+            && options?.sourceAddress ? namedEndpoints(topology).find(({ nic, config }) => nic.owner.id === vnet.id
+              && config.subnetId === subnet.id && config.privateIp === options.sourceAddress) : undefined
+          const loadBalancerOutbound = lbEndpoint && loadBalancerOutboundCandidates(topology, {
+            workloadId: lbEndpoint.workload.id, nicId: lbEndpoint.nic.id, ipConfigurationId: lbEndpoint.config.id,
+          }).some((candidate) => candidate.primaryKnown && !candidate.unsupported && candidate.lb.rulesStatus !== 'unknown' && candidate.pool.membersStatus !== 'unknown')
+          if (subnet.internetEgressStatus === 'unknown' && !natGateway && !instancePublicIp && !loadBalancerOutbound) {
             const reason = 'Captured Internet egress association is incomplete or unsupported; its absence is not proof of no outbound method.'
             pushHop({ nodeKind: 'subnet', nodeId: subnet.id, vnetId: vnet.id, nodeName: subnet.name, subnetId: subnet.id,
               action: 'subnet-lookup', matchedRoute: matched, detail: reason })
             return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed', hops,
               traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
           }
-          if (subnet.defaultOutboundAccess === false && !natGateway && !instancePublicIp) {
+          if (subnet.defaultOutboundAccess === false && !natGateway && !instancePublicIp && !loadBalancerOutbound) {
             pushHop({
               nodeKind: 'subnet',
               nodeId: subnet.id,
@@ -2411,7 +2417,7 @@ export function traceAzNetFlow(
             subnetName: subnet.name,
             action: 'delivered',
             matchedRoute: matched,
-            detail: `Egresses directly to Internet from ${vnet.name}/${subnet.name} (${natGateway ? 'explicit NAT Gateway' : instancePublicIp ? 'explicit instance public IP' : 'legacy default outbound access'}); this route probe does not assess translation or security.`,
+            detail: `Egresses directly to Internet from ${vnet.name}/${subnet.name} (${natGateway ? 'explicit NAT Gateway' : instancePublicIp ? 'explicit instance public IP' : loadBalancerOutbound ? 'Load Balancer outbound configuration (packet protocol not assessed)' : 'legacy default outbound access'}); this route probe does not assess translation or security.`,
           })
           return {
             source,

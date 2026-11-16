@@ -104,9 +104,11 @@ export function validateRequest(input: unknown): PlatformRequest {
 }
 
 function normalize(document: PlatformDocument): PlatformDocument {
-  const checkNodes = (count: number, inventory?: { workloads: unknown[]; nics: unknown[]; publicIps: unknown[]; natGateways?: unknown[]; publicIpPrefixes?: unknown[] }) => {
+  const checkNodes = (count: number, inventory?: { workloads: unknown[]; nics: unknown[]; publicIps: unknown[]; natGateways?: unknown[]; publicIpPrefixes?: unknown[];
+    networkSecurityGroups?: unknown[]; loadBalancers?: unknown[] }) => {
     if (count + (inventory ? inventory.workloads.length + inventory.nics.length + inventory.publicIps.length
-      + (inventory.natGateways?.length ?? 0) + (inventory.publicIpPrefixes?.length ?? 0) : 0) > platformLimits.maxNodes) throw new Error('Topology node limit exceeded.')
+      + (inventory.natGateways?.length ?? 0) + (inventory.publicIpPrefixes?.length ?? 0)
+      + (inventory.networkSecurityGroups?.length ?? 0) + (inventory.loadBalancers?.length ?? 0) : 0) > platformLimits.maxNodes) throw new Error('Topology node limit exceeded.')
   }
   if (document.mode === 'vwan') {
     const topology = validateTopology(document.topology)
