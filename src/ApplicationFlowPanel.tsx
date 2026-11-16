@@ -6,6 +6,7 @@ import { sameInventoryOwner } from './inventory'
 import { packetEndpointOptions } from './packet-flow'
 import { runBrowserSimulation } from './platform/browser'
 import { t } from './i18n'
+import './application-messages-ja'
 
 export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
   topology: InventoryTopology

@@ -1,10 +1,12 @@
 import { expect, test } from '@playwright/test'
+import type { ElectronApplication } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { applicationFixture, applicationPlatformRequest } from '../tests/fixtures/application'
 import { executePlatform } from '../src/platform/service'
 import { translate } from '../src/messages'
+import '../src/application-messages-ja'
 
 for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   for (const locale of ['en', 'ja'] as const) {
@@ -125,8 +127,9 @@ test('native edit/undo/export retains application identities and blocks deleting
 test('offline Electron keeps unavailable contracts honest through UI and desktop worker', async ({ playwright }, testInfo) => {
   const profile = testInfo.outputPath('electron-profile')
   await mkdir(profile, { recursive: true })
-  const application = await playwright._electron.launch({ args: [resolve('platform-dist', 'electron', 'main.cjs'), `--user-data-dir=${profile}`] })
+  let application: ElectronApplication | undefined
   try {
+    application = await playwright._electron.launch({ args: [resolve('platform-dist', 'electron', 'main.cjs'), `--user-data-dir=${profile}`] })
     const page = await application.firstWindow(), topology = applicationFixture('full')
     await page.getByTestId('aznet-app').waitFor()
     await page.evaluate((topology) => {
@@ -143,5 +146,8 @@ test('offline Electron keeps unavailable contracts honest through UI and desktop
     const result = await page.evaluate(async (request) => window.desktopSimulator!.simulate(request), applicationPlatformRequest())
     expect(result).toEqual({ ok: true, value: executePlatform(applicationPlatformRequest()) })
     await page.screenshot({ path: testInfo.outputPath('electron-ja-offline-contracts.png'), fullPage: true })
-  } finally { await application.close() }
+  } finally {
+    try { await application?.close() }
+    finally { await rm(profile, { recursive: true, force: true }) }
+  }
 })
