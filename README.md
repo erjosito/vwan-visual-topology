@@ -2,6 +2,10 @@
 
 A browser-based Azure networking topology designer and **explainable planning simulator** for Virtual WAN and classic networks. No Azure credentials, backend, database, or telemetry are needed for simulation. Optional online feedback opens a pre-filled issue in the public feedback repository without OAuth consent or topology uploads.
 
+**License:** [MIT](LICENSE). Third-party dependencies and assets remain subject to their respective licenses and terms.
+
+**Privacy:** [Privacy policy](PRIVACY.md) covers local storage, website hosting, optional Azure collection, feedback, sharing, and MCP/AI clients.
+
 **Live app:** https://vwan-simulator.com or https://aznet-simulator.com. Both websites and Windows desktop start with one empty mixed-network workspace when there is no saved design. There is no architecture-mode selector. Browser-saved designs remain separate per origin.
 
 **Routing behavior and prioritized application recommendations:** [ROUTING-LOGIC.md](ROUTING-LOGIC.md).
