@@ -145,12 +145,37 @@ repairs are open-ended; no guest/listener or live-session readiness is certified
 
 Practice JSON is an **independent draft**, saved locally on edits. **Open draft
 in visual editor** validates it using the shared worker and requires explicit
-replacement confirmation; export a normal design first. After visual editing,
+confirmation before opening a **protected practice workspace**. Normal designs
+are not replaced. After visual editing,
 reopen learning and **Copy workspace configuration into practice** before
 assessment. Copying does not include temporary failure overlays. **Assess
 practice draft** grades that exact snapshot using the P1 browser-worker adapter;
 editing cancels pending work and visibly invalidates earlier displayed evidence.
 Changing native editors cannot display a previous editor's assessment.
+
+The root owns one separate practice canvas in
+`network-simulator:practice-workspace:v1`, including stable course/scenario IDs,
+the native document, active/resume state and the normal return provider.
+Normal document keys (`vwan-visual-topology:v1`, `aznet-visual-topology:v1`),
+selection and preserved-original archives are not practice save destinations.
+VWAN layout mode/positions and mixed-network node `x`/`y` coordinates remain
+inside their respective native documents. Display preferences stay shared.
+**Return to my design** and **Resume practice** keep independent undo/redo stacks
+during the same page session; reload restores documents/layouts, not undo stacks.
+An active saved practice resumes on ordinary reload. Explicit mode, sample and
+shared-snapshot links take precedence and leave practice available to resume.
+Panel reopen and exercise selection do not reload a starter; only confirmed
+visual opening replaces the previous practice canvas.
+
+Initial practice persistence must succeed before a starter opens. Subsequent
+save failures keep the latest practice in memory with a visible session-only
+warning; it remains resumable for export before reload. Damaged practice is
+preserved and blocks replacement until confirmed **Discard practice workspace**,
+which deletes only the practice-canvas key, not drafts, achievements, preferences
+or normal designs. Known stale writes/discards refuse to overwrite another
+tab's saved practice; this is not atomic multi-tab ownership or synchronization.
+The existing picker/draft assessment remains transitional: the guided sidebar,
+task runner and awarded-points progression are separate learning-epic stages.
 
 Local progress uses `aznet-simulator:practice:v1` in localStorage, independently
 of normal topology saves: at most nine 200,000-character drafts within the existing

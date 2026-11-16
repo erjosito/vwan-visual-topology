@@ -1,10 +1,19 @@
 # Guided course authoring contract
 
-Stage 1 of #176 / #179. These files are **author-time contracts and examples**.
-The existing nine-exercise modal, practice-v1 storage, routing engines and UI are
-unchanged. No course runner, navigation adapter, new save format or migration is
-activated by importing the examples in tests. Delivery is tracked in #182,
-#178, #180, #183, #184 and #181.
+Stage 1 of #176 / #179. The `course-*` files are **author-time contracts and
+examples**; importing them does not activate a course runner or award points.
+Stage 2 (#182) adds a protected canvas beneath the transitional nine-exercise
+modal; its independent draft/achievement storage and routing engines remain
+unchanged. Sidebar, semantic guidance, runner, progression and full-curriculum
+delivery are tracked separately in #178, #180, #183, #184 and #181.
+
+The root's `openPractice({ courseId, scenarioId, document }, signal)` session API
+accepts a copied native scenario after explicit confirmation; it does not look
+up lesson names or hardcode the curriculum. Opening/selecting lesson content must
+not invoke it implicitly. Resume the existing canvas instead of loading its
+starter again. `practice-workspace.ts` owns the separate canvas envelope; it is
+not the course progress/award ledger. See `PLATFORM.md` for exact persistence,
+return, recovery and same-session history behavior.
 
 ## What goes where
 

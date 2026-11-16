@@ -10,6 +10,7 @@ import { emptyProgress, entryFor, maxDraftChars, parseProgress, progressKey, rec
 import type { Progress } from './progress'
 import './learning.css'
 import { useWorkspaceSession } from '../workspace-context'
+import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './practice-workspace'
 
 export function LearningDialog({ document: workspace, onOpen, initialOpen = false }: {
   document: PlatformDocument
@@ -107,10 +108,17 @@ export function LearningDialog({ document: workspace, onOpen, initialOpen = fals
       const admitted = await runBrowserSimulation({ ...request, operation: 'validate' }, controller.signal)
       if (job.current !== controller || controller.signal.aborted) return
       if (admitted.status !== 'complete' || !admitted.document) throw new Error('Invalid draft')
-      if (!matchingMode && session) await session.openDocument(admitted.document.topology)
+      if (session?.openPractice) await session.openPractice({
+        courseId: 'local-practice', scenarioId: exercise.id, document: admitted.document,
+      }, controller.signal)
+      else if (!matchingMode && session) await session.openDocument(admitted.document.topology)
       else onOpen(admitted.document)
       close()
-    } catch { if (job.current === controller) setError(text(labels.invalid, language)) }
+    } catch (error) {
+      if (job.current === controller) setError(text(error instanceof Error && error.message === practiceReadFailure ? labels.practiceReadFailure
+        : error instanceof Error && error.message === practiceConflict ? labels.practiceConflict
+        : error instanceof Error && error.message === practiceSaveFailure ? labels.practiceStartFailure : labels.invalid, language))
+    }
     finally { if (job.current === controller) { job.current = undefined; setRunning(false) } }
   }
 

@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useState } from 'react'
 import type { Topology } from './model'
 import { validateTopology } from './validation'
+import { useWorkspaceSession } from './workspace-context'
 
 export interface UseTopologyHistoryOptions {
   storageKey: string
@@ -18,7 +19,13 @@ export function useTopologyHistory({
   onBeforeUndoRedo,
   onAfterChange,
 }: UseTopologyHistoryOptions) {
+  const session = useWorkspaceSession()
+  const [cached] = useState(() => session?.getEditorHistory?.())
   const [initial] = useState(() => {
+    if (cached?.provider === 'vwan') return cached
+    if (session?.practice?.document.mode === 'vwan') {
+      return { topology: session.practice.document.topology, error: '', backup: '' }
+    }
     let saved: string | null = null
     try {
       saved = localStorage.getItem(storageKey)
@@ -37,13 +44,20 @@ export function useTopologyHistory({
   })
 
   const [topology, setTopology] = useState<Topology>(initial.topology)
-  const [history, setHistory] = useState<{ past: Topology[]; future: Topology[] }>({ past: [], future: [] })
+  const [history, setHistory] = useState<{ past: Topology[]; future: Topology[] }>(() =>
+    cached?.provider === 'vwan' ? { past: cached.past, future: cached.future } : { past: [], future: [] })
   const [error, setError] = useState(initial.error)
   const [saveError, setSaveError] = useState('')
+  useLayoutEffect(() => {
+    session?.rememberEditorHistory?.({
+      provider: 'vwan', topology, past: history.past, future: history.future, error, backup: initial.backup,
+    })
+  }, [session, topology, history, error, initial.backup])
 
   const persist = (next: Topology) => {
     try {
-      localStorage.setItem(storageKey, JSON.stringify(next))
+      if (session?.practice && session.savePractice) session.savePractice({ mode: 'vwan', topology: next })
+      else localStorage.setItem(storageKey, JSON.stringify(next))
       setSaveError('')
     } catch {
       setSaveError('Browser storage is unavailable or full. Export JSON to preserve your topology.')

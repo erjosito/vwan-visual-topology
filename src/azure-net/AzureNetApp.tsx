@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { InputHTMLAttributes } from 'react'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
@@ -249,7 +249,15 @@ function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttr
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
-  const initialResolved = useMemo(() => {
+  const [cachedHistory] = useState(() => workspaceSession?.getEditorHistory?.())
+  const [initialResolved] = useState(() => {
+    if (cachedHistory?.provider === 'azure-net') return {
+      sampleId: cachedHistory.sampleId, topology: cachedHistory.topology,
+      snapshotImported: false, recovery: cachedHistory.recovery,
+    }
+    if (workspaceSession?.practice && workspaceSession.practice.document.mode !== 'vwan') return {
+      sampleId: '', topology: workspaceSession.practice.document.topology, snapshotImported: false, recovery: [],
+    }
     // Access localStorage inside loadAzWorkspace's try/catch (the getter itself may throw).
     const stored = loadAzWorkspace({ getItem: (key) => window.localStorage.getItem(key) }, window.location.hash)
     if (stored.snapshotImported) return stored
@@ -258,20 +266,29 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return { ...stored, sampleId: urlSample.id, topology: parseAzNetTopology(urlSample.topology) }
     }
     return stored
-  }, [])
+  })
 
   const [sampleId, setSampleId] = useState<string>(initialResolved.sampleId)
   const [topology, setTopology] = useState<AzNetTopology>(initialResolved.topology)
-  const [history, setHistory] = useState<AzNetTopology[]>([])
-  const [future, setFuture] = useState<AzNetTopology[]>([])
+  const [history, setHistory] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.past : [])
+  const [future, setFuture] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.future : [])
   const [recoveryEntries, setRecoveryEntries] = useState(initialResolved.recovery)
-  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(initialResolved.recovery.length === 0)
+  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(() =>
+    cachedHistory?.provider === 'azure-net' ? cachedHistory.recoveryAcknowledged : initialResolved.recovery.length === 0)
   const [saveError, setSaveError] = useState('')
   const [workspaceNotice, setWorkspaceNotice] = useState('')
   const [pendingUrlSample, setPendingUrlSample] = useState(() => {
+    if (workspaceSession?.practice) return ''
+    if (cachedHistory?.provider === 'azure-net') return cachedHistory.pendingUrlSample
     const requested = new URLSearchParams(window.location.search).get('sample') ?? ''
     return !initialResolved.snapshotImported && /^[a-z0-9-]+$/.test(requested) && !resolveInitialUrlSample() ? requested : ''
   })
+  useLayoutEffect(() => {
+    workspaceSession?.rememberEditorHistory?.({
+      provider: 'azure-net', topology, sampleId, past: history, future, recovery: recoveryEntries,
+      recoveryAcknowledged, pendingUrlSample,
+    })
+  }, [workspaceSession, topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, pendingUrlSample])
   const [activeTab, setActiveTab] = useState<InspectorTab | null>(null)
   const [selected, setInspectedEntity] = useState<AzSelectedEntity>(() =>
     defaultSelected(initialResolved.topology),
@@ -338,12 +355,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (!recoveryAcknowledged || pendingUrlSample) return
     try {
       parseAzNetTopology(topology)
-      measureAzWork('persist', () => window.localStorage.setItem(
-        AZNET_STORAGE_KEY,
-        JSON.stringify({ sampleId, topology }),
-      ))
+      if (workspaceSession?.practice && workspaceSession.savePractice) {
+        workspaceSession.savePractice({ mode: workspaceSession.practice.document.mode === 'hub-spoke' ? 'hub-spoke' : 'full', topology })
+      } else {
+        measureAzWork('persist', () => window.localStorage.setItem(
+          AZNET_STORAGE_KEY,
+          JSON.stringify({ sampleId, topology }),
+        ))
+      }
       setSaveError('')
-      consumeAzSnapshotUrl()
+      if (!workspaceSession?.practice) consumeAzSnapshotUrl()
     } catch (error) {
       setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Export JSON to preserve this design; saved originals and URL snapshots have not been overwritten.`)
     }
@@ -670,6 +691,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [workspaceSession?.capture])
 
   const importLiveSnapshot = useEffectEvent(() => {
+    if (workspaceSession?.practice) return
     if (!/(?:#|&)s=/.test(window.location.hash)) return
     const loaded = loadAzWorkspace({ getItem: () => null }, window.location.hash)
     if (loaded.recovery.length) {
