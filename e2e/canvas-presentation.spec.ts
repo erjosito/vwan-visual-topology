@@ -5,6 +5,38 @@ import { sampleHybridVwanAndHubSpoke, sampleArsSdwanNvaCoexistence } from '../sr
 const styleKey = 'aznet-canvas-style:v1'
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  test(`${mode}: keyboard navigation keeps scrolling context-menu actions visible`, async ({ page }, testInfo) => {
+    if (mode === 'full') await page.addInitScript(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
+    await page.setViewportSize({ width: 390, height: 320 })
+    await page.goto(`/?mode=${mode}&sample=${mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'}`)
+    const topologyKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), topologyKey)).not.toBeNull()
+    const original = await page.evaluate((key) => localStorage.getItem(key), topologyKey)
+    const node = page.locator(mode === 'vwan' ? '.spoke-node' : '[data-testid^="aznet-vnet-"]').first()
+    await node.focus()
+    await page.keyboard.press('Shift+F10')
+    const menu = page.getByRole('menu').first()
+    await expect(menu).toBeVisible()
+    expect(await menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+    for (const key of ['End', 'ArrowUp', 'Home', 'ArrowDown']) {
+      await page.keyboard.press(key)
+      const visibleFocus = await menu.evaluate((element) => {
+        const focused = document.activeElement
+        if (!focused || !element.contains(focused)) return false
+        const item = focused.getBoundingClientRect(), bounds = element.getBoundingClientRect()
+        return item.top >= bounds.top && item.bottom <= bounds.bottom
+      })
+      expect(visibleFocus).toBe(true)
+      if (key === 'End') await page.screenshot({ path: testInfo.outputPath(`${mode}-keyboard-menu.png`) })
+    }
+    await page.keyboard.press('Escape')
+    await expect(menu).toHaveCount(0)
+    await expect(node).toBeFocused()
+    expect(await page.evaluate((key) => localStorage.getItem(key), topologyKey)).toBe(original)
+  })
+}
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode} keeps long node headers inside shared badges and label bounds`, async ({ page }, testInfo) => {
     const topology = mode === 'vwan' ? structuredClone(example) : structuredClone(sampleHybridVwanAndHubSpoke)
     const nodes = 'hubs' in topology ? [...topology.hubs, ...topology.spokes, ...topology.sites, ...(topology.erLocations ?? [])] :

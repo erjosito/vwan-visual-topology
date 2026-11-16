@@ -63,7 +63,7 @@ function MenuLevel({ x = 0, y = 0, title, actions, anchor, preferredSide = 'righ
         const items = Array.from(menu.current!.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'))
         const current = items.findIndex((button) => button === document.activeElement)
         const index = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1 : (current + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
-        items[index]?.focus({ preventScroll: true })
+        items[index]?.focus()
       }
     }}>
       <div role="presentation" className="context-menu-title">{onBack && <button role="menuitem" className="submenu-back" aria-label={t("Back from {0}", title)} onClick={onBack}><span aria-hidden="true" className="menu-chevron back" /></button>}<span>{title}</span></div>
