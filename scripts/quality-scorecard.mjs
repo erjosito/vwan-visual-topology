@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 2
+export const scorecardVersion = 3
+// Keep document-derived contract fixtures distinct from regression and live Azure evidence.
+export const modelContractPlan = { unit: [], browser: [] }
 export const unitPlan = [
   { id: 'routing-packet-regressions', label: 'Routing/packet regression conformance', files: [
     'src/routing.test.ts', 'src/paths.test.ts', 'src/vpn-routing.test.ts', 'src/vpn-nat.test.ts', 'src/hub-routing.test.ts',

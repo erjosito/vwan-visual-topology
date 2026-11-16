@@ -2,17 +2,23 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve, relative, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, execFileSync } from 'node:child_process'
-import { scorecardVersion, unitPlan, browserPlan, digest, vitestCases, playwrightCases, scoreGroup } from './quality-scorecard.mjs'
+import { scorecardVersion, unitPlan, modelContractPlan, browserPlan, digest, vitestCases, playwrightCases, scoreGroup } from './quality-scorecard.mjs'
+import { accessibilityPlan, scoreAccessibility } from './accessibility-scorecard.mjs'
+import { auditAccessibility } from './audit-accessibility.mjs'
 
 const root = fileURLToPath(new URL('../', import.meta.url))
 process.chdir(root)
 const args = process.argv.slice(2)
 const browser = args.includes('--browser')
+const accessibilityOnly = args.includes('--accessibility-only')
+const regressionPlan = [...unitPlan, ...modelContractPlan.unit]
+const workflowPlan = [...browserPlan, ...modelContractPlan.browser]
 const outputIndex = args.indexOf('--output')
 const output = outputIndex >= 0 ? args[outputIndex + 1] : 'test-artifacts/quality/latest.json'
 if (!output || output.startsWith('--') || args.filter((arg) => arg === '--output').length > 1
-  || args.some((arg, index) => !['--browser', '--output'].includes(arg) && !(outputIndex >= 0 && index === outputIndex + 1))) {
-  throw new Error('Usage: npm run evaluate -- [--browser] [--output path.json]')
+  || (browser && accessibilityOnly)
+  || args.some((arg, index) => !['--browser', '--accessibility-only', '--output'].includes(arg) && !(outputIndex >= 0 && index === outputIndex + 1))) {
+  throw new Error('Usage: npm run evaluate -- [--browser | --accessibility-only] [--output path.json]')
 }
 const runId = new Date().toISOString().replaceAll(/[:.]/g, '-') + `-${process.pid}`
 const artifacts = resolve('test-artifacts', 'quality', runId)
@@ -44,57 +50,70 @@ const metrics = []
 const errors = []
 let server
 try {
-  const ready = await command('node_modules/typescript/bin/tsc', ['-p', 'tsconfig.platform.json'])
-    && await command('scripts/build-platform.mjs', [])
-  if (!ready) throw new Error('Platform build failed; regression evidence is not assessed')
-  const unitFile = resolve(artifacts, 'vitest.json')
-  const unitOk = await command('node_modules/vitest/vitest.mjs', [
-    'run', ...unitPlan.flatMap((group) => group.files), '--maxWorkers=2', '--retry=0', '--reporter=json', `--outputFile=${unitFile}`,
-  ])
-  const unitReport = JSON.parse(await readFile(unitFile, 'utf8'))
-  const units = vitestCases(unitReport)
-  metrics.push(...unitPlan.map((group) => scoreGroup(group, units)))
-  if (!unitOk || unitReport.success !== true) errors.push('Vitest runner failed (including setup/unhandled errors); gate is blocked even if individual cases passed.')
-  if (browser) {
+  if (!accessibilityOnly) {
+    const ready = await command('node_modules/typescript/bin/tsc', ['-p', 'tsconfig.platform.json'])
+      && await command('scripts/build-platform.mjs', [])
+    if (!ready) throw new Error('Platform build failed; regression evidence is not assessed')
+    const unitFile = resolve(artifacts, 'vitest.json')
+    const unitOk = await command('node_modules/vitest/vitest.mjs', [
+      'run', ...regressionPlan.flatMap((group) => group.files), '--maxWorkers=2', '--retry=0', '--reporter=json', `--outputFile=${unitFile}`,
+    ])
+    const unitReport = JSON.parse(await readFile(unitFile, 'utf8'))
+    const units = vitestCases(unitReport)
+    metrics.push(...regressionPlan.map((group) => scoreGroup(group, units)))
+    if (!unitOk || unitReport.success !== true) errors.push('Vitest runner failed (including setup/unhandled errors); gate is blocked even if individual cases passed.')
+  }
+  if (browser || accessibilityOnly) {
     const { createServer } = await import('vite')
     server = await createServer({ server: {
       host: '127.0.0.1', port: 0,
       watch: { ignored: ['**/test-artifacts/**', '**/test-results/**'] },
     }, clearScreen: false })
     await server.listen()
-    const browserFile = resolve(artifacts, 'playwright.json')
-    const browserOk = await command('node_modules/@playwright/test/cli.js', [
-      'test', ...browserPlan.flatMap((group) => group.files), '--workers=2', '--reporter=json',
-      '--output', resolve(artifacts, 'browser'),
-    ], { PLAYWRIGHT_BASE_URL: server.resolvedUrls.local[0], PLAYWRIGHT_JSON_OUTPUT_FILE: browserFile })
-    const browserReport = JSON.parse(await readFile(browserFile, 'utf8'))
-    const browsers = playwrightCases(browserReport)
-    metrics.push(...browserPlan.map((group) => scoreGroup(group, browsers)))
-    if (!browserOk || browserReport.errors?.length) errors.push('Playwright runner failed; inspect local report/setup errors.')
-  } else metrics.push(...browserPlan.map((group) => scoreGroup(group, [], { completed: false })))
+    if (browser) {
+      const browserFile = resolve(artifacts, 'playwright.json')
+      const browserOk = await command('node_modules/@playwright/test/cli.js', [
+        'test', ...workflowPlan.flatMap((group) => group.files), '--workers=2', '--reporter=json',
+        '--output', resolve(artifacts, 'browser'),
+      ], { PLAYWRIGHT_BASE_URL: server.resolvedUrls.local[0], PLAYWRIGHT_JSON_OUTPUT_FILE: browserFile })
+      const browserReport = JSON.parse(await readFile(browserFile, 'utf8'))
+      const browsers = playwrightCases(browserReport)
+      metrics.push(...workflowPlan.map((group) => scoreGroup(group, browsers)))
+      if (!browserOk || browserReport.errors?.length) errors.push('Playwright runner failed; inspect local report/setup errors.')
+    }
+    const auditStart = performance.now()
+    try {
+      metrics.push(scoreAccessibility(await auditAccessibility({ baseURL: server.resolvedUrls.local[0], artifacts })))
+    } finally {
+      commands.push({ script: 'scripts/audit-accessibility.mjs', args: [],
+        durationMs: performance.now() - auditStart, execution: 'in-process; owned Chromium contexts; 45s/state deadline; no retries' })
+    }
+  } else metrics.push(...workflowPlan.map((group) => scoreGroup(group, [], { completed: false })))
 } catch (error) {
   errors.push(error.message)
 } finally {
   await server?.close()
 }
-for (const group of [...unitPlan, ...browserPlan]) {
+for (const group of [...regressionPlan, ...workflowPlan]) {
   if (!metrics.some((metric) => metric.id === group.id)) metrics.push(scoreGroup(group, [], { completed: false }))
 }
-const requested = metrics.filter((metric) => browser || unitPlan.some((group) => group.id === metric.id))
+if (!metrics.some(({ id }) => id === accessibilityPlan.id)) metrics.push(scoreAccessibility([], { completed: false }))
+const requested = metrics.filter((metric) => accessibilityOnly ? metric.id === accessibilityPlan.id
+  : browser || regressionPlan.some((group) => group.id === metric.id))
 const gate = errors.length || requested.some((metric) => metric.status === 'failed') ? 'blocked'
   : requested.some((metric) => metric.status !== 'passed') ? 'incomplete' : 'passed-for-requested-subset'
 const result = {
-  scorecardVersion, planSha256: digest({ unitPlan, browserPlan }), runId,
+  scorecardVersion, planSha256: digest({ unitPlan, modelContractPlan, browserPlan, accessibilityPlan }), runId,
   measuredAt: new Date().toISOString(), source, sourceChangedDuringRun: digest(source) !== digest(await sourceSnapshot()),
   environment: { node: process.version, platform: process.platform, arch: process.arch },
-  profile: browser ? 'unit-and-scripted-browser' : 'unit-only',
+  profile: accessibilityOnly ? 'automated-accessibility-only' : browser ? 'unit-scripted-browser-and-accessibility' : 'unit-only',
   overallScore: null, gate, metrics,
   notAssessed: ['Human usability/task efficiency/satisfaction', 'Learning gain/retention/transfer',
     'Expert-reviewed Azure fidelity beyond registered regressions', 'WCAG conformance',
     'Live Azure observations', 'Security certification', 'Packaged Electron and release provenance',
     'Production performance (run measure:production separately; dev timings are not production)'],
   evidenceDirectory: relative(root, artifacts), commands, errors,
-  interpretation: 'Only registered regression conformance is scored. Compare scores only with matching plan/case hashes, profile and comparable environment; never infer human usability, learning effectiveness or overall quality from a passing suite.',
+  interpretation: 'Only registered regression conformance is scored; accessibility reports sampled rule/node counts and a serious/critical gate, never a percentage. Compare only matching evidence/plan/case versions, profile and environment; never infer WCAG conformance, human usability, learning effectiveness or overall quality.',
 }
 if (result.sourceChangedDuringRun) {
   result.gate = 'blocked'

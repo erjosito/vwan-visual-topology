@@ -16,7 +16,7 @@ denominator, date, revision and uncertainty alongside every number.
 | Honest uncertainty and grading safety | False passes on invalid/unknown/unsupported and adversarial inputs; false failures on independently valid variants; cancellation/partial-job checks | Independent rubric/oracle review; whether supported assumptions are understandable |
 | UI effectiveness/discoverability | Regression completion of scripted create/connect/inspect/trace/recover tasks, broken actions and JS errors | Unassisted novice/expert task-success rate and critical errors on realistic tasks |
 | UI efficiency and recovery | Fixed-script interaction counts, response durations, keyboard/focus/recovery invariants | Human completion time, unnecessary actions, help requests and recovery success; script speed is not user speed |
-| Accessibility | Keyboard/focus regressions and, later, automated rule violations by severity | Screen-reader, zoom/reflow, contrast exceptions and assistive-technology review; automated success is not WCAG conformance |
+| Accessibility | Keyboard/focus regressions plus local axe rule/node occurrences by severity in a versioned sample | Screen-reader, zoom/reflow, contrast exceptions and assistive-technology review; automated success is not WCAG conformance |
 | Training/rubric engineering | Starter unmet/unknown, supported repairs, negative cases, independent drafts and versioned progress; coverage per exercise | Objective alignment, instructional clarity, feedback/hints, difficulty and valid alternative solutions |
 | Learning effectiveness | Score independent pre/post/transfer tasks once a reviewed study supplies answers | Actual learner data, retention and transfer; no invented learning-gain score |
 | Explanation quality | Stable evidence links/IDs, localization/source coverage, unknown-result regression tests | Factuality, actionability, level, misleading omissions and whether explanations help learning |
@@ -37,11 +37,13 @@ From the repository root, after installing the declared development dependencies
 npm run evaluate
 npm run evaluate -- --browser
 npm run evaluate -- --browser --output test-artifacts\quality\candidate.json
+npm run evaluate:accessibility
 npm run test:evaluation
 ```
 
 The default evaluates registered **unit regression conformance**. `--browser`
-also runs the registered Chromium workflow cases against an owned, ephemeral
+also runs the registered Chromium workflow cases and the distinct accessibility
+sample against an owned, ephemeral
 loopback Vite server, which is closed afterward. It does not attach to an
 existing server/browser or send a user's design to an evaluation service.
 Browser binaries must already be installed using the repository's normal
@@ -53,8 +55,10 @@ Vitest/Playwright reports, browser artifacts and `scorecard.json` under a unique
 run directory. Everything stays local. CI runs the scorecard adapter tests;
 it does not automatically upload study data or claim a full evaluation.
 
-The executable manifest is `scripts/quality-scorecard.mjs`, version 2 (adds the
-VPN overlap NAT unit and scripted workflow cases to the initial version 1 plan):
+The executable regression manifest is `scripts/quality-scorecard.mjs`, version 3.
+Version 2 added VPN overlap NAT; version 3 adds the separately versioned
+`scripts/accessibility-scorecard.mjs` manifest/evidence adapter and
+model-contract registration seam. The combined plan hash includes all manifests:
 
 | Numeric series | Current evidence subset |
 | --- | --- |
@@ -66,8 +70,10 @@ VPN overlap NAT unit and scripted workflow cases to the initial version 1 plan):
 | Scripted UI workflows | Canvas presentation, original VNet detail, single-workspace and VPN NAT tests |
 | Scripted training workflows | Learning/practice browser tests |
 | Scripted localization workflows | Localization browser tests |
+| Automated accessibility (no numeric score) | Sixteen whole-document axe samples, with rule/node counts and a serious/critical gate; see below |
 
 Each score is **100 x first-attempt passed cases / registered reported cases**.
+This formula applies only to regression series, **never** accessibility.
 Failures, skips and flaky retry passes remain in the denominator; a retry does
 not erase the first failure. Vitest retries are disabled for the evaluation.
 Expected-failure browser tests do not earn passing credit. A missing planned
@@ -95,6 +101,109 @@ flaky cases. It does **not** establish 100% usability, content quality or Azure
 fidelity. The initial evaluation also caught a stale branding expectation and
 correctly blocked the gate until it was fixed.
 
+## Local automated accessibility evidence
+
+`npm run evaluate:accessibility` runs only this dimension; other series remain
+`null`/`not-assessed`. `npm run evaluate -- --browser` includes it alongside the
+unchanged regression subsets. Both return nonzero for serious/critical findings,
+missing/failed/skipped states, invalid evidence or source changes. The default
+unit-only profile explicitly leaves accessibility unassessed. A completed audit
+is evidence, not necessarily a passing accessibility gate.
+
+The pinned development dependency is `@axe-core/playwright` **4.14.0**, with
+lockfile-resolved `axe-core` **4.14.0**. It is not shipped in the application.
+Accessibility evidence version **1** registers the Cartesian product:
+
+- EN and JA, verified through the application's language selector and HTML lang;
+- desktop **1440 x 1000/light** and narrow **390 x 844/dark**;
+- empty initial mixed workspace; opened **original VNet detail inspector** for
+  one locally created VNet; opened **Workspace controls** searchable command
+  palette (unfiltered, not a fictional separate command dialog); and the
+  dedicated VWAN `hub-routing-preferences` sample.
+
+Theme and size are intentionally paired, not a full theme/viewport factorial.
+Workspace controls start closed for consistent state setup; the command-palette
+state explicitly opens them and verifies search focus. The inspector state opens
+the real editable original, not a test replica or practice draft.
+Each state uses a fresh Chromium context, synthetic local data and a 45-second
+deadline, with no retries. Only the owned loopback origin is permitted for page
+HTTP requests. Browser and server close in `finally` blocks; there is no hosted
+audit, analytics, upload or persistent helper.
+
+Axe runs on the **whole document**, with all default-enabled rules (including
+best practices), no element exclusions, no disabled rules and no violation
+allowlist. Axe's own applicability/visibility rules still apply: modal states
+can legitimately make background content inapplicable. Samples do not cover
+every dialog, topology, theme, zoom, interaction or assistive technology.
+
+Each local run retains `accessibility.json` plus one complete `axe-<sample>.json`
+per completed state alongside the scorecard. Raw reports retain affected
+selectors/HTML, rule descriptions/help URLs, passed/incomplete/inapplicable
+checks, tool/browser versions, timestamp and examined URL. The adapter reloads
+persisted raw bytes, validates their digest, rejects duplicate sample identities
+and duplicate rules **within** an outcome, and records the unique examined-rule
+count/hash, node/rule occurrences, scope, duration and raw path/hash per state.
+Axe may legitimately report the same rule in multiple outcomes for different
+nodes; those are not duplicate evidence. Empty evidence or missing planned
+states cannot pass. Any observed serious/critical violation blocks even if
+another state failed to complete.
+
+The threshold is a repository gate, not a WCAG requirement: **zero serious and
+critical rule occurrences** in this fixed sample. Minor/moderate violations and
+axe `incomplete` checks remain visible even if that threshold passes; incomplete
+checks require human review. Counts summed across states are **occurrences**,
+not deduplicated defects or a percentage of accessible controls. There is no
+accessibility or overall quality score, and zero automated findings cannot
+establish WCAG conformance.
+
+### Observed local baseline (2026-11-16)
+
+The first completed evidence-v1 run against application baseline
+`4fcfbea6a4953bc1ca624f7ebe36d65e96055ef4` (evaluation tooling dirty fingerprint
+recorded in its scorecard) audited **16/16** states, **90 unique rules per state**.
+It found **0 critical**, **4 serious rule / 28 node occurrences**, and
+**14 moderate rule / 22 node occurrences**, with no minor occurrences.
+The accessibility gate was correctly **blocked** (exit 1), not waived:
+
+- Serious `label-content-name-mismatch`: seven affected node occurrences in
+  each of the four dedicated VWAN samples, across EN/JA and both viewports.
+- Moderate `landmark-one-main` and `region`: initial mixed workspace and opened
+  command-palette states; narrow palette states reported only `region`.
+- Opened original inspector samples had no automated violations, but still
+  contained incomplete checks; this is not a conformance claim.
+
+All samples retained incomplete checks (one rule for inspector samples, two
+for the others). Existing application findings were deliberately not fixed or
+masked in this evaluation-only increment. Human usability and learning
+effectiveness remain **NOT MEASURED**; no participants have been invented.
+Raw baseline evidence is local under
+`test-artifacts\quality\2026-11-16T11-47-09-158Z-18360`.
+Keep run directories to inspect findings and compare matching manifests.
+
+### Document-derived model-contract extension seam
+
+`scripts/quality-scorecard.mjs` exports initially empty
+`modelContractPlan = { unit: [], browser: [] }`. After #165 integrates, add:
+
+```js
+// modelContractPlan.unit:
+{ id: 'hub-firewall-model-contract', label: 'Hub firewall document-derived model-contract evidence (not live Azure)', files: ['src/hub-firewall.test.ts'] }
+// modelContractPlan.browser:
+{ id: 'hub-firewall-model-contract-workflows', label: 'Hub firewall document-derived model-contract UI evidence (not live Azure)', files: ['e2e/hub-firewall.spec.ts'] }
+```
+
+The local evaluator executes unit entries with Vitest and browser entries with
+the existing workflow runner, reporting each as a **distinct** series using
+the same fail-closed file/identity/skip rules. Their manifest participates in
+the plan hash. Use unique IDs and bump the scorecard version when registering
+them. The hand-authored six-direction expected matrices in
+`tests/fixtures/hub-firewall.ts` (published-VNet, contradictory published-branch,
+and separate-untrusted candidate scenarios) are document-derived model-contract
+evidence, **not a live Azure-qualified oracle**. This seam does not register or
+claim execution of those not-yet-integrated files. An empty registration
+contributes neither evidence nor score. Existing regression groups and all
+production/startup budgets are unchanged.
+
 ## Next automatic evaluations
 
 Prioritize evidence quality before adding more aggregate numbers:
@@ -109,8 +218,8 @@ Prioritize evidence quality before adding more aggregate numbers:
    counts/rates separately; require zero known critical false passes. Preserve
    fixed original endpoint identities. Keep held-out variants independent of
    the example repair so the rubric cannot overfit one JSON design.
-3. **Accessibility/performance sampling:** add a pinned automated accessibility
-   tool only with a reviewed manifest change; retain manual criteria. Reuse
+3. **Accessibility/performance sampling:** extend the explicitly versioned local
+   accessibility sample only with reviewed manifest changes; retain manual criteria. Reuse
    `npm run measure:production` and exact-artifact startup gates. Collect repeated
    cold/warm runs on defined topology sizes and report sample count, median,
    p95, hardware/browser and raw timings. The current single local startup
