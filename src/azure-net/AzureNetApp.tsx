@@ -37,6 +37,7 @@ import {
 } from './azure-import'
 import { validateVpnNat } from '../vpn-nat'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
+import { validateApplicationInventory } from '../application-inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 
 import { pruneAzSiteRouteMaps } from './route-maps'
@@ -371,6 +372,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         pruneAzArsRouteMaps(draft)
         pruneDeletedInventory(draft, topology)
         validateInventory(draft)
+        validateApplicationInventory(draft)
         validateVpnNat(draft)
         return draft
       })

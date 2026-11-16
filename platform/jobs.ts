@@ -1,8 +1,8 @@
 import { Worker } from 'node:worker_threads'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { validateRequest } from '../src/platform/service'
-import { contractVersion, engineVersion, platformLimits } from '../src/platform/contract'
+import { incompletePlatformResult, validateRequest } from '../src/platform/service'
+import { platformLimits } from '../src/platform/contract'
 import type { PlatformRequest, PlatformResult } from '../src/platform/contract'
 
 type Job = { expires: number; cancel: () => void; result?: PlatformResult; done: Promise<PlatformResult> }
@@ -77,11 +77,6 @@ export class PlatformJobs {
   }
 
   private incomplete(request: PlatformRequest, code: string): PlatformResult {
-    return {
-      contractVersion, engineVersion, revision: '', status: 'not assessed',
-      errors: [{ code, message: 'Job stopped without a complete result; unchecked requirements are not verified.' }],
-      assessments: (request.requirements ?? []).map((requirement) => ({ id: requirement.id, outcome: 'not assessed', evidence: null, reasons: [code] })),
-      limitations: [code],
-    }
+    return incompletePlatformResult(request, code)
   }
 }
