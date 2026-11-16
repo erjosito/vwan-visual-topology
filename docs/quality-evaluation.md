@@ -55,10 +55,12 @@ Vitest/Playwright reports, browser artifacts and `scorecard.json` under a unique
 run directory. Everything stays local. CI runs the scorecard adapter tests;
 it does not automatically upload study data or claim a full evaluation.
 
-The executable regression manifest is `scripts/quality-scorecard.mjs`, version 3.
+The executable regression manifest is `scripts/quality-scorecard.mjs`, version 4.
 Version 2 added VPN overlap NAT; version 3 adds the separately versioned
 `scripts/accessibility-scorecard.mjs` manifest/evidence adapter and
-model-contract registration seam. The combined plan hash includes all manifests:
+model-contract registration seam. Version 4 registers the separate #165
+document-derived Firewall contracts and native evidence workflows, carrying their
+qualification into each metric. The combined plan hash includes all manifests:
 
 | Numeric series | Current evidence subset |
 | --- | --- |
@@ -70,10 +72,12 @@ model-contract registration seam. The combined plan hash includes all manifests:
 | Scripted UI workflows | Canvas presentation, original VNet detail, single-workspace and VPN NAT tests |
 | Scripted training workflows | Learning/practice browser tests |
 | Scripted localization workflows | Localization browser tests |
+| Static Firewall model contracts | Hand-authored published/candidate matrices and conservative negatives in both native providers; synthetic, not live-Azure-qualified |
+| Static Firewall native workflows | Original IDs/static authoring, ingress/onward tables, per-leg worker parity, path evidence and EN/JA persistence |
 | Automated accessibility (no numeric score) | Sixteen whole-document axe samples, with rule/node counts and a serious/critical gate; see below |
 
 Each score is **100 x first-attempt passed cases / registered reported cases**.
-This formula applies only to regression series, **never** accessibility.
+This formula applies only to registered regression/model-contract series, **never** accessibility.
 Failures, skips and flaky retry passes remain in the denominator; a retry does
 not erase the first failure. Vitest retries are disabled for the evaluation.
 Expected-failure browser tests do not earn passing credit. A missing planned

@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 3
+export const scorecardVersion = 4
 // Keep document-derived contract fixtures distinct from regression and live Azure evidence.
-export const modelContractPlan = { unit: [], browser: [] }
+export const modelContractPlan = {
+  unit: [{ id: 'static-firewall-model-contracts', label: 'Document-derived static Firewall model-contract conformance',
+    files: ['src/hub-firewall.test.ts'], qualification: 'Synthetic document-derived expectations; not live-Azure-qualified.' }],
+  browser: [{ id: 'static-firewall-native-workflows', label: 'Static Firewall native handoff and evidence workflow conformance',
+    files: ['e2e/hub-firewall.spec.ts'], qualification: 'Scripted native authoring/evidence checks; not human usability or live Azure fidelity.' }],
+}
 export const unitPlan = [
   { id: 'routing-packet-regressions', label: 'Routing/packet regression conformance', files: [
     'src/routing.test.ts', 'src/paths.test.ts', 'src/vpn-routing.test.ts', 'src/vpn-nat.test.ts', 'src/hub-routing.test.ts',
@@ -83,7 +88,7 @@ export function scoreGroup(plan, cases, { completed = true } = {}) {
   const total = selected.length
   const assessed = completed && !missingFiles.length && total > 0
   return {
-    id: plan.id, label: plan.label,
+    id: plan.id, label: plan.label, qualification: plan.qualification,
     status: !assessed ? 'not-assessed' : counts.failed ? 'failed' : counts.skipped || counts.flaky ? 'partial' : 'passed',
     score: assessed ? Math.round(10000 * counts.passed / total) / 100 : null,
     unit: 'percent first-attempt passing registered regression cases; not a product-quality rating',

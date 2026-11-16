@@ -113,7 +113,7 @@ const result = {
     'Live Azure observations', 'Security certification', 'Packaged Electron and release provenance',
     'Production performance (run measure:production separately; dev timings are not production)'],
   evidenceDirectory: relative(root, artifacts), commands, errors,
-  interpretation: 'Only registered regression conformance is scored; accessibility reports sampled rule/node counts and a serious/critical gate, never a percentage. Compare only matching evidence/plan/case versions, profile and environment; never infer WCAG conformance, human usability, learning effectiveness or overall quality.',
+  interpretation: 'Only registered regression and model-contract test conformance is scored; document-derived fixtures are not live-Azure-qualified. Accessibility reports sampled rule/node counts and a serious/critical gate, never a percentage. Compare only matching evidence/plan/case versions, profile and environment; never infer WCAG conformance, human usability, learning effectiveness or overall quality.',
 }
 if (result.sourceChangedDuringRun) {
   result.gate = 'blocked'
