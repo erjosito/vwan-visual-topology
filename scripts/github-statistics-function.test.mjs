@@ -56,6 +56,22 @@ test('an invocation retry checks the existing blob rather than overwriting it', 
   assert.equal(result.etag, 'original-receipt')
 })
 
+test('optional platform aggregates are persisted without secrets; configured failures prevent partial snapshots', async () => {
+  const web = { status: 'available', days: [{ date: '2026-11-15', hits: 17, errors: null, bytesSent: 1024 }] }
+  const result = await collectAndPersist({
+    ...options({ async uploadData(data) {
+      assert.deepEqual(JSON.parse(data.toString()).web, web)
+      return { etag: 'web-receipt' }
+    } }),
+    collectWebMetrics: async () => web,
+  })
+  assert.deepEqual(result.web, { status: 'available', days: 1 })
+  await assert.rejects(collectAndPersist({
+    ...options({ async uploadData() { assert.fail('Partial snapshot must not be uploaded') } }),
+    collectWebMetrics: async () => { throw new Error('Metrics unavailable') },
+  }), /Metrics unavailable/)
+})
+
 test('missing credentials and failed collection never create a blob; storage failures propagate', async () => {
   const neverUpload = { async uploadData() { assert.fail('Unexpected write') } }
   await assert.rejects(collectAndPersist({ ...options(neverUpload), trafficToken: '' }), /required/)

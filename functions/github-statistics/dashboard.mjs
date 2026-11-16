@@ -4,6 +4,7 @@ export const dashboardHistoryDays = 366
 export async function buildDashboardSummary(snapshots, { repository, now = new Date() }) {
   const observations = []
   const trafficDays = new Map()
+  const webObservations = []
   let latest
   for await (const snapshot of snapshots) {
     if (snapshot.schemaVersion !== 1 || snapshot.repository !== repository
@@ -14,6 +15,7 @@ export async function buildDashboardSummary(snapshots, { repository, now = new D
       repositoryCounters: snapshot.repositoryCounters,
       assets: snapshot.releases.flatMap((release) => release.assets.map(({ id, downloads }) => ({ id, downloads }))),
     })
+    if (snapshot.web?.status === 'available') webObservations.push(snapshot.web)
     if (snapshot.traffic.status !== 'available') continue
     for (const metric of ['views', 'clones']) {
       for (const entry of snapshot.traffic[metric].days) {
@@ -48,6 +50,28 @@ export async function buildDashboardSummary(snapshots, { repository, now = new D
     days.set(date, row)
   }
   const series = [...days.values()]
+  const webDays = new Map()
+  let web = { status: 'not_configured', days: [] }
+  const cutoff = new Date(now.getTime() - (dashboardHistoryDays - 1) * dayMs).toISOString().slice(0, 10)
+  webObservations.sort((a, b) => a.collectedAt.localeCompare(b.collectedAt))
+  const latestWeb = webObservations.at(-1)
+  if (latestWeb) {
+    for (const observation of webObservations) {
+      if (observation.resourceId.toLowerCase() !== latestWeb.resourceId.toLowerCase()) continue
+      for (const entry of observation.days) {
+        if (entry.date < cutoff || entry.date >= observation.collectedAt.slice(0, 10)) continue
+        webDays.set(entry.date, {
+          date: entry.date, hits: entry.hits, errors: entry.errors, bytesSent: entry.bytesSent,
+        })
+      }
+    }
+    web = {
+      status: 'available',
+      resourceName: latestWeb.resourceId.split('/').at(-1),
+      collectedAt: latestWeb.collectedAt,
+      days: [...webDays.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    }
+  }
   const window = (metric) => {
     const data = latest.traffic[metric]
     return { count: data.count, uniques: data.uniques, from: data.days[0]?.date ?? null, through: data.days.at(-1)?.date ?? null }
@@ -70,6 +94,7 @@ export async function buildDashboardSummary(snapshots, { repository, now = new D
     series,
     trafficDays: [...trafficDays.values()].sort((a, b) => a.date.localeCompare(b.date))
       .map((row) => ({ ...row, partial: row.date >= latest.collectedAt.slice(0, 10) })),
+    web,
   }
 }
 

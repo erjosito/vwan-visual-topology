@@ -1,4 +1,4 @@
-# Daily GitHub statistics
+# Daily GitHub and web hosting statistics
 
 A Node.js Azure Function collects one snapshot daily at **04:17 UTC**. It uses
 Flex Consumption with 512 MB instances, zero always-ready instances and a
@@ -8,7 +8,7 @@ endpoint and a linked private DNS zone provide host, deployment-package and
 snapshot connectivity inside the dedicated statistics resource group.
 
 The `Deploy statistics Function` workflow only tests and deploys code from
-`main`; it has no daily collection schedule. No app usage telemetry, project
+`main`; it has no daily collection schedule. No browser/MCP instrumentation, project
 accounts or public dashboard are introduced. A personal/local runner is not
 required.
 
@@ -36,8 +36,62 @@ invocations and expired-token notices.
 These are distribution and repository-interest metrics, **not active users or
 installations**. Downloads include repeat downloads, automation and maintainer
 testing. Subscribers are repository watchers, not users. Views/clones are for
-the repository, not either application website. Web, Windows and MCP runtime
-usage remains unmeasured.
+the repository, not either application website. Existing Azure hosting metrics
+are collected separately as described below; web sessions, feature usage,
+Windows and MCP runtime usage remain unmeasured.
+
+## Existing web hosting metrics
+
+When `AZURE_STATS_SWA_RESOURCE_ID` is configured, the same Function queries
+Azure Monitor for the production Static Web App's existing `SiteHits`,
+`BytesSent` and `SiteErrors` metrics with daily `Total` aggregation. It backfills
+the preceding **90 completed UTC days** on each run in three 30-day requests.
+The SWA metrics API silently shortened a live 90-day request to 31 days; the
+collector verifies each response's interval and exact time range to prevent
+silent truncation. No requests are added to the application, and there is no
+tracking SDK, visitor identifier, cookie or Application Insights deployment.
+No monitoring workspace or new hosting resource is needed.
+
+The production SWA resource hosts `aznet-simulator.com`, `vwan-simulator.com`
+and `www.vwan-simulator.com`. Its metrics aggregate all those hostnames,
+including the default hostname; they cannot be broken down by domain or path.
+Site hits include asset requests, automation, bots and repeated requests.
+They are **not page views, unique people, sessions or successful simulations**.
+Site errors do not measure browser exceptions or simulation failures.
+Missing metric samples stay `null`/unavailable, even when Azure reports a
+successful query. Only an explicit zero is shown as zero.
+
+The optional `web` field is added to the existing schema-v1 raw snapshot.
+Overlapping windows use the latest observation per resource and UTC date,
+never a sum of snapshots. Historical archives lacking `web` remain valid.
+Dashboard web totals follow the selected range and display measured-day
+coverage for each metric; incomplete totals include only available samples.
+Historical platform data older than the backfill window is recoverable only
+if it was previously archived. A configured metrics API/authentication error
+fails collection rather than publishing a misleading successful snapshot.
+MCP remains local stdio with no runtime reporting; release downloads are still
+only distribution evidence.
+
+Configure access once using an administrator with role-assignment permission:
+
+```powershell
+$swaId = az staticwebapp show --resource-group '<web-resource-group>' --name '<production-swa-name>' --query id --output tsv
+$principalId = az identity show --resource-group '<statistics-resource-group>' --name id-github-statistics-function --query principalId --output tsv
+az role assignment create --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --role Reader --scope $swaId --output none
+gh variable set AZURE_STATS_SWA_RESOURCE_ID --env github-statistics --body $swaId
+```
+
+The built-in **Reader** role is restricted to that one SWA resource. It grants
+the runtime identity management-plane read access (including metrics), no
+writes or data-plane access. CI's identity needs no SWA access: it only copies
+the resource ID variable to the existing Function settings during deployment.
+Dispatch the statistics deployment workflow after configuration. RBAC can
+take time to propagate. To disable collection, delete the Function's
+`AZURE_STATS_SWA_RESOURCE_ID` app setting as well as the GitHub variable; the
+deployment workflow does not delete existing settings when a variable is absent.
+Restore the variable/deploy after reapplying base infrastructure that replaces
+app settings. Existing dashboard authentication and private Storage remain
+unchanged.
 
 For later aggregation:
 
@@ -171,7 +225,7 @@ does not include a separately provisioned alerting workspace.
 ## Local checks and manual collection
 
 ```powershell
-node --test scripts\collect-github-statistics.test.mjs scripts\github-statistics-function.test.mjs scripts\github-statistics-dashboard.test.mjs
+node --test scripts\collect-github-statistics.test.mjs scripts\github-statistics-function.test.mjs scripts\github-statistics-dashboard.test.mjs scripts\github-statistics-swa.test.mjs
 $env:GITHUB_TOKEN = gh auth token
 # Optional: set GH_STATS_TRAFFIC_TOKEN using a suitably scoped token.
 node scripts\collect-github-statistics.mjs --repository erjosito/vwan-visual-topology --output test-artifacts\github-statistics.json
@@ -313,4 +367,5 @@ References:
 [GitHub traffic API](https://docs.github.com/en/rest/metrics/traffic),
 [Azure Login with OIDC](https://github.com/Azure/login#login-with-openid-connect-oidc-recommended),
 [Flex Consumption](https://learn.microsoft.com/azure/azure-functions/flex-consumption-plan),
-[Functions storage requirements](https://learn.microsoft.com/azure/azure-functions/storage-considerations).
+[Functions storage requirements](https://learn.microsoft.com/azure/azure-functions/storage-considerations),
+[Static Web Apps platform metrics](https://learn.microsoft.com/azure/azure-monitor/reference/supported-metrics/microsoft-web-staticsites-metrics).

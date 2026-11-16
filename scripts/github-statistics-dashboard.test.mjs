@@ -63,8 +63,40 @@ test('missing traffic is not zero; empty and foreign archives are rejected', asy
   const result = await buildDashboardSummary([data], { repository, now })
   assert.deepEqual(result.traffic, { status: 'not_configured' })
   assert.deepEqual(result.trafficDays, [])
+  assert.deepEqual(result.web, { status: 'not_configured', days: [] })
   await assert.rejects(buildDashboardSummary([], { repository, now }), /No statistics/)
   await assert.rejects(buildDashboardSummary([{ ...data, repository: 'other/repository' }], { repository, now }), /Invalid/)
+})
+
+test('platform history deduplicates windows, keeps nulls and zeroes, and never mixes SWA resources', async () => {
+  const first = snapshot('2026-11-15T04:17:00Z', [])
+  const latest = snapshot('2026-11-16T04:17:00Z', [])
+  const other = snapshot('2026-11-14T04:17:00Z', [])
+  const source = '/subscriptions/id/resourceGroups/production/providers/Microsoft.Web/staticSites/simulator'
+  first.web = {
+    status: 'available', resourceId: source, collectedAt: first.collectedAt,
+    days: [{ date: '2026-11-14', hits: 10, errors: 3, bytesSent: 1024 }],
+  }
+  latest.web = {
+    status: 'available', resourceId: source.toUpperCase(), collectedAt: latest.collectedAt,
+    days: [
+      { date: '2026-11-14', hits: 12, errors: null, bytesSent: 2048, unwanted: 'omit-this' },
+      { date: '2026-11-15', hits: 0, errors: 0, bytesSent: null },
+      { date: '2026-11-16', hits: 1 },
+      { date: '2020-01-01', hits: 100 },
+    ],
+  }
+  other.web = {
+    ...first.web, resourceId: `${source}-preview`, collectedAt: other.collectedAt,
+    days: [{ date: '2026-11-13', hits: 1000 }],
+  }
+  const result = await buildDashboardSummary([latest, other, first, latest], { repository, now })
+  assert.deepEqual(result.web.days, [
+    { date: '2026-11-14', hits: 12, errors: null, bytesSent: 2048 },
+    { date: '2026-11-15', hits: 0, errors: 0, bytesSent: null },
+  ])
+  assert.equal(result.web.collectedAt, latest.collectedAt)
+  assert.ok(!JSON.stringify(result.web).includes('omit-this'))
 })
 
 test('summary rebuild excludes old history and retries conditional writes after a concurrent refresh', async () => {

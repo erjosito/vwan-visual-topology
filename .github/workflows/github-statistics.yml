@@ -46,7 +46,7 @@ jobs:
             fi
           done
       - name: Test collector and private persistence
-        run: node --test scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs
+        run: node --test scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs scripts/github-statistics-swa.test.mjs
       - name: Package locked Function dependencies
         run: |
           node scripts/package-github-statistics-function.mjs
@@ -62,6 +62,7 @@ jobs:
       - name: Configure protected traffic credential
         env:
           TRAFFIC_TOKEN: ${{ secrets.GH_STATS_TRAFFIC_TOKEN }}
+          AZURE_STATS_SWA_RESOURCE_ID: ${{ vars.AZURE_STATS_SWA_RESOURCE_ID }}
           AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
         run: |
@@ -69,10 +70,14 @@ jobs:
             echo "::error::GH_STATS_TRAFFIC_TOKEN is required."
             exit 1
           fi
+          settings=("GH_STATS_TRAFFIC_TOKEN=$TRAFFIC_TOKEN")
+          if [ -n "$AZURE_STATS_SWA_RESOURCE_ID" ]; then
+            settings+=("AZURE_STATS_SWA_RESOURCE_ID=$AZURE_STATS_SWA_RESOURCE_ID")
+          fi
           az functionapp config appsettings set \
             --resource-group "$AZURE_RESOURCE_GROUP" \
             --name "$AZURE_FUNCTION_APP" \
-            --settings "GH_STATS_TRAFFIC_TOKEN=$TRAFFIC_TOKEN" \
+            --settings "${settings[@]}" \
             --only-show-errors \
             --output none
       - name: Deploy Function package

@@ -4,6 +4,7 @@ import { BlobServiceClient } from '@azure/storage-blob'
 import { readFile } from 'node:fs/promises'
 import { collectAndPersist } from './handler.mjs'
 import { dashboardResponse, persistDashboardSummary } from './dashboard.mjs'
+import { collectStaticWebAppMetrics } from './swa.mjs'
 
 const html = await readFile(new URL('./dashboard.html', import.meta.url), 'utf8')
 const script = await readFile(new URL('./dashboard-client.js', import.meta.url), 'utf8')
@@ -28,6 +29,10 @@ async function run(context) {
     trafficToken: process.env.GH_STATS_TRAFFIC_TOKEN,
     invocationId: context.invocationId,
     container,
+    collectWebMetrics: process.env.AZURE_STATS_SWA_RESOURCE_ID ? () => collectStaticWebAppMetrics({
+      resourceId: process.env.AZURE_STATS_SWA_RESOURCE_ID,
+      credential: new ManagedIdentityCredential({ clientId: process.env.AZURE_STATS_RUNTIME_CLIENT_ID }),
+    }) : undefined,
     refreshSummary: () => persistDashboardSummary({ container, repository }),
   })
   context.log(JSON.stringify(summary))

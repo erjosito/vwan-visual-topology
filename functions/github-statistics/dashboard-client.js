@@ -2,6 +2,9 @@ const element = (id) => document.getElementById(id)
 const number = (value) => value === null || value === undefined ? 'Not measured' : new Intl.NumberFormat().format(value)
 const utc = (value) => value ? new Date(value).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC') : 'Baseline'
 const dayMs = 86_400_000
+const webNumber = (value) => value === null || value === undefined ? 'Unavailable' : number(value)
+const bytes = (value) => value === null || value === undefined ? 'Unavailable'
+  : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value / 1_048_576)} MiB`
 let summary
 
 function row(target, cells) {
@@ -15,16 +18,16 @@ function row(target, cells) {
   element(target).append(tr)
 }
 
-function card(label, value, detail) {
+function card(label, value, detail, target = 'cards', format = number) {
   const article = document.createElement('article')
   const title = document.createElement('span')
   title.textContent = label
   const count = document.createElement('strong')
-  count.textContent = number(value)
+  count.textContent = format(value)
   const note = document.createElement('span')
   note.textContent = detail
   article.append(title, count, note)
-  element('cards').append(article)
+  element(target).append(article)
 }
 
 function chart(target, rows, metrics, label) {
@@ -80,6 +83,27 @@ function renderHistory() {
   const cutoff = new Date(Date.now() - Number(element('range').value) * dayMs).toISOString().slice(0, 10)
   const traffic = summary.trafficDays.filter(({ date }) => date >= cutoff)
   const downloads = summary.series.filter(({ date }) => date >= cutoff)
+  const web = (summary.web?.days ?? []).filter(({ date }) => date >= cutoff)
+  for (const id of ['web-cards', 'web-rows']) element(id).replaceChildren()
+  for (const [key, title, format] of [
+    ['hits', 'Web site hits', webNumber], ['bytesSent', 'Web data out', bytes], ['errors', 'Reported site errors', webNumber],
+  ]) {
+    const measured = web.filter((entry) => entry[key] !== null && entry[key] !== undefined)
+    card(title, measured.length ? measured.reduce((sum, entry) => sum + entry[key], 0) : null,
+      `${measured.length}/${element('range').value} UTC days measured; total of available samples`, 'web-cards', format)
+  }
+  element('web-status').textContent = summary.web?.status === 'available'
+    ? `Source: ${summary.web.resourceName}. Last platform collection: ${utc(summary.web.collectedAt)}. Completed UTC days only; missing samples are unavailable, not zero.`
+    : 'Static Web App metrics have not been collected yet.'
+  element('web-status').classList.toggle('warning', summary.web?.status === 'available'
+    && Date.now() - Date.parse(summary.web.collectedAt) > 36 * 3_600_000)
+  chart('web-hits-chart', web, [{ key: 'hits', color: '#8ecaff' }], 'Daily Static Web App site hits, not users or sessions.')
+  chart('web-bytes-chart', web.map((entry) => ({
+    date: entry.date, mib: entry.bytesSent === null || entry.bytesSent === undefined ? null : entry.bytesSent / 1_048_576,
+  })), [{ key: 'mib', color: '#8de0c2' }], 'Daily Static Web App outgoing data in MiB.')
+  for (const entry of [...web].reverse()) {
+    row('web-rows', [entry.date, webNumber(entry.hits), bytes(entry.bytesSent), webNumber(entry.errors)])
+  }
   for (const id of ['traffic-rows', 'download-rows']) element(id).replaceChildren()
   chart('traffic-chart', traffic.map((entry) => ({ date: entry.date, views: entry.views?.count, clones: entry.clones?.count })), [
     { key: 'views', color: '#8ecaff' }, { key: 'clones', color: '#8de0c2' },
@@ -109,7 +133,7 @@ async function load() {
     if (response.status === 503) throw new Error((await response.json()).error)
     if (!response.ok) throw new Error('The statistics service is unavailable. Try again later.')
     summary = await response.json()
-    element('repository').textContent = summary.repository
+    element('repository').textContent = `${summary.repository} - GitHub distribution and web hosting metrics`
     const age = Date.now() - Date.parse(summary.collectedAt)
     element('status').textContent = `Last successful collection: ${utc(summary.collectedAt)}${age > 36 * 3_600_000 ? ' - collection is overdue.' : ''}`
     element('status').classList.toggle('warning', age > 36 * 3_600_000)

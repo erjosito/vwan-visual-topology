@@ -25,7 +25,7 @@
     caption { text-align: left; color: #b3c1d5; padding-bottom: 12px }
     select { background: #141f32; color: inherit; border: 1px solid #647997; border-radius: 6px; padding: 7px }
     #status { border-left: 4px solid #8ecaff; padding: 8px 14px; margin-top: 22px }
-    #status.warning { border-color: #ffc76b; color: #ffe0aa } [hidden] { display: none !important }
+    #status.warning { border-color: #ffc76b; color: #ffe0aa } .warning { color: #ffe0aa } [hidden] { display: none !important }
     footer { margin-top: 26px; font-size: .9rem }
   </style>
   <script src="/api/statistics/dashboard.js" defer></script>
@@ -35,15 +35,30 @@
     <div><small>PRIVATE PROJECT DASHBOARD</small><h1>Network Simulator statistics</h1></div>
     <a href="/.auth/logout?post_logout_redirect_uri=/api/statistics">Sign out</a>
   </header>
-  <p class="muted" id="repository">GitHub distribution and repository interest</p>
+  <p class="muted" id="repository">GitHub distribution and web hosting metrics</p>
   <p id="status" role="status" aria-live="polite">Loading the latest collected statistics...</p>
   <p id="signin" hidden><a href="/.auth/login/aad?post_login_redirect_uri=/api/statistics">Sign in again</a></p>
   <main id="dashboard" hidden>
+    <h2>GitHub distribution and repository interest</h2>
     <div class="cards" id="cards"></div>
     <div class="toolbar">
       <p class="muted" id="coverage"></p>
       <label>History <select id="range"><option value="30">30 days</option><option value="90">90 days</option><option value="365">365 days</option></select></label>
     </div>
+    <section class="panel">
+      <h2>Web hosting activity (Azure Static Web Apps)</h2>
+      <p class="muted" id="web-status"></p>
+      <p>Site hits include asset requests, bots and repeated requests. They are not page views, unique visitors, sessions or successful simulations. Totals below follow the selected history range.</p>
+      <div class="cards" id="web-cards"></div>
+      <div class="charts">
+        <div><h2>Daily web site hits</h2><div id="web-hits-chart"></div></div>
+        <div><h2>Daily outgoing data (MiB)</h2><div id="web-bytes-chart"></div></div>
+      </div>
+      <div class="table-wrap"><table><caption>Existing hosting aggregates only. Unavailable errors do not establish an error-free day. Platform errors do not measure browser or simulation failures.</caption>
+        <thead><tr><th scope="col">UTC date</th><th scope="col">Site hits</th><th scope="col">Data out</th><th scope="col">Reported site errors</th></tr></thead>
+        <tbody id="web-rows"></tbody>
+      </table></div>
+    </section>
     <div class="charts">
       <section class="panel"><h2>Daily repository traffic</h2><div id="traffic-chart"></div><div class="legend"><span class="views">Views</span><span class="clones">Clones</span></div></section>
       <section class="panel"><h2>Observed download growth</h2><div id="download-chart"></div><small>Growth between observations, not installations or exact daily downloads. Missing/new baselines are not zero.</small></section>
@@ -69,6 +84,6 @@
       </table></div>
     </section>
   </main>
-  <footer class="muted">These are GitHub statistics, not web, Windows or MCP active users. No application activity telemetry is collected. Daily collection: 04:17 UTC. Raw snapshots stay in private Storage.</footer>
+  <footer class="muted">These are GitHub statistics and existing Azure web hosting aggregates, not web, Windows or MCP active users. No browser tracking or MCP runtime telemetry is collected. Daily collection: 04:17 UTC. Raw snapshots stay in private Storage.</footer>
 </body>
 </html>
