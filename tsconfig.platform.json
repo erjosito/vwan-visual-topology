@@ -12,5 +12,5 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true
   },
-  "include": ["platform"]
+  "include": ["platform", "src/gifenc.d.ts"]
 }

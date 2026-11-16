@@ -50,8 +50,9 @@ test('only maps explicit test hosts and never exposes files outside dist', async
   assert.equal((await fetch(origin, { method: 'POST' })).status, 405)
 })
 
-test('entry graph retains the measured local gzip budget without eagerly referencing either workspace', async () => {
+test('entry graph retains the measured local gzip budget without eagerly referencing workspaces or GIF encoding', async () => {
   const graph = await initialAssetGraph()
   assert.ok(graph.localGzipBytes <= 140_000, `Entry graph: ${graph.localGzipBytes} local gzip bytes`)
   assert.ok(!graph.files.some(({ path }) => /\/(?:App|AzureNetApp)-/.test(path)))
+  assert.ok(!graph.files.some(({ path }) => /\/flow-gif-codec-/.test(path)))
 })

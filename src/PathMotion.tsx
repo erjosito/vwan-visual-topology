@@ -1,13 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { NodePosition } from './model'
-
-export interface MotionSegment {
-  id: string; from: string; to: string
-  start: NodePosition; control: NodePosition; end: NodePosition
-}
-export interface MotionFlow {
-  segments: MotionSegment[]; destinationId: string; direction?: 'forward' | 'return'; stopped?: boolean
-}
+import { motionTrack } from './path-motion'
+import type { MotionFlow } from './path-motion'
+export type { MotionSegment, MotionFlow } from './path-motion'
 
 function PathStream({ flow, pixelsPerUnit, color }: { flow: MotionFlow; pixelsPerUnit: number; color: string }) {
   const { segments } = flow
@@ -15,7 +9,7 @@ function PathStream({ flow, pixelsPerUnit, color }: { flow: MotionFlow; pixelsPe
   const group = useRef<SVGGElement>(null)
   const [count, setCount] = useState(2)
   // Straight joins cross the intervening node underneath its card.
-  const d = segments.map((segment, i) => `${i ? 'L' : 'M'} ${segment.start.x} ${segment.start.y} Q ${segment.control.x} ${segment.control.y} ${segment.end.x} ${segment.end.y}`).join(' ')
+  const d = motionTrack(segments)
   useLayoutEffect(() => {
     const duration = Math.max(track.current!.getTotalLength() * pixelsPerUnit / 200, 0.001)
     setCount(Math.max(2, Math.ceil(duration / 0.65)))
