@@ -296,6 +296,15 @@ Keep the direct CNAME and required validation records for managed renewal.
 The custom hostname uses the same Entra authorization as the default hostname;
 no public aggregate endpoint is introduced.
 
+On 2026-11-16, [dashboard deployment 43924643480](https://github.com/erjosito/vwan-visual-topology/actions/runs/43924643480)
+passed all 15 focused tests. Live verification confirmed trusted HTTPS,
+Microsoft sign-in redirects with the custom-hostname callback, approved-user
+API access and desktop/mobile browser rendering. Anonymous API requests and
+forged identity headers were denied; manual collection still required its
+administrator key. Both the raw snapshot and dashboard summary returned
+successful private Storage receipts. This does not yet verify a later
+scheduled timer execution.
+
 Public reporting, if added later, must be a separate reviewed aggregate export
 with collection dates, definitions and coverage limitations. Do not expose the
 archive, summary Blob or runtime credentials publicly.
