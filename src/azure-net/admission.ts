@@ -5,6 +5,7 @@ import type { HubRoutingConfiguration } from '../model'
 import { validateInventory } from '../inventory'
 import { azHubPolicyLinks } from './route-maps'
 import { isVwanNvaAsn } from '../validation'
+import { validateVpnNat } from '../vpn-nat'
 
 export const AZNET_MAX_JSON_LENGTH = 4_000_000
 const MAX_ITEMS = 4096
@@ -150,6 +151,7 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   const clean = boundedJson(input)
   schema(clean, 'Topology')
   const topology = clean as AzNetTopology
+  validateVpnNat(topology)
   const ids = new Set<string>()
   const unique = (items: { id: string }[], scope = ids) => {
     for (const item of items) {

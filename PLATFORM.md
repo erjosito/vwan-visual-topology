@@ -109,6 +109,11 @@ are permitted and recorded, not grounds for a trusted certification claim.
 
 ## Explicit public ingress and DNAT
 
+Cross-premises VPN overlap NAT is a separate, bounded feature: see
+[VPN overlap NAT](docs/VPN-OVERLAP-NAT.md) for native-provider boundaries,
+gateway/connection inspectors, BGP translation and the optional `vpnPacket`
+simulation contract. It does not enable VPN Internet breakout or legacy-v1 NAT.
+
 The packet probe selects an original **public-IP frontend** separately from an
 external Internet address. Standard static IPv4 VM frontends map to the original
 private NIC address and preserve the client source. Associated subnet/NIC NSGs

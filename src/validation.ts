@@ -99,6 +99,11 @@ export function validateTopology(input: unknown): Topology {
     return result
   }
   const root = record(input)
+  for (const entity of [...(Array.isArray(root.hubs) ? root.hubs : []), ...(Array.isArray(root.connections) ? root.connections : [])]) {
+    if (entity && typeof entity === 'object' && ('vpnNat' in entity || 'nat' in entity)) {
+      fail('VPN NAT requires the Azure/Full Hybrid native provider; legacy VWAN NAT configuration cannot be silently discarded.')
+    }
+  }
   if (root.version !== 1) fail('Unsupported topology version (expected 1).')
   if (root.allowBranchToBranchTraffic !== undefined && typeof root.allowBranchToBranchTraffic !== 'boolean') fail('WAN branch-to-branch traffic must be a boolean.')
   const prefixes = (value: unknown, label: string) => array(value, 100, label).map((value) => {

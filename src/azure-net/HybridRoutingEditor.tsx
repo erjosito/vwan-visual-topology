@@ -3,6 +3,7 @@ import { t } from '../i18n'
 import { cidr, isVwanNvaAsn, parseAsPath } from '../validation'
 import type { AzNetTopology } from './model'
 import { PeerRouteAttributes } from './RouteMapsPanel'
+import { VpnNatConnectionEditor } from '../VpnNatEditor'
 
 type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => void }
 const prefixes = (text: string) => {
@@ -20,7 +21,7 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
   const [bgp, setBgp] = useState(vpn?.bgpEnabled ?? true)
   if (!connection) return null
   const hub = connection.targetKind === 'vwan-hub'
-  return <section className="aznet-card" data-testid="aznet-hybrid-connection-editor">
+  return <><section className="aznet-card" data-testid="aznet-hybrid-connection-editor">
     <h3>{t('Hybrid connection routing')}</h3>
     <p className="muted">{connection.id}</p>
     <form onSubmit={(event) => {
@@ -80,6 +81,8 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
       {error && <p role="alert">{error}</p>}
     </form>
   </section>
+  {vpn && <VpnNatConnectionEditor topology={topology} connectionId={connectionId} commit={commit} />}
+  </>
 }
 
 export function HybridNvaEditor({ topology, applianceId, commit }: Props & { applianceId: string }) {

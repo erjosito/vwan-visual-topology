@@ -195,6 +195,14 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       'Unsupported Azure Network capture format. Expected kind="azure-network-capture" and version=2.',
     )
   }
+  for (const raw of [...asArray(root.vnetGateways), ...asArray(root.vpnConnections)]) {
+    const resource = asObject(raw, 'VPN NAT capture resource')
+    const properties = resource.properties && typeof resource.properties === 'object'
+      ? resource.properties as Record<string, unknown> : resource
+    if (['natRules', 'ingressNatRules', 'egressNatRules'].some((key) => asArray(properties[key]).length)) {
+      throw new Error('VPN overlap NAT capture reconstruction is unsupported. Author explicit original gateway/connection mappings in native JSON; NAT associations cannot be silently discarded.')
+    }
+  }
 
   const warnings: string[] = asArray(root.warnings).map((w) => String(w))
   const rgName = asString(root.resourceGroup, 'azure-rg')

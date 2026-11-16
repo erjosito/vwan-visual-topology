@@ -38,6 +38,8 @@ import {
   type AzNetComparisonReport,
 } from './azure-import'
 import { BgpRouteTable } from './BgpRouteTable'
+import { VpnNatGatewayEditor } from '../VpnNatEditor'
+import { validateVpnNat } from '../vpn-nat'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 
@@ -368,6 +370,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         pruneAzArsRouteMaps(draft)
         pruneDeletedInventory(draft, topology)
         validateInventory(draft)
+        validateVpnNat(draft)
         return draft
       })
     } catch (error) {
@@ -4003,6 +4006,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </div>
 
                 <Suspense fallback={null}>
+                {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} />}
+                {selected.kind === 'vwan-hub' && <VpnNatGatewayEditor key={selected.hubId} topology={topology} targetKind="vwan-hub" targetId={selected.hubId} commit={commitTopology} />}
                 {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}

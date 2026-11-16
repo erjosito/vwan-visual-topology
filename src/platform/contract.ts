@@ -4,6 +4,8 @@ import type { AzNetTopology } from '../azure-net/model'
 import type { AzEndpointRef } from '../azure-net/engine'
 import type { PacketRequest, PacketResult } from '../packet-flow'
 import type { WorkloadIpReference } from '../inventory'
+import type { VpnNatPacketRequest, VpnNatPacketResult } from '../vpn-nat-packet'
+import { VPN_NAT_CAPABILITIES } from '../vpn-nat'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
@@ -51,6 +53,7 @@ export type PlatformRequest = {
   requirements?: Requirement[]
   budget?: { maxMillis?: number; maxOutputBytes?: number }
   packet?: PacketRequest
+  vpnPacket?: VpnNatPacketRequest
 }
 export type Assessment = {
   id: string
@@ -69,6 +72,7 @@ export type PlatformResult = {
   errors: { code: string; message: string }[]
   limitations: string[]
   packet?: PacketResult
+  vpnPacket?: VpnNatPacketResult
 }
 
 export const platformLimits = {
@@ -90,6 +94,9 @@ export const capabilities = {
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],
   workspace: { capabilities: workspaceCapabilities, limitations: workspaceCapabilityLimits },
+  vpnNat: { operation: 'simulate', requestField: 'vpnPacket', modes: ['hub-spoke', 'full'], providers: VPN_NAT_CAPABILITIES,
+    endpoints: 'One original connectionId, ingress/egress initiation and explicit IPv4 TCP/UDP tuple. Replies are assessed only within that forward request.',
+    outcomes: 'Native routing and per-leg translation only; security/application delivery not assessed.' },
   inventory: ['optional original workload/NIC/IP-configuration/public-IP identities', 'explicit detailed subnets on VWAN spokes; no inferred VMs or addresses',
     'optional original subnet/NIC NSG associations and bounded rule declarations',
     'regional Standard Load Balancer frontends, original NIC pools, probes/declared health, ordinary/inbound-NAT/outbound rules and explicit IPv4 primary association'],
@@ -116,5 +123,5 @@ export const capabilities = {
   outcomes: ['satisfied', 'violated', 'not assessed'],
   limits: platformLimits,
   privacy: 'Local deterministic computation. No HTTP listener, files, Azure credentials or cloud calls. An external AI may receive tool inputs/results.',
-  excluded: ['elapsed Azure convergence/history', 'guest/firewall rules and dynamic NAT/live-session enforcement', 'application or packet delivery', 'unobserved imported controls', 'identity and verified badges'],
+  excluded: ['elapsed Azure convergence/history', 'guest/firewall rules and live dynamic NAT/session enforcement', 'application or packet delivery', 'unobserved imported controls', 'identity and verified badges'],
 }

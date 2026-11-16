@@ -42,6 +42,7 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.vpnConnections.some((connection) => connection.nat)) warnings.push('VPN overlap NAT rules, gateway capabilities, instance associations and BGP translation are not deployed by this Bicep starter. Preserve native JSON; generated gateways/connections are not an equivalent NAT deployment.')
   if (topology.inventory?.routerSnatPolicies?.length) warnings.push('Firewall network-rule SNAT/private ranges and NVA guest SNAT are simulation declarations, not deployed by this Bicep starter. Preserve native JSON and configure original device policies separately.')
   if (topology.vnets.some((vnet) => vnet.subnets.some((subnet) => subnet.defaultOutboundAccess === undefined))) {
     warnings.push('Legacy unspecified defaultOutboundAccess is preserved as unspecified; Azure deployment defaults can differ. Set it explicitly for a reproducible outbound posture.')

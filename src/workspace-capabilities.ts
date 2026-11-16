@@ -4,6 +4,7 @@ export const workspaceCapabilities = [
   { feature: 'Classic gateways, Azure Route Server and appliances', vwan: false, classic: true, mixed: true },
   { feature: 'ExpressRoute, locations, SKU scope and Global Reach', vwan: true, classic: true, mixed: true },
   { feature: 'BGP and static VPN connections', vwan: true, classic: true, mixed: true },
+  { feature: 'Bounded classic/VWAN VPN overlap NAT (Azure/Full Hybrid native provider)', vwan: false, classic: true, mixed: true },
   { feature: 'Integrated SD-WAN and spoke NVA BGP peering', vwan: true, classic: false, mixed: true },
   { feature: 'Default, custom and None hub tables; association and propagation', vwan: true, classic: false, mixed: true },
   { feature: 'Case-sensitive inter-hub label propagation', vwan: true, classic: false, mixed: true },
@@ -21,6 +22,6 @@ export const workspaceCapabilityLimits = [
   'Static hub next hops and custom hub tables combined with routing intent are not assessed by either VWAN provider.',
   'Hub route maps are unsupported on integrated SD-WAN. Spoke NVA policies use the hosting VNet connection. Static VPN bypasses BGP policies.',
   'Incomplete or non-converged routing cannot certify reachability or isolation. Aggregate advertisements do not fill holes.',
-  'Internet ingress, NAT, load balancers, NSGs and application delivery remain outside the routing assessment.',
+  'Internet ingress, translator/session behavior, load balancers and NSGs require their separate bounded packet assessment; application delivery is not certified.',
   'Legacy designs retain their native provider and exact IDs. Automatic conversion, unified defaults and selector retirement are separate work.',
 ] as const

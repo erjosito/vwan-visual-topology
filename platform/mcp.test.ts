@@ -3,6 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolve } from 'node:path'
 import { executePlatform } from '../src/platform/service'
+import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })
@@ -75,6 +76,24 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
       request: { ...packetRequest, packet: { ...packetRequest.packet, sourcePort: 0 } },
     } })
     expect(badPacket.isError).toBe(true)
+    const vpnRequest = { contractVersion: 1, operation: 'simulate', document: { mode: 'full', topology: vpnNatFixture('vwan') },
+      vpnPacket: { connectionId: 'vpn', direction: 'ingress', tuple: { sourceAddress: '10.0.0.4',
+        destinationAddress: '192.168.2.5', sourcePort: 12345, destinationPort: 443, protocol: 'tcp' } } }
+    const vpnJob = await call('start_simulation', { request: vpnRequest })
+    let vpnStatus
+    for (let attempt = 0; attempt < 100; attempt++) {
+      vpnStatus = await call('get_job', { handle: vpnJob.handle })
+      if (vpnStatus.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    expect(vpnStatus?.resultStatus).toBe('complete')
+    expect(vpnStatus?.sections).toContain('vpnPacket')
+    const vpnChunk = await call('get_evidence', { handle: vpnJob.handle, section: 'vpnPacket', limit: 16000 })
+    expect(vpnChunk.complete).toBe(true)
+    const vpnEvidence = JSON.parse(vpnChunk.jsonText)
+    expect(vpnEvidence).toEqual(executePlatform(vpnRequest).vpnPacket)
+    expect(vpnEvidence.forward.routing).toBe('reachable')
+    expect(vpnEvidence.reply.routing).toBe('reachable')
     const second = await call('start_simulation', { request })
     await call('cancel_job', { handle: second.handle })
     expect((await call('get_job', { handle: second.handle })).resultStatus).toBe('not assessed')

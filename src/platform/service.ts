@@ -9,6 +9,7 @@ import { contractVersion, engineVersion, platformLimits } from './contract'
 import type { Assessment, FlowRequirement, PlatformDocument, PlatformRequest, PlatformResult, Requirement } from './contract'
 import type { AzEndpointRef } from '../azure-net/engine'
 import { tracePacket, validatePacketRequest } from '../packet-flow'
+import { traceVpnNatPacket, validateVpnNatPacketRequest } from '../vpn-nat-packet'
 import { assessPacket } from './packet-assessment'
 
 export function admitJson(input: unknown): string {
@@ -52,7 +53,7 @@ export function validateRequest(input: unknown): PlatformRequest {
     if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error('Unknown contract field; requirements must not be silently omitted.')
   }
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Request object required.')
-  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet'])
+  keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket'])
   if (request.contractVersion !== contractVersion || (request.engineVersion !== undefined && request.engineVersion !== engineVersion)) throw new Error('Unsupported contract or engine version.')
   if (!['validate', 'simulate', 'evaluate'].includes(request.operation)) throw new Error('Unknown operation.')
   if (request.packet !== undefined) {
@@ -60,6 +61,10 @@ export function validateRequest(input: unknown): PlatformRequest {
     validatePacketRequest(request.packet)
   }
   if (!request.document || !['vwan', 'hub-spoke', 'full'].includes(request.document.mode)) throw new Error('Explicit supported mode required.')
+  if (request.vpnPacket !== undefined) {
+    if (request.operation !== 'simulate' || request.document.mode === 'vwan') throw new Error('VPN NAT packet assessment requires simulate and the Azure/Full Hybrid native provider.')
+    validateVpnNatPacketRequest(request.vpnPacket)
+  }
   keys(request.document, ['mode', 'topology'])
   if (request.locale !== undefined && !['en', 'ja'].includes(request.locale)) throw new Error('Unsupported locale.')
   if (request.budget !== undefined && (!request.budget || typeof request.budget !== 'object' || Array.isArray(request.budget))) throw new Error('Budget object required.')
@@ -186,6 +191,7 @@ export function executePlatform(input: unknown): PlatformResult {
     } else {
       const simulation = simulateAzNet(document.topology)
       result.simulation = simulation
+      if (request.vpnPacket) result.vpnPacket = traceVpnNatPacket(document.topology, request.vpnPacket, simulation)
       if (simulation.controlPlaneComplete === false) result.status = 'not assessed'
       if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)
       result.limitations = simulation.warnings
