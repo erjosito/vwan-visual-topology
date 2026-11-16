@@ -9,7 +9,7 @@ import { VPN_NAT_CAPABILITIES } from '../vpn-nat'
 import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-capabilities'
 
 export const contractVersion = 1 as const
-export const engineVersion = '2026.11.16.9'
+export const engineVersion = '2026.11.16.10'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }

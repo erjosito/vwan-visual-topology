@@ -383,7 +383,7 @@ foreach ($section in @('nicEffectiveRoutes', 'arsLearnedRoutes', 'arsAdvertisedR
 $capture = [ordered]@{
     kind               = 'azure-network-capture'
     version            = 2
-    collectorVersion   = '2026.11.16.6'
+    collectorVersion   = '2026.11.16.10'
     connectivityVersion = 1
     observationVersion = 1
     context            = $context

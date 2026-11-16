@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 1
+export const scorecardVersion = 2
 export const unitPlan = [
   { id: 'routing-packet-regressions', label: 'Routing/packet regression conformance', files: [
-    'src/routing.test.ts', 'src/paths.test.ts', 'src/vpn-routing.test.ts', 'src/hub-routing.test.ts',
+    'src/routing.test.ts', 'src/paths.test.ts', 'src/vpn-routing.test.ts', 'src/vpn-nat.test.ts', 'src/hub-routing.test.ts',
     'src/azure-net/engine.test.ts', 'src/packet-egress.test.ts', 'src/packet-ingress.test.ts',
     'src/packet-load-balancer.test.ts', 'src/packet-security.test.ts', 'src/azure-comparison.test.ts',
   ] },
@@ -20,7 +20,7 @@ export const unitPlan = [
 ]
 export const browserPlan = [
   { id: 'ui-workflow-regressions', label: 'Scripted UI workflow regression conformance', files: [
-    'e2e/canvas-presentation.spec.ts', 'e2e/network-detail.spec.ts', 'e2e/single-workspace.spec.ts',
+    'e2e/canvas-presentation.spec.ts', 'e2e/network-detail.spec.ts', 'e2e/single-workspace.spec.ts', 'e2e/vpn-nat.spec.ts',
   ] },
   { id: 'training-workflow-regressions', label: 'Scripted training workflow regression conformance', files: ['e2e/learning.spec.ts'] },
   { id: 'localization-workflow-regressions', label: 'Scripted localization workflow regression conformance', files: ['e2e/localization.spec.ts'] },

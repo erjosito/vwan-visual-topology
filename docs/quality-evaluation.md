@@ -53,16 +53,17 @@ Vitest/Playwright reports, browser artifacts and `scorecard.json` under a unique
 run directory. Everything stays local. CI runs the scorecard adapter tests;
 it does not automatically upload study data or claim a full evaluation.
 
-The executable manifest is `scripts/quality-scorecard.mjs`, version 1:
+The executable manifest is `scripts/quality-scorecard.mjs`, version 2 (adds the
+VPN overlap NAT unit and scripted workflow cases to the initial version 1 plan):
 
 | Numeric series | Current evidence subset |
 | --- | --- |
-| Routing/packet regressions | Native routing, paths, VPN/hub contexts, classic routing, egress/ingress/NSG/LB and captured comparison tests |
+| Routing/packet regressions | Native routing, paths, VPN/hub contexts and overlap NAT, classic routing, egress/ingress/NSG/LB and captured comparison tests |
 | Requirement-grading regressions | Route/flow and packet requirement tests |
 | Training-contract regressions | Routing and connectivity practice/rubric/progress tests |
 | Persistence/local-boundary regressions | Workspace originals/recovery, inventory, platform service and MCP tests |
 | Localization-contract regressions | Message/localization contract tests |
-| Scripted UI workflows | Canvas presentation, original VNet detail and single-workspace tests |
+| Scripted UI workflows | Canvas presentation, original VNet detail, single-workspace and VPN NAT tests |
 | Scripted training workflows | Learning/practice browser tests |
 | Scripted localization workflows | Localization browser tests |
 
@@ -88,7 +89,7 @@ Passing this subset is not a release approval. Routing errors, unsafe grading,
 data loss/privacy violations or incomplete critical evidence cannot be
 compensated for by good colors, speed or another passing dimension.
 
-The first local baseline passed 417 registered unit and 72 browser cases. This
+The first local version 1 baseline passed 417 registered unit and 72 browser cases. This
 produced 100 for all eight *regression-conformance* series, with zero skipped or
 flaky cases. It does **not** establish 100% usability, content quality or Azure
 fidelity. The initial evaluation also caught a stale branding expectation and
