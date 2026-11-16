@@ -1,0 +1,73 @@
+name: GitHub statistics
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-statistics
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: github-statistics
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate configuration
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_STATS_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_STATS_TENANT_ID }}
+          AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STATS_STORAGE_ACCOUNT }}
+        run: |
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_STORAGE_ACCOUNT; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing configuration: $name. See docs/github-statistics.md."
+              exit 1
+            fi
+          done
+      - name: Test collector
+        run: node --test scripts/collect-github-statistics.test.mjs
+      - name: Collect snapshot
+        id: snapshot
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_STATS_TRAFFIC_TOKEN: ${{ secrets.GH_STATS_TRAFFIC_TOKEN }}
+        run: |
+          node scripts/collect-github-statistics.mjs --output test-artifacts/github-statistics.json
+          day=$(node --input-type=module -e "import fs from 'node:fs'; console.log(JSON.parse(fs.readFileSync('test-artifacts/github-statistics.json')).collectedAt.slice(0, 10).replaceAll('-', '/'))")
+          echo "blob=github/${GITHUB_REPOSITORY}/snapshots/${day}/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.json" >> "$GITHUB_OUTPUT"
+      - name: Sign in to Azure without a stored credential
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_STATS_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_STATS_TENANT_ID }}
+          allow-no-subscriptions: true
+      - name: Persist private snapshot
+        env:
+          AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STATS_STORAGE_ACCOUNT }}
+          SNAPSHOT_BLOB: ${{ steps.snapshot.outputs.blob }}
+        run: |
+          az storage blob upload \
+            --account-name "$AZURE_STORAGE_ACCOUNT" \
+            --container-name github-statistics \
+            --name "$SNAPSHOT_BLOB" \
+            --file test-artifacts/github-statistics.json \
+            --auth-mode login \
+            --overwrite false \
+            --content-type application/json \
+            --only-show-errors \
+            --output none
+          echo "Snapshot saved to private Azure Blob Storage. No statistics were published." >> "$GITHUB_STEP_SUMMARY"

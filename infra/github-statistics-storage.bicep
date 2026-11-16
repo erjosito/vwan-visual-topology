@@ -1,0 +1,78 @@
+param location string
+param storageAccountName string
+param repository string
+param tags object
+
+resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
+  name: storageAccountName
+  location: location
+  tags: tags
+  kind: 'StorageV2'
+  sku: {
+    name: 'Standard_LRS'
+  }
+  properties: {
+    accessTier: 'Hot'
+    supportsHttpsTrafficOnly: true
+    minimumTlsVersion: 'TLS1_2'
+    allowBlobPublicAccess: false
+    allowSharedKeyAccess: false
+    defaultToOAuthAuthentication: true
+    publicNetworkAccess: 'Enabled'
+  }
+}
+
+resource blobs 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
+  parent: storage
+  name: 'default'
+  properties: {
+    deleteRetentionPolicy: {
+      enabled: true
+      days: 30
+    }
+    containerDeleteRetentionPolicy: {
+      enabled: true
+      days: 30
+    }
+  }
+}
+
+resource container 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobs
+  name: 'github-statistics'
+  properties: {
+    publicAccess: 'None'
+  }
+}
+
+resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: 'id-github-statistics'
+  location: location
+  tags: tags
+}
+
+resource federation 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+  parent: identity
+  name: 'github-statistics-environment'
+  properties: {
+    issuer: 'https://token.actions.githubusercontent.com'
+    subject: 'repo:${repository}:environment:github-statistics'
+    audiences: [
+      'api://AzureADTokenExchange'
+    ]
+  }
+}
+
+resource uploadRole 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(container.id, identity.id, 'blob-data-contributor')
+  scope: container
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+output storageAccount string = storage.name
+output container string = container.name
+output clientId string = identity.properties.clientId

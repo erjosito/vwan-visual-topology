@@ -24,6 +24,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - run: node --test scripts/collect-github-statistics.test.mjs
       - run: npm run lint
       - run: npm run test:evaluation
       - run: npm test
@@ -35,6 +36,7 @@ jobs:
           az bicep build --file test-artifacts/azure-files/bicep/single-hub.bicep --stdout > test-artifacts/azure-files/bicep/single-hub.json
           az bicep build --file test-artifacts/azure-files/bicep/ars-policies.bicep --stdout > test-artifacts/azure-files/bicep/ars-policies.json
           az bicep build --file test-artifacts/azure-files/bicep/nat-egress.bicep --stdout > test-artifacts/azure-files/bicep/nat-egress.json
+          az bicep build --file infra/github-statistics.bicep --stdout > "$RUNNER_TEMP/github-statistics.json"
           az bicep build --file test-artifacts/azure-files/bicep/connectivity-public-lb.bicep --stdout > test-artifacts/azure-files/bicep/connectivity-public-lb.json
           az bicep build --file test-artifacts/azure-files/bicep/connectivity-private-lb.bicep --stdout > test-artifacts/azure-files/bicep/connectivity-private-lb.json
           az bicep build --file test-artifacts/azure-files/bicep/connectivity-firewall-dnat.bicep --stdout > test-artifacts/azure-files/bicep/connectivity-firewall-dnat.json
