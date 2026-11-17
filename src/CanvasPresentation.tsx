@@ -78,12 +78,12 @@ export function CanvasControls({ zoom, onZoom, onResetView, onFitView, minZoom =
     .filter((level) => level === zoom || (level >= minZoom && level <= maxZoom)).sort((a, b) => a - b)
   return <div className="canvas-controls-stack">{status}<div className="canvas-controls" role="group" aria-label={t('Canvas controls')}>
     <div className="canvas-zoom-controls">
-      <button type="button" aria-label={t('Zoom out')} title={t('Zoom out')} disabled={zoom <= minZoom}
+      <button type="button" aria-label={t('Zoom out')} title={`${t('Zoom out')} (Ctrl+-)`} aria-keyshortcuts="Control+-" disabled={zoom <= minZoom}
         onClick={() => onZoom(Math.max(minZoom, +(zoom - zoomStep).toFixed(2)))}>-</button>
       <select aria-label={t('Canvas zoom')} value={zoom} onChange={(event) => onZoom(Number(event.target.value))}>
         {zoomLevels.map((level) => <option key={level} value={level}>{Math.round(level * 100)}%</option>)}
       </select>
-      <button type="button" aria-label={t('Zoom in')} title={t('Zoom in')} disabled={zoom >= maxZoom}
+      <button type="button" aria-label={t('Zoom in')} title={`${t('Zoom in')} (Ctrl++)`} aria-keyshortcuts="Control+=" disabled={zoom >= maxZoom}
         onClick={() => onZoom(Math.min(maxZoom, +(zoom + zoomStep).toFixed(2)))}>+</button>
     </div>
     <button type="button" onClick={onResetView}>{t('Reset view')}</button>

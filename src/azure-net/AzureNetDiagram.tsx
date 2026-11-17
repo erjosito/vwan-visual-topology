@@ -8,6 +8,7 @@ import { DiagramNodeBadge, DiagramNodeText } from '../DiagramNodeLabels'
 import { DiagramButton } from '../DiagramButton'
 import { azHubGatewayConnections, hubGatewayLabel } from '../hub-gateways'
 import { useCanvasPresentation } from '../useCanvasPresentation'
+import { useCanvasZoom } from '../useCanvasZoom'
 import type { RouteMap, RouteMapAssignment, RouteMapDirection } from '../model'
 import { PathMotion, type MotionFlow, type MotionSegment } from '../PathMotion'
 import { RouteMapPreview } from '../RouteMapPreview'
@@ -18,6 +19,8 @@ import { inventoryCounts } from '../inventory'
 import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
 import type { AzFlowTrace } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
+
+const zoomLimits = { minZoom: 0.65, maxZoom: 1.6, zoomStep: 0.15 }
 
 export type AzSelectedEntity =
   | { kind: 'subnet'; vnetId: string; subnetId: string }
@@ -315,6 +318,11 @@ export function AzureNetDiagram({
 
   const [preview, setPreview] = useState<{ kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site'; id: string; x: number; y: number } | null>(null)
   const dragPointerId = useRef<number | null>(null)
+  const changeZoom = useCanvasZoom({
+    svgRef, zoom, onZoom: (next) => { closePolicyPreview(); setHoverPopover(null); setZoom(next) }, ...zoomLimits,
+    onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
+    isDragging: () => dragPointerId.current !== null,
+  })
   const clearDrag = (event?: { pointerId: number }) => {
     if (event && event.pointerId !== dragPointerId.current) return
     dragPointerId.current = null
@@ -676,6 +684,10 @@ export function AzureNetDiagram({
         className="aznet-diagram-svg"
         data-testid="aznet-diagram-svg"
         data-learning-canvas
+        role="group"
+        tabIndex={0}
+        aria-label={t('Interactive Azure networking topology')}
+        aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')}
         viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
         onPointerDownCapture={(event) => {
           closePolicyPreview()
@@ -2179,7 +2191,7 @@ export function AzureNetDiagram({
         )
       })()}
 
-      <CanvasControls zoom={zoom} onZoom={setZoom} minZoom={0.65} maxZoom={1.6} zoomStep={0.15}
+      <CanvasControls zoom={zoom} onZoom={changeZoom} {...zoomLimits}
         onFitView={() => {
           const bounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
           setZoom(1180 / bounds.width); setPan({ x: bounds.x, y: bounds.y })

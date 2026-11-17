@@ -5,6 +5,91 @@ import { sampleHybridVwanAndHubSpoke, sampleArsSdwanNvaCoexistence } from '../sr
 const styleKey = 'aznet-canvas-style:v1'
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  test(`${mode}: canvas keyboard and anchored wheel zoom share bounds without changing topology`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.goto(`/?mode=${mode}&sample=${mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'}`)
+    const svg = page.locator(mode === 'vwan' ? 'svg.diagram' : '[data-testid="aznet-diagram-svg"]')
+    const zoom = page.getByLabel('Canvas zoom', { exact: true })
+    const storageKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), storageKey)).not.toBeNull()
+    const original = await page.evaluate((key) => localStorage.getItem(key), storageKey)
+    await svg.focus()
+    await page.keyboard.press('Control+=')
+    await expect(zoom).toHaveValue(mode === 'vwan' ? '1.25' : '1.15')
+    await page.keyboard.press('Control+-')
+    await expect(zoom).toHaveValue('1')
+    for (const [key, code] of [['+', 'NumpadAdd'], ['-', 'NumpadSubtract'], ['+', 'Equal'], ['_', 'Minus']]) {
+      const before = Number(await zoom.inputValue())
+      await svg.evaluate((element, { key, code }) => element.dispatchEvent(new KeyboardEvent('keydown', { key, code, ctrlKey: true, shiftKey: code === 'Equal' || code === 'Minus', bubbles: true, cancelable: true })), { key, code })
+      await expect.poll(async () => Number(await zoom.inputValue())).toBeCloseTo(before + (key === '+' ? 1 : -1) * (mode === 'vwan' ? 0.25 : 0.15), 4)
+    }
+
+    await page.getByRole('button', { name: 'Fit view', exact: true }).click()
+    const viewport = await svg.evaluate((element) => {
+      const rect = element.getBoundingClientRect(), parent = element.parentElement!.getBoundingClientRect()
+      return { x: Math.round(Math.max(rect.left, parent.left) + Math.min(rect.width, parent.width) * 0.7),
+        y: Math.round(Math.max(rect.top, parent.top) + Math.min(rect.height, parent.height) * 0.4) }
+    })
+    const worldPoint = () => svg.evaluate((element, point) => {
+      const matrix = (element as SVGSVGElement).getScreenCTM()!
+      const world = new DOMPoint(point.x, point.y).matrixTransform(matrix.inverse())
+      return { x: world.x, y: world.y }
+    }, viewport)
+    const before = await worldPoint()
+    await page.mouse.move(viewport.x, viewport.y)
+    await page.mouse.wheel(0, -100)
+    await expect.poll(async () => Number(await zoom.inputValue())).toBeGreaterThan(1)
+    await expect.poll(async () => {
+      const after = await worldPoint()
+      return Math.hypot(after.x - before.x, after.y - before.y)
+    }).toBeLessThan(0.1)
+    const wheelZoom = Number(await zoom.inputValue())
+    await svg.evaluate((element, point) => element.dispatchEvent(new WheelEvent('wheel', { deltaY: 0.5, clientX: point.x, clientY: point.y, bubbles: true, cancelable: true })), viewport)
+    await expect.poll(async () => Number(await zoom.inputValue())).toBeLessThan(wheelZoom)
+    await svg.evaluate((element, point) => element.dispatchEvent(new WheelEvent('wheel', { deltaY: -3, deltaMode: 1, clientX: point.x, clientY: point.y, bubbles: true, cancelable: true })), viewport)
+    await expect.poll(async () => Number(await zoom.inputValue())).toBeGreaterThan(wheelZoom)
+    const pannedFrom = await svg.getAttribute('viewBox')
+    const bounds = (await svg.boundingBox())!
+    await page.mouse.move(bounds.x + 4, bounds.y + 4)
+    await page.mouse.down()
+    await page.mouse.move(bounds.x + 44, bounds.y + 24, { steps: 4 })
+    await page.mouse.up()
+    await expect(svg).not.toHaveAttribute('viewBox', pannedFrom!)
+    for (const [key, bound] of [['=', mode === 'vwan' ? '1.5' : '1.6'], ['-', mode === 'vwan' ? '0.75' : '0.65']]) {
+      await svg.focus()
+      for (let index = 0; index < 12; index++) await page.keyboard.press(`Control+${key}`)
+      await expect(zoom).toHaveValue(bound)
+    }
+    await page.getByRole('button', { name: 'Reset view', exact: true }).click()
+    await expect(zoom).toHaveValue('1')
+    await expect(svg).toHaveAttribute('viewBox', /^0 0 /)
+
+    await page.getByRole('button', { name: 'Sample topologies', exact: true }).click()
+    const search = page.getByRole('searchbox', { name: 'Search samples', exact: true })
+    const handled = await search.evaluate((element) => {
+      const event = new KeyboardEvent('keydown', { key: '+', ctrlKey: true, bubbles: true, cancelable: true })
+      element.dispatchEvent(event)
+      return event.defaultPrevented
+    })
+    expect(handled).toBe(false)
+    await search.hover()
+    await page.mouse.wheel(0, -100)
+    await expect(zoom).toHaveValue('1')
+    await page.keyboard.press('Escape')
+    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(original)
+    const node = page.locator(mode === 'vwan' ? '.spoke-node' : '[data-testid^="aznet-select-vnet-"]').first()
+    await node.focus()
+    await page.keyboard.press('Control+=')
+    await expect(zoom).toHaveValue(mode === 'vwan' ? '1.25' : '1.15')
+    await page.keyboard.press('Shift+F10')
+    await expect(page.getByRole('menu').first()).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(node).toBeFocused()
+    expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBe(original)
+  })
+}
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode}: keyboard navigation keeps scrolling context-menu actions visible`, async ({ page }, testInfo) => {
     if (mode === 'full') await page.addInitScript(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
     await page.setViewportSize({ width: 390, height: 320 })

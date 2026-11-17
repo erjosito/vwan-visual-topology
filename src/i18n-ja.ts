@@ -20,6 +20,8 @@ export const ja: Record<string, string> = {
   'Loop duration': 'ループ時間',
   'Export flow diagram': 'フロー図をエクスポート',
   'Cancel export': 'エクスポートをキャンセル',
+  'Interactive Azure networking topology': '対話型 Azure ネットワーク トポロジ',
+  'Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.': 'キャンバスの拡大縮小: Ctrl とプラス/マイナス、またはマウス ホイール。操作はキャンバス内でのみ有効です。',
   'Managed VNRA': 'マネージド VNRA',
   'Add Managed VNRA': 'マネージド VNRA を追加',
   'Configure Managed VNRA': 'マネージド VNRA を構成',

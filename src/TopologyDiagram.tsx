@@ -13,6 +13,7 @@ import type { SiteRoute } from './bgp'
 import { diagramCurve as baseDiagramCurve, diagramLayout } from './diagram-layout'
 import { connectionBend, fitDiagram } from './connection-geometry'
 import { useCanvasPresentation } from './useCanvasPresentation'
+import { useCanvasZoom } from './useCanvasZoom'
 import { NetworkNodeIcon as NodeIcon } from './NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from './DiagramNodeLabels'
 import { hubGatewayConnections, hubGatewayLabel } from './hub-gateways'
@@ -27,6 +28,7 @@ const destinationPalette = [
   'var(--path-11)', 'var(--path-12)', 'var(--path-13)', 'var(--path-14)', 'var(--path-15)',
   'var(--path-16)', 'var(--path-17)', 'var(--path-18)', 'var(--path-19)', 'var(--path-20)',
 ] as const
+const zoomLimits = { minZoom: 0.75, maxZoom: 1.5, zoomStep: 0.25 }
 
 export interface DiagramContextMenu {
   selection?: ObjectSelection; x: number; y: number; invoker: SVGElement
@@ -84,6 +86,11 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
   const panDrag = useRef<{ pointerId: number; start: NodePosition; origin: NodePosition; unitsPerPixel: number } | undefined>(undefined)
+  const changeZoom = useCanvasZoom({
+    svgRef: svg, zoom, onZoom: (next) => { closePreview(); onZoom(next) }, ...zoomLimits,
+    onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
+    isDragging: () => !!drag.current || !!panDrag.current,
+  })
   const { positions, width: layoutWidth, height: layoutHeight } = diagramLayout(topology, layout)
   const nvaSiteMap = new Map(topology.connections.filter((c) => c.transport === 'SpokeNVA' && c.spokeId).map((c) => [c.siteId, c.spokeId!]))
   const visualId = (id: string) => nvaSiteMap.get(id) ?? id
@@ -340,7 +347,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     if (panDrag.current?.pointerId !== event.pointerId) return
     panDrag.current = undefined; setPanning(false)
   }
-  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} onPointerDownCapture={closePreview}
+  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')} onPointerDownCapture={closePreview}
     onPointerDown={(event) => {
       if (event.pointerType !== 'mouse' || event.button !== 0 || !event.isPrimary
         || (event.target as Element).closest('g[role="button"], .network-link, .edge-badge, .policy-guide, .routing-path-stop')) return
@@ -564,7 +571,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       </g>
     })}
   </svg>{preview && previewNode && previewLink && previewMap && !faults[preview.owner.id] && !faults[preview.connectionId] && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
-    <CanvasControls zoom={zoom} onZoom={onZoom} status={canvasStatus} onResetView={() => {
+    <CanvasControls zoom={zoom} onZoom={changeZoom} {...zoomLimits} status={canvasStatus} onResetView={() => {
       setFitting(false); setPan({ x: 0, y: 0 }); onZoom(1)
       scroll.current?.scrollTo(0, 0)
     }} onFitView={() => {
