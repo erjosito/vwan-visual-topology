@@ -1,0 +1,8 @@
+.learning-status-trigger { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; max-width: 100%; white-space: normal; font-size: 12px; }
+.unified-topbar-left:has(.learning-status-trigger) { flex-wrap: wrap; min-width: 0; max-width: 100%; flex-basis: 100%; }
+:is(.aznet-topbar, .unified-topbar):has(.learning-status-trigger) { flex-wrap: wrap; }
+:is(.aznet-topbar, .unified-topbar):has(.learning-status-trigger) > :is(.aznet-topbar-controls, .unified-topbar-controls) { flex-basis: 100%; justify-content: flex-start; }
+@media (max-width: 760px) {
+  :is(.aznet-topbar, .unified-topbar):has(.learning-status-trigger) { flex-wrap: nowrap; max-height: min(180px, 30dvh); overflow: auto; }
+  :is(.aznet-topbar, .unified-topbar):has(.learning-status-trigger) > :is(.unified-topbar-left, .aznet-topbar-controls, .unified-topbar-controls) { flex-basis: auto; flex-shrink: 0; }
+}

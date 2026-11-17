@@ -1,18 +1,11 @@
 import type { CourseBundle } from './course-contract'
 import { courseScenarios } from './course-scenarios'
+import { peeringCheckpoint, previewCourse } from './course-profile'
 
 // Two assessed examples; the complete white-to-black curriculum is a separate content stage.
 export const exampleCourse: CourseBundle = {
   schemaVersion: 1,
-  course: {
-    id: 'azure-networking-preview', contentVersion: 2, publication: 'preview',
-    title: { en: 'Azure networking: guided practice', ja: 'Azure ネットワーク: ガイド付き練習' },
-    lessonOrder: ['direct-peering', 'route-override'],
-    belts: [
-      { id: 'white', name: { en: 'White belt', ja: '白帯' }, color: '#ffffff', pointsRequired: 0, checkpointTaskIds: [] },
-      { id: 'yellow', name: { en: 'Yellow belt', ja: '黄帯' }, color: '#eab308', pointsRequired: 100, checkpointTaskIds: ['peering.explain'] },
-    ],
-  },
+  course: previewCourse,
   scenarios: courseScenarios,
   lessons: [
     {
@@ -59,10 +52,10 @@ export const exampleCourse: CourseBundle = {
           checkId: 'connected', guidanceIds: ['routes-a'], hints: [],
         },
         {
-          id: 'peering.explain', assessmentVersion: 1, awardId: 'peering.explain', points: 20,
+          id: peeringCheckpoint.taskId, assessmentVersion: peeringCheckpoint.assessmentVersion, awardId: 'peering.explain', points: 20,
           title: { en: 'Explain peering scope', ja: 'ピアリングの範囲を説明する' },
           instruction: { en: 'Apply what changed to a third VNet, rather than memorizing a menu location.', ja: 'メニューの位置を覚えるのではなく、変更の意味を 3 つ目の VNet に適用してください。' },
-          checkId: 'explain-nontransitive', guidanceIds: [], hints: [],
+          checkId: peeringCheckpoint.checkId, guidanceIds: [], hints: [],
         },
       ],
     },

@@ -6,7 +6,7 @@ import './practice-workspace.css'
 
 export function PracticeWorkspaceBar({ active, notice, onReturn, onResume, onDiscard }: {
   active: boolean
-  notice: '' | 'read' | 'save' | 'conflict'
+  notice: '' | 'read' | 'save' | 'conflict' | 'ownership'
   onReturn: () => void
   onResume?: () => void
   onDiscard: () => void
@@ -25,7 +25,8 @@ export function PracticeWorkspaceBar({ active, notice, onReturn, onResume, onDis
     {active ? <button type="button" onClick={onReturn}>{text(practiceLabels.returnDesign, language)}</button>
       : onResume && <button type="button" onClick={onResume}>{text(practiceLabels.resumePractice, language)}</button>}
     <button ref={discard} type="button" onClick={() => setConfirm(true)}>{text(practiceLabels.discardPractice, language)}</button>
-    {notice && <p role="alert">{text(notice === 'read' ? practiceLabels.practiceReadFailure
+    {notice && <p role="alert">{text(notice === 'ownership' ? practiceLabels.practiceOwnership
+      : notice === 'read' ? practiceLabels.practiceReadFailure
       : notice === 'conflict' ? practiceLabels.practiceConflict : onResume ? practiceLabels.practiceSaveFailure : practiceLabels.practiceStartFailure, language)}</p>}
     <dialog ref={dialog} aria-labelledby="discard-practice-title" onCancel={(event) => { event.preventDefault(); close() }}>
       <h2 id="discard-practice-title">{text(practiceLabels.discardPractice, language)}</h2>

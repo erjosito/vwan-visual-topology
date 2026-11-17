@@ -3,10 +3,11 @@
 The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
 and evidence-gated runner (#180) activate two representative assessed lessons.
-The root owns the runner across editor switches and pause/resume. Completion
-history currently lives in this open app session, not across reload. Durable
-awards/belts and the full curriculum remain #183/#184. No legacy JSON draft,
-raw requirements or engine payload is shown; legacy storage stays untouched.
+The root owns the runner across editor switches and pause/resume. A bounded
+browser-local ledger (#183) restores compatible completions after reload and
+derives first-earned points, checkpoint-gated belts and the header status.
+The full curriculum remains #184. No legacy JSON draft, raw requirements or
+engine payload is shown; legacy storage stays untouched.
 
 `runner.ts` is the single progression authority. Supported check kinds dispatch
 to reusable checks, never lesson-ID branches. A passing candidate is bound to
@@ -33,8 +34,10 @@ up lesson names or hardcode the curriculum. Opening/selecting lesson content mus
 not invoke it implicitly. Resume the existing canvas instead of loading its
 starter again. `practice-workspace.ts` owns the separate canvas envelope; it is
 not the course progress/award ledger. `practice-session.ts` loads only when
-practice exists or is explicitly started, keeping optional learning off the
-normal startup asset graph. See `PLATFORM.md` for exact persistence,
+practice exists or is explicitly started, keeping the controller and full course
+off the normal startup asset graph. The header reads only lightweight course
+metadata and the local ledger; details and concept bodies load on demand.
+See `PLATFORM.md` for exact persistence,
 return, recovery and same-session history behavior.
 
 ## What goes where
@@ -42,12 +45,16 @@ return, recovery and same-session history behavior.
 | File | Edit for |
 | --- | --- |
 | `course-outline.ts` | Full journey objectives and planned point budgets |
-| `course-examples.ts` | Lesson order, preview belts/thresholds, localized instructions, hints, quizzes, tasks, checks and guidance references |
+| `course-profile.ts` | Lightweight course identity, order, preview belts/thresholds and checkpoint assessment identities shared with the header |
+| `course-examples.ts` | Localized instructions, hints, quizzes, tasks, checks and guidance references |
 | `course-scenarios.ts` | Native starter documents; copy before editing |
 | `course-contract.ts` | A genuinely new reusable task/check/action shape |
 | `course-validation.ts` | Validation for a new shape/scope, not individual lesson IDs |
 | `course.test.ts` | Content validation and real-engine failure/solution fixtures |
 | `runner.ts`, `runner.test.ts` | Reusable progression, current-revision checks, completion events and cancellation |
+| `progress-ledger.ts`, `progress-ledger.test.ts` | Bounded local completion history, compatible first awards, points/belt derivation and storage recovery |
+| `practice-ownership.ts` | Exclusive origin-wide practice/award writer ownership |
+| `content.ts`, `concept-bodies.ts` | Concept summaries/references and lazily loaded explanation bodies |
 
 Use declarative TypeScript data and the existing `{ en, ja }` convention. No
 callbacks, scripts, CSS selectors, translated-label matching or synthetic clicks.
@@ -139,7 +146,7 @@ guidance target must be used so its scenario scope is actually validated.
 ## Versioning, insertion and historical awards
 
 The policy is exported as `courseCompatibilityPolicy` for downstream stages.
-The runner consumes these stable identities; durable award storage follows in #183.
+The runner and persistent ledger consume these stable identities.
 
 | Change | Required action |
 | --- | --- |
@@ -150,8 +157,8 @@ The runner consumes these stable identities; durable award storage follows in #1
 | Removed task/lesson | Archive its completion/award; never transfer credit to replacement IDs |
 | Deliberately new credit | New award ID plus explicit migration policy; a version bump alone cannot award twice |
 
-Future completion records must bind course/task identity, assessment version and
-document revision. First awards must record `(courseId, awardId, pointsAtAward)`;
+Completion records bind course/task identity, assessment version and
+document revision. First awards derive `(courseId, awardId, pointsAtAward)`;
 unique award identity is independent of task ordering and assessment version.
 Historical awards never disappear or reprice when current content changes.
 An older pass can remain history without satisfying a revised current checkpoint.
@@ -162,5 +169,26 @@ Do not silently reprice tasks downward and make the new course impossible for
 returning learners: a curriculum update must review both new-learner reachability
 and paths for affected existing learners under the retained historical awards.
 Keep legacy `aznet-simulator:practice:v1` entries unchanged as independent history;
-none prove completion of new guided tasks. Storage/multi-tab handling and executable
-migration tests belong to #183.
+none prove completion of new guided tasks. Status details offer a download of the
+original legacy bytes rather than inventing guided credit or rewriting old data.
+
+The guided ledger uses `network-simulator:learning-progress:v1`, envelope version
+1 and award policy version 1. Its immutable first completion for each
+`(courseId, awardId)` supplies the historical points; no mutable total or duplicate
+award array is persisted. Reassessment records a new completion identity without
+re-awarding it. Records are bounded to 2,048 completions and 1,000,000 characters.
+Do not silently prune history or accept unknown fields/policy versions.
+
+Only the origin's exclusive Web Locks practice owner may write practice or
+awards. Pause does not relinquish an editable canvas. Return to the normal design,
+discard practice or close the tab to release it; another tab can then resume the
+latest saved canvas. Missing/rejected locks fail closed for practice, not normal
+designs. Expected-raw comparisons additionally reject stale/old-client writes.
+
+Quota-failed accepted completions stay in memory with **Session only**, backup
+and retry-saving controls. Conflicted/corrupt/unavailable records do not invent
+zero credit or overwrite originals. A refused completion sink cannot advance
+the runner. Confirmed reset rechecks the confirmation snapshot and deletes only
+the guided ledger, not the practice canvas, normal designs or legacy history.
+Clearing browser-origin/Electron-profile data still removes local progress;
+there is no authentication, cloud sync, encryption or verified certification.

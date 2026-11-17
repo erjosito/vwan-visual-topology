@@ -199,11 +199,36 @@ save failures keep the latest practice in memory with a visible session-only
 warning; it remains resumable for export before reload. Damaged practice is
 preserved and blocks replacement until confirmed **Discard practice workspace**,
 which deletes only the practice-canvas key, not drafts, achievements, preferences
-or normal designs. Known stale writes/discards refuse to overwrite another
-tab's saved practice; this is not atomic multi-tab ownership or synchronization.
-Durable completion/award storage, points and belts remain #183. This stage
-emits stable scoped completion events but does not claim durable awards or a
-complete white-to-black-belt curriculum (#184).
+or normal designs. An origin-wide exclusive Web Lock
+(`network-simulator:practice-writer:v1`) now protects both practice persistence
+and guided awards. A second tab remains a reader until the owner returns to its
+normal design, discards practice or closes. Pausing the sidebar does not release
+an editable practice canvas. Resume acquires ownership and adopts the latest
+saved canvas only when this tab has no unsaved local edits. Missing/rejected
+Web Locks fail closed for practice; normal designs remain available. Expected-raw
+comparisons additionally refuse stale/old-client writes. No synchronization of
+independently edited normal designs is claimed.
+
+Guided history uses `network-simulator:learning-progress:v1`, envelope and award
+policy version 1, bounded to 2,048 completion events and 1,000,000 characters.
+Completion identity is `(courseId, taskId, assessmentVersion)`; first completion
+per `(courseId, awardId)` supplies immutable historical points, including retired
+tasks. Reassessment grants no duplicate credit. Current task/check identities
+gate unlocks and mastery checkpoints; belt names/order, thresholds and checkpoint
+identities come from the lightweight declarative course profile. Published point
+changes never reprice history; changed thresholds/checkpoints may leave an honest
+gap. Totals and belts derive from this ledger, never an incremented mutable total.
+
+The shared header shows **Not signed in**, a labeled belt icon and points in
+both native providers. Optional details show point/checkpoint gaps, storage scope,
+single-writer recovery, first-award policy, backup, retry and scoped reset.
+Damaged/unavailable records are not presented as zero earned credit. Quota-failed
+accepted events remain session-only and exportable, never reported as durable.
+Known conflicts refuse completion/advance and preserve originals. Confirmed reset
+rechecks the confirmation snapshot and removes only guided history/points.
+Status details and explanation bodies load on demand to preserve startup budgets.
+The shipped two-lesson preview is not the complete white-to-black curriculum
+(#184), and its highest available belt is explicitly a preview, not qualification.
 
 Retained legacy progress uses `aznet-simulator:practice:v1` in localStorage, independently
 of normal topology saves: at most nine 200,000-character drafts within the existing
@@ -218,10 +243,9 @@ practice achievement.
 
 The sidebar does not write or reset this legacy ledger. Retained
 progress is per browser origin or Electron profile, **not encrypted,
-account-backed or synchronized**; simultaneous tabs use last-write-wins saves.
-Storage corruption is preserved until deliberate reset; unavailable/full
-storage is reported as session-only. Reset requires confirmation and does not
-touch the visual workspace. No exercises/results are uploaded, no Azure
+account-backed or synchronized**. The status panel provides an original-byte
+legacy backup; legacy attempts/drafts grant no guided-course credit. Guided
+reset never changes those bytes or the visual workspace. No exercises/results are uploaded, no Azure
 resources are created and basic help/grading requires no AI subscription.
 Account-backed progress and server-verified awards remain P4.
 

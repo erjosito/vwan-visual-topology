@@ -34,7 +34,7 @@ try {
   page.on('pageerror', (error) => failures.push(error.message))
   await page.locator('[data-testid="vwan-app"], [data-testid="aznet-app"], dialog[aria-labelledby="workspace-library-title"]').waitFor()
   await page.evaluate(() => {
-    for (const key of ['network-simulator:workspace:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
+    for (const key of ['network-simulator:workspace:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'network-simulator:learning-progress:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
   })
   await page.reload()
   await page.getByTestId('aznet-app').waitFor()
@@ -75,6 +75,7 @@ try {
     ['hub-spoke', 'azure-net/hub-spoke-firewall-udr.json'],
     ['full', 'azure-net/hybrid-vwan-and-hub-spoke.json'],
   ]) {
+    await page.evaluate(() => localStorage.removeItem('network-simulator:learning-progress:v1'))
     await page.goto(`app://simulator/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', ...file.split('/')), 'utf8'))
@@ -252,6 +253,7 @@ try {
     await learning.getByRole('radio', { name: 'No, there is no connecting path.', exact: true }).check()
     await learning.getByRole('button', { name: 'Check task', exact: true }).click()
     await learning.getByRole('button', { name: 'Complete task & continue', exact: true }).click()
+    await expect(page.getByTestId('learning-status')).toContainText('20 points')
     await learning.getByRole('button', { name: 'Show me where', exact: true }).click()
     await expect(page.getByTestId('aznet-subnet-selector')).toHaveValue('work-a')
     await expect(page.locator('.learning-cue')).toHaveCount(1)
@@ -267,6 +269,8 @@ try {
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:practice-workspace:v1')).document)).toEqual(practice)
     await page.getByTestId('learning-open').click()
     await expect(learning).toContainText('Two assessed lessons are available')
+    await expect(page.getByTestId('learning-status')).toContainText('20 points')
+    await expect(learning.getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
     await learning.getByRole('button', { name: 'Pause learning', exact: true }).click()
     await page.getByRole('button', { name: 'Return to my design', exact: true }).click()
     await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()

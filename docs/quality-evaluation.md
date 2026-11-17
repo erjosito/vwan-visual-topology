@@ -62,8 +62,9 @@ Version 2 added VPN overlap NAT; version 3 adds the separately versioned
 model-contract registration seam. Version 4 registers the separate #165
 document-derived Firewall contracts and native evidence workflows, carrying their
 qualification into each metric. Version 5 registers the guided-course, guidance,
-runner and protected-practice contracts, practice isolation workflows and SVG
-accessibility regressions. A tracked-file inventory guard fails closed if new
+runner, protected-practice ownership and anonymous local progress-ledger contracts,
+practice isolation/status workflows and SVG accessibility regressions. A
+tracked-file inventory guard fails closed if new
 learning contracts or critical learning/accessibility workflows are unregistered.
 The combined plan hash includes all manifests; the expanded corpus is not
 numerically comparable to version 4:
@@ -72,7 +73,7 @@ numerically comparable to version 4:
 | --- | --- |
 | Routing/packet regressions | Native routing, paths, VPN/hub contexts and overlap NAT, classic routing, egress/ingress/NSG/LB and captured comparison tests |
 | Requirement-grading regressions | Route/flow and packet requirement tests |
-| Training-contract regressions | Routing/connectivity practice, rubric, progress, guided course, guidance, runner and protected-practice safety tests |
+| Training-contract regressions | Routing/connectivity practice, rubric, guided course, guidance, runner, protected-practice ownership and anonymous progress-ledger safety tests |
 | Persistence/local-boundary regressions | Workspace originals/recovery, inventory, platform service and MCP tests |
 | Localization-contract regressions | Message/localization contract tests |
 | Scripted UI workflows | Canvas presentation, SVG accessibility, original VNet detail, single-workspace and VPN NAT tests |

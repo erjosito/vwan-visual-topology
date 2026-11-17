@@ -3,7 +3,8 @@ import type { Requirement } from '../platform/contract'
 
 export const runnerLabels = {
   preview: { en: 'Two assessed lessons are available. The complete white-to-black-belt curriculum is still being developed.', ja: '評価付きの 2 レッスンを利用できます。白帯から黒帯までの全カリキュラムは開発中です。' },
-  session: { en: 'Task completion stays in this open app session for now. Your practice canvas is saved separately in this browser.', ja: '現在、タスクの完了はこのアプリのセッション内に保持されます。練習キャンバスはこのブラウザーに別途保存されます。' },
+  session: { en: 'Task completion and first-earned points use this browser origin or desktop profile only. Check the header for saved versus session-only progress.', ja: 'タスクの完了と初回獲得ポイントは、このブラウザーのオリジンまたはデスクトップのプロファイルだけで使用します。保存済みかセッションのみかはヘッダーで確認できます。' },
+  progress: { en: 'Completion could not be recorded. Your task is still locked at this step. Check the learning-status details for storage recovery or another-tab ownership, then check the task again.', ja: '完了を記録できませんでした。このステップはまだ完了していません。学習状態の詳細で保存の回復方法や別のタブの所有権を確認し、タスクを再確認してください。' },
   check: { en: 'Check task', ja: 'タスクを確認' },
   checking: { en: 'Checking current canvas...', ja: '現在のキャンバスを確認中...' },
   continue: { en: 'Complete task & continue', ja: 'タスクを完了して続ける' },
