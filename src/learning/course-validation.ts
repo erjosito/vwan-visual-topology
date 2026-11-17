@@ -1,4 +1,5 @@
 import { cidr } from '../validation'
+import { hubRouteTables } from '../hub-routing'
 import { admitJson, executePlatform, validateRequest } from '../platform/service'
 import type { PlatformDocument } from '../platform/contract'
 import { courseBundleSchema, type CourseBundle, type CourseCheck, type CourseGuidance } from './course-contract'
@@ -30,6 +31,11 @@ function checkScope(
   const params = definition.params
   if ('scenarioId' in params) {
     requireContent(params.scenarioId === scenarioId, `${definition.id} loads a different scenario`)
+  } else if ('hubId' in params) {
+    requireContent(document.mode !== 'vwan' && document.topology.vwanHubs.some((hub) => hub.id === params.hubId
+      && (!('tableId' in params) || hubRouteTables(hub).some((table) => table.id === params.tableId))), `${definition.id} needs an owned hub/table`)
+  } else if (kind === 'network.configure' && 'vnetId' in params) {
+    requireContent(document.mode !== 'vwan' && document.topology.vnets.some((vnet) => vnet.id === params.vnetId), `${definition.id} needs an owned VNet`)
   } else if ('vnetAId' in params || 'subnetId' in params) {
     requireContent(document.mode !== 'vwan', `${definition.id} needs the mixed-network provider`)
     if ('vnetAId' in params) {
@@ -40,7 +46,7 @@ function checkScope(
       requireContent(document.topology.vnets.some((vnet) => vnet.id === params.vnetId
         && vnet.subnets.some((subnet) => subnet.id === params.subnetId && subnet.routeTableId === params.routeTableId))
         && document.topology.udrTables.some((table) => table.id === params.routeTableId
-          && table.routes.some((route) => route.id === params.routeId)),
+          && (!params.routeId || table.routes.some((route) => route.id === params.routeId))),
       `${definition.id} needs the owned subnet's associated route table and route`)
     } else {
       requireContent(!!cidr(params.prefix)

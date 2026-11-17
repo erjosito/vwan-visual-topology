@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 7
+export const scorecardVersion = 8
 // Keep document-derived contract fixtures distinct from regression and live Azure evidence.
 export const modelContractPlan = {
   unit: [{ id: 'static-firewall-model-contracts', label: 'Document-derived static Firewall model-contract conformance',
@@ -19,7 +19,7 @@ export const unitPlan = [
   ] },
   { id: 'training-contract-regressions', label: 'Training contract regression conformance', files: [
     'src/learning/learning.test.ts', 'src/learning/connectivity-exercises.test.ts',
-    'src/learning/course.test.ts', 'src/learning/course-routing.test.ts', 'src/learning/course-wan.test.ts', 'src/learning/guidance.test.ts',
+    'src/learning/course.test.ts', 'src/learning/course-routing.test.ts', 'src/learning/course-wan.test.ts', 'src/learning/scenario-course.test.ts', 'src/learning/guidance.test.ts',
     'src/learning/practice-workspace.test.ts', 'src/learning/runner.test.ts',
     'src/learning/practice-ownership.test.ts', 'src/learning/progress-ledger.test.ts',
   ] },
@@ -33,7 +33,7 @@ export const browserPlan = [
     'e2e/canvas-presentation.spec.ts', 'e2e/network-detail.spec.ts', 'e2e/single-workspace.spec.ts', 'e2e/vpn-nat.spec.ts',
     'e2e/accessibility-labels.spec.ts',
   ] },
-  { id: 'training-workflow-regressions', label: 'Scripted training workflow regression conformance', files: ['e2e/learning.spec.ts', 'e2e/practice-workspace.spec.ts', 'e2e/learning-progress.spec.ts'] },
+  { id: 'training-workflow-regressions', label: 'Scripted training workflow regression conformance', files: ['e2e/learning.spec.ts', 'e2e/practice-workspace.spec.ts', 'e2e/learning-progress.spec.ts', 'e2e/learning-editions.spec.ts'] },
   { id: 'localization-workflow-regressions', label: 'Scripted localization workflow regression conformance', files: ['e2e/localization.spec.ts'] },
 ]
 export const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex')

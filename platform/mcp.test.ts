@@ -6,6 +6,8 @@ import { createHash } from 'node:crypto'
 import { executePlatform } from '../src/platform/service'
 import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
 import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
+import { scenarioTopologies } from '../src/learning/scenario-topologies'
+import { scenarioBundle } from '../src/learning/scenario-course'
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })
@@ -36,6 +38,21 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
     expect(schema.example.kind).toBe('azure-network-topology')
     expect(schema.inventoryShapes.nics[0].owner.kind).toBe('vnet')
     expect(schema.optionalPacket.operation).toBe('simulate')
+    expect(schema.requirementShapes.some((shape: Record<string, unknown>) => shape.applianceChain)).toBe(true)
+    const chainTopology = structuredClone(scenarioTopologies['colocated-chain'])
+    chainTopology.udrTables.find((table) => table.id === 'inspection-onward')!.routes[0].enabled = true
+    const chainCheck = scenarioBundle.checks.find((check) => check.id === 'colocated-chain.repair-check')!
+    if (chainCheck.kind !== 'requirements.satisfied') throw new Error('Expected chain check')
+    const chainJob = await call('start_simulation', { request: { contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology: chainTopology }, requirements: chainCheck.params.requirements } })
+    let chainResult
+    for (let attempt = 0; attempt < 100; attempt++) {
+      chainResult = await call('get_job', { handle: chainJob.handle })
+      if (chainResult.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    expect(chainResult?.resultStatus).toBe('complete')
+    expect(chainResult?.assessments.map((entry: { outcome: string }) => entry.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied'])
     const { handle } = await call('start_simulation', { request })
     let result
     for (let attempt = 0; attempt < 100; attempt++) {

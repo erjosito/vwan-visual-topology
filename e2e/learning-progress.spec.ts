@@ -19,6 +19,54 @@ async function backup(page: Page, legacy = false) {
   return readFile((await (await downloaded).path())!, 'utf8')
 }
 
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: track overview is informational and planned tracks cannot create progress or practice`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    if (language === 'ja') await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
+    await page.goto('/?mode=full')
+    await page.locator('header [data-language-selector]').selectOption(language)
+    const name = language === 'en' ? 'Routing foundations' : 'ルーティングの基礎'
+    const plannedName = language === 'en' ? 'Planned tracks' : '計画中のトラック'
+    const plannedStatus = language === 'en' ? 'Planned' : '計画中'
+    const titles = language === 'en' ? ['DNS and name resolution', 'Application delivery'] : ['DNS と名前解決', 'アプリケーション配信']
+    await expect(status(page)).toContainText(name)
+    const before = await page.evaluate(({ guided, practice }) => [
+      localStorage.getItem(guided), localStorage.getItem(practice), localStorage.getItem('aznet-visual-topology:v1'),
+    ], { guided: guidedProgressKey, practice: practiceWorkspaceKey })
+    await status(page).click()
+    await expect(details(page)).toContainText(`${name} · ${language === 'en' ? 'Scenario edition - White belt · 0 points' : 'シナリオ版 - 白帯 · 0 ポイント'}`)
+    const statusOverview = details(page).getByTestId('learning-tracks')
+    await statusOverview.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    const planned = statusOverview.getByRole('region', { name: plannedName, exact: true })
+    for (const title of titles) {
+      const entry = planned.getByRole('listitem').filter({ hasText: title })
+      await expect(entry).toContainText(`${title} - ${plannedStatus}`)
+      await entry.getByText(title, { exact: true }).click()
+    }
+    await expect(planned.locator('button,a,input,select')).toHaveCount(0)
+    expect((await new AxeBuilder({ page }).include('.learning-status-panel').analyze()).violations).toEqual([])
+    expect(await details(page).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await details(page).getByRole('button', { name: language === 'en' ? 'Close learning status' : '学習状態を閉じる', exact: true }).click()
+    await page.getByTestId('learning-open').click()
+    const panel = learningSidebar(page)
+    await expect(panel.getByTestId('learning-active-track')).toContainText(name)
+    await expect(panel.getByTestId('learning-completion-count')).toHaveText(`0 / 35 ${language === 'en' ? 'Completed' : '完了'}`)
+    const overview = panel.getByTestId('learning-tracks')
+    await overview.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    const plannedInSidebar = overview.getByRole('region', { name: plannedName, exact: true })
+    for (const title of titles) await expect(plannedInSidebar.getByText(title, { exact: true })).toBeVisible()
+    await expect(plannedInSidebar.locator('button,a,input,select')).toHaveCount(0)
+    expect((await new AxeBuilder({ page }).include('.learning-tracks').analyze()).violations).toEqual([])
+    expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    expect(await page.evaluate(({ guided, practice }) => [
+      localStorage.getItem(guided), localStorage.getItem(practice), localStorage.getItem('aznet-visual-topology:v1'),
+    ], { guided: guidedProgressKey, practice: practiceWorkspaceKey })).toEqual(before)
+    await expect(page.getByTestId('practice-workspace-bar')).toHaveCount(0)
+  })
+}
+
 for (const unavailable of [false, true]) {
   test(`concept bodies load only on explicit expansion, with local failure feedback: ${unavailable}`, async ({ page }) => {
     const requests: string[] = []
@@ -39,25 +87,27 @@ test('first-earned points, checkpoint gap and linear position survive reload and
   test.setTimeout(60_000)
   await open(page); await loadLearningNetwork(page); await completeLearningTasks(page, 2)
   await expect(status(page)).toContainText('Not signed in')
-  await expect(status(page)).toContainText('White belt · 20 points')
+  await expect(status(page)).toContainText('White belt · 10 points')
   await status(page).click()
-  await expect(details(page)).toContainText('Yellow belt · 80 points remaining')
+  await expect(details(page)).toContainText('Yellow belt · 90 points remaining')
   await expect(details(page)).toContainText('Required mastery checkpoints remaining: 1')
   await details(page).getByRole('button', { name: 'Close learning status', exact: true }).click()
   await page.reload()
-  await expect(status(page)).toContainText('20 points')
+  await expect(status(page)).toContainText('Scenario edition - White belt')
+  await expect(status(page)).toContainText('10 points')
   await page.getByTestId('learning-open').click()
-  await expect(learningSidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
+  await expect(learningSidebar(page).getByTestId('learning-active-track')).toContainText('Routing foundations')
+  await expect(learningSidebar(page).getByRole('heading', { name: 'Meet the network requirements', exact: true })).toBeVisible()
   await completeLearningTasks(page)
-  await expect(status(page)).toContainText('25 points')
+  await expect(status(page)).toContainText('75 points')
   const ledger = await saved(page, guidedProgressKey)
   await learningSidebar(page).getByRole('button', { name: 'Replay this lesson', exact: true }).click()
   await learningSidebar(page).getByRole('button', { name: 'Start lesson replay', exact: true }).click()
   await completeLearningTasks(page, 3)
-  await expect(status(page)).toContainText('25 points')
+  await expect(status(page)).toContainText('75 points')
   expect(await saved(page, guidedProgressKey)).toBe(ledger)
   await page.reload()
-  await expect(status(page)).toContainText('25 points')
+  await expect(status(page)).toContainText('75 points')
 })
 
 test('quota-failed points are explicitly session-only, can be saved later, and scoped reset preserves legacy and canvases', async ({ page }) => {
@@ -94,7 +144,7 @@ test('quota-failed points are explicitly session-only, can be saved later, and s
   expect(await saved(page, 'aznet-visual-topology:v1')).toBe(normal)
   expect(await saved(page, legacyProgressKey)).toBe('unchanged previous practice bytes')
   await details(page).getByRole('button', { name: 'Close learning status', exact: true }).click()
-  await expect(learningSidebar(page).getByRole('heading', { name: 'Load the practice network', exact: true })).toBeVisible()
+  await expect(learningSidebar(page).getByRole('heading', { name: 'Open this scenario', exact: true })).toBeVisible()
 })
 
 test('damaged guided data is not zero credit, cannot be overwritten by completion, and has an original-byte backup', async ({ page }) => {
@@ -108,6 +158,7 @@ test('damaged guided data is not zero credit, cannot be overwritten by completio
   expect(await saved(page, guidedProgressKey)).toBe('damaged guided original')
   await status(page).click()
   await expect(details(page)).toContainText('original is preserved')
+  await expect(details(page)).toContainText('Original edition: Learning progress unavailable')
   expect(await backup(page)).toBe('damaged guided original')
   await details(page).getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
   await details(page).getByRole('button', { name: 'Delete guided history & points', exact: true }).click()
@@ -120,7 +171,7 @@ test('actual competing tabs cannot write practice or farm points, and recover th
   const other = await context.newPage()
   try {
     await other.goto('/')
-    await expect(status(other)).toContainText('20 points')
+    await expect(status(other)).toContainText('10 points')
     const bar = other.getByTestId('practice-workspace-bar')
     await expect(bar.getByRole('alert')).toContainText('Another tab owns practice')
     await expect(bar.getByRole('button', { name: 'Resume practice', exact: true })).toBeVisible()
@@ -132,7 +183,7 @@ test('actual competing tabs cannot write practice or farm points, and recover th
     await expect(learningSidebar(other).getByRole('alert')).toContainText('Another tab owns practice')
     const unchanged = await saved(page, practiceWorkspaceKey)
     await completeLearningTasks(page, 2)
-    await expect(status(other)).toContainText('55 points')
+    await expect(status(other)).toContainText('80 points')
     const latest = await saved(page, practiceWorkspaceKey)
     expect(latest).not.toBe(unchanged)
     await page.close()
@@ -141,7 +192,7 @@ test('actual competing tabs cannot write practice or farm points, and recover th
     await expect(bar).toContainText('your normal design is kept separately')
     expect(JSON.parse((await saved(other, practiceWorkspaceKey))!).document).toEqual(JSON.parse(latest!).document)
     await completeLearningTasks(other)
-    await expect(status(other)).toContainText('60 points')
+    await expect(status(other)).toContainText('100 points')
     expect(JSON.parse((await saved(other, guidedProgressKey))!).completions).toHaveLength(5)
   } finally { await other.close() }
 })

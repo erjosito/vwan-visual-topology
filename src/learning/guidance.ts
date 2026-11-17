@@ -1,5 +1,6 @@
 import type { CourseGuidance } from './course-contract'
 import type { PlatformDocument } from '../platform/contract'
+import { hubRouteTables } from '../hub-routing'
 
 export const guidanceAnchor = (...scope: string[]) => JSON.stringify(scope)
 export type GuidanceReason = 'provider' | 'entity' | 'association' | 'peered'
@@ -8,6 +9,15 @@ export type GuidancePlan = { anchors: string[]; reason?: undefined } | { reason:
 export function resolveGuidance(document: PlatformDocument, cue: CourseGuidance): GuidancePlan {
   if (document.mode === 'vwan') return { reason: 'provider' }
   const topology = document.topology
+  if (cue.action === 'hub.configure') return topology.vwanHubs.some((hub) => hub.id === cue.params.hubId)
+    ? { anchors: [guidanceAnchor('hub-editor', cue.params.hubId)] } : { reason: 'entity' }
+  if (cue.action === 'network.configure') return topology.vnets.some((vnet) => vnet.id === cue.params.vnetId)
+    ? { anchors: [guidanceAnchor('network-editor', cue.params.vnetId)] } : { reason: 'entity' }
+  if (cue.action === 'hub-routes.open') {
+    const hub = topology.vwanHubs.find((hub) => hub.id === cue.params.hubId)
+    return hub && hubRouteTables(hub).some((table) => table.id === cue.params.tableId)
+      ? { anchors: [guidanceAnchor('hub-effective-table', hub.id, cue.params.tableId)] } : { reason: 'entity' }
+  }
   if (cue.action === 'peering.command') {
     const { vnetAId, vnetBId } = cue.params
     if (vnetAId === vnetBId || ![vnetAId, vnetBId].every((id) => topology.vnets.some((v) => v.id === id))) return { reason: 'entity' }
@@ -23,6 +33,8 @@ export function resolveGuidance(document: PlatformDocument, cue: CourseGuidance)
   ] }
   const { routeTableId, routeId } = cue.params
   if (subnet.routeTableId !== routeTableId) return { reason: 'association' }
-  if (!topology.udrTables.find((t) => t.id === routeTableId)?.routes.some((r) => r.id === routeId)) return { reason: 'entity' }
+  const table = topology.udrTables.find((t) => t.id === routeTableId)
+  if (!table || routeId && !table.routes.some((r) => r.id === routeId)) return { reason: 'entity' }
+  if (!routeId) return { anchors: [guidanceAnchor('udr-table', vnetId, subnetId, routeTableId)] }
   return { anchors: [guidanceAnchor('udr-route', vnetId, subnetId, routeTableId, routeId)] }
 }

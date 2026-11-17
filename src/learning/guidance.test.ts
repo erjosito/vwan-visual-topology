@@ -2,10 +2,26 @@ import { describe, expect, it } from 'vitest'
 import { exampleCourse } from './course-examples'
 import { guidanceAnchor, resolveGuidance } from './guidance'
 import type { CourseGuidance } from './course-contract'
+import { scenarioBundle } from './scenario-course'
 
 describe('semantic guidance admission', () => {
   const document = () => structuredClone(exampleCourse.scenarios[1].document)
   const cue = (id: string) => exampleCourse.guidance.find((item) => item.id === id)!
+  it('resolves owned hub scopes, VNet configuration and empty associated UDR tables without mutation', () => {
+    for (const id of ['branch-advertisement', 'wan-isolation']) {
+      const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === id)!.document)
+      const before = structuredClone(input)
+      for (const cue of scenarioBundle.guidance.filter((cue) => cue.id.startsWith(`${id}.`))) {
+        expect(resolveGuidance(input, cue).anchors?.length, cue.id).toBeGreaterThan(0)
+      }
+      expect(input).toEqual(before)
+      const hubCue = scenarioBundle.guidance.find((cue) => cue.id === 'wan-isolation.hub')!
+      if (id === 'wan-isolation' && input.mode !== 'vwan') {
+        input.topology.vwanHubs[0].id = 'another-hub'
+        expect(resolveGuidance(input, hubCue)).toEqual({ reason: 'entity' })
+      }
+    }
+  })
   it('resolves exact subnet/prefix and nested directional peering identities without mutation', () => {
     const topology = structuredClone(exampleCourse.scenarios[0].document)
     const original = structuredClone(topology)

@@ -2614,8 +2614,12 @@ export function traceAzNetFlow(
         continue
       }
 
-      // Check if Destination is in the SAME VNet as the appliance
-      if (conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet?.id === vnet.id && targetInfo.subnet) {
+      const hostingTable = simulation.subnetTables[app.subnetId]
+      const hostingRoute = hostingTable ? lookupSubnetEffectiveRoute(hostingTable, destinationIp) : undefined
+      const explicitSubnetPolicy = hostingRoute?.source === 'User'
+
+      // An explicit selected subnet policy must be consulted before topology shortcuts.
+      if (!explicitSubnetPolicy && conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet?.id === vnet.id && targetInfo.subnet) {
         pushHop({
           nodeKind: 'appliance',
           nodeId: app.id,
@@ -2636,7 +2640,7 @@ export function traceAzNetFlow(
       }
 
       // Check if Destination is in a DIRECTLY peered VNet
-      if (conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet && targetInfo.subnet) {
+      if (!explicitSubnetPolicy && conditionalStatic?.nextHopKind !== 'appliance' && targetInfo.vnet && targetInfo.subnet) {
         const directRel = getActivePeeringBetween(topology, vnet.id, targetInfo.vnet.id)
         if (directRel) {
           const check = validatePeeringTransition(vnet, targetInfo.vnet, true, app.kind === 'vnra')

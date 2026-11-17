@@ -74,7 +74,7 @@ for (const language of ['en', 'ja']) {
       await page.getByLabel('Theme', { exact: true }).selectOption(width === 390 ? 'dark' : 'light')
       const card = page.getByTestId('aznet-vnet-a')
       const header = page.getByTestId('aznet-select-vnet-a')
-      const subnet = page.getByTestId('aznet-subnet-work-a')
+      const subnet = page.getByTestId('aznet-subnet-a-work')
       await expect(card).toHaveAttribute('role', 'group')
       await expect(card.locator('[role="button"] [role="button"]')).toHaveCount(0)
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])

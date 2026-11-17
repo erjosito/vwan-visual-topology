@@ -4,6 +4,8 @@ import { checkpointAssessments, previewCourse } from './course-profile'
 import { beltProgress, createProgressLedger, earnedAwards, guidedProgressKey, legacyProgressKey,
   parseProgressLedger, progressLimits, recordCompletion, type ProgressLedger } from './progress-ledger'
 import { orderedTasks, type TaskCompletion } from './runner'
+import { learningTracks } from './tracks'
+import { editions, scenarioCourse, selectedEdition } from './editions'
 
 const empty = (): ProgressLedger => ({ version: 1, policyVersion: 1, completions: [] })
 const completion = (index = 0, changes: Partial<TaskCompletion> = {}): TaskCompletion => {
@@ -22,6 +24,70 @@ const storage = () => {
 }
 
 describe('versioned completion and first-award ledger', () => {
+  it('defaults new learners to scenarios but preserves original-edition enrollment and historical black belts', () => {
+    expect(selectedEdition(empty()).course.id).toBe(scenarioCourse.id)
+    const historical = { ...empty(), completions: orderedTasks(exampleCourse).map((_, index) => completion(index)) }
+    const raw = storage()
+    raw.setItem(guidedProgressKey, JSON.stringify(historical))
+    const store = createProgressLedger(() => raw)
+    const previous = store.getSnapshot().ledger!.completions
+    expect(selectedEdition(store.getSnapshot().ledger).course.id).toBe(previewCourse.id)
+    expect(store.enroll(scenarioCourse.id, false)).toBe(false)
+    expect(store.enroll(scenarioCourse.id, true)).toBe(true)
+    expect(selectedEdition(createProgressLedger(() => raw).getSnapshot().ledger).course.id).toBe(scenarioCourse.id)
+    expect(store.getSnapshot().ledger!.completions).toEqual(previous)
+    expect(beltProgress(store.getSnapshot().ledger!, scenarioCourse, editions[1].assessments)).toMatchObject({ points: 0, belt: { id: 'white' } })
+    expect(beltProgress(store.getSnapshot().ledger!, previewCourse, checkpointAssessments)).toMatchObject({ points: 1325, belt: { id: 'black' } })
+    expect(store.enroll(previewCourse.id, true)).toBe(true)
+    expect(store.getSnapshot().ledger!.completions).toEqual(previous)
+  })
+  it('does not enroll on corrupt data, conflicting writes or unknown edition identities', () => {
+    const raw = storage()
+    const store = createProgressLedger(() => raw)
+    expect(store.enroll('unknown-course', true)).toBe(false)
+    raw.setItem(guidedProgressKey, 'preserve external bytes')
+    expect(store.enroll(scenarioCourse.id, true)).toBe(false)
+    expect(raw.getItem(guidedProgressKey)).toBe('preserve external bytes')
+    const broken = createProgressLedger(() => raw)
+    expect(broken.enroll(scenarioCourse.id, true)).toBe(false)
+    expect(() => parseProgressLedger(JSON.stringify({ ...empty(), enrollment: 'unknown-course' }))).toThrow()
+  })
+  it('retains explicit session-only enrollment through failed writes and persists it on retry', () => {
+    const raw = storage()
+    let quota = true
+    const store = createProgressLedger(() => ({ ...raw, setItem: (key, value) => {
+      if (quota) throw new Error('quota')
+      raw.setItem(key, value)
+    } }))
+    expect(store.enroll(previewCourse.id, true)).toBe(true)
+    expect(store.getSnapshot().status).toBe('session')
+    expect(selectedEdition(store.getSnapshot().ledger).course.id).toBe(previewCourse.id)
+    expect(raw.getItem(guidedProgressKey)).toBeNull()
+    quota = false
+    expect(store.retry(true)).toBe(true)
+    expect(selectedEdition(createProgressLedger(() => raw).getSnapshot().ledger).course.id).toBe(previewCourse.id)
+  })
+  it('reads a pre-track black-belt backup unchanged, without credit from another course', () => {
+    const raw = storage()
+    const ledger: ProgressLedger = { ...empty(), completions: [
+      ...orderedTasks(exampleCourse).map((_, index) => completion(index, {
+        courseId: 'azure-networking-preview', contentVersion: index < 11 ? 2 : index < 24 ? 3 : 4,
+      })),
+      completion(0, { courseId: 'future-dns', points: 9999 }),
+    ] }
+    const backup = JSON.stringify(ledger, null, 2)
+    raw.setItem('network-simulator:learning-progress:v1', backup)
+    const store = createProgressLedger(() => raw)
+    const track = learningTracks.find((entry) => entry.status === 'available')
+    if (track?.status !== 'available') throw new Error('Playable track required')
+    expect(beltProgress(store.getSnapshot().ledger!, { ...previewCourse, id: track.courseId }, checkpointAssessments))
+      .toMatchObject({ belt: { id: 'black' }, points: 1325, next: undefined })
+    expect(store.getSnapshot().ledger?.completions).toEqual(ledger.completions)
+    expect(raw.getItem(guidedProgressKey)).toBe(backup)
+    expect(JSON.parse(store.backup(false)!).completions).toEqual(ledger.completions)
+    expect(earnedAwards(recordCompletion(store.getSnapshot().ledger!, completion(39)), track.courseId)).toHaveLength(40)
+  })
+
   it('deduplicates retries, repeated events, refresh and reassessment without repricing earned or retired awards', () => {
     let ledger = recordCompletion(empty(), completion())
     ledger = recordCompletion(ledger, completion(0, { points: 999, title: { en: 'Edited wording', ja: '改訂' } }))

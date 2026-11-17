@@ -2,13 +2,49 @@
 
 The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
-and evidence-gated runner (#180) activate six sequential assessed missions
-(40 tasks, 1,325 points, through black belt).
+and evidence-gated runner (#180) activate sequential assessed missions.
+The original edition has 40 tasks across six missions; the scenario edition
+has 35 tasks across seven missions. Each edition offers 1,325 points through
+black belt, with its own thresholds and mastery checkpoints.
 The root owns the runner across editor switches and pause/resume. A bounded
 browser-local ledger (#183) restores compatible completions after reload and
 derives first-earned points, checkpoint-gated belts and the header status.
 The curriculum is authored under #184. No legacy JSON draft, raw requirements or
 engine payload is shown; legacy storage stays untouched.
+
+## Track scope and compatibility
+
+The playable track is displayed as **Routing foundations**. Its historical
+`azure-networking-preview` course ID, content version 4, award/check identities,
+40 tasks, 1,325 points and stored practice/progress formats remain unchanged.
+Renaming the presentation is not a migration or a grading revision.
+`tracks.ts` is a small declarative catalog; **DNS and name resolution** and
+**Application delivery** are **Planned** informational entries, with no course
+binding, points, unlocks or start actions. `TrackOverview` is shared by the
+on-demand status details and sidebar. The eager header uses only lightweight
+course metadata; it must not import the catalog or overview.
+
+Belts describe completion of a track's published curriculum, not all Azure
+networking or professional certification. Available-course denominators and
+XP exclude planned tracks; future tracks must use their own course identity.
+Existing first awards and recorded content/assessment versions remain intact.
+Future additions need an explicit compatibility review: expose compatible new
+material as new modules, or scope incompatible belt requirements to a separate
+extension/edition while retaining historic achievements. Do not silently change
+published thresholds/checkpoints and thereby revoke an earned belt. This slice
+adds no automatic historical credit.
+
+`editions.ts` is the lightweight edition catalog. Fresh learners start
+`azure-routing-scenarios` version 1. Historical original-course completions
+retain the original edition unless the learner explicitly opts in through
+**Curriculum editions** or header status details. A retained original practice
+canvas also retains its edition when no enrollment/history selects otherwise.
+The optional `enrollment` field extends the existing v1 ledger; old backups
+remain readable. Enrollment uses the same exclusive writer/CAS protection as
+awards. Switching editions neither loads a starter nor rewrites achievements.
+The original belt and points remain visible separately after opting in, and
+switching back restores the original journey. Reset explicitly clears both
+editions' progress; it is not an edition-switch mechanism.
 
 `runner.ts` is the single progression authority. Supported check kinds dispatch
 to reusable checks, never lesson-ID branches. A passing candidate is bound to
@@ -51,6 +87,10 @@ return, recovery and same-session history behavior.
 | `course-routing.ts` | Localized longest-prefix and gateway-return missions, checks and guidance |
 | `course-wan.ts` | Localized secured-WAN and hybrid-capstone missions, checks and guidance |
 | `course-scenarios.ts` | Native starter documents; copy before editing |
+| `editions.ts` | Lightweight edition identities, scenario order, belts and cumulative mastery checkpoints |
+| `scenario-course.ts` | Localized scenario objectives, balanced diagnostic choices, requirements and native guidance |
+| `scenario-topologies.ts` | Independent original scenario-edition starter documents |
+| `scenario-course.test.ts` | Actual-engine starter failures, valid repairs, preserved witnesses and independent faults |
 | `course-contract.ts` | A genuinely new reusable task/check/action shape |
 | `course-validation.ts` | Validation for a new shape/scope, not individual lesson IDs |
 | `course.test.ts` | Content validation and real-engine failure/solution fixtures |
@@ -62,7 +102,7 @@ return, recovery and same-session history behavior.
 Use declarative TypeScript data and the existing `{ en, ja }` convention. No
 callbacks, scripts, CSS selectors, translated-label matching or synthetic clicks.
 The Zod discriminated unions are the typed registry of supported semantic check
-and action IDs. `guidance.ts` resolves the three shipped actions to scoped
+and action IDs. `guidance.ts` resolves registered actions to scoped
 semantic anchors; the mixed editor reveals them using its own selection,
 route-inspection and context-menu handlers. `TopologyContextMenu` carries command
 identity separately from translated labels. The sidebar has no lesson-specific
@@ -72,7 +112,47 @@ disabled controls get a localized reason; closed/moved inspectors can be
 revealed again explicitly. Adding a supported control requires its resolver,
 native reveal adapter and anchor, never a lesson-specific sidebar branch.
 
-## White-to-black ladder
+## Scenario-edition ladder
+
+| Mission | Points | Architecture and assessed repair |
+| --- | ---: | --- |
+| Private application link | 100 | Direct VNet peering; preserve local operations and restricted-network isolation |
+| Inspection bypass | 125 | Delivered but uninspected traffic; longest-prefix steering in both directions |
+| Co-located appliance chain | 200 | Firewall and SD-WAN in separate subnets of one hub; onward subnet policy |
+| Dedicated appliance VNets | 250 | Firewall and SD-WAN in separate VNets; IP forwarding and independent return order |
+| Branch advertisement | 200 | Gateway route propagation into workload subnets; learning versus attachment |
+| WAN isolation | 200 | Exact hub-table evidence, connection propagation and positive/negative witnesses |
+| Tiered incident | 250 | Indirect spoke with two independent faults; preserve the existing application conversation |
+
+Each mission is linear: explicitly load, inspect an exact starting scope,
+repair an open networking requirement, inspect the independent return scope,
+then explain a design/diagnostic decision. Task points are 5, 5,
+`mission budget - 35`, 5 and 20. Thresholds are 0, 100, 225, 425, 675, 1075
+and 1325; cumulative interpretation checkpoints gate each belt. Brown requires
+both the branch and WAN missions.
+
+Native guidance can reveal VNet configuration (`network.configure`), an
+associated UDR table including an empty one (`route-table.configure` without
+`routeId`), hub configuration (`hub.configure`) or an exact hub route table
+(`hub-routes.open`). These actions locate controls without making repairs.
+The existing exact-route action remains available when a specific row is
+the intended observation. Requirements, not a prescribed edit sequence,
+grade repairs. Preserve positive and isolation witnesses when adding cases.
+
+Ordered chain checks require separately authored forward/reverse appliance
+IDs. They assess complete modeled forwarding, not live security rules,
+vendor overlay behavior, HA health/orchestration, convergence timing or
+session failover. Missing/unknown owners and unsupported providers cannot
+pass. HA, richer BGP/export policies, subnet-scoped peering and unsupported
+WAN connection controls remain capability-gated follow-up work; these seven
+cases do not claim exhaustive coverage of the book or blog.
+
+Quiz options use authored order, comparable detail and grammatical structure,
+and answer-specific explanations. Preserving old choice IDs preserves old
+award/answer identities. Automated qualification is not an answer-blind SME
+review and does not establish learning effectiveness.
+
+## Original-edition ladder
 
 | Belt | Required points | Points available before next belt | Objective |
 | --- | ---: | ---: | --- |

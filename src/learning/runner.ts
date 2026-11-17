@@ -215,6 +215,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   }
   publish()
   return {
+    bundle,
     getSnapshot: () => state,
     assess, advance, review, replayLesson, workspaceChanged,
     replaceProgress: (entries: readonly TaskCompletion[]) => {
