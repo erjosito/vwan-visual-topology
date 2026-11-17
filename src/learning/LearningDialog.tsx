@@ -18,7 +18,6 @@ import { orderedTasks, taskCompleted } from './runner'
 import { requirementDescription, runnerLabels as runnerText } from './runner-content'
 import { TrackOverview } from './TrackOverview'
 import { editions } from './editions'
-import { LearningStatusDetails } from './LearningStatusDetails'
 import './learning.css'
 
 type PanelProps = {
@@ -45,7 +44,6 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const check = bundle.checks.find((item) => item.id === task.checkId)!
   const requirements = 'requirements' in check.params ? check.params.requirements : []
   const [answerId, setAnswerId] = useState<string>()
-  const [editionsOpen, setEditionsOpen] = useState(false)
   const [replayConfirm, setReplayConfirm] = useState(false)
   const [confirm, setConfirm] = useState(false)
   const [running, setRunning] = useState(false)
@@ -88,7 +86,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
     }}>
       <header><h2 id="learning-title">{text(learningLabels.learn, language)}</h2><button type="button" onClick={onPause}>{text(labels.pause, language)}</button></header>
       <p data-testid="learning-active-track"><strong>{text(bundle.course.title, language)}</strong> · {text(editions.find((entry) => entry.course.id === bundle.course.id)!.name, language)}</p>
-      <button type="button" onClick={() => setEditionsOpen(true)}>{language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}</button>
+      <button type="button" onClick={() => session?.setLearningDetailsOpen?.(true)}>{language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}</button>
       <TrackOverview />
       <p className="learning-notice">{bundle.course.id === 'azure-networking-preview' ? text(runnerText.preview, language)
         : language === 'ja' ? '7 つの順序立ったシナリオで、この版の白帯から黒帯まで進みます。検証は静的なルーティングのモデルに限定され、Azure 認定ではありません。' : 'Seven sequential scenarios take you from white to black belt in this edition. Checks assess modeled steady-state routing, not Azure certification.'}</p>
@@ -177,6 +175,5 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       <details><summary>{text(labels.help, language)}</summary>{(Object.keys(concepts) as ConceptId[]).map((id) => <Explain key={id} concept={id} />)}</details>
     </aside>
     {plan?.anchors && <GuidanceHighlight key={guideRequest} anchors={plan.anchors} onVisibility={setVisible} />}
-    {editionsOpen && <LearningStatusDetails onClose={() => setEditionsOpen(false)} />}
   </>, document.body)
 }

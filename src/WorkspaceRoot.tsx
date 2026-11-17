@@ -41,6 +41,7 @@ export function UnifiedSimulatorRoot() {
   const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict' | 'ownership'>('')
   const [practiceEpoch, setPracticeEpoch] = useState(0)
   const [learningView, setLearningView] = useState({ open: false })
+  const [learningDetailsOpen, setLearningDetailsOpen] = useState(false)
   const [learning, setLearning] = useState<CourseRunner>()
   const [learningState, setLearningState] = useState<RunnerState>()
   const learningRef = useRef<CourseRunner | undefined>(undefined)
@@ -302,7 +303,7 @@ export function UnifiedSimulatorRoot() {
       editorHistory.current = value
       if (practicing && changed) { learningRevision.current++; learningRef.current?.workspaceChanged() }
     },
-    selectLearningEdition,
+    selectLearningEdition, learningDetailsOpen, setLearningDetailsOpen,
     learningView, setLearningView: (view) => {
       if (!view.open) learningRef.current?.cancel()
       setLearningView(view)
