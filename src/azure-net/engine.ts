@@ -2348,7 +2348,8 @@ export function traceAzNetFlow(
             action: 'peering-cross',
             matchedRoute: matched,
             edgeId: check.peering.id,
-            detail: `Steered by ${matched.originLabel} across peering "${check.peering.name}" to ${found.appliance.name} (${found.appliance.privateIp})`,
+            ...(haPorts ? { haPorts } : {}),
+            detail: `Steered by ${matched.originLabel} across peering "${check.peering.name}" to ${found.appliance.name} (${found.appliance.privateIp})${haPorts ? `. ${haPorts.reason}` : ''}`,
           })
         } else {
           pushHop({
@@ -2360,15 +2361,11 @@ export function traceAzNetFlow(
             subnetName: subnet.name,
             action: 'subnet-lookup',
             matchedRoute: matched,
-            detail: `Steered by ${matched.originLabel} to ${found.appliance.name} (${found.appliance.privateIp})`,
+            ...(haPorts ? { haPorts } : {}),
+            detail: `Steered by ${matched.originLabel} to ${found.appliance.name} (${found.appliance.privateIp})${haPorts ? `. ${haPorts.reason}` : ''}`,
           })
         }
 
-        if (haPorts) {
-          pushHop({ nodeKind: 'subnet', nodeId: haPorts.frontendSubnetId!, vnetId: found.vnet.id,
-            subnetId: haPorts.frontendSubnetId, nodeName: haPorts.loadBalancerId, action: 'subnet-lookup',
-            matchedRoute: matched, haPorts, detail: haPorts.reason })
-        }
         cursor = { kind: 'appliance', vnetId: found.vnet.id, applianceId: found.appliance.id }
         continue
       }

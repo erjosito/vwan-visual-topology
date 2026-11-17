@@ -20,6 +20,10 @@ describe('owned internal HA-ports NVA forwarding', () => {
     const request = { ...haPacket, protocol, sourcePort: 41000, destinationPort: 65000 }
     const before = JSON.stringify(topology), packet = tracePacket(topology, request, simulation)
     expect(lookupSubnetEffectiveRoute(simulation.subnetTables.work, '10.82.1.10')).toMatchObject({ source: 'User', nextHopIp: '10.80.3.10' })
+    const native = traceAzNetFlow(topology, simulation, { kind: 'subnet', vnetId: 'application', subnetId: 'work' }, '10.82.1.10')
+    expect(native.hops.find((hop) => hop.haPorts)).toMatchObject({ nodeId: 'work', subnetId: 'work',
+      matchedRoute: { nextHopIp: '10.80.3.10' }, haPorts: { frontendSubnetId: 'frontend-subnet' } })
+    expect(native.hops.some((hop) => hop.nodeId === 'frontend-subnet')).toBe(false)
     expect(packet).toMatchObject({ translation: 'none', delivery: 'not-assessed',
       forward: { routing: 'reachable' }, reply: { routing: 'reachable' },
       haPorts: { symmetry: 'symmetric', forward: [{ loadBalancerId: 'transit-lb', frontendId: 'transit-vip',

@@ -237,6 +237,59 @@ and [HA ports configuration/symmetry boundaries](https://learn.microsoft.com/azu
 These document-derived tests are not live-Azure qualification, answer-blind SME
 review or evidence of learning effectiveness.
 
+### Bounded HA-ports learner candidate (#245)
+
+Use the original `tests/fixtures/ha-ports.ts` ownership, not a copied diagram.
+This is an authoring candidate, not an installed lesson. Inspect the application
+`work` subnet's route to `172.31.80.0/24`: the user route keeps the next hop
+`10.80.3.10`, owned by `transit-lb` / `transit-vip`. A packet probe between the
+original client/server workloads retains the destination `10.82.1.10` and TCP
+ports 49152/443 while showing the selected original `primary-vm` identity.
+The VIP's owning subnet is context, not an extra subnet route lookup.
+EN: "Inspect the transit VIP route, then compare the packet's destination and
+selected NVA." JA: "中継 VIP へのルートを確認し、パケットの宛先と選択された NVA を比較してください。"
+Route inspection uses existing exact-scope guidance. Packet/probe controls need
+a scoped learning guidance adapter and mounted-control tests before publication;
+do not expose the fixture JSON to learners or substitute a menu of tools.
+
+Seed the remote subnet's independent return UDR with next hop `10.80.2.4`.
+Both legs can be routable while the packet check fails for different NVAs.
+Repair that return route to the transit VIP; retain the forward VIP route and
+verify both the original selected backend and the unaffected local witness.
+EN: "Repair the remote subnet's return route; verify both directions."
+JA: "リモート サブネットの戻りルートを修正し、往復の経路を検証してください。"
+The shared tests qualify this wrong-return counterexample and the restored
+single-NVA result; they do not prove stateful firewall delivery.
+
+Draft diagnosis question (correct A): EN: "The forward leg selects the primary
+NVA and the return leg traverses standby. Why can the configured check fail
+despite both routes being reachable?" A: "Backend selection leaves the remote
+subnet's independent return route unchanged." B: "Tuple preservation makes the
+reply's source address become the frontend VIP." C: "Probe eligibility changes
+the route table only after another route lookup." JA: "往路はプライマリ NVA、
+復路はスタンバイ NVA を通ります。両方の経路に到達可能でも、構成チェックが失敗する理由は何ですか。"
+A: "バックエンドの選択では、リモート サブネットの独立した戻りルートは変更されません。"
+B: "タプルを維持すると、応答の送信元アドレスがフロントエンド VIP に変わります。"
+C: "プローブの適格性によるルート テーブルの変更は、次のルート検索後に反映されます。"
+
+Draft tradeoff question (correct C): EN: "Which additional evidence would
+support TCP session continuity across an actual NVA failure?" A: "Healthy
+backend probe snapshots and the floating HA-ports rule configuration."
+B: "Effective forward and return routing tables from both backend snapshots."
+C: "Existing-session state replication and traffic captures across the failure."
+JA: "実際の NVA 障害をまたいだ TCP セッションの継続性を裏付ける追加の証拠はどれですか。"
+A: "正常なバックエンドのプローブ スナップショットと Floating IP を使う HA ポート ルールの構成。"
+B: "両方のバックエンドのスナップショットにおける往復の有効なルート テーブル。"
+C: "既存セッションの状態複製と、障害の前後を含むトラフィック キャプチャ。"
+These are technically authored drafts; independent answer-blind EN/JA review
+remains a pre-grading gate under #222. The current model supplies A/B of the
+tradeoff question, not C. No session-continuity conclusion may earn credit.
+
+Award-compatibility decision: #245 changes no released task, award identity,
+point value or belt threshold and awards no new XP. Publishing this candidate
+requires an explicit curriculum-edition/award decision under #222 and the
+existing historical-award regression checks, not insertion into released editions.
+
 ## Original-edition ladder
 
 | Belt | Required points | Points available before next belt | Objective |
