@@ -5,8 +5,10 @@ import { selectedEdition } from './editions'
 import { beltProgress } from './progress-ledger'
 import type { LearningStatusDetails } from './LearningStatusDetails'
 import './learning-status.css'
+import { useCloudSession } from '../cloud/useCloudSession'
 
 export function LearningStatus() {
+  const cloud = useCloudSession()
   const session = useWorkspaceSession(), state = session?.learningProgress, language = useLanguage()
   const { course, assessments, name } = selectedEdition(state?.ledger, session?.practice?.courseId)
   const [fallbackOpen, setFallbackOpen] = useState(false)
@@ -24,7 +26,7 @@ export function LearningStatus() {
     <button ref={trigger} type="button" className="learning-status-trigger" data-testid="learning-status"
       onKeyDown={(event) => { if (open && event.key === 'Escape') { event.stopPropagation(); setOpen(false) } }}
       aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
-      {language === 'ja' ? '未サインイン' : 'Not signed in'} · {course.title[language]} · {name[language]} - {progress ? <>
+      {cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')} · {course.title[language]} · {name[language]} - {progress ? <>
         <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={progress.belt.color} stroke="currentColor" /></svg>
         {progress.belt.name[language]} · {progress.points} {language === 'ja' ? 'ポイント' : 'points'}
         {state?.status !== 'saved' && <> · {state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown}</>}
