@@ -3,6 +3,8 @@ import type { RouteMapDirection } from '../model'
 import { cidr, parseAsPath, validateTopology } from '../validation'
 import type { AzNetTopology, AzRouteServer, AzVNet } from './model'
 
+export const ARS_MAX_BGP_PEERS = 16
+
 const reservedArsAsns = new Set([8074, 8075, 12076, 65515, 65517, 65518, 65519, 65520])
 
 export function parseArsPrependAsPath(value: string) {
@@ -43,7 +45,7 @@ export function azArsPeerHosts(vnet: AzVNet, topology?: AzNetTopology) {
 
 export function azArsPeers(vnet: AzVNet, topology?: AzNetTopology) {
   const hosts = azArsPeerHosts(vnet, topology)
-  return (vnet.routeServer?.peerApplianceIds ?? []).slice(0, 8).flatMap((id) => {
+  return (vnet.routeServer?.peerApplianceIds ?? []).flatMap((id) => {
     const host = hosts.find((host) => host.appliances.some((app) => app.id === id))
     const peer = host?.appliances.find((app) => app.id === id)
     return host && peer ? [{ host, peer, connectionId: host.id === vnet.id ? `nva:${peer.id}` : `vnet:${host.id}` }] : []
@@ -54,7 +56,7 @@ export function azArsPolicyLinks(vnet: AzVNet, topology?: AzNetTopology) {
   const ars = vnet.routeServer
   if (!ars) return []
   return [
-    ...ars.peerApplianceIds.slice(0, 8).flatMap((id) => {
+    ...ars.peerApplianceIds.flatMap((id) => {
       const peer = vnet.appliances.find((app) => app.id === id)
       return peer ? [{ id: `nva:${id}`, name: `BGP peer: ${peer.name}`, bgp: Boolean(peer.bgpEnabled), targetId: id }] : []
     }),
@@ -87,6 +89,9 @@ export function validateAzArsRouteMaps(topology: AzNetTopology) {
       }
     }
     const ars = vnet.routeServer
+    if (ars && ars.peerApplianceIds.length > ARS_MAX_BGP_PEERS) {
+      throw new Error(`Azure Route Server "${ars.name}" supports at most ${ARS_MAX_BGP_PEERS} BGP peers.`)
+    }
     if (!ars || ars.routeMaps === undefined && ars.routeMapAssignments === undefined) continue
     if (!Array.isArray(ars.routeMaps ?? []) || !Array.isArray(ars.routeMapAssignments ?? [])) {
       throw new Error('ARS route maps and assignments must be arrays.')

@@ -6,7 +6,7 @@ import {
   importAzNetCapture,
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
-import { applyAzArsRouteMap } from './ars-route-maps'
+import { applyAzArsRouteMap, azArsPeers, validateAzArsRouteMaps } from './ars-route-maps'
 import type { RouteMapAdvertisement } from '../bgp'
 import { analyzeAzNetConnectivity, createAzNetConnectivityAnalysis, azFindingFlows, azFindingImpact, groupAzNetFindings, runAzNetDiagnostics } from './diagnostics'
 import { getAzNetEndpoints } from './endpoints'
@@ -315,6 +315,70 @@ describe('Azure Networking Simulator Engine & Diagnostics', () => {
     }
     return topology
   }
+
+  function arsPeerLimitTopology(count: number) {
+    const topology = arsTopology()
+    const hub = topology.vnets[0]
+    hub.appliances = Array.from({ length: count }, (_, index) => ({
+      ...hub.appliances[0], id: `peer-${index + 1}`, name: `NVA ${index + 1}`,
+      privateIp: `10.0.2.${index + 4}`, asn: 65010 + index, advertisedPrefixes: [`198.19.${index}.0/24`],
+    }))
+    hub.routeServer!.peerApplianceIds = hub.appliances.map((app) => app.id)
+    return topology
+  }
+
+  it.each([8, 9, 16])('processes all %s ARS peers and preserves late-peer inbound/outbound policies on round trip', (count) => {
+    const topology = arsPeerLimitTopology(count)
+    const hub = topology.vnets[0]
+    const ars = hub.routeServer!
+    const last = hub.appliances.at(-1)!
+    ars.routeMaps![0].rules[0] = {
+      ...ars.routeMaps![0].rules[0], prefixes: last.advertisedPrefixes!, action: 'prepend', prepend: [64501],
+    }
+    ars.routeMaps!.push({ id: 'out-map', name: 'Outbound filter', rules: [{
+      ...ars.routeMaps![0].rules[0], id: 'out-rule', prefixes: hub.appliances[0].advertisedPrefixes!, action: 'drop', prepend: [],
+    }] })
+    ars.routeMapAssignments = [{ connectionId: `nva:${last.id}`, inboundMapId: 'ars-map', outboundMapId: 'out-map' }]
+    const restored = parseAzNetJson(JSON.stringify(topology))
+    expect(restored).toEqual(topology)
+    expect(validateAzNetTopology(restored)).toEqual([])
+    pruneAzArsRouteMaps(restored)
+    expect(restored.vnets[0].routeServer!.routeMapAssignments).toEqual(ars.routeMapAssignments)
+    const result = simulateAzNet(restored)
+    expect(result.routeServerRibs.ars.filter((route) => route.originProtocol === 'BGP-NVA')).toHaveLength(count)
+    expect(result.routeServerInbound!.ars[`nva:${last.id}`][0]).toMatchObject({
+      prefix: last.advertisedPrefixes![0], asPath: [64501, last.asn!],
+    })
+    expect(result.routeServerOutbound!.ars[`nva:${last.id}`].some((route) => route.prefix === '198.19.0.0/24')).toBe(false)
+    expect(result.routeServerRibs.ars.some((route) => route.prefix === '198.19.0.0/24')).toBe(true)
+    expect(result.routeServerOutbound!.ars['nva:peer-2'].some((route) => route.prefix === '198.19.0.0/24')).toBe(true)
+    expect(result.warnings.join(' ')).not.toContain('BGP peers configured')
+  })
+
+  it('diagnoses 17 ARS peers without silently dropping their configuration or advertisements', () => {
+    const topology = arsPeerLimitTopology(17)
+    delete topology.vnets[0].routeServer!.routeMaps
+    expect(parseAzNetJson(JSON.stringify(topology))).toEqual(topology)
+    expect(() => validateAzArsRouteMaps(topology)).toThrow('at most 16 BGP peers')
+    expect(validateAzNetTopology(topology).join(' ')).toContain('at most 16 BGP peers')
+    const result = simulateAzNet(topology)
+    expect(result.warnings.join(' ')).toContain('17 BGP peers configured (maximum supported by Azure is 16)')
+    expect(result.routeServerRibs.ars.find((route) => route.prefix === '198.19.16.0/24')?.nextHopId).toBe('peer-17')
+  })
+
+  it('resolves a sixteenth ARS peer in an eligible remote VNet without requiring gateway transit', () => {
+    const topology = arsPeerLimitTopology(16)
+    const [hub, spoke] = topology.vnets
+    const last = hub.appliances.pop()!
+    spoke.appliances.push({ ...last, subnetId: spoke.subnets[0].id, privateIp: '10.1.1.4' })
+    topology.vnetPeerings[0].aToB.allowGatewayTransit = false
+    topology.vnetPeerings[0].bToA.useRemoteGateways = false
+    expect(validateAzNetTopology(topology)).toEqual([])
+    expect(azArsPeers(hub, topology).at(-1)).toMatchObject({ host: { id: spoke.id }, peer: { id: last.id }, connectionId: `vnet:${spoke.id}` })
+    expect(simulateAzNet(topology).routeServerInbound!.ars[`vnet:${spoke.id}`].some((route) => route.prefix === '198.19.15.0/24')).toBe(true)
+    topology.vnetPeerings[0].enabled = false
+    expect(simulateAzNet(topology).routeServerRibs.ars.some((route) => route.prefix === '198.19.15.0/24')).toBe(false)
+  })
 
   it('runs ARS inbound policies before selection without withdrawing the NVA origin', () => {
     const topology = arsTopology()

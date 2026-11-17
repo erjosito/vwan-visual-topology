@@ -13,7 +13,7 @@ import type { ApplicationRequest, ApplicationResult } from '../application'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
-export const engineVersion = '2026.11.17.1'
+export const engineVersion = '2026.11.17.2'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
