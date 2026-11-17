@@ -807,6 +807,22 @@ validation remains a release gate. Explicit CLI reads can contact Azure identity
 and management endpoints according to the user's existing Azure/cloud policy.
 Disabling renderer networking does not isolate the user's CLI from Azure.
 
+### Complete bounded diagnostics measurements
+
+`npm run benchmark:diagnostics -- <output.json>` retains the declared 500/1,000-prefix
+source-star and ECMP/N-1 workloads, bounded continuation and wide-reference parity.
+`DIAGNOSTICS_ROOT` selects frozen baseline source without changing the harness.
+`node scripts/compare-diagnostics.mjs <baseline-source> <baseline-dist> <candidate-dist> <output.json>`
+runs six serial alternating SSR pairs and four actual production-browser worker pairs.
+It requires clean committed source, verifies immutable artifacts and complete report,
+workload and budget identities, and retains individual runs and descriptive ranges.
+The browser fixture supplies a valid hub region for native import; its report hashes
+are compared separately from SSR. Browser timing includes continuation, rendering and
+worker message copies; batch-boundary heap samples are not a true peak-memory bound.
+Closed affected-flow disclosures defer DOM mounting, not assessment or report evidence;
+expanding them restores every flow and directional trace. Scenario-local parsed route
+ranges preserve longest-prefix selection without sharing state across failures.
+
 ### Exact web artifact and startup gates
 
 `npm run test:production` serves the already-built `dist` with its SWA static

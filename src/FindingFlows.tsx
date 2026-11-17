@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { diagnosticImpact, type DiagnosticsFinding } from './diagnostics'
 import { localizeDiagnostic, t } from './i18n'
 import { topologyObject, type Topology } from './model'
@@ -7,14 +8,15 @@ export function FindingFlows({ finding, topology, onFinding }: {
   topology: Topology
   onFinding: (finding: DiagnosticsFinding) => void
 }) {
+  const [expanded, setExpanded] = useState(false)
   const impact = diagnosticImpact(finding)
   const members = (finding.occurrences ?? [finding]).filter((entry) => entry.source && entry.target)
   const name = (entry: DiagnosticsFinding['source']) => entry ? topologyObject(topology, entry)?.name ?? entry.id : ''
   return <>
     <p data-testid="vwan-root-impact">{t('1 root-cause issue; {0} affected flow pairs, {1} workload VNets, {2} sites, {3} prefixes.', impact.pairs, impact.workloads, impact.sites, impact.prefixes)}</p>
-    {!!members.length && <details data-testid="vwan-affected-flows">
+    {!!members.length && <details data-testid="vwan-affected-flows" onToggle={(event) => setExpanded(event.currentTarget.open)}>
       <summary>{t('Affected flows and directional evidence')}</summary>
-      {members.map((entry, index) => <div key={`${entry.id}:${index}`}>
+      {expanded && members.map((entry, index) => <div key={`${entry.id}:${index}`}>
         <p>{name(entry.source)} · {entry.sourceAddress} ↔ {name(entry.target)} · {entry.destinationAddress}</p>
         <button onClick={() => onFinding({ ...entry, id: finding.id })}>{t('Highlight affected flow')}</button>
         {([['Forward', entry.forward], ['Return', entry.reverse]] as const).map(([direction, paths]) => <details key={direction}>

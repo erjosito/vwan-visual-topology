@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
+import { cpus, freemem, totalmem } from 'node:os'
 import { resolve } from 'node:path'
 import { createServer } from 'vite'
 
 const server = await createServer({
+  root: resolve(process.env.DIAGNOSTICS_ROOT || '.'),
   configFile: false, server: { middlewareMode: true }, appType: 'custom',
   optimizeDeps: { noDiscovery: true, include: [] },
 })
 const results = []
+const availableMemoryBefore = freemem()
 try {
   const { createRoutingAnalysis } = await server.ssrLoadModule('/src/diagnostics.ts')
   const hub = (id) => ({
@@ -36,6 +40,7 @@ try {
     }
   }
   const run = (label, topology, profile, options) => {
+    const startedAtMicros = Number(process.hrtime.bigint() / 1000n)
     const started = performance.now()
     const initialHeap = process.memoryUsage().heapUsed
     let observedHeap = initialHeap
@@ -49,6 +54,10 @@ try {
     const measurement = {
       label, configuredPrefixes: topology.spokes.reduce((sum, spoke) => sum + spoke.prefixes.length, 0),
       elapsedMillis: Math.round(performance.now() - started), batches,
+      startedAtMicros, finishedAtMicros: Number(process.hrtime.bigint() / 1000n),
+      workloadSha256: createHash('sha256').update(JSON.stringify({ topology, profile })).digest('hex'),
+      reportSha256: createHash('sha256').update(JSON.stringify({ ...report, budget: undefined })).digest('hex'),
+      budget: report.budget,
       heapAtStartMiB: Math.round(initialHeap / 1048576), maximumObservedHeapMiB: Math.round(observedHeap / 1048576),
       cells: report.cells, probes: report.probes, failureCases: report.failureCases,
       status: report.continuation.status, complete: report.complete, remainingCells: report.continuation.remainingCells,
@@ -99,6 +108,8 @@ try {
   assert.ok(batched.findings.some((finding) => finding.rule === 'failure'))
   assert.deepEqual({ ...batched, budget: reference.budget }, reference)
   const output = JSON.stringify({
+    environment: { node: process.version, platform: process.platform, cpu: cpus()[0].model,
+      logicalCpus: cpus().length, totalMemory: totalmem(), availableMemoryBefore, availableMemoryAfter: freemem() },
     methodology: 'Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.',
     results,
   }, null, 2)
