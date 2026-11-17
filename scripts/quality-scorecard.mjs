@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 8
+export const scorecardVersion = 9
 // Keep document-derived contract fixtures distinct from regression and live Azure evidence.
 export const modelContractPlan = {
   unit: [{ id: 'static-firewall-model-contracts', label: 'Document-derived static Firewall model-contract conformance',
@@ -19,7 +19,7 @@ export const unitPlan = [
   ] },
   { id: 'training-contract-regressions', label: 'Training contract regression conformance', files: [
     'src/learning/learning.test.ts', 'src/learning/connectivity-exercises.test.ts',
-    'src/learning/course.test.ts', 'src/learning/course-routing.test.ts', 'src/learning/course-wan.test.ts', 'src/learning/scenario-course.test.ts', 'src/learning/guidance.test.ts',
+    'src/learning/course.test.ts', 'src/learning/course-routing.test.ts', 'src/learning/course-wan.test.ts', 'src/learning/scenario-course.test.ts', 'src/learning/ha-routing.test.ts', 'src/learning/guidance.test.ts',
     'src/learning/practice-workspace.test.ts', 'src/learning/runner.test.ts',
     'src/learning/practice-ownership.test.ts', 'src/learning/progress-ledger.test.ts',
   ] },

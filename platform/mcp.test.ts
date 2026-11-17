@@ -8,6 +8,7 @@ import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
 import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
 import { scenarioTopologies } from '../src/learning/scenario-topologies'
 import { scenarioBundle } from '../src/learning/scenario-course'
+import { haRoutingRequirements, haRoutingTopology } from '../tests/fixtures/ha-routing'
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })
@@ -53,6 +54,21 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
     }
     expect(chainResult?.resultStatus).toBe('complete')
     expect(chainResult?.assessments.map((entry: { outcome: string }) => entry.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied'])
+    const haTopology = haRoutingTopology()
+    haTopology.vpnConnections[0].enabled = false
+    const haRequirements = haRoutingRequirements('primary')
+    if (haRequirements[0].kind !== 'flow') throw new Error('Expected branch flow')
+    delete haRequirements[0].applianceChain
+    const haJob = await call('start_simulation', { request: { contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology: haTopology }, requirements: haRequirements } })
+    let haResult
+    for (let attempt = 0; attempt < 100; attempt++) {
+      haResult = await call('get_job', { handle: haJob.handle })
+      if (haResult.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
+    expect(haResult?.resultStatus).toBe('complete')
+    expect(haResult?.assessments.map((entry: { outcome: string }) => entry.outcome)).toEqual(['violated', 'satisfied', 'satisfied'])
     const { handle } = await call('start_simulation', { request })
     let result
     for (let attempt = 0; attempt < 100; attempt++) {

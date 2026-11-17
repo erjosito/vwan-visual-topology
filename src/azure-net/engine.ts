@@ -2932,25 +2932,27 @@ export function traceAzNetFlow(
           cursor = { kind: 'vnet-gateway', vnetId: vnet.id, gatewayId: transitGw.id, direction: 'egress' }
           continue
         }
-        pushHop({
-          nodeKind: 'appliance',
-          nodeId: app.id,
-          vnetId: vnet.id,
-          nodeName: app.name,
-          subnetId: app.subnetId,
-          action: 'delivered',
-          detail: `Delivered to ${app.name}-originated prefix ${selfAdvertised} (${destinationIp})`,
-        })
-        return {
-          source,
-          destinationIp,
-          destinationLabel: targetInfo.label,
-          status: 'delivered',
-          hops,
-          traversedApplianceIds,
-          traversedEdgeIds,
-          traversedVnetIds,
-          summaryReason: `Delivered to ${app.name} advertised prefix ${selfAdvertised}.`,
+        if (!targetInfo.endpoint) {
+          pushHop({
+            nodeKind: 'appliance',
+            nodeId: app.id,
+            vnetId: vnet.id,
+            nodeName: app.name,
+            subnetId: app.subnetId,
+            action: 'delivered',
+            detail: `Delivered to ${app.name}-originated prefix ${selfAdvertised} (${destinationIp})`,
+          })
+          return {
+            source,
+            destinationIp,
+            destinationLabel: targetInfo.label,
+            status: 'delivered',
+            hops,
+            traversedApplianceIds,
+            traversedEdgeIds,
+            traversedVnetIds,
+            summaryReason: `Delivered to ${app.name} advertised prefix ${selfAdvertised}.`,
+          }
         }
       }
 

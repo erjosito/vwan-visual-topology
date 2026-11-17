@@ -152,6 +152,91 @@ and answer-specific explanations. Preserving old choice IDs preserves old
 award/answer identities. Automated qualification is not an answer-blind SME
 review and does not establish learning effectiveness.
 
+## HA routing qualification (#222)
+
+`tests/fixtures/ha-routing.ts` is an original two-NVA/ARS/branch fixture, not a
+published mission. `ha-routing.test.ts` qualifies independent forward/return
+paths, an unaffected local operations flow and invalid/unknown alternatives.
+Neither released edition, its awards, nor its 1,325-point ladder changes.
+
+| Mechanism | Qualified scope or remaining gate |
+| --- | --- |
+| Preferred/standby BGP advertisements | Shorter primary AS path, longer standby AS path; explicitly withdraw the primary branch advertisement and overlay, then verify both legs use the standby overlay. Restore is a new stateless snapshot, not measured failback. |
+| Stale primary advertisement | An available alternate and a retained route are insufficient. Engine `2026.11.17.1` rejects delivery at an advertising NVA when a separately owned branch still needs a forwarding path. Abstract, unowned NVA-origin prefixes keep their existing behavior. |
+| Manual UDR next-hop change | Equal-prefix User policy can still pin an NVA whose forwarding is explicitly disabled. Updating the next hop or removing that UDR restores the qualified standby path. This is a declared configuration repair, not health-triggered automation. |
+| Internal Standard LB HA ports / Floating IP | Native declarations are retained but forwarding is not assessed; packet tests cover both floating and nonfloating HA ports. A separate extension must model original frontend/backend ownership, tuple preservation, declared eligible backends and independent return routing. Ordinary LB DNAT is not a substitute. |
+| BGP next hop independent of speaker | Current NVA advertisements use that NVA's private IP. Advertising an LB frontend or another NVA/firewall needs an explicit owned next hop before grading; Azure support does not imply simulator support. |
+| Controller-driven address reassignment | Requires explicit address-owner transitions and resulting routing. It is not LB Floating IP and is not qualified by editing a label or retaining unknown JSON. |
+| ECMP hashing, live probes, timers, VMSS orchestration, state replication and session continuity | Not established by these snapshots; retain explicit conceptual-only limits. A selected modeled path does not prove Azure per-flow symmetry. |
+
+Candidate experience: inspect the workload's exact branch-prefix route and the
+ARS candidates; compare branch-side return selection; observe a declared
+withdrawal; repair stale advertisement or manual steering without changing
+the local witness. A later graded mission still needs native ARS/NVA/overlay
+guidance, reviewed EN/JA questions and an explicit award-compatibility decision.
+Navigation assistance must not reveal the repair.
+
+### Candidate inspection and questions (not learner-published)
+
+EN inspection: In the workload's effective routes, find `172.31.80.0/24`
+and record its source and next hop. Compare the two ARS candidates and the
+branch-side return path. After the declared withdrawal, repeat both traces
+and check that the operations subnet remains reachable.
+
+JA inspection: ワークロードの有効なルートで `172.31.80.0/24` を探し、
+ルートのソースとネクストホップを記録します。ARS の 2 つの候補と、
+ブランチ側の戻り経路を比較します。明示的な撤回後に往復のトレースを
+再実行し、運用サブネットへの到達性も確認します。
+
+EN diagnosis: The preferred overlay is down, its advertisement remains,
+and the standby is available. Why can the workload-to-branch trace fail
+while the branch-prefix route is still present?
+
+| Choice | EN | JA |
+| --- | --- | --- |
+| A | The preferred NVA still advertises the branch prefix; the selected route outlives that NVA's usable overlay. | 優先 NVA がブランチのプレフィックスを広告し続けており、選択されたルートがその NVA の使用可能なオーバーレイより長く残っています。 |
+| B | The standby NVA advertises a longer AS path; ARS cannot retain that advertisement as an alternate candidate. | 待機 NVA が長い AS パスを広告しているため、ARS はその広告を代替候補として保持できません。 |
+| C | The spoke uses the hub's remote gateway; branch replies therefore follow the same NVA as outbound packets. | スポークがハブのリモートゲートウェイを使用しているため、ブランチからの応答は送信パケットと同じ NVA を通ります。 |
+| D | The effective table contains the branch prefix; the failure therefore lies outside modeled routing and forwarding. | 有効なルートにブランチのプレフィックスが存在するため、障害はモデル化されたルーティングと転送の範囲外にあります。 |
+
+JA diagnosis: 優先オーバーレイが停止しても、その広告は残り、待機 NVA は
+利用可能です。ブランチのルートが存在するのに、ワークロードから
+ブランチへのトレースが失敗するのはなぜですか。
+
+Author key A: route selection does not establish onward forwarding. B confuses
+a less-preferred candidate with an invalid route; C couples independent return
+selection to the outbound path; D mistakes route presence for delivery.
+JA 解説: 正解は A です。ルートの選択だけでは、その先への転送を保証
+しません。B は低優先度と無効を混同し、C は往復の独立した経路選択を
+同一視し、D はルートの存在を配信の成功と同一視しています。
+
+EN design tradeoff: What obligation remains when manual UDR next-hop changes
+are used as the HA mechanism?
+
+| Choice | EN | JA |
+| --- | --- | --- |
+| A | Provide detection and a process that updates affected route tables, and verify return routing separately from the changed next hop. | 検出と対象ルートテーブルを更新する手順を用意し、変更したネクストホップとは別に戻り経路を検証します。 |
+| B | Provide detection and a process that changes ARS path preference, and rely on that preference to replace the configured UDR next hop. | 検出と ARS の経路優先順位を変更する手順を用意し、その優先順位によって設定済み UDR のネクストホップを置き換えます。 |
+| C | Provide detection and a process that changes the branch AS path, and use that path to establish symmetry through the new UDR next hop. | 検出とブランチの AS パスを変更する手順を用意し、そのパスによって新しい UDR ネクストホップを通る往復の対称性を確立します。 |
+| D | Provide detection and a process that changes peering gateway transit, and use that setting to replace the configured UDR next hop. | 検出とピアリングのゲートウェイトランジットを変更する手順を用意し、その設定によって設定済み UDR のネクストホップを置き換えます。 |
+
+JA design tradeoff: 手動の UDR ネクストホップ変更を HA の仕組みとして
+使う場合、設計側にどのような責務が残りますか。
+
+Author key A: this fixture declares snapshots rather than implementing detection
+or updates. B and D do not rewrite an explicit UDR next hop; C does not establish
+independent return-path symmetry. JA 解説: 正解は A です。このフィクスチャは
+状態を宣言するもので、検出や更新処理は実装しません。B と D は明示的な
+UDR のネクストホップを書き換えず、C は独立した戻り経路の対称性を
+保証しません。Both drafts still require independent answer-blind EN/JA review.
+
+Sources checked for this qualification:
+[ARS route injection and primary/standby AS paths](https://learn.microsoft.com/azure/route-server/route-injection-in-spokes),
+[independent next-hop support](https://learn.microsoft.com/azure/route-server/next-hop-ip),
+and [HA ports configuration/symmetry boundaries](https://learn.microsoft.com/azure/load-balancer/load-balancer-ha-ports-overview).
+These document-derived tests are not live-Azure qualification, answer-blind SME
+review or evidence of learning effectiveness.
+
 ## Original-edition ladder
 
 | Belt | Required points | Points available before next belt | Objective |
