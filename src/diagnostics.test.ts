@@ -427,6 +427,30 @@ describe('routing diagnostic intent and evidence', () => {
     expect(report.complete).toBe(true)
     expect(report.findings.map((f) => f.rule)).toEqual(['reachable'])
   })
+
+  it.each([false, true])('keeps longest-prefix model limits and failure scenarios distinct across continuations (failures=%s)', (failureAnalysis) => {
+    const topology = fixture()
+    topology.sites[0].prefixes.push('10.2.1.0/24')
+    topology.connections.push({
+      ...structuredClone(topology.connections[0]), id: 'sdwan', transport: 'SDWAN',
+    })
+    topology.sites[0].routeMapAssignments = [{ connectionId: 'sdwan', outboundMapId: 'drop-specific' }]
+    topology.routeMaps = [{ id: 'drop-specific', name: 'Only broad SDWAN advertisement', siteId: 'b', rules: [
+      { id: 'drop', prefixes: ['10.2.1.0/24'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' },
+    ] }]
+    const requirements = profile(flow({ destinationPrefix: '10.2.0.0/16' }), failureAnalysis)
+    const expected = analyzeRouting(topology, requirements)
+    expect(expected.findings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ rule: 'reachable', prefix: '10.2.1.0/24' }),
+      expect.objectContaining({ rule: 'unknown', evidence: expect.arrayContaining([{ code: 'limitation:sdwan' }]) }),
+    ]))
+    const run = createRoutingAnalysis(topology, requirements, { maxCells: 1, maxProbes: 1, maxFailureCases: 1 })
+    let report = run.advance()
+    for (let batch = 0; report.continuation?.status === 'paused' && batch < 200; batch++) report = run.advance()
+    expect(report).toEqual({ ...expected, budget: report.budget })
+    if (failureAnalysis) expect(report.failureCases).toBe(2)
+    expect(topology.connections.map((connection) => connection.enabled)).toEqual([true, true])
+  })
 })
 
 describe('diagnostic contracts, policies and bounds', () => {

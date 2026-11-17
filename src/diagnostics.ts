@@ -1,7 +1,7 @@
 import type { HubFirewallPolicy, ObjectSelection, Topology } from './model'
 import { english } from './messages'
 import type { MessageRenderer } from './messages'
-import type { Simulation } from './routing'
+import type { Decision, Simulation } from './routing'
 import { advertiseSiteRoutes, applyRouteMapRules, areErLocationsGlobalReachLinked, receiveSiteRoutes, routerMapRules } from './bgp'
 import { checkErHubLinkCompatibility, simulate } from './routing'
 import type { NodePath, PathNode } from './paths'
@@ -365,6 +365,7 @@ interface Scenario {
   cache: Map<string, NodePath[]>
   limitsCache: Map<string, string[]>
   ownersCache: Map<string, PathNode[]>
+  decisionRanges: WeakMap<Decision[], { decision: Decision; start: number; end: number; length: number }[]>
 }
 function scenario(topology: Topology): Scenario {
   const simulation = simulate(topology)
@@ -400,7 +401,7 @@ function scenario(topology: Topology): Scenario {
     ...topology.spokes.flatMap((node) => node.prefixes.map((p) => ({ node: { kind: 'spoke' as const, id: node.id }, ...addressRange(p) }))),
     ...topology.sites.flatMap((node) => node.prefixes.map((p) => ({ node: { kind: 'site' as const, id: node.id }, ...addressRange(p) }))),
   ]
-  return { topology, simulation, learned, boundaries: [...boundaries].sort((a, b) => a - b), limitations, hasOwnAs, ownerRanges, cache: new Map(), limitsCache: new Map(), ownersCache: new Map() }
+  return { topology, simulation, learned, boundaries: [...boundaries].sort((a, b) => a - b), limitations, hasOwnAs, ownerRanges, cache: new Map(), limitsCache: new Map(), ownersCache: new Map(), decisionRanges: new WeakMap() }
 }
 function owners(state: Scenario, address: string): PathNode[] {
   const n = ipv4(address)!
@@ -428,6 +429,20 @@ function owned(state: Scenario, node: PathNode, address: string, incoming: NodeP
 }
 const delivered = (path: NodePath, target: PathNode) => path.status === 'delivered' && path.termination === 'owner' && path.terminalKind === target.kind && path.siteId === target.id
 
+function longestDecision(state: Scenario, table: Decision[] | undefined, address: number): Decision | undefined {
+  if (!table) return
+  let ranges = state.decisionRanges.get(table)
+  if (!ranges) {
+    // Scenario tables are immutable; keep parsed ranges local to this failure/routing scenario.
+    ranges = table.flatMap((decision) => {
+      const parsed = cidr(decision.prefix)
+      return parsed ? [{ decision, start: parsed.network, end: parsed.network + 2 ** (32 - parsed.length), length: parsed.length }] : []
+    }).sort((a, b) => b.length - a.length)
+    state.decisionRanges.set(table, ranges)
+  }
+  return ranges.find((range) => address >= range.start && address < range.end)?.decision
+}
+
 function modelLimits(state: Scenario, source: PathNode, destination: string, paths: NodePath[]): string[] {
   const key = `${source.kind}:${source.id}:${destination}`
   const cached = state.limitsCache.get(key)
@@ -440,7 +455,7 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
   for (const { hubId: id, tableId } of contexts) {
     for (const table of tableId === 'defaultRouteTable' ? [simulation.bgpTables[id], simulation.tables[id], simulation.firewallTables[id]]
       : [simulation.hubTables?.[id]?.[tableId]]) {
-      const decision = table?.filter((d) => contains(d.prefix, address)).sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
+      const decision = longestDecision(state, table, address)
       if ((decision?.candidates.length ?? 0) > 1 && decision?.candidates.some((route) => route.transport === 'SDWAN')) reasons.push(limits.sdwan)
       if (decision?.candidates.some((route) => !route.remote && route.kind === 'bgp' && (route.asPath.includes(65515) || route.asPath.includes(65520)))) reasons.push(limits.ownAs)
       if (decision?.prefix === '0.0.0.0/0' && decision.selected.some((route) => route.transport === 'ExpressRoute')) reasons.push(limits.erDefault)
@@ -475,7 +490,7 @@ function modelLimits(state: Scenario, source: PathNode, destination: string, pat
         const tableId = attachmentHubRouting(topology, c.id).associatedTableId ?? ''
         for (const table of tableId === 'defaultRouteTable' ? [simulation.bgpTables[c.hubId], simulation.tables[c.hubId], simulation.firewallTables[c.hubId]]
           : [simulation.hubTables?.[c.hubId]?.[tableId]]) {
-          const decision = table?.filter((d) => contains(d.prefix, address)).sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length)[0]
+          const decision = longestDecision(state, table, address)
           if ((decision?.candidates.length ?? 0) > 1 && decision?.candidates.some((route) => route.transport === 'SDWAN')) reasons.push(limits.sdwan)
         }
       }
