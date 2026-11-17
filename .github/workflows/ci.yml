@@ -160,14 +160,17 @@ jobs:
             Select-Object Path, Hash | ConvertTo-Json |
             Set-Content test-artifacts\desktop\installer-sha256.json
           $info = (Get-Item "release\win-unpacked\Azure Network Simulator.exe").VersionInfo
+          $runtimeVersion = (Get-Content test-artifacts\desktop\packaged-checks.json -Raw | ConvertFrom-Json).runtime.version
           @{
             fileVersion = $info.FileVersion
             productVersion = $info.ProductVersion
+            runtimeVersion = $runtimeVersion
             buildVersion = $env:CANDIDATE_VERSION
             packageVersion = $env:CANDIDATE_PACKAGE_VERSION
           } | ConvertTo-Json | Set-Content test-artifacts\desktop\version-checks.json
-          if ($info.FileVersion -ne $env:CANDIDATE_VERSION -or $info.ProductVersion -ne $env:CANDIDATE_PACKAGE_VERSION) {
-            throw 'Packaged executable version does not match the candidate identity'
+          Get-Content test-artifacts\desktop\version-checks.json
+          if ($info.FileVersion -ne $env:CANDIDATE_VERSION -or $info.ProductVersion -ne "$env:CANDIDATE_PACKAGE_VERSION.0" -or $runtimeVersion -ne $env:CANDIDATE_PACKAGE_VERSION) {
+            throw 'Packaged executable resource/runtime versions do not match the recorded candidate identity'
           }
       - name: Record immutable desktop candidate
         run: node scripts/release-candidate.mjs create desktop

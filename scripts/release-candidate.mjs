@@ -96,7 +96,8 @@ export async function verifyCandidate(root, expected) {
     const checksums = Array.isArray(evidence) ? evidence : [evidence]
     requireValue(checksums.length === 1 && checksums[0].Hash?.toLowerCase() === actual[`Azure-Network-Simulator-${manifest.version}-x64.exe`], 'Installer checksum evidence mismatch')
     const version = await json(resolve(root, 'payload', 'version-checks.json'))
-    requireValue(version.fileVersion === manifest.version && version.productVersion === manifest.packageVersion
+    requireValue(version.fileVersion === manifest.version && version.productVersion === `${manifest.packageVersion}.0`
+      && version.runtimeVersion === manifest.packageVersion
       && version.buildVersion === manifest.version && version.packageVersion === manifest.packageVersion, 'Packaged version evidence mismatch')
   }
   return manifest
@@ -296,6 +297,7 @@ async function main() {
     const version = desktopIdentity(run, runs)
     const config = await json('electron-builder.json')
     config.buildVersion = version.build
+    config.buildNumber = '0'
     config.extraMetadata.version = version.package
     await save('electron-builder.json', config)
     if (process.env.GITHUB_ENV) {

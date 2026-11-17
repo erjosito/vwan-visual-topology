@@ -72,7 +72,8 @@ test('Function package and desktop evidence must match the candidate identity an
   const evidence = resolve(root, 'installer-sha256.json')
   await writeFile(evidence, JSON.stringify({ Path: installer, Hash: hash('tested installer').toUpperCase() }))
   const versions = resolve(root, 'version-checks.json')
-  await writeFile(versions, JSON.stringify({ fileVersion: version.build, productVersion: version.package, buildVersion: version.build, packageVersion: version.package }))
+  await writeFile(versions, JSON.stringify({ fileVersion: version.build, productVersion: `${version.package}.0`, runtimeVersion: version.package,
+    buildVersion: version.build, packageVersion: version.package }))
   const inputs = [[installer, installer.split(/[\\/]/).at(-1)], [evidence, 'installer-sha256.json'], [versions, 'version-checks.json']]
   const desktopEnv = { ...env, CANDIDATE_VERSION: version.build, CANDIDATE_PACKAGE_VERSION: version.package }
   await createCandidate('desktop', resolve(root, 'desktop'), inputs, desktopEnv)
@@ -81,6 +82,9 @@ test('Function package and desktop evidence must match the candidate identity an
   await writeFile(evidence, JSON.stringify({ Path: installer, Hash: hash('tested installer') }))
   await writeFile(versions, JSON.stringify({ fileVersion: '2026.11.17.1', productVersion: version.package }))
   await assert.rejects(createCandidate('desktop', resolve(root, 'bad-version'), inputs, desktopEnv), /version evidence mismatch/)
+  await writeFile(versions, JSON.stringify({ fileVersion: version.build, productVersion: `${version.package}.0`, runtimeVersion: '0.0.0',
+    buildVersion: version.build, packageVersion: version.package }))
+  await assert.rejects(createCandidate('desktop', resolve(root, 'bad-runtime'), inputs, desktopEnv), /version evidence mismatch/)
 })
 
 test('desktop CI identities need no source version bump and fail closed at Windows limits', () => {

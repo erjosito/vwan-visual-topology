@@ -97,7 +97,10 @@ For CI desktop packaging, `N` is the CI run's ordinal within its original UTC
 creation date (including PR/manual/failed builds), not the all-time run number
 or a required consecutive release counter. The date/build identity is allocated
 before packaging in the disposable checkout, with actual FileVersion/ProductVersion
-evidence. The package/runtime version remains three-part `YYYY.M.D` semver.
+evidence. The package/runtime version remains three-part `YYYY.M.D` semver;
+electron-builder represents the Windows executable ProductVersion as
+`YYYY.M.D.0`. FileVersion retains the separate four-part dated build identity,
+and CI checks all three values against the actual packaged application.
 No version-bump commit or source edit is required to merge. The allocator fails
 closed beyond Windows' 65535 component bound; revise the allocation policy
 before that limit rather than wrapping/reusing identities. Keep daily CI run
