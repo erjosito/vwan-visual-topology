@@ -2,11 +2,12 @@
 
 The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
-and evidence-gated runner (#180) activate two representative assessed lessons.
+and evidence-gated runner (#180) activate six sequential assessed missions
+(40 tasks, 1,325 points, through black belt).
 The root owns the runner across editor switches and pause/resume. A bounded
 browser-local ledger (#183) restores compatible completions after reload and
 derives first-earned points, checkpoint-gated belts and the header status.
-The full curriculum remains #184. No legacy JSON draft, raw requirements or
+The curriculum is authored under #184. No legacy JSON draft, raw requirements or
 engine payload is shown; legacy storage stays untouched.
 
 `runner.ts` is the single progression authority. Supported check kinds dispatch
@@ -44,9 +45,11 @@ return, recovery and same-session history behavior.
 
 | File | Edit for |
 | --- | --- |
-| `course-outline.ts` | Full journey objectives and planned point budgets |
-| `course-profile.ts` | Lightweight course identity, order, preview belts/thresholds and checkpoint assessment identities shared with the header |
-| `course-examples.ts` | Localized instructions, hints, quizzes, tasks, checks and guidance references |
+| `course-outline.ts` | Full journey objectives and reviewed point budgets |
+| `course-profile.ts` | Lightweight course identity, order, belts/thresholds and checkpoint assessment identities shared with the header |
+| `course-examples.ts` | The original two localized missions and central content assembly; historical export name retained |
+| `course-routing.ts` | Localized longest-prefix and gateway-return missions, checks and guidance |
+| `course-wan.ts` | Localized secured-WAN and hybrid-capstone missions, checks and guidance |
 | `course-scenarios.ts` | Native starter documents; copy before editing |
 | `course-contract.ts` | A genuinely new reusable task/check/action shape |
 | `course-validation.ts` | Validation for a new shape/scope, not individual lesson IDs |
@@ -69,30 +72,77 @@ disabled controls get a localized reason; closed/moved inspectors can be
 revealed again explicitly. Adding a supported control requires its resolver,
 native reveal adapter and anchor, never a lesson-specific sidebar branch.
 
-## Planned white-to-black ladder
+## White-to-black ladder
 
-| Belt | Required points | Planned points available before next belt | Objective |
+| Belt | Required points | Points available before next belt | Objective |
 | --- | ---: | ---: | --- |
-| White | 0 | 150 | Address ownership, exact routes, direct peering |
-| Yellow | 150 | 200 | Access flags, non-transitivity, return paths |
-| Orange | 350 | 250 | Longest prefix, UDRs, equal-prefix selection |
-| Green | 600 | 300 | Gateway transit, Route Server, BGP selection |
-| Blue | 900 | 350 | Virtual WAN propagation, table scope, intent |
-| Brown | 1,250 | 450 | Mixed diagnosis, alternatives, transfer/capstone |
-| Black | 1,700 | 0 | Capstone completion and honest uncertainty |
+| White | 0 | 100 | Address ownership, exact routes, direct peering |
+| Yellow | 100 | 75 | Diagnose an equal-prefix UDR override |
+| Orange | 175 | 150 | Longest-prefix diagnosis, two destination addresses |
+| Green | 325 | 225 | Shared gateway/BGP transit and independent return routing |
+| Blue | 550 | 325 | Virtual WAN propagation, table scope, private intent |
+| Brown | 875 | 450 | Mixed diagnosis, independent faults, transfer/capstone |
+| Black | 1,325 | 0 | Capstone completion and honest uncertainty |
 
-These are explicit **planning allocations**, not available awards or authored
-lessons. #184 must supply reviewed tasks/checkpoints within those budgets (or
-revise the content plan explicitly). Points alone never replace the mastery
-checkpoint at a belt transition. Black belt is local practice, not certification.
+Two pre-implementation design/self-review iterations on #184 revised the old
+unimplemented 1,700-point plan. Quick first wins retain the existing 100- and
+75-point chapters and every historical award identity/value. New work budgets
+then grow to 150, 225, 325 and 450 points. Points never replace mastery checkpoints.
+All six chapters have available assessments. A pre-publication budget audit
+corrected the capstone's listed subtask arithmetic: branch repair 85, return
+repair 115 and combined verification 110 bring its actual total to the reviewed
+450-point budget. No previously published awards were repriced.
 
-`exampleCourse` deliberately publishes only a **preview contract** with white and
-yellow thresholds backed by its actual sample tasks. Do not copy its preview
-threshold into the full journey or expose it as the complete product curriculum.
-The peering lesson is complete; the UDR checkpoint is a representative advanced
-example, not proof the other belt curricula have shipped. Existing shared-engine
-fixtures verify both starter failures and repaired outcomes; human subject-matter
-and learner review remain release work, not claimed research results.
+`exampleCourse` and `previewCourse` retain their historical source export names
+and course ID. Their current content version is 4 and publication is `complete`.
+The original eleven tasks still award exactly 175 points; fresh and returning
+learners can reach 1,325 without repricing or repeated credit. The first 24 tasks
+retain their 550 points and assessment identities. Gateway and WAN chapters
+diagnose preconfigured transit/intent, not gateway/hub-configuration skills.
+Shared-engine fixtures cover failed forward/return outcomes, both supported
+repair styles, the wrong-prefix non-fix and checkpoint reachability. A browser
+journey drives all 40 tasks through real controls and restores the normal design.
+WAN checks require the modeled Firewall waypoint in both directions; delivered
+but bypassing paths fail. The capstone keeps two faults independent and rechecks
+both repairs together. Exact hub requirements name the Default table, not a
+union of hub routes. These scenarios do not combine custom tables with intent.
+
+Technical author review references Microsoft Learn's
+[routing selection](https://learn.microsoft.com/azure/virtual-network/virtual-networks-udr-overview),
+[gateway transit](https://learn.microsoft.com/azure/vpn-gateway/vpn-gateway-peering-gateway-transit)
+and [hub routing](https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing).
+This is not independent human subject-matter sign-off or evidence of learning
+effectiveness. Novice evaluation remains #181/#160. Black belt records local
+practice completion, not Azure certification. Publication `complete` describes
+the available assessed path, not human validation or a live Azure guarantee.
+
+## Journey qualification and known limits
+
+The #202 curriculum head `e1f1057` passed full CI run `43989910088` before
+merging as `8d4151e`: 937 unit tests, 369 Chromium browser cases, 18 production
+cases, unchanged startup budgets and actual unpackaged/packaged Electron smoke.
+Those are repository regression denominators, not human success or learning
+rates. The focused learning fixtures exercise all belt thresholds, historical
+175/550-point histories, exact scopes, independent faults, supported alternatives
+and unsupported-result refusal. `runner.test.ts` and `progress-ledger.test.ts`
+separately cover stale evidence, inserted/revised content and immutable awards.
+
+#181 records qualification findings and follow-ups. #206 adds waypoint-aware
+failed-check feedback; #207 restores focus to the next task/completion heading
+after explicit advance, without adding Tab stops or changing ordinary canvas
+focus. Native-control browser regressions cover the complete course in EN and
+JA, with dark/reduced-motion and separate narrow/focus cases. These scripted
+checks do not validate native-language clarity, assistive-technology usability,
+contrast exceptions or educational effectiveness.
+
+Remaining enhancements: #204 needs a new exact hub-table guidance adapter;
+current advanced table checks are exact but their cue opens the source subnet.
+#205 separates the scaffolded capstone from a genuinely novel diagnosis task.
+Human recruitment, independent SME review and pre/post/delayed-transfer sessions
+remain pending under #160; this work has no participant results. Use the existing
+`docs/human-evaluation-pilot.md` protocol and its guided-first-mission task, not XP
+or test counts, to evaluate learning. Concurrent loaded-canvas accessibility and
+benchmark work is tracked separately in #201/#197/#198/#199.
 
 ## Add or change a lesson without changing runtime code
 
@@ -107,7 +157,7 @@ and learner review remain release work, not claimed research results.
    necessary. New thresholds must be achievable by the actual ordered content.
 5. Add localized feedback for every answer, relevant hints and semantic guidance.
    Navigation help stays available at every belt and never removes points.
-6. Run `npx vitest run src/learning/course.test.ts` and `npm run build`.
+6. Run `npx vitest run learning` and `npm run build`.
    The content-only addition/reorder test demonstrates this extension path.
 
 Changing a title/quiz wording, adding a supported lesson, changing order or tuning

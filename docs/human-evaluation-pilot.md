@@ -26,7 +26,8 @@ certification or evidence that the application causes learning. Follow the
    the participant's existing saved work. Verify the reset/export/reload procedure
    before recruitment.
 4. Explain the purpose, voluntary participation, expected 35-minute usability
-   session and optional separate learning follow-up. Obtain affirmative consent
+   session, optional eight-minute guided-practice task and optional separate
+   learning follow-up. Obtain affirmative consent
    before collecting responses. A participant may stop or skip any task without
    consequence. Do not treat this document as organizational research approval.
 5. Default to moderator notes only: no screen/audio recording, analytics or
@@ -88,6 +89,23 @@ failure.
 | U1: construct and connect | Starting empty, create a hub and a VNet with the supplied synthetic prefix, connect them, and find the VNet route in the hub. | 8 minutes | Original hub/VNet identities retained; intended attachment enabled; exact supplied prefix appears in the selected effective table; participant can identify the selected connection. |
 | U2: inspect without intent | From the supplied one-hub trusted/untrusted starter, add Azure Firewall without enabling routing intent. Configure the supplied custom-table/static routing requirement and determine whether each direction of one supplied flow traverses it. | 10 minutes | Explicit original Firewall, both intents off, exact requested static target and associations; independent forward/reverse evidence; no claim that modeled inspection proves Firewall-policy permission or application delivery. |
 | U3: preserve and recover | Export your design, reload it in the isolated workspace, and verify that the important objects and routing settings survived. Begin clearing the canvas, then decide to keep your work. | 5 minutes | Native round trip preserves original IDs/configuration; attempted cancellation leaves the topology and saved workspace unchanged. If confirmation is absent, record a product finding and restore from the export; do not blame the participant. |
+| U4: optional guided first mission | Keep the supplied normal design safe, start guided networking practice, complete the first mission, reload to resume, and return to your original design. Explain why the two workloads can communicate and what the belt means. | 8 minutes | Explicit starter confirmation; protected canvas; predict/inspect/direct-peering/explain sequence; current checks and linear unlocks; Yellow belt at 100 local points; compatible reload; original design/layout intact. The participant distinguishes modeled routing and local progress from delivery guarantees or certification. |
+
+U4 rehearses the shipped first seven guided tasks, not the retired independent
+exercise menu. It is an optional additional usability task, not part of the
+counterbalanced U1/U2 timing comparison. Do not instruct the participant to edit
+JSON or pre-demonstrate the control sequence. Treat free **Show me where** as UI
+navigation assistance, separately from conceptual hints, wrong route predictions
+and moderator explanation. Log a failure to locate a control as a discoverability
+problem, not automatically a networking error. Record reload/resume and original
+design recovery separately from the learner's explanation.
+
+The six-mission, 40-task black-belt path is assisted practice. In particular,
+the capstone currently discloses its two faults in the instructions (#205).
+It is not the independent pre/post/delayed-transfer assessment below. Prepare
+new reviewed, matched task variants without those answers before claiming
+transfer. Exact advanced hub-table navigation is tracked in #204. Native
+Japanese terminology and actual screen-reader use still need human review.
 
 For U2 the moderator derives a native synthetic starter from
 `tests\fixtures\hub-firewall.ts`, removing its Firewall declaration and static

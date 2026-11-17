@@ -1,8 +1,10 @@
 import type { CourseBundle } from './course-contract'
 import { courseScenarios } from './course-scenarios'
 import { peeringCheckpoint, previewCourse } from './course-profile'
+import { routingChecks, routingGuidance, routingLessons } from './course-routing'
+import { wanChecks, wanGuidance, wanLessons } from './course-wan'
 
-// Two assessed examples; the complete white-to-black curriculum is a separate content stage.
+// Historical export name retained while the curriculum grows in content-only batches.
 export const exampleCourse: CourseBundle = {
   schemaVersion: 1,
   course: previewCourse,
@@ -62,7 +64,7 @@ export const exampleCourse: CourseBundle = {
     {
       id: 'route-override', contentVersion: 1, scenarioId: 'peered-with-drop', prerequisites: ['direct-peering'],
       title: { en: 'Checkpoint: a route overrides peering', ja: 'チェックポイント: ピアリングを上書きするルート' },
-      objective: { en: 'Diagnose a selected equal-prefix UDR, restore both paths, and explain route preference. This is one advanced example, not a complete advanced curriculum.', ja: '同じプレフィックスの選択済み UDR を診断し、双方向の経路を復元してルートの優先順位を説明します。これは高度な例の一つで、上級カリキュラム全体ではありません。' },
+      objective: { en: 'Diagnose a selected equal-prefix UDR, restore both paths, and explain why an enabled peering is not enough.', ja: '同じプレフィックスの選択済み UDR を診断し、双方向の経路を復元して、有効なピアリングだけでは不十分な理由を説明します。' },
       taskOrder: ['override.load', 'override.inspect', 'override.repair', 'override.explain'],
       tasks: [
         {
@@ -92,6 +94,8 @@ export const exampleCourse: CourseBundle = {
         },
       ],
     },
+    ...routingLessons,
+    ...wanLessons,
   ],
   checks: [
     { id: 'load-peering', kind: 'scenario.loaded', params: { scenarioId: 'two-vnets' } },
@@ -156,6 +160,8 @@ export const exampleCourse: CourseBundle = {
         ],
       },
     },
+    ...routingChecks,
+    ...wanChecks,
   ],
   guidance: [
     { id: 'routes-a', action: 'routes.open', params: { vnetId: 'a', subnetId: 'work-a', prefix: '10.2.0.0/16' },
@@ -165,5 +171,7 @@ export const exampleCourse: CourseBundle = {
     { id: 'repair-drop', action: 'route-table.configure',
       params: { vnetId: 'a', subnetId: 'work-a', routeTableId: 'blocking', routeId: 'drop-b' },
       instruction: { en: 'Reveal the associated route table and highlight the selected drop route. You decide the routing repair.', ja: '関連付けられたルート テーブルを開き、選択された破棄ルートを強調表示します。修復方法は自分で決めます。' } },
+    ...routingGuidance,
+    ...wanGuidance,
   ],
 }

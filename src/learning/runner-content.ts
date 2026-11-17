@@ -2,7 +2,7 @@ import type { Localized } from './content'
 import type { Requirement } from '../platform/contract'
 
 export const runnerLabels = {
-  preview: { en: 'Two assessed lessons are available. The complete white-to-black-belt curriculum is still being developed.', ja: '評価付きの 2 レッスンを利用できます。白帯から黒帯までの全カリキュラムは開発中です。' },
+  preview: { en: 'Six sequential networking missions take you from white to black belt in local practice, not Azure certification. Navigation help and retries are always free.', ja: '6 つの順序立ったネットワークのミッションで白帯から黒帯まで進めます。ローカルの練習であり、Azure 認定ではありません。操作場所の案内と再試行は常に無料です。' },
   session: { en: 'Task completion and first-earned points use this browser origin or desktop profile only. Check the header for saved versus session-only progress.', ja: 'タスクの完了と初回獲得ポイントは、このブラウザーのオリジンまたはデスクトップのプロファイルだけで使用します。保存済みかセッションのみかはヘッダーで確認できます。' },
   progress: { en: 'Completion could not be recorded. Your task is still locked at this step. Check the learning-status details for storage recovery or another-tab ownership, then check the task again.', ja: '完了を記録できませんでした。このステップはまだ完了していません。学習状態の詳細で保存の回復方法や別のタブの所有権を確認し、タスクを再確認してください。' },
   check: { en: 'Check task', ja: 'タスクを確認' },
@@ -27,7 +27,7 @@ export const runnerLabels = {
   replayConfirm: { en: 'Start lesson replay', ja: 'レッスンの再練習を開始' },
   replaying: { en: 'Replaying this lesson. Past completion is preserved.', ja: 'このレッスンを再練習中です。過去の完了は保持されます。' },
   done: { en: 'Available lessons complete', ja: '利用可能なレッスンを完了' },
-  doneDetail: { en: 'You completed both assessed examples. Review or replay to practice again. This is not a black-belt qualification or an Azure certification.', ja: '評価付きの 2 つの例を完了しました。復習や再練習を利用できます。黒帯の資格や Azure 認定ではありません。' },
+  doneDetail: { en: 'You completed the local white-to-black practice path. Review or replay without repeat points. Your belt is browser-local practice history, not verified qualification or Azure certification.', ja: 'ローカルの白帯から黒帯までの練習課程を完了しました。ポイントを重複獲得せずに復習や再練習ができます。帯はブラウザー内の練習記録であり、検証された資格や Azure 認定ではありません。' },
   outline: { en: 'Learning path and completed-task review', ja: '学習の順序と完了したタスクの復習' },
   completed: { en: 'Completed', ja: '完了' },
   locked: { en: 'Locked', ja: 'ロック中' },
@@ -40,9 +40,12 @@ export function requirementDescription(requirement: Requirement): Localized {
     en: `The exact route ${requirement.prefix} must be ${requirement.expectation === 'present' ? 'present' : 'absent'} in the requested route table.`,
     ja: `指定されたルート テーブルで完全一致の ${requirement.prefix} が${requirement.expectation === 'present' ? '存在する' : '存在しない'}必要があります。`,
   }
-  if (requirement.kind === 'flow') return {
-    en: `${requirement.sourceAddress} to ${requirement.destinationAddress}: the modeled forward and return paths must ${requirement.expectation === 'allow' ? 'allow traffic' : 'demonstrate the requested block'}.`,
-    ja: `${requirement.sourceAddress} から ${requirement.destinationAddress}: モデルの往路と復路で${requirement.expectation === 'allow' ? '通信が許可される' : '指定された遮断が確認される'}必要があります。`,
+  if (requirement.kind === 'flow') {
+    const inspection = !!(requirement.requiredApplianceId || requirement.requiredFirewallHubId)
+    return {
+      en: `${requirement.sourceAddress} to ${requirement.destinationAddress}: the modeled forward and return paths must ${requirement.expectation === 'allow' ? 'allow traffic' : 'demonstrate the requested block'}.${inspection ? ' Both directions must also traverse the required inspection waypoint.' : ''}`,
+      ja: `${requirement.sourceAddress} から ${requirement.destinationAddress}: モデルの往路と復路で${requirement.expectation === 'allow' ? '通信が許可される' : '指定された遮断が確認される'}必要があります。${inspection ? '往路と復路の両方が、指定された検査の通過点も経由する必要があります。' : ''}`,
+    }
   }
   return { en: 'The requested packet-routing condition must be fully assessed and satisfied.', ja: '指定されたパケット ルーティング条件が完全に評価され、満たされる必要があります。' }
 }

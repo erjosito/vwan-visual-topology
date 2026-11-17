@@ -268,7 +268,7 @@ try {
     await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:practice-workspace:v1')).document)).toEqual(practice)
     await page.getByTestId('learning-open').click()
-    await expect(learning).toContainText('Two assessed lessons are available')
+    await expect(learning).toContainText('Navigation help and retries are always free')
     await expect(page.getByTestId('learning-status')).toContainText('20 points')
     await expect(learning.getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
     await learning.getByRole('button', { name: 'Pause learning', exact: true }).click()

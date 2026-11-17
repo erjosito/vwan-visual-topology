@@ -94,7 +94,7 @@ describe('declarative guided course content', () => {
     ['wrong guidance scope', (bundle) => { bundle.lessons[0].tasks[2].guidanceIds = ['peer-command'] }],
     ['duplicate award', (bundle) => { bundle.lessons[1].tasks[0].awardId = bundle.lessons[0].tasks[0].awardId }],
     ['zero completion points', (bundle) => { bundle.lessons[0].tasks[0].points = 0 }],
-    ['unattainable threshold', (bundle) => { bundle.course.belts[1].pointsRequired = 1000 }],
+    ['unattainable threshold', (bundle) => { bundle.course.belts[1].pointsRequired = Number.MAX_SAFE_INTEGER }],
     ['nonincreasing thresholds', (bundle) => { bundle.course.belts[1].pointsRequired = 0 }],
     ['unknown checkpoint', (bundle) => { bundle.course.belts[1].checkpointTaskIds = ['missing'] }],
     ['missing checkpoint', (bundle) => { bundle.course.belts[1].checkpointTaskIds = [] }],
@@ -155,13 +155,21 @@ describe('declarative guided course content', () => {
     }
   })
 
-  it('keeps the full journey plan attainable from explicit planned task budgets, separate from the preview', () => {
+  it('backs every reviewed belt allocation with the actual sequential task budget', () => {
     let budget = 0
     for (const belt of courseOutline) {
       expect(belt.pointsRequired).toBe(budget)
       budget += belt.plannedTaskPoints
     }
-    expect(exampleCourse.course.publication).toBe('preview')
-    expect(exampleCourse.course.belts.at(-1)!.pointsRequired).toBeLessThan(courseOutline.at(-1)!.pointsRequired)
+    expect(exampleCourse.course.publication).toBe('complete')
+    let available = 0
+    for (const [index, id] of exampleCourse.course.lessonOrder.entries()) {
+      const lesson = exampleCourse.lessons.find((item) => item.id === id)!
+      const points = lesson.tasks.reduce((total, task) => total + task.points, 0)
+      expect(points).toBe(courseOutline[index].plannedTaskPoints)
+      available += points
+      expect(exampleCourse.course.belts[index + 1].pointsRequired).toBe(available)
+    }
+    expect(available).toBe(courseOutline.at(-1)!.pointsRequired)
   })
 })
