@@ -826,7 +826,8 @@ recoverable loading/failure controls, native JSON/history and offline workers.
 
 `npm run measure:production -- <output.json>` records the initial referenced
 asset graph, settled cold-start JS/CSS requests per mode, first optional-panel
-and first inactive-workspace latency. `PRODUCTION_ROOT` selects an existing
+and first inactive-workspace latency, first Japanese switch, and a fresh-context
+Japanese initial workspace. `PRODUCTION_ROOT` selects an existing
 artifact for baseline reproduction. Gzip sizes are computed locally, not
 observed Azure transfers; loopback timing samples are not a network-performance
 promise. Compared with the published 8d9d76d artifact, the measured entry graph
@@ -837,6 +838,22 @@ ready/panel/switch timings are retained separately, with neither speed nor
 peak-memory improvements assumed. CI enforces bounded entry/per-mode byte
 budgets and tests defaults/overrides, pre-paint theme, workers, optional panels,
 failure recovery and cached offline operations.
+
+The default-English entry and settled workspace local-gzip budgets are now
+130,000 and 300,000 bytes respectively (the existing 1,200,000-byte workspace
+raw ceiling is unchanged). The shared Japanese catalog loads only for a saved
+Japanese preference or an explicit language switch; Japanese startup waits for
+it before rendering the workspace. A pending/failed switch preserves the current
+language, originals and drafts, with explicit reload recovery. Already-loaded
+languages can switch while offline; this is not offline fresh-navigation support.
+Japanese startup and first-switch costs are measured separately, not counted as
+an improvement to the English budget.
+
+`node scripts/compare-production.mjs <baseline-dist> <candidate-dist> <output.json>`
+runs the same measurement harness against immutable artifacts in twenty alternating
+AB/BA pairs, isolating each invocation in a fresh browser process. It preserves raw
+runs beside the summary, full raw timing arrays, nearest-rank p95, environment
+qualifications and artifact hashes. Run it without concurrent local tests/builds.
 
 ## Shared samples and workspace evolution
 

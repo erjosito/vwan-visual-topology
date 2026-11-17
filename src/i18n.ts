@@ -1,9 +1,8 @@
 import { useSyncExternalStore } from 'react'
-import { ja } from './i18n-ja'
-import { diagnosticJa } from './i18n-diagnostics-ja'
-import { translate } from './messages'
+import { ja, diagnosticJa, japaneseLoaded, loadLanguage, translate } from './messages'
 import type { Language } from './messages'
 export { translate } from './messages'
+export { loadLanguage } from './messages'
 export type { Language } from './messages'
 
 export const languageStorageKey = 'vwan-visual-topology:language:v1'
@@ -23,7 +22,11 @@ function subscribe(listener: () => void) {
   listeners.add(listener)
   return () => { listeners.delete(listener) }
 }
-export function setLanguage(next: Language) {
+let languageRequest = 0
+export async function setLanguage(next: Language) {
+  const request = ++languageRequest
+  await loadLanguage(next)
+  if (request !== languageRequest) return
   language = next === 'ja' ? 'ja' : 'en'
   try { localStorage.setItem(languageStorageKey, language) } catch { /* In-memory switching still works. */ }
   document.documentElement.lang = language
@@ -67,8 +70,6 @@ const azureLimitationMessages = [
   'Cross-subscription VNet read skipped. Opt in with -AllowCrossSubscriptionVnets to read only referenced VNets.',
   'A referenced VNet read failed; check read permissions.',
 ]
-const prefixedAzureDiagnostics = Object.fromEntries(azureLimitationMessages.map((message) =>
-  [`{0}: ${message}`, `{0}: ${diagnosticJa[message] ?? ja[message] ?? message}`]))
 const networkPrefix = '(?:\\d{1,3}\\.){3}\\d{1,3}/\\d{1,2}'
 const diagnosticShapes: Record<string, { priority?: number; slots: Record<string, string> }> = {
   // Match structural envelopes before atomic reasons. Greedy router slots preserve names
@@ -99,22 +100,33 @@ const selectionReasonMessages = new Set([
   'Internet routing intent uses direct Internet egress from Azure Firewall.',
   'Azure Firewall has a direct Internet fallback when no default is learned. This does not install a hub default route.',
 ])
-const templates = Object.entries({ ...ja, ...diagnosticJa, ...prefixedAzureDiagnostics })
-  .map(([message, translated]) => {
-    const slots: string[] = []
-    let pattern = '', position = 0
-    for (const match of message.matchAll(/\{(\d+)\}/g)) {
-      pattern += escape(message.slice(position, match.index)) + '(' + (diagnosticShapes[message]?.slots[match[1]] ?? '[\\s\\S]*?') + ')'
-      slots.push(match[1])
-      position = match.index! + match[0].length
-    }
-    pattern += escape(message.slice(position))
-    return { message, pattern: new RegExp('^' + pattern + '$'), startPattern: new RegExp('^' + pattern + '(?= |$)'), translated, slots,
-      priority: diagnosticShapes[message]?.priority ?? 0,
-      specificity: message.replace(/\{\d+\}/g, '').length }
-  }).sort((a, b) => b.priority - a.priority || b.specificity - a.specificity)
-const diagnostics = templates.filter((template) => template.slots.length)
-const selectionReasons = templates.filter((template) => selectionReasonMessages.has(template.message))
+let templates: ReturnType<typeof compileDiagnosticTemplates> | undefined
+function compileDiagnosticTemplates() {
+  const prefixedAzureDiagnostics = Object.fromEntries(azureLimitationMessages.map((message) =>
+    [`{0}: ${message}`, `{0}: ${diagnosticJa[message] ?? ja[message] ?? message}`]))
+  const compiled = Object.entries({ ...ja, ...diagnosticJa, ...prefixedAzureDiagnostics })
+    .map(([message, translated]) => {
+      const slots: string[] = []
+      let pattern = '', position = 0
+      for (const match of message.matchAll(/\{(\d+)\}/g)) {
+        pattern += escape(message.slice(position, match.index)) + '(' + (diagnosticShapes[message]?.slots[match[1]] ?? '[\\s\\S]*?') + ')'
+        slots.push(match[1])
+        position = match.index! + match[0].length
+      }
+      pattern += escape(message.slice(position))
+      return { message, pattern: new RegExp('^' + pattern + '$'), startPattern: new RegExp('^' + pattern + '(?= |$)'), translated, slots,
+        priority: diagnosticShapes[message]?.priority ?? 0,
+        specificity: message.replace(/\{\d+\}/g, '').length }
+    }).sort((a, b) => b.priority - a.priority || b.specificity - a.specificity)
+  return {
+    diagnostics: compiled.filter((template) => template.slots.length),
+    selectionReasons: compiled.filter((template) => selectionReasonMessages.has(template.message)),
+  }
+}
+function diagnosticTemplates() {
+  if (!japaneseLoaded) return { diagnostics: [], selectionReasons: [] }
+  return templates ??= compileDiagnosticTemplates()
+}
 
 /** Exact, anchored engine-message templates only; never apply to names, code or imported prose. */
 export function localizeDiagnostic(message: string, locale: Language = language): string {
@@ -126,7 +138,7 @@ export function localizeDiagnostic(message: string, locale: Language = language)
   if (saved) return translate(locale, 'Saved topology could not be loaded: {0}. The saved data has not been overwritten.', localizeDiagnostic(saved[1], locale))
   const direct = diagnosticJa[message] ?? ja[message]
   if (direct !== undefined) return direct
-  for (const { message: template, pattern, translated, slots } of diagnostics) {
+  for (const { message: template, pattern, translated, slots } of diagnosticTemplates().diagnostics) {
     const match = pattern.exec(message)
     if (match) return translated.replace(/\{(\d+)\}/g, (slot, index: string) => {
       const capture = slots.indexOf(index)
@@ -155,7 +167,7 @@ function localizeSelectionExplanation(message: string, locale: Language) {
   const parts: string[] = []
   let remainder = message
   while (remainder) {
-    const reason = selectionReasons.map((template) => template.startPattern.exec(remainder)).find((match) => match !== null)
+    const reason = diagnosticTemplates().selectionReasons.map((template) => template.startPattern.exec(remainder)).find((match) => match !== null)
     if (!reason) { parts.push(remainder); break }
     parts.push(localizeDiagnostic(reason[0], locale))
     remainder = remainder.slice(reason[0].length)
