@@ -3,6 +3,7 @@ import { sampleCatalogJa } from './sample-catalog-ja'
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
   ...sampleCatalogJa,
+  'Inspect NVA Learned BGP Routes': 'NVA が学習した BGP ルートを確認',
   'Preview UI': 'UI プレビュー',
   'Try a less cluttered presentation. Your design and settings stay unchanged.': '操作を整理した表示を試します。設計や設定は変更されません。',
   'Settings & help': '設定とヘルプ',

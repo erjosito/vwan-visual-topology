@@ -105,6 +105,19 @@ export interface AzSubnetRouteTableResult {
   suppressedPeeringRoutes: AzEffectiveRoute[]
 }
 
+export type AzNvaReceivedRoute = Omit<AzBgpRibEntry, 'preferred'> & { selectedByArs: boolean }
+
+export interface AzNvaBgpPeer {
+  applianceId: string
+  applianceVnetId: string
+  routeServerId: string
+  routeServerVnetId: string
+  connectionId: string
+  policyConnectionId?: string
+  state: 'available' | 'ars-disabled' | 'bgp-disabled' | 'unsupported-asn' | 'unsupported-appliance' | 'unreachable'
+  routes: AzNvaReceivedRoute[]
+}
+
 export interface AzSimulationResult {
   controlPlaneComplete?: boolean
   subnetTables: Record<string, AzSubnetRouteTableResult>
@@ -112,6 +125,7 @@ export interface AzSimulationResult {
   routeServerRibs: Record<string, AzBgpRibEntry[]>
   routeServerInbound?: Record<string, Record<string, AzBgpRibEntry[]>>
   routeServerOutbound?: Record<string, Record<string, AzBgpRibEntry[]>>
+  nvaBgpPeers?: Record<string, AzNvaBgpPeer[]>
   vwanHubRibs: Record<string, AzBgpRibEntry[]>
   vwanFirewallRibs: Record<string, AzBgpRibEntry[]>
   vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>>
@@ -389,6 +403,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   const routeServerRibs: Record<string, AzBgpRibEntry[]> = {}
   const routeServerInbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
   const routeServerOutbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
+  const nvaBgpPeers: Record<string, AzNvaBgpPeer[]> = {}
   const vwanHubRibs: Record<string, AzBgpRibEntry[]> = {}
   const vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>> = {}
   const vwanHubTableCoverage = azHubTableCoverage(topology)
@@ -824,7 +839,29 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   // 4. Populate Azure Route Servers (ARS) and exchange with Gateways when branchToBranchTraffic is enabled
   for (const vnet of topology.vnets) {
     const ars = vnet.routeServer
-    if (!ars || !ars.enabled) continue
+    if (!ars) continue
+    const resolvedPeers = azArsPeers(vnet, topology)
+    const policyLinks = azArsPolicyLinks(vnet, topology)
+    const peerViews: AzNvaBgpPeer[] = []
+    for (const id of new Set(ars.peerApplianceIds)) {
+      const owner = topology.vnets.find((host) => host.appliances.some((app) => app.id === id))
+      const app = owner?.appliances.find((app) => app.id === id)
+      if (!owner || !app) continue
+      const connectionId = owner.id === vnet.id ? `nva:${id}` : `vnet:${owner.id}`
+      const state: AzNvaBgpPeer['state'] = !ars.enabled ? 'ars-disabled'
+        : app.kind !== 'nva-vm' ? 'unsupported-appliance'
+          : !app.bgpEnabled ? 'bgp-disabled'
+            : app.asn === 65515 || app.asn === 12076 ? 'unsupported-asn'
+              : !resolvedPeers.some(({ peer }) => peer.id === id) ? 'unreachable' : 'available'
+      const view: AzNvaBgpPeer = {
+        applianceId: id, applianceVnetId: owner.id, routeServerId: ars.id, routeServerVnetId: vnet.id,
+        connectionId, ...(policyLinks.some((link) => link.id === connectionId) ? { policyConnectionId: connectionId } : {}),
+        state, routes: [],
+      }
+      ;(nvaBgpPeers[id] ??= []).push(view)
+      peerViews.push(view)
+    }
+    if (!ars.enabled) continue
     if (ars.peerApplianceIds.length > ARS_MAX_BGP_PEERS) {
       warnings.push(
         `Azure Route Server "${ars.name}" in "${vnet.name}" has ${ars.peerApplianceIds.length} BGP peers configured (maximum supported by Azure is ${ARS_MAX_BGP_PEERS}).`,
@@ -874,7 +911,19 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       explanation: 'Local On-link address space is independent of route-map propagation',
     }))
     routeServerRibs[ars.id].push(...onLink)
-    for (const link of azArsPolicyLinks(vnet, topology)) {
+    for (const view of peerViews.filter((peer) => peer.state === 'available')) {
+      const { peer, host } = resolvedPeers.find(({ peer }) => peer.id === view.applianceId)!
+      const candidates = [
+        ...connected.filter((route) => host.id === vnet.id || !host.prefixes.includes(route.prefix)),
+        ...routeServerRibs[ars.id].filter((route) => route.preferred && route.originProtocol !== 'VNet' && route.nextHopId !== peer.id),
+      ]
+      // BGP eligibility does not grant a new policy-assignment scope or inject subnet routes.
+      const exported = view.policyConnectionId
+        ? applyAzArsRouteMap(ars, view.policyConnectionId, 'outbound', candidates) : candidates
+      view.routes = exported.filter((route) => !route.asPath.includes(peer.asn ?? 65501))
+        .map(({ preferred, ...route }) => ({ ...route, selectedByArs: preferred }))
+    }
+    for (const link of policyLinks) {
       const isGateway = link.id.startsWith('gateway:')
       const isSpoke = link.id.startsWith('vnet:')
       const peer = azArsPeers(vnet, topology).find(({ peer }) => peer.id === link.targetId)?.peer
@@ -1209,6 +1258,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     routeServerRibs,
     routeServerInbound,
     routeServerOutbound,
+    nvaBgpPeers,
     vwanHubRibs,
     vwanFirewallRibs,
     vwanHubTables,
