@@ -86,7 +86,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
   const panDrag = useRef<{ pointerId: number; start: NodePosition; origin: NodePosition; unitsPerPixel: number } | undefined>(undefined)
-  const changeZoom = useCanvasZoom({
+  useCanvasZoom({
     svgRef: svg, zoom, onZoom: (next) => { closePreview(); onZoom(next) }, ...zoomLimits,
     onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
     isDragging: () => !!drag.current || !!panDrag.current,
@@ -571,7 +571,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       </g>
     })}
   </svg>{preview && previewNode && previewLink && previewMap && !faults[preview.owner.id] && !faults[preview.connectionId] && <RouteMapPreview id={previewId} anchor={preview.anchor} map={previewMap} owner={previewNode.name} connection={previewLink.name} direction={preview.direction} enabled={previewLink.enabled} onEnter={cancelPreviewClose} onLeave={leavePreview} onClose={closePreview} />}</div>
-    <CanvasControls zoom={zoom} onZoom={changeZoom} {...zoomLimits} status={canvasStatus} onResetView={() => {
+    <CanvasControls zoom={zoom} onZoom={onZoom} {...zoomLimits} status={canvasStatus} onResetView={() => {
       setFitting(false); setPan({ x: 0, y: 0 }); onZoom(1)
       scroll.current?.scrollTo(0, 0)
     }} onFitView={() => {

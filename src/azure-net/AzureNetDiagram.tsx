@@ -318,7 +318,7 @@ export function AzureNetDiagram({
 
   const [preview, setPreview] = useState<{ kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site'; id: string; x: number; y: number } | null>(null)
   const dragPointerId = useRef<number | null>(null)
-  const changeZoom = useCanvasZoom({
+  useCanvasZoom({
     svgRef, zoom, onZoom: (next) => { closePolicyPreview(); setHoverPopover(null); setZoom(next) }, ...zoomLimits,
     onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
     isDragging: () => dragPointerId.current !== null,
@@ -2191,7 +2191,7 @@ export function AzureNetDiagram({
         )
       })()}
 
-      <CanvasControls zoom={zoom} onZoom={changeZoom} {...zoomLimits}
+      <CanvasControls zoom={zoom} onZoom={setZoom} {...zoomLimits}
         onFitView={() => {
           const bounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
           setZoom(1180 / bounds.width); setPan({ x: bounds.x, y: bounds.y })

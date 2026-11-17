@@ -71,6 +71,4 @@ export function useCanvasZoom({ svgRef, zoom, onZoom, onPan, minZoom, maxZoom, z
       element.removeEventListener('keydown', keydown)
     }
   }, [svgRef, zoom, minZoom, maxZoom, zoomStep, changeZoom, isDragging])
-
-  return changeZoom
 }
