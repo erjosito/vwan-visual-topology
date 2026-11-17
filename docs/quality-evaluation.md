@@ -56,14 +56,16 @@ run directory. Local evidence stays local. CI runs the scorecard adapter tests
 and the real registered accessibility audit, retaining its raw automated reports
 for seven days. It does not upload study data or claim a full evaluation.
 
-The executable regression manifest is `scripts/quality-scorecard.mjs`, version 6.
+The executable regression manifest is `scripts/quality-scorecard.mjs`, version 7.
 Version 2 added VPN overlap NAT; version 3 adds the separately versioned
 `scripts/accessibility-scorecard.mjs` manifest/evidence adapter and
 model-contract registration seam. Version 4 registers the separate #165
 document-derived Firewall contracts and native evidence workflows, carrying their
 qualification into each metric. Version 5 registers the guided-course, guidance,
 runner, protected-practice ownership and anonymous local progress-ledger contracts,
-practice isolation/status workflows and SVG accessibility regressions. A
+practice isolation/status workflows and SVG accessibility regressions. Version 6
+registers the routing missions; version 7 includes the completed WAN curriculum
+contracts and updated guided workflows from #202 and #208. A
 tracked-file inventory guard fails closed if new
 learning contracts or critical learning/accessibility workflows are unregistered.
 The combined plan hash includes all manifests; the expanded corpus is not
