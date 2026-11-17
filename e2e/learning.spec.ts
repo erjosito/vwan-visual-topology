@@ -3,6 +3,7 @@ import { guidanceAnchor } from '../src/learning/guidance'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { exampleCourse } from '../src/learning/course-examples'
 import { completeLearningTasks as next, loadLearningNetwork as load } from './learning-helpers'
+import { runnerLabels } from '../src/learning/runner-content'
 
 const sidebar = (page: Page) => page.getByTestId('learning-sidebar')
 const cue = (page: Page) => page.locator('.learning-cue')
@@ -201,7 +202,10 @@ test('all six missions reach black belt through scoped repairs without touching 
   await expect(page.getByTestId('learning-status')).toContainText('375 points')
   await next(page, 3)
   await expect(page.getByTestId('learning-status')).toContainText('Blue belt · 550 points')
-  await next(page, 8)
+  await next(page, 3)
+  await sidebar(page).getByRole('button', { name: 'Check task', exact: true }).click()
+  await expect(sidebar(page).getByTestId('learning-feedback')).toContainText('Both directions must also traverse the required inspection waypoint.')
+  await next(page, 5)
   await expect(page.getByTestId('learning-status')).toContainText('Brown belt · 875 points')
   await next(page, 4)
   await expect(sidebar(page).getByRole('heading', { name: 'Find the remaining reverse-path fault', exact: true })).toBeVisible()
@@ -242,6 +246,46 @@ test('Japanese dark reduced-motion narrow sidebar leaves the canvas usable and r
   await expect(sidebar(page)).toHaveCount(0)
   await expect(cue(page)).toHaveCount(0)
   await expect(page.getByTestId('learning-open')).toBeFocused()
+})
+
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: keyboard advance focuses the new task, without stealing focus on language updates`, async ({ page }) => {
+    await open(page)
+    const selector = page.locator('header [data-language-selector]')
+    await selector.selectOption(language)
+    await load(page, language)
+    await sidebar(page).getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
+    const advance = sidebar(page).getByRole('button', { name: runnerLabels.continue[language], exact: true })
+    await expect(advance).toBeEnabled()
+    await advance.focus()
+    await page.keyboard.press('Enter')
+    const heading = sidebar(page).getByRole('heading', { name: exampleCourse.lessons[0].tasks[1].title[language], exact: true })
+    await expect(heading).toBeFocused()
+    await expect(heading).toHaveAttribute('tabindex', '-1')
+    await selector.focus()
+    await selector.selectOption(language === 'en' ? 'ja' : 'en')
+    await expect(selector).toBeFocused()
+  })
+}
+
+test('Japanese dark reduced-motion journey reaches black belt using all forty localized native tasks', async ({ page }) => {
+  test.setTimeout(300_000)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
+  await open(page)
+  await page.locator('header [data-language-selector]').selectOption('ja')
+  await next(page, 27, 'ja')
+  await sidebar(page).getByRole('button', { name: 'タスクを確認', exact: true }).click()
+  await expect(sidebar(page).getByTestId('learning-feedback')).toContainText('往路と復路の両方が、指定された検査の通過点も経由する必要があります。')
+  await next(page, 13, 'ja')
+  const completed = sidebar(page).getByRole('heading', { name: '利用可能なレッスンを完了', exact: true })
+  await expect(completed).toBeFocused()
+  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('40 / 40 完了')
+  await expect(page.getByTestId('learning-status')).toContainText('黒帯 · 1325 ポイント')
+  await page.reload()
+  await expect(page.getByTestId('learning-status')).toContainText('黒帯 · 1325 ポイント')
+  await page.getByTestId('learning-open').click()
+  await expect(completed).toBeVisible()
 })
 
 test('failed optional sidebar loading preserves the canvas and supports explicit reload recovery', async ({ page }) => {

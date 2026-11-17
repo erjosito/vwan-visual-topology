@@ -179,7 +179,11 @@ Pending checks and passing candidates bind the live editor's monotonic revision,
 practice scope, runtime session, course/content/task and assessment version.
 Edits, edit/undo, reset, pause and provider changes abort or discard old evidence.
 Unknown/incomplete/unsupported engine assessments never pass; quizzes have
-answer-specific retry feedback. Completed-task review is historical, not proof
+answer-specific retry feedback. Unmet flow feedback names required inspection
+waypoints in both directions, without exposing engine IDs or JSON. Explicit
+advance focuses the next task or completion heading when the replaced button
+loses focus; ordinary renders and canvas interactions do not move focus.
+Completed-task review is historical, not proof
 that today's canvas is still valid. Explicit lesson replay preserves history
 and cannot emit duplicate completion events. Newly inserted/revised unmet
 tasks gate the next uncompleted task even if later historical records exist.
@@ -241,6 +245,11 @@ gateway/hub-configuration guidance adapter. Exact Default-table requirements and
 both-direction Firewall waypoints prevent route-presence or bypass-only passes.
 Exact current-route and forward/return checks, supported alternative repairs and a complete
 real-control journey are covered by the learning unit/browser suites.
+Complete EN and JA native-control journeys, plus keyboard transition and
+dark/narrow/reduced-motion samples, are technical regressions rather than human
+usability or learning outcomes. #181 records the qualification and #160 retains
+the explicitly pending opt-in human study. Exact hub-table guidance (#204) and
+a less-scaffolded transfer diagnosis (#205) remain tracked enhancements.
 
 Retained legacy progress uses `aznet-simulator:practice:v1` in localStorage, independently
 of normal topology saves: at most nine 200,000-character drafts within the existing
