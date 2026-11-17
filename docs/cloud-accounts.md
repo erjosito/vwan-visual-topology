@@ -32,7 +32,7 @@ from the validated token issuer and subject, not a browser-supplied user ID.
 
 ## Register the applications
 
-These are administrator setup instructions, not automatic provisioning.
+These are administrator setup instructions for a new installation.
 Use two registrations in an existing Microsoft Entra workforce tenant:
 
 1. Register an API application supporting **Personal Microsoft accounts only**.
@@ -53,6 +53,11 @@ Use two registrations in an existing Microsoft Entra workforce tenant:
    `User.Read` permission if present. No Graph permission is needed.
 5. If required by your tenant's consent policy, pre-authorize this SPA for the
    exposed scope. Do not enable implicit token grants or create a SPA client secret.
+
+Use descriptive names such as **AzNetSim Personal Accounts SPA** and
+**AzNetSim User Cloud API**. Entra generates their GUID IDs. Personal-account-only
+registrations do not support creating enterprise service principals in the
+workforce tenant; do not broaden their supported account types to work around that.
 
 The authority is fixed to `https://login.microsoftonline.com/consumers`.
 The API accepts v2 tokens only, for the personal-account tenant
@@ -105,7 +110,7 @@ this container. Allow for RBAC propagation before testing.
 
 | Function setting | Value |
 | --- | --- |
-| `FUNCTIONS_WORKER_RUNTIME` | `node` |
+| `FUNCTIONS_WORKER_RUNTIME` | `node` for non-Flex plans. Flex uses `functionAppConfig.runtime` instead. |
 | `CLOUD_STORAGE_ACCOUNT_URL` | `https://<account>.blob.core.windows.net` |
 | `CLOUD_RUNTIME_CLIENT_ID` | Optional user-assigned managed-identity client ID. Omit for system-assigned identity. |
 | `CLOUD_API_AUDIENCE` | API application/client ID, the GUID, not `api://...`. |
@@ -138,8 +143,8 @@ Choose a supported hosting arrangement before deploying:
 
 * **Same origin:** route `/api/cloud/*` to this Function through a supported
   Static Web Apps linked backend or your reverse proxy. Check the actual SWA
-  plan/backend capabilities first; this change does not upgrade a plan or
-  modify the existing deployment workflows.
+  plan/backend capabilities first. The supplied production infrastructure uses
+  the separate HTTPS API option instead of changing SWA backend authentication.
 * **Separate HTTPS API:** set `VITE_CLOUD_API_BASE_URL` to
   `https://<function-host>/api/cloud`. Add that exact API origin to the main
   page's `connect-src` in `public/staticwebapp.config.json`. Keep Microsoft's
@@ -165,6 +170,75 @@ mechanism's production dependency restore, or stage `npm ci --omit=dev` with
 the Function manifest and lockfile before zip deployment. Do not deploy just
 the JavaScript bundle without its runtime dependencies. No resources are
 created, registrations changed or applications deployed by these build commands.
+
+## Production infrastructure and releases
+
+`infra/user-cloud.bicep` provisions a dedicated resource group deployment with
+AzNetSim-named runtime and GitHub identities, Node 22 Flex Consumption hosting
+(512 MB, no always-ready instances, maximum 40 instances), and private Blob
+storage. Create the resource group first and preview changes:
+
+```powershell
+az group create --name rg-aznetsim-user-cloud --location westeurope
+az deployment group what-if --resource-group rg-aznetsim-user-cloud --template-file infra\user-cloud.bicep --parameters spaClientId=<SPA-client-ID> apiClientId=<API-client-ID>
+az deployment group create --resource-group rg-aznetsim-user-cloud --template-file infra\user-cloud.bicep --parameters spaClientId=<SPA-client-ID> apiClientId=<API-client-ID>
+```
+
+Select the intended subscription explicitly for your installation. The deployment
+returns the actual API URL, Function name and deployment identity client ID.
+Its isolated VNet uses `10.247.69.0/24`; check this range before linking it to any
+other network. Storage has shared-key and public network access disabled.
+Blob traffic uses a private endpoint and private DNS. The runtime has Blob Data
+Owner on this dedicated account for host locks, deployment packages and user
+data. The GitHub identity has Website Contributor only on this Function.
+Neither identity is shared with the statistics service.
+
+The template's GitHub OIDC subject is pinned to this repository's immutable
+identity and the **user-cloud-production** environment. Override
+`githubOidcSubject` for a fork or a different environment, using the repository's
+actual OIDC subject format. Do not replace federation with a client secret.
+
+Configure these **repository variables** before the selected CI build:
+
+| Variable | Value |
+| --- | --- |
+| `VITE_MICROSOFT_CLIENT_ID` | Personal Accounts SPA client ID |
+| `VITE_CLOUD_API_SCOPE` | `api://<API-client-ID>/Cloud.Access` |
+| `VITE_CLOUD_API_BASE_URL` | Deployment output `apiBaseUrl` |
+
+CI injects them into the web build only, not the Electron build. Update the main
+SWA CSP's exact `connect-src` API origin if provisioning another Function host.
+Changing variables does not change an already-built candidate or the live site.
+
+Configure **user-cloud-production** with deployment branches restricted to
+`main`, retaining any required reviewers. Set its environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `AZURE_USER_CLOUD_CLIENT_ID` | Deployment identity client ID, not the SPA/API/runtime client ID |
+| `AZURE_USER_CLOUD_TENANT_ID` | Infrastructure tenant ID |
+| `AZURE_USER_CLOUD_SUBSCRIPTION_ID` | Infrastructure subscription ID |
+| `AZURE_USER_CLOUD_RESOURCE_GROUP` | Dedicated resource group |
+| `AZURE_USER_CLOUD_FUNCTION_APP` | Deployment output `functionAppName` |
+
+CI stages `host.json`, the runtime manifest/lockfile and `dist/index.mjs`,
+installs locked production dependencies, and records the exact ZIP as the
+**user-cloud** candidate. Follow [explicit releases](releasing.md) to preflight
+and promote this target from a successful main-push run. Release performs no
+build or dependency restore. Deploy the backend before enabling the configured
+**web** candidate. Merging alone never deploys either target.
+
+Application Insights records sampled server operations and exceptions, not
+frontend visitor analytics. Automatic dependency tracking is disabled to avoid
+collecting per-owner Blob paths. Log Analytics retains 30 days and has a
+0.1 GB daily ingestion cap; this is a best-effort telemetry cap, not a hard Azure
+spending limit or an application rate limit. Monitor platform costs and configure
+budget alerts and abuse protection for the intended public audience.
+Private endpoints incur charges even when the Function scales to zero.
+
+Blob and container soft deletion retain deleted data for 30 days. App deletion
+does not purge these recoverable copies immediately. Production operators must
+use their Azure administrative access for retention or permanent-erasure requests.
 
 ## Conflicts, offline use and privacy
 
@@ -219,5 +293,6 @@ Before rollout, use the actual registrations, deployed headers and managed
 identity to verify personal-account sign-in/consent, token renewal, account
 switching, denied work/school accounts, cross-account isolation, cloud progress
 and topology operations, offline/conflict recovery and the configured retention
-policy. None of those Azure resources or app registrations are provisioned by
-this implementation.
+policy. Infrastructure deployment and release success do not establish that a
+real user has signed in or completed a cloud save; verify those interactively
+with personal accounts before claiming end-to-end rollout validation.

@@ -27,8 +27,9 @@ old web deployment's accidental independence from Windows validation.
 
 Before the first actual promotion:
 
-1. Configure environments **web-production**, **github-statistics** and
-   **desktop-release** with deployment branches restricted to `main`.
+1. Configure environments **web-production**, **github-statistics**,
+   **user-cloud-production** and **desktop-release** with deployment branches
+   restricted to `main`.
    Add required reviewers if supported by the repository's plan and desired
    approval policy. A workflow referencing a new environment does **not**
    configure reviewers or branch policies automatically. The main-ref guard
@@ -42,7 +43,10 @@ Before the first actual promotion:
    [statistics configuration](github-statistics.md#configure-github).
    No Azure client secret or new Azure resources are needed. The promotion job
    has contents-write permission for durable release records and OIDC permission
-   for the Function target; only that target signs in to Azure.
+   for Function targets; only the selected Function target signs in to Azure.
+   The independent **user-cloud-production** environment uses its own
+   AzNetSim identity and variables, never the statistics identity or credentials.
+   See [personal-account deployment](cloud-accounts.md#production-infrastructure-and-releases).
 4. Preserve any configured `CI / validate` and `CI / desktop` required checks.
    This change does not create branch rules or relax tests. Repository owners
    should configure integration rules if they are currently absent.
@@ -86,7 +90,7 @@ Then dispatch with the **same run/attempt/target**, explicitly disabling preflig
 gh workflow run release.yml --ref main -f candidate_run_id=123456789 -f candidate_attempt=1 -f target=web -f preflight_only=false -f rollback=false
 ```
 
-Targets are **web**, **statistics**, or **desktop**, one per dispatch. Web and
+Targets are **web**, **statistics**, **user-cloud**, or **desktop**, one per dispatch. Web and
 Function deployments reuse exact CI bytes without installing dependencies or
 rebuilding. Desktop publication reuses the tested unsigned installer and names
 it `desktop-dev-YYYY.MM.DD.N`; it does not sign it or add an updater (#146).
@@ -111,7 +115,8 @@ publishable build rather than renaming old bytes.
 
 ## Retention and durable release records
 
-CI keeps `static-site-<attempt>`, `statistics-function-<attempt>` and
+CI keeps `static-site-<attempt>`, `statistics-function-<attempt>`,
+`user-cloud-function-<attempt>` and
 `unsigned-windows-development-build-<attempt>` for **30 days**. Their root
 `manifest.json` binds the `payload` to the source SHA, run and attempt.
 PR/manual candidates are useful for testing but are intentionally unreleasable.
@@ -169,7 +174,7 @@ draft after confirming no production side effects, delete **only that
 identified draft** (and any associated unused tag after inspection); this is a
 manual administrator recovery, not an automatic cleanup.
 
-To roll back web or statistics, select the exact run/attempt of a **previously
+To roll back web, statistics or user-cloud, select the exact run/attempt of a **previously
 successfully released candidate**:
 
 ```powershell
@@ -188,12 +193,13 @@ of a retained earlier installer, not a workflow deployment or automatic update.
 
 ## Validation before cutover
 
-Run `node --test scripts/release-candidate.test.mjs` and `npm run lint`, and
+Run `npm run build:user-cloud`, `node --test scripts/release-candidate.test.mjs`
+and `npm run lint`, and
 check both workflow files with `actionlint`. The focused suite covers candidate
 byte preservation/tampering, source/run/attempt mismatches, missing payloads,
 link/path rejection, actual installer evidence, invalid/failed/skipped CI gates,
 stale promotion, retry and rollback rules. CI also packages and verifies all
-three targets on its real Linux/Windows runners.
+four targets on its real Linux/Windows runners.
 
 A valid hosted preflight requires these workflows to have landed and a new
 successful main-push candidate. Neither local tests nor a PR run can prove a

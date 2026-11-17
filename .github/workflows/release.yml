@@ -16,7 +16,7 @@ on:
         description: Promote one independently released target
         required: true
         type: choice
-        options: [web, statistics, desktop]
+        options: [web, statistics, user-cloud, desktop]
       preflight_only:
         description: Validate candidate without deploying or publishing
         type: boolean
@@ -78,7 +78,7 @@ jobs:
     if: ${{ !inputs.preflight_only && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: ${{ inputs.target == 'statistics' && 'github-statistics' || inputs.target == 'web' && 'web-production' || 'desktop-release' }}
+    environment: ${{ inputs.target == 'statistics' && 'github-statistics' || inputs.target == 'user-cloud' && 'user-cloud-production' || inputs.target == 'web' && 'web-production' || 'desktop-release' }}
     permissions:
       contents: write
       actions: read
@@ -164,6 +164,38 @@ jobs:
         env:
           AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_FUNCTION_APP" \
+            --src release-input/candidate/payload/function.zip \
+            --build-remote false --timeout 600 --only-show-errors --output none
+      - name: Validate user-cloud configuration
+        if: inputs.target == 'user-cloud' && steps.guard.outputs.no_op != 'true'
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_USER_CLOUD_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_USER_CLOUD_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_USER_CLOUD_SUBSCRIPTION_ID }}
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_USER_CLOUD_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_USER_CLOUD_RESOURCE_GROUP }}
+        run: |
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_FUNCTION_APP AZURE_RESOURCE_GROUP; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing configuration: $name. See docs/cloud-accounts.md."
+              exit 1
+            fi
+          done
+      - name: Sign in for user-cloud deployment
+        if: inputs.target == 'user-cloud' && steps.guard.outputs.no_op != 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_USER_CLOUD_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_USER_CLOUD_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_USER_CLOUD_SUBSCRIPTION_ID }}
+      - name: Deploy exact tested user-cloud Function package (no rebuild)
+        if: inputs.target == 'user-cloud' && steps.guard.outputs.no_op != 'true'
+        env:
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_USER_CLOUD_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_USER_CLOUD_RESOURCE_GROUP }}
         run: |
           az functionapp deployment source config-zip \
             --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_FUNCTION_APP" \
