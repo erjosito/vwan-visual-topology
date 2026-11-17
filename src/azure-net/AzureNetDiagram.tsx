@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
-import { CanvasBackground, CanvasControls } from '../CanvasPresentation'
+import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from '../CanvasPresentation'
 import { centerOfBox, connectionBend, fitDiagram, reverseCurve } from '../connection-geometry'
 import { NetworkNodeIcon } from '../NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from '../DiagramNodeLabels'
@@ -55,6 +55,7 @@ interface AzureNetDiagramProps {
   topology: AzNetTopology
   selected?: AzSelectedEntity
   onSelect: (entity: AzSelectedEntity) => void
+  onClearSelection: () => void
   onContextMenu?: (target: AzContextMenuTarget) => void
   onMoveNode: (
     nodeKind: 'vnet' | 'vwan-hub' | 'er-location' | 'site',
@@ -228,6 +229,7 @@ export function AzureNetDiagram({
   onRisk,
   selected,
   onSelect,
+  onClearSelection,
   onContextMenu,
   onMoveNode,
   onResetLayout,
@@ -318,6 +320,7 @@ export function AzureNetDiagram({
 
   const [preview, setPreview] = useState<{ kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site'; id: string; x: number; y: number } | null>(null)
   const dragPointerId = useRef<number | null>(null)
+  const suppressBackgroundClick = useRef(false)
   useCanvasZoom({
     svgRef, zoom, onZoom: (next) => { closePolicyPreview(); setHoverPopover(null); setZoom(next) }, ...zoomLimits,
     onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
@@ -397,8 +400,11 @@ export function AzureNetDiagram({
   )
 
   const hasActiveHighlights =
-    forwardTraces.length > 0 || reverseTraces.length > 0 ||
+    Boolean(selected) || forwardTraces.length > 0 || reverseTraces.length > 0 ||
     (showDiagnosticBadges && diagnostics.some((d) => d.severity !== 'info'))
+  const selectedDeviceId = selected?.kind === 'gateway' ? selected.gatewayId
+    : selected?.kind === 'route-server' ? selected.routeServerId
+      : selected?.kind === 'appliance' ? selected.applianceId : undefined
 
   const findingsForNode = (kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site', id: string) =>
     showDiagnosticBadges ? diagnostics.filter((finding) => {
@@ -434,6 +440,7 @@ export function AzureNetDiagram({
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     if (!dragState || e.pointerId !== dragPointerId.current) return
     if (dragState.mode === 'pan') {
+      if (Math.hypot(e.clientX - dragState.startMouseX, e.clientY - dragState.startMouseY) >= 4) suppressBackgroundClick.current = true
       const { dx, dy } = clientToSvgDelta(
         e.clientX - dragState.startMouseX,
         e.clientY - dragState.startMouseY,
@@ -451,6 +458,7 @@ export function AzureNetDiagram({
 
   const handlePointerUp = (event: React.PointerEvent<SVGSVGElement>) => {
     if (event.pointerId !== dragPointerId.current) return
+    if (dragState?.mode === 'pan' && Math.hypot(event.clientX - dragState.startMouseX, event.clientY - dragState.startMouseY) >= 4) suppressBackgroundClick.current = true
     // Include the completion event, even when the browser coalesced the last pointermove.
     if (dragState?.mode === 'node') {
       const { dx, dy } = clientToSvgDelta(event.clientX - dragState.startMouseX, event.clientY - dragState.startMouseY)
@@ -695,6 +703,7 @@ export function AzureNetDiagram({
             if (event.button !== 2) { event.preventDefault(); event.stopPropagation() }
             return
           }
+          suppressBackgroundClick.current = false
           dragPointerId.current = event.pointerId
           if (event.target instanceof Element) event.target.setPointerCapture(event.pointerId)
         }}
@@ -714,7 +723,18 @@ export function AzureNetDiagram({
         onPointerUp={handlePointerUp}
         onPointerCancel={clearDrag}
         onLostPointerCapture={clearDrag}
-        onKeyDown={(event) => { if (event.key === 'Escape') clearDrag() }}
+        onClick={(event) => {
+          if (event.target === event.currentTarget && !suppressBackgroundClick.current) onClearSelection()
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape' || event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) return
+          event.preventDefault()
+          event.stopPropagation()
+          if (dragState) { clearDrag(); suppressBackgroundClick.current = true; return }
+          closePolicyPreview()
+          setHoverPopover(null)
+          onClearSelection()
+        }}
         onContextMenu={(e) => {
           if (!onContextMenu) return
           e.preventDefault()
@@ -765,7 +785,6 @@ export function AzureNetDiagram({
           if (brokenAccess || hasFinding) stroke = 'var(--error)'
           if (inReverse) stroke = 'var(--return)'
           if (inForward) stroke = 'var(--forward)'
-          if (isSelected) stroke = 'var(--accent)'
 
           const flagsSummary: string[] = []
           if (peering.aToB.allowGatewayTransit || peering.bToA.allowGatewayTransit) {
@@ -785,6 +804,11 @@ export function AzureNetDiagram({
               key={peering.id}
               className="aznet-edge-group"
               data-testid={`aznet-peering-${peering.id}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select peering ${peering.name}`}
+              aria-pressed={isSelected}
+              onKeyDown={(event) => openKeyboardContext(event, { kind: 'peering', peeringId: peering.id })}
               onMouseEnter={(e) => {
                 clearHoverTimer()
                 const pos = getRelativePopoverPosition(e.clientX, e.clientY)
@@ -822,6 +846,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
+              <CanvasEdgeSelection selected={isSelected} path={curve.d} />
               <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4 : 2.5}
@@ -912,9 +937,7 @@ export function AzureNetDiagram({
             ? 'var(--link)'
             : hasSkuMismatch
               ? 'var(--error)'
-              : isSelected
-                ? 'var(--accent)'
-                : inForward
+              : inForward
                   ? 'var(--forward)'
                   : inReverse
                     ? 'var(--return)'
@@ -922,10 +945,12 @@ export function AzureNetDiagram({
           return (
             <g
               key={link.id}
+              className="aznet-edge-group"
               data-testid={`aznet-erlink-${link.id}`}
               role="button"
               tabIndex={0}
               aria-label={`Select ${link.targetKind === 'site' ? 'ExpressRoute link' : 'ER connection'} ${link.name}`}
+              aria-pressed={isSelected}
               onKeyDown={(e) => openKeyboardContext(e, { kind: 'er-link', linkId: link.id })}
               onClick={(e) => {
                 e.stopPropagation()
@@ -946,6 +971,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
+              <CanvasEdgeSelection selected={isSelected} path={curve.d} />
               <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4.2 : 2.8}
@@ -991,9 +1017,7 @@ export function AzureNetDiagram({
             selected?.kind === 'er-global-reach-link' && selected.linkId === grLink.id
           const stroke = !grLink.enabled
             ? 'var(--link)'
-            : isSelected
-              ? 'var(--accent)'
-              : inForward
+            : inForward
                 ? 'var(--forward)'
                 : inReverse
                   ? 'var(--return)'
@@ -1001,7 +1025,13 @@ export function AzureNetDiagram({
           return (
             <g
               key={grLink.id}
+              className="aznet-edge-group"
               data-testid={`aznet-ergrlink-${grLink.id}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select Global Reach link ${grLink.name}`}
+              aria-pressed={isSelected}
+              onKeyDown={(event) => openKeyboardContext(event, { kind: 'er-global-reach-link', linkId: grLink.id })}
               onClick={(e) => {
                 e.stopPropagation()
                 const entity: AzSelectedEntity = {
@@ -1027,6 +1057,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
+              <CanvasEdgeSelection selected={isSelected} path={curve.d} />
               <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 4 : 2.6}
@@ -1083,9 +1114,7 @@ export function AzureNetDiagram({
             selected?.kind === 'vpn-connection' && selected.connectionId === conn.id
           const stroke = !conn.enabled
             ? 'var(--link)'
-            : isSelected
-              ? 'var(--accent)'
-              : inForward
+            : inForward
                 ? 'var(--forward)'
                 : inReverse
                   ? 'var(--return)'
@@ -1093,7 +1122,13 @@ export function AzureNetDiagram({
           return (
             <g
               key={conn.id}
+              className="aznet-edge-group"
               data-testid={`aznet-vpnconn-${conn.id}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select ${conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} connection ${conn.name}`}
+              aria-pressed={isSelected}
+              onKeyDown={(event) => openKeyboardContext(event, { kind: 'vpn-connection', connectionId: conn.id })}
               onClick={(e) => {
                 e.stopPropagation()
                 const entity: AzSelectedEntity = {
@@ -1119,6 +1154,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
+              <CanvasEdgeSelection selected={isSelected} path={curve.d} />
               <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 3.8 : 2.2}
@@ -1161,9 +1197,7 @@ export function AzureNetDiagram({
           const isSelected = selected?.kind === 'site-link' && selected.siteLinkId === sLink.id
           const stroke = !sLink.enabled
             ? 'var(--link)'
-            : isSelected
-              ? 'var(--accent)'
-              : inForward
+            : inForward
                 ? 'var(--forward)'
                 : inReverse
                   ? 'var(--return)'
@@ -1171,7 +1205,13 @@ export function AzureNetDiagram({
           return (
             <g
               key={sLink.id}
+              className="aznet-edge-group"
               data-testid={`aznet-sitelink-${sLink.id}`}
+              role="button"
+              tabIndex={0}
+              aria-label={`Select site link ${sLink.name}`}
+              aria-pressed={isSelected}
+              onKeyDown={(event) => openKeyboardContext(event, { kind: 'site-link', siteLinkId: sLink.id })}
               onClick={(e) => {
                 e.stopPropagation()
                 const entity: AzSelectedEntity = { kind: 'site-link', siteLinkId: sLink.id }
@@ -1191,6 +1231,7 @@ export function AzureNetDiagram({
               }}
               style={{ cursor: 'pointer' }}
             >
+              <CanvasEdgeSelection selected={isSelected} path={curve.d} />
               <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={stroke}
                 strokeWidth={inForward || inReverse || isSelected ? 3.6 : 2}
@@ -1333,6 +1374,7 @@ export function AzureNetDiagram({
                           key={chip.key}
                           data-testid={`aznet-chip-${chip.key}`}
                           className="network-device-chip"
+                          aria-pressed={selectedDeviceId === chip.key}
                           data-disabled={chip.disabled ? 'true' : undefined}
                           role="button"
                           tabIndex={0}
@@ -1415,6 +1457,7 @@ export function AzureNetDiagram({
                 return (
                   <g
                     key={subnet.id}
+                    aria-pressed={isSubSelected}
                     data-testid={`aznet-subnet-${subnet.id}`}
                     tabIndex={0}
                     role="button"
@@ -1428,10 +1471,7 @@ export function AzureNetDiagram({
                       showSubnet(bounds.left, bounds.bottom)
                     }}
                     onBlur={scheduleClosePopover}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') { e.stopPropagation(); setHoverPopover(null) }
-                      else openKeyboardContext(e, { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
-                    }}
+                    onKeyDown={(e) => openKeyboardContext(e, { kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })}
                     onClick={(e) => {
                       e.stopPropagation()
                       onSelect({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
