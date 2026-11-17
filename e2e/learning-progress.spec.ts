@@ -158,6 +158,7 @@ test('damaged guided data is not zero credit, cannot be overwritten by completio
   expect(await saved(page, guidedProgressKey)).toBe('damaged guided original')
   await status(page).click()
   await expect(details(page)).toContainText('original is preserved')
+  await expect(details(page)).toContainText('Original edition: Learning progress unavailable')
   expect(await backup(page)).toBe('damaged guided original')
   await details(page).getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
   await details(page).getByRole('button', { name: 'Delete guided history & points', exact: true }).click()

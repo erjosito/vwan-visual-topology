@@ -53,7 +53,9 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
         <p>{language === 'ja' ? '版ごとの進捗を保持します。切り替えても過去のポイントや帯は失われません。' : 'Each edition keeps its own progress. Switching preserves historical points and belts.'}</p>
         {editions.filter((entry) => entry.course.id !== course.id).map((entry) => {
           const historical = state?.ledger && beltProgress(state.ledger, entry.course, entry.assessments)
-          return <div key={entry.course.id}><p>{label(entry.name)}: {historical?.points ?? 0} {label(labels.points)}{historical && <> · {label(historical.belt.name)}</>}</p>
+          return <div key={entry.course.id}><p>{label(entry.name)}: {historical
+            ? <>{historical.points} {label(labels.points)} · {label(historical.belt.name)}</>
+            : label(labels.unknown)}</p>
             <button type="button" disabled={busy || !state?.ledger} onClick={() => setEditionConfirm(entry.course.id)}>
               {language === 'ja' ? `${label(entry.name)}に切り替える` : `Switch to ${label(entry.name)}`}
             </button></div>
