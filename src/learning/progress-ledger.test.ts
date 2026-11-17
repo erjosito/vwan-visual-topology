@@ -37,26 +37,27 @@ describe('versioned completion and first-award ledger', () => {
     expect(() => recordCompletion(ledger, completion(0, { awardId: 'unversioned-award-change' }))).toThrow('Unversioned')
   })
 
-  it('derives points and belt gates from the same ledger, including revised checkpoints and a terminal belt', () => {
+  it('derives points and revised checkpoints, including a terminal two-belt content configuration', () => {
+    const course = { ...previewCourse, belts: previewCourse.belts.slice(0, 2) }
     let ledger = empty()
     for (let index = 0; index < 6; index++) ledger = recordCompletion(ledger, completion(index))
-    expect(beltProgress(ledger, previewCourse, checkpointAssessments)).toMatchObject({
+    expect(beltProgress(ledger, course, checkpointAssessments)).toMatchObject({
       points: 80, belt: { id: 'white' }, pointsRemaining: 20, checkpointsRemaining: ['peering.explain'],
     })
     ledger = recordCompletion(ledger, completion(7, { points: 100 }))
-    expect(beltProgress(ledger, previewCourse, checkpointAssessments)).toMatchObject({
+    expect(beltProgress(ledger, course, checkpointAssessments)).toMatchObject({
       points: 180, belt: { id: 'white' }, pointsRemaining: 0, checkpointsRemaining: ['peering.explain'],
     })
     ledger = recordCompletion(ledger, completion(6))
-    expect(beltProgress(ledger, previewCourse, checkpointAssessments)).toMatchObject({
+    expect(beltProgress(ledger, course, checkpointAssessments)).toMatchObject({
       points: 200, belt: { id: 'yellow' }, next: undefined, pointsRemaining: 0,
     })
     const revised = checkpointAssessments.map((entry) => ({ ...entry, assessmentVersion: 2 }))
-    expect(beltProgress(ledger, previewCourse, revised).belt.id).toBe('white')
+    expect(beltProgress(ledger, course, revised).belt.id).toBe('white')
     ledger = recordCompletion(ledger, completion(6, { assessmentVersion: 2, points: 500 }))
-    expect(beltProgress(ledger, previewCourse, revised).points).toBe(200)
-    expect(beltProgress(ledger, previewCourse, revised).belt.id).toBe('yellow')
-    const full = structuredClone(previewCourse)
+    expect(beltProgress(ledger, course, revised).points).toBe(200)
+    expect(beltProgress(ledger, course, revised).belt.id).toBe('yellow')
+    const full = structuredClone(course)
     full.belts.push({ ...full.belts[1], id: 'black', pointsRequired: 200, name: { en: 'Black belt', ja: '黒帯' } })
     full.publication = 'complete'
     expect(beltProgress(ledger, full, revised)).toMatchObject({ belt: { id: 'black' }, next: undefined, checkpointsRemaining: [] })

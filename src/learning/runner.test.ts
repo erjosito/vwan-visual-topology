@@ -149,7 +149,7 @@ describe('evidence-gated course runner', () => {
     await h.pass()
   })
 
-  it.each(['disable-route', 'remove-association'])('completes both real-engine lessons with supported repair %s', async (repair) => {
+  it.each(['disable-route', 'remove-association'])('completes the original lessons and unlocks the next incident with supported repair %s', async (repair) => {
     const h = harness(); await h.finishPeering()
     expect(h.state().taskId).toBe('override.load')
     await h.runner.assess()
@@ -163,7 +163,7 @@ describe('evidence-gated course runner', () => {
       else delete document.topology.vnets[0].subnets[0].routeTableId
     })
     await h.pass(); await h.pass('same-prefix')
-    expect(h.state().taskId).toBeUndefined()
+    expect(h.state().taskId).toBe('prefix.load')
     expect(h.state().completions).toHaveLength(11)
     expect(h.completed).toHaveBeenCalledTimes(11)
   })
@@ -256,7 +256,7 @@ describe('evidence-gated course runner', () => {
     h.bundle.lessons[0].tasks[0].assessmentVersion++
     expect(resume().taskId).toBe('peering.load')
     expect(completions).toHaveLength(2)
-    expect(orderedTasks(h.bundle)).toHaveLength(12)
+    expect(orderedTasks(h.bundle)).toHaveLength(orderedTasks(exampleCourse).length + 1)
     expect(createCourseRunner(h.bundle, {
       workspace: h.live, changed: () => {}, evaluate: h.evaluate, completions: [] as TaskCompletion[],
     }).getSnapshot().taskId).toBe('peering.load')

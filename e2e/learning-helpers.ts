@@ -42,9 +42,12 @@ export async function completeLearningTasks(page: Page, count = 1) {
       await page.getByTestId('learning-record-inspection').click()
     }
     if (check.kind === 'vnet.peered') await createLessonPeering(page)
-    if (taskId === 'override.repair') {
+    const repair = task.guidanceIds.map((id) => exampleCourse.guidance.find((item) => item.id === id)!)
+      .find((target) => target.action === 'route-table.configure')
+    if (check.kind === 'requirements.satisfied' && repair?.action === 'route-table.configure') {
       await sidebar.getByRole('button', { name: 'Show me where', exact: true }).click()
-      await learningAnchor(page, 'udr-route', 'a', 'work-a', 'blocking', 'drop-b').locator('input[type="checkbox"]').uncheck()
+      const { vnetId, subnetId, routeTableId, routeId } = repair.params
+      await learningAnchor(page, 'udr-route', vnetId, subnetId, routeTableId, routeId).locator('input[type="checkbox"]').uncheck()
     }
     await sidebar.getByRole('button', { name: 'Check task', exact: true }).click()
     await expect(sidebar.getByTestId('learning-feedback')).toContainText('current check passed')
