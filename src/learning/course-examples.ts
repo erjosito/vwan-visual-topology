@@ -2,6 +2,7 @@ import type { CourseBundle } from './course-contract'
 import { courseScenarios } from './course-scenarios'
 import { peeringCheckpoint, previewCourse } from './course-profile'
 import { routingChecks, routingGuidance, routingLessons } from './course-routing'
+import { wanChecks, wanGuidance, wanLessons } from './course-wan'
 
 // Historical export name retained while the curriculum grows in content-only batches.
 export const exampleCourse: CourseBundle = {
@@ -94,6 +95,7 @@ export const exampleCourse: CourseBundle = {
       ],
     },
     ...routingLessons,
+    ...wanLessons,
   ],
   checks: [
     { id: 'load-peering', kind: 'scenario.loaded', params: { scenarioId: 'two-vnets' } },
@@ -159,6 +161,7 @@ export const exampleCourse: CourseBundle = {
       },
     },
     ...routingChecks,
+    ...wanChecks,
   ],
   guidance: [
     { id: 'routes-a', action: 'routes.open', params: { vnetId: 'a', subnetId: 'work-a', prefix: '10.2.0.0/16' },
@@ -169,5 +172,6 @@ export const exampleCourse: CourseBundle = {
       params: { vnetId: 'a', subnetId: 'work-a', routeTableId: 'blocking', routeId: 'drop-b' },
       instruction: { en: 'Reveal the associated route table and highlight the selected drop route. You decide the routing repair.', ja: '関連付けられたルート テーブルを開き、選択された破棄ルートを強調表示します。修復方法は自分で決めます。' } },
     ...routingGuidance,
+    ...wanGuidance,
   ],
 }
