@@ -428,7 +428,7 @@ References: [components](https://learn.microsoft.com/en-us/azure/load-balancer/c
 
 ### Bounded internal HA-ports NVA forwarding (#245)
 
-Engine `2026.11.17.2`, native topology v2, contract 1 flow/route checks and
+Engine `2026.11.17.3`, native topology v2, contract 1 flow/route checks and
 contract 2 packet predicates support one internal Standard LB/frontend/pool
 and one floating HA-ports rule. Use the existing frontend's private IP as a
 subnet UDR `VirtualAppliance` next hop. The rule declares `haPorts: true`,
