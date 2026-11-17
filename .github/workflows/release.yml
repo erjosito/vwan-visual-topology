@@ -1,0 +1,180 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Successful main-push CI run ID (not a SHA or PR run)
+        required: true
+        type: string
+      candidate_attempt:
+        description: Exact CI attempt (use rerun-all-jobs, not only failed jobs)
+        required: true
+        type: string
+        default: '1'
+      target:
+        description: Promote one independently released target
+        required: true
+        type: choice
+        options: [web, statistics, desktop]
+      preflight_only:
+        description: Validate candidate without deploying or publishing
+        type: boolean
+        default: true
+      rollback:
+        description: Explicitly restore a previously released web/Function candidate
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: release-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      handoff_artifact_id: ${{ steps.handoff.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify selected main candidate and exact archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          CANDIDATE_ATTEMPT: ${{ inputs.candidate_attempt }}
+          RELEASE_TARGET: ${{ inputs.target }}
+        run: node scripts/release-candidate.mjs preflight "$RELEASE_TARGET" "$CANDIDATE_RUN_ID" release-input "$CANDIDATE_ATTEMPT"
+      - name: Check release history and rollback eligibility without production credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK: ${{ inputs.rollback }}
+        run: node scripts/release-candidate.mjs guard release-input "$ROLLBACK"
+      - name: Summarize preflight
+        run: |
+          echo 'Candidate provenance, required CI gates, archive/file checksums and release ordering passed. No production changes have been made.' >> "$GITHUB_STEP_SUMMARY"
+          cat release-input/receipt.json >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        id: handoff
+        if: ${{ !inputs.preflight_only }}
+        with:
+          name: release-input-${{ github.run_attempt }}
+          path: release-input/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  promote:
+    needs: preflight
+    if: ${{ !inputs.preflight_only && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.target == 'statistics' && 'github-statistics' || inputs.target == 'web' && 'web-production' || 'desktop-release' }}
+    permissions:
+      contents: write
+      actions: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.preflight.outputs.handoff_artifact_id }}
+          merge-multiple: true
+          path: release-input
+      - name: Recheck candidate and release ordering after environment approval
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK: ${{ inputs.rollback }}
+        run: node scripts/release-candidate.mjs guard release-input "$ROLLBACK"
+      - name: Reserve durable promotion record before production changes
+        if: steps.guard.outputs.no_op != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK: ${{ inputs.rollback }}
+        run: node scripts/release-candidate.mjs reserve release-input "$ROLLBACK"
+      - name: Deploy exact tested web assets (no rebuild)
+        if: inputs.target == 'web' && steps.guard.outputs.no_op != 'true'
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
+          action: upload
+          app_location: release-input/candidate/payload
+          api_location: ''
+          output_location: ''
+          skip_app_build: true
+          skip_api_build: true
+      - name: Validate statistics configuration
+        if: inputs.target == 'statistics' && steps.guard.outputs.no_op != 'true'
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_STATS_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_STATS_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_STATS_SUBSCRIPTION_ID }}
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
+        run: |
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AZURE_FUNCTION_APP AZURE_RESOURCE_GROUP; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing configuration: $name. See docs/github-statistics.md."
+              exit 1
+            fi
+          done
+      - name: Sign in for statistics deployment
+        if: inputs.target == 'statistics' && steps.guard.outputs.no_op != 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_STATS_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_STATS_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_STATS_SUBSCRIPTION_ID }}
+      - name: Configure protected statistics credential
+        if: inputs.target == 'statistics' && steps.guard.outputs.no_op != 'true'
+        env:
+          TRAFFIC_TOKEN: ${{ secrets.GH_STATS_TRAFFIC_TOKEN }}
+          AZURE_STATS_SWA_RESOURCE_ID: ${{ vars.AZURE_STATS_SWA_RESOURCE_ID }}
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
+        run: |
+          if [ -z "$TRAFFIC_TOKEN" ]; then
+            echo "::error::GH_STATS_TRAFFIC_TOKEN is required."
+            exit 1
+          fi
+          settings=("GH_STATS_TRAFFIC_TOKEN=$TRAFFIC_TOKEN")
+          if [ -n "$AZURE_STATS_SWA_RESOURCE_ID" ]; then
+            settings+=("AZURE_STATS_SWA_RESOURCE_ID=$AZURE_STATS_SWA_RESOURCE_ID")
+          fi
+          az functionapp config appsettings set \
+            --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_FUNCTION_APP" \
+            --settings "${settings[@]}" --only-show-errors --output none
+      - name: Deploy exact tested Function package (no rebuild)
+        if: inputs.target == 'statistics' && steps.guard.outputs.no_op != 'true'
+        env:
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_STATS_FUNCTION_APP }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_STATS_RESOURCE_GROUP }}
+        run: |
+          az functionapp deployment source config-zip \
+            --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_FUNCTION_APP" \
+            --src release-input/candidate/payload/function.zip \
+            --build-remote false --timeout 600 --only-show-errors --output none
+      - name: Publish desktop download or durable deployment receipt
+        if: steps.guard.outputs.no_op != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROLLBACK: ${{ inputs.rollback }}
+        run: node scripts/release-candidate.mjs record release-input "$ROLLBACK"
+      - name: Report unchanged candidate
+        if: steps.guard.outputs.no_op == 'true'
+        run: echo 'The exact candidate is already current; nothing was deployed or republished.' >> "$GITHUB_STEP_SUMMARY"

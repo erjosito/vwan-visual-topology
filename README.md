@@ -462,7 +462,7 @@ az deployment sub what-if --location westeurope --template-file .\infra\main.bic
 az deployment sub create --name vwan-visual-topology --location westeurope --template-file .\infra\main.bicep --parameters '@infra\main.parameters.json' sessionId='<tracking-id>' deployedBy='<operator>'
 ```
 
-Store the app's deployment token in the GitHub repository secret `AZURE_STATIC_WEB_APPS_API_TOKEN`; never commit it. The `CI` workflow runs lint, unit tests, production build and Chromium tests, then deploys **those exact built assets** on `main` only. Pull requests cannot deploy. A manual workflow run can redeploy `main`.
+**Merging does not release.** `CI` runs the existing web/platform/Windows checks and retains versioned candidate artifacts for 30 days; neither main pushes nor manual CI deploy or publish anything. Use the separate manual **Release** workflow to preflight a selected successful main-push CI run/attempt, then explicitly promote its exact tested assets to `web`, `statistics`, or `desktop`. Preflight-only is the default. Store `AZURE_STATIC_WEB_APPS_API_TOKEN` in the **web-production** environment, never in source. See the [release runbook](docs/releasing.md) for environment setup, retiring old deployment credentials/workflows, unsigned desktop publication, retries and rollback.
 
 To run the same browser tests against the deployed app instead of starting a local server:
 

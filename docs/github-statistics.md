@@ -7,8 +7,11 @@ Blob access and shared-key authentication remain disabled. One Blob private
 endpoint and a linked private DNS zone provide host, deployment-package and
 snapshot connectivity inside the dedicated statistics resource group.
 
-The `Deploy statistics Function` workflow only tests and deploys code from
-`main`; it has no daily collection schedule. No browser/MCP instrumentation, project
+The manual `Release` workflow's `statistics` target promotes the exact tested
+Function package from a successful main-push CI run/attempt; merging Function
+changes no longer deploys them. Preflight-only is the default. See the
+[release runbook](releasing.md) for dispatch, setup and rollback. This workflow
+has no daily collection schedule. No browser/MCP instrumentation, project
 accounts or public dashboard are introduced. A personal/local runner is not
 required.
 
@@ -85,7 +88,7 @@ The built-in **Reader** role is restricted to that one SWA resource. It grants
 the runtime identity management-plane read access (including metrics), no
 writes or data-plane access. CI's identity needs no SWA access: it only copies
 the resource ID variable to the existing Function settings during deployment.
-Dispatch the statistics deployment workflow after configuration. RBAC can
+Explicitly promote the `statistics` target after configuration. RBAC can
 take time to propagate. To disable collection, delete the Function's
 `AZURE_STATS_SWA_RESOURCE_ID` app setting as well as the GitHub variable; the
 deployment workflow does not delete existing settings when a variable is absent.
@@ -208,8 +211,11 @@ diagnosing a mismatch.
    Set an expiry and arrange renewal. The Function requests public
    counters/releases without a token; the built-in `GITHUB_TOKEN` cannot
    supply the needed traffic permission.
-4. Merge the workflow to `main`, enable it if previously paused, and manually run
-   **Deploy statistics Function** once. Confirm code deployment and perform the
+4. Merge the workflows to `main`, select the resulting successful main-push CI
+   run/attempt, and manually run **Release** for `statistics`: first with
+   `preflight_only=true`, then explicitly with `preflight_only=false`.
+   Disable the retired **Deploy statistics Function** workflow and do not rerun
+   its historical deployments. Confirm code deployment and perform the
    authenticated manual collection described below.
    Initial Azure RBAC propagation can take time; rerun if necessary.
 
@@ -246,15 +252,18 @@ Remove-Item Env:GITHUB_TOKEN
 
 The collector refuses to overwrite an existing output file; choose a fresh
 filename for another local run. `test-artifacts` is already ignored by Git.
-The workflow requires only `contents: read` and `id-token: write`. Runtime
+CI requires only `contents: read` and `actions: read`. The privileged Release job uses
+`contents: write` for durable release records and `id-token: write`
+for the Function's existing Azure federation. Runtime
 dependencies are isolated in `functions\github-statistics\package.json` and its
 lockfile; the simulator application does not acquire Azure SDK dependencies.
 
 `scripts\package-github-statistics-function.mjs` stages only the Function
 sources, the shared collector, host configuration and locked manifest under
-`test-artifacts`. The deployment workflow installs production dependencies in
-that staging folder and uploads a ZIP. Credentials and collected snapshots
-are not included.
+`test-artifacts`. CI installs production dependencies from the lockfile in
+that staging folder and retains the ZIP as a checksummed candidate. Release
+uploads those exact bytes without installing dependencies or rebuilding.
+Credentials and collected snapshots are not included.
 
 ## Manual verification
 

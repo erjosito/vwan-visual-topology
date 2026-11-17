@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   validate:
@@ -24,7 +25,7 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - run: node --test scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs scripts/github-statistics-swa.test.mjs
+      - run: node --test scripts/release-candidate.test.mjs scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs scripts/github-statistics-swa.test.mjs
       - run: npm run lint
       - run: npm run test:evaluation
       - run: npm test
@@ -76,6 +77,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: automated-accessibility
+          overwrite: true
           path: test-artifacts/quality/
           if-no-files-found: warn
           retention-days: 7
@@ -83,23 +85,45 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: presentation-acceptance
+          overwrite: true
           path: test-results/**/*.png
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: production-measurements
+          overwrite: true
           path: test-results/production-measurements.json
           retention-days: 7
+      - name: Package locked statistics Function candidate (no deployment)
+        run: |
+          node scripts/package-github-statistics-function.mjs
+          npm ci --omit=dev --prefix test-artifacts/github-statistics-function
+          cd test-artifacts/github-statistics-function
+          zip -q -r ../github-statistics-function.zip .
+      - name: Record immutable release candidates
+        run: |
+          node scripts/release-candidate.mjs create web
+          node scripts/release-candidate.mjs create statistics
       - uses: actions/upload-artifact@v4
         with:
-          name: static-site
-          path: dist/
-          retention-days: 1
+          name: static-site-${{ github.run_attempt }}
+          path: test-artifacts/candidates/web/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: statistics-function-${{ github.run_attempt }}
+          path: test-artifacts/candidates/statistics/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: playwright-results
+          overwrite: true
           path: |
             test-results/
             test-artifacts/production-playwright/
@@ -116,7 +140,13 @@ jobs:
       - run: npm ci
       - run: npm run test:platform
       - run: npm run test:desktop-cli
+      - name: Allocate candidate version in this disposable checkout
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-candidate.mjs prepare-desktop
       - run: npm run build:desktop
+        env:
+          VITE_APP_REVISION: ${{ github.sha }}
       - run: npm run test:desktop
       - run: npm run test:desktop-network
       - name: Smoke packaged offline application
@@ -133,35 +163,25 @@ jobs:
           Get-FileHash release\Azure-Network-Simulator-*-x64.exe -Algorithm SHA256 |
             Select-Object Path, Hash | ConvertTo-Json |
             Set-Content test-artifacts\desktop\installer-sha256.json
+          $info = (Get-Item "release\win-unpacked\Azure Network Simulator.exe").VersionInfo
+          $runtimeVersion = (Get-Content test-artifacts\desktop\packaged-checks.json -Raw | ConvertFrom-Json).runtime.version
+          @{
+            fileVersion = $info.FileVersion
+            productVersion = $info.ProductVersion
+            runtimeVersion = $runtimeVersion
+            buildVersion = $env:CANDIDATE_VERSION
+            packageVersion = $env:CANDIDATE_PACKAGE_VERSION
+          } | ConvertTo-Json | Set-Content test-artifacts\desktop\version-checks.json
+          Get-Content test-artifacts\desktop\version-checks.json
+          if ($info.FileVersion -ne $env:CANDIDATE_VERSION -or $info.ProductVersion -ne "$env:CANDIDATE_PACKAGE_VERSION.0" -or $runtimeVersion -ne $env:CANDIDATE_PACKAGE_VERSION) {
+            throw 'Packaged executable resource/runtime versions do not match the recorded candidate identity'
+          }
+      - name: Record immutable desktop candidate
+        run: node scripts/release-candidate.mjs create desktop
       - uses: actions/upload-artifact@v4
         with:
-          name: unsigned-windows-development-build
-          path: |
-            release/Azure-Network-Simulator-*-x64.exe
-            test-artifacts/desktop/*checks.json
-            test-artifacts/desktop/*sha256.json
-          retention-days: 7
-
-  deploy:
-    needs: validate
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: azure-production
-      cancel-in-progress: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: static-site
-          path: dist
-      - name: Deploy validated static assets
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          action: upload
-          app_location: dist
-          api_location: ''
-          output_location: ''
-          skip_app_build: true
-          skip_api_build: true
+          name: unsigned-windows-development-build-${{ github.run_attempt }}
+          path: test-artifacts/candidates/desktop/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
