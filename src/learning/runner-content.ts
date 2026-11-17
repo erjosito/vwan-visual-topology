@@ -41,10 +41,10 @@ export function requirementDescription(requirement: Requirement): Localized {
     ja: `指定されたルート テーブルで完全一致の ${requirement.prefix} が${requirement.expectation === 'present' ? '存在する' : '存在しない'}必要があります。`,
   }
   if (requirement.kind === 'flow') {
-    const inspection = !!(requirement.requiredApplianceId || requirement.requiredFirewallHubId)
+    const inspection = !!(requirement.requiredApplianceId || requirement.requiredFirewallHubId || requirement.applianceChain)
     return {
-      en: `${requirement.sourceAddress} to ${requirement.destinationAddress}: the modeled forward and return paths must ${requirement.expectation === 'allow' ? 'allow traffic' : 'demonstrate the requested block'}.${inspection ? ' Both directions must also traverse the required inspection waypoint.' : ''}`,
-      ja: `${requirement.sourceAddress} から ${requirement.destinationAddress}: モデルの往路と復路で${requirement.expectation === 'allow' ? '通信が許可される' : '指定された遮断が確認される'}必要があります。${inspection ? '往路と復路の両方が、指定された検査の通過点も経由する必要があります。' : ''}`,
+      en: `${requirement.sourceAddress} to ${requirement.destinationAddress}: ${requirement.expectation === 'allow' ? 'the modeled forward and return paths must allow traffic' : 'the modeled forward initiation must demonstrate the requested block'}.${inspection ? ' Both directions must also traverse the required inspection waypoint.' : ''}${requirement.applianceChain ? ' Each direction must visit the appliance stages in its declared order.' : ''}`,
+      ja: `${requirement.sourceAddress} から ${requirement.destinationAddress}: ${requirement.expectation === 'allow' ? 'モデルの往路と復路で通信が許可される' : 'モデルの往路の開始で指定された遮断が確認される'}必要があります。${inspection ? '往路と復路の両方が、指定された検査の通過点も経由する必要があります。' : ''}${requirement.applianceChain ? '各方向で、装置を指定された順に通る必要があります。' : ''}`,
     }
   }
   return { en: 'The requested packet-routing condition must be fully assessed and satisfied.', ja: '指定されたパケット ルーティング条件が完全に評価され、満たされる必要があります。' }

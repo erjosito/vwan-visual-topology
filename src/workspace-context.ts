@@ -24,6 +24,7 @@ export const WorkspaceSessionContext = createContext<{
   learningView?: { open: boolean }
   setLearningView?: (view: { open: boolean }) => void
   loadLearning?: () => Promise<CourseRunner>
+  selectLearningEdition?: (courseId: string) => Promise<boolean>
   learning?: CourseRunner
   learningState?: RunnerState
   reportLearningObservation?: (event: LearningObservation) => void

@@ -198,6 +198,29 @@ that today's canvas is still valid. Explicit lesson replay preserves history
 and cannot emit duplicate completion events. Newly inserted/revised unmet
 tasks gate the next uncompleted task even if later historical records exist.
 
+Routing foundations has separately versioned original and scenario editions.
+New learners start the seven-scenario edition. Existing completion history
+keeps the original edition until explicit, confirmed enrollment; old points
+and belts remain historical achievements, not credit in the new edition.
+Enrollment is an optional field in the existing v1 progress ledger and uses
+the same writer ownership and optimistic conflict checks as completion writes.
+Changing editions does not replace the current practice canvas. Each scenario
+still requires the existing explicit starter/replacement confirmation.
+
+Mixed flow requirements can declare
+`applianceChain: { forward: ["firewall-id", "sdwan-id"], reverse: ["sdwan-id", "firewall-id"] }`.
+Each leg contains 1-16 distinct original appliance IDs, with explicit order
+independently authored for both directions. This is an allow-only assertion;
+it cannot be combined with legacy appliance/Firewall waypoint policy fields.
+A complete delivered trace must contain each declared leg's ordered sequence
+in `traversedApplianceIds`. Additional intermediate appliances are permitted;
+this is an ordered waypoint requirement, not an exact-hop-count assertion.
+Unknown original owners and VWAN-only providers return **not assessed**.
+Subnet UDR policy selected at an appliance's hosting subnet takes precedence
+over same-VNet/direct-peering and automatic topology-chain shortcuts. None of
+these checks asserts live Firewall rules, vendor SD-WAN behavior, HA health,
+convergence timing or preservation of existing sessions.
+
 The root owns one separate practice canvas in
 `network-simulator:practice-workspace:v1`, including stable course/scenario IDs,
 the native document, active/resume state and the normal return provider.

@@ -4,7 +4,7 @@ import type { TaskCompletion } from './runner'
 export const guidedProgressKey = 'network-simulator:learning-progress:v1'
 export const legacyProgressKey = 'aznet-simulator:practice:v1'
 export const progressLimits = { entries: 2048, chars: 1_000_000 }
-export type ProgressLedger = { version: 1; policyVersion: 1; completions: TaskCompletion[] }
+export type ProgressLedger = { version: 1; policyVersion: 1; completions: TaskCompletion[]; enrollment?: string }
 export type ProgressStatus = 'saved' | 'session' | 'corrupt' | 'unavailable' | 'conflict' | 'limit' | 'ownership'
 export type LedgerState = { ledger?: ProgressLedger; status: ProgressStatus; legacy: boolean }
 type StorageAccess = () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
@@ -33,7 +33,8 @@ function validCompletion(value: TaskCompletion): boolean {
 export function parseProgressLedger(raw: string): ProgressLedger {
   if (raw.length > progressLimits.chars) throw new Error('Progress storage limit')
   const value = JSON.parse(raw) as ProgressLedger
-  if (!value || !objectKeys(value, ['version', 'policyVersion', 'completions']) || value.version !== 1
+  if (!value || !objectKeys(value, ['version', 'policyVersion', 'completions', ...('enrollment' in value ? ['enrollment'] : [])])
+    || ('enrollment' in value && !['azure-networking-preview', 'azure-routing-scenarios'].includes(value.enrollment!)) || value.version !== 1
     || value.policyVersion !== 1 || !Array.isArray(value.completions) || value.completions.length > progressLimits.entries
     || value.completions.some((entry) => !validCompletion(entry))
     || new Set(value.completions.map(identity)).size !== value.completions.length) throw new Error('Invalid guided progress')
@@ -122,6 +123,11 @@ export function createProgressLedger(storage: StorageAccess) {
       try { next = recordCompletion(state.ledger, completion) }
       catch { publish({ ...state, status: 'limit' }); return false }
       return write(next, owned)
+    },
+    enroll(courseId: string, owned: boolean) {
+      if (!state.ledger || !['saved', 'session', 'ownership'].includes(state.status)
+        || !['azure-networking-preview', 'azure-routing-scenarios'].includes(courseId)) return false
+      return write({ ...state.ledger, enrollment: courseId }, owned)
     },
     retry: (owned: boolean) => !!state.ledger && !['corrupt', 'conflict', 'limit'].includes(state.status) && write(state.ledger, owned),
     reset(owned: boolean) {

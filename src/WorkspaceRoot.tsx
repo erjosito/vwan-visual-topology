@@ -9,6 +9,7 @@ import type { PracticeRequest, PracticeWorkspace } from './learning/practice-wor
 import type { PracticeSession } from './learning/practice-session'
 import type { CourseRunner, RunnerState } from './learning/runner'
 import { createProgressLedger, guidedProgressKey, legacyProgressKey } from './learning/progress-ledger'
+import { editions, selectedEdition } from './learning/editions'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
@@ -44,6 +45,7 @@ export function UnifiedSimulatorRoot() {
   const [learningState, setLearningState] = useState<RunnerState>()
   const learningRef = useRef<CourseRunner | undefined>(undefined)
   const learningLoading = useRef<Promise<CourseRunner> | undefined>(undefined)
+  const learningCourse = useRef<string | undefined>(undefined)
   const learningRevision = useRef(0)
   const practiceRef = useRef<PracticeSession | undefined>(undefined)
   const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
@@ -54,7 +56,14 @@ export function UnifiedSimulatorRoot() {
   const { style, maximized } = useCanvasPresentation()
   const request = useRef(0)
   const loadLearning = useCallback(() => {
+    const courseId = selectedEdition(progress.getSnapshot().ledger, practiceRef.current?.current?.courseId).course.id
+    if (learningCourse.current !== courseId) {
+      learningRef.current?.cancel()
+      learningLoading.current = undefined
+      learningCourse.current = courseId
+    }
     learningLoading.current ??= import('./learning/learning-session').then(({ createLearningSession }) => {
+      if (learningCourse.current !== courseId) throw new Error('Curriculum selection changed.')
       const runner = createLearningSession({
         changed: setLearningState,
         completions: progress.getSnapshot().ledger?.completions,
@@ -69,11 +78,11 @@ export function UnifiedSimulatorRoot() {
               ? { mode: current.document.mode, topology: cached.topology } : current.document
           return { practice: { ...current, document }, revision: learningRevision.current, scope: request.current }
         },
-      })
+      }, courseId)
       learningRef.current = runner
       setLearning(runner)
       return runner
-    }).catch((error) => { learningLoading.current = undefined; throw error })
+    }).catch((error) => { if (learningCourse.current === courseId) learningLoading.current = undefined; throw error })
     return learningLoading.current
   }, [progress])
   useEffect(() => {
@@ -82,11 +91,13 @@ export function UnifiedSimulatorRoot() {
       const owned = practiceRef.current?.owns === true
       progress.externalChange(owned)
       if (owned) learningRef.current?.cancel()
-      else learningRef.current?.replaceProgress(progress.getSnapshot().ledger?.completions ?? [])
+      else if (learningRef.current && learningCourse.current !== selectedEdition(progress.getSnapshot().ledger, practiceRef.current?.current?.courseId).course.id) {
+        void loadLearning().catch(() => learningRef.current?.cancel())
+      } else learningRef.current?.replaceProgress(progress.getSnapshot().ledger?.completions ?? [])
     }
     window.addEventListener('storage', changed)
     return () => window.removeEventListener('storage', changed)
-  }, [progress])
+  }, [progress, loadLearning])
   const loadPractice = () => {
     practiceLoading.current ??= import('./learning/practice-session').then(({ createPracticeSession }) => {
       practiceRef.current = createPracticeSession({
@@ -131,8 +142,22 @@ export function UnifiedSimulatorRoot() {
     try {
       if (reset && progress.getSnapshot() !== expected) return false
       const success = reset ? progress.reset(session.owns) : progress.retry(session.owns)
-      if (success && reset) learningRef.current?.replaceProgress([])
+      if (success && reset && learningRef.current) {
+        if (learningCourse.current !== selectedEdition(progress.getSnapshot().ledger, session.current?.courseId).course.id) await loadLearning()
+        else learningRef.current.replaceProgress([])
+      }
       return success
+    } finally { session.release() }
+  }
+  const selectLearningEdition = async (courseId: string) => {
+    if (!editions.some((entry) => entry.course.id === courseId)) return false
+    const session = await loadPractice()
+    if (!await session.acquire()) return false
+    try {
+      if (!progress.enroll(courseId, session.owns)) return false
+      learningRef.current?.cancel()
+      await loadLearning()
+      return true
     } finally { session.release() }
   }
   const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
@@ -277,6 +302,7 @@ export function UnifiedSimulatorRoot() {
       editorHistory.current = value
       if (practicing && changed) { learningRevision.current++; learningRef.current?.workspaceChanged() }
     },
+    selectLearningEdition,
     learningView, setLearningView: (view) => {
       if (!view.open) learningRef.current?.cancel()
       setLearningView(view)

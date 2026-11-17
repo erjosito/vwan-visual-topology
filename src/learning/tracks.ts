@@ -11,8 +11,8 @@ export const learningTracks: readonly LearningTrack[] = [
   {
     id: 'routing-foundations', title: previewCourse.title, status: 'available', courseId: previewCourse.id,
     summary: {
-      en: 'Address ownership, peering, route selection and hybrid/Virtual WAN troubleshooting. Your existing course and awards.',
-      ja: 'アドレスの所有関係、ピアリング、経路選択、ハイブリッドと Virtual WAN の問題解決。既存のコースと獲得履歴をそのまま使用します。',
+      en: 'Address ownership, peering, appliance chains and hybrid/Virtual WAN troubleshooting. Original and scenario editions retain separate progress and achievements.',
+      ja: 'アドレスの所有関係、ピアリング、装置チェーン、ハイブリッドと Virtual WAN の問題解決。従来版とシナリオ版は、別々の進捗と達成を保持します。',
     },
   },
   {

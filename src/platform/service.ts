@@ -88,7 +88,7 @@ export function validateRequest(input: unknown): PlatformRequest {
     ids.add(requirement.id)
     if (!['flow', 'route', 'packet'].includes(requirement.kind)) throw new Error('Unsupported requirement kind.')
     keys(requirement, requirement.kind === 'packet' ? ['id', 'kind', 'packet', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredBackend'] : requirement.kind === 'flow'
-      ? ['id', 'kind', 'source', 'target', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredFirewallHubId', 'requiredApplianceId', 'firewallPolicy']
+      ? ['id', 'kind', 'source', 'target', 'sourceAddress', 'destinationAddress', 'expectation', 'requiredFirewallHubId', 'requiredApplianceId', 'applianceChain', 'firewallPolicy']
       : ['id', 'kind', 'table', 'hubTableId', 'prefix', 'expectation'])
     if (requirement.kind === 'packet') {
       if (!['configured', 'blocked'].includes(requirement.expectation) || ipv4(requirement.sourceAddress) === undefined || ipv4(requirement.destinationAddress) === undefined) throw new Error('Packet configuration requirement needs fixed IPv4 bindings and a supported expectation.')
@@ -122,6 +122,16 @@ export function validateRequest(input: unknown): PlatformRequest {
         }
       }
       if ([requirement.requiredFirewallHubId, requirement.requiredApplianceId].some((id) => id !== undefined && (typeof id !== 'string' || !id))) throw new Error('Invalid inspection waypoint.')
+      if (requirement.applianceChain !== undefined) {
+        const chain = requirement.applianceChain
+        if (!chain || typeof chain !== 'object' || Array.isArray(chain)) throw new Error('Invalid appliance chain.')
+        keys(chain, ['forward', 'reverse'])
+        if (requirement.expectation !== 'allow' || requirement.requiredApplianceId || requirement.requiredFirewallHubId || requirement.firewallPolicy
+          || [chain.forward, chain.reverse].some((leg) => !Array.isArray(leg) || !leg.length || leg.length > 16
+            || new Set(leg).size !== leg.length || leg.some((id) => typeof id !== 'string' || !id || id.length > 120))) {
+          throw new Error('Appliance chains require explicit, bounded, unique per-direction owners and an allow expectation.')
+        }
+      }
       if (requirement.firewallPolicy !== undefined) {
         const policy = requirement.firewallPolicy
         if (!policy || typeof policy !== 'object' || Array.isArray(policy)) throw new Error('Invalid Firewall policy.')
@@ -162,6 +172,7 @@ const unknown = (requirement: Requirement, reason: string, evidence: unknown = n
   ({ id: requirement.id, outcome: 'not assessed', reasons: [reason], evidence })
 
 function vwanFlow(document: Extract<PlatformDocument, { mode: 'vwan' }>, requirement: FlowRequirement): Assessment {
+  if (requirement.applianceChain) return unknown(requirement, 'Ordered appliance chains require the mixed-network provider.')
   if (requirement.requiredApplianceId) return unknown(requirement, 'Use a VWAN firewall hub ID, not an appliance ID.')
   const profile = validateDiagnosticsProfile({
     version: 1, failureAnalysis: false, intents: [{
@@ -262,6 +273,12 @@ export function executePlatform(input: unknown): PlatformResult {
           result.assessments.push(unknown(requirement, 'The asserted Firewall hub is missing or has no declared Firewall.'))
           continue
         }
+        const chain = requirement.applianceChain
+        const applianceIds = document.topology.vnets.flatMap((vnet) => vnet.appliances.map((appliance) => appliance.id))
+        if (chain && [...chain.forward, ...chain.reverse].some((id) => !applianceIds.includes(id))) {
+          result.assessments.push(unknown(requirement, 'Ordered chain needs original owned appliance identities.'))
+          continue
+        }
         const pair = traceAzNetPair(document.topology, simulation, source, requirement.sourceAddress, target, requirement.destinationAddress)
         if ([pair.forward, pair.reverse].some((trace) => trace.status === 'not-assessed')) {
           result.assessments.push(unknown(requirement, 'Incomplete mixed hub routing coverage prevents reachability or isolation certification.', pair))
@@ -269,6 +286,14 @@ export function executePlatform(input: unknown): PlatformResult {
         }
         const reachable = pair.forward.status === 'delivered' && pair.reverse.status === 'delivered'
         const waypoint = (!requirement.requiredApplianceId || [pair.forward, pair.reverse].every((trace) => trace.traversedApplianceIds.includes(requirement.requiredApplianceId!)))
+          && (!chain || (['forward', 'reverse'] as const).every((leg) => {
+            let previous = -1
+            return chain[leg].every((id) => {
+              const next = pair[leg].traversedApplianceIds.indexOf(id, previous + 1)
+              previous = next
+              return next >= 0
+            })
+          }))
           && (!firewallHub || ([['forward', requirement.firewallPolicy?.forward ?? 'required'], ['reverse', requirement.firewallPolicy?.reverse ?? 'required']] as const)
             .every(([leg, expectation]) => pair[leg].traversedApplianceIds.includes(firewallHub.firewall?.id ?? `vhub-fw:${firewallHub.id}`) === (expectation === 'required')))
         const satisfied = requirement.expectation === 'allow' ? reachable && waypoint : pair.forward.status !== 'delivered'

@@ -30,6 +30,9 @@ server.registerTool('get_schema', {
   endpointShapes: mode === 'vwan' ? [{ kind: 'spoke', id: 'ID' }, { kind: 'site', id: 'ID' }, { kind: 'hub', id: 'ID' }]
     : [{ kind: 'subnet', vnetId: 'ID', subnetId: 'ID' }, { kind: 'site', siteId: 'ID' }],
   requirementShapes: [
+    ...(mode === 'vwan' ? [] : [{ kind: 'flow', expectation: 'allow',
+      applianceChain: { forward: ['original-firewall-id', 'original-sdwan-id'], reverse: ['original-sdwan-id', 'original-firewall-id'] },
+      note: 'Optional ordered waypoint subsequences. Each leg needs 1-16 distinct original appliance IDs. Do not combine with other waypoint fields; not HA or session enforcement.' }]),
     { kind: 'flow', expectation: 'allow', firewallPolicy: { hubId: 'original hub ID', forward: 'required or bypassed', reverse: 'required or bypassed' },
       note: 'Optional per-leg inspection predicate; independent return routing; do not combine with legacy waypoint fields. This is not a Firewall permission or delivery assertion.' },
     { id: 'unique-packet-id', kind: 'packet', packet: 'explicit packet request', sourceAddress: 'fixed original IPv4', destinationAddress: 'fixed original IPv4',
