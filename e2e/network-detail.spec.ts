@@ -1,11 +1,12 @@
 import { expect, test } from '@playwright/test'
 import type { Topology } from '../src/model'
-import { createEmptyAzNetTopology } from '../src/azure-net/model'
+import { createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
 import type { NetworkInventory } from '../src/inventory'
 import { executePlatform } from '../src/platform/service'
 import type { PlatformRequest } from '../src/platform/contract'
+import { validateTopology } from '../src/validation'
 
-function design(mode: string) {
+function design(mode: string): Topology | AzNetTopology {
   const subnets = [{ id: 'app', name: 'App subnet', prefix: '10.1.1.0/24' }]
   const inventory: NetworkInventory = {
     workloads: [{ id: 'vm:a', name: 'Application', nicIds: ['nic-a'] }, { id: 'vm-b', name: 'Database', nicIds: ['nic-b'] }],
@@ -24,6 +25,246 @@ function design(mode: string) {
     subnets, gateways: [], appliances: [], x: 200, y: 200 }]
   topology.inventory = inventory
   return topology
+}
+
+function graphicalDesign(mode: string) {
+  const topology = design(mode), owner = { kind: mode === 'vwan' ? 'spoke' as const : 'vnet' as const, id: 'network' }
+  const subnets = topology.version === 1 ? topology.spokes[0].subnets! : topology.vnets[0].subnets
+  subnets.push({ id: 'second', name: 'Second subnet', prefix: '10.1.2.0/24' })
+  topology.inventory!.nics[0].ipConfigurations.push({ id: 'ip-second', name: 'Secondary', subnetId: 'second', privateIp: '10.1.2.4' })
+  topology.inventory!.publicIps.push({ id: 'nat-pip', name: 'NAT public IP', address: '20.50.60.80', sku: 'Standard', allocation: 'Static' })
+  topology.inventory!.natGateways = [{ id: 'nat-original', name: 'Shared NAT', owner, sku: 'Standard', subnetIds: ['app', 'second'], publicIpIds: ['nat-pip'] }]
+  topology.inventory!.loadBalancers = [{ id: 'lb-original', name: 'Shared LB', owner, sku: 'Standard',
+    frontends: [{ id: 'frontend', name: 'Private frontend', kind: 'private', subnetId: 'second', privateIp: '10.1.2.10' }],
+    pools: [{ id: 'pool', name: 'Original backends', members: [{ workloadId: 'vm:a', nicId: 'nic-a', ipConfigurationId: 'ip-a' }] }],
+    probes: [], rules: [], inboundNatRules: [], outboundRules: [] }]
+  topology.application = { version: 1, services: [{ id: 'service-original', name: 'Declared application', kind: 'application-gateway', owner,
+    references: [{ kind: 'subnet', owner, id: 'app' }], unsupportedFeatures: [] }], dnsProfiles: [] }
+  if (topology.version === 2) {
+    const vnet = topology.vnets[0]
+    vnet.subnets[0].privateEndpoints = [{ id: 'pe-original', name: 'Storage endpoint', ipAddress: '10.1.1.9', serviceName: 'storage' }]
+    vnet.subnets.push({ id: 'transit', name: 'VirtualNetworkApplianceSubnet', prefix: '10.1.3.0/24' },
+      { id: 'ars-subnet', name: 'RouteServerSubnet', prefix: '10.1.4.0/27' },
+      { id: 'firewall-subnet', name: 'AzureFirewallSubnet', prefix: '10.1.5.0/26' })
+    vnet.appliances = [
+      { id: 'nva-original', name: 'Original NVA', kind: 'nva-vm', subnetId: 'app', privateIp: '10.1.1.8', enableIpForwarding: true, staticRoutes: [] },
+      { id: 'vnra-original', name: 'Original VNRA', kind: 'vnra', subnetId: 'transit', privateIp: '10.1.3.4', enableIpForwarding: true, staticRoutes: [] },
+      { id: 'firewall-original', name: 'Original Firewall', kind: 'azure-firewall', subnetId: 'firewall-subnet', privateIp: '10.1.5.4', enableIpForwarding: true, staticRoutes: [] },
+    ]
+    vnet.gateways = [{ id: 'gateway-original', name: 'Original gateway', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true }]
+    vnet.routeServer = { id: 'ars-original', name: 'Original ARS', subnetId: 'ars-subnet', enabled: true, branchToBranchTraffic: false, hubRoutingPreference: 'ASPath', peerApplianceIds: [] }
+  } else {
+    topology.hubs = [{ id: 'hub', name: 'Hub', region: 'westeurope', preference: 'ExpressRoute', routingIntent: { private: false, internet: false, privatePrefixes: [] } }]
+    topology.spokes[0].hubId = 'hub'
+    topology.sites = [{ id: 'nva-original', name: 'Original NVA', role: 'spoke-nva', asn: 65001, prefixes: [] }]
+    topology.connections = [{ id: 'nva-connection', name: 'Original NVA association', hubId: 'hub', siteId: 'nva-original', spokeId: 'network',
+      transport: 'SpokeNVA', peerIp: '10.1.1.8', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }]
+  }
+  return topology.version === 1 ? validateTopology(topology) : topology
+}
+
+for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
+  test(`graphical detail ${mode}: original attachment references, keyboard actions, edits and history`, async ({ page }) => {
+    const topology = graphicalDesign(mode), key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    await page.addInitScript(({ key, value }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(value))
+    }, { key, value: mode === 'vwan' ? topology : { sampleId: '', topology } })
+    await page.setViewportSize({ width: mode === 'hub-spoke' ? 390 : 1440, height: 1000 })
+    await page.goto(`/?mode=${mode}`)
+    await page.getByLabel('Theme', { exact: true }).selectOption(mode === 'hub-spoke' ? 'dark' : 'light')
+    const read = () => page.evaluate((key) => { const saved = JSON.parse(localStorage.getItem(key)!); return saved.topology ?? saved }, key)
+    const node = mode === 'vwan' ? page.locator('.spoke-node[data-node-id="network"]') : page.getByTestId('aznet-vnet-network')
+    await node.click()
+    const opener = page.getByRole('button', { name: 'VNet detail', exact: true })
+    const before = await read()
+    await opener.click()
+    const dialog = page.getByTestId('network-detail-dialog')
+    const app = dialog.locator('[data-subnet-id="app"]'), second = dialog.locator('[data-subnet-id="second"]')
+    for (const container of [app, second]) {
+      await expect(container.locator('[data-entity-id="nic-a"]')).toHaveCount(1)
+      await expect(container.locator('[data-entity-id="nat-original"]')).toHaveCount(1)
+      await expect(container.locator('[data-entity-id="lb-original"]')).toHaveCount(1)
+      await expect(container.getByText('Original entity; 2 declared subnet associations', { exact: true })).toHaveCount(3)
+    }
+    await expect(app.locator('[data-entity-id="nic-a"]')).toContainText('10.1.1.4')
+    await expect(app.locator('[data-entity-id="nic-a"]')).not.toContainText('10.1.2.4')
+    await expect(second.locator('[data-entity-id="nic-a"]')).toContainText('10.1.2.4')
+    await expect(second.locator('[data-entity-id="service-original"]')).toHaveCount(0)
+    await expect(app.locator('[data-entity-id="service-original"]')).toHaveCount(1)
+    if (mode !== 'vwan') {
+      for (const [id, subnetId] of [['nva-original', 'app'], ['vnra-original', 'transit'], ['firewall-original', 'firewall-subnet'], ['ars-original', 'ars-subnet'], ['pe-original', 'app']]) {
+        await expect(dialog.locator(`[data-subnet-id="${subnetId}"] [data-entity-id="${id}"]`)).toHaveCount(1)
+      }
+      await expect(dialog.getByRole('region', { name: 'Network-level associations', exact: true }).locator('[data-entity-id="gateway-original"]')).toHaveCount(1)
+      await expect(dialog.locator('[data-subnet-id] [data-entity-id="gateway-original"]')).toHaveCount(0)
+    } else await expect(dialog.getByRole('region', { name: 'Network-level associations', exact: true }).locator('[data-entity-id="nva-original"]')).toHaveCount(1)
+    const subnetTarget = app.getByRole('button', { name: 'Subnet: App subnet', exact: true })
+    await subnetTarget.focus()
+    await page.keyboard.press('Shift+F10')
+    const menu = dialog.getByRole('menu', { name: 'App subnet', exact: true })
+    await expect(menu.getByRole('menuitem', { name: 'Subnet NSG', exact: true })).toBeVisible()
+    if (mode !== 'vwan') await expect(menu.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeVisible()
+    await expect(subnetTarget).toBeFocused()
+    expect(await read()).toEqual(before)
+    const nic = app.getByRole('button', { name: 'NIC: App NIC', exact: true })
+    await nic.click({ button: 'right' })
+    await dialog.getByRole('menuitem', { name: 'Edit workload: Application', exact: true }).click()
+    const form = dialog.getByTestId('selected-workload-form')
+    await expect(form.getByLabel('Workload name', { exact: true })).toBeFocused()
+    await form.getByLabel('Workload name', { exact: true }).fill('Renamed original')
+    await form.getByRole('button', { name: 'Save workload', exact: true }).click()
+    await expect(app.locator('[data-entity-id="nic-a"]')).toContainText('Renamed original')
+    await expect(second.locator('[data-entity-id="nic-a"]')).toContainText('Renamed original')
+    expect((await read()).inventory.workloads[0]).toMatchObject({ id: 'vm:a', name: 'Renamed original', nicIds: ['nic-a'] })
+    await page.keyboard.press('Escape')
+    await expect(opener).toBeFocused()
+    await page.getByRole('button', { name: mode === 'vwan' ? 'Undo' : '↶ Undo', exact: true }).click()
+    await expect.poll(async () => (await read()).inventory.workloads[0].name).toBe('Application')
+    await page.getByRole('button', { name: mode === 'vwan' ? 'Redo' : '↷ Redo', exact: true }).click()
+    await opener.click()
+    await expect(form.getByLabel('Workload name', { exact: true })).toHaveValue('Renamed original')
+    await expect(dialog.getByRole('button', { name: 'Renamed original', exact: true })).toHaveAttribute('aria-pressed', 'true')
+    const persisted = await read()
+    const expected = structuredClone(before)
+    expected.inventory.workloads[0].name = 'Renamed original'
+    expect(persisted).toEqual(expected)
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(opener).toBeFocused()
+  })
+}
+
+test('graphical detail native shared actions release the modal for original subnet and appliance inspectors', async ({ page }) => {
+  const topology = graphicalDesign('full')
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.goto('/?mode=full')
+  await page.getByTestId('aznet-vnet-network').click()
+  const opener = page.getByRole('button', { name: 'VNet detail', exact: true })
+  const dialog = page.getByTestId('network-detail-dialog')
+  await opener.click()
+  const appliance = dialog.getByRole('button', { name: 'NVA: Original NVA', exact: true })
+  await appliance.focus()
+  await page.keyboard.press('ContextMenu')
+  await dialog.getByRole('menuitem', { name: 'Disable NIC IP Forwarding', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  await expect.poll(async () => (await read()).vnets[0].appliances[0].enableIpForwarding).toBe(false)
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect.poll(async () => (await read()).vnets[0].appliances[0].enableIpForwarding).toBe(true)
+  await opener.click()
+  await appliance.click({ button: 'right' })
+  await dialog.getByRole('menuitem', { name: 'Inspect Appliance Subnet Effective Routes', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByTestId('aznet-effective-route-table')).toBeVisible()
+  await opener.click()
+  await dialog.getByRole('button', { name: 'Subnet: App subnet', exact: true }).focus()
+  await page.keyboard.press('Shift+F10')
+  await dialog.getByRole('menuitem', { name: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  const prefix = page.getByTestId('aznet-subnet-prefix-app')
+  await expect(prefix).toBeVisible()
+  await prefix.fill('10.1.1.0/25')
+  await prefix.press('Tab')
+  await expect.poll(async () => (await read()).vnets[0].subnets[0].prefix).toBe('10.1.1.0/25')
+  await opener.click()
+  await expect(dialog.locator('[data-subnet-id="app"]').getByText('10.1.1.0/25', { exact: true })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect.poll(async () => (await read()).vnets[0].subnets[0].prefix).toBe('10.1.1.0/24')
+})
+
+test('graphical detail VWAN NVA invokes the original shared editor and retains history without subnet inference', async ({ page }) => {
+  const topology = graphicalDesign('vwan')
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('vwan-visual-topology:v1')) localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
+  }, topology)
+  await page.goto('/?mode=vwan')
+  const node = page.locator('.spoke-node[data-node-id="network"]')
+  await node.click()
+  await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+  const dialog = page.getByTestId('network-detail-dialog')
+  await expect(dialog.locator('[data-subnet-id] [data-entity-id="nva-original"]')).toHaveCount(0)
+  const nva = dialog.getByRole('button', { name: 'NVA: Original NVA', exact: true })
+  await nva.focus()
+  await page.keyboard.press('Shift+F10')
+  await expect(dialog.getByRole('menuitem', { name: 'BGP table', exact: true })).toBeVisible()
+  await dialog.getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  const editor = page.locator('.object-editor')
+  await expect(editor.getByLabel('Name', { exact: true })).toHaveValue('Original NVA')
+  await editor.getByLabel('Name', { exact: true }).fill('Renamed original NVA')
+  await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))
+  await expect.poll(async () => (await read()).sites[0].name).toBe('Renamed original NVA')
+  expect((await read()).sites[0].id).toBe('nva-original')
+  await page.getByRole('button', { name: 'Undo', exact: true }).click()
+  await expect.poll(async () => (await read()).sites[0].name).toBe('Original NVA')
+  await node.click()
+  await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+  await expect(nva).toBeVisible()
+  await page.keyboard.press('Escape')
+})
+
+for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
+  test(`graphical detail ${mode}: bounded attachment pages, search, collapsing and narrow keyboard return`, async ({ page }) => {
+    const topology = design(mode), key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    for (let index = 0; index < 140; index++) {
+      topology.inventory!.workloads.push({ id: `late-${index}`, name: `Late workload ${index}`, nicIds: [`late-nic-${index}`] })
+      topology.inventory!.nics.push({ id: `late-nic-${index}`, name: `Late NIC ${index}`, owner: { kind: mode === 'vwan' ? 'spoke' : 'vnet', id: 'network' },
+        ipConfigurations: [{ id: 'primary', name: 'Primary', subnetId: 'app', privateIp: `10.1.1.${index + 10}` }] })
+    }
+    topology.inventory!.nics.push({ id: 'orphan', name: 'Orphan NIC', owner: { kind: mode === 'vwan' ? 'spoke' : 'vnet', id: 'network' },
+      ipConfigurations: [{ id: 'primary', name: 'Primary', subnetId: 'app', privateIp: '10.1.1.250' }] })
+    await page.addInitScript(({ key, value }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(value))
+    }, { key, value: mode === 'vwan' ? topology : { sampleId: '', topology } })
+    await page.setViewportSize({ width: 390, height: 844 })
+    await page.goto(`/?mode=${mode}`)
+    await page.getByLabel('Theme', { exact: true }).selectOption('dark')
+    await page.locator(mode === 'vwan' ? '.spoke-node[data-node-id="network"]' : '[data-testid="aznet-vnet-network"]').click()
+    const opener = page.getByRole('button', { name: 'VNet detail', exact: true })
+    const before = await page.evaluate((key) => localStorage.getItem(key), key)
+    await opener.click()
+    const dialog = page.getByTestId('network-detail-dialog')
+    await expect(dialog.getByTestId('detail-device')).toHaveCount(12)
+    await dialog.getByRole('button', { name: 'Next attachments', exact: true }).click()
+    await expect(dialog.locator('[data-entity-id="nic-a"]')).toHaveCount(0)
+    await expect(dialog.getByTestId('detail-device')).toHaveCount(12)
+    await dialog.getByLabel('Search attached entities', { exact: true }).fill('late-139')
+    await expect(dialog.getByTestId('detail-device')).toHaveCount(1)
+    const nic = dialog.getByRole('button', { name: 'NIC: Late NIC 139', exact: true })
+    await nic.focus()
+    await page.keyboard.press('ContextMenu')
+    await expect(dialog.getByRole('menuitem', { name: 'Edit workload: Late workload 139', exact: true })).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(nic).toBeFocused()
+    await page.keyboard.press('ContextMenu')
+    await dialog.getByRole('menuitem', { name: 'NIC NSG', exact: true }).click()
+    const nsg = dialog.getByTestId('nsg-editor-nic-late-nic-139')
+    await expect(nsg.locator('summary').first()).toBeFocused()
+    await expect(dialog.getByRole('button', { name: 'Late workload 139', exact: true })).toBeVisible()
+    await dialog.getByLabel('Search attached entities', { exact: true }).fill('orphan')
+    const orphan = dialog.getByRole('button', { name: 'NIC: Orphan NIC', exact: true })
+    await orphan.focus()
+    await page.keyboard.press('ContextMenu')
+    await expect(dialog.getByRole('menuitem', { name: 'NIC NSG', exact: true })).toBeDisabled()
+    await expect(dialog.getByTestId('nsg-editor-nic-orphan')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(orphan).toBeFocused()
+    await dialog.locator('.detail-workload-inventory > summary').click()
+    await expect(dialog.getByRole('button', { name: 'Late workload 139', exact: true })).not.toBeVisible()
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true)
+    await page.keyboard.press('Escape')
+    await expect(opener).toBeFocused()
+    expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(before)
+    await opener.click()
+    await expect(dialog.getByTestId('detail-device')).toHaveCount(12)
+    await expect(dialog.getByRole('button', { name: 'Previous attachments', exact: true })).toBeDisabled()
+  })
 }
 
 for (const mode of ['vwan', 'full'] as const) {

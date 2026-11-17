@@ -18,6 +18,7 @@ import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceMenu } from '../WorkspaceSession'
 import { useWorkspaceSession } from '../workspace-context'
 import type { ContextAction } from '../TopologyContextMenu'
+import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
 import { CanvasOverlay } from '../CanvasOverlay'
@@ -2730,6 +2731,15 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setDeleteTarget(canvasSelection)
   } : undefined)
 
+  const detailEntity = (target: DetailTarget): AzSelectedEntity => {
+    const vnetId = detailOwner!
+    return target.kind === 'network' ? { kind: 'vnet', vnetId }
+      : target.kind === 'subnet' ? { kind: 'subnet', vnetId, subnetId: target.id }
+        : target.kind === 'appliance' ? { kind: 'appliance', vnetId, applianceId: target.id }
+          : target.kind === 'gateway' ? { kind: 'gateway', vnetId, gatewayId: target.id }
+            : target.kind === 'site' ? { kind: 'site', siteId: target.id }
+              : { kind: 'route-server', vnetId, routeServerId: target.id }
+  }
   return (
     <div ref={guidanceRoot} className="aznet-app" data-testid="aznet-app" data-learning-scope="azure-net" data-inventory-selection={inventorySelection}>
       {snatHubId && <Suspense fallback={null}><RouterSnatDialog topology={topology} owner={{ kind: 'hub', id: snatHubId }}
@@ -2737,10 +2747,23 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         commit={(mutate) => commitTopology((next) => mutate(next))} onClose={() => setSnatHubId(undefined)} /></Suspense>}
       {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'vnet', id: detailOwner }} simulation={simulation} returnFocus={detailReturnFocus}
         selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => commitTopology((next) => mutate(next))}
+        selectedTargetId={canvasSelection && ('subnetId' in canvasSelection ? canvasSelection.subnetId
+          : 'applianceId' in canvasSelection ? canvasSelection.applianceId : 'gatewayId' in canvasSelection ? canvasSelection.gatewayId
+            : 'routeServerId' in canvasSelection ? canvasSelection.routeServerId : entityId(canvasSelection))}
+        onSelectTarget={(target) => setCanvasSelection(detailEntity(target))}
+        getContextActions={(target) => {
+          const entity = detailEntity(target)
+          return (getContextMenuSpec(entity)?.actions ?? []).map(function wrap(action): ContextAction {
+            return { ...action, children: action.children?.map(wrap), ...(action.onSelect || action.run ? { onSelect: () => {
+              setCanvasSelection(entity)
+              ;(action.run ?? action.onSelect)?.()
+            }, run: undefined } : {}) }
+          })
+        }}
         onApplianceAction={(vnetId, applianceId, action) => {
           const entity = { kind: 'appliance' as const, vnetId, applianceId }
-          if (action === 'routes') inspectRoutes(entity)
-          else { setSelected(entity); setActiveTab('editor') }
+          setCanvasSelection(entity)
+          getContextMenuSpec(entity)?.actions.find((entry) => entry.label === (action === 'routes' ? 'Inspect Appliance Subnet Effective Routes' : 'Configure Appliance'))?.onSelect?.()
         }}
         boundaries={[
           ...(singleFlowForCustomIp ?? pairAnalysis?.forward ? [{ direction: 'forward' as const,

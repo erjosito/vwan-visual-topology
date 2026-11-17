@@ -614,6 +614,11 @@ function App() {
       onClose={() => setSnatHubId(undefined)} /></Suspense>}
     {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'spoke', id: detailOwner }} simulation={simulation}
       selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => update((next) => mutate(next))}
+      selectedTargetId={selection?.id}
+      onSelectTarget={(target) => { if (target.kind === 'network' || target.kind === 'site') selectObject({ kind: target.kind === 'site' ? 'site' : 'spoke', id: target.id }) }}
+      getContextActions={(target) => target.kind === 'network' || target.kind === 'site' ? getContextActions({ kind: target.kind === 'site' ? 'site' : 'spoke', id: target.id }).map(function wrap(action): ContextAction {
+        return { ...action, children: action.children?.map(wrap), ...(action.run ? { run: () => { selectObject({ kind: target.kind === 'site' ? 'site' : 'spoke', id: target.id }); action.run?.() } } : {}) }
+      }) : []}
       boundaries={diagramPaths.slice(0, 16).map((path) => ({ direction: 'direction' in path && path.direction === 'return' ? 'reply' : 'forward',
         destination, evidence: path.steps.join(' '), subnetIds: [] }))}
       onClose={() => setDetailOwner(undefined)} /></Suspense>}
