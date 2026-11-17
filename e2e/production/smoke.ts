@@ -181,15 +181,18 @@ test('a delayed Japanese switch preserves drafts and both cached languages work 
   const delayed = new Promise<void>((resolve) => { release = resolve })
   await page.route(/\/japanese-catalog[.-]/, async (route) => { await delayed; await route.continue() })
   const language = page.locator('header [data-language-selector]')
+  await language.focus()
   await language.selectOption('ja')
   try {
     await expect(language).toBeDisabled()
+    await expect(language).toBeFocused()
     await expect(page.locator('html')).toHaveAttribute('lang', 'en')
     await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Uncommitted original draft')
     expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(original)
   } finally { release() }
   await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
   await expect(language).toBeEnabled()
+  await expect(language).toBeFocused()
   await expect(page.getByLabel('名前', { exact: true })).toHaveValue('Uncommitted original draft')
   await context.setOffline(true)
   await language.selectOption('en')

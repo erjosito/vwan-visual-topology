@@ -9,7 +9,8 @@ export function LanguageSelector() {
   return <><label className="language-selector">
     <span>{language === 'ja' ? '言語' : 'Language'}</span>
     <select aria-label={language === 'ja' ? '言語 / Language' : 'Language / 言語'} data-language-selector
-      value={pending ?? language} disabled={!!pending} aria-busy={!!pending} onChange={(event) => {
+      value={pending ?? language} aria-disabled={!!pending} aria-busy={!!pending} onChange={(event) => {
+        if (pending) return
         const next = event.target.value === 'ja' ? 'ja' : 'en'
         setPending(next)
         setFailed(false)
