@@ -20,10 +20,17 @@ export async function auditAccessibility({ baseURL, artifacts }) {
           // Fail on external requests rather than permitting topology or audit uploads.
           await context.route('**/*', (route) => new URL(route.request().url()).origin === new URL(baseURL).origin
             ? route.continue() : route.abort('blockedbyclient'))
-          await context.addInitScript(({ language }) => {
+          await context.addInitScript(({ language, originalLearning }) => {
             localStorage.setItem('vwan-visual-topology:language:v1', language)
             localStorage.setItem('aznet-workspace-tools:v1', 'closed')
-          }, { language: sample.state.startsWith('learning-') ? 'en' : sample.language })
+            // Preserve the versioned two-vnets prediction fixture despite the new default edition.
+            if (originalLearning) localStorage.setItem('network-simulator:learning-progress:v1', JSON.stringify({
+              version: 1, policyVersion: 1, completions: [], enrollment: 'azure-networking-preview',
+            }))
+          }, {
+            language: sample.state.startsWith('learning-') ? 'en' : sample.language,
+            originalLearning: sample.state.startsWith('learning-'),
+          })
           const page = await context.newPage()
           page.setDefaultTimeout(10_000)
           page.setDefaultNavigationTimeout(15_000)
