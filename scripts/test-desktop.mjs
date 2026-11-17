@@ -53,6 +53,8 @@ try {
   await expect(page.getByRole('button', { name: '+ Hub', exact: true })).toBeEnabled()
   await page.getByRole('button', { name: 'Sample topologies', exact: true }).click()
   await page.getByRole('dialog', { name: 'Sample topologies', exact: true }).getByRole('button', { name: 'Load sample topology', exact: true }).first().click()
+  await expect(page.getByRole('dialog', { name: 'Sample topologies', exact: true })).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).not.toBeNull()
   const savedVwan = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
   const hubCount = JSON.parse(savedVwan).hubs.length
   expect(hubCount).toBeGreaterThan(0)

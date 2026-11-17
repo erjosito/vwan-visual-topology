@@ -4,6 +4,12 @@
 
 このディレクトリには、[ユーザー ガイドと実践サンプル](../docs/README.ja.md)（[Web ドキュメント `vwan-simulator.com/docs/?lang=ja`](https://vwan-simulator.com/docs/?lang=ja)）で使用されている、そのままインポート可能な Virtual WAN トポロジ JSON ファイルが含まれています。
 
+19 件すべての分類、前提知識、制限と整理方針は
+[サンプル カタログ（英語）](../docs/sample-catalog.md)を参照してください。
+ギャラリーはリファレンス構成を最初に表示し、検証シナリオ
+（2 つの全機能複合障害ケースを含む）は別のコレクションで選択します。
+サンプルの読み込みは自由な探索用であり、採点付き演習ではありません。
+
 | ファイル | シナリオ | シミュレーター ライブ リンク |
 | :--- | :--- | :--- |
 | [`hub-routing-preferences.json`](./hub-routing-preferences.json) | **サンプル 1:** ExpressRoute と BGP VPN の二重接続における `ExpressRoute` 優先と `ASPath` 優先の比較 | [シミュレーターで開く](https://vwan-simulator.com/?sample=hub-routing-preferences) |
