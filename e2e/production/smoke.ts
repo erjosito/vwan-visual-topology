@@ -225,7 +225,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(workers.every((url) => new URL(url).origin === 'http://127.0.0.1:4174')).toBe(true)
     const detailTopology = JSON.parse(sample.toString())
     const detailOwner = mode === 'vwan' ? detailTopology.spokes[0] : detailTopology.vnets[0]
-    const detailNode = mode === 'vwan' ? page.locator(`.spoke-node[data-node-id="${detailOwner.id}"]`) : page.getByTestId(`aznet-vnet-${detailOwner.id}`)
+    const detailNode = mode === 'vwan' ? page.locator(`.spoke-node[data-node-id="${detailOwner.id}"]`) : page.getByTestId(`aznet-select-vnet-${detailOwner.id}`)
     const beforeDetail = await page.evaluate((key) => localStorage.getItem(key), storageKey)
     await detailNode.focus()
     await page.keyboard.press('Shift+F10')

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 4
+export const scorecardVersion = 7
 // Keep document-derived contract fixtures distinct from regression and live Azure evidence.
 export const modelContractPlan = {
   unit: [{ id: 'static-firewall-model-contracts', label: 'Document-derived static Firewall model-contract conformance',
@@ -19,6 +19,9 @@ export const unitPlan = [
   ] },
   { id: 'training-contract-regressions', label: 'Training contract regression conformance', files: [
     'src/learning/learning.test.ts', 'src/learning/connectivity-exercises.test.ts',
+    'src/learning/course.test.ts', 'src/learning/course-routing.test.ts', 'src/learning/course-wan.test.ts', 'src/learning/guidance.test.ts',
+    'src/learning/practice-workspace.test.ts', 'src/learning/runner.test.ts',
+    'src/learning/practice-ownership.test.ts', 'src/learning/progress-ledger.test.ts',
   ] },
   { id: 'persistence-boundary-regressions', label: 'Persistence/local boundary regression conformance', files: [
     'src/workspace-session.test.ts', 'src/inventory.test.ts', 'platform/service.test.ts', 'platform/mcp.test.ts',
@@ -28,12 +31,21 @@ export const unitPlan = [
 export const browserPlan = [
   { id: 'ui-workflow-regressions', label: 'Scripted UI workflow regression conformance', files: [
     'e2e/canvas-presentation.spec.ts', 'e2e/network-detail.spec.ts', 'e2e/single-workspace.spec.ts', 'e2e/vpn-nat.spec.ts',
+    'e2e/accessibility-labels.spec.ts',
   ] },
-  { id: 'training-workflow-regressions', label: 'Scripted training workflow regression conformance', files: ['e2e/learning.spec.ts'] },
+  { id: 'training-workflow-regressions', label: 'Scripted training workflow regression conformance', files: ['e2e/learning.spec.ts', 'e2e/practice-workspace.spec.ts', 'e2e/learning-progress.spec.ts'] },
   { id: 'localization-workflow-regressions', label: 'Scripted localization workflow regression conformance', files: ['e2e/localization.spec.ts'] },
 ]
 export const digest = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex')
 const normalized = (file) => file.replaceAll('\\', '/')
+
+export function unregisteredCriticalFiles(files) {
+  const registered = new Set([...unitPlan, ...browserPlan].flatMap(({ files }) => files))
+  return files.map(normalized).filter((file) => (
+    /^src\/learning\/.*\.test\.tsx?$/.test(file)
+    || /^e2e\/(?:[^/]*learning[^/]*|[^/]*practice-workspace[^/]*|accessibility-labels)\.spec\.ts$/.test(file)
+  ) && !registered.has(file))
+}
 
 export function vitestCases(report) {
   if (!Array.isArray(report.testResults)) throw new Error('Invalid Vitest report')

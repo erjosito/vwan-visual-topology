@@ -37,7 +37,7 @@ async function loadHybrid(page: Page, mode: string) {
 
 const confirmation = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true })
 async function selectAndDelete(page: Page, testId: string) {
-  await page.getByTestId(testId).focus()
+  await page.getByTestId(testId.replace(/^aznet-vnet-/, 'aznet-select-vnet-')).focus()
   await page.keyboard.press('Enter')
   await page.keyboard.press('Delete')
 }
@@ -129,7 +129,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await selectAndDelete(page, 'aznet-vnet-hub')
     await page.keyboard.press('Escape')
     await expect(node).toBeVisible()
-    await node.focus()
+    await page.getByTestId('aznet-select-vnet-hub').focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
     const label = page.getByTestId('aznet-node-label-input-hub')

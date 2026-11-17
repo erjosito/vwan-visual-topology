@@ -5,7 +5,7 @@ import { resolve } from 'node:path'
 import { AZURE_NET_SAMPLES, createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
 
 async function openNodeMenu(page: Page, testId: string) {
-  await page.getByTestId(testId).focus()
+  await page.getByTestId(testId.replace(/^aznet-vnet-/, 'aznet-select-vnet-')).focus()
   await page.keyboard.press('Shift+F10')
 }
 
@@ -129,7 +129,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     await instrument(page)
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
     const node = page.getByTestId('aznet-vnet-vnet-spoke-app')
-    const frame = node.locator(':scope > rect').first()
+    const frame = node.locator('.network-node-frame')
     const original = { x: await frame.getAttribute('x'), y: await frame.getAttribute('y') }
     const start = await counts(page)
     for (const cancel of ['pointercancel', 'lostpointercapture', 'Escape']) {
@@ -147,7 +147,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     expect((await counts(page)).commit ?? 0).toBe(start.commit ?? 0)
     expect((await counts(page)).simulation).toBe(start.simulation)
     await expect(page.getByRole('button', { name: '↶ Undo', exact: true })).toBeDisabled()
-    await node.focus()
+    await page.getByTestId('aznet-select-vnet-vnet-spoke-app').focus()
     await page.keyboard.press('ArrowRight')
     await expect(frame).toHaveAttribute('x', String(Number(original.x) + 5))
     await page.keyboard.press('Shift+ArrowDown')
@@ -217,7 +217,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     const renamed = await counts(page)
     for (const kind of ['simulation', 'connectivity', 'trace', 'diagnostics', 'resilience']) expect(renamed[kind]).toBe(before[kind])
     await expect(page.getByTestId('resilience-results')).toBeVisible()
-    await page.getByTestId('aznet-vnet-vnet-spoke-data').focus()
+    await page.getByTestId('aznet-select-vnet-vnet-spoke-data').focus()
     await page.keyboard.press('ArrowRight')
     await expect(page.getByTestId('resilience-results')).toBeVisible()
     await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
@@ -266,7 +266,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
       await page.getByTestId('aznet-check-routing-btn').click()
       await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible()
       const node = page.getByTestId('aznet-vnet-bench-vnet-0')
-      const frame = node.locator(':scope > rect').first()
+      const frame = node.locator('.network-node-frame')
       const originalX = await frame.getAttribute('x')
       const originalY = await frame.getAttribute('y')
       const edge = page.getByTestId('aznet-peering-bench-peer-0').locator('path').first()

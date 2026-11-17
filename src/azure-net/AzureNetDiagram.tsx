@@ -1230,12 +1230,8 @@ export function AzureNetDiagram({
               key={vnet.id}
               data-testid={`aznet-vnet-${vnet.id}`}
               data-simulated-failed={faults[vnet.id] ? 'true' : undefined}
-              tabIndex={0}
-              role="button"
-              className="network-node"
-              aria-pressed={isVnetSelected}
-              aria-label={`VNet ${vnet.name}${faults[vnet.id] ? ` — Simulated failure: ${faults[vnet.id].map((f) => f.name).join(', ')}` : ''}`}
-              onKeyDown={(e) => openKeyboardContext(e, { kind: 'vnet', vnetId: vnet.id })}
+              role="group"
+              aria-label={`VNet ${vnet.name}`}
               onPointerDown={(e) => {
                 if (e.button === 2) return
                 e.stopPropagation()
@@ -1265,6 +1261,15 @@ export function AzureNetDiagram({
                 })
               }}
               style={{ cursor: 'grab' }}
+            >
+            <DiagramButton
+              data-testid={`aznet-select-vnet-${vnet.id}`}
+              tabIndex={0}
+              role="button"
+              className="network-node"
+              aria-pressed={isVnetSelected}
+              aria-label={`VNet ${vnet.name}${faults[vnet.id] ? ` — Simulated failure: ${faults[vnet.id].map((f) => f.name).join(', ')}` : ''}`}
+              onKeyDown={(e) => openKeyboardContext(e, { kind: 'vnet', vnetId: vnet.id })}
             >
               <rect
                 className="network-node-frame"
@@ -1305,6 +1310,7 @@ export function AzureNetDiagram({
               <DiagramNodeText text={vnet.name} x={box.x + 40} y={box.y + 18} width={box.width - roleWidth - 60} weight={700} />
               <DiagramNodeText text={`${vnet.prefixes.join(', ')} · ${vnet.region}`} x={box.x + 12} y={box.y + 34} width={box.width - 24} fontSize={10.5} weight={400} />
               <DiagramNodeBadge label={vnet.role.toUpperCase()} x={box.x + box.width - roleWidth - 10} y={box.y + 6} width={roleWidth} tone={isHubVnetRole(vnet.role) ? 'info' : 'muted'} />
+            </DiagramButton>
 
               {/* Control Plane / Appliances Strip */}
               {chips.length > 0 && (

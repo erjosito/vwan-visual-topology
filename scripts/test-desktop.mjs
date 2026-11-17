@@ -143,7 +143,7 @@ try {
       return mode === 'vwan' ? value : value.topology
     }, mode)
     await expect.poll(readSaved).toEqual(executePlatform({ ...request, operation: 'validate' }).document.topology)
-    const detailNode = mode === 'vwan' ? page.locator(`.spoke-node[data-node-id="${inventoryOwner.id}"]`) : page.getByTestId(`aznet-vnet-${inventoryOwner.id}`)
+    const detailNode = mode === 'vwan' ? page.locator(`.spoke-node[data-node-id="${inventoryOwner.id}"]`) : page.getByTestId(`aznet-select-vnet-${inventoryOwner.id}`)
     await detailNode.focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()

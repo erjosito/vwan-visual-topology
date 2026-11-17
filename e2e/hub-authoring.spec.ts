@@ -36,7 +36,8 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
     await expect.poll(async () => (await saved(page, mode))?.name).toContain('Selective Firewall')
     const original = await saved(page, mode)
     const node = mode === 'vwan' ? page.locator('[data-node-id="hub-local"]') : page.getByTestId('aznet-vwanhub-hub-local')
-    await expect(node).toHaveAccessibleName(/VPN 1\/2 · ER 0\/1/)
+    if (mode === 'vwan') await expect(node).toHaveAccessibleDescription(/VPN 1\/2 · ER 0\/1/)
+    else await expect(node).toHaveAccessibleName(/VPN 1\/2 · ER 0\/1/)
     await node.screenshot({ path: testInfo.outputPath('modeled-hub.png') })
     const menu = async () => { await node.focus(); await page.keyboard.press('Shift+F10') }
     await menu()
@@ -105,7 +106,7 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
     await expect.poll(async () => (await saved(page, mode))?.name).toContain('Selective Firewall')
     const node = (id: string, hub = false) => mode === 'vwan'
       ? page.locator(`[data-node-id="${id}"]`)
-      : page.getByTestId(`aznet-${hub ? 'vwanhub' : 'vnet'}-${id}`)
+      : page.getByTestId(`aznet-${hub ? 'vwanhub' : 'select-vnet'}-${id}`)
     const menu = async (id: string, hub = false) => { await node(id, hub).focus(); await page.keyboard.press('Shift+F10') }
     const original = await saved(page, mode)
     await menu('trusted-a')

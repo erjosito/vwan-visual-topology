@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve, relative, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn, execFileSync } from 'node:child_process'
-import { scorecardVersion, unitPlan, modelContractPlan, browserPlan, digest, vitestCases, playwrightCases, scoreGroup } from './quality-scorecard.mjs'
+import { scorecardVersion, unitPlan, modelContractPlan, browserPlan, digest, vitestCases, playwrightCases, scoreGroup, unregisteredCriticalFiles } from './quality-scorecard.mjs'
 import { accessibilityPlan, scoreAccessibility } from './accessibility-scorecard.mjs'
 import { auditAccessibility } from './audit-accessibility.mjs'
 
@@ -50,6 +50,8 @@ const metrics = []
 const errors = []
 let server
 try {
+  const missingCritical = unregisteredCriticalFiles(git('ls-files').split('\n'))
+  if (missingCritical.length) throw new Error(`Register critical evaluation files and version the corpus: ${missingCritical.join(', ')}`)
   if (!accessibilityOnly) {
     const ready = await command('node_modules/typescript/bin/tsc', ['-p', 'tsconfig.platform.json'])
       && await command('scripts/build-platform.mjs', [])

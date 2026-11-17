@@ -191,7 +191,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(tooltip).toBeVisible()
     await expect(tooltip).toContainText('10.0.2.0/24')
     await expect(tooltip).toContainText('ProductionApplicationServicesSubnetWithALongName')
-    await page.getByTestId('aznet-vnet-hub').focus()
+    await page.getByTestId('aznet-select-vnet-hub').focus()
     await expect(tooltip).toBeHidden()
     await subnet.hover({ position: { x: 8, y: 2 } })
     await expect(tooltip).toBeVisible()

@@ -110,7 +110,7 @@ for (const theme of ['light', 'dark']) {
         await expect(page.getByTestId('aznet-peering-hover-card')).toBeVisible()
         await readable(page.getByTestId('aznet-peering-hover-card'))
         await page.mouse.move(0, 0)
-        await page.getByTestId('aznet-vnet-vnet-hub-weu').focus()
+        await page.getByTestId('aznet-select-vnet-vnet-hub-weu').focus()
         await page.keyboard.press('Shift+F10')
         await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
         const gatewayPrefixes = page.getByRole('textbox', { name: /^Advertised gateway prefixes / }).first()

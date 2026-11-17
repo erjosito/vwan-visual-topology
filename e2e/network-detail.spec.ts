@@ -125,6 +125,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
       await page.goto(`/?mode=${mode}`)
       await page.getByLabel('Theme', { exact: true }).selectOption(narrow ? 'dark' : 'light')
       const node = mode === 'vwan' ? page.locator('.spoke-node[data-node-id="network"]') : page.getByTestId('aznet-vnet-network')
+      const focusNode = mode === 'vwan' ? node : page.getByTestId('aznet-select-vnet-network')
       await node.click()
       const opener = page.getByRole('button', { name: 'VNet detail', exact: true })
       await opener.click()
@@ -190,13 +191,13 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
       await expect(dialog.getByRole('button', { name: 'New VM', exact: true })).toBeVisible()
       await close.click()
       await expect(dialog).toHaveCount(0)
-      await node.focus()
-      await expect(node).toBeFocused()
+      await focusNode.focus()
+      await expect(focusNode).toBeFocused()
       await page.keyboard.press('Shift+F10')
       await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()
       await expect(dialog).toBeVisible()
       await page.keyboard.press('Escape')
-      await expect(node).toBeFocused()
+      await expect(focusNode).toBeFocused()
       const input: PlatformRequest = {
         contractVersion: 1, operation: 'simulate', document: { mode, topology: persisted },
         packet: { source: { kind: 'workload', workloadId: 'vm:a', nicId: 'nic-a', ipConfigurationId: 'ip-a' },
@@ -212,7 +213,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
       if (narrow) {
         await page.evaluate(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
         await page.reload()
-        await node.focus()
+        await focusNode.focus()
         await page.keyboard.press('Shift+F10')
         await page.getByRole('menuitem', { name: 'VNet の詳細を開く', exact: true }).click()
         await expect(dialog).toHaveAccessibleName('VNet の詳細: Network')
@@ -238,6 +239,7 @@ for (const narrow of [false, true]) {
     await page.goto('/?mode=full')
     await page.getByLabel('Theme', { exact: true }).selectOption(narrow ? 'dark' : 'light')
     const node = page.getByTestId('aznet-vnet-network')
+    const focusNode = page.getByTestId('aznet-select-vnet-network')
     await node.click()
     await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
     const dialog = page.getByTestId('network-detail-dialog'), editor = dialog.getByTestId('nat-gateway-editor')
@@ -291,7 +293,7 @@ for (const narrow of [false, true]) {
     if (narrow) {
       await page.evaluate(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
       await page.reload()
-      await node.focus()
+      await focusNode.focus()
       await page.keyboard.press('Shift+F10')
       await page.getByRole('menuitem', { name: 'VNet の詳細を開く', exact: true }).click()
       await editor.locator('summary').click()
@@ -357,7 +359,7 @@ for (const kind of ['azure-firewall', 'nva-vm'] as const) {
     if (kind === 'nva-vm') {
       await page.keyboard.press('Escape')
       await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
-      await page.getByTestId('aznet-vnet-network').focus()
+      await page.getByTestId('aznet-select-vnet-network').focus()
       await page.keyboard.press('Shift+F10')
       await page.getByRole('menuitem', { name: 'VNet の詳細を開く', exact: true }).click()
       await editor.locator('summary').click()

@@ -12,7 +12,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const topologyKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), topologyKey)).not.toBeNull()
     const original = await page.evaluate((key) => localStorage.getItem(key), topologyKey)
-    const node = page.locator(mode === 'vwan' ? '.spoke-node' : '[data-testid^="aznet-vnet-"]').first()
+    const node = page.locator(mode === 'vwan' ? '.spoke-node' : '[data-testid^="aznet-select-vnet-"]').first()
     await node.focus()
     await page.keyboard.press('Shift+F10')
     const menu = page.getByRole('menu').first()
@@ -89,7 +89,7 @@ test('wrapped device badges expose every appliance and disabled ARS without cove
   await expect(chips).toHaveCount(hub.gateways.length + 8)
   await expect(page.getByTestId(`aznet-chip-${hub.routeServer!.id}`)).toHaveAttribute('data-disabled', 'true')
   const geometry = await card.evaluate((node) => {
-    const frame = node.querySelector(':scope > rect')!.getBoundingClientRect()
+    const frame = node.querySelector('.network-node-frame')!.getBoundingClientRect()
     const badges = [...node.querySelectorAll('.network-device-chip > g > rect')].map((badge) => badge.getBoundingClientRect())
     const subnets = [...node.querySelectorAll('[data-testid^="aznet-subnet-"] > rect')].map((row) => row.getBoundingClientRect())
     return {

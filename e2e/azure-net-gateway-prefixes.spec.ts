@@ -32,7 +32,7 @@ async function menu(page: Page, id: string, action: string) {
 }
 
 const inspect = (page: Page) => menu(page, 'aznet-site-dc', 'Inspect Site BGP Route Table')
-const configure = (page: Page) => menu(page, 'aznet-vnet-hub', 'Configure VNet & Elements')
+const configure = (page: Page) => menu(page, 'aznet-select-vnet-hub', 'Configure VNet & Elements')
 
 for (const [mode, transport] of [['hub-spoke', 'ExpressRoute'], ['full', 'Vpn']] as const) {
   test(`${mode} edits ${transport} gateway summaries, keeps uncovered spaces and round-trips persistence/JSON/share`, async ({ page, browser }) => {

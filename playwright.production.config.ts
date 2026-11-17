@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
-  testMatch: ['**/production/smoke.ts', '**/flow-export.spec.ts'],
+  testMatch: ['**/production/smoke.ts', '**/flow-export.spec.ts', '**/accessibility-labels.spec.ts'],
   outputDir: 'test-artifacts/production-playwright',
   fullyParallel: true,
   retries: process.env.CI ? 1 : 0,

@@ -137,7 +137,7 @@ for (const mode of ['hub-spoke', 'full']) {
     expect(await forward.evaluate((node) => JSON.parse(node.getAttribute('data-segments')!))).toEqual([
       { id: 'peer', from: 'vnet:spoke', to: 'vnet:hub' },
     ])
-    await page.getByTestId('aznet-vnet-spoke').focus()
+    await page.getByTestId('aznet-select-vnet-spoke').focus()
     await page.keyboard.press('Enter')
     await page.keyboard.press('Delete')
     await page.getByRole('dialog', { name: 'Delete VNet', exact: true }).getByRole('button', { name: 'Confirm deletion', exact: true }).click()
