@@ -5,13 +5,14 @@ import { mkdir, rm } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { applicationFixture, applicationPlatformRequest } from '../tests/fixtures/application'
 import { executePlatform } from '../src/platform/service'
-import { translate } from '../src/messages'
+import { loadLanguage, translate } from '../src/messages'
 import '../src/application-messages-ja'
 import '../src/network-detail-messages-ja'
 
 for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   for (const locale of ['en', 'ja'] as const) {
     test(`${mode} ${locale}: original-identity contracts, keyboard, narrow layout and worker parity`, async ({ page }, testInfo) => {
+      await loadLanguage(locale)
       const topology = applicationFixture(mode), key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
       const t = (message: string) => translate(locale, message)
       const unexpected: string[] = [], errors: string[] = []
