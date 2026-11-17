@@ -4,6 +4,7 @@ import { cidr, isVwanNvaAsn, parseAsPath } from '../validation'
 import type { AzNetTopology } from './model'
 import { PeerRouteAttributes } from './RouteMapsPanel'
 import { VpnNatConnectionEditor } from '../VpnNatEditor'
+import { saveManagedVnra, vnraSubnetName } from './vnra-authoring'
 
 type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => void }
 const prefixes = (text: string) => {
@@ -90,6 +91,7 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
   const vnet = topology.vnets.find((vnet) => vnet.appliances.some((app) => app.id === applianceId))
   const app = vnet?.appliances.find((app) => app.id === applianceId)
   if (!app || !vnet) return null
+  if (app.kind === 'vnra') return <ManagedVnraEditor key={app.subnetId} topology={topology} vnetId={vnet.id} applianceId={app.id} commit={commit} />
   return <section className="aznet-card" data-testid="aznet-hybrid-nva-editor">
     <h3>{t('NVA BGP advertisements')}</h3>
     <form onSubmit={(event) => {
@@ -121,5 +123,52 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
     <PeerRouteAttributes key={app.advertisedPrefixes?.join(',')} app={app} onSave={(attributes) => commit((draft) => {
       draft.vnets.find((owner) => owner.id === vnet.id)!.appliances.find((app) => app.id === applianceId)!.advertisedRouteAttributes = attributes
     })} />
+  </section>
+}
+
+export function ManagedVnraEditor({ topology, vnetId, applianceId, commit, onSaved, onCancel }: Props & {
+  vnetId: string
+  applianceId?: string
+  onSaved?: (id: string) => void
+  onCancel?: () => void
+}) {
+  const vnet = topology.vnets.find((entry) => entry.id === vnetId)
+  const app = vnet?.appliances.find((entry) => entry.id === applianceId && entry.kind === 'vnra')
+  const [subnetId, setSubnetId] = useState(app?.subnetId ?? vnet?.subnets.find((entry) => entry.name === vnraSubnetName)?.id ?? '')
+  const [error, setError] = useState('')
+  if (!vnet || (applianceId && !app)) return null
+  return <section className="aznet-card" data-testid="aznet-vnra-editor">
+    <h3>{t(app ? 'Configure Managed VNRA' : 'Add Managed VNRA')}</h3>
+    <p>{t('Original VNet')}: {vnet.name} (<code>{vnet.id}</code>){app && <> · <code>{app.id}</code></>}</p>
+    <p>{t('Use a dedicated VirtualNetworkApplianceSubnet and UDRs targeting the VNRA private IP. Configure peering access, forwarded traffic and return routes separately; this action does not change peerings or routes.')}</p>
+    <form key={app ? JSON.stringify([app.name, app.privateIp, app.subnetId]) : vnet.id} onSubmit={(event) => {
+      event.preventDefault()
+      try {
+        const data = new FormData(event.currentTarget)
+        const input = {
+          id: app?.id ?? `vnra-${crypto.randomUUID()}`, name: String(data.get('name')),
+          privateIp: String(data.get('address')), subnetId: subnetId || undefined,
+          newSubnetPrefix: subnetId ? undefined : String(data.get('prefix')),
+        }
+        saveManagedVnra(structuredClone(topology), vnet.id, input)
+        commit((draft) => saveManagedVnra(draft, vnet.id, input))
+        setError('')
+        onSaved?.(input.id)
+      } catch (error) { setError(t(error instanceof Error ? error.message : 'Inventory edit failed.')) }
+    }}>
+      <label className="field"><span>{t('VNRA name')}</span><input name="name" required maxLength={120} defaultValue={app?.name ?? `${vnet.name}-vnra`} /></label>
+      <label className="field"><span>{t('VNRA subnet')}</span><select value={subnetId} onChange={(event) => setSubnetId(event.target.value)}>
+        <option value="">{t('Create dedicated VNRA subnet')}</option>
+        {vnet.subnets.filter((subnet) => subnet.name === vnraSubnetName || subnet.id === app?.subnetId).map((subnet) =>
+          <option key={subnet.id} value={subnet.id}>{subnet.name} · {subnet.prefix} · {subnet.id}</option>)}
+      </select></label>
+      {!subnetId && <label className="field"><span>{t('VNRA subnet prefix')}</span><input name="prefix" required placeholder={vnet.prefixes.join(', ')} /></label>}
+      <label className="field"><span>{t('VNRA private IPv4 address')}</span><input name="address" required defaultValue={app?.privateIp ?? ''} /></label>
+      <p>{t('Managed forwarding only. Guest BGP, firewall inspection and NAT controls are not VNRA capabilities here. Throughput, HA, live readiness and IPv6 forwarding are not assessed. Bicep export does not deploy VNRA; preserve native JSON.')}</p>
+      {app?.enableIpForwarding === false && <p role="status">{t('Modeled forwarding is disabled in this saved design; editing identity does not silently enable it.')}</p>}
+      <button type="submit">{t(app ? 'Save Managed VNRA' : 'Create Managed VNRA')}</button>
+      {onCancel && <button type="button" onClick={onCancel}>{t('Cancel')}</button>}
+      {error && <p role="alert">{error}</p>}
+    </form>
   </section>
 }

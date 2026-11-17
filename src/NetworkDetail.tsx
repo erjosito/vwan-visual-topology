@@ -18,7 +18,7 @@ import { revisionOf } from './platform/service'
 
 export interface DetailBoundary { direction: 'forward' | 'reply'; destination: string; evidence: string; subnetIds: string[] }
 
-export function NetworkDetail({ topology, owner, simulation, selectedId, boundaries = [], returnFocus, onSelect, commit, onClose }: {
+export function NetworkDetail({ topology, owner, simulation, selectedId, boundaries = [], returnFocus, onSelect, onApplianceAction, commit, onClose }: {
   topology: InventoryTopology
   owner: InventoryOwner
   simulation: Simulation | AzSimulationResult
@@ -26,6 +26,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
   boundaries?: DetailBoundary[]
   returnFocus?: Element | null
   onSelect: (id: string) => void
+  onApplianceAction?: (vnetId: string, applianceId: string, action: 'configure' | 'routes') => void
   commit: (update: (draft: InventoryTopology) => void) => void
   onClose: () => void
 }) {
@@ -117,6 +118,14 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, boundar
               {attached.length > 10 && <p>{t('Additional attachments are listed on the workload cards.')}</p>}
               <NatGatewayEditor topology={topology} owner={owner} subnetId={subnet.id} change={change} />
               <NsgEditor topology={topology} owner={owner} target={{ kind: 'subnet', id: subnet.id }} change={change} />
+              {topology.version === 2 && topology.vnets.find((vnet) => vnet.id === owner.id)?.appliances
+                .filter((device) => device.subnetId === subnet.id && device.kind === 'vnra').map((device) => <div key={device.id} data-testid="detail-vnra">
+                  <strong>{t('Managed VNRA')}: {device.name}</strong> · <code>{device.privateIp}</code> · <code>{device.id}</code>
+                  {onApplianceAction && <div>
+                    <button type="button" onClick={() => { onApplianceAction(owner.id, device.id, 'configure'); close() }}>{t('Configure Managed VNRA')}</button>
+                    <button type="button" onClick={() => { onApplianceAction(owner.id, device.id, 'routes'); close() }}>{t('Inspect Appliance Subnet Effective Routes')}</button>
+                  </div>}
+                </div>)}
               {topology.version === 2 && topology.vnets.find((vnet) => vnet.id === owner.id)?.appliances
                 .filter((device) => device.subnetId === subnet.id && device.kind !== 'vnra').map((device) => <div key={device.id}>
                   <RouterSnatEditor topology={topology} owner={{ kind: 'appliance', id: device.id }} name={device.name}
