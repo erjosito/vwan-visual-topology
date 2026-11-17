@@ -107,7 +107,7 @@ main { max-width: 1900px; margin: auto; padding: 29px 36px; }
 .network-device-chip[data-disabled="true"] .network-node-badge > rect { stroke-dasharray: 3 2; }
 .network-node:focus-visible, .network-device-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .network-node:hover > .network-node-frame, .network-node:focus-visible > .network-node-frame, .network-node[aria-pressed="true"] > .network-node-frame { stroke: var(--accent); stroke-width: 2.5; }
-.network-device-chip:hover .network-node-badge > rect, .network-device-chip:focus-visible .network-node-badge > rect { stroke: var(--accent); stroke-width: 2; }
+.network-device-chip:hover .network-node-badge > rect, .network-device-chip:focus-visible .network-node-badge > rect, .network-device-chip[aria-pressed="true"] .network-node-badge > rect { stroke: var(--accent); stroke-width: 2; }
 .site-node .node-kind { fill: var(--text-muted); }.spoke-node .node-kind { fill: var(--text-muted); }
 .node-custom-label-bg { fill: var(--surface-muted); stroke: var(--warning); stroke-width: 1; }
 .node-custom-label { fill: var(--warning); font-size: 10.5px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; pointer-events: none; }

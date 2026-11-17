@@ -3126,6 +3126,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             onSelect={(entity) => {
               setCanvasSelection(entity)
             }}
+            onClearSelection={() => setCanvasSelection(undefined)}
             onMoveNode={(nodeKind, nodeId, x, y) => {
               commitTopology((next) => {
                 if (nodeKind === 'vnet') {
@@ -3166,6 +3167,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               setActiveTab('diagnostics')
             }}
             onClearHighlights={() => {
+              setCanvasSelection(undefined)
               setTraceActive(false)
               setGroupTrace(null)
               setShowDiagnosticBadges(false)
