@@ -8,7 +8,7 @@ export const wanCheckpoint = { taskId: 'wan.explain', assessmentVersion: 1, chec
 export const capstoneCheckpoint = { taskId: 'capstone.explain', assessmentVersion: 1, checkId: 'explain-capstone' }
 export const previewCourse: CourseBundle['course'] = {
   id: 'azure-networking-preview', contentVersion: 4, publication: 'complete',
-  title: { en: 'Azure networking: guided practice', ja: 'Azure ネットワーク: ガイド付き練習' },
+  title: { en: 'Routing foundations', ja: 'ルーティングの基礎' },
   lessonOrder: ['direct-peering', 'route-override', 'prefix-outage', 'gateway-return', 'secured-wan', 'hybrid-incident'],
   belts: [
     { id: 'white', name: { en: 'White belt', ja: '白帯' }, color: '#ffffff', pointsRequired: 0, checkpointTaskIds: [] },

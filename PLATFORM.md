@@ -142,8 +142,8 @@ bindings and configuration-only packet predicates. Unknown health, allocation,
 mapping or filtering cannot certify either connectivity or isolation. Supported
 repairs are open-ended; no guest/listener or live-session readiness is certified.
 
-The lazy, non-modal learning sidebar runs six sequential missions through black
-belt (40 tasks, 1,325 first-earned points) from `course-examples.ts`,
+The lazy, non-modal learning sidebar runs the **Routing foundations** track's
+six sequential missions through black belt (40 tasks, 1,325 first-earned points) from `course-examples.ts`,
 `course-routing.ts` and `course-wan.ts`. They cover direct peering, equal-prefix
 UDR preference, longest-prefix diagnosis, shared-gateway return routing, secured
 Virtual WAN and a two-fault hybrid capstone. `runner.ts` is the single progression authority: scoped
@@ -158,6 +158,16 @@ Confirmed **Load practice network** validates the starter using the shared
 worker before opening a **protected practice workspace**. Opening/resuming the
 sidebar does not reload or reset a canvas; loading a starter always confirms
 replacement of any existing practice edits.
+
+**Learning tracks**, shared by the optional sidebar and status details, lists
+Routing foundations as **Available**, with **DNS and name resolution** and
+**Application delivery** explicitly **Planned**. Planned entries have no playable
+course, progress or unlock action and never change routing completion totals.
+The header, status details and completion view scope claims to Routing
+foundations. The catalog/overview remain off the normal startup graph; the
+header reuses lightweight course metadata. Existing course/storage/assessment
+identities and all first-earned awards are unchanged; see the
+[track compatibility policy](src/learning/AUTHORING.md#track-scope-and-compatibility).
 
 **Show me where** resolves typed action IDs and exact entity/table/route/prefix
 parameters, not translated labels, selectors from content, coordinates or

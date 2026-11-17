@@ -17,6 +17,7 @@ import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './pr
 import { practiceOwnershipFailure } from './practice-ownership'
 import { orderedTasks, taskCompleted } from './runner'
 import { requirementDescription, runnerLabels as runnerText } from './runner-content'
+import { TrackOverview } from './TrackOverview'
 import './learning.css'
 
 const instructions = orderedTasks(bundle)
@@ -84,6 +85,8 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       if (event.key === 'Escape') { event.stopPropagation(); onPause() }
     }}>
       <header><h2 id="learning-title">{text(learningLabels.learn, language)}</h2><button type="button" onClick={onPause}>{text(labels.pause, language)}</button></header>
+      <p data-testid="learning-active-track"><strong>{text(bundle.course.title, language)}</strong></p>
+      <TrackOverview />
       <p className="learning-notice">{text(runnerText.preview, language)}</p>
       <p>{text(learningLabels.local, language)}</p>
       <p>{text(runnerText.session, language)}</p>

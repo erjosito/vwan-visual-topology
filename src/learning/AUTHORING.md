@@ -10,6 +10,28 @@ derives first-earned points, checkpoint-gated belts and the header status.
 The curriculum is authored under #184. No legacy JSON draft, raw requirements or
 engine payload is shown; legacy storage stays untouched.
 
+## Track scope and compatibility
+
+The playable course is displayed as **Routing foundations**. Its historical
+`azure-networking-preview` course ID, content version 4, award/check identities,
+40 tasks, 1,325 points and stored practice/progress formats remain unchanged.
+Renaming the presentation is not a migration or a grading revision.
+`tracks.ts` is a small declarative catalog; **DNS and name resolution** and
+**Application delivery** are **Planned** informational entries, with no course
+binding, points, unlocks or start actions. `TrackOverview` is shared by the
+on-demand status details and sidebar. The eager header uses only lightweight
+course metadata; it must not import the catalog or overview.
+
+Belts describe completion of a track's published curriculum, not all Azure
+networking or professional certification. Available-course denominators and
+XP exclude planned tracks; future tracks must use their own course identity.
+Existing first awards and recorded content/assessment versions remain intact.
+Future additions need an explicit compatibility review: expose compatible new
+material as new modules, or scope incompatible belt requirements to a separate
+extension/edition while retaining historic achievements. Do not silently change
+published thresholds/checkpoints and thereby revoke an earned belt. This slice
+adds no edition runtime or automatic historical credit.
+
 `runner.ts` is the single progression authority. Supported check kinds dispatch
 to reusable checks, never lesson-ID branches. A passing candidate is bound to
 course/content/task/assessment identity, runtime session, practice scope and a
