@@ -796,8 +796,12 @@ npm run test:desktop
 `release` contains an assisted per-user NSIS installer and packaged application.
 Artifacts are unsigned **development** builds, not enterprise production
 releases. The filename/build identity uses `YYYY.MM.DD.N`; the package uses
-three-part semver. The application and installer use the repository's Windows
-icon resources.
+three-part semver. CI allocates the UTC date and per-date CI build number before
+packaging in its disposable checkout and records the actual executable versions;
+merging requires no version-bump commit. Publication is a separate manual
+promotion of the tested candidate, not an effect of merging or packaging.
+See the [release runbook](docs/releasing.md). The application and installer use
+the repository's Windows icon resources.
 
 Electron loads local `app://simulator/` assets, not a local HTTP service.
 Sandboxing, context isolation, CSP and main-frame/origin-checked IPC are enforced.
@@ -1058,8 +1062,12 @@ existing local diagnostics workers, packaged offline assets, narrow bridge,
 renderer Node isolation, disabled outbound integrations and remote-fetch
 blocking. The same harness accepts `DESKTOP_EXECUTABLE` to test ASAR packaging
 and the external worker resource. It does not authenticate to Azure.
-Windows CI builds/tests the unsigned NSIS development artifacts; existing
-Ubuntu web validation and Static Web Apps deployment remain unchanged.
+Windows CI builds/tests unsigned NSIS development candidates; Ubuntu retains
+the existing web quality gates. Neither job deploys or publishes on merge.
+The separate manual **Release** workflow verifies an exact successful main-push
+CI run/attempt before promoting its tested bytes. Both jobs must pass for any
+release target. Its default preflight has no production side effects; see the
+[release runbook](docs/releasing.md) for explicit deployment and publication.
 
 `npm run test:desktop-network` adds an actual Chromium startup-to-shutdown
 net-log check, reachable loopback/PAC canary and HTTP(S)/WS(S) probes for both
