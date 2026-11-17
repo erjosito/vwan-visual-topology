@@ -6,7 +6,7 @@ import { simulate } from '../src/routing'
 import { simulateAzNet } from '../src/azure-net/engine'
 import { validateTopology } from '../src/validation'
 import { parseAzNetTopology } from '../src/azure-net/admission'
-import { translate } from '../src/messages'
+import { loadLanguage, translate } from '../src/messages'
 import { PlatformJobs } from './jobs'
 import type { PlatformRequest } from '../src/platform/contract'
 import { engineVersion } from '../src/platform/contract'
@@ -51,7 +51,8 @@ describe('browser-free platform contract', () => {
     expect(inputs.some((file) => /node_modules\/react|src\/i18n\.ts|worker/.test(file))).toBe(false)
   })
 
-  it('does not leak locale state across clients or interpret placeholders inside user data', () => {
+  it('does not leak locale state across clients or interpret placeholders inside user data', async () => {
+    await loadLanguage('ja')
     expect(translate('ja', 'Shortest learned AS path ({0} ASNs).', 2)).not.toEqual(translate('en', 'Shortest learned AS path ({0} ASNs).', 2))
     expect(translate('en', '{0}', '{1}', 'private')).toBe('{1}')
     expect(executePlatform({ ...request(), locale: 'ja' }).simulation).toEqual(executePlatform({ ...request(), locale: 'en' }).simulation)

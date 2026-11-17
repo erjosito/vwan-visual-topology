@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
-import { translate } from '../src/messages'
+import { loadLanguage, translate } from '../src/messages'
 import '../src/hub-dialog-messages-ja'
 
 async function saved(page: Page, mode: string) {
@@ -13,6 +13,7 @@ async function saved(page: Page, mode: string) {
 
 for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
   test(`${mode} ${language}: discover Firewall without intent and inspect honest derived gateway capabilities`, async ({ page }, testInfo) => {
+    await loadLanguage(language)
     const text = (value: string) => translate(language, value)
     const native = hubFirewallTopology()
     delete native.hubs[0].firewall
@@ -84,6 +85,7 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
 
 for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
   test(`${mode} ${language}: reciprocal hub connections preserve originals and reject silent reattachment`, async ({ page }) => {
+    await loadLanguage(language)
     const text = (value: string) => translate(language, value)
     const native = hubFirewallTopology()
     delete native.hubs[0].firewall
@@ -160,6 +162,7 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja'] as const) {
   test(`${mode} ${language}: clear is explicit, safely focused and preserves unrelated local data`, async ({ page }) => {
+    await loadLanguage(language)
     const text = (value: string) => translate(language, value)
     await page.addInitScript((language) => {
       localStorage.setItem('vwan-visual-topology:language:v1', language)

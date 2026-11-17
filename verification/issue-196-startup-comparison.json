@@ -1,0 +1,1912 @@
+{
+  "evidenceVersion": 1,
+  "measuredAt": "2026-11-17T00:55:55.483Z",
+  "harnessRevision": "7e5cf28c209a50c51925dc9e92eb2d66fe55b9e5",
+  "environment": {
+    "node": "v22.23.5",
+    "browser": "156.0.8078.4",
+    "platform": "win32",
+    "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+    "logicalCpus": 22,
+    "totalMemory": 33983225856,
+    "availableMemoryBefore": 5752803328,
+    "availableMemoryAfter": 5271703552
+  },
+  "qualification": "20 serial invocations per artifact, alternating AB/BA pairs; fresh browser per invocation and fresh contexts per mode. Mode order is fixed. Shared machine, OS cache not reset. Loopback uncompressed artifact serving; local gzip is not Azure transfer. Nearest-rank p95 is descriptive, not statistical significance.",
+  "order": [
+    {
+      "pair": 1,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 1,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 2,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 2,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 3,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 3,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 4,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 4,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 5,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 5,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 6,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 6,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 7,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 7,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 8,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 8,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 9,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 9,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 10,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 10,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 11,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 11,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 12,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 12,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 13,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 13,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 14,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 14,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 15,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 15,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 16,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 16,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 17,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 17,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 18,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 18,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 19,
+      "artifact": "baseline"
+    },
+    {
+      "pair": 19,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 20,
+      "artifact": "candidate"
+    },
+    {
+      "pair": 20,
+      "artifact": "baseline"
+    }
+  ],
+  "artifactSha256": {
+    "baseline": "07bd48d2efd0c19a9f703f0f0997160543cc4be3e39d273a3aacea8ff0312c4d",
+    "candidate": "073adf4efa19e9329c86797cee3428c6f3db56186e98ca471dc0edd727c345cf"
+  },
+  "baseline": {
+    "initialReferencedGraph": {
+      "files": [
+        {
+          "path": "/assets/index-BtmJ4fVx.js",
+          "rawBytes": 12832,
+          "localGzipBytes": 5021
+        },
+        {
+          "path": "/assets/index-CuymhpPS.css",
+          "rawBytes": 51330,
+          "localGzipBytes": 10152
+        },
+        {
+          "path": "/assets/messages-B3lWO07I.js",
+          "rawBytes": 193565,
+          "localGzipBytes": 55188
+        },
+        {
+          "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+          "rawBytes": 726,
+          "localGzipBytes": 429
+        },
+        {
+          "path": "/assets/vendor-C1iE8mnY.js",
+          "rawBytes": 218754,
+          "localGzipBytes": 67528
+        },
+        {
+          "path": "/theme-bootstrap.js",
+          "rawBytes": 469,
+          "localGzipBytes": 274
+        }
+      ],
+      "rawBytes": 477676,
+      "localGzipBytes": 138592
+    },
+    "modes": [
+      {
+        "mode": "vwan",
+        "language": "en",
+        "initialRequests": {
+          "files": [
+            {
+              "path": "/assets/admission-CF3RUh4V.js",
+              "rawBytes": 41086,
+              "localGzipBytes": 12165
+            },
+            {
+              "path": "/assets/App-B825bGRD.js",
+              "rawBytes": 196392,
+              "localGzipBytes": 52656
+            },
+            {
+              "path": "/assets/azure-observation-8i4irJ3z.js",
+              "rawBytes": 19113,
+              "localGzipBytes": 6396
+            },
+            {
+              "path": "/assets/content-B5_TlclH.js",
+              "rawBytes": 1916,
+              "localGzipBytes": 1027
+            },
+            {
+              "path": "/assets/diagnostics-7V-stLVt.js",
+              "rawBytes": 11392,
+              "localGzipBytes": 4457
+            },
+            {
+              "path": "/assets/endpoints--tzfodK2.js",
+              "rawBytes": 203646,
+              "localGzipBytes": 41798
+            },
+            {
+              "path": "/assets/ErLocationInfoModal-Ccj3aJgk.js",
+              "rawBytes": 12697,
+              "localGzipBytes": 3365
+            },
+            {
+              "path": "/assets/FlowExportControls-BQEL1GHV.css",
+              "rawBytes": 6031,
+              "localGzipBytes": 1738
+            },
+            {
+              "path": "/assets/FlowExportControls-DM5I9v_i.js",
+              "rawBytes": 61782,
+              "localGzipBytes": 21982
+            },
+            {
+              "path": "/assets/index-BtmJ4fVx.js",
+              "rawBytes": 12832,
+              "localGzipBytes": 5021
+            },
+            {
+              "path": "/assets/index-CuymhpPS.css",
+              "rawBytes": 51330,
+              "localGzipBytes": 10152
+            },
+            {
+              "path": "/assets/messages-B3lWO07I.js",
+              "rawBytes": 193565,
+              "localGzipBytes": 55188
+            },
+            {
+              "path": "/assets/model-CLb5CF0R.js",
+              "rawBytes": 29305,
+              "localGzipBytes": 6449
+            },
+            {
+              "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+              "rawBytes": 726,
+              "localGzipBytes": 429
+            },
+            {
+              "path": "/assets/RouteMapsPanel-BeTKBBi0.js",
+              "rawBytes": 17955,
+              "localGzipBytes": 5215
+            },
+            {
+              "path": "/assets/SampleGallery-CYQcOnLE.css",
+              "rawBytes": 1357,
+              "localGzipBytes": 572
+            },
+            {
+              "path": "/assets/SampleGallery-wQv_gUVJ.js",
+              "rawBytes": 4773,
+              "localGzipBytes": 1845
+            },
+            {
+              "path": "/assets/validation-9FPiXEeP.js",
+              "rawBytes": 63152,
+              "localGzipBytes": 18129
+            },
+            {
+              "path": "/assets/vendor-C1iE8mnY.js",
+              "rawBytes": 218754,
+              "localGzipBytes": 67528
+            },
+            {
+              "path": "/assets/WorkspaceRoot-8zgf3WIL.js",
+              "rawBytes": 17875,
+              "localGzipBytes": 6104
+            },
+            {
+              "path": "/theme-bootstrap.js",
+              "rawBytes": 469,
+              "localGzipBytes": 274
+            }
+          ],
+          "rawBytes": 1166148,
+          "localGzipBytes": 322490
+        },
+        "readyMs": {
+          "samples": [
+            1141,
+            1087,
+            1070.699999988079,
+            1051,
+            1040.0999999940395,
+            1132.699999988079,
+            1008,
+            1314.199999988079,
+            1016.0999999940395,
+            1035.1000000238419,
+            1072,
+            1126.7999999821186,
+            1182.9000000059605,
+            1202.6000000238419,
+            1115.9000000059605,
+            1074.2999999821186,
+            1154.9000000059605,
+            1077.1000000238419,
+            1116.2000000178814,
+            1199.7999999821186
+          ],
+          "count": 20,
+          "median": 1101.4500000029802,
+          "p95": 1202.6000000238419,
+          "min": 1008,
+          "max": 1314.199999988079
+        },
+        "firstOptionalPanelMs": {
+          "samples": [
+            568.0612000000001,
+            398.3076000000001,
+            404.0790999999999,
+            402.65509999999995,
+            451.18100000000004,
+            425.1582000000003,
+            411.53510000000006,
+            397.06510000000026,
+            399.8715000000002,
+            400.90030000000024,
+            411.34789999999975,
+            377.8331000000003,
+            413.98929999999973,
+            573.5972000000002,
+            421.6423999999997,
+            393.2946999999999,
+            437.1206000000002,
+            418.40210000000025,
+            417.3287999999998,
+            425.8887999999997
+          ],
+          "count": 20,
+          "median": 412.7621999999999,
+          "p95": 568.0612000000001,
+          "min": 377.8331000000003,
+          "max": 573.5972000000002
+        },
+        "firstInactiveWorkspaceMs": {
+          "samples": [
+            674.5512999999996,
+            447.4737,
+            450.40920000000006,
+            494.53989999999976,
+            545.2194,
+            526.9527000000003,
+            457.57079999999996,
+            436.1296000000002,
+            416.0439000000001,
+            421.7458999999999,
+            850.2085999999999,
+            425.6836999999996,
+            435.6354000000001,
+            596.2824999999993,
+            518.0591000000004,
+            460.2910999999999,
+            540.3841000000002,
+            492.3303999999998,
+            441.69579999999996,
+            492.4531999999999
+          ],
+          "count": 20,
+          "median": 476.31074999999987,
+          "p95": 674.5512999999996,
+          "min": 416.0439000000001,
+          "max": 850.2085999999999
+        },
+        "firstJapaneseSwitchMs": {
+          "samples": [
+            429.34079999999994,
+            154.84049999999934,
+            152.74139999999989,
+            168.9286000000002,
+            201.76749999999947,
+            175.0658000000003,
+            167.64919999999984,
+            135.79249999999956,
+            116.05490000000009,
+            156.8795,
+            216.6930999999995,
+            126.85950000000048,
+            167.45910000000003,
+            362.8766999999998,
+            349.1817000000001,
+            185.2543999999998,
+            180.95699999999988,
+            148.66949999999997,
+            183.65729999999985,
+            202.46299999999974
+          ],
+          "count": 20,
+          "median": 171.99720000000025,
+          "p95": 362.8766999999998,
+          "min": 116.05490000000009,
+          "max": 429.34079999999994
+        },
+        "firstJapaneseSwitchWorkspace": "hub-spoke"
+      },
+      {
+        "mode": "hub-spoke",
+        "language": "en",
+        "initialRequests": {
+          "files": [
+            {
+              "path": "/assets/admission-CF3RUh4V.js",
+              "rawBytes": 41086,
+              "localGzipBytes": 12165
+            },
+            {
+              "path": "/assets/azure-import-C6fmtHG6.js",
+              "rawBytes": 38814,
+              "localGzipBytes": 12330
+            },
+            {
+              "path": "/assets/azure-observation-8i4irJ3z.js",
+              "rawBytes": 19113,
+              "localGzipBytes": 6396
+            },
+            {
+              "path": "/assets/AzureNetApp-uBb7LAyu.js",
+              "rawBytes": 223052,
+              "localGzipBytes": 55959
+            },
+            {
+              "path": "/assets/content-B5_TlclH.js",
+              "rawBytes": 1916,
+              "localGzipBytes": 1027
+            },
+            {
+              "path": "/assets/endpoints--tzfodK2.js",
+              "rawBytes": 203646,
+              "localGzipBytes": 41798
+            },
+            {
+              "path": "/assets/FlowExportControls-BQEL1GHV.css",
+              "rawBytes": 6031,
+              "localGzipBytes": 1738
+            },
+            {
+              "path": "/assets/FlowExportControls-DM5I9v_i.js",
+              "rawBytes": 61782,
+              "localGzipBytes": 21982
+            },
+            {
+              "path": "/assets/guidance-Bw9NryZr.js",
+              "rawBytes": 854,
+              "localGzipBytes": 445
+            },
+            {
+              "path": "/assets/index-BtmJ4fVx.js",
+              "rawBytes": 12832,
+              "localGzipBytes": 5021
+            },
+            {
+              "path": "/assets/index-CuymhpPS.css",
+              "rawBytes": 51330,
+              "localGzipBytes": 10152
+            },
+            {
+              "path": "/assets/messages-B3lWO07I.js",
+              "rawBytes": 193565,
+              "localGzipBytes": 55188
+            },
+            {
+              "path": "/assets/model-CLb5CF0R.js",
+              "rawBytes": 29305,
+              "localGzipBytes": 6449
+            },
+            {
+              "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+              "rawBytes": 726,
+              "localGzipBytes": 429
+            },
+            {
+              "path": "/assets/validation-9FPiXEeP.js",
+              "rawBytes": 63152,
+              "localGzipBytes": 18129
+            },
+            {
+              "path": "/assets/vendor-C1iE8mnY.js",
+              "rawBytes": 218754,
+              "localGzipBytes": 67528
+            },
+            {
+              "path": "/assets/workspace-7qDKlQEA.js",
+              "rawBytes": 1644,
+              "localGzipBytes": 919
+            },
+            {
+              "path": "/assets/WorkspaceRoot-8zgf3WIL.js",
+              "rawBytes": 17875,
+              "localGzipBytes": 6104
+            },
+            {
+              "path": "/theme-bootstrap.js",
+              "rawBytes": 469,
+              "localGzipBytes": 274
+            }
+          ],
+          "rawBytes": 1185946,
+          "localGzipBytes": 324033
+        },
+        "readyMs": {
+          "samples": [
+            1079.5999999940395,
+            949.8000000119209,
+            1032.7000000178814,
+            1173.300000011921,
+            1111.699999988079,
+            1087.300000011921,
+            1006.4000000059605,
+            1015.4000000059605,
+            998.5999999940395,
+            1070.0999999940395,
+            1177.199999988079,
+            1018.3999999761581,
+            1070.300000011921,
+            1110.3999999761581,
+            1033.300000011921,
+            1077,
+            1065.300000011921,
+            1062.199999988079,
+            1474.7000000178814,
+            1090.6000000238419
+          ],
+          "count": 20,
+          "median": 1070.2000000029802,
+          "p95": 1177.199999988079,
+          "min": 949.8000000119209,
+          "max": 1474.7000000178814
+        },
+        "firstOptionalPanelMs": {
+          "samples": [
+            388.1151,
+            393.89350000000013,
+            423.9268000000002,
+            430.8669999999993,
+            389.35679999999957,
+            396.09169999999995,
+            409.7019,
+            399.4966000000004,
+            379.3921,
+            446.21700000000055,
+            409.4911000000002,
+            386.20470000000023,
+            390.89429999999993,
+            390.5697,
+            398.46119999999974,
+            409.3041000000003,
+            378.6129000000001,
+            419.0113999999994,
+            428.5190999999995,
+            396.97580000000016
+          ],
+          "count": 20,
+          "median": 397.71849999999995,
+          "p95": 430.8669999999993,
+          "min": 378.6129000000001,
+          "max": 446.21700000000055
+        },
+        "firstInactiveWorkspaceMs": {
+          "samples": [
+            838.8981999999996,
+            399.4856,
+            391.42019999999957,
+            467.10189999999966,
+            401.85599999999977,
+            868.7049999999999,
+            425.89810000000034,
+            426.9849000000004,
+            468.8604999999998,
+            439.71860000000015,
+            464.1440999999995,
+            844.8970000000008,
+            456.5655999999999,
+            860.3296,
+            459.5807999999997,
+            458.40030000000024,
+            396.66379999999936,
+            394.3862000000008,
+            877.3064000000004,
+            403.70820000000003
+          ],
+          "count": 20,
+          "median": 457.4829500000001,
+          "p95": 868.7049999999999,
+          "min": 391.42019999999957,
+          "max": 877.3064000000004
+        },
+        "firstJapaneseSwitchMs": {
+          "samples": [
+            210.36040000000048,
+            162.95599999999922,
+            189.79939999999988,
+            279.5511000000006,
+            176.92100000000028,
+            335.77649999999994,
+            164.83100000000013,
+            192.21910000000025,
+            182.13590000000022,
+            181.7416000000003,
+            223.01810000000023,
+            184.59860000000026,
+            174.57939999999962,
+            284.5596999999998,
+            295.1960000000008,
+            187.67550000000028,
+            143.07030000000032,
+            219.52509999999984,
+            407.6435999999994,
+            183.84079999999994
+          ],
+          "count": 20,
+          "median": 188.73745000000008,
+          "p95": 335.77649999999994,
+          "min": 143.07030000000032,
+          "max": 407.6435999999994
+        },
+        "firstJapaneseSwitchWorkspace": "vwan"
+      },
+      {
+        "mode": "full",
+        "language": "en",
+        "initialRequests": {
+          "files": [
+            {
+              "path": "/assets/admission-CF3RUh4V.js",
+              "rawBytes": 41086,
+              "localGzipBytes": 12165
+            },
+            {
+              "path": "/assets/azure-import-C6fmtHG6.js",
+              "rawBytes": 38814,
+              "localGzipBytes": 12330
+            },
+            {
+              "path": "/assets/azure-observation-8i4irJ3z.js",
+              "rawBytes": 19113,
+              "localGzipBytes": 6396
+            },
+            {
+              "path": "/assets/AzureNetApp-uBb7LAyu.js",
+              "rawBytes": 223052,
+              "localGzipBytes": 55959
+            },
+            {
+              "path": "/assets/content-B5_TlclH.js",
+              "rawBytes": 1916,
+              "localGzipBytes": 1027
+            },
+            {
+              "path": "/assets/endpoints--tzfodK2.js",
+              "rawBytes": 203646,
+              "localGzipBytes": 41798
+            },
+            {
+              "path": "/assets/FlowExportControls-BQEL1GHV.css",
+              "rawBytes": 6031,
+              "localGzipBytes": 1738
+            },
+            {
+              "path": "/assets/FlowExportControls-DM5I9v_i.js",
+              "rawBytes": 61782,
+              "localGzipBytes": 21982
+            },
+            {
+              "path": "/assets/guidance-Bw9NryZr.js",
+              "rawBytes": 854,
+              "localGzipBytes": 445
+            },
+            {
+              "path": "/assets/index-BtmJ4fVx.js",
+              "rawBytes": 12832,
+              "localGzipBytes": 5021
+            },
+            {
+              "path": "/assets/index-CuymhpPS.css",
+              "rawBytes": 51330,
+              "localGzipBytes": 10152
+            },
+            {
+              "path": "/assets/messages-B3lWO07I.js",
+              "rawBytes": 193565,
+              "localGzipBytes": 55188
+            },
+            {
+              "path": "/assets/model-CLb5CF0R.js",
+              "rawBytes": 29305,
+              "localGzipBytes": 6449
+            },
+            {
+              "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+              "rawBytes": 726,
+              "localGzipBytes": 429
+            },
+            {
+              "path": "/assets/validation-9FPiXEeP.js",
+              "rawBytes": 63152,
+              "localGzipBytes": 18129
+            },
+            {
+              "path": "/assets/vendor-C1iE8mnY.js",
+              "rawBytes": 218754,
+              "localGzipBytes": 67528
+            },
+            {
+              "path": "/assets/workspace-7qDKlQEA.js",
+              "rawBytes": 1644,
+              "localGzipBytes": 919
+            },
+            {
+              "path": "/assets/WorkspaceRoot-8zgf3WIL.js",
+              "rawBytes": 17875,
+              "localGzipBytes": 6104
+            },
+            {
+              "path": "/theme-bootstrap.js",
+              "rawBytes": 469,
+              "localGzipBytes": 274
+            }
+          ],
+          "rawBytes": 1185946,
+          "localGzipBytes": 324033
+        },
+        "readyMs": {
+          "samples": [
+            996.8000000119209,
+            996.3000000119209,
+            1042.5,
+            1129,
+            1019.0999999940395,
+            1155.2000000178814,
+            1032.0999999940395,
+            1024.7000000178814,
+            1036.4000000059605,
+            1000.5,
+            1042.9000000059605,
+            1066.2999999821186,
+            1020.1999999880791,
+            1012.5,
+            1050.7000000178814,
+            987.5,
+            1058.0999999940395,
+            1013.4000000059605,
+            1121,
+            1241.9000000059605
+          ],
+          "count": 20,
+          "median": 1034.25,
+          "p95": 1155.2000000178814,
+          "min": 987.5,
+          "max": 1241.9000000059605
+        },
+        "firstOptionalPanelMs": {
+          "samples": [
+            381.09160000000156,
+            372.77580000000034,
+            467.0513000000001,
+            385.73319999999876,
+            401.04519999999957,
+            380.5553,
+            420.8062,
+            372.74019999999837,
+            374.96929999999975,
+            388.8030000000008,
+            412.3069999999989,
+            387.46080000000075,
+            388.7691999999997,
+            396.3865000000005,
+            442.5658000000003,
+            377.47539999999935,
+            389.04179999999997,
+            377.59340000000066,
+            385.6181000000015,
+            396.65329999999994
+          ],
+          "count": 20,
+          "median": 388.11500000000024,
+          "p95": 442.5658000000003,
+          "min": 372.74019999999837,
+          "max": 467.0513000000001
+        },
+        "firstInactiveWorkspaceMs": {
+          "samples": [
+            440.16090000000077,
+            451.9391999999989,
+            489.2008000000005,
+            415.5116999999991,
+            471.91209999999955,
+            868.8976000000002,
+            868.9605000000001,
+            395.54659999999967,
+            843.1826000000001,
+            412.6333000000013,
+            843.2205000000013,
+            469.3598000000002,
+            511.3907999999992,
+            428.5556000000015,
+            452.1839,
+            548.8670999999995,
+            856.6658000000007,
+            438.83309999999983,
+            437.7322000000004,
+            403.5016999999989
+          ],
+          "count": 20,
+          "median": 460.7718500000001,
+          "p95": 868.8976000000002,
+          "min": 395.54659999999967,
+          "max": 868.9605000000001
+        },
+        "firstJapaneseSwitchMs": {
+          "samples": [
+            194.9475999999995,
+            212.28809999999976,
+            290.4908000000014,
+            227.65189999999893,
+            170.6893,
+            153.20830000000024,
+            140.01000000000022,
+            158.8786,
+            108.98209999999926,
+            155.35360000000037,
+            107.32779999999912,
+            190.97090000000026,
+            295.85669999999845,
+            189.7982000000011,
+            231.90869999999995,
+            223.92399999999907,
+            147.8076000000001,
+            198.90769999999975,
+            215.9449999999997,
+            263.91140000000087
+          ],
+          "count": 20,
+          "median": 192.95924999999988,
+          "p95": 290.4908000000014,
+          "min": 107.32779999999912,
+          "max": 295.85669999999845
+        },
+        "firstJapaneseSwitchWorkspace": "vwan"
+      }
+    ],
+    "initialJapaneseWorkspace": {
+      "mode": "full",
+      "language": "ja",
+      "readyMs": {
+        "samples": [
+          1091.699999988079,
+          1474.5999999940395,
+          1188.5999999940395,
+          1362.0999999940395,
+          1209.5,
+          1122.9000000059605,
+          1204.2999999821186,
+          1361,
+          1287.800000011921,
+          1064.7000000178814,
+          1101.5999999940395,
+          1445,
+          1394.5999999940395,
+          1397.1000000238419,
+          1190.4000000059605,
+          1178.7999999821186,
+          1086.7000000178814,
+          1377.199999988079,
+          1414.199999988079,
+          1345.4000000059605
+        ],
+        "count": 20,
+        "median": 1248.6500000059605,
+        "p95": 1445,
+        "min": 1064.7000000178814,
+        "max": 1474.5999999940395
+      },
+      "initialRequests": {
+        "files": [
+          {
+            "path": "/assets/admission-CF3RUh4V.js",
+            "rawBytes": 41086,
+            "localGzipBytes": 12165
+          },
+          {
+            "path": "/assets/azure-import-C6fmtHG6.js",
+            "rawBytes": 38814,
+            "localGzipBytes": 12330
+          },
+          {
+            "path": "/assets/azure-observation-8i4irJ3z.js",
+            "rawBytes": 19113,
+            "localGzipBytes": 6396
+          },
+          {
+            "path": "/assets/AzureNetApp-uBb7LAyu.js",
+            "rawBytes": 223052,
+            "localGzipBytes": 55959
+          },
+          {
+            "path": "/assets/content-B5_TlclH.js",
+            "rawBytes": 1916,
+            "localGzipBytes": 1027
+          },
+          {
+            "path": "/assets/endpoints--tzfodK2.js",
+            "rawBytes": 203646,
+            "localGzipBytes": 41798
+          },
+          {
+            "path": "/assets/FlowExportControls-BQEL1GHV.css",
+            "rawBytes": 6031,
+            "localGzipBytes": 1738
+          },
+          {
+            "path": "/assets/FlowExportControls-DM5I9v_i.js",
+            "rawBytes": 61782,
+            "localGzipBytes": 21982
+          },
+          {
+            "path": "/assets/guidance-Bw9NryZr.js",
+            "rawBytes": 854,
+            "localGzipBytes": 445
+          },
+          {
+            "path": "/assets/index-BtmJ4fVx.js",
+            "rawBytes": 12832,
+            "localGzipBytes": 5021
+          },
+          {
+            "path": "/assets/index-CuymhpPS.css",
+            "rawBytes": 51330,
+            "localGzipBytes": 10152
+          },
+          {
+            "path": "/assets/messages-B3lWO07I.js",
+            "rawBytes": 193565,
+            "localGzipBytes": 55188
+          },
+          {
+            "path": "/assets/model-CLb5CF0R.js",
+            "rawBytes": 29305,
+            "localGzipBytes": 6449
+          },
+          {
+            "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+            "rawBytes": 726,
+            "localGzipBytes": 429
+          },
+          {
+            "path": "/assets/validation-9FPiXEeP.js",
+            "rawBytes": 63152,
+            "localGzipBytes": 18129
+          },
+          {
+            "path": "/assets/vendor-C1iE8mnY.js",
+            "rawBytes": 218754,
+            "localGzipBytes": 67528
+          },
+          {
+            "path": "/assets/workspace-7qDKlQEA.js",
+            "rawBytes": 1644,
+            "localGzipBytes": 919
+          },
+          {
+            "path": "/assets/WorkspaceRoot-8zgf3WIL.js",
+            "rawBytes": 17875,
+            "localGzipBytes": 6104
+          },
+          {
+            "path": "/theme-bootstrap.js",
+            "rawBytes": 469,
+            "localGzipBytes": 274
+          }
+        ],
+        "rawBytes": 1185946,
+        "localGzipBytes": 324033
+      }
+    }
+  },
+  "candidate": {
+    "initialReferencedGraph": {
+      "files": [
+        {
+          "path": "/assets/index-BMKGxNlv.js",
+          "rawBytes": 12324,
+          "localGzipBytes": 4862
+        },
+        {
+          "path": "/assets/index-CuymhpPS.css",
+          "rawBytes": 51330,
+          "localGzipBytes": 10152
+        },
+        {
+          "path": "/assets/messages-BjA1yf1E.js",
+          "rawBytes": 546,
+          "localGzipBytes": 388
+        },
+        {
+          "path": "/assets/preload-helper-CRzLMJPS.js",
+          "rawBytes": 1534,
+          "localGzipBytes": 798
+        },
+        {
+          "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+          "rawBytes": 726,
+          "localGzipBytes": 429
+        },
+        {
+          "path": "/assets/vendor-C1iE8mnY.js",
+          "rawBytes": 218754,
+          "localGzipBytes": 67528
+        },
+        {
+          "path": "/theme-bootstrap.js",
+          "rawBytes": 469,
+          "localGzipBytes": 274
+        }
+      ],
+      "rawBytes": 285683,
+      "localGzipBytes": 84431
+    },
+    "modes": [
+      {
+        "mode": "vwan",
+        "language": "en",
+        "initialRequests": {
+          "files": [
+            {
+              "path": "/assets/admission-CF3RUh4V.js",
+              "rawBytes": 41086,
+              "localGzipBytes": 12165
+            },
+            {
+              "path": "/assets/App-9RCyyzlI.js",
+              "rawBytes": 196479,
+              "localGzipBytes": 52687
+            },
+            {
+              "path": "/assets/azure-observation-8i4irJ3z.js",
+              "rawBytes": 19113,
+              "localGzipBytes": 6396
+            },
+            {
+              "path": "/assets/content-B5_TlclH.js",
+              "rawBytes": 1916,
+              "localGzipBytes": 1027
+            },
+            {
+              "path": "/assets/diagnostics-CIBw-UBj.js",
+              "rawBytes": 11392,
+              "localGzipBytes": 4456
+            },
+            {
+              "path": "/assets/endpoints--tzfodK2.js",
+              "rawBytes": 203646,
+              "localGzipBytes": 41798
+            },
+            {
+              "path": "/assets/ErLocationInfoModal-Ccj3aJgk.js",
+              "rawBytes": 12697,
+              "localGzipBytes": 3365
+            },
+            {
+              "path": "/assets/FlowExportControls-BQEL1GHV.css",
+              "rawBytes": 6031,
+              "localGzipBytes": 1738
+            },
+            {
+              "path": "/assets/FlowExportControls-CwWO7sLH.js",
+              "rawBytes": 62356,
+              "localGzipBytes": 22110
+            },
+            {
+              "path": "/assets/index-BMKGxNlv.js",
+              "rawBytes": 12324,
+              "localGzipBytes": 4862
+            },
+            {
+              "path": "/assets/index-CuymhpPS.css",
+              "rawBytes": 51330,
+              "localGzipBytes": 10152
+            },
+            {
+              "path": "/assets/messages-BjA1yf1E.js",
+              "rawBytes": 546,
+              "localGzipBytes": 388
+            },
+            {
+              "path": "/assets/model-CLb5CF0R.js",
+              "rawBytes": 29305,
+              "localGzipBytes": 6449
+            },
+            {
+              "path": "/assets/preload-helper-CRzLMJPS.js",
+              "rawBytes": 1534,
+              "localGzipBytes": 798
+            },
+            {
+              "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+              "rawBytes": 726,
+              "localGzipBytes": 429
+            },
+            {
+              "path": "/assets/RouteMapsPanel-Dlfx073Q.js",
+              "rawBytes": 17955,
+              "localGzipBytes": 5215
+            },
+            {
+              "path": "/assets/SampleGallery-CeEC2z2Z.js",
+              "rawBytes": 4773,
+              "localGzipBytes": 1844
+            },
+            {
+              "path": "/assets/SampleGallery-CYQcOnLE.css",
+              "rawBytes": 1357,
+              "localGzipBytes": 572
+            },
+            {
+              "path": "/assets/validation-9FPiXEeP.js",
+              "rawBytes": 63152,
+              "localGzipBytes": 18129
+            },
+            {
+              "path": "/assets/vendor-C1iE8mnY.js",
+              "rawBytes": 218754,
+              "localGzipBytes": 67528
+            },
+            {
+              "path": "/assets/WorkspaceRoot-Y6aOdd7n.js",
+              "rawBytes": 18013,
+              "localGzipBytes": 6151
+            },
+            {
+              "path": "/theme-bootstrap.js",
+              "rawBytes": 469,
+              "localGzipBytes": 274
+            }
+          ],
+          "rawBytes": 974954,
+          "localGzipBytes": 268533
+        },
+        "readyMs": {
+          "samples": [
+            1139.5,
+            1143.1000000238419,
+            1110.5,
+            1063.2000000178814,
+            3854.2999999821186,
+            1061.300000011921,
+            1072,
+            1204.800000011921,
+            1074.7000000178814,
+            1066.5,
+            1136.2999999821186,
+            1115.199999988079,
+            1036.4000000059605,
+            1049.0999999940395,
+            1138,
+            999.6000000238419,
+            1111,
+            1046,
+            1083.7000000178814,
+            1139
+          ],
+          "count": 20,
+          "median": 1097.1000000089407,
+          "p95": 1204.800000011921,
+          "min": 999.6000000238419,
+          "max": 3854.2999999821186
+        },
+        "firstOptionalPanelMs": {
+          "samples": [
+            424.90560000000005,
+            452.3879999999999,
+            466.3580000000002,
+            409.87030000000004,
+            534.0414000000001,
+            392.5724,
+            469.36190000000033,
+            431.7912000000001,
+            406.7282,
+            401.3775999999998,
+            458.12710000000015,
+            392.52059999999983,
+            505.7817,
+            423.15700000000015,
+            432.6683000000003,
+            395.55610000000024,
+            439.68690000000015,
+            441.1488999999997,
+            589.1414,
+            429.87639999999965
+          ],
+          "count": 20,
+          "median": 432.2297500000002,
+          "p95": 534.0414000000001,
+          "min": 392.52059999999983,
+          "max": 589.1414
+        },
+        "firstInactiveWorkspaceMs": {
+          "samples": [
+            481.7049000000002,
+            529.1342,
+            444.6965999999993,
+            508.74749999999995,
+            626.4526999999998,
+            477.64789999999994,
+            551.7933000000003,
+            428.06079999999974,
+            491.5778,
+            858.8555000000001,
+            456.84079999999994,
+            409.93190000000004,
+            622.6077999999998,
+            441.5708999999997,
+            525.1834999999996,
+            475.2826,
+            852.1178000000004,
+            493.1909999999998,
+            623.5506999999998,
+            444.9921999999997
+          ],
+          "count": 20,
+          "median": 492.3843999999999,
+          "p95": 852.1178000000004,
+          "min": 409.93190000000004,
+          "max": 858.8555000000001
+        },
+        "firstJapaneseSwitchMs": {
+          "samples": [
+            167.0010000000002,
+            227.6144000000004,
+            174.66739999999936,
+            180.34000000000015,
+            296.5770000000002,
+            275.9333999999999,
+            292.77869999999984,
+            162.41949999999952,
+            255.92239999999993,
+            194.6324999999997,
+            267.45510000000013,
+            162.75409999999965,
+            277.0740000000005,
+            140.01240000000007,
+            257.1764000000003,
+            167.63190000000031,
+            251.73049999999967,
+            214.9952000000003,
+            256.3747000000003,
+            202.9935000000005
+          ],
+          "count": 20,
+          "median": 221.30480000000034,
+          "p95": 292.77869999999984,
+          "min": 140.01240000000007,
+          "max": 296.5770000000002
+        },
+        "firstJapaneseSwitchWorkspace": "hub-spoke"
+      },
+      {
+        "mode": "hub-spoke",
+        "language": "en",
+        "initialRequests": {
+          "files": [
+            {
+              "path": "/assets/admission-CF3RUh4V.js",
+              "rawBytes": 41086,
+              "localGzipBytes": 12165
+            },
+            {
+              "path": "/assets/azure-import-C6fmtHG6.js",
+              "rawBytes": 38814,
+              "localGzipBytes": 12330
+            },
+            {
+              "path": "/assets/azure-observation-8i4irJ3z.js",
+              "rawBytes": 19113,
+              "localGzipBytes": 6396
+            },
+            {
+              "path": "/assets/AzureNetApp-C7Peqoza.js",
+              "rawBytes": 223171,
+              "localGzipBytes": 55998
+            },
+            {
+              "path": "/assets/content-B5_TlclH.js",
+              "rawBytes": 1916,
+              "localGzipBytes": 1027
+            },
+            {
+              "path": "/assets/endpoints--tzfodK2.js",
+              "rawBytes": 203646,
+              "localGzipBytes": 41798
+            },
+            {
+              "path": "/assets/FlowExportControls-BQEL1GHV.css",
+              "rawBytes": 6031,
+              "localGzipBytes": 1738
+            },
+            {
+              "path": "/assets/FlowExportControls-CwWO7sLH.js",
+              "rawBytes": 62356,
+              "localGzipBytes": 22110
+            },
+            {
+              "path": "/assets/guidance-Bw9NryZr.js",
+              "rawBytes": 854,
+              "localGzipBytes": 445
+            },
+            {
+              "path": "/assets/index-BMKGxNlv.js",
+              "rawBytes": 12324,
+              "localGzipBytes": 4862
+            },
+            {
+              "path": "/assets/index-CuymhpPS.css",
+              "rawBytes": 51330,
+              "localGzipBytes": 10152
+            },
+            {
+              "path": "/assets/messages-BjA1yf1E.js",
+              "rawBytes": 546,
+              "localGzipBytes": 388
+            },
+            {
+              "path": "/assets/model-CLb5CF0R.js",
+              "rawBytes": 29305,
+              "localGzipBytes": 6449
+            },
+            {
+              "path": "/assets/preload-helper-CRzLMJPS.js",
+              "rawBytes": 1534,
+              "localGzipBytes": 798
+            },
+            {
+              "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+              "rawBytes": 726,
+              "localGzipBytes": 429
+            },
+            {
+              "path": "/assets/validation-9FPiXEeP.js",
+              "rawBytes": 63152,
+              "localGzipBytes": 18129
+            },
+            {
+              "path": "/assets/vendor-C1iE8mnY.js",
+              "rawBytes": 218754,
+              "localGzipBytes": 67528
+            },
+            {
+              "path": "/assets/workspace-7qDKlQEA.js",
+              "rawBytes": 1644,
+              "localGzipBytes": 919
+            },
+            {
+              "path": "/assets/WorkspaceRoot-Y6aOdd7n.js",
+              "rawBytes": 18013,
+              "localGzipBytes": 6151
+            },
+            {
+              "path": "/theme-bootstrap.js",
+              "rawBytes": 469,
+              "localGzipBytes": 274
+            }
+          ],
+          "rawBytes": 994784,
+          "localGzipBytes": 270086
+        },
+        "readyMs": {
+          "samples": [
+            1025.0999999940395,
+            1014.3000000119209,
+            959.2000000178814,
+            1011.8000000119209,
+            1038.7000000178814,
+            998.9000000059605,
+            1025.2999999821186,
+            956.1999999880791,
+            1211.1000000238419,
+            1008.9000000059605,
+            1050.2999999821186,
+            1001.5,
+            1065.699999988079,
+            971.0999999940395,
+            1000.8000000119209,
+            1058.9000000059605,
+            984.3000000119209,
+            986.2999999821186,
+            1004.3000000119209,
+            1029.199999988079
+          ],
+          "count": 20,
+          "median": 1010.3500000089407,
+          "p95": 1065.699999988079,
+          "min": 956.1999999880791,
+          "max": 1211.1000000238419
+        },
+        "firstOptionalPanelMs": {
+          "samples": [
+            363.71609999999964,
+            370.79339999999956,
+            409.1732999999995,
+            385.35579999999936,
+            409.15680000000066,
+            384.3211000000001,
+            395.0110000000004,
+            385.6927000000005,
+            421.41579999999976,
+            379.1899999999996,
+            384.95840000000044,
+            388.1823999999997,
+            390.03150000000005,
+            375.27250000000004,
+            378.9242000000004,
+            420.46159999999963,
+            378.1741000000002,
+            376.7537000000002,
+            375.91160000000036,
+            384.4381999999996
+          ],
+          "count": 20,
+          "median": 384.6983,
+          "p95": 420.46159999999963,
+          "min": 363.71609999999964,
+          "max": 421.41579999999976
+        },
+        "firstInactiveWorkspaceMs": {
+          "samples": [
+            407.6112999999996,
+            396.6693000000005,
+            422.53109999999924,
+            419.8616999999995,
+            433.4774000000016,
+            852.8996999999999,
+            411.91179999999986,
+            510.40819999999985,
+            883.5991999999997,
+            437.4447,
+            841.0876000000007,
+            388.8756000000003,
+            404.96730000000025,
+            381.98219999999947,
+            843.4704000000002,
+            515.2750999999998,
+            386.10149999999976,
+            392.9953000000005,
+            377.2489999999998,
+            381.1281999999992
+          ],
+          "count": 20,
+          "median": 415.88674999999967,
+          "p95": 852.8996999999999,
+          "min": 377.2489999999998,
+          "max": 883.5991999999997
+        },
+        "firstJapaneseSwitchMs": {
+          "samples": [
+            276.14999999999964,
+            209.73879999999917,
+            226.15040000000045,
+            447.7536,
+            276.1761999999999,
+            183.44580000000042,
+            194.26460000000043,
+            382.9443000000001,
+            343.41020000000026,
+            444.35180000000037,
+            138.52410000000054,
+            198.35549999999967,
+            200.53710000000046,
+            142.4372000000003,
+            412.6923999999999,
+            445.1346999999996,
+            165.08259999999973,
+            182.07690000000002,
+            172.39919999999984,
+            146.71209999999974
+          ],
+          "count": 20,
+          "median": 205.13794999999982,
+          "p95": 445.1346999999996,
+          "min": 138.52410000000054,
+          "max": 447.7536
+        },
+        "firstJapaneseSwitchWorkspace": "vwan"
+      },
+      {
+        "mode": "full",
+        "language": "en",
+        "initialRequests": {
+          "files": [
+            {
+              "path": "/assets/admission-CF3RUh4V.js",
+              "rawBytes": 41086,
+              "localGzipBytes": 12165
+            },
+            {
+              "path": "/assets/azure-import-C6fmtHG6.js",
+              "rawBytes": 38814,
+              "localGzipBytes": 12330
+            },
+            {
+              "path": "/assets/azure-observation-8i4irJ3z.js",
+              "rawBytes": 19113,
+              "localGzipBytes": 6396
+            },
+            {
+              "path": "/assets/AzureNetApp-C7Peqoza.js",
+              "rawBytes": 223171,
+              "localGzipBytes": 55998
+            },
+            {
+              "path": "/assets/content-B5_TlclH.js",
+              "rawBytes": 1916,
+              "localGzipBytes": 1027
+            },
+            {
+              "path": "/assets/endpoints--tzfodK2.js",
+              "rawBytes": 203646,
+              "localGzipBytes": 41798
+            },
+            {
+              "path": "/assets/FlowExportControls-BQEL1GHV.css",
+              "rawBytes": 6031,
+              "localGzipBytes": 1738
+            },
+            {
+              "path": "/assets/FlowExportControls-CwWO7sLH.js",
+              "rawBytes": 62356,
+              "localGzipBytes": 22110
+            },
+            {
+              "path": "/assets/guidance-Bw9NryZr.js",
+              "rawBytes": 854,
+              "localGzipBytes": 445
+            },
+            {
+              "path": "/assets/index-BMKGxNlv.js",
+              "rawBytes": 12324,
+              "localGzipBytes": 4862
+            },
+            {
+              "path": "/assets/index-CuymhpPS.css",
+              "rawBytes": 51330,
+              "localGzipBytes": 10152
+            },
+            {
+              "path": "/assets/messages-BjA1yf1E.js",
+              "rawBytes": 546,
+              "localGzipBytes": 388
+            },
+            {
+              "path": "/assets/model-CLb5CF0R.js",
+              "rawBytes": 29305,
+              "localGzipBytes": 6449
+            },
+            {
+              "path": "/assets/preload-helper-CRzLMJPS.js",
+              "rawBytes": 1534,
+              "localGzipBytes": 798
+            },
+            {
+              "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+              "rawBytes": 726,
+              "localGzipBytes": 429
+            },
+            {
+              "path": "/assets/validation-9FPiXEeP.js",
+              "rawBytes": 63152,
+              "localGzipBytes": 18129
+            },
+            {
+              "path": "/assets/vendor-C1iE8mnY.js",
+              "rawBytes": 218754,
+              "localGzipBytes": 67528
+            },
+            {
+              "path": "/assets/workspace-7qDKlQEA.js",
+              "rawBytes": 1644,
+              "localGzipBytes": 919
+            },
+            {
+              "path": "/assets/WorkspaceRoot-Y6aOdd7n.js",
+              "rawBytes": 18013,
+              "localGzipBytes": 6151
+            },
+            {
+              "path": "/theme-bootstrap.js",
+              "rawBytes": 469,
+              "localGzipBytes": 274
+            }
+          ],
+          "rawBytes": 994784,
+          "localGzipBytes": 270086
+        },
+        "readyMs": {
+          "samples": [
+            997,
+            1004.4000000059605,
+            1036.5999999940395,
+            1047.0999999940395,
+            1023.6999999880791,
+            1106.9000000059605,
+            997.7999999821186,
+            1033,
+            1148.7000000178814,
+            1191.800000011921,
+            987.7000000178814,
+            1029.300000011921,
+            946.7999999821186,
+            947.0999999940395,
+            1123.5,
+            1193.4000000059605,
+            989.5,
+            1041.5,
+            1000,
+            1019.9000000059605
+          ],
+          "count": 20,
+          "median": 1026.5,
+          "p95": 1191.800000011921,
+          "min": 946.7999999821186,
+          "max": 1193.4000000059605
+        },
+        "firstOptionalPanelMs": {
+          "samples": [
+            374.7612000000008,
+            374.71480000000065,
+            408.5673999999999,
+            407.4308000000001,
+            451.9243999999999,
+            380.21810000000005,
+            374.88720000000103,
+            411.2024000000001,
+            539.5673999999999,
+            385.1185000000005,
+            405.09269999999924,
+            353.7041999999992,
+            383.66769999999906,
+            376.5056000000004,
+            429.5742000000009,
+            451.238800000001,
+            401.3894,
+            367.84199999999873,
+            391.8616000000002,
+            399.6404000000002
+          ],
+          "count": 20,
+          "median": 395.7510000000002,
+          "p95": 451.9243999999999,
+          "min": 353.7041999999992,
+          "max": 539.5673999999999
+        },
+        "firstInactiveWorkspaceMs": {
+          "samples": [
+            391.83749999999964,
+            427.46140000000014,
+            404.0547000000006,
+            529.7480999999989,
+            505.7471999999998,
+            431.84580000000096,
+            401.13510000000133,
+            394.8666999999987,
+            901.7031999999999,
+            400.0648000000001,
+            394.09969999999885,
+            390.6310000000003,
+            434.90010000000075,
+            380.79070000000047,
+            475.3538000000008,
+            485.547700000001,
+            840.6216000000004,
+            847.7183999999997,
+            427.09749999999985,
+            484.10000000000036
+          ],
+          "count": 20,
+          "median": 429.65360000000055,
+          "p95": 847.7183999999997,
+          "min": 380.79070000000047,
+          "max": 901.7031999999999
+        },
+        "firstJapaneseSwitchMs": {
+          "samples": [
+            154.97729999999865,
+            213.6376999999993,
+            190.32450000000063,
+            232.3885999999984,
+            390.2988999999998,
+            220.48760000000038,
+            260.73049999999967,
+            186.70960000000014,
+            312.89660000000003,
+            211.424500000001,
+            185.8247999999985,
+            210.5036999999993,
+            414.59720000000016,
+            233.4387000000006,
+            343.4974000000002,
+            262.9449000000004,
+            205.9958999999999,
+            137.40149999999994,
+            318.3654000000006,
+            261.01950000000033
+          ],
+          "count": 20,
+          "median": 226.4380999999994,
+          "p95": 390.2988999999998,
+          "min": 137.40149999999994,
+          "max": 414.59720000000016
+        },
+        "firstJapaneseSwitchWorkspace": "vwan"
+      }
+    ],
+    "initialJapaneseWorkspace": {
+      "mode": "full",
+      "language": "ja",
+      "readyMs": {
+        "samples": [
+          1124.5,
+          1152.5,
+          1073.5999999940395,
+          1085.0999999940395,
+          1220.0999999940395,
+          1083.5,
+          1109.199999988079,
+          1119.7000000178814,
+          1029.800000011921,
+          1109.1000000238419,
+          1170.5,
+          1048,
+          1369.1000000238419,
+          1071.2999999821186,
+          1039.7999999821186,
+          1181.5,
+          1069.300000011921,
+          1494.5999999940395,
+          1165.199999988079,
+          1136.5
+        ],
+        "count": 20,
+        "median": 1114.4500000029802,
+        "p95": 1369.1000000238419,
+        "min": 1029.800000011921,
+        "max": 1494.5999999940395
+      },
+      "initialRequests": {
+        "files": [
+          {
+            "path": "/assets/admission-CF3RUh4V.js",
+            "rawBytes": 41086,
+            "localGzipBytes": 12165
+          },
+          {
+            "path": "/assets/azure-import-C6fmtHG6.js",
+            "rawBytes": 38814,
+            "localGzipBytes": 12330
+          },
+          {
+            "path": "/assets/azure-observation-8i4irJ3z.js",
+            "rawBytes": 19113,
+            "localGzipBytes": 6396
+          },
+          {
+            "path": "/assets/AzureNetApp-C7Peqoza.js",
+            "rawBytes": 223171,
+            "localGzipBytes": 55998
+          },
+          {
+            "path": "/assets/content-B5_TlclH.js",
+            "rawBytes": 1916,
+            "localGzipBytes": 1027
+          },
+          {
+            "path": "/assets/endpoints--tzfodK2.js",
+            "rawBytes": 203646,
+            "localGzipBytes": 41798
+          },
+          {
+            "path": "/assets/FlowExportControls-BQEL1GHV.css",
+            "rawBytes": 6031,
+            "localGzipBytes": 1738
+          },
+          {
+            "path": "/assets/FlowExportControls-CwWO7sLH.js",
+            "rawBytes": 62356,
+            "localGzipBytes": 22110
+          },
+          {
+            "path": "/assets/guidance-Bw9NryZr.js",
+            "rawBytes": 854,
+            "localGzipBytes": 445
+          },
+          {
+            "path": "/assets/index-BMKGxNlv.js",
+            "rawBytes": 12324,
+            "localGzipBytes": 4862
+          },
+          {
+            "path": "/assets/index-CuymhpPS.css",
+            "rawBytes": 51330,
+            "localGzipBytes": 10152
+          },
+          {
+            "path": "/assets/japanese-catalog-DnKoaNp7.js",
+            "rawBytes": 193373,
+            "localGzipBytes": 55035
+          },
+          {
+            "path": "/assets/messages-BjA1yf1E.js",
+            "rawBytes": 546,
+            "localGzipBytes": 388
+          },
+          {
+            "path": "/assets/model-CLb5CF0R.js",
+            "rawBytes": 29305,
+            "localGzipBytes": 6449
+          },
+          {
+            "path": "/assets/preload-helper-CRzLMJPS.js",
+            "rawBytes": 1534,
+            "localGzipBytes": 798
+          },
+          {
+            "path": "/assets/rolldown-runtime-XKyaHtl9.js",
+            "rawBytes": 726,
+            "localGzipBytes": 429
+          },
+          {
+            "path": "/assets/validation-9FPiXEeP.js",
+            "rawBytes": 63152,
+            "localGzipBytes": 18129
+          },
+          {
+            "path": "/assets/vendor-C1iE8mnY.js",
+            "rawBytes": 218754,
+            "localGzipBytes": 67528
+          },
+          {
+            "path": "/assets/workspace-7qDKlQEA.js",
+            "rawBytes": 1644,
+            "localGzipBytes": 919
+          },
+          {
+            "path": "/assets/WorkspaceRoot-Y6aOdd7n.js",
+            "rawBytes": 18013,
+            "localGzipBytes": 6151
+          },
+          {
+            "path": "/theme-bootstrap.js",
+            "rawBytes": 469,
+            "localGzipBytes": 274
+          }
+        ],
+        "rawBytes": 1188157,
+        "localGzipBytes": 325121
+      }
+    }
+  }
+}

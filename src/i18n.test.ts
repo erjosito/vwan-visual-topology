@@ -1,10 +1,18 @@
-import { describe, expect, it } from 'vitest'
-import { localizeDiagnostic, readLanguage, translate } from './i18n'
+import { beforeAll, describe, expect, it } from 'vitest'
+import { loadLanguage, localizeDiagnostic, readLanguage, translate } from './i18n'
 import { example } from './model'
 import { simulate, traceFlow } from './routing'
 import { validateTopology } from './validation'
 
+const earlyDiagnostic = localizeDiagnostic('Forwarding loop at Before catalog.', 'ja')
+beforeAll(() => loadLanguage('ja'))
+
 describe('localization boundaries', () => {
+  it('does not cache incomplete diagnostic templates before the catalog arrives', () => {
+    expect(earlyDiagnostic).toBe('Forwarding loop at Before catalog.')
+    expect(localizeDiagnostic('Forwarding loop at Before catalog.', 'ja')).toBe('Before catalog で転送ループが発生しました。')
+  })
+
   it('translates declared context-provenance envelopes without rewriting opaque imported hub names', () => {
     const name = 'BGP table {2}: Hub route-table inventory is incomplete'
     for (const reason of [
