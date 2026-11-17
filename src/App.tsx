@@ -17,7 +17,6 @@ import { ErLocationInfoModal } from './ErLocationInfoModal'
 import type { ErCircuitSku } from './er-locations-catalog'
 import { CanvasOverlay } from './CanvasOverlay'
 import { hubGatewayConnections } from './hub-gateways'
-import { SampleGallery } from './SampleGallery'
 import { WorkspaceTools } from './WorkspaceTools'
 import { vwanWorkspaceIdentity, vwanWorkspaceObjects } from './workspace-objects'
 import { RouteInspector } from './RouteInspector'
@@ -51,6 +50,7 @@ import { FlowExportControls } from './FlowExportControls'
 import { pruneDeletedInventory } from './inventory'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const SampleGallery = lazy(() => import('./SampleGallery').then((module) => ({ default: module.VwanSampleGallery })))
 const HubCapabilitiesDialog = lazy(() => import('./HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('./ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
 const TopologyContextMenu = lazy(() => import('./TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
@@ -69,43 +69,6 @@ const parseNode = (key: string): PathNode => {
   const index = key.slice(0, key.indexOf(':'))
   return { kind: index as PathNode['kind'], id: key.slice(key.indexOf(':') + 1) }
 }
-
-const VWAN_SAMPLE_GALLERY: Array<{
-  id: string
-  title: string
-  summary: string
-  file?: string
-}> = [
-  {
-    id: 'default-example',
-    title: 'Dual-Hub Enterprise Virtual WAN (Default Workspace)',
-    summary: 'Two regional Virtual Hubs (Europe & US) with ExpressRoute, S2S VPN, SD-WAN, Route Maps, and Spoke VNets.',
-  },
-  {
-    id: 'hub-routing-preferences',
-    title: 'Hub Routing Preferences (ExpressRoute vs VPN vs AS Path)',
-    summary: 'Three hubs connected to the same dual-homed branch site, each configured with a different Hub Routing Preference (ExpressRoute, VpnGateway, ASPath).',
-    file: '/docs/samples/hub-routing-preferences.json',
-  },
-  {
-    id: 'secured-hub-routing-intent',
-    title: 'Secured Virtual Hub with Private & Internet Routing Intent',
-    summary: 'Two hubs where West Europe enforces Private + Internet Routing Intent through Azure Firewall while North Europe remains unsecured.',
-    file: '/docs/samples/secured-hub-routing-intent.json',
-  },
-  {
-    id: 'spoke-bgp-nva-transit',
-    title: 'Spoke BGP NVA Transit & Indirect Spoke/Branch Reachability',
-    summary: 'A transit spoke hosting a BGP NVA peering with the Virtual Hub (ASN 65515) and advertising downstream peered VNet and SD-WAN branch prefixes.',
-    file: '/docs/samples/spoke-bgp-nva-transit.json',
-  },
-  {
-    id: 'three-hub-all-features-asymmetric',
-    title: 'Three-Hub Enterprise Showcase (All Features & Asymmetric Bypass)',
-    summary: 'Exercises all Virtual WAN features across 3 regional hubs and intentionally triggers asymmetric Firewall bypass & route-map findings for Check routing.',
-    file: '/docs/samples/three-hub-all-features-asymmetric.json',
-  },
-]
 
 function App() {
   const workspaceSession = useWorkspaceSession()
@@ -341,9 +304,11 @@ function App() {
     setRouter({ kind: 'hub', id: next.hubs[0]?.id ?? '' })
   }
   const loadGallerySample = async (id: string, signal: AbortSignal) => {
+    const request = ++importRequest.current
+    const { VWAN_SAMPLE_GALLERY } = await import('./sample-catalog')
+    if (signal.aborted || request !== importRequest.current) return false
     const entry = VWAN_SAMPLE_GALLERY.find((sample) => sample.id === id)
     if (!entry) return false
-    const request = ++importRequest.current
     try {
       const loaded = entry.file ? await fetch(entry.file, { signal }).then(async (res) => {
         if (!res.ok) throw new Error(`Sample topology "${entry.id}" not found.`)
@@ -364,11 +329,14 @@ function App() {
     const sample = new URLSearchParams(location.search).get('sample')?.trim() ?? ''
     if (!/^[a-z0-9-]+$/.test(sample)) return
     sampleLoaded.current = true
-    void fetch(`/docs/samples/${sample}.json`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error(`Sample topology "${sample}" not found.`)
-        return validateTopology(await res.json())
-      })
+    void import('./sample-catalog').then(async ({ VWAN_SAMPLE_GALLERY, resolveSampleIdAlias }) => {
+      const id = resolveSampleIdAlias(sample)
+      const entry = VWAN_SAMPLE_GALLERY.find((item) => item.id === id)
+      if (entry && !entry.file) return validateTopology(structuredClone(example))
+      const res = await fetch(entry?.file ?? `/docs/samples/${id}.json`)
+      if (!res.ok) throw new Error(`Sample topology "${sample}" not found.`)
+      return validateTopology(await res.json())
+    })
       .then((loaded) => {
         if (!mounted.current) return
         clearHistory()
@@ -683,9 +651,11 @@ function App() {
         {selection?.kind === 'hub' && <button type="button" onClick={() => setSnatHubId(selection.id)}>{t('Firewall SNAT')}</button>}
         <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
-    {panel === 'samples' && <SampleGallery entries={VWAN_SAMPLE_GALLERY} testIdPrefix="vwan"
+    {panel === 'samples' && <Suspense fallback={null}><SampleGallery testIdPrefix="vwan"
       hasWorkspace={topology.name !== 'New topology' || !!(topology.hubs.length || topology.spokes.length || topology.sites.length || topology.connections.length || topology.routeMaps?.length || topology.erLocations?.length)}
-      onLoad={loadGallerySample} onExport={() => exportTopology()} onClose={closePanel} />}
+      onLoad={loadGallerySample} onExport={() => exportTopology()}
+      onOpenCurriculum={workspaceSession?.setLearningView ? () => workspaceSession.setLearningView?.({ open: true }) : undefined}
+      onClose={closePanel} /></Suspense>}
     <ErLocationInfoModal
       isOpen={erLocationModal.open}
       initialLocationName={erLocationModal.peeringLocation}

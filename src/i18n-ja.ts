@@ -1,5 +1,8 @@
+import { sampleCatalogJa } from './sample-catalog-ja'
+
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  ...sampleCatalogJa,
   'Add Azure Firewall': 'Azure Firewall を追加',
   'Configure Azure Firewall': 'Azure Firewall を構成',
   'Gateway capabilities (modeled)': 'ゲートウェイ機能 (モデル)',

@@ -1,22 +1,28 @@
 import { useEffect, useRef, useState } from 'react'
+import type { ComponentProps } from 'react'
 import { t } from './i18n'
+import {
+  DIFFICULTY_LABELS,
+  SAMPLE_TRACKS,
+  VWAN_SAMPLE_GALLERY,
+  type SampleDifficulty,
+  type SampleGalleryEntry,
+  type SampleTrackId,
+} from './sample-catalog'
 import './sample-gallery.css'
 
-export interface SampleGalleryEntry {
-  id: string
-  title: string
-  summary: string
-  category?: 'flagship' | 'validation'
-  badges?: string[]
-}
+export type { SampleGalleryEntry }
 
-export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, onLoad, onExport, onClose }: {
+const difficultyLevels = ['foundational', 'intermediate', 'advanced'] as const
+
+export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, onLoad, onExport, onOpenCurriculum, onClose }: {
   entries: readonly SampleGalleryEntry[]
   currentId?: string
   hasWorkspace: boolean
   testIdPrefix: string
   onLoad: (id: string, signal: AbortSignal) => Promise<boolean>
   onExport: () => void
+  onOpenCurriculum?: () => void
   onClose: () => void
 }) {
   const dialog = useRef<HTMLDialogElement>(null)
@@ -25,6 +31,10 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
   const lastChoice = useRef<HTMLButtonElement>(null)
   const request = useRef<AbortController | undefined>(undefined)
   const [query, setQuery] = useState('')
+  const [collection, setCollection] = useState<'flagship' | 'validation'>('flagship')
+  const [trackFilter, setTrackFilter] = useState<'all' | SampleTrackId>('all')
+  const [difficultyFilter, setDifficultyFilter] = useState<'all' | SampleDifficulty>('all')
+  const [expandedId, setExpandedId] = useState<string>()
   const [pending, setPending] = useState<SampleGalleryEntry>()
   const [loadingId, setLoadingId] = useState<string>()
   const [error, setError] = useState('')
@@ -59,9 +69,22 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
     }
   }
   const search = query.trim().toLocaleLowerCase()
-  const visible = entries.filter((entry) =>
-    [entry.id, t(entry.title), t(entry.summary), ...(entry.badges ?? []).map((badge) => t(badge))]
-      .join(' ').toLocaleLowerCase().includes(search))
+  const availableTracks = SAMPLE_TRACKS.filter((track) => entries.some((entry) => entry.track === track.id))
+  const visible = entries.filter((entry) => {
+    if (entry.category !== collection) return false
+    if (trackFilter !== 'all' && entry.track !== trackFilter) return false
+    if (difficultyFilter !== 'all' && entry.difficulty !== difficultyFilter) return false
+    if (!search) return true
+    const haystack = [
+      entry.id,
+      ...(entry.aliases ?? []),
+      t(entry.title),
+      t(entry.summary),
+      t(entry.purpose),
+      ...entry.concepts.map((concept) => t(concept)),
+    ].join(' ').toLocaleLowerCase()
+    return haystack.includes(search)
+  })
   return <dialog ref={dialog} className="object-dialog sample-gallery" aria-labelledby="sample-gallery-title"
     data-testid={`${testIdPrefix}-sample-gallery-modal`} onClose={onClose}
     onCancel={(event) => { event.preventDefault(); close() }}
@@ -90,8 +113,33 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
       <button type="button" data-testid={`${testIdPrefix}-close-sample-gallery-btn`} aria-label={t('Close sample gallery')} onClick={close}>{t('Close')}</button>
     </div>
     <p>{t('Browse reference designs and validation scenarios. Loading a sample replaces the current workspace; export JSON first to keep a copy.')}</p>
-    <label className="field"><span>{t('Search samples')}</span><input ref={searchInput} type="search" value={query}
-      onChange={(event) => setQuery(event.target.value)} disabled={!!loadingId} /></label>
+    <label className="field"><span>{t('Collection')}</span>
+      <select value={collection} disabled={!!loadingId || !!pending}
+        onChange={(event) => { setCollection(event.target.value as 'flagship' | 'validation'); setTrackFilter('all'); setDifficultyFilter('all') }}>
+        <option value="flagship">{t('Reference topologies')}</option>
+        <option value="validation">{t('Validation scenarios')}</option>
+      </select>
+    </label>
+    <p>{t('Samples are open-ended workspaces, not assessed practice. Validation scenarios may contain intentional faults. Related lessons remain in course order in Learn & practice.')}</p>
+    <div className="sample-gallery-filters">
+      <label className="field"><span>{t('Search samples')}</span><input ref={searchInput} type="search" value={query}
+        onChange={(event) => setQuery(event.target.value)} disabled={!!loadingId || !!pending} /></label>
+      <label className="field"><span>{t('Concept track')}</span>
+        <select value={trackFilter} data-testid={`${testIdPrefix}-gallery-track-filter`}
+          onChange={(event) => setTrackFilter(event.target.value as 'all' | SampleTrackId)} disabled={!!loadingId || !!pending}>
+          <option value="all">{t('All concept tracks')}</option>
+          {availableTracks.map((track) => <option key={track.id} value={track.id}>{t(track.label)}</option>)}
+        </select>
+      </label>
+      <label className="field"><span>{t('Complexity')}</span>
+        <select value={difficultyFilter} data-testid={`${testIdPrefix}-gallery-difficulty-filter`}
+          onChange={(event) => setDifficultyFilter(event.target.value as 'all' | SampleDifficulty)} disabled={!!loadingId || !!pending}>
+          <option value="all">{t('All levels')}</option>
+          {difficultyLevels.map((level) =>
+            <option key={level} value={level}>{t(DIFFICULTY_LABELS[level])}</option>)}
+        </select>
+      </label>
+    </div>
     <p className="muted" role="status">{loadingId ? t('Loading sample…') : t('Showing {0} of {1} samples', visible.length, entries.length)}</p>
     {error && <p role="alert" className="notice error">{t(error)}</p>}
     {pending && <section className="sample-replacement" aria-label={t('Replace current workspace')}>
@@ -108,28 +156,69 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
     </section>}
     {!visible.length && <p>{t('No samples match your search.')}</p>}
     <div className="sample-gallery-groups" aria-busy={!!loadingId}>
-      {(['flagship', 'validation'] as const).map((category) => {
-        const group = visible.filter((entry) => (entry.category ?? 'flagship') === category)
-        return !!group.length && <section key={category}>
-          <h3>{t(category === 'flagship' ? 'Reference topologies' : 'Validation scenarios')}</h3>
+      {availableTracks.map((track) => {
+        const group = visible.filter((entry) => entry.track === track.id)
+          .sort((a, b) => difficultyLevels.indexOf(a.difficulty) - difficultyLevels.indexOf(b.difficulty))
+        return !!group.length && <section key={track.id} data-testid={`${testIdPrefix}-gallery-track-${track.id}`}>
+          <div className="sample-track-header">
+            <h3>{t(track.label)}</h3>
+            <p className="muted">{t(track.description)}</p>
+          </div>
           <div className="sample-gallery-grid">
-            {group.map((entry) => <article key={entry.id} className={`sample-gallery-card${currentId === entry.id ? ' current' : ''}`}
-              data-testid={`${testIdPrefix}-gallery-card-${entry.id}`}>
-              <h4>{t(entry.title)}</h4>
-              <p>{t(entry.summary)}</p>
-              <div className="sample-gallery-badges">{entry.badges?.map((badge) => <span key={badge}>{t(badge)}</span>)}</div>
-              {currentId === entry.id && <span className="muted">{t('Current sample')}</span>}
-              <button type="button" className="primary" data-testid={`${testIdPrefix}-gallery-load-${entry.id}`}
-                disabled={!!loadingId || !!pending} onClick={(event) => {
-                  lastChoice.current = event.currentTarget
-                  setError(''); if (hasWorkspace) setPending(entry); else void load(entry)
-                }}>
-                {t('Load sample topology')}
-              </button>
-            </article>)}
+            {group.map((entry) => {
+              const isExpanded = expandedId === entry.id
+              return <article key={entry.id} className={`sample-gallery-card${currentId === entry.id ? ' current' : ''}`}
+                data-testid={`${testIdPrefix}-gallery-card-${entry.id}`}>
+                <div className="sample-card-meta-row">
+                  <span className={`sample-tier-pill tier-${entry.difficulty}`}>{t(DIFFICULTY_LABELS[entry.difficulty])}</span>
+                  <span className="sample-kind-pill">{t(entry.category === 'flagship' ? 'Reference architecture' : 'Validation case study')}</span>
+                  {currentId === entry.id && <span className="muted">{t('Current sample')}</span>}
+                </div>
+                <h4>{t(entry.title)}</h4>
+                <p>{t(entry.summary)}</p>
+                <p className="sample-purpose"><strong>{t('Why inspect this:')}</strong> {t(entry.purpose)}</p>
+                <div className="sample-concepts">
+                  <strong>{t('Key concepts:')}</strong> {entry.concepts.map((concept) => t(concept)).join(' · ')}
+                </div>
+                {entry.curriculum && <div className="sample-curriculum-callout">
+                  <span><strong>{t('Related practice objective:')}</strong> {t(entry.curriculum.title)}</span>
+                  {onOpenCurriculum && <button type="button" className="sample-link-btn"
+                    data-testid={`${testIdPrefix}-gallery-curriculum-${entry.id}`}
+                    disabled={!!loadingId || !!pending}
+                    onClick={() => { close(); onOpenCurriculum() }}>
+                    {t('Open Learn & practice')}
+                  </button>}
+                </div>}
+                {isExpanded && <div className="sample-study-guide" data-testid={`${testIdPrefix}-gallery-guide-${entry.id}`}>
+                  <p><strong>{t('Prerequisites:')}</strong> {t(entry.prerequisites)}</p>
+                  <p><strong>{t('Try this after loading:')}</strong> {t(entry.suggestedExperiment)}</p>
+                  <p><strong>{t('Supported capabilities:')}</strong> {entry.capabilities.map((cap) => t(cap)).join(' · ')}</p>
+                  <p><strong>{t('Scope & limitations:')}</strong> {entry.limitations.map((lim) => t(lim)).join(' ')}</p>
+                </div>}
+                <div className="sample-card-actions">
+                  <button type="button" data-testid={`${testIdPrefix}-gallery-details-${entry.id}`}
+                    aria-expanded={isExpanded}
+                    disabled={!!loadingId}
+                    onClick={() => setExpandedId(isExpanded ? undefined : entry.id)}>
+                    {t(isExpanded ? 'Hide study guide' : 'Study guide & scope')}
+                  </button>
+                  <button type="button" className="primary" data-testid={`${testIdPrefix}-gallery-load-${entry.id}`}
+                    disabled={!!loadingId || !!pending} onClick={(event) => {
+                      lastChoice.current = event.currentTarget
+                      setError(''); if (hasWorkspace) setPending(entry); else void load(entry)
+                    }}>
+                    {t('Load sample topology')}
+                  </button>
+                </div>
+              </article>
+            })}
           </div>
         </section>
       })}
     </div>
   </dialog>
+}
+
+export function VwanSampleGallery(props: Omit<ComponentProps<typeof SampleGallery>, 'entries'>) {
+  return <SampleGallery {...props} entries={VWAN_SAMPLE_GALLERY} />
 }

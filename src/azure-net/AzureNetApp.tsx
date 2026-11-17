@@ -11,6 +11,7 @@ import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
+import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
@@ -80,99 +81,6 @@ import {
 
 type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor' | 'azure'
 
-interface AzNetSampleCatalogEntry {
-  id: string
-  title: string
-  summary: string
-  category: 'flagship' | 'validation'
-  badges: string[]
-}
-
-const FLAGSHIP_BADGES: Record<string, string[]> = {
-  'hub-spoke-firewall-udr': ['Hub & Spoke', 'AzFW Inspection', 'GatewaySubnet UDR', 'Private Endpoint /32'],
-  'ars-sdwan-nva-coexistence': ['Azure Route Server', 'SD-WAN BGP NVA', 'ER + VPN B2B', 'BGP Propagation'],
-  'dual-hub-vnra-global-peering': ['Dual-Region Hubs', 'Managed VNRA', 'Global Peering', 'Chained UDRs'],
-  'hybrid-vwan-and-hub-spoke': ['Secured vWAN Hub', 'Classic Hub-and-Spoke', 'Shared ER location', 'Routing Intent'],
-  'enterprise-vnet-all-features-showcase': ['All Features', '2 Regional Hubs', 'AzFW + ARS + SD-WAN', 'PE Policies & BGP LPM'],
-}
-
-const AZURE_NET_VALIDATION_SCENARIOS: AzNetSampleCatalogEntry[] = [
-  {
-    id: 'uc1-hub-spoke-nva-ars-baseline',
-    title: 'UC1 · Hub & Spoke + NVA + Route Server Baseline',
-    summary: 'Symmetric Hub & Spoke inspection through a Linux BGP NVA peering with Azure Route Server (ASN 65515) and Gateway Transit to spokes.',
-    category: 'validation',
-    badges: ['UC1 Validated', 'Route Server', 'BGP NVA', 'Gateway Transit'],
-  },
-  {
-    id: 'uc2-gateway-subnet-missing-udr-asymmetry',
-    title: 'UC2 · GatewaySubnet Missing Return UDR Asymmetry',
-    summary: 'Outbound spoke traffic traverses the Hub NVA/Firewall via UDR, while inbound on-premises return traffic from the Gateway bypasses inspection.',
-    category: 'validation',
-    badges: ['UC2 Validated', 'Asymmetric Inspection', 'GatewaySubnet UDR', 'Auto-Fixable'],
-  },
-  {
-    id: 'uc3-bgp-propagation-and-peering-gates',
-    title: 'UC3 · BGP Route Propagation & Peering Gates',
-    summary: 'Contrasts disableBgpRoutePropagation true vs false on spoke route tables alongside VNet Peering allowForwardedTraffic and useRemoteGateways gates.',
-    category: 'validation',
-    badges: ['UC3 Validated', 'BGP Propagation', 'Peering Gates', 'Remote Gateways'],
-  },
-  {
-    id: 'uc4-private-endpoint-udr-override',
-    title: 'UC4 · Private Endpoint /32 System Route vs RouteTableEnabled',
-    summary: 'Compares PrivateEndpointNetworkPolicies Disabled (/32 InterfaceEndpoint system route overrides /24 UDR) against RouteTableEnabled.',
-    category: 'validation',
-    badges: ['UC4 Validated', 'Private Endpoint /32', 'RouteTableEnabled', 'LPM Override'],
-  },
-  {
-    id: 'uc5-ars-branch-to-branch-and-bgp-selection',
-    title: 'UC5 · ARS Branch-to-Branch & Hub Routing Preference',
-    summary: 'Tests Azure Route Server branchToBranchTraffic and hubRoutingPreference (ExpressRoute vs VpnGateway vs ASPath) across multi-homed paths.',
-    category: 'validation',
-    badges: ['UC5 Validated', 'ARS Preference', 'AS-Path Prepend', 'Branch-to-Branch'],
-  },
-  {
-    id: 'uc6-ars-default-route-self-blackhole',
-    title: 'UC6 · ARS 0.0.0.0/0 NVA Self-Loop Blackhole Trap',
-    summary: 'When an NVA advertises 0.0.0.0/0 to Azure Route Server and its own subnet leaves BGP propagation enabled, ARS programs 0.0.0.0/0 back to the NVA NIC.',
-    category: 'validation',
-    badges: ['UC6 Validated', 'ARS Self-Loop', '0.0.0.0/0 Trap', 'Auto-Fixable'],
-  },
-  {
-    id: 'uc7-bgp-lpm-bypasses-summary-udr',
-    title: 'UC7 · BGP /16 LPM Bypassing /8 Summary UDR',
-    summary: 'A spoke with a 10.0.0.0/8 summary UDR to a Firewall but BGP propagation enabled learns a more-specific /16 BGP route that wins by LPM and bypasses the Firewall.',
-    category: 'validation',
-    badges: ['UC7 Validated', 'BGP LPM Bypass', 'Summary UDR', 'Asymmetric Drop'],
-  },
-  {
-    id: 'uc8-udr-next-hop-types-and-vng-transit-trap',
-    title: 'UC8 · All 5 UDR Next-Hop Types & VNG Transit Trap',
-    summary: 'Exercises VirtualAppliance, VnetLocal, Internet, None (Blackhole), and VirtualNetworkGateway UDR next-hop types on one spoke route table.',
-    category: 'validation',
-    badges: ['UC8 Validated', '5 Next-Hop Types', 'Blackhole Route', 'VnetLocal Override'],
-  },
-  {
-    id: 'uc9-expressroute-hairpin-two-vnets',
-    title: 'UC9 · Cross-VNet Transit via Shared ExpressRoute Location',
-    summary: 'Two independent VNets (no VNet Peering) with standalone ExpressRoute Gateways linked to the same ExpressRoute location (ASN 12076) exchanging routes via BGP.',
-    category: 'validation',
-    badges: ['UC9 Validated', 'Shared ER location', 'ASN 12076 Hairpin', 'No VNet Peering'],
-  },
-]
-
-const ALL_AZURE_NET_CATALOG: AzNetSampleCatalogEntry[] = [
-  ...AZURE_NET_SAMPLES.map((s) => ({
-    id: s.id,
-    title: s.title,
-    summary: s.summary ?? '',
-    category: 'flagship' as const,
-    badges: FLAGSHIP_BADGES[s.id] ?? ['Reference Topology'],
-  })),
-  ...AZURE_NET_VALIDATION_SCENARIOS,
-]
-
 function encodeTopologyToUrlHash(topology: AzNetTopology): string {
   const json = JSON.stringify(topology)
   const bytes = new TextEncoder().encode(json)
@@ -185,7 +93,7 @@ function encodeTopologyToUrlHash(topology: AzNetTopology): string {
 
 function resolveInitialUrlSample() {
   if (typeof window === 'undefined') return null
-  const requested = new URLSearchParams(window.location.search).get('sample')?.trim() ?? ''
+  const requested = resolveSampleIdAlias(new URLSearchParams(window.location.search).get('sample') ?? '')
   if (!requested) return null
   return AZURE_NET_SAMPLES.find((s) => s.id === requested) ?? null
 }
@@ -286,7 +194,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [pendingUrlSample, setPendingUrlSample] = useState(() => {
     if (workspaceSession?.practice) return ''
     if (cachedHistory?.provider === 'azure-net') return cachedHistory.pendingUrlSample
-    const requested = new URLSearchParams(window.location.search).get('sample') ?? ''
+    const requested = resolveSampleIdAlias(new URLSearchParams(window.location.search).get('sample') ?? '')
     return !initialResolved.snapshotImported && /^[a-z0-9-]+$/.test(requested) && !resolveInitialUrlSample() ? requested : ''
   })
   useLayoutEffect(() => {
@@ -724,6 +632,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [])
 
   const loadSample = async (id: string, signal?: AbortSignal) => {
+    id = resolveSampleIdAlias(id)
     const request = ++sampleRequest.current
     try {
       if (id && !/^[a-z0-9-]+$/.test(id)) return false
@@ -1141,21 +1050,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     return null
   }, [routeSelection, topology, simulation, scenario.affected, hubTableInspection])
 
-  const visibleFlagshipSamples = useMemo(
-    () =>
-      simulatorMode === 'hub-spoke'
-        ? AZURE_NET_SAMPLES.filter((s) => s.id !== 'hybrid-vwan-and-hub-spoke')
-        : AZURE_NET_SAMPLES,
-    [simulatorMode],
-  )
   const visibleCatalogEntries = useMemo(
     () =>
       simulatorMode === 'hub-spoke'
-        ? ALL_AZURE_NET_CATALOG.filter((s) => s.id !== 'hybrid-vwan-and-hub-spoke')
-        : ALL_AZURE_NET_CATALOG,
+        ? AZURE_NET_SAMPLE_GALLERY.filter((s) => !s.fullHybridOnly)
+        : AZURE_NET_SAMPLE_GALLERY,
     [simulatorMode],
   )
-  const currentSampleMeta = ALL_AZURE_NET_CATALOG.find((s) => s.id === sampleId)
+  const currentSampleMeta = AZURE_NET_SAMPLE_GALLERY.find((s) => s.id === sampleId)
 
   const handleExportJson = () => {
     const blob = new Blob([JSON.stringify(topology, null, 2)], { type: 'application/json' })
@@ -2949,20 +2851,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             {sampleId === 'shared-topology' && (
               <option value="shared-topology">🔗 Shared URL Topology</option>
             )}
-            <optgroup label={`Flagship Reference Topologies (${visibleFlagshipSamples.length})`}>
-              {visibleFlagshipSamples.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </optgroup>
-            <optgroup label="Empirical Validation Scenarios (UC1–UC9)">
-              {AZURE_NET_VALIDATION_SCENARIOS.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.title}
-                </option>
-              ))}
-            </optgroup>
+            {(['flagship', 'validation'] as const).map((category) =>
+              <optgroup key={category} label={t(category === 'flagship' ? 'Reference topologies' : 'Validation scenarios')}>
+                {visibleCatalogEntries.filter((s) => s.category === category).map((s) =>
+                  <option key={s.id} value={s.id}>{t(s.title)}</option>)}
+              </optgroup>)}
           </select>
 
           <button
@@ -6100,7 +5993,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
       {sampleGalleryOpen && <Suspense fallback={null}><SampleGallery entries={visibleCatalogEntries} currentId={sampleId} testIdPrefix="aznet"
         hasWorkspace={topology.name !== 'Empty Topology' || !!(topology.vnets.length || topology.vwanHubs.length || topology.sites.length || topology.erLocations.length || topology.udrTables.length || topology.routeMaps?.length || topology.vnetPeerings.length || topology.erLinks.length || topology.vpnConnections.length || topology.siteLinks.length)}
-        onLoad={loadSample} onExport={handleExportJson} onClose={() => setSampleGalleryOpen(false)} /></Suspense>}
+        onLoad={loadSample} onExport={handleExportJson}
+        onOpenCurriculum={workspaceSession?.setLearningView ? () => workspaceSession.setLearningView?.({ open: true }) : undefined}
+        onClose={() => setSampleGalleryOpen(false)} /></Suspense>}
 
       {/* ExpressRoute Peering Locations & Providers Modal (#43, #44) */}
       {erLocationModalState.hasOpened && <Suspense fallback={null}><ErLocationInfoModal

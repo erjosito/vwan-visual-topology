@@ -4,6 +4,12 @@
 
 This directory contains ready-to-import Virtual WAN topology JSON files used in the [User Guide & Worked Examples](../docs/README.md) ([日本語ガイド](../docs/README.ja.md) · [live docs on `vwan-simulator.com/docs/`](https://vwan-simulator.com/docs/)).
 
+For the curated concept tracks, prerequisites, limitations and the disposition
+of all 19 gallery entries, see the [sample catalog](../docs/sample-catalog.md).
+The gallery opens with reference topologies; validation scenarios (including
+the two all-features diagnostic stress cases) are a separate collection.
+Loading a sample is open-ended exploration, not an assessed practice session.
+
 | File | Scenario | Live Simulator Link |
 | :--- | :--- | :--- |
 | [`hub-routing-preferences.json`](./hub-routing-preferences.json) | **Example 1:** `ExpressRoute` vs `ASPath` hub routing preference with dual ExpressRoute + BGP VPN connections | [Open in Simulator](https://vwan-simulator.com/?sample=hub-routing-preferences) |

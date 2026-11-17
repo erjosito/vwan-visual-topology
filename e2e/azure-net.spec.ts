@@ -501,9 +501,10 @@ test.describe('Azure Networking Simulator Preview (/?mode=azure-net)', () => {
     await page.getByTestId('aznet-tab-diagnostics').click()
     await expect(page.getByTestId('aznet-finding-bgp-routes-suppressed')).toBeVisible()
 
-    // Open Sample Gallery modal and load the 5th flagship all-features showcase topology
+    // Load the all-features stress case from the secondary validation collection.
     await page.getByTestId('aznet-open-sample-gallery-btn').click()
     await expect(page.getByTestId('aznet-sample-gallery-modal')).toBeVisible()
+    await page.getByTestId('aznet-sample-gallery-modal').getByRole('combobox', { name: 'Collection', exact: true }).selectOption('validation')
     await expect(page.getByTestId('aznet-gallery-card-uc9-expressroute-hairpin-two-vnets')).toBeVisible()
     await page.getByTestId('aznet-gallery-load-enterprise-vnet-all-features-showcase').click()
     await page.getByRole('button', { name: 'Replace and load', exact: true }).click()

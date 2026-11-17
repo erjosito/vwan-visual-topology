@@ -1,18 +1,31 @@
-.sample-gallery.object-dialog { width: min(1040px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); padding: 20px; box-sizing: border-box; overflow-y: auto; font-family: 'DM Sans', system-ui, sans-serif; }
+.sample-gallery.object-dialog { width: min(1080px, calc(100vw - 24px)); max-width: none; max-height: calc(100dvh - 24px); padding: 20px; box-sizing: border-box; overflow-y: auto; font-family: 'DM Sans', system-ui, sans-serif; }
 .sample-gallery .dialog-heading { justify-content: space-between; gap: 12px; }
 .sample-gallery .dialog-heading h2 { margin: 0; }
-.sample-gallery-groups { display: grid; gap: 20px; }
-.sample-gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px; }
-.sample-gallery-card { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 0; overflow-wrap: anywhere; }
+.sample-gallery-filters { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(2, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.sample-gallery-groups { display: grid; gap: 22px; }
+.sample-track-header { display: grid; gap: 4px; margin-bottom: 10px; }
+.sample-track-header h3, .sample-track-header p { margin: 0; }
+.sample-gallery-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+.sample-gallery-card { display: flex; flex-direction: column; gap: 8px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-width: 0; overflow-wrap: anywhere; }
 .sample-gallery-card.current { border-color: var(--accent); background: var(--surface-muted); }
 .sample-gallery-card h4, .sample-gallery-card p { margin: 0; }
-.sample-gallery-card p { line-height: 1.5; }
-.sample-gallery-card button { margin-top: auto; }
-.sample-gallery-badges { display: flex; flex-wrap: wrap; gap: 5px; }
-.sample-gallery-badges span { padding: 3px 6px; border-radius: 4px; background: var(--info-surface); color: var(--info); font-size: 12px; }
+.sample-gallery-card p { line-height: 1.45; font-size: 13px; }
+.sample-card-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 11.5px; }
+.sample-tier-pill, .sample-kind-pill { padding: 2px 7px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.sample-tier-pill.tier-foundational { background: var(--success-surface); color: var(--success); }
+.sample-tier-pill.tier-intermediate { background: var(--info-surface); color: var(--info); }
+.sample-tier-pill.tier-advanced { background: var(--purple-surface); color: var(--purple); }
+.sample-kind-pill { background: var(--surface-muted); color: var(--text-muted); border: 1px solid var(--border); }
+.sample-purpose, .sample-concepts { font-size: 12.5px; color: var(--text); }
+.sample-curriculum-callout { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; padding: 6px 8px; border-radius: 6px; background: var(--surface-muted); border: 1px solid var(--border); font-size: 12px; }
+.sample-link-btn { padding: 4px 8px; font-size: 11.5px; }
+.sample-study-guide { display: grid; gap: 6px; padding: 8px 10px; border-radius: 6px; background: var(--surface-muted); border: 1px solid var(--border); font-size: 12px; }
+.sample-card-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 4px; }
+.sample-card-actions button { flex: 1 1 auto; }
 .sample-replacement { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 16px; background: var(--warning-surface); }
 .sample-replacement h3 { margin: 0; }
-@media (max-width: 600px) {
+@media (max-width: 720px) {
   .sample-gallery.object-dialog { padding: 12px; }
+  .sample-gallery-filters { grid-template-columns: minmax(0, 1fr); }
   .sample-gallery .row { flex-wrap: wrap; }
 }
