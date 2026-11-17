@@ -1,6 +1,7 @@
 import { cidr, contains, ipv4 } from '../validation'
 import { mappedVpnAddress, translateVpnRoutes, validateVpnNat } from '../vpn-nat'
 import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
+import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
 import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
@@ -151,6 +152,7 @@ export interface AzTraceHop {
   matchedRoute?: AzEffectiveRoute
   edgeId?: string
   hubTableId?: string
+  haPorts?: HaPortsAssessment
 }
 
 export type AzTraceStatus =
@@ -1762,6 +1764,16 @@ export function traceAzNetFlow(
     }
   }
 
+  const unsupportedNvaHaHop = (vnet: AzVNet, app: AzAppliance, address?: string): AzFlowTrace | undefined => {
+    const haPorts = resolveHaPortsNextHop(topology, simulation, address)
+    if (!haPorts) return
+    const reason = 'NVA-originated or chained HA-ports steering is outside the single workload-UDR boundary; no onward forwarding is inferred.'
+    pushHop({ nodeKind: 'appliance', nodeId: app.id, vnetId: vnet.id, nodeName: app.name, subnetId: app.subnetId,
+      action: 'dropped', haPorts: { ...haPorts, status: 'not-assessed', selected: undefined, applianceId: undefined, reason }, detail: reason })
+    return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
+      hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+  }
+
   let ipNum = ipv4(destinationIp)!
   if (ipNum === undefined) {
     return {
@@ -2258,7 +2270,20 @@ export function traceAzNetFlow(
       }
 
       if (matched.nextHopType === 'VirtualAppliance') {
-        const found = findApplianceByIp(topology, matched.nextHopIp)
+        const haPorts = resolveHaPortsNextHop(topology, simulation, matched.nextHopIp)
+        const outsideHaScope = !targetInfo.endpoint || destinationIp === haPorts?.frontendAddress || hops.some((hop) => hop.haPorts)
+        if (haPorts && (outsideHaScope || haPorts.status !== 'selected')) {
+          const reason = outsideHaScope
+            ? 'HA ports supports one steering boundary per leg toward an independently owned destination; direct VIP destinations, Internet and chained LB steering are not assessed.' : haPorts.reason
+          const assessment: HaPortsAssessment = outsideHaScope
+            ? { ...haPorts, status: 'not-assessed', selected: undefined, applianceId: undefined, reason } : haPorts
+          pushHop({ nodeKind: 'subnet', nodeId: subnet.id, vnetId: vnet.id, nodeName: vnet.name,
+            subnetId: subnet.id, action: 'dropped', matchedRoute: matched, haPorts: assessment, detail: reason })
+          return { source, destinationIp, destinationLabel: targetInfo.label,
+            status: assessment.status === 'blocked' ? 'dropped-no-route' : 'not-assessed',
+            hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: reason }
+        }
+        const found = findApplianceByIp(topology, haPorts?.backendAddress ?? matched.nextHopIp)
         if (!found) {
           pushHop({
             nodeKind: 'subnet',
@@ -2323,7 +2348,8 @@ export function traceAzNetFlow(
             action: 'peering-cross',
             matchedRoute: matched,
             edgeId: check.peering.id,
-            detail: `Steered by ${matched.originLabel} across peering "${check.peering.name}" to ${found.appliance.name} (${found.appliance.privateIp})`,
+            ...(haPorts ? { haPorts } : {}),
+            detail: `Steered by ${matched.originLabel} across peering "${check.peering.name}" to ${found.appliance.name} (${found.appliance.privateIp})${haPorts ? `. ${haPorts.reason}` : ''}`,
           })
         } else {
           pushHop({
@@ -2335,7 +2361,8 @@ export function traceAzNetFlow(
             subnetName: subnet.name,
             action: 'subnet-lookup',
             matchedRoute: matched,
-            detail: `Steered by ${matched.originLabel} to ${found.appliance.name} (${found.appliance.privateIp})`,
+            ...(haPorts ? { haPorts } : {}),
+            detail: `Steered by ${matched.originLabel} to ${found.appliance.name} (${found.appliance.privateIp})${haPorts ? `. ${haPorts.reason}` : ''}`,
           })
         }
 
@@ -2571,6 +2598,13 @@ export function traceAzNetFlow(
         ? app.staticRoutes.filter((route) => route.enabled && cidr(route.prefix) && contains(route.prefix, ipNum))
           .sort((a, b) => cidr(b.prefix)!.length - cidr(a.prefix)!.length) : []
       const conditionalStatic = conditionalStatics[0]
+      const nestedHaStatic = app.staticRoutes.find((route) => route.enabled && route.nextHopKind === 'appliance'
+        && cidr(route.prefix) && contains(route.prefix, ipNum)
+        && resolveHaPortsNextHop(topology, simulation, route.nextHopIp))
+      if (nestedHaStatic) {
+        const unsupportedHa = unsupportedNvaHaHop(vnet, app, nestedHaStatic.nextHopIp)
+        if (unsupportedHa) return unsupportedHa
+      }
       if (conditionalStatic && conditionalStatics.filter((route) => cidr(route.prefix)!.length === cidr(conditionalStatic.prefix)!.length).length > 1) {
         return { source, destinationIp, destinationLabel: targetInfo.label, status: 'not-assessed',
           hops, traversedApplianceIds, traversedEdgeIds, traversedVnetIds, summaryReason: 'Equal-prefix conditional return static routes are ambiguous.' }
@@ -2860,6 +2894,8 @@ export function traceAzNetFlow(
         : undefined
       const nextRoute = filteredAppTable ? lookupSubnetEffectiveRoute(filteredAppTable, destinationIp) : undefined
       if (nextRoute?.nextHopType === 'VirtualAppliance') {
+        const unsupportedHa = unsupportedNvaHaHop(vnet, app, nextRoute.nextHopIp)
+        if (unsupportedHa) return unsupportedHa
         const target = findApplianceByIp(topology, nextRoute.nextHopIp)
         const transition = target && target.vnet.id !== vnet.id
           ? validatePeeringTransition(vnet, target.vnet, true, app.kind === 'vnra' || target.appliance.kind === 'vnra') : undefined

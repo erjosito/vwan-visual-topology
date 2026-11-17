@@ -13,7 +13,7 @@ import type { ApplicationRequest, ApplicationResult } from '../application'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
-export const engineVersion = '2026.11.17.2'
+export const engineVersion = '2026.11.17.3'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -114,6 +114,15 @@ export const capabilities = {
     scope: 'Explicit forward and reverse ordered subsequences of complete delivered original-appliance traces; 1-16 distinct IDs per leg.',
     excluded: ['unknown owners', 'legacy waypoint combinations', 'HA health/orchestration', 'vendor internals', 'live security rules or sessions'],
   },
+  haPorts: {
+    modes: ['hub-spoke', 'full'], topologyVersion: 2,
+    scope: 'One internal Standard LB/frontend/pool and floating HA-ports rule; original single-NIC/single-IP NVA backends; one UDR steering boundary per leg toward an owned destination.',
+    declaration: 'inventory.loadBalancers[].rules[].haPortsForwarding: preserve-tuple; HA ports true, Floating IP true, protocol all and ports 0.',
+    selection: 'Declared health and independent probe NSGs; unknown eligibility fails closed. Stable original-ID selection, not Azure hashing. Forwarding-disabled backends are not silently replaced.',
+    evidence: 'Native hops[].haPorts; packet.haPorts forward/reply original frontend/rule/pool/backend identities, probe evidence and independently checked symmetry.',
+    excluded: ['nonfloating HA ports', 'direct frontend destination/ordinary DNAT', 'multiple LB/frontend/pool or multi-NIC/multi-IP backend layouts',
+      'additional backend NAT policies', 'Internet egress', 'live probes/convergence', 'guest OS readiness', 'session replication/continuity'],
+  },
   staticHubFirewall: {
     scope: 'Single hub, declared original hub.firewall ID/name, routing intent disabled, CIDR/ResourceId routes to that ID only.',
     forwarding: 'Longest prefix, then static over learned for equal prefixes; independent local-connection Firewall onward and return lookups.',
@@ -145,7 +154,7 @@ export const capabilities = {
     translationLimits: ['illustrative allocation/ports only', 'unsolicited ingress requires an explicitly selected supported frontend and permission',
       'NAT Gateway cannot publish ingress', 'unknown/multiple router NAT, secured-hub private DNAT interfaces and forced-tunnel translation unassessed',
       'no StandardV2/IPv6/NAT64/application-rule proxy/capacity/timer predictions',
-      'no Basic/Gateway/global LB, HA ports/Floating IP/DSR OS support, private-backend hairpin, live health/session migration or extra ingress translation stages'] },
+      'no Basic/Gateway/global LB, general HA ports/Floating IP/DSR OS support beyond the explicit haPorts slice, private-backend hairpin, live health/session migration or extra ingress translation stages'] },
   requirements: ['flow: owned IPv4 endpoints, allow/deny, return path, modeled inspection', 'route: exact-prefix presence/absence in owned subnet tables or explicit hub table scope, subject to complete modeled coverage',
     'packet: bound original IPv4 endpoints/backend, configured routing/filtering/translation and conditional response or proven initiation blocker; not runtime delivery/health certification'],
   outcomes: ['satisfied', 'violated', 'not assessed'],

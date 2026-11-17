@@ -34,12 +34,13 @@ export function assessPacket(topology: InventoryTopology, simulation: Simulation
     && (!['public-ip', 'load-balancer'].includes(requirement.packet.target.kind) || packet.ingress === 'configured')
   if (!forward) return unknown('Forward routing, filtering, mapping or eligible backend configuration is unknown; not a pass or proven blocker.', packet)
   if (requirement.expectation === 'blocked') return assessment(false)
+  if (packet.haPorts?.symmetry === 'asymmetric') return assessment(false)
   if (packet.reply.routing === 'unreachable' || packet.nsg?.reply.outcome === 'denied') return assessment(false)
   if (packet.reply.routing !== 'reachable' || packet.nsg?.reply.outcome !== 'allowed') {
     return unknown('A supported symmetric response and its private-tuple filtering are not established.', packet)
   }
   if (required) {
-    const selected = packet.loadBalancer?.selected
+    const selected = packet.loadBalancer?.selected ?? packet.haPorts?.forward[0]?.selected
     const matches = selected ? workloadEndpointKey({ kind: 'workload', ...selected }) === workloadEndpointKey({ kind: 'workload', ...required })
       : packet.forward.steps.some((step) => step.entity.kind === 'workload' && step.entity.id === required.workloadId
         && step.after?.destinationAddress === required.address)

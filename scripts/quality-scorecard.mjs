@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 9
+export const scorecardVersion = 10
 // Keep document-derived contract fixtures distinct from regression and live Azure evidence.
 export const modelContractPlan = {
   unit: [{ id: 'static-firewall-model-contracts', label: 'Document-derived static Firewall model-contract conformance',
@@ -12,7 +12,7 @@ export const unitPlan = [
   { id: 'routing-packet-regressions', label: 'Routing/packet regression conformance', files: [
     'src/routing.test.ts', 'src/paths.test.ts', 'src/vpn-routing.test.ts', 'src/vpn-nat.test.ts', 'src/hub-routing.test.ts',
     'src/azure-net/engine.test.ts', 'src/packet-egress.test.ts', 'src/packet-ingress.test.ts',
-    'src/packet-load-balancer.test.ts', 'src/packet-security.test.ts', 'src/azure-comparison.test.ts',
+    'src/packet-load-balancer.test.ts', 'src/ha-ports.test.ts', 'src/packet-security.test.ts', 'src/azure-comparison.test.ts',
   ] },
   { id: 'requirement-grading-regressions', label: 'Requirement grading regression conformance', files: [
     'platform/assessment.test.ts', 'platform/packet-assessment.test.ts',
@@ -30,7 +30,7 @@ export const unitPlan = [
 ]
 export const browserPlan = [
   { id: 'ui-workflow-regressions', label: 'Scripted UI workflow regression conformance', files: [
-    'e2e/canvas-presentation.spec.ts', 'e2e/network-detail.spec.ts', 'e2e/single-workspace.spec.ts', 'e2e/vpn-nat.spec.ts',
+    'e2e/canvas-presentation.spec.ts', 'e2e/network-detail.spec.ts', 'e2e/single-workspace.spec.ts', 'e2e/vpn-nat.spec.ts', 'e2e/ha-ports.spec.ts',
     'e2e/accessibility-labels.spec.ts',
   ] },
   { id: 'training-workflow-regressions', label: 'Scripted training workflow regression conformance', files: ['e2e/learning.spec.ts', 'e2e/practice-workspace.spec.ts', 'e2e/learning-progress.spec.ts', 'e2e/learning-editions.spec.ts'] },

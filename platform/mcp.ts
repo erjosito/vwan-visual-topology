@@ -67,6 +67,9 @@ server.registerTool('get_schema', {
       probes: [{ id: 'PROBE_ID', name: 'Health', protocol: 'tcp', port: 8080, health: [] }],
       rules: [{ id: 'RULE_ID', name: 'Ordinary rule', frontendId: 'FRONTEND_ID', poolId: 'POOL_ID', probeId: 'PROBE_ID', protocol: 'tcp',
         frontendPort: 443, backendPort: 8443, disableOutboundSnat: true }], inboundNatRules: [], outboundRules: [] }],
+    haPortsRule: { id: 'RULE_ID', name: 'Declared NVA transit', frontendId: 'FRONTEND_ID', poolId: 'POOL_ID', probeId: 'PROBE_ID',
+      protocol: 'all', frontendPort: 0, backendPort: 0, haPorts: true, floatingIp: true, haPortsForwarding: 'preserve-tuple', disableOutboundSnat: true },
+    haPortsUsage: 'Native v2 only: use the owned internal VIP as a subnet UDR VirtualAppliance next hop, not as the packet destination. Original backends must be single-NIC/single-IP workloads backed by the matching original nva-vm device.',
     location: 'optional topology.inventory; omitted addresses remain unknown; VWAN detailed subnets are explicitly declared in spoke.subnets',
   },
   applicationContracts: {

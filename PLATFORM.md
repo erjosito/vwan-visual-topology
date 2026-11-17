@@ -416,15 +416,56 @@ unsupported coverage remain unassessed. Address/port allocation and capacity
 are illustrative. Explicit outbound rules require disabling overlapping inbound
 rule SNAT. This precedence never replaces an established LB ingress response.
 
-Public HA ports are rejected. Valid internal HA/Floating IP declarations are
-retained but packet forwarding stays explicitly unsupported; no silent DNAT,
-DSR backend OS readiness or next-hop NVA destination rewrite is inferred.
+Public HA ports are rejected. Direct frontend-destination HA/Floating IP
+mapping remains unassessed; it is not ordinary DNAT. The separate bounded
+UDR steering slice below preserves the original destination.
 Basic/Gateway/global LB, IPv6, VMSS orchestration, proprietary hashing, live
 health/sessions, SNAT exhaustion and L7/WAF are outside this slice. #135 still
 tracks allowlisted Azure capture/import/Bicep and new graded-learning integration.
 
 References: [components](https://learn.microsoft.com/en-us/azure/load-balancer/components),
 [outbound rules](https://learn.microsoft.com/en-us/azure/load-balancer/outbound-rules).
+
+### Bounded internal HA-ports NVA forwarding (#245)
+
+Engine `2026.11.17.3`, native topology v2, contract 1 flow/route checks and
+contract 2 packet predicates support one internal Standard LB/frontend/pool
+and one floating HA-ports rule. Use the existing frontend's private IP as a
+subnet UDR `VirtualAppliance` next hop. The rule declares `haPorts: true`,
+`floatingIp: true`, protocol `all`, frontend/backend ports `0`, and
+`haPortsForwarding: "preserve-tuple"`. The last field explicitly declares
+modeled guest forwarding; merely importing an Azure HA-ports rule does not
+establish that assumption.
+
+Each pool member must retain original workload/NIC/IP-configuration identities
+and match a single-NIC/single-IP `nva-vm` backing device's private IP/subnet.
+The existing probe declarations supply unverified healthy/unhealthy snapshots;
+probe NSGs are checked separately from client-data NSGs. Unknown eligibility
+fails closed, and no known-eligible backend stops the new flow. Eligible members
+are selected by stable original-ID order for illustration, not Azure hashing.
+Disabling a selected NVA's forwarding does not silently change declared health.
+
+Forwarding resolves the VIP to the original NVA without DNAT or SNAT and keeps
+the route table's next hop as the VIP. Native `hops[].haPorts` and
+`packet.haPorts` identify the frontend, rule, pool, eligible/selected original
+backend and probe evidence. The packet view exposes both independently traced
+legs, tuple preservation and symmetry; `requiredBackend` can bind that original
+NVA backend. A different return NVA/bypass cannot pass the configured predicate.
+Conditional response permission does not establish a live NVA session.
+
+The original `tests/fixtures/ha-ports.ts` qualifies workload-to-branch and
+workload-to-workload paths, declared standby selection, independent return
+faults and an unaffected local witness. This is not a published learner mission;
+curriculum guidance/questions and award compatibility remain separate gates.
+
+Nonfloating HA ports, multiple frontends/pools/LBs sharing a backend,
+multi-NIC/multi-IP backend layouts, additional backend NAT policies, chained
+LB steering, Internet egress and ambiguous/missing original ownership remain
+unassessed. No probes/timers, Azure hashing, convergence, backend OS readiness,
+VMSS orchestration, state replication or session continuity are simulated.
+Azure supports more layouts than this intentionally bounded first slice.
+
+Reference: [HA ports and configuration-specific symmetry](https://learn.microsoft.com/azure/load-balancer/load-balancer-ha-ports-overview).
 
 ## Clients and data flow
 
