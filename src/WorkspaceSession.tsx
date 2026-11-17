@@ -4,6 +4,7 @@ import { useWorkspaceSession } from './workspace-context'
 import { t, useLanguage } from './i18n'
 import { lazy, Suspense, useState } from 'react'
 import { LearningStatus } from './learning/LearningStatus'
+import { CloudMenu } from './cloud/CloudMenu'
 
 const FeedbackDialog = lazy(() => import('./FeedbackDialog').then((module) => ({ default: module.FeedbackDialog })))
 
@@ -17,6 +18,7 @@ export function WorkspaceMenu() {
     <LanguageSelector />
     <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
     <LearningStatus />
+    <CloudMenu />
     {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}
   </>
 }

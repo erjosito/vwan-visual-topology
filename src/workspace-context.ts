@@ -5,6 +5,7 @@ import type { PlatformDocument } from './platform/contract'
 import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
 import type { CourseRunner, LearningObservation, RunnerState } from './learning/runner'
 import type { LedgerState } from './learning/progress-ledger'
+import type { SyncStatus } from './cloud/progress-sync'
 
 export type WorkspaceEditorHistory =
   | { provider: 'vwan'; topology: Topology; past: Topology[]; future: Topology[]; error: string; saveError: string; backup: string }
@@ -34,6 +35,12 @@ export const WorkspaceSessionContext = createContext<{
   resetLearningProgress?: (expected: LedgerState) => Promise<boolean>
   retryLearningProgress?: () => Promise<boolean>
   backupLearningProgress?: (legacy: boolean) => string | null | undefined
+  cloudProgress?: {
+    status?: SyncStatus
+    refresh: (choice?: 'cloud' | 'local') => Promise<void> | undefined
+    hasAnonymousProgress: boolean
+    importAnonymous: () => Promise<boolean>
+  }
 } | undefined>(undefined)
 
 export const useWorkspaceSession = () => useContext(WorkspaceSessionContext)

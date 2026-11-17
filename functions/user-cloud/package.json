@@ -1,0 +1,14 @@
+{
+  "name": "network-simulator-user-cloud",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.mjs",
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@azure/functions": "4.17.1",
+    "@azure/identity": "4.14.1",
+    "@azure/storage-blob": "12.34.0",
+    "jose": "6.2.17"
+  }
+}
