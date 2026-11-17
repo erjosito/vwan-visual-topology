@@ -12,6 +12,7 @@ export function LoadBalancerEditor({ topology, owner, change, onSelect }: {
   const [query, setQuery] = useState('')
   const [serviceQuery, setServiceQuery] = useState('')
   const [ruleId, setRuleId] = useState('')
+  const [haRule, setHaRule] = useState(false)
   const [frontendId, setFrontendId] = useState('')
   const [probeId, setProbeId] = useState('')
   const [inboundId, setInboundId] = useState('')
@@ -68,7 +69,7 @@ export function LoadBalancerEditor({ topology, owner, change, onSelect }: {
         const initial = frontend(draft, data, kind)
         ;(draft.inventory!.loadBalancers ??= []).push({ id, name: String(data.get('name')), sku: 'Standard', owner,
           frontends: [initial], pools: [], probes: [], rules: [], inboundNatRules: [], outboundRules: [] })
-      })) { setSelectedId(id); setRuleId(''); form.reset() }
+      })) { setSelectedId(id); setRuleId(''); setHaRule(false); form.reset() }
     }}>
       <h4>{t('Declare Standard LB')}</h4>
       <label>{t('LB name')}<input name="name" required maxLength={120} /></label>
@@ -79,7 +80,7 @@ export function LoadBalancerEditor({ topology, owner, change, onSelect }: {
       <button type="submit">{t('Add Standard LB')}</button>
     </form>
     <label>{t('Search original LBs')}<input type="search" value={serviceQuery} onChange={(event) => setServiceQuery(event.target.value)} /></label>
-    <label>{t('Select original LB')}<select aria-label={t('Select original LB')} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setRuleId('') }}>
+    <label>{t('Select original LB')}<select aria-label={t('Select original LB')} value={selectedId} onChange={(event) => { setSelectedId(event.target.value); setRuleId(''); setHaRule(false) }}>
       <option value="">{t('Select')}</option>{visibleLbs.map((lb) => <option key={lb.id} value={lb.id}>{lb.name}</option>)}
       {lb && !visibleLbs.includes(lb) && <option value={lb.id}>{lb.name}</option>}
     </select></label>
@@ -212,33 +213,40 @@ export function LoadBalancerEditor({ topology, owner, change, onSelect }: {
       </details>
       <details><summary>{t('Ordinary LB rules')} ({lb.rules.length})</summary>
         {lb.rules.map((rule) => <p key={rule.id}><code>{rule.name} · {rule.protocol} · {rule.frontendPort} → {rule.backendPort}</code>
-          <button type="button" onClick={() => setRuleId(rule.id)}>{t('Edit LB rule')}</button>
+          <button type="button" onClick={() => { setRuleId(rule.id); setHaRule(rule.haPorts === true && rule.floatingIp === true) }}>{t('Edit LB rule')}</button>
           <button type="button" onClick={() => { if (update((lb) => { lb.rules = lb.rules.filter((entry) => entry.id !== rule.id) })) setRuleId('') }}>{t('Remove LB rule')}</button>
         </p>)}
-        <button type="button" onClick={() => setRuleId('')}>{t('New LB rule')}</button>
-        {selectedRule && (selectedRule.floatingIp || selectedRule.haPorts) && <p role="status">{t('HA ports and Floating IP are retained but unsupported. Remove the declaration and explicitly create an ordinary replacement; original destination semantics are not silently changed.')}</p>}
+        <button type="button" onClick={() => { setRuleId(''); setHaRule(false) }}>{t('New LB rule')}</button>
+        <p>{t('HA ports is a UDR next-hop service, not a destination mapping. Select the original workloads when tracing a packet. Only the declared single-LB, single-NIC NVA layout is assessed; live health and guest readiness are not verified.')}</p>
+        {selectedRule && (selectedRule.floatingIp || selectedRule.haPorts) && !(selectedRule.haPorts && selectedRule.floatingIp) && <p role="status">{t('HA ports and Floating IP are retained but unsupported. Remove the declaration and explicitly create an ordinary replacement; original destination semantics are not silently changed.')}</p>}
         <form key={JSON.stringify(selectedRule ?? [lb.id, lb.frontends, lb.pools, lb.probes])} data-testid="lb-rule-form" onSubmit={(event) => {
           event.preventDefault()
-          if (selectedRule?.floatingIp || selectedRule?.haPorts) return
+          if (selectedRule && (selectedRule.floatingIp || selectedRule.haPorts) && !(selectedRule.haPorts && selectedRule.floatingIp)) return
           const data = new FormData(event.currentTarget)
           const rule: LoadBalancerRule = { id: selectedRule?.id ?? `lb-rule-${crypto.randomUUID()}`, name: String(data.get('name')),
             frontendId: String(data.get('frontend')), poolId: String(data.get('pool')), probeId: String(data.get('probe')),
-            protocol: String(data.get('protocol')) as 'tcp' | 'udp', frontendPort: Number(data.get('frontendPort')), backendPort: Number(data.get('backendPort')),
-            affinity: String(data.get('affinity')) as LoadBalancerRule['affinity'], disableOutboundSnat: data.has('disableSnat') }
+            protocol: haRule ? 'all' : String(data.get('protocol')) as 'tcp' | 'udp',
+            frontendPort: haRule ? 0 : Number(data.get('frontendPort')), backendPort: haRule ? 0 : Number(data.get('backendPort')),
+            affinity: haRule ? 'none' : String(data.get('affinity')) as LoadBalancerRule['affinity'], disableOutboundSnat: haRule || data.has('disableSnat'),
+            ...(haRule ? { haPorts: true, floatingIp: true, ...(data.has('preserveTuple') ? { haPortsForwarding: 'preserve-tuple' as const } : {}) } : {}) }
           if (update((lb) => { lb.rules = [...lb.rules.filter((entry) => entry.id !== rule.id), rule] })) setRuleId(rule.id)
         }}>
           <label>{t('LB rule name')}<input name="name" required maxLength={120} defaultValue={selectedRule?.name ?? ''} /></label>
           <label>{t('LB rule frontend')}<select name="frontend" aria-label={t('LB rule frontend')} required defaultValue={selectedRule?.frontendId}>{lb.frontends.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
           <label>{t('LB rule pool')}<select name="pool" aria-label={t('LB rule pool')} required defaultValue={selectedRule?.poolId}>{lb.pools.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
           <label>{t('LB rule probe')}<select name="probe" aria-label={t('LB rule probe')} required defaultValue={selectedRule?.probeId}>{lb.probes.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}</select></label>
-          <label>{t('LB rule protocol')}<select name="protocol" aria-label={t('LB rule protocol')} defaultValue={selectedRule?.protocol ?? 'tcp'}><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
-          <label>{t('LB frontend port')}<input name="frontendPort" type="number" min="1" max="65535" required defaultValue={selectedRule?.frontendPort ?? 443} /></label>
-          <label>{t('LB backend port')}<input name="backendPort" type="number" min="1" max="65535" required defaultValue={selectedRule?.backendPort ?? 8443} /></label>
-          <label>{t('Illustrative LB affinity')}<select name="affinity" aria-label={t('Illustrative LB affinity')} defaultValue={selectedRule?.affinity ?? 'none'}>
+          <label><input type="checkbox" checked={haRule} disabled={lb.frontends.some((frontend) => frontend.kind !== 'private')
+            || !!selectedRule && !!(selectedRule.haPorts || selectedRule.floatingIp)} onChange={(event) => setHaRule(event.target.checked)} />{t('Internal HA ports with Floating IP')}</label>
+          {haRule && <label><input name="preserveTuple" type="checkbox" defaultChecked={selectedRule?.haPortsForwarding === 'preserve-tuple'} />{t('Declare tuple-preserving NVA forwarding (unverified)')}</label>}
+          <label>{t('LB rule protocol')}<select key={String(haRule)} name="protocol" aria-label={t('LB rule protocol')} disabled={haRule} defaultValue={haRule ? 'all' : selectedRule?.protocol === 'udp' ? 'udp' : 'tcp'}><option value="tcp">TCP</option><option value="udp">UDP</option>{haRule && <option value="all">{t('All')}</option>}</select></label>
+          <label>{t('LB frontend port')}<input key={String(haRule)} name="frontendPort" type="number" min={haRule ? 0 : 1} max="65535" required disabled={haRule} defaultValue={haRule ? 0 : selectedRule?.frontendPort || 443} /></label>
+          <label>{t('LB backend port')}<input key={String(haRule)} name="backendPort" type="number" min={haRule ? 0 : 1} max="65535" required disabled={haRule} defaultValue={haRule ? 0 : selectedRule?.backendPort || 8443} /></label>
+          <label>{t('Illustrative LB affinity')}<select name="affinity" disabled={haRule} aria-label={t('Illustrative LB affinity')} defaultValue={selectedRule?.affinity ?? 'none'}>
             <option value="none">{t('Five tuple')}</option><option value="client-ip">{t('Client IP')}</option><option value="client-ip-protocol">{t('Client IP and protocol')}</option>
           </select></label>
           <label><input name="disableSnat" type="checkbox" defaultChecked={selectedRule ? selectedRule.disableOutboundSnat === true : true} />{t('Disable rule outbound SNAT')}</label>
-          <button type="submit" disabled={!lb.frontends.length || !lb.pools.length || !lb.probes.length || !!selectedRule?.floatingIp || !!selectedRule?.haPorts}>{t('Save LB rule')}</button>
+          <button type="submit" disabled={!lb.frontends.length || !lb.pools.length || !lb.probes.length
+            || !!selectedRule && !!(selectedRule.floatingIp || selectedRule.haPorts) && !(selectedRule.haPorts && selectedRule.floatingIp)}>{t('Save LB rule')}</button>
         </form>
       </details>
       <details><summary>{t('Specific LB inbound NAT')} ({lb.inboundNatRules.length})</summary>

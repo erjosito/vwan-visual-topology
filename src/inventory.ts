@@ -44,6 +44,7 @@ export interface LoadBalancerRule {
   disableOutboundSnat?: boolean
   floatingIp?: boolean
   haPorts?: boolean
+  haPortsForwarding?: 'preserve-tuple'
 }
 export interface LoadBalancerInboundNatRule {
   id: string
@@ -642,7 +643,8 @@ export function validateInventory(topology: InventoryTopology): void {
     const rules = list(lb.rules, 'LB rules').map((entry) => {
       const rule = named(entry, 'LB rule')
       supportedFields(rule, ['id', 'name', 'frontendId', 'poolId', 'probeId', 'protocol', 'frontendPort', 'backendPort',
-        'affinity', 'disableOutboundSnat', 'floatingIp', 'haPorts'], 'LB rule')
+        'affinity', 'disableOutboundSnat', 'floatingIp', 'haPorts', 'haPortsForwarding'], 'LB rule')
+      if (rule.haPortsForwarding !== undefined && (rule.haPortsForwarding !== 'preserve-tuple' || !rule.haPorts || !rule.floatingIp)) fail('HA forwarding requires floating HA ports and an explicit preserve-tuple declaration')
       for (const field of ['disableOutboundSnat', 'floatingIp', 'haPorts']) if (rule[field] !== undefined && typeof rule[field] !== 'boolean') fail('invalid LB rule flag')
       if (rule.affinity !== undefined && !['none', 'client-ip', 'client-ip-protocol'].includes(String(rule.affinity))) fail('unsupported LB affinity')
       const { frontend } = match(rule)

@@ -9,6 +9,51 @@ import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hu
 import { scenarioTopologies } from '../src/learning/scenario-topologies'
 import { scenarioBundle } from '../src/learning/scenario-course'
 import { haRoutingRequirements, haRoutingTopology } from '../tests/fixtures/ha-routing'
+import { haBackend, haPacket, haPortsTopology } from '../tests/fixtures/ha-ports'
+
+it('qualifies owned HA-port forwarding and fail-closed alternatives through the actual stdio engine', async () => {
+  const client = new Client({ name: 'ha-ports-contract-test', version: '1' })
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    if (response.isError) throw new Error(JSON.stringify(response.content))
+    return response.structuredContent as Record<string, any>
+  }
+  try {
+    expect((await call('get_capabilities')).haPorts.modes).toEqual(['hub-spoke', 'full'])
+    expect((await call('get_schema', { mode: 'full' })).inventoryShapes.haPortsRule.haPortsForwarding).toBe('preserve-tuple')
+    for (const variant of ['healthy', 'unknown', 'unhealthy', 'wrong-return'] as const) {
+      const topology = haPortsTopology()
+      if (variant === 'unknown' || variant === 'unhealthy') topology.inventory!.loadBalancers![0].probes[0].health[0].status = variant
+      if (variant === 'wrong-return') topology.udrTables[1].routes[0].nextHopIp = '10.80.2.4'
+      const request = { contractVersion: 2 as const, operation: 'evaluate' as const, document: { mode: 'full' as const, topology },
+        requirements: [{ id: 'original-ha-packet', kind: 'packet' as const, packet: haPacket,
+          sourceAddress: '10.81.1.10', destinationAddress: '10.82.1.10', expectation: 'configured' as const,
+          requiredBackend: { ...haBackend('primary'), address: '10.80.1.4' } }, ...haRoutingRequirements('primary')] }
+      const job = await call('start_simulation', { request })
+      let state
+      for (let attempt = 0; attempt < 100; attempt++) {
+        state = await call('get_job', { handle: job.handle })
+        if (state.status === 'finished') break
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      expect(state?.status).toBe('finished')
+      expect(state?.resultStatus).toBe(variant === 'unknown' ? 'not assessed' : 'complete')
+      const chunks: string[] = []
+      for (let offset = 0; offset < 1_000_000;) {
+        const chunk = await call('get_evidence', { handle: job.handle, section: 'assessments', offset, limit: 16000 })
+        chunks.push(chunk.jsonText)
+        if (chunk.complete) break
+        expect(chunk.jsonText.length).toBeGreaterThan(0)
+        offset += chunk.jsonText.length
+      }
+      const evidence = JSON.parse(chunks.join(''))
+      expect(evidence).toEqual(executePlatform(request).assessments)
+      expect(evidence[0].outcome).toBe(variant === 'healthy' ? 'satisfied' : variant === 'unknown' ? 'not assessed' : 'violated')
+      expect(evidence.at(-1).outcome).toBe('satisfied')
+    }
+  } finally { await client.close() }
+}, 20000)
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })

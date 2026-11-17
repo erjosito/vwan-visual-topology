@@ -1,6 +1,13 @@
 import { registerJapaneseMessages } from './messages'
 
 registerJapaneseMessages({
+  'Internal HA ports with Floating IP': 'Floating IP を使用する内部 HA ポート',
+  'Declare tuple-preserving NVA forwarding (unverified)': 'NVA がタプルを保持して転送すると宣言する（未検証）',
+  'HA ports steering': 'HA ポートによる転送',
+  'symmetric': '対称',
+  'asymmetric': '非対称',
+  'HA ports is a UDR next-hop service, not a destination mapping. Select the original workloads when tracing a packet. Only the declared single-LB, single-NIC NVA layout is assessed; live health and guest readiness are not verified.': 'HA ポートは UDR のネクストホップとして機能し、宛先の変換ではありません。パケット追跡では元のワークロードを選択してください。宣言された単一 LB・単一 NIC の NVA 構成のみを評価します。実際の正常性やゲストの準備状態は検証しません。',
+  'Original packet addresses and ports are preserved. Backend selection is illustrative; return routing is checked independently. This is not live failover or session continuity.': '元のパケットのアドレスとポートを保持します。バックエンドの選択は例示であり、戻り経路は個別に確認します。実際のフェールオーバーやセッションの継続性を示すものではありません。',
   'Workload packet probe': 'ワークロード パケット プローブ',
   'Independent forward and reply routing probes. Routing success does not establish a listener, security policy, NAT or application delivery.': '往路と応答のルーティングを個別に調査します。ルーティングの成功は、リスナー、セキュリティ ポリシー、NAT、アプリケーション配信の成立を意味しません。',
   'Select an IP configuration': 'IP 構成を選択',

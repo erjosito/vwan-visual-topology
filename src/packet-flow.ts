@@ -8,6 +8,7 @@ import { applyInternetEgress } from './packet-egress'
 import { completePacketNsg, endpointNsg, type NsgAssessment, type TupleUncertainty } from './packet-security'
 import { tracePublicIngress } from './packet-ingress'
 import { traceLoadBalancer, type LoadBalancerPacketAssessment } from './packet-load-balancer'
+import type { HaPortsAssessment } from './ha-ports'
 
 export interface WorkloadEndpoint { kind: 'workload'; workloadId: string; nicId: string; ipConfigurationId: string }
 export type PacketEndpoint = WorkloadEndpoint | { kind: 'external'; address: string } | { kind: 'public-ip'; publicIpId: string }
@@ -50,6 +51,7 @@ export interface PacketResult {
   egress?: 'configured' | 'blocked' | 'legacy-implicit' | 'not-assessed'
   ingress?: 'configured' | 'blocked' | 'not-assessed'
   loadBalancer?: LoadBalancerPacketAssessment
+  haPorts?: { forward: HaPortsAssessment[]; reply: HaPortsAssessment[]; symmetry: 'symmetric' | 'asymmetric' | 'not-assessed' }
   limitations: string[]
   nsg?: { forward: NsgAssessment; reply: NsgAssessment }
 }
@@ -177,15 +179,32 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
     return {
       direction, tuple: packet, routing: trace.status === 'not-assessed' ? 'not-assessed' : trace.status === 'delivered' && owned ? 'reachable' : 'unreachable',
       native: trace, reasons: [trace.summaryReason],
-      steps: trace.hops.map((hop) => ({
+      steps: trace.hops.flatMap((hop) => [{
         entity: { kind: hop.nodeKind, id: hop.nodeId }, before: packet,
         after: to.native!.kind === 'internet' && hop.action === 'delivered' ? null : packet, evidence: hop.detail,
         ...(hop.edgeId ? { edgeId: hop.edgeId } : {}), ...(hop.matchedRoute ? { routeId: hop.matchedRoute.id } : {}),
         ...(hop.hubTableId ? { tableId: hop.hubTableId } : {}),
-      })),
+      }, ...(hop.haPorts ? [{ entity: { kind: 'load-balancer', id: hop.haPorts.loadBalancerId }, before: packet,
+        after: hop.haPorts.status === 'selected' ? packet : null, routeId: hop.haPorts.ruleId, evidence: hop.haPorts.reason }] : [])]),
     }
   }
   const forward = leg('forward'), reply = leg('reply')
+  const steering = (leg: PacketLeg) => !leg.native || Array.isArray(leg.native) ? [] : leg.native.hops
+    .flatMap((hop) => hop.haPorts ? [hop.haPorts] : [])
+  const forwardHa = steering(forward), replyHa = steering(reply)
+  let haPorts: PacketResult['haPorts']
+  if (forwardHa.length || replyHa.length) {
+    const selected = forwardHa[0]?.applianceId
+    const forwardTrace = !Array.isArray(forward.native) ? forward.native : undefined
+    const replyTrace = !Array.isArray(reply.native) ? reply.native : undefined
+    const known = forwardHa.length === 1 && forwardHa[0].status === 'selected' && forward.routing === 'reachable'
+      && reply.routing === 'reachable' && forwardTrace && replyTrace
+    const symmetric = known && forwardTrace.traversedApplianceIds.length === 1 && forwardTrace.traversedApplianceIds[0] === selected
+      && replyTrace.traversedApplianceIds.length === 1 && replyTrace.traversedApplianceIds[0] === selected
+      && replyHa.every((assessment) => assessment.loadBalancerId === forwardHa[0].loadBalancerId && assessment.status === 'selected')
+    haPorts = { forward: forwardHa, reply: replyHa, symmetry: !known ? 'not-assessed' : symmetric ? 'symmetric' : 'asymmetric' }
+    if (known && !symmetric) reply.reasons.push('HA ports return routing uses a different appliance or bypass; symmetric NVA forwarding is not established.')
+  }
   for (const result of [forward, reply]) {
     if (!result.tuple) continue
     const from = result.direction === 'forward' ? request.source : request.target
@@ -201,16 +220,23 @@ export function tracePacket(topology: InventoryTopology, request: PacketRequest,
   }
   const sourceNsg = forward.tuple ? endpointNsg(topology, request.source, 'outbound', forward.tuple, nativeSimulation)
     : { outcome: 'not-assessed' as const, checks: [] }
+  const haPreserved = forwardHa.length === 1 && forwardHa[0].status === 'selected' && !Array.isArray(forward.native)
+    && forward.native?.traversedApplianceIds.length === 1 && forward.native.traversedApplianceIds[0] === forwardHa[0].applianceId
+    && request.source.kind === 'workload' && request.target.kind === 'workload'
   const egress: Pick<PacketResult, 'translation' | 'egress'> = sourceNsg.outcome === 'denied' ? { translation: 'not-assessed' as const }
-    : applyInternetEgress(topology, request, forward, reply, nativeSimulation)
+    : haPreserved ? { translation: 'none' } : applyInternetEgress(topology, request, forward, reply, nativeSimulation)
   const nsg = completePacketNsg(topology, request.target, forward, reply, sourceNsg, nativeSimulation,
     egress.translation === 'snat' ? 'snat' : egress.translation === 'none' ? 'none' : 'not-assessed')
+  if (haPorts && (haPorts.symmetry !== 'symmetric' || reply.routing !== 'reachable')) {
+    delete reply.session
+    nsg.reply = { outcome: 'not-assessed', checks: [] }
+  }
   if (nsg.forward.outcome === 'denied') {
     egress.translation = forward.steps.some((step) => step.after && step.before.sourceAddress !== step.after.sourceAddress) ? 'snat' : 'not-assessed'
     if (request.target.kind === 'external') egress.egress = 'blocked'
   }
   return {
-    source: request.source, target: request.target, forward, reply,
+    source: request.source, target: request.target, forward, reply, ...(haPorts ? { haPorts } : {}),
     delivery: 'not-assessed', security: nsg.forward.outcome === 'denied' ? 'denied' : 'not-assessed', ...egress, nsg,
     limitations: ['Supported NSG checks and route/egress modeling do not prove guest/firewall policy, a listener, backend health or application delivery.',
       reply.session ? 'The response is conditional on this modeled outbound flow; it does not permit a new Internet-initiated connection.'

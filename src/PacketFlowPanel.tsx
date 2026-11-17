@@ -72,6 +72,26 @@ export function PacketFlowPanel({ topology, simulation, onHighlight }: {
     {error && <p role="alert">{error}</p>}
     {submitted && !result && <p role="status">{t('The topology or probe changed. Run the probe again for current evidence.')}</p>}
     {result && <div data-testid="packet-flow-result">
+      {result.haPorts && <section data-testid="packet-ha-ports-result" aria-label={t('HA ports steering')}>
+        <h4>{t('HA ports steering')}: {t(result.haPorts.symmetry)}</h4>
+        <p>{t('Original packet addresses and ports are preserved. Backend selection is illustrative; return routing is checked independently. This is not live failover or session continuity.')}</p>
+        {(['forward', 'reply'] as const).map((direction) => <div key={direction}>
+          <strong>{t(direction === 'forward' ? 'Forward routing' : 'Reply routing')}</strong>
+          {result.haPorts![direction].map((assessment, index) => <article key={index}>
+            <code>{assessment.loadBalancerId} · {assessment.frontendId} · {assessment.ruleId} · {assessment.poolId}</code>
+            <p>{t(assessment.reason)}</p>
+            <p>{t('Known eligible backends')}: {assessment.eligible.length}</p>
+            {assessment.selected && <p>{t('Illustrative backend')}: <code>{assessment.selected.workloadId} · {assessment.selected.nicId} · {assessment.selected.ipConfigurationId}</code>{' '}
+              {onHighlight && <button type="button" onClick={() => onHighlight(assessment.selected!.workloadId)}>{t('Highlight original backend')}</button>}
+            </p>}
+            <details><summary>{t('Independent probe checks')} ({assessment.probes.length})</summary>
+              {assessment.probes.map((probe) => <p key={JSON.stringify(probe.target)}><code>{probe.target.workloadId}</code> · {t(probe.declared)} · {t(probe.eligibility)}
+                {probe.checks.map((check, index) => <span key={index}> · <code>{check.nsgId ?? check.target.id} · {check.ruleId}</code>: {t(check.outcome)}</span>)}
+              </p>)}
+            </details>
+          </article>)}
+        </div>)}
+      </section>}
       {result.ingress && <p><strong>{t(result.loadBalancer ? 'Load Balancer ingress' : 'Public ingress')}: {t(result.ingress)}</strong></p>}
       {result.loadBalancer && <section data-testid="packet-lb-result" aria-label={t('Load Balancer selection')}>
         <h4>{t('Load Balancer selection')}: <code>{result.loadBalancer.id} · {result.loadBalancer.ruleId}</code></h4>
