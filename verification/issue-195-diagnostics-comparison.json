@@ -1,0 +1,3092 @@
+{
+  "evidenceVersion": 1,
+  "measuredAt": "2026-11-17T01:51:18.355Z",
+  "harnessRevision": "306f1b16c303f90ddf451a969b400b1dc9f575e4",
+  "artifactSha256": {
+    "baselineSource": "c5743d9478f3bbb23abfd42233430f3eb9dd39f55d7bc4a4f195c018919208db",
+    "candidateSource": "cdd0aa2f3325591ad6af519f30ca9b52674f0197dc05b3b5bd24168444677d9e",
+    "baselineDist": "07bd48d2efd0c19a9f703f0f0997160543cc4be3e39d273a3aacea8ff0312c4d",
+    "candidateDist": "b5eb8630b6a6926315c63121e9dfc85d98fcf005f4507c19edd42b2782e53b85"
+  },
+  "order": [
+    {
+      "kind": "ssr",
+      "pair": 1,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "ssr",
+      "pair": 1,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "ssr",
+      "pair": 2,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "ssr",
+      "pair": 2,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "ssr",
+      "pair": 3,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "ssr",
+      "pair": 3,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "ssr",
+      "pair": 4,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "ssr",
+      "pair": 4,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "ssr",
+      "pair": 5,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "ssr",
+      "pair": 5,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "ssr",
+      "pair": 6,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "ssr",
+      "pair": 6,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "browser",
+      "pair": 1,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "browser",
+      "pair": 1,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "browser",
+      "pair": 2,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "browser",
+      "pair": 2,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "browser",
+      "pair": 3,
+      "artifact": "baseline"
+    },
+    {
+      "kind": "browser",
+      "pair": 3,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "browser",
+      "pair": 4,
+      "artifact": "candidate"
+    },
+    {
+      "kind": "browser",
+      "pair": 4,
+      "artifact": "baseline"
+    }
+  ],
+  "qualification": "Six SSR pairs and four production-browser pairs, serial alternating AB/BA; fresh process per invocation. Fixed bounded-before-wide case order within SSR. Full report hashes and corpus/budgets must match across artifacts. Shared machine, OS cache uncontrolled. Small-sample medians/ranges are descriptive; no p95/significance or true peak-memory claim.",
+  "ssr": {
+    "baseline": [
+      {
+        "label": "500: bounded star continuation",
+        "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+        "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+        "budget": {
+          "maxProbes": 2048,
+          "maxCells": 1024,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 11875,
+        "probes": 950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            6397,
+            6148,
+            6862,
+            7919,
+            11234,
+            7060
+          ],
+          "count": 6,
+          "median": 6961,
+          "min": 6148,
+          "max": 11234
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            203,
+            203,
+            203,
+            184,
+            185,
+            202
+          ],
+          "count": 6,
+          "median": 202.5,
+          "min": 184,
+          "max": 203
+        }
+      },
+      {
+        "label": "500: wide-batch reference",
+        "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+        "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+        "budget": {
+          "maxProbes": 100000,
+          "maxCells": 50000,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 11875,
+        "probes": 950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            5211,
+            5299,
+            3768,
+            4542,
+            7008,
+            6231
+          ],
+          "count": 6,
+          "median": 5255,
+          "min": 3768,
+          "max": 7008
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            224,
+            224,
+            224,
+            152,
+            152,
+            224
+          ],
+          "count": 6,
+          "median": 224,
+          "min": 152,
+          "max": 224
+        }
+      },
+      {
+        "label": "1000: bounded star continuation",
+        "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+        "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+        "budget": {
+          "maxProbes": 2048,
+          "maxCells": 1024,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 24375,
+        "probes": 1950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            36637,
+            29685,
+            33371,
+            30243,
+            28394,
+            22010
+          ],
+          "count": 6,
+          "median": 29964,
+          "min": 22010,
+          "max": 36637
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            504,
+            467,
+            504,
+            649,
+            649,
+            511
+          ],
+          "count": 6,
+          "median": 507.5,
+          "min": 467,
+          "max": 649
+        }
+      },
+      {
+        "label": "1000: wide-batch reference",
+        "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+        "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+        "budget": {
+          "maxProbes": 100000,
+          "maxCells": 50000,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 24375,
+        "probes": 1950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            22968,
+            14638,
+            17115,
+            28513,
+            14510,
+            23063
+          ],
+          "count": 6,
+          "median": 20041.5,
+          "min": 14510,
+          "max": 28513
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            490,
+            581,
+            490,
+            692,
+            692,
+            498
+          ],
+          "count": 6,
+          "median": 539.5,
+          "min": 490,
+          "max": 692
+        }
+      },
+      {
+        "label": "ECMP/N-1: one step per budget",
+        "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+        "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+        "budget": {
+          "maxProbes": 1,
+          "maxCells": 1,
+          "maxFindings": 1,
+          "maxFailureCases": 1,
+          "maxMillis": 60000
+        },
+        "cells": 45,
+        "probes": 55,
+        "failureCases": 4,
+        "elapsedMillis": {
+          "samples": [
+            132,
+            65,
+            52,
+            146,
+            41,
+            67
+          ],
+          "count": 6,
+          "median": 66,
+          "min": 41,
+          "max": 146
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            504,
+            596,
+            505,
+            256,
+            227,
+            512
+          ],
+          "count": 6,
+          "median": 504.5,
+          "min": 227,
+          "max": 596
+        }
+      },
+      {
+        "label": "ECMP/N-1: wide-batch reference",
+        "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+        "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+        "budget": {
+          "maxProbes": 4096,
+          "maxCells": 2048,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 45,
+        "probes": 55,
+        "failureCases": 4,
+        "elapsedMillis": {
+          "samples": [
+            21,
+            14,
+            15,
+            13,
+            8,
+            10
+          ],
+          "count": 6,
+          "median": 13.5,
+          "min": 8,
+          "max": 21
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            493,
+            586,
+            496,
+            250,
+            231,
+            504
+          ],
+          "count": 6,
+          "median": 494.5,
+          "min": 231,
+          "max": 586
+        }
+      }
+    ],
+    "candidate": [
+      {
+        "label": "500: bounded star continuation",
+        "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+        "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+        "budget": {
+          "maxProbes": 2048,
+          "maxCells": 1024,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 11875,
+        "probes": 950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            4746,
+            4887,
+            3841,
+            4820,
+            7455,
+            4420
+          ],
+          "count": 6,
+          "median": 4783,
+          "min": 3841,
+          "max": 7455
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            214,
+            214,
+            212,
+            214,
+            214,
+            210
+          ],
+          "count": 6,
+          "median": 214,
+          "min": 210,
+          "max": 214
+        }
+      },
+      {
+        "label": "500: wide-batch reference",
+        "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+        "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+        "budget": {
+          "maxProbes": 100000,
+          "maxCells": 50000,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 11875,
+        "probes": 950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            2172,
+            1983,
+            1919,
+            1840,
+            2193,
+            2549
+          ],
+          "count": 6,
+          "median": 2077.5,
+          "min": 1840,
+          "max": 2549
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            235,
+            235,
+            233,
+            151,
+            235,
+            232
+          ],
+          "count": 6,
+          "median": 234,
+          "min": 151,
+          "max": 235
+        }
+      },
+      {
+        "label": "1000: bounded star continuation",
+        "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+        "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+        "budget": {
+          "maxProbes": 2048,
+          "maxCells": 1024,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 24375,
+        "probes": 1950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            16882,
+            15935,
+            13177,
+            14691,
+            19646,
+            20301
+          ],
+          "count": 6,
+          "median": 16408.5,
+          "min": 13177,
+          "max": 20301
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            648,
+            590,
+            580,
+            648,
+            590,
+            580
+          ],
+          "count": 6,
+          "median": 590,
+          "min": 580,
+          "max": 648
+        }
+      },
+      {
+        "label": "1000: wide-batch reference",
+        "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+        "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+        "budget": {
+          "maxProbes": 100000,
+          "maxCells": 50000,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 24375,
+        "probes": 1950,
+        "failureCases": 0,
+        "elapsedMillis": {
+          "samples": [
+            7348,
+            4354,
+            5169,
+            5029,
+            8014,
+            7670
+          ],
+          "count": 6,
+          "median": 6258.5,
+          "min": 4354,
+          "max": 8014
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            348,
+            396,
+            443,
+            692,
+            394,
+            443
+          ],
+          "count": 6,
+          "median": 419.5,
+          "min": 348,
+          "max": 692
+        }
+      },
+      {
+        "label": "ECMP/N-1: one step per budget",
+        "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+        "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+        "budget": {
+          "maxProbes": 1,
+          "maxCells": 1,
+          "maxFindings": 1,
+          "maxFailureCases": 1,
+          "maxMillis": 60000
+        },
+        "cells": 45,
+        "probes": 55,
+        "failureCases": 4,
+        "elapsedMillis": {
+          "samples": [
+            87,
+            48,
+            50,
+            43,
+            58,
+            194
+          ],
+          "count": 6,
+          "median": 54,
+          "min": 43,
+          "max": 194
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            362,
+            409,
+            458,
+            232,
+            408,
+            458
+          ],
+          "count": 6,
+          "median": 408.5,
+          "min": 232,
+          "max": 458
+        }
+      },
+      {
+        "label": "ECMP/N-1: wide-batch reference",
+        "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+        "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+        "budget": {
+          "maxProbes": 4096,
+          "maxCells": 2048,
+          "maxFindings": 500,
+          "maxFailureCases": 24,
+          "maxMillis": 60000
+        },
+        "cells": 45,
+        "probes": 55,
+        "failureCases": 4,
+        "elapsedMillis": {
+          "samples": [
+            12,
+            10,
+            13,
+            8,
+            11,
+            22
+          ],
+          "count": 6,
+          "median": 11.5,
+          "min": 8,
+          "max": 22
+        },
+        "maximumObservedHeapMiB": {
+          "samples": [
+            351,
+            405,
+            447,
+            232,
+            398,
+            446
+          ],
+          "count": 6,
+          "median": 401.5,
+          "min": 232,
+          "max": 447
+        }
+      }
+    ]
+  },
+  "browser": {
+    "baseline": {
+      "browser": "156.0.8078.4",
+      "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+      "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+      "elapsedMillis": {
+        "samples": [
+          111009.3762,
+          96642.3239,
+          83090.24759999999,
+          76462.9072
+        ],
+        "count": 4,
+        "median": 89866.28575,
+        "min": 76462.9072,
+        "max": 111009.3762
+      },
+      "batches": {
+        "samples": [
+          12,
+          12,
+          12,
+          12
+        ],
+        "count": 4,
+        "median": 12,
+        "min": 12,
+        "max": 12
+      },
+      "cells": 24375,
+      "probes": 1950,
+      "budget": {
+        "maxProbes": 4096,
+        "maxCells": 2048,
+        "maxFindings": 500,
+        "maxFailureCases": 24,
+        "maxMillis": 5000
+      },
+      "mountedFlowButtons": 24375,
+      "status": "complete",
+      "remainingCells": 0,
+      "animationFrames": {
+        "samples": [
+          371,
+          355,
+          336,
+          326
+        ],
+        "count": 4,
+        "median": 345.5,
+        "min": 326,
+        "max": 371
+      },
+      "maximumFrameGapMillis": {
+        "samples": [
+          4999.800000000003,
+          4449.899999999994,
+          5399.800000000003,
+          4683.200000000012
+        ],
+        "count": 4,
+        "median": 4841.500000000007,
+        "min": 4449.899999999994,
+        "max": 5399.800000000003
+      },
+      "cancelMillis": {
+        "samples": [
+          116.7667000000074,
+          144.45520000001125,
+          96.75160000000324,
+          81.12980000000971
+        ],
+        "count": 4,
+        "median": 106.75915000000532,
+        "min": 81.12980000000971,
+        "max": 144.45520000001125
+      },
+      "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+    },
+    "candidate": {
+      "browser": "156.0.8078.4",
+      "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+      "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+      "elapsedMillis": {
+        "samples": [
+          18109.8412,
+          18202.9957,
+          14983.1155,
+          12998.2186
+        ],
+        "count": 4,
+        "median": 16546.478349999998,
+        "min": 12998.2186,
+        "max": 18202.9957
+      },
+      "batches": {
+        "samples": [
+          12,
+          12,
+          12,
+          12
+        ],
+        "count": 4,
+        "median": 12,
+        "min": 12,
+        "max": 12
+      },
+      "cells": 24375,
+      "probes": 1950,
+      "budget": {
+        "maxProbes": 4096,
+        "maxCells": 2048,
+        "maxFindings": 500,
+        "maxFailureCases": 24,
+        "maxMillis": 5000
+      },
+      "mountedFlowButtons": 0,
+      "status": "complete",
+      "remainingCells": 0,
+      "animationFrames": {
+        "samples": [
+          902,
+          915,
+          778,
+          687
+        ],
+        "count": 4,
+        "median": 840,
+        "min": 687,
+        "max": 915
+      },
+      "maximumFrameGapMillis": {
+        "samples": [
+          450,
+          350,
+          366.7000000000007,
+          366.60000000000036
+        ],
+        "count": 4,
+        "median": 366.65000000000055,
+        "min": 350,
+        "max": 450
+      },
+      "cancelMillis": {
+        "samples": [
+          136.15169999999853,
+          135.51380000000063,
+          145.46319999999832,
+          55.938099999999395
+        ],
+        "count": 4,
+        "median": 135.83274999999958,
+        "min": 55.938099999999395,
+        "max": 145.46319999999832
+      },
+      "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+    }
+  },
+  "rawRuns": {
+    "ssr": {
+      "baseline": [
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4766154752,
+            "availableMemoryAfter": 3969687552
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 6397,
+              "batches": 12,
+              "startedAtMicros": 254322102191,
+              "finishedAtMicros": 254328499320,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 203,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 5211,
+              "batches": 1,
+              "startedAtMicros": 254328668597,
+              "finishedAtMicros": 254333879480,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 224,
+              "maximumObservedHeapMiB": 224,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 36637,
+              "batches": 24,
+              "startedAtMicros": 254334536740,
+              "finishedAtMicros": 254371174068,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 112,
+              "maximumObservedHeapMiB": 504,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 22968,
+              "batches": 1,
+              "startedAtMicros": 254371712764,
+              "finishedAtMicros": 254394681006,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 414,
+              "maximumObservedHeapMiB": 490,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 132,
+              "batches": 55,
+              "startedAtMicros": 254396150291,
+              "finishedAtMicros": 254396282683,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 496,
+              "maximumObservedHeapMiB": 504,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 21,
+              "batches": 1,
+              "startedAtMicros": 254396284771,
+              "finishedAtMicros": 254396306065,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 490,
+              "maximumObservedHeapMiB": 493,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4478763008,
+            "availableMemoryAfter": 3995512832
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 6148,
+              "batches": 12,
+              "startedAtMicros": 254471115664,
+              "finishedAtMicros": 254477264012,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 203,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 5299,
+              "batches": 1,
+              "startedAtMicros": 254477503204,
+              "finishedAtMicros": 254482801758,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 224,
+              "maximumObservedHeapMiB": 224,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 29685,
+              "batches": 24,
+              "startedAtMicros": 254483483934,
+              "finishedAtMicros": 254513168750,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 112,
+              "maximumObservedHeapMiB": 467,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 14638,
+              "batches": 1,
+              "startedAtMicros": 254513705315,
+              "finishedAtMicros": 254528342974,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 506,
+              "maximumObservedHeapMiB": 581,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 65,
+              "batches": 55,
+              "startedAtMicros": 254529066798,
+              "finishedAtMicros": 254529132310,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 589,
+              "maximumObservedHeapMiB": 596,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 14,
+              "batches": 1,
+              "startedAtMicros": 254529133550,
+              "finishedAtMicros": 254529147874,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 582,
+              "maximumObservedHeapMiB": 586,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4601556992,
+            "availableMemoryAfter": 4860817408
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 6862,
+              "batches": 12,
+              "startedAtMicros": 254531974827,
+              "finishedAtMicros": 254538837060,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 40,
+              "maximumObservedHeapMiB": 203,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 3768,
+              "batches": 1,
+              "startedAtMicros": 254538956785,
+              "finishedAtMicros": 254542724917,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 224,
+              "maximumObservedHeapMiB": 224,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 33371,
+              "batches": 24,
+              "startedAtMicros": 254543151988,
+              "finishedAtMicros": 254576522831,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 110,
+              "maximumObservedHeapMiB": 504,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 17115,
+              "batches": 1,
+              "startedAtMicros": 254577055117,
+              "finishedAtMicros": 254594170227,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 415,
+              "maximumObservedHeapMiB": 490,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 52,
+              "batches": 55,
+              "startedAtMicros": 254594907636,
+              "finishedAtMicros": 254594959421,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 499,
+              "maximumObservedHeapMiB": 505,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 15,
+              "batches": 1,
+              "startedAtMicros": 254594960216,
+              "finishedAtMicros": 254594974942,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 493,
+              "maximumObservedHeapMiB": 496,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 5167542272,
+            "availableMemoryAfter": 4374491136
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 7919,
+              "batches": 12,
+              "startedAtMicros": 254660981919,
+              "finishedAtMicros": 254668901113,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 45,
+              "maximumObservedHeapMiB": 184,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 4542,
+              "batches": 1,
+              "startedAtMicros": 254669100520,
+              "finishedAtMicros": 254673643043,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 115,
+              "maximumObservedHeapMiB": 152,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 30243,
+              "batches": 24,
+              "startedAtMicros": 254674600525,
+              "finishedAtMicros": 254704843809,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 149,
+              "maximumObservedHeapMiB": 649,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 28513,
+              "batches": 1,
+              "startedAtMicros": 254705506537,
+              "finishedAtMicros": 254734019534,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 692,
+              "maximumObservedHeapMiB": 692,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 146,
+              "batches": 55,
+              "startedAtMicros": 254736112018,
+              "finishedAtMicros": 254736258173,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 253,
+              "maximumObservedHeapMiB": 256,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 13,
+              "batches": 1,
+              "startedAtMicros": 254736259544,
+              "finishedAtMicros": 254736272416,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 246,
+              "maximumObservedHeapMiB": 250,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 5020426240,
+            "availableMemoryAfter": 4114595840
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 11234,
+              "batches": 12,
+              "startedAtMicros": 254740742864,
+              "finishedAtMicros": 254751977087,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 185,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 7008,
+              "batches": 1,
+              "startedAtMicros": 254752261703,
+              "finishedAtMicros": 254759269750,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 115,
+              "maximumObservedHeapMiB": 152,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 28394,
+              "batches": 24,
+              "startedAtMicros": 254759717952,
+              "finishedAtMicros": 254788111619,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 149,
+              "maximumObservedHeapMiB": 649,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 14510,
+              "batches": 1,
+              "startedAtMicros": 254788532989,
+              "finishedAtMicros": 254803042779,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 692,
+              "maximumObservedHeapMiB": 692,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 41,
+              "batches": 55,
+              "startedAtMicros": 254803653188,
+              "finishedAtMicros": 254803694480,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 218,
+              "maximumObservedHeapMiB": 227,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 8,
+              "batches": 1,
+              "startedAtMicros": 254803695144,
+              "finishedAtMicros": 254803703033,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 227,
+              "maximumObservedHeapMiB": 231,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4243013632,
+            "availableMemoryAfter": 4160315392
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 7060,
+              "batches": 12,
+              "startedAtMicros": 254902147749,
+              "finishedAtMicros": 254909207873,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 39,
+              "maximumObservedHeapMiB": 202,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 6231,
+              "batches": 1,
+              "startedAtMicros": 254909506423,
+              "finishedAtMicros": 254915737830,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 224,
+              "maximumObservedHeapMiB": 224,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 22010,
+              "batches": 24,
+              "startedAtMicros": 254916125379,
+              "finishedAtMicros": 254938134998,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 111,
+              "maximumObservedHeapMiB": 511,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 23063,
+              "batches": 1,
+              "startedAtMicros": 254938890251,
+              "finishedAtMicros": 254961953547,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 423,
+              "maximumObservedHeapMiB": 498,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 67,
+              "batches": 55,
+              "startedAtMicros": 254962894749,
+              "finishedAtMicros": 254962961798,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 507,
+              "maximumObservedHeapMiB": 512,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 10,
+              "batches": 1,
+              "startedAtMicros": 254962962758,
+              "finishedAtMicros": 254962972346,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 500,
+              "maximumObservedHeapMiB": 504,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        }
+      ],
+      "candidate": [
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4508028928,
+            "availableMemoryAfter": 3708387328
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 4746,
+              "batches": 12,
+              "startedAtMicros": 254402687047,
+              "finishedAtMicros": 254407433457,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 44,
+              "maximumObservedHeapMiB": 214,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 2172,
+              "batches": 1,
+              "startedAtMicros": 254407643849,
+              "finishedAtMicros": 254409815613,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 235,
+              "maximumObservedHeapMiB": 235,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 16882,
+              "batches": 24,
+              "startedAtMicros": 254410337071,
+              "finishedAtMicros": 254427218948,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 137,
+              "maximumObservedHeapMiB": 648,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 7348,
+              "batches": 1,
+              "startedAtMicros": 254427717964,
+              "finishedAtMicros": 254435065939,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 275,
+              "maximumObservedHeapMiB": 348,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 87,
+              "batches": 55,
+              "startedAtMicros": 254435796230,
+              "finishedAtMicros": 254435883645,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 355,
+              "maximumObservedHeapMiB": 362,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 12,
+              "batches": 1,
+              "startedAtMicros": 254435884941,
+              "finishedAtMicros": 254435896941,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 348,
+              "maximumObservedHeapMiB": 351,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4352622592,
+            "availableMemoryAfter": 3815415808
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 4887,
+              "batches": 12,
+              "startedAtMicros": 254439510150,
+              "finishedAtMicros": 254444397618,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 214,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 1983,
+              "batches": 1,
+              "startedAtMicros": 254444523572,
+              "finishedAtMicros": 254446506687,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 235,
+              "maximumObservedHeapMiB": 235,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 15935,
+              "batches": 24,
+              "startedAtMicros": 254446896267,
+              "finishedAtMicros": 254462831393,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 137,
+              "maximumObservedHeapMiB": 590,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 4354,
+              "batches": 1,
+              "startedAtMicros": 254463092452,
+              "finishedAtMicros": 254467446156,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 320,
+              "maximumObservedHeapMiB": 396,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 48,
+              "batches": 55,
+              "startedAtMicros": 254468304004,
+              "finishedAtMicros": 254468352467,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 409,
+              "maximumObservedHeapMiB": 409,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 10,
+              "batches": 1,
+              "startedAtMicros": 254468353413,
+              "finishedAtMicros": 254468362977,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 402,
+              "maximumObservedHeapMiB": 405,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 5455245312,
+            "availableMemoryAfter": 4828864512
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 3841,
+              "batches": 12,
+              "startedAtMicros": 254598877938,
+              "finishedAtMicros": 254602718929,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 212,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 1919,
+              "batches": 1,
+              "startedAtMicros": 254602933501,
+              "finishedAtMicros": 254604852123,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 233,
+              "maximumObservedHeapMiB": 233,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 13177,
+              "batches": 24,
+              "startedAtMicros": 254605215744,
+              "finishedAtMicros": 254618392804,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 122,
+              "maximumObservedHeapMiB": 580,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 5169,
+              "batches": 1,
+              "startedAtMicros": 254618782717,
+              "finishedAtMicros": 254623951976,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 371,
+              "maximumObservedHeapMiB": 443,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 50,
+              "batches": 55,
+              "startedAtMicros": 254625458210,
+              "finishedAtMicros": 254625507900,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 451,
+              "maximumObservedHeapMiB": 458,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 13,
+              "batches": 1,
+              "startedAtMicros": 254625509271,
+              "finishedAtMicros": 254625521978,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 444,
+              "maximumObservedHeapMiB": 447,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 5480263680,
+            "availableMemoryAfter": 4395876352
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 4820,
+              "batches": 12,
+              "startedAtMicros": 254630042876,
+              "finishedAtMicros": 254634863382,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 214,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 1840,
+              "batches": 1,
+              "startedAtMicros": 254635117769,
+              "finishedAtMicros": 254636958033,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 96,
+              "maximumObservedHeapMiB": 151,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 14691,
+              "batches": 24,
+              "startedAtMicros": 254637351902,
+              "finishedAtMicros": 254652042656,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 158,
+              "maximumObservedHeapMiB": 648,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 5029,
+              "batches": 1,
+              "startedAtMicros": 254652304171,
+              "finishedAtMicros": 254657332927,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 692,
+              "maximumObservedHeapMiB": 692,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 43,
+              "batches": 55,
+              "startedAtMicros": 254658133325,
+              "finishedAtMicros": 254658176426,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 224,
+              "maximumObservedHeapMiB": 232,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 8,
+              "batches": 1,
+              "startedAtMicros": 254658177051,
+              "finishedAtMicros": 254658185417,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 232,
+              "maximumObservedHeapMiB": 232,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4710244352,
+            "availableMemoryAfter": 4108697600
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 7455,
+              "batches": 12,
+              "startedAtMicros": 254811723825,
+              "finishedAtMicros": 254819178885,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 214,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 2193,
+              "batches": 1,
+              "startedAtMicros": 254819385873,
+              "finishedAtMicros": 254821578491,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 235,
+              "maximumObservedHeapMiB": 235,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 19646,
+              "batches": 24,
+              "startedAtMicros": 254822207937,
+              "finishedAtMicros": 254841853509,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 135,
+              "maximumObservedHeapMiB": 590,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 8014,
+              "batches": 1,
+              "startedAtMicros": 254842383886,
+              "finishedAtMicros": 254850398087,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 321,
+              "maximumObservedHeapMiB": 394,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 58,
+              "batches": 55,
+              "startedAtMicros": 254851357339,
+              "finishedAtMicros": 254851415214,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 402,
+              "maximumObservedHeapMiB": 408,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 11,
+              "batches": 1,
+              "startedAtMicros": 254851415926,
+              "finishedAtMicros": 254851427173,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 395,
+              "maximumObservedHeapMiB": 398,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        },
+        {
+          "environment": {
+            "node": "v22.23.5",
+            "platform": "win32",
+            "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+            "logicalCpus": 22,
+            "totalMemory": 33983225856,
+            "availableMemoryBefore": 4714790912,
+            "availableMemoryAfter": 3507257344
+          },
+          "methodology": "Node/Vite SSR. Memory is process heap sampled at batch boundaries, not a hard peak or browser-worker limit. Large cases assess a declared source-star scope, not the unrestricted mesh. Complete report parity asserted between batch sizes.",
+          "results": [
+            {
+              "label": "500: bounded star continuation",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 4420,
+              "batches": 12,
+              "startedAtMicros": 254859770429,
+              "finishedAtMicros": 254864190703,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 43,
+              "maximumObservedHeapMiB": 210,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "500: wide-batch reference",
+              "configuredPrefixes": 500,
+              "elapsedMillis": 2549,
+              "batches": 1,
+              "startedAtMicros": 254864383359,
+              "finishedAtMicros": 254866931940,
+              "workloadSha256": "4c10adf50407dc01bae5aa4718db9be3cc513b182b48d3f5aa1537697e26e359",
+              "reportSha256": "2526095f90fb94613dd5e80ad5cd85ce5a9f84be7067da4083400f7db6e3bd73",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 232,
+              "maximumObservedHeapMiB": 232,
+              "cells": 11875,
+              "probes": 950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: bounded star continuation",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 20301,
+              "batches": 24,
+              "startedAtMicros": 254868282506,
+              "finishedAtMicros": 254888583173,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 2048,
+                "maxCells": 1024,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 107,
+              "maximumObservedHeapMiB": 580,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "1000: wide-batch reference",
+              "configuredPrefixes": 1000,
+              "elapsedMillis": 7670,
+              "batches": 1,
+              "startedAtMicros": 254889286821,
+              "finishedAtMicros": 254896956541,
+              "workloadSha256": "5720818204e2334cc848dc0ee7c78712804629c52c7f988f6386f2610dbdfc28",
+              "reportSha256": "f5fbd9069562c4ff26fc42c8f9c9bb6469680353219315df2cea82751979e700",
+              "budget": {
+                "maxProbes": 100000,
+                "maxCells": 50000,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 371,
+              "maximumObservedHeapMiB": 443,
+              "cells": 24375,
+              "probes": 1950,
+              "failureCases": 0,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: one step per budget",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 194,
+              "batches": 55,
+              "startedAtMicros": 254898450785,
+              "finishedAtMicros": 254898645263,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 1,
+                "maxCells": 1,
+                "maxFindings": 1,
+                "maxFailureCases": 1,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 451,
+              "maximumObservedHeapMiB": 458,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            },
+            {
+              "label": "ECMP/N-1: wide-batch reference",
+              "configuredPrefixes": 1,
+              "elapsedMillis": 22,
+              "batches": 1,
+              "startedAtMicros": 254898647314,
+              "finishedAtMicros": 254898669833,
+              "workloadSha256": "11ebede38bf7dff70737423804273d8b1ef5610cbdadf6e10cf512766ce8e7b6",
+              "reportSha256": "bfac31f5f465f1d81ca4df43167667d226ff86dfba79d75fffe27317b349b8da",
+              "budget": {
+                "maxProbes": 4096,
+                "maxCells": 2048,
+                "maxFindings": 500,
+                "maxFailureCases": 24,
+                "maxMillis": 60000
+              },
+              "heapAtStartMiB": 443,
+              "maximumObservedHeapMiB": 446,
+              "cells": 45,
+              "probes": 55,
+              "failureCases": 4,
+              "status": "complete",
+              "complete": true,
+              "remainingCells": 0,
+              "limits": []
+            }
+          ]
+        }
+      ]
+    },
+    "browser": {
+      "baseline": [
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 111009.3762,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 24375,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 371,
+          "maximumFrameGapMillis": 4999.800000000003,
+          "cancelMillis": 116.7667000000074,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        },
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 96642.3239,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 24375,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 355,
+          "maximumFrameGapMillis": 4449.899999999994,
+          "cancelMillis": 144.45520000001125,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        },
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 83090.24759999999,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 24375,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 336,
+          "maximumFrameGapMillis": 5399.800000000003,
+          "cancelMillis": 96.75160000000324,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        },
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 76462.9072,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 24375,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 326,
+          "maximumFrameGapMillis": 4683.200000000012,
+          "cancelMillis": 81.12980000000971,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        }
+      ],
+      "candidate": [
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 18109.8412,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 0,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 902,
+          "maximumFrameGapMillis": 450,
+          "cancelMillis": 136.15169999999853,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        },
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 18202.9957,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 0,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 915,
+          "maximumFrameGapMillis": 350,
+          "cancelMillis": 135.51380000000063,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        },
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 14983.1155,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 0,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 778,
+          "maximumFrameGapMillis": 366.7000000000007,
+          "cancelMillis": 145.46319999999832,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        },
+        {
+          "browser": "156.0.8078.4",
+          "workloadSha256": "324baa45cc403f06695508f0ca951873b16ceba3034e5d518cf0c36f2a258156",
+          "reportSha256": "b81eb16f7a938088bdef9e4327cc6ccb2489c0504b9c283695538b029e2205da",
+          "elapsedMillis": 12998.2186,
+          "batches": 12,
+          "cells": 24375,
+          "probes": 1950,
+          "budget": {
+            "maxProbes": 4096,
+            "maxCells": 2048,
+            "maxFindings": 500,
+            "maxFailureCases": 24,
+            "maxMillis": 5000
+          },
+          "mountedFlowButtons": 0,
+          "status": "complete",
+          "remainingCells": 0,
+          "animationFrames": 687,
+          "maximumFrameGapMillis": 366.60000000000036,
+          "cancelMillis": 55.938099999999395,
+          "qualification": "Production app and actual worker, default 2048-cell/4096-probe/5000ms budgets. The SSR star uses a blank hub region; this native-importable variant supplies westeurope without changing routing scope. Includes continuation clicks, rendering and worker message copies. Frame gaps include report rendering; cancellation timing includes the browser action. Shared loopback environment, not a production latency guarantee."
+        }
+      ]
+    }
+  },
+  "baselineRevision": "46571e5bfc340a7395090cfb5100a72845086ab1",
+  "candidateImplementationRevision": "306f1b16c303f90ddf451a969b400b1dc9f575e4",
+  "profiling": {
+    "window": "1000: bounded star continuation",
+    "sampledMicros": 32991295,
+    "profileSha256": "6a2c7039799e882190ce7a14c48de32220c9055a46d313ac836d8dfc10f4d76d",
+    "inclusive": [
+      {
+        "functionName": "modelLimits",
+        "percent": 38.88
+      },
+      {
+        "functionName": "snapshot",
+        "percent": 37.2
+      }
+    ],
+    "self": [
+      {
+        "functionName": "structuredClone",
+        "percent": 36.89
+      },
+      {
+        "functionName": "ipv4",
+        "percent": 17.12
+      },
+      {
+        "functionName": "cidr",
+        "percent": 12.05
+      },
+      {
+        "functionName": "(garbage collector)",
+        "percent": 6.27
+      },
+      {
+        "functionName": "ipv4",
+        "percent": 5.72
+      },
+      {
+        "functionName": "cidr",
+        "percent": 4.2
+      },
+      {
+        "functionName": "",
+        "percent": 3.38
+      },
+      {
+        "functionName": "contains",
+        "percent": 2.21
+      },
+      {
+        "functionName": "contains",
+        "percent": 1.73
+      },
+      {
+        "functionName": "RegExp: ^(0|[1-9]\\d{0,2})(\\.(0|[1-9]\\d{0,2})){3}$",
+        "percent": 1.26
+      }
+    ],
+    "qualification": "Baseline instrumented bounded 1000-prefix CPU window, not before/after timing evidence. Sampled modelLimits repeatedly parses CIDRs; report snapshot cloning is deliberately preserved. Local absolute source paths omitted."
+  }
+}
