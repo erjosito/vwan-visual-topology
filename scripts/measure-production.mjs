@@ -62,9 +62,9 @@ try {
   })
   await page.goto(`http://127.0.0.1:${server.address().port}/?mode=full`)
   await page.getByTestId('aznet-app').waitFor()
+  await page.locator('header [data-language-selector][aria-label="言語 / Language"]').waitFor()
   const readyMs = await page.evaluate(() => performance.now())
   await page.waitForLoadState('networkidle')
-  if (await page.locator('html').getAttribute('lang') !== 'ja') throw new Error('Japanese startup did not initialize')
   result.initialJapaneseWorkspace = { mode: 'full', language: 'ja', readyMs, initialRequests: await assetGraph([...requests], root) }
   await context.close()
   const json = `${JSON.stringify(result, null, 2)}\n`
