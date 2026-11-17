@@ -155,13 +155,21 @@ describe('declarative guided course content', () => {
     }
   })
 
-  it('keeps the full journey plan attainable from explicit planned task budgets, separate from the preview', () => {
+  it('backs every reviewed belt allocation with the actual sequential task budget', () => {
     let budget = 0
     for (const belt of courseOutline) {
       expect(belt.pointsRequired).toBe(budget)
       budget += belt.plannedTaskPoints
     }
-    expect(exampleCourse.course.publication).toBe('preview')
-    expect(exampleCourse.course.belts.at(-1)!.pointsRequired).toBeLessThan(courseOutline.at(-1)!.pointsRequired)
+    expect(exampleCourse.course.publication).toBe('complete')
+    let available = 0
+    for (const [index, id] of exampleCourse.course.lessonOrder.entries()) {
+      const lesson = exampleCourse.lessons.find((item) => item.id === id)!
+      const points = lesson.tasks.reduce((total, task) => total + task.points, 0)
+      expect(points).toBe(courseOutline[index].plannedTaskPoints)
+      available += points
+      expect(exampleCourse.course.belts[index + 1].pointsRequired).toBe(available)
+    }
+    expect(available).toBe(courseOutline.at(-1)!.pointsRequired)
   })
 })

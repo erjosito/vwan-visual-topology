@@ -142,10 +142,11 @@ bindings and configuration-only packet predicates. Unknown health, allocation,
 mapping or filtering cannot certify either connectivity or isolation. Supported
 repairs are open-ended; no guest/listener or live-session readiness is certified.
 
-The lazy, non-modal learning sidebar runs four sequential missions through blue
-belt (24 tasks, 550 first-earned points) from `course-examples.ts` and
-`course-routing.ts`. They cover direct peering, equal-prefix UDR preference,
-longest-prefix diagnosis and shared-gateway return routing. `runner.ts` is the single progression authority: scoped
+The lazy, non-modal learning sidebar runs six sequential missions through black
+belt (40 tasks, 1,325 first-earned points) from `course-examples.ts`,
+`course-routing.ts` and `course-wan.ts`. They cover direct peering, equal-prefix
+UDR preference, longest-prefix diagnosis, shared-gateway return routing, secured
+Virtual WAN and a two-fault hybrid capstone. `runner.ts` is the single progression authority: scoped
 setup, observation, direct-peering configuration plus engine outcome, open-design
 requirements, and quizzes unlock the next task only after a passing current
 check and explicit **Complete task & continue**. The root keeps task/completion
@@ -230,13 +231,15 @@ accepted events remain session-only and exportable, never reported as durable.
 Known conflicts refuse completion/advance and preserve originals. Confirmed reset
 rechecks the confirmation snapshot and removes only guided history/points.
 Status details and explanation bodies load on demand to preserve startup budgets.
-The shipped four-mission preview is not the complete white-to-black curriculum
-(#184). Secured Virtual WAN and the mixed-network capstone remain planned, not
-available assessments. Blue belt is explicitly preview practice, not qualification.
+The six-mission curriculum (#184) provides the complete local white-to-black
+practice path, not Azure certification or evidence of educational effectiveness.
+Independent subject-matter/novice evaluation remains #181/#160.
 The original course/task/award identities and 175 first-earned preview points are
-retained. Advanced gateway content assesses diagnosis of preconfigured transit,
-not an unimplemented gateway-configuration guidance adapter. Exact current-route
-and forward/return checks, supported alternative repairs and a complete
+retained, as are the first 24 tasks' 550 points. Advanced gateway/WAN content
+assesses diagnosis of preconfigured transit/intent, not an unimplemented
+gateway/hub-configuration guidance adapter. Exact Default-table requirements and
+both-direction Firewall waypoints prevent route-presence or bypass-only passes.
+Exact current-route and forward/return checks, supported alternative repairs and a complete
 real-control journey are covered by the learning unit/browser suites.
 
 Retained legacy progress uses `aznet-simulator:practice:v1` in localStorage, independently

@@ -63,7 +63,7 @@ describe('routing incident content', () => {
     }
   })
 
-  it.each([false, true])('reaches every published belt while retaining original preview awards, reload at 175 XP: %s', async (reloadPreview) => {
+  it.each([0, 11, 24])('reaches every belt retaining historical awards, reload after task count: %s', async (reloadAt) => {
     let ledger: ProgressLedger = { version: 1, policyVersion: 1, completions: [] }
     let live: LearningWorkspace | undefined
     const options = () => ({
@@ -72,13 +72,14 @@ describe('routing incident content', () => {
       evaluate: async (request: Parameters<typeof executePlatform>[0]) => executePlatform(request),
       completed: (completion: Parameters<typeof recordCompletion>[1]) => {
         ledger = recordCompletion(ledger, { ...completion,
-          contentVersion: reloadPreview && ledger.completions.length < 11 ? 2 : completion.contentVersion })
+          contentVersion: reloadAt && ledger.completions.length < reloadAt ? reloadAt === 11 ? 2 : 3 : completion.contentVersion })
       },
     })
     let runner = createCourseRunner(exampleCourse, options())
     const checkpoints: Record<string, [string, number]> = {
       'peering.explain': ['yellow', 100], 'override.explain': ['orange', 175],
       'prefix.explain': ['green', 325], 'gateway.explain': ['blue', 550],
+      'wan.explain': ['brown', 875], 'capstone.explain': ['black', 1325],
     }
     for (const { task, lesson } of orderedTasks(exampleCourse)) {
       expect(runner.getSnapshot().taskId).toBe(task.id)
@@ -116,20 +117,20 @@ describe('routing incident content', () => {
       if (checkpoint) expect(beltProgress(ledger, exampleCourse.course, checkpointAssessments)).toMatchObject({
         belt: { id: checkpoint[0] }, points: checkpoint[1],
       })
-      if (reloadPreview && task.id === 'override.explain') {
+      if (reloadAt && ledger.completions.length === reloadAt) {
         const original = JSON.stringify(ledger)
         ledger = parseProgressLedger(original)
         runner = createCourseRunner(exampleCourse, options())
-        expect(runner.getSnapshot().taskId).toBe('prefix.load')
+        expect(runner.getSnapshot().taskId).toBe(orderedTasks(exampleCourse)[reloadAt].task.id)
         expect(JSON.stringify(ledger)).toBe(original)
       }
     }
     expect(runner.getSnapshot().taskId).toBeUndefined()
-    expect(earnedAwards(ledger, exampleCourse.course.id)).toHaveLength(24)
+    expect(earnedAwards(ledger, exampleCourse.course.id)).toHaveLength(40)
     const reloaded = createCourseRunner(exampleCourse, options())
     expect(reloaded.getSnapshot().taskId).toBeUndefined()
     expect(beltProgress(ledger, exampleCourse.course, checkpointAssessments)).toMatchObject({
-      points: 550, belt: { id: 'blue' }, next: undefined,
+      points: 1325, belt: { id: 'black' }, next: undefined,
     })
   })
 })
