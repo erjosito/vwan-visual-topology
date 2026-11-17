@@ -40,9 +40,12 @@ export function requirementDescription(requirement: Requirement): Localized {
     en: `The exact route ${requirement.prefix} must be ${requirement.expectation === 'present' ? 'present' : 'absent'} in the requested route table.`,
     ja: `指定されたルート テーブルで完全一致の ${requirement.prefix} が${requirement.expectation === 'present' ? '存在する' : '存在しない'}必要があります。`,
   }
-  if (requirement.kind === 'flow') return {
-    en: `${requirement.sourceAddress} to ${requirement.destinationAddress}: the modeled forward and return paths must ${requirement.expectation === 'allow' ? 'allow traffic' : 'demonstrate the requested block'}.`,
-    ja: `${requirement.sourceAddress} から ${requirement.destinationAddress}: モデルの往路と復路で${requirement.expectation === 'allow' ? '通信が許可される' : '指定された遮断が確認される'}必要があります。`,
+  if (requirement.kind === 'flow') {
+    const inspection = !!(requirement.requiredApplianceId || requirement.requiredFirewallHubId)
+    return {
+      en: `${requirement.sourceAddress} to ${requirement.destinationAddress}: the modeled forward and return paths must ${requirement.expectation === 'allow' ? 'allow traffic' : 'demonstrate the requested block'}.${inspection ? ' Both directions must also traverse the required inspection waypoint.' : ''}`,
+      ja: `${requirement.sourceAddress} から ${requirement.destinationAddress}: モデルの往路と復路で${requirement.expectation === 'allow' ? '通信が許可される' : '指定された遮断が確認される'}必要があります。${inspection ? '往路と復路の両方が、指定された検査の通過点も経由する必要があります。' : ''}`,
+    }
   }
   return { en: 'The requested packet-routing condition must be fully assessed and satisfied.', ja: '指定されたパケット ルーティング条件が完全に評価され、満たされる必要があります。' }
 }

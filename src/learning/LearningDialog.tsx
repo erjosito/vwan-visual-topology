@@ -91,11 +91,11 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       {state.replayLessonId && <p>{text(runnerText.replaying, language)}</p>}
       {reviewing && <div className="learning-notice"><p>{text(runnerText.review, language)}</p>
         <button type="button" onClick={() => runner.review()}>{text(runnerText.return, language)}</button></div>}
-      {done ? <section><h3>{text(runnerText.done, language)}</h3><p>{text(runnerText.doneDetail, language)}</p></section> : <>
+      {done ? <section><h3 id="learning-task" tabIndex={-1}>{text(runnerText.done, language)}</h3><p>{text(runnerText.doneDetail, language)}</p></section> : <>
       <h3>{text(lesson.title, language)}</h3>
       <p>{text(lesson.objective, language)}</p>
       <section aria-labelledby="learning-task" data-testid="learning-task" data-task-id={task.id}>
-        <h4 id="learning-task" aria-live="polite">{text(task.title, language)}</h4>
+        <h4 id="learning-task" tabIndex={-1} aria-live="polite">{text(task.title, language)}</h4>
         <p>{text(task.instruction, language)}</p>
         <p>{task.points} {text(runnerText.points, language)}</p>
         {inPractice && <p>{text(labels.loaded, language)}</p>}
@@ -142,7 +142,12 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
         </div>}
       </section>
       {!reviewing && <nav className="learning-actions" aria-label={text(runnerText.current, language)}>
-        <button type="button" disabled={!state.canContinue || running} onClick={() => runner.advance()}>{text(runnerText.continue, language)}</button>
+        <button type="button" disabled={!state.canContinue || running} onClick={() => {
+          if (runner.advance()) requestAnimationFrame(() => {
+            // Advance replaces the keyed panel and removes its focused button.
+            if (document.activeElement === document.body) document.getElementById('learning-task')?.focus({ preventScroll: true })
+          })
+        }}>{text(runnerText.continue, language)}</button>
       </nav>}
       </>}
       <div className="learning-actions">

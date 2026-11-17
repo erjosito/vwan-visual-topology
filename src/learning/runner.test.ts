@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { executePlatform } from '../platform/service'
 import type { PlatformRequest, PlatformResult } from '../platform/contract'
 import { exampleCourse } from './course-examples'
+import { requirementDescription } from './runner-content'
 import { createCourseRunner, orderedTasks, type LearningWorkspace, type RunnerOptions, type TaskCompletion } from './runner'
 
 function harness(overrides: Partial<RunnerOptions> = {}) {
@@ -260,5 +261,33 @@ describe('evidence-gated course runner', () => {
     expect(createCourseRunner(h.bundle, {
       workspace: h.live, changed: () => {}, evaluate: h.evaluate, completions: [] as TaskCompletion[],
     }).getSnapshot().taskId).toBe('peering.load')
+  })
+})
+
+describe('learner-facing unmet flow conditions', () => {
+  const flow = {
+    id: 'inspected-pair', kind: 'flow' as const,
+    source: { kind: 'subnet' as const, vnetId: 'a', subnetId: 'work-a' },
+    target: { kind: 'subnet' as const, vnetId: 'b', subnetId: 'work-b' },
+    sourceAddress: '10.1.1.4', destinationAddress: '10.2.1.4', expectation: 'allow' as const,
+  }
+  it.each([{ requiredApplianceId: 'vhub-fw:wan' }, { requiredFirewallHubId: 'wan' }])('explains both-direction inspection for %o without exposing engine IDs', (waypoint) => {
+    const description = requirementDescription({ ...flow, ...waypoint })
+    expect(description.en).toContain('Both directions must also traverse the required inspection waypoint.')
+    expect(description.ja).toContain('往路と復路の両方が、指定された検査の通過点も経由する必要があります。')
+    expect(description.en).not.toContain('vhub-fw:')
+    expect(description.ja).not.toContain('vhub-fw:')
+  })
+
+  it('does not imply an inspection condition for ordinary allow/deny or exact-route checks', () => {
+    const allow = requirementDescription(flow)
+    const deny = requirementDescription({ ...flow, expectation: 'deny' })
+    expect(allow.en).toContain('allow traffic')
+    expect(deny.en).toContain('demonstrate the requested block')
+    const route = requirementDescription({ id: 'route', kind: 'route', table: 'wan', prefix: '10.2.0.0/16', expectation: 'present' })
+    for (const description of [allow, deny, route]) {
+      expect(description.en).not.toContain('inspection waypoint')
+      expect(description.ja).not.toContain('検査の通過点')
+    }
   })
 })

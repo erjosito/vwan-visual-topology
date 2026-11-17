@@ -116,6 +116,34 @@ effectiveness. Novice evaluation remains #181/#160. Black belt records local
 practice completion, not Azure certification. Publication `complete` describes
 the available assessed path, not human validation or a live Azure guarantee.
 
+## Journey qualification and known limits
+
+The #202 curriculum head `e1f1057` passed full CI run `43989910088` before
+merging as `8d4151e`: 937 unit tests, 369 Chromium browser cases, 18 production
+cases, unchanged startup budgets and actual unpackaged/packaged Electron smoke.
+Those are repository regression denominators, not human success or learning
+rates. The focused learning fixtures exercise all belt thresholds, historical
+175/550-point histories, exact scopes, independent faults, supported alternatives
+and unsupported-result refusal. `runner.test.ts` and `progress-ledger.test.ts`
+separately cover stale evidence, inserted/revised content and immutable awards.
+
+#181 records qualification findings and follow-ups. #206 adds waypoint-aware
+failed-check feedback; #207 restores focus to the next task/completion heading
+after explicit advance, without adding Tab stops or changing ordinary canvas
+focus. Native-control browser regressions cover the complete course in EN and
+JA, with dark/reduced-motion and separate narrow/focus cases. These scripted
+checks do not validate native-language clarity, assistive-technology usability,
+contrast exceptions or educational effectiveness.
+
+Remaining enhancements: #204 needs a new exact hub-table guidance adapter;
+current advanced table checks are exact but their cue opens the source subnet.
+#205 separates the scaffolded capstone from a genuinely novel diagnosis task.
+Human recruitment, independent SME review and pre/post/delayed-transfer sessions
+remain pending under #160; this work has no participant results. Use the existing
+`docs/human-evaluation-pilot.md` protocol and its guided-first-mission task, not XP
+or test counts, to evaluate learning. Concurrent loaded-canvas accessibility and
+benchmark work is tracked separately in #201/#197/#198/#199.
+
 ## Add or change a lesson without changing runtime code
 
 1. Add/copy a starter in `course-scenarios.ts` with a permanent scenario ID.
