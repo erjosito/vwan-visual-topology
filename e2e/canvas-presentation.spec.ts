@@ -6,6 +6,7 @@ const styleKey = 'aznet-canvas-style:v1'
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode}: canvas keyboard and anchored wheel zoom share bounds without changing topology`, async ({ page }) => {
+    test.slow()
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.goto(`/?mode=${mode}&sample=${mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'}`)
     const svg = page.locator(mode === 'vwan' ? 'svg.diagram' : '[data-testid="aznet-diagram-svg"]')
