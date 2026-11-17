@@ -14,6 +14,8 @@ export type WorkspaceEditorHistory =
 
 export const WorkspaceSessionContext = createContext<{
   openLibrary: () => void
+  presentationPreview?: boolean
+  setPresentationPreview?: (preview: boolean) => void
   openDocument: (input: unknown) => Promise<void>
   getRequestVersion: () => number
   capture?: unknown

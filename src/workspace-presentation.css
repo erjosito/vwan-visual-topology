@@ -1,0 +1,40 @@
+.presentation-group { position: relative; }
+.presentation-group > summary {
+  list-style: none; cursor: pointer; white-space: nowrap;
+  padding: 8px 11px; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text); background: var(--surface); font-size: 12px;
+}
+.presentation-group > summary::-webkit-details-marker { display: none; }
+.presentation-group > summary::after { content: ' +'; }
+.presentation-group[open] > summary::after { content: ' -'; }
+.presentation-group > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.presentation-group-content {
+  position: absolute; z-index: 1250; top: calc(100% + 6px); right: 0;
+  width: min(290px, calc(100vw - 32px)); max-height: min(65dvh, 550px);
+  overflow: auto; display: grid; gap: 8px; padding: 12px;
+  border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); box-shadow: 0 8px 24px var(--shadow);
+}
+.presentation-group-content > button { text-align: left; width: 100%; }
+.presentation-group-content > .presentation-group-close { text-align: center; justify-self: end; width: auto; }
+.presentation-group-content > label { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.presentation-group-content > select { max-width: 100%; }
+.simulator-shell[data-ui-preview] :is(.aznet-topbar, .unified-topbar) {
+  flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; padding: 8px 12px;
+  max-height: none; overflow: visible;
+}
+.simulator-shell[data-ui-preview] .unified-topbar-left {
+  flex-wrap: wrap; align-self: auto; flex-basis: auto; flex-shrink: 1; gap: 8px;
+}
+.simulator-shell[data-ui-preview] .unified-brand { width: auto; margin-right: 8px; }
+.simulator-shell[data-ui-preview] :is(.aznet-topbar-controls, .unified-topbar-controls) {
+  flex-basis: auto; flex-shrink: 1; flex-wrap: wrap; gap: 8px;
+}
+.simulator-shell[data-ui-preview] [data-testid="ui-preview-toggle"] { border-color: var(--accent); color: var(--accent); }
+@media (max-width: 760px) {
+  .simulator-shell[data-ui-preview] :is(.unified-topbar-left, .aznet-topbar-controls, .unified-topbar-controls) { display: contents; }
+  .simulator-shell[data-ui-preview] .unified-brand { width: auto; margin-right: 0; }
+  .simulator-shell[data-ui-preview] .unified-brand h1 { font-size: 14px; white-space: normal; }
+  .presentation-group { position: static; }
+  .presentation-group-content { position: fixed; top: 16px; right: 16px; max-height: calc(100dvh - 32px); }
+}

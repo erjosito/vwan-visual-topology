@@ -1,6 +1,8 @@
 import { t, localizeDiagnostic, useLanguage, documentTitles } from './i18n'
 import { LearningTools } from './learning/LearningTools'
 import { WorkspaceMenu } from './WorkspaceSession'
+import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
+import { previewVnetActions } from './context-actions'
 import { useWorkspaceSession } from './workspace-context'
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
@@ -72,6 +74,7 @@ const parseNode = (key: string): PathNode => {
 
 function App() {
   const workspaceSession = useWorkspaceSession()
+  const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
   const language = useLanguage()
   useEffect(() => {
     document.documentElement.lang = language
@@ -419,7 +422,7 @@ function App() {
     { label: t("Check routing"), run: checkRouting },
     { label: t("Model notes and warnings"), run: () => setPanel('notes') },
   ]
-  const getContextActions = (contextSelection?: ObjectSelection, routeMap?: DiagramContextMenu['routeMap']): ContextAction[] => {
+  const getContextActions = (contextSelection?: ObjectSelection, routeMap?: DiagramContextMenu['routeMap'], fullActions = false): ContextAction[] => {
     const contextConnection = contextSelection?.kind === 'connection' ? topology.connections.find((connection) => connection.id === contextSelection.id) : undefined
     const vpnActions: ContextAction[] = contextConnection?.transport === 'VPN'
       ? (['static', 'bgp'] as const).map((mode) => ({
@@ -444,8 +447,8 @@ function App() {
           })
         },
       }] : []),
-      { label: t("Edit configuration"), run: () => setEditorRequest(contextSelection) },
-      ...(contextSelection.kind === 'spoke' ? [{ label: t('Open VNet detail'), run: () => setDetailOwner(contextSelection.id) }] : []),
+      { label: t("Edit configuration"), previewPrimary: true, run: () => setEditorRequest(contextSelection) },
+      ...(contextSelection.kind === 'spoke' ? [{ label: t('Open VNet detail'), previewPrimary: true, run: () => setDetailOwner(contextSelection.id) }] : []),
       ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
         { label: t("BGP table"), run: () => showRoutes(contextSelection) },
         { label: t("Learned routes"), run: () => showRoutes(contextSelection, false, 'learned') },
@@ -458,7 +461,7 @@ function App() {
       ...(['hub', 'site', 'spoke'].includes(contextSelection.kind) ? [
         { label: t("Show path to"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'to') },
         { label: t("Show path from"), disabled: !simulation.converged, children: pathActions(contextSelection as PathNode, 'from') },
-        { label: t("Open path explorer"), run: () => openPath(contextSelection as PathNode, 'to') },
+        { label: t("Open path explorer"), previewPrimary: true, run: () => openPath(contextSelection as PathNode, 'to') },
       ] : []),
       ...(contextSelection.kind === 'hub' ? [
         { label: t(topology.hubs.find((hub) => hub.id === contextSelection.id)?.firewall ? 'Configure Azure Firewall' : 'Add Azure Firewall'),
@@ -492,9 +495,9 @@ function App() {
       ] : []),
       ...(contextSelection.kind === 'spoke' ? [
         ...(spokeObj?.hubId || spokeObj?.nvaSpokeIds?.length ? [{
-          label: t('Configure virtual hub connection'), run: () => setEditorRequest(contextSelection),
+          label: t('Configure virtual hub connection'), previewPrimary: true, run: () => setEditorRequest(contextSelection),
         }] : [{
-          label: t('Connect to virtual hub'), allowDisabledChildren: true,
+          label: t('Connect to virtual hub'), previewPrimary: true, allowDisabledChildren: true,
           children: topology.hubs.length ? topology.hubs.map((hub) => ({
             label: hub.name,
             run: () => {
@@ -549,6 +552,8 @@ function App() {
       { label: t("Delete {0}", t(objectLabels[contextSelection.kind])), danger: true, run: () => setEditorRequest({ ...contextSelection, deleting: true }) },
     ] : canvasActions
     const contextFaults = contextSelection ? scenario.affected[contextSelection.id] ?? [] : []
+    const presented = workspaceSession?.presentationPreview && !fullActions && contextSelection?.kind === 'spoke'
+      ? previewVnetActions(ordinaryContextActions, () => setToolsOpenRequest((request) => request + 1)) : ordinaryContextActions
     const contextDomain = contextSelection && scenario.domains.find((domain) =>
       (domain.kind === 'site' && contextSelection.kind === 'site' || domain.kind === 'er-location' && contextSelection.kind === 'erLocation') && domain.id === contextSelection.id ||
       domain.kind === 'region' && (contextSelection.kind === 'hub' || contextSelection.kind === 'spoke') &&
@@ -556,7 +561,7 @@ function App() {
     return contextFaults.length
       ? contextFaults.map((fault) => ({ label: `Restore ${failureLabel(fault)}`, run: () => restoreFault(fault) }))
       : [...(contextDomain ? [{ label: `Simulate failure of ${failureLabel(contextDomain)}`, run: () => addFault(contextDomain) }]
-        : contextSelection && ['hub', 'spoke'].includes(contextSelection.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...ordinaryContextActions]
+        : contextSelection && ['hub', 'spoke'].includes(contextSelection.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...presented]
   }
   const contextSelection = contextMenu?.selection
   const contextObject = contextSelection && topologyObject(topology, contextSelection)
@@ -616,7 +621,7 @@ function App() {
       selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => update((next) => mutate(next))}
       selectedTargetId={selection?.id}
       onSelectTarget={(target) => { if (target.kind === 'network' || target.kind === 'site') selectObject({ kind: target.kind === 'site' ? 'site' : 'spoke', id: target.id }) }}
-      getContextActions={(target) => target.kind === 'network' || target.kind === 'site' ? getContextActions({ kind: target.kind === 'site' ? 'site' : 'spoke', id: target.id }).map(function wrap(action): ContextAction {
+      getContextActions={(target) => target.kind === 'network' || target.kind === 'site' ? getContextActions({ kind: target.kind === 'site' ? 'site' : 'spoke', id: target.id }, undefined, true).map(function wrap(action): ContextAction {
         return { ...action, children: action.children?.map(wrap), ...(action.run ? { run: () => { selectObject({ kind: target.kind === 'site' ? 'site' : 'spoke', id: target.id }); action.run?.() } } : {}) }
       }) : []}
       boundaries={diagramPaths.slice(0, 16).map((path) => ({ direction: 'direction' in path && path.direction === 'return' ? 'reply' : 'forward',
@@ -638,14 +643,14 @@ function App() {
         <WorkspaceMenu />
       </div>
       <div className="actions unified-topbar-controls">
-        <WorkspaceTools creationActions={[
+        <WorkspaceTools openRequest={toolsOpenRequest} creationActions={[
           { label: t('+ Hub'), run: () => setEditorRequest({ kind: 'hub' }) },
           { label: t('+ VNet'), run: () => setEditorRequest({ kind: 'spoke' }) },
           { label: t('+ Site'), run: () => setEditorRequest({ kind: 'site' }) },
           { label: t('+ ER location'), run: () => setEditorRequest({ kind: 'erLocation' }) },
         ]} getSelection={() => selectedObject && selection ? {
           title: t("{0} actions: {1}", t(objectLabels[selection.kind]), selectedObject.name),
-          actions: getContextActions(selection),
+          actions: getContextActions(selection, undefined, true),
         } : undefined} inventory={{
           getObjects: () => vwanWorkspaceObjects(topology),
           selected: selection ? vwanWorkspaceIdentity(selection) : undefined,
@@ -654,7 +659,20 @@ function App() {
         <LearningTools document={{ mode: 'vwan', topology }} />
         {selection?.kind === 'spoke' && <button type="button" onClick={() => setDetailOwner(selection.id)}>{t('VNet detail')}</button>}
         {selection?.kind === 'hub' && <button type="button" onClick={() => setSnatHubId(selection.id)}>{t('Firewall SNAT')}</button>}
-        <span className="local-badge">{t("Local-first · no Azure credentials")}</span><button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button><button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button><button onClick={() => exportTopology()}>{t("Export JSON")}</button><button onClick={() => importer.current?.click()}>{t("Import JSON")}</button><button onClick={() => setPanel('azure')}>{t("Azure files")}</button><button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button><button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button><input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+        <PresentationGroup label={t('Explore')}>
+          <span className="local-badge">{t("Local-first · no Azure credentials")}</span>
+          <button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button>
+          <button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button>
+          <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button>
+        </PresentationGroup>
+        <PresentationGroup label={t('File')}>
+          <button onClick={() => exportTopology()}>{t("Export JSON")}</button>
+          <button onClick={() => importer.current?.click()}>{t("Import JSON")}</button>
+          <button onClick={() => setPanel('azure')}>{t("Azure files")}</button>
+          <button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button>
+        </PresentationGroup>
+        <PresentationToggle />
+        <input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
     </header>
     {panel === 'samples' && <Suspense fallback={null}><SampleGallery testIdPrefix="vwan"
       hasWorkspace={topology.name !== 'New topology' || !!(topology.hubs.length || topology.spokes.length || topology.sites.length || topology.connections.length || topology.routeMaps?.length || topology.erLocations?.length)}

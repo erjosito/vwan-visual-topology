@@ -7,6 +7,7 @@ import type { WorkspaceIdentity, WorkspaceObject } from './workspace-objects'
 import './workspace-tools.css'
 import { workspaceCapabilities, workspaceCapabilityLimits } from './workspace-capabilities'
 import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
+import { useWorkspaceSession } from './workspace-context'
 
 type WorkspaceAction = ContextAction & { testId?: string }
 const storageKey = 'aznet-workspace-tools:v1'
@@ -50,9 +51,10 @@ function ActionList({ actions, query, parents = [], onRun }: {
   })}</ul>
 }
 
-export function WorkspaceTools<Selection>({ creationActions, getSelection, inventory, dismissRequest = 0 }: {
+export function WorkspaceTools<Selection>({ creationActions, getSelection, inventory, dismissRequest = 0, openRequest = 0 }: {
   creationActions: WorkspaceAction[]
   dismissRequest?: number
+  openRequest?: number
   getSelection?: () => { title: string; actions: ContextAction[] } | null | undefined
   inventory?: {
     getObjects: () => readonly WorkspaceObject<Selection>[]
@@ -62,10 +64,16 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
 }) {
   const id = useId()
   const language = useLanguage()
+  const preview = useWorkspaceSession()?.presentationPreview
   const capabilityText = (message: string) => language === 'ja' ? workspaceCapabilitiesJa[message] ?? message : message
-  const [visibility, setVisibility] = useState(() => ({ open: initialOpen(), request: dismissRequest }))
-  const open = visibility.open && visibility.request === dismissRequest
+  const [visibility, setVisibility] = useState(() => ({ open: initialOpen(), request: dismissRequest, openRequest }))
+  const requested = visibility.openRequest !== openRequest
+  const open = requested || visibility.open && visibility.request === dismissRequest
   const [search, setSearch] = useState('')
+  if (requested) {
+    setVisibility({ open: true, request: dismissRequest, openRequest })
+    setSearch('')
+  }
   const [top, setTop] = useState(0)
   const [objectsOpen, setObjectsOpen] = useState(false)
   const opener = useRef<HTMLButtonElement>(null)
@@ -73,6 +81,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
   const selectionHeading = useRef<HTMLHeadingElement>(null)
   const focusSelection = useRef(false)
   const focusSearch = useRef(false)
+  const lastOpenRequest = useRef(openRequest)
   useLayoutEffect(() => {
     const header = opener.current?.closest('header')
     if (!header) return
@@ -92,16 +101,17 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
   }, [])
   const changeOpen = (next: boolean, restoreFocus = false) => {
     focusSearch.current = next
-    setVisibility({ open: next, request: dismissRequest })
+    setVisibility({ open: next, request: dismissRequest, openRequest })
     try { localStorage.setItem(storageKey, next ? 'open' : 'closed') } catch { /* Keep the in-session choice. */ }
     if (restoreFocus) opener.current?.focus({ preventScroll: true })
   }
   useEffect(() => {
-    if (open && focusSearch.current) {
+    if (open && (focusSearch.current || lastOpenRequest.current !== openRequest)) {
       input.current?.focus({ preventScroll: true })
       focusSearch.current = false
     }
-  }, [open])
+    lastOpenRequest.current = openRequest
+  }, [open, openRequest])
   useEffect(() => {
     if (focusSelection.current || selectionHeading.current === document.activeElement) {
       focusSelection.current = false
@@ -125,6 +135,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     { title: t('Create network objects'), actions: creationActions, selection: false },
     ...(selection ? [{ title: selection.title, actions: selection.actions, selection: true }] : []),
   ].filter((group) => visibleActions(group.actions, query).length)
+  if (preview) groups.sort((a, b) => Number(b.selection) - Number(a.selection))
   const run = (action: WorkspaceAction) => {
     if (!window.matchMedia('(min-width: 901px)').matches) changeOpen(false, true)
     const handler = action.run ?? action.onSelect
@@ -141,6 +152,15 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
     setSearch('')
     inventory?.onSelect(object.selection)
   }
+  const actionSections = groups.map((group) => <section key={group.title} aria-label={group.title}>
+    {preview && !group.selection && selection && !query ? <details>
+      <summary>{group.title}</summary>
+      <ActionList actions={group.actions} query={query} onRun={run} />
+    </details> : <>
+      <h3 ref={group.selection ? selectionHeading : undefined} tabIndex={group.selection ? -1 : undefined}>{group.title}</h3>
+      <ActionList actions={group.actions} query={query} onRun={run} />
+    </>}
+  </section>)
   return <>
     <button type="button" ref={opener} aria-expanded={open} aria-controls={id}
       onClick={() => changeOpen(!open)}>{t('Workspace controls')}</button>
@@ -160,6 +180,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
         <label className="workspace-tools-search">{t('Search workspace controls')}
           <input ref={input} type="search" value={search} onChange={(event) => setSearch(event.target.value)} />
         </label>
+        {preview && actionSections}
         {(!query || capabilityMatches.length > 0) && <details className="workspace-tools-objects" data-testid="workspace-capabilities" open={query ? true : undefined}>
           <summary>{t('Capability coverage')}</summary>
           <div style={{ overflowX: 'auto' }}>
@@ -191,10 +212,7 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
             {matches.length > 100 && <p role="status">{t('Showing {0} of {1} objects. Refine your search to find others.', 100, matches.length)}</p>}
           </>}
         </details>}
-        {groups.map((group) => <section key={group.title} aria-label={group.title}>
-          <h3 ref={group.selection ? selectionHeading : undefined} tabIndex={group.selection ? -1 : undefined}>{group.title}</h3>
-          <ActionList actions={group.actions} query={query} onRun={run} />
-        </section>)}
+        {!preview && actionSections}
         {!groups.length && !matches.length && !capabilityMatches.length && <p role="status">{t('No commands match your search.')}</p>}
         {!selection && <p className="muted">{t('Select an object on the canvas or find it here for its configuration, routes and connection actions.')}</p>}
       </aside>

@@ -42,6 +42,9 @@ const noSubscribe = () => () => {}
 const noSync = () => undefined
 
 function Workspace() {
+  const [presentationPreview, setPresentationPreview] = useState(() => {
+    try { return localStorage.getItem('aznet-ui-preview:v1') === 'true' } catch { return false }
+  })
   const cloud = useCloudSession()
   const accountId = cloud?.account?.id
   const [startup] = useState(() => workspaceStartup({ getItem: (key) => localStorage.getItem(key) }, location.search, location.hash))
@@ -356,6 +359,10 @@ function Workspace() {
   const editorKey = practicing ? `practice:${practiceEpoch}:${provider}` : `design:${active?.provider}:${active?.revision}`
   const editorHistory = practicing ? practiceHistory : designHistory
   return <WorkspaceSessionContext value={{
+    presentationPreview, setPresentationPreview: (value) => {
+      setPresentationPreview(value)
+      try { localStorage.setItem('aznet-ui-preview:v1', String(value)) } catch { /* Keep the choice in this tab. */ }
+    },
     openLibrary: () => { leavePractice(); request.current++; setLibraryOpen(true) },
     openDocument, getRequestVersion: () => request.current,
     capture: practicing ? undefined : active?.capture,
@@ -393,7 +400,7 @@ function Workspace() {
       },
     } : undefined,
   }}>
-    <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
+    <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style} data-ui-preview={presentationPreview || undefined}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
       <CanvasMaximizeButton />
       {(practice || practiceNotice) && <Suspense fallback={null}><PracticeWorkspaceBar active={practicing}
