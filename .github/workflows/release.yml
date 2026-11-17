@@ -38,6 +38,8 @@ jobs:
   preflight:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    outputs:
+      handoff_artifact_id: ${{ steps.handoff.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -62,9 +64,10 @@ jobs:
           echo 'Candidate provenance, required CI gates, archive/file checksums and release ordering passed. No production changes have been made.' >> "$GITHUB_STEP_SUMMARY"
           cat release-input/receipt.json >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
+        id: handoff
         if: ${{ !inputs.preflight_only }}
         with:
-          name: release-input
+          name: release-input-${{ github.run_attempt }}
           path: release-input/
           include-hidden-files: true
           if-no-files-found: error
@@ -89,7 +92,8 @@ jobs:
           node-version: '22'
       - uses: actions/download-artifact@v4
         with:
-          name: release-input
+          artifact-ids: ${{ needs.preflight.outputs.handoff_artifact_id }}
+          merge-multiple: true
           path: release-input
       - name: Recheck candidate and release ordering after environment approval
         id: guard

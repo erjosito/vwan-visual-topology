@@ -115,8 +115,14 @@ CI keeps `static-site-<attempt>`, `statistics-function-<attempt>` and
 `unsigned-windows-development-build-<attempt>` for **30 days**. Their root
 `manifest.json` binds the `payload` to the source SHA, run and attempt.
 PR/manual candidates are useful for testing but are intentionally unreleasable.
-Preflight handoff artifacts last one day; approval after their expiry requires
-a fresh dispatch.
+Preflight handoff artifacts last one day. Each preflight attempt creates a new
+artifact ID, passed explicitly to promotion; rerunning only a failed promotion
+reuses the successful preflight's handoff, while rerunning all jobs regenerates
+it without replacing earlier handoffs. Approval expiry before any production
+changes can be recovered with a fresh dispatch. An interrupted promotion with
+an expired handoff must rerun all jobs in its original Release run to preserve
+the reserved receipt's identity. Diagnostic-only CI artifacts are replaceable
+on rerun; the per-attempt release candidate archives are never overwritten.
 
 Before production changes, promotion reserves a draft
 `promotion-<target>-<release-run-id>` GitHub release containing the verified

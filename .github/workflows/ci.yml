@@ -77,6 +77,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: automated-accessibility
+          overwrite: true
           path: test-artifacts/quality/
           if-no-files-found: warn
           retention-days: 7
@@ -84,12 +85,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: presentation-acceptance
+          overwrite: true
           path: test-results/**/*.png
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: production-measurements
+          overwrite: true
           path: test-results/production-measurements.json
           retention-days: 7
       - name: Package locked statistics Function candidate (no deployment)
@@ -120,6 +123,7 @@ jobs:
         if: failure()
         with:
           name: playwright-results
+          overwrite: true
           path: |
             test-results/
             test-artifacts/production-playwright/
