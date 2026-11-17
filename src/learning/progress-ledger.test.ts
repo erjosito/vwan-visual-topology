@@ -5,6 +5,7 @@ import { beltProgress, createProgressLedger, earnedAwards, guidedProgressKey, le
   parseProgressLedger, progressLimits, recordCompletion, type ProgressLedger } from './progress-ledger'
 import { orderedTasks, type TaskCompletion } from './runner'
 import { learningTracks } from './tracks'
+import { editions, scenarioCourse, selectedEdition } from './editions'
 
 const empty = (): ProgressLedger => ({ version: 1, policyVersion: 1, completions: [] })
 const completion = (index = 0, changes: Partial<TaskCompletion> = {}): TaskCompletion => {
@@ -23,6 +24,49 @@ const storage = () => {
 }
 
 describe('versioned completion and first-award ledger', () => {
+  it('defaults new learners to scenarios but preserves original-edition enrollment and historical black belts', () => {
+    expect(selectedEdition(empty()).course.id).toBe(scenarioCourse.id)
+    const historical = { ...empty(), completions: orderedTasks(exampleCourse).map((_, index) => completion(index)) }
+    const raw = storage()
+    raw.setItem(guidedProgressKey, JSON.stringify(historical))
+    const store = createProgressLedger(() => raw)
+    const previous = store.getSnapshot().ledger!.completions
+    expect(selectedEdition(store.getSnapshot().ledger).course.id).toBe(previewCourse.id)
+    expect(store.enroll(scenarioCourse.id, false)).toBe(false)
+    expect(store.enroll(scenarioCourse.id, true)).toBe(true)
+    expect(selectedEdition(createProgressLedger(() => raw).getSnapshot().ledger).course.id).toBe(scenarioCourse.id)
+    expect(store.getSnapshot().ledger!.completions).toEqual(previous)
+    expect(beltProgress(store.getSnapshot().ledger!, scenarioCourse, editions[1].assessments)).toMatchObject({ points: 0, belt: { id: 'white' } })
+    expect(beltProgress(store.getSnapshot().ledger!, previewCourse, checkpointAssessments)).toMatchObject({ points: 1325, belt: { id: 'black' } })
+    expect(store.enroll(previewCourse.id, true)).toBe(true)
+    expect(store.getSnapshot().ledger!.completions).toEqual(previous)
+  })
+  it('does not enroll on corrupt data, conflicting writes or unknown edition identities', () => {
+    const raw = storage()
+    const store = createProgressLedger(() => raw)
+    expect(store.enroll('unknown-course', true)).toBe(false)
+    raw.setItem(guidedProgressKey, 'preserve external bytes')
+    expect(store.enroll(scenarioCourse.id, true)).toBe(false)
+    expect(raw.getItem(guidedProgressKey)).toBe('preserve external bytes')
+    const broken = createProgressLedger(() => raw)
+    expect(broken.enroll(scenarioCourse.id, true)).toBe(false)
+    expect(() => parseProgressLedger(JSON.stringify({ ...empty(), enrollment: 'unknown-course' }))).toThrow()
+  })
+  it('retains explicit session-only enrollment through failed writes and persists it on retry', () => {
+    const raw = storage()
+    let quota = true
+    const store = createProgressLedger(() => ({ ...raw, setItem: (key, value) => {
+      if (quota) throw new Error('quota')
+      raw.setItem(key, value)
+    } }))
+    expect(store.enroll(previewCourse.id, true)).toBe(true)
+    expect(store.getSnapshot().status).toBe('session')
+    expect(selectedEdition(store.getSnapshot().ledger).course.id).toBe(previewCourse.id)
+    expect(raw.getItem(guidedProgressKey)).toBeNull()
+    quota = false
+    expect(store.retry(true)).toBe(true)
+    expect(selectedEdition(createProgressLedger(() => raw).getSnapshot().ledger).course.id).toBe(previewCourse.id)
+  })
   it('reads a pre-track black-belt backup unchanged, without credit from another course', () => {
     const raw = storage()
     const ledger: ProgressLedger = { ...empty(), completions: [

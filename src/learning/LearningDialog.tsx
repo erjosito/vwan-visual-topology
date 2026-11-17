@@ -5,7 +5,6 @@ import type { PlatformDocument } from '../platform/contract'
 import { contractVersion, engineVersion } from '../platform/contract'
 import { useWorkspaceSession } from '../workspace-context'
 import { concepts, text, type ConceptId } from './content'
-import { exampleCourse as bundle } from './course-examples'
 import type { CourseGuidance } from './course-contract'
 import { Explain } from './Explain'
 import { GuidanceHighlight } from './GuidanceHighlight'
@@ -18,9 +17,8 @@ import { practiceOwnershipFailure } from './practice-ownership'
 import { orderedTasks, taskCompleted } from './runner'
 import { requirementDescription, runnerLabels as runnerText } from './runner-content'
 import { TrackOverview } from './TrackOverview'
+import { editions } from './editions'
 import './learning.css'
-
-const instructions = orderedTasks(bundle)
 
 type PanelProps = {
   document: PlatformDocument
@@ -31,12 +29,14 @@ type PanelProps = {
 export function LearningDialog(props: PanelProps) {
   const session = useWorkspaceSession()
   if (!session?.learningState || !session.learning) return null
-  return <LearningPanel key={session.learningState.reviewId ?? session.learningState.taskId ?? 'complete'} {...props} />
+  return <LearningPanel key={`${session.learning.bundle.course.id}:${session.learningState.reviewId ?? session.learningState.taskId ?? 'complete'}`} {...props} />
 }
 
 function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const language = useLanguage(), session = useWorkspaceSession()
   const runner = session!.learning!, state = session!.learningState!
+  const bundle = runner.bundle
+  const instructions = orderedTasks(bundle)
   const done = !state.taskId && !state.reviewId
   const reviewing = !!state.reviewId
   const index = Math.max(0, instructions.findIndex((item) => item.task.id === (state.reviewId ?? state.taskId)))
@@ -85,9 +85,11 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       if (event.key === 'Escape') { event.stopPropagation(); onPause() }
     }}>
       <header><h2 id="learning-title">{text(learningLabels.learn, language)}</h2><button type="button" onClick={onPause}>{text(labels.pause, language)}</button></header>
-      <p data-testid="learning-active-track"><strong>{text(bundle.course.title, language)}</strong></p>
+      <p data-testid="learning-active-track"><strong>{text(bundle.course.title, language)}</strong> · {text(editions.find((entry) => entry.course.id === bundle.course.id)!.name, language)}</p>
+      <button type="button" onClick={() => session?.setLearningDetailsOpen?.(true)}>{language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}</button>
       <TrackOverview />
-      <p className="learning-notice">{text(runnerText.preview, language)}</p>
+      <p className="learning-notice">{bundle.course.id === 'azure-networking-preview' ? text(runnerText.preview, language)
+        : language === 'ja' ? '7 つの順序立ったシナリオで、この版の白帯から黒帯まで進みます。検証は静的なルーティングのモデルに限定され、Azure 認定ではありません。' : 'Seven sequential scenarios take you from white to black belt in this edition. Checks assess modeled steady-state routing, not Azure certification.'}</p>
       <p>{text(learningLabels.local, language)}</p>
       <p>{text(runnerText.session, language)}</p>
       <p data-testid="learning-completion-count">{instructions.filter(({ task }) => taskCompleted(bundle, state.completions, task)).length} / {instructions.length} {text(runnerText.completed, language)}</p>

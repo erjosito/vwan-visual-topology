@@ -11,6 +11,14 @@ const cue = (page: Page) => page.locator('.learning-cue')
 const saved = (page: Page) => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), practiceWorkspaceKey)
 const anchor = (page: Page, ...scope: string[]) => page.locator(`[data-learning-anchor=${JSON.stringify(guidanceAnchor(...scope))}]`)
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript((key) => {
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({
+      version: 1, policyVersion: 1, completions: [], enrollment: 'azure-networking-preview',
+    }))
+  }, guidedProgressKey)
+})
+
 async function open(page: Page) {
   await page.goto('/?mode=full')
   await page.getByTestId('learning-open').click()
@@ -223,7 +231,7 @@ test('all six missions reach black belt through scoped repairs without touching 
   const earned = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
   await page.getByTestId('learning-status').click()
   const statusDetails = page.getByTestId('learning-status-details')
-  await expect(statusDetails).toContainText('Routing foundations - Black belt · 1325 points')
+  await expect(statusDetails).toContainText('Routing foundations · Original edition - Black belt · 1325 points')
   await expect(statusDetails).toContainText('Planned tracks do not change this achievement.')
   await statusDetails.getByTestId('learning-tracks').locator('summary').click()
   await expect(statusDetails.getByRole('region', { name: 'Planned tracks', exact: true }).getByRole('listitem')).toHaveCount(2)

@@ -2809,7 +2809,17 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
               setContextMenu(null)
               setGuidanceRevision((revision) => revision + 1)
-              if (cue.action === 'peering.command') {
+              if (cue.action === 'hub.configure') {
+                setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })
+                setActiveTab('editor')
+              } else if (cue.action === 'hub-routes.open') {
+                inspectRoutes({ kind: 'vwan-hub', hubId: cue.params.hubId })
+                setHubTableInspection({ hubId: cue.params.hubId, tableId: cue.params.tableId })
+              } else if (cue.action === 'network.configure') {
+                setSelected({ kind: 'vnet', vnetId: cue.params.vnetId })
+                setActiveTab('editor')
+                setFrameRequest({ vnetId: cue.params.vnetId, revision: guidanceRevision + 1 })
+              } else if (cue.action === 'peering.command') {
                 const entity = { kind: 'vnet' as const, vnetId: cue.params.vnetAId }
                 setSelected(entity)
                 setActiveTab(null)
@@ -3529,7 +3539,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </div>}
 
                 {inspectedControlRib && (
-                  <div className="aznet-card" data-testid="aznet-control-rib-card">
+                  <div className="aznet-card" data-testid="aznet-control-rib-card"
+                    data-learning-anchor={routeSelection.kind === 'vwan-hub' && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
+                      ? guidanceAnchor('hub-effective-table', routeSelection.hubId, hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE) : undefined}>
                     <h3>{inspectedControlRib.title}</h3>
                     {routeSelection.kind === 'vwan-hub' && (() => {
                       const hub = topology.vwanHubs.find((hub) => hub.id === routeSelection.hubId)
@@ -4347,6 +4359,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       <div
                         key={vnet.id}
                         data-testid={`aznet-vnet-config-${vnet.id}`}
+                        data-learning-anchor={guidanceAnchor('network-editor', vnet.id)}
                         style={{
                           marginBottom: 10,
                           padding: 10,
@@ -4792,6 +4805,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       <div
                         key={rt.id}
                         data-testid={`aznet-rt-card-${rt.id}`}
+                        data-learning-anchor={selected.kind === 'subnet' ? guidanceAnchor('udr-table', selected.vnetId, selected.subnetId, rt.id) : undefined}
                         style={{
                           marginBottom: 10,
                           padding: 10,
@@ -5708,7 +5722,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   topology.vwanHubs
                     .filter((h) => selected.kind !== 'vwan-hub' || h.id === selected.hubId)
                     .map((hub) => (
-                      <div key={hub.id} className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`}>
+                      <div key={hub.id} className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`} data-learning-anchor={guidanceAnchor('hub-editor', hub.id)}>
                         <h3>Virtual WAN Hub: {hub.name}</h3>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <input

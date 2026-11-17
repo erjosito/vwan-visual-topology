@@ -29,6 +29,7 @@ export type FlowRequirement = {
   expectation: 'allow' | 'deny'
   requiredFirewallHubId?: string
   requiredApplianceId?: string
+  applianceChain?: { forward: string[]; reverse: string[] }
   firewallPolicy?: HubFirewallPolicy
 }
 export type RouteRequirement = {
@@ -108,6 +109,11 @@ export const capabilities = {
   mixedRouting: ['native hub tables/association/propagation', 'shared VWAN HRP selection', 'hub-owned and site-owned route maps',
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],
+  orderedApplianceChains: {
+    modes: ['hub-spoke', 'full'], field: 'applianceChain', expectation: 'allow',
+    scope: 'Explicit forward and reverse ordered subsequences of complete delivered original-appliance traces; 1-16 distinct IDs per leg.',
+    excluded: ['unknown owners', 'legacy waypoint combinations', 'HA health/orchestration', 'vendor internals', 'live security rules or sessions'],
+  },
   staticHubFirewall: {
     scope: 'Single hub, declared original hub.firewall ID/name, routing intent disabled, CIDR/ResourceId routes to that ID only.',
     forwarding: 'Longest prefix, then static over learned for equal prefixes; independent local-connection Firewall onward and return lookups.',

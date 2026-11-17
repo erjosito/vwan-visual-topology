@@ -127,9 +127,9 @@ export const exampleCourse: CourseBundle = {
         question: { en: 'Can these two isolated VNets exchange private traffic?', ja: '分離されたこの 2 つの VNet はプライベート通信できますか。' },
         correctChoiceId: 'no-connection',
         choices: [
-          { id: 'same-region', text: { en: 'Yes, because they share a region.', ja: '同じリージョンなので可能です。' },
+          { id: 'same-region', text: { en: 'Yes, their shared region supplies a private connecting path.', ja: 'はい。共通のリージョンがプライベート接続経路を提供します。' },
             feedback: { en: 'A shared region does not establish private connectivity.', ja: '同じリージョンであることはプライベート接続を確立しません。' } },
-          { id: 'no-connection', text: { en: 'No, there is no connecting path.', ja: '接続経路がないため不可能です。' },
+          { id: 'no-connection', text: { en: 'No, their separate networks have no private connecting path.', ja: 'いいえ。別々のネットワーク間にプライベート接続経路がありません。' },
             feedback: { en: 'Correct. Separate VNet address spaces need a supported connecting path.', ja: '正解です。別々の VNet アドレス空間にはサポートされる接続経路が必要です。' } },
         ],
       },
@@ -140,9 +140,9 @@ export const exampleCourse: CourseBundle = {
         question: { en: 'If B is also peered with C, does A automatically reach C through B?', ja: 'B が C ともピアリングすると、A は B 経由で自動的に C に到達しますか。' },
         correctChoiceId: 'not-transitive',
         choices: [
-          { id: 'automatic', text: { en: 'Yes, peering is transitive.', ja: 'はい、ピアリングには推移性があります。' },
+          { id: 'automatic', text: { en: 'Yes, B combines its two peerings into a transit path.', ja: 'はい。B が 2 つのピアリングを転送経路に結合します。' },
             feedback: { en: 'Ordinary VNet peering does not provide automatic transit.', ja: '通常の VNet ピアリングでは自動転送は提供されません。' } },
-          { id: 'not-transitive', text: { en: 'No, a supported direct or transit design is required.', ja: 'いいえ、サポートされる直接接続または転送設計が必要です。' },
+          { id: 'not-transitive', text: { en: 'No, A and C need a direct connection or a transit design.', ja: 'いいえ。A と C には直接接続または転送設計が必要です。' },
             feedback: { en: 'Correct. A-B and B-C peerings alone do not connect A to C.', ja: '正解です。A-B と B-C のピアリングだけでは A と C は接続されません。' } },
         ],
       },
@@ -153,9 +153,9 @@ export const exampleCourse: CourseBundle = {
         question: { en: 'Why does this /16 UDR override the peering /16 route?', ja: 'この /16 UDR がピアリングの /16 ルートを上書きするのはなぜですか。' },
         correctChoiceId: 'same-prefix',
         choices: [
-          { id: 'always-udr', text: { en: 'UDRs always beat more-specific routes.', ja: 'UDR は常により具体的なルートより優先されます。' },
+          { id: 'always-udr', text: { en: 'Its user-defined source makes it more specific than the peering route.', ja: 'ユーザー定義の生成元により、ピアリング ルートより具体的になります。' },
             feedback: { en: 'Longest-prefix matching happens first; do not ignore prefix length.', ja: '最長プレフィックス一致が最初に行われます。プレフィックス長を無視しないでください。' } },
-          { id: 'same-prefix', text: { en: 'For the same prefix, the UDR has higher preference.', ja: '同じプレフィックスでは UDR の優先順位が高いためです。' },
+          { id: 'same-prefix', text: { en: 'For these equal prefixes, the user-defined route has higher preference.', ja: 'この同じプレフィックス同士では、ユーザー定義ルートの優先順位が高くなります。' },
             feedback: { en: 'Correct. Equal-prefix preference selects the UDR; None drops the traffic.', ja: '正解です。同じプレフィックスの優先順位で UDR が選択され、None が通信を破棄します。' } },
         ],
       },
@@ -174,4 +174,24 @@ export const exampleCourse: CourseBundle = {
     ...routingGuidance,
     ...wanGuidance,
   ],
+}
+
+const quizOrder: Record<string, string[]> = {
+  'no-connection': ['no-connection', 'same-region'],
+  'not-transitive': ['automatic', 'not-transitive'],
+  'same-prefix': ['same-prefix', 'always-udr'],
+  'application-only': ['both', 'neither', 'application-only'],
+  'longer-peering': ['longer-peering', 'route-type-first', 'same-region'],
+  'check-return': ['bgp-guarantees', 'new-gateway', 'check-return'],
+  'transit-and-evidence': ['automatic-transit', 'transit-and-evidence', 'live-proof'],
+  'source-first': ['source-first', 'intent-overrides', 'internet-policy'],
+  'lookup-versus-export': ['same-setting', 'any-table', 'lookup-versus-export'],
+  'routing-only': ['application-proof', 'routing-only', 'all-tables'],
+  'independent-faults': ['independent-faults', 'one-fix', 'return-irrelevant'],
+  'bounded-evidence': ['certified', 'unknown-passes', 'bounded-evidence'],
+}
+for (const check of exampleCourse.checks) {
+  if (check.kind !== 'quiz.answered') continue
+  const order = quizOrder[check.params.correctChoiceId]
+  check.params.choices = order.map((id) => check.params.choices.find((choice) => choice.id === id)!)
 }
