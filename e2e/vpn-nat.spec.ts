@@ -19,7 +19,8 @@ for (const provider of ['classic', 'vwan'] as const) {
     await page.getByLabel('Theme', { exact: true }).selectOption(provider === 'classic' ? 'light' : 'dark')
     const configure = async () => {
       const [controls, configure] = await page.evaluate(async () => {
-        const { t } = await import('/src/i18n.ts')
+        const { t, loadLanguage, readLanguage } = await import('/src/i18n.ts')
+        await loadLanguage(readLanguage())
         return [t('Workspace controls'), t('Configure VPN Connection')]
       })
       const tools = page.getByRole('complementary', { name: controls, exact: true })
