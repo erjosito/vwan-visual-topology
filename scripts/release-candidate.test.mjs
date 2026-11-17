@@ -254,6 +254,8 @@ test('expired CI artifacts recover only from a published matching release archiv
   await preflight('web', '123', ready, '1')
   assert.equal(hash(await readFile(resolve(ready, 'candidate.zip'))), archiveSha256)
   await assert.rejects(guard(ready, false), /Unresolved promotion draft/)
+  const recovery = await guard(ready, true)
+  assert.equal(recovery.noOp, false, 'An unresolved deployment must not turn a known-good rollback into a no-op')
 })
 
 function releaseStore() {

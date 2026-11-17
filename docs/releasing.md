@@ -142,7 +142,7 @@ runs again after environment approval, so an older/divergent source cannot
 replace a newer published source. An exact current candidate is a no-op;
 the same source with different bytes is rejected rather than silently replaced.
 
-A draft receipt left by a failed/partial promotion blocks other promotions for
+A draft receipt left by a failed/partial promotion blocks forward promotions for
 that target. Inspect the failed steps and rerun the **original Release run**:
 its draft/assets are reused without overwriting existing bytes. Deployment
 retry can repeat the same package upload; it cannot guarantee an Azure
@@ -151,7 +151,13 @@ verify existing asset digests, never overwrite a published version.
 
 If GitHub/Azure changed state but final receipt publication failed, do not
 delete the draft merely to get a green run. Reconcile what was deployed and
-finish the original run first. A missing or mismatched published asset is an
+finish the original run, or explicitly roll back to a previously released
+candidate. A recovery rollback is allowed past another run's unresolved draft
+and forces deployment even if the last successful receipt already names those
+known-good bytes: the failed deployment may have changed production. Verify
+recovery before manually reconciling/removing only the identified failed draft;
+it continues to block forward promotion until reconciled.
+A missing or mismatched published asset is an
 error requiring investigation, not permission to clobber it. If abandoning a
 draft after confirming no production side effects, delete **only that
 identified draft** (and any associated unused tag after inspection); this is a

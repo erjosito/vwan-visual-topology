@@ -222,8 +222,10 @@ export async function guard(directory, rollback) {
   requireValue(manifest.version === receipt.version && manifest.packageVersion === receipt.packageVersion, 'Preflight version mismatch')
   const records = recordsFor(receipt.repository, receipt.target)
   const relation = records.length ? api(`repos/${receipt.repository}/compare/${records[0].sourceSha}...${receipt.sourceSha}`).status : null
-  const noOp = promotionDecision(receipt, records, rollback, relation)
-  for (const pending of releases(receipt.repository).filter((release) => release.draft && release.tag_name.startsWith(`promotion-${receipt.target}-`))) {
+  const pendingReleases = releases(receipt.repository).filter((release) => release.draft && release.tag_name.startsWith(`promotion-${receipt.target}-`))
+  const noOp = promotionDecision(receipt, records, rollback, relation) && !(rollback && pendingReleases.length)
+  for (const pending of pendingReleases) {
+    if (rollback && pending.tag_name !== `promotion-${receipt.target}-${process.env.GITHUB_RUN_ID}`) continue
     requireValue(pending.tag_name === `promotion-${receipt.target}-${process.env.GITHUB_RUN_ID}`
       && JSON.parse(pending.body).archiveSha256 === receipt.archiveSha256,
     'Unresolved promotion draft exists; rerun that release or reconcile it before another promotion')
@@ -236,7 +238,7 @@ export async function guard(directory, rollback) {
     }
   }
   await output({ no_op: noOp, source_sha: receipt.sourceSha, version: receipt.version ?? '' })
-  return receipt
+  return { ...receipt, noOp }
 }
 
 export async function record(directory, rollback, reserve = false) {
