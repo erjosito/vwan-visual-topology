@@ -94,7 +94,7 @@ describe('declarative guided course content', () => {
     ['wrong guidance scope', (bundle) => { bundle.lessons[0].tasks[2].guidanceIds = ['peer-command'] }],
     ['duplicate award', (bundle) => { bundle.lessons[1].tasks[0].awardId = bundle.lessons[0].tasks[0].awardId }],
     ['zero completion points', (bundle) => { bundle.lessons[0].tasks[0].points = 0 }],
-    ['unattainable threshold', (bundle) => { bundle.course.belts[1].pointsRequired = 1000 }],
+    ['unattainable threshold', (bundle) => { bundle.course.belts[1].pointsRequired = Number.MAX_SAFE_INTEGER }],
     ['nonincreasing thresholds', (bundle) => { bundle.course.belts[1].pointsRequired = 0 }],
     ['unknown checkpoint', (bundle) => { bundle.course.belts[1].checkpointTaskIds = ['missing'] }],
     ['missing checkpoint', (bundle) => { bundle.course.belts[1].checkpointTaskIds = [] }],

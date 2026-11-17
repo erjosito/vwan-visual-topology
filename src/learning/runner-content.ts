@@ -2,7 +2,7 @@ import type { Localized } from './content'
 import type { Requirement } from '../platform/contract'
 
 export const runnerLabels = {
-  preview: { en: 'Two assessed lessons are available. The complete white-to-black-belt curriculum is still being developed.', ja: '評価付きの 2 レッスンを利用できます。白帯から黒帯までの全カリキュラムは開発中です。' },
+  preview: { en: 'Four sequential missions take you through blue belt. Secured Virtual WAN and the black-belt capstone are still being developed. Navigation help and retries are always free.', ja: '4 つの順序立ったミッションで青帯まで進めます。保護された Virtual WAN と黒帯の総合課題は開発中です。操作場所の案内と再試行は常に無料です。' },
   session: { en: 'Task completion and first-earned points use this browser origin or desktop profile only. Check the header for saved versus session-only progress.', ja: 'タスクの完了と初回獲得ポイントは、このブラウザーのオリジンまたはデスクトップのプロファイルだけで使用します。保存済みかセッションのみかはヘッダーで確認できます。' },
   progress: { en: 'Completion could not be recorded. Your task is still locked at this step. Check the learning-status details for storage recovery or another-tab ownership, then check the task again.', ja: '完了を記録できませんでした。このステップはまだ完了していません。学習状態の詳細で保存の回復方法や別のタブの所有権を確認し、タスクを再確認してください。' },
   check: { en: 'Check task', ja: 'タスクを確認' },
@@ -27,7 +27,7 @@ export const runnerLabels = {
   replayConfirm: { en: 'Start lesson replay', ja: 'レッスンの再練習を開始' },
   replaying: { en: 'Replaying this lesson. Past completion is preserved.', ja: 'このレッスンを再練習中です。過去の完了は保持されます。' },
   done: { en: 'Available lessons complete', ja: '利用可能なレッスンを完了' },
-  doneDetail: { en: 'You completed both assessed examples. Review or replay to practice again. This is not a black-belt qualification or an Azure certification.', ja: '評価付きの 2 つの例を完了しました。復習や再練習を利用できます。黒帯の資格や Azure 認定ではありません。' },
+  doneDetail: { en: 'You completed the available networking missions. Review or replay without earning repeat points. Advanced chapters are still being developed; this is not black-belt qualification or Azure certification.', ja: '利用可能なネットワークのミッションを完了しました。ポイントを重複獲得せずに復習や再練習ができます。上級の章は開発中で、黒帯の資格や Azure 認定ではありません。' },
   outline: { en: 'Learning path and completed-task review', ja: '学習の順序と完了したタスクの復習' },
   completed: { en: 'Completed', ja: '完了' },
   locked: { en: 'Locked', ja: 'ロック中' },
