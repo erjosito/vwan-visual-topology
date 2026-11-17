@@ -4,6 +4,7 @@ import { checkpointAssessments, previewCourse } from './course-profile'
 import { beltProgress, createProgressLedger, earnedAwards, guidedProgressKey, legacyProgressKey,
   parseProgressLedger, progressLimits, recordCompletion, type ProgressLedger } from './progress-ledger'
 import { orderedTasks, type TaskCompletion } from './runner'
+import { learningTracks } from './tracks'
 
 const empty = (): ProgressLedger => ({ version: 1, policyVersion: 1, completions: [] })
 const completion = (index = 0, changes: Partial<TaskCompletion> = {}): TaskCompletion => {
@@ -22,6 +23,27 @@ const storage = () => {
 }
 
 describe('versioned completion and first-award ledger', () => {
+  it('reads a pre-track black-belt backup unchanged, without credit from another course', () => {
+    const raw = storage()
+    const ledger: ProgressLedger = { ...empty(), completions: [
+      ...orderedTasks(exampleCourse).map((_, index) => completion(index, {
+        courseId: 'azure-networking-preview', contentVersion: index < 11 ? 2 : index < 24 ? 3 : 4,
+      })),
+      completion(0, { courseId: 'future-dns', points: 9999 }),
+    ] }
+    const backup = JSON.stringify(ledger, null, 2)
+    raw.setItem('network-simulator:learning-progress:v1', backup)
+    const store = createProgressLedger(() => raw)
+    const track = learningTracks.find((entry) => entry.status === 'available')
+    if (track?.status !== 'available') throw new Error('Playable track required')
+    expect(beltProgress(store.getSnapshot().ledger!, { ...previewCourse, id: track.courseId }, checkpointAssessments))
+      .toMatchObject({ belt: { id: 'black' }, points: 1325, next: undefined })
+    expect(store.getSnapshot().ledger?.completions).toEqual(ledger.completions)
+    expect(raw.getItem(guidedProgressKey)).toBe(backup)
+    expect(JSON.parse(store.backup(false)!).completions).toEqual(ledger.completions)
+    expect(earnedAwards(recordCompletion(store.getSnapshot().ledger!, completion(39)), track.courseId)).toHaveLength(40)
+  })
+
   it('deduplicates retries, repeated events, refresh and reassessment without repricing earned or retired awards', () => {
     let ledger = recordCompletion(empty(), completion())
     ledger = recordCompletion(ledger, completion(0, { points: 999, title: { en: 'Edited wording', ja: '改訂' } }))

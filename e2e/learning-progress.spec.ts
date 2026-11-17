@@ -19,6 +19,54 @@ async function backup(page: Page, legacy = false) {
   return readFile((await (await downloaded).path())!, 'utf8')
 }
 
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: track overview is informational and planned tracks cannot create progress or practice`, async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 })
+    if (language === 'ja') await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
+    await page.goto('/?mode=full')
+    await page.locator('header [data-language-selector]').selectOption(language)
+    const name = language === 'en' ? 'Routing foundations' : 'ルーティングの基礎'
+    const plannedName = language === 'en' ? 'Planned tracks' : '計画中のトラック'
+    const plannedStatus = language === 'en' ? 'Planned' : '計画中'
+    const titles = language === 'en' ? ['DNS and name resolution', 'Application delivery'] : ['DNS と名前解決', 'アプリケーション配信']
+    await expect(status(page)).toContainText(name)
+    const before = await page.evaluate(({ guided, practice }) => [
+      localStorage.getItem(guided), localStorage.getItem(practice), localStorage.getItem('aznet-visual-topology:v1'),
+    ], { guided: guidedProgressKey, practice: practiceWorkspaceKey })
+    await status(page).click()
+    await expect(details(page)).toContainText(`${name} - ${language === 'en' ? 'White belt · 0 points' : '白帯 · 0 ポイント'}`)
+    const statusOverview = details(page).getByTestId('learning-tracks')
+    await statusOverview.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    const planned = statusOverview.getByRole('region', { name: plannedName, exact: true })
+    for (const title of titles) {
+      const entry = planned.getByRole('listitem').filter({ hasText: title })
+      await expect(entry).toContainText(`${title} - ${plannedStatus}`)
+      await entry.getByText(title, { exact: true }).click()
+    }
+    await expect(planned.locator('button,a,input,select')).toHaveCount(0)
+    expect((await new AxeBuilder({ page }).include('.learning-status-panel').analyze()).violations).toEqual([])
+    expect(await details(page).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await details(page).getByRole('button', { name: language === 'en' ? 'Close learning status' : '学習状態を閉じる', exact: true }).click()
+    await page.getByTestId('learning-open').click()
+    const panel = learningSidebar(page)
+    await expect(panel.getByTestId('learning-active-track')).toHaveText(name)
+    await expect(panel.getByTestId('learning-completion-count')).toHaveText(`0 / 40 ${language === 'en' ? 'Completed' : '完了'}`)
+    const overview = panel.getByTestId('learning-tracks')
+    await overview.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    const plannedInSidebar = overview.getByRole('region', { name: plannedName, exact: true })
+    for (const title of titles) await expect(plannedInSidebar.getByText(title, { exact: true })).toBeVisible()
+    await expect(plannedInSidebar.locator('button,a,input,select')).toHaveCount(0)
+    expect((await new AxeBuilder({ page }).include('.learning-tracks').analyze()).violations).toEqual([])
+    expect(await panel.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
+    expect(await page.evaluate(({ guided, practice }) => [
+      localStorage.getItem(guided), localStorage.getItem(practice), localStorage.getItem('aznet-visual-topology:v1'),
+    ], { guided: guidedProgressKey, practice: practiceWorkspaceKey })).toEqual(before)
+    await expect(page.getByTestId('practice-workspace-bar')).toHaveCount(0)
+  })
+}
+
 for (const unavailable of [false, true]) {
   test(`concept bodies load only on explicit expansion, with local failure feedback: ${unavailable}`, async ({ page }) => {
     const requests: string[] = []
@@ -45,8 +93,10 @@ test('first-earned points, checkpoint gap and linear position survive reload and
   await expect(details(page)).toContainText('Required mastery checkpoints remaining: 1')
   await details(page).getByRole('button', { name: 'Close learning status', exact: true }).click()
   await page.reload()
+  await expect(status(page)).toContainText('Routing foundations - White belt')
   await expect(status(page)).toContainText('20 points')
   await page.getByTestId('learning-open').click()
+  await expect(learningSidebar(page).getByTestId('learning-active-track')).toHaveText('Routing foundations')
   await expect(learningSidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
   await completeLearningTasks(page)
   await expect(status(page)).toContainText('25 points')

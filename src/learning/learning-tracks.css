@@ -1,0 +1,6 @@
+.learning-tracks { margin-block: 12px; border-block: 1px solid var(--border, #b8c7d8); padding-block: 8px; }
+.learning-tracks summary { cursor: pointer; }
+.learning-tracks ul { padding-inline-start: 20px; }
+.learning-tracks li { margin-block: 12px; }
+.learning-tracks p { line-height: 1.5; }
+.learning-tracks summary:focus-visible { outline: 2px solid var(--focus, #1857b6); outline-offset: 2px; }

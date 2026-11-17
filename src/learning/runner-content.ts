@@ -2,7 +2,7 @@ import type { Localized } from './content'
 import type { Requirement } from '../platform/contract'
 
 export const runnerLabels = {
-  preview: { en: 'Six sequential networking missions take you from white to black belt in local practice, not Azure certification. Navigation help and retries are always free.', ja: '6 つの順序立ったネットワークのミッションで白帯から黒帯まで進めます。ローカルの練習であり、Azure 認定ではありません。操作場所の案内と再試行は常に無料です。' },
+  preview: { en: 'Six sequential Routing foundations missions take you from white to black belt in this track, not all Azure networking or Azure certification. Navigation help and retries are always free.', ja: '「ルーティングの基礎」の 6 つの順序立ったミッションで、このトラックの白帯から黒帯まで進めます。Azure ネットワーク全体の習得や Azure 認定ではありません。操作場所の案内と再試行は常に無料です。' },
   session: { en: 'Task completion and first-earned points use this browser origin or desktop profile only. Check the header for saved versus session-only progress.', ja: 'タスクの完了と初回獲得ポイントは、このブラウザーのオリジンまたはデスクトップのプロファイルだけで使用します。保存済みかセッションのみかはヘッダーで確認できます。' },
   progress: { en: 'Completion could not be recorded. Your task is still locked at this step. Check the learning-status details for storage recovery or another-tab ownership, then check the task again.', ja: '完了を記録できませんでした。このステップはまだ完了していません。学習状態の詳細で保存の回復方法や別のタブの所有権を確認し、タスクを再確認してください。' },
   check: { en: 'Check task', ja: 'タスクを確認' },
@@ -26,8 +26,8 @@ export const runnerLabels = {
   replayNotice: { en: 'Replay starts at the first task without deleting past completion. Loading the starter still needs confirmation. No repeat credit is awarded.', ja: '過去の完了を削除せず、最初のタスクから再練習します。初期構成の読み込みには引き続き確認が必要です。重複したポイントは付与しません。' },
   replayConfirm: { en: 'Start lesson replay', ja: 'レッスンの再練習を開始' },
   replaying: { en: 'Replaying this lesson. Past completion is preserved.', ja: 'このレッスンを再練習中です。過去の完了は保持されます。' },
-  done: { en: 'Available lessons complete', ja: '利用可能なレッスンを完了' },
-  doneDetail: { en: 'You completed the local white-to-black practice path. Review or replay without repeat points. Your belt is browser-local practice history, not verified qualification or Azure certification.', ja: 'ローカルの白帯から黒帯までの練習課程を完了しました。ポイントを重複獲得せずに復習や再練習ができます。帯はブラウザー内の練習記録であり、検証された資格や Azure 認定ではありません。' },
+  done: { en: 'Routing foundations complete', ja: 'ルーティングの基礎を完了' },
+  doneDetail: { en: 'You completed this track’s local white-to-black practice path. Planned tracks do not change this achievement. Review or replay without repeat points. Your belt records this curriculum, not all Azure networking or verified certification.', ja: 'このトラックのローカルの白帯から黒帯までの練習課程を完了しました。計画中のトラックはこの達成に影響しません。ポイントを重複獲得せずに復習や再練習ができます。帯はこの課程の記録であり、Azure ネットワーク全体の習得や認定ではありません。' },
   outline: { en: 'Learning path and completed-task review', ja: '学習の順序と完了したタスクの復習' },
   completed: { en: 'Completed', ja: '完了' },
   locked: { en: 'Locked', ja: 'ロック中' },

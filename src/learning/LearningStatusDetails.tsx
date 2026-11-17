@@ -5,6 +5,7 @@ import { useWorkspaceSession } from '../workspace-context'
 import { previewCourse, checkpointAssessments } from './course-profile'
 import { beltProgress, type LedgerState } from './progress-ledger'
 import { statusLabels as labels } from './status-content'
+import { TrackOverview } from './TrackOverview'
 import './learning-status-details.css'
 
 export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
@@ -39,12 +40,13 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
       <header><h2>{label(labels.details)}</h2><button type="button" onClick={onClose}>{label(labels.close)}</button></header>
       <p role="status">{label(state ? labels[state.status] : labels.unavailable)}</p>
       {progress && <>
-        <p>{label(progress.belt.name)} · {progress.points} {label(labels.points)}</p>
+        <p>{label(previewCourse.title)} - {label(progress.belt.name)} · {progress.points} {label(labels.points)}</p>
         {progress.next ? <>
           <p>{label(labels.next)}: {label(progress.next.name)} · {progress.pointsRemaining} {label(labels.remaining)}</p>
           <p>{label(labels.checkpoints)}: {progress.checkpointsRemaining.length}</p>
         </> : <p>{label(previewCourse.publication === 'preview' ? labels.preview : labels.terminal)}</p>}
       </>}
+      <TrackOverview />
       <p>{label(labels.local)}</p><p>{label(labels.writer)}</p><p>{label(labels.policy)}</p>
       <div className="learning-status-actions">
         <button type="button" onClick={() => backup(false)}>{label(labels.backup)}</button>

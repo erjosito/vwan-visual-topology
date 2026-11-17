@@ -21,7 +21,7 @@ export function LearningStatus() {
         setOpen(!open)
         if (!Panel) void import('./LearningStatusDetails').then(({ LearningStatusDetails }) => setPanel(() => LearningStatusDetails), () => setFailed(true))
       }}>
-      {language === 'ja' ? '未サインイン' : 'Not signed in'} · {progress ? <>
+      {language === 'ja' ? '未サインイン' : 'Not signed in'} · {previewCourse.title[language]} - {progress ? <>
         <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={progress.belt.color} stroke="currentColor" /></svg>
         {progress.belt.name[language]} · {progress.points} {language === 'ja' ? 'ポイント' : 'points'}
         {state?.status !== 'saved' && <> · {state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown}</>}
