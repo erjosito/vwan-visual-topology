@@ -124,6 +124,12 @@ export function createProgressLedger(storage: StorageAccess) {
       catch { publish({ ...state, status: 'limit' }); return false }
       return write(next, owned)
     },
+    replace(ledger: ProgressLedger, owned: boolean) {
+      if (!state.ledger || !['saved', 'session', 'ownership'].includes(state.status)) return false
+      let next: ProgressLedger
+      try { next = parseProgressLedger(JSON.stringify(ledger)) } catch { return false }
+      return write(next, owned)
+    },
     enroll(courseId: string, owned: boolean) {
       if (!state.ledger || !['saved', 'session', 'ownership'].includes(state.status)
         || !['azure-networking-preview', 'azure-routing-scenarios'].includes(courseId)) return false

@@ -73,7 +73,10 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
         </div>}
       </section>
       <TrackOverview />
-      <p>{label(labels.local)}</p><p>{label(labels.writer)}</p><p>{label(labels.policy)}</p>
+      <p>{session?.cloudProgress
+        ? language === 'ja' ? 'アカウント別のキャッシュです。クラウドの同期状態はクラウド アカウント画面で確認してください。認定ではありません。'
+          : 'Account-specific device cache. See Cloud account for sync status. Cloud history is not verified certification.'
+        : label(labels.local)}</p><p>{label(labels.writer)}</p><p>{label(labels.policy)}</p>
       <div className="learning-status-actions">
         <button type="button" onClick={() => backup(false)}>{label(labels.backup)}</button>
         {state?.status === 'session' && <button type="button" disabled={busy} onClick={() => { void operate(false) }}>{label(labels.retry)}</button>}

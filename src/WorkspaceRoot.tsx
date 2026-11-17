@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { t } from './i18n'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
@@ -8,8 +8,11 @@ import { practiceWorkspaceKey } from './learning/practice-workspace-key'
 import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
 import type { PracticeSession } from './learning/practice-session'
 import type { CourseRunner, RunnerState } from './learning/runner'
-import { createProgressLedger, guidedProgressKey, legacyProgressKey } from './learning/progress-ledger'
+import { createProgressLedger, guidedProgressKey, legacyProgressKey, recordCompletion, type ProgressLedger, type ProgressLedgerStore } from './learning/progress-ledger'
 import { editions, selectedEdition } from './learning/editions'
+import { CloudProvider } from './cloud/CloudSession'
+import { useCloudSession } from './cloud/useCloudSession'
+import { createProgressSync } from './cloud/progress-sync'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
@@ -32,6 +35,15 @@ class WorkspaceBoundary extends Component<{ children: ReactNode; onRecover: () =
 }
 
 export function UnifiedSimulatorRoot() {
+  return <CloudProvider><Workspace /></CloudProvider>
+}
+
+const noSubscribe = () => () => {}
+const noSync = () => undefined
+
+function Workspace() {
+  const cloud = useCloudSession()
+  const accountId = cloud?.account?.id
   const [startup] = useState(() => workspaceStartup({ getItem: (key) => localStorage.getItem(key) }, location.search, location.hash))
   const [active, setActive] = useState<{ provider: WorkspaceProvider; revision: number; capture?: unknown }>()
   const [libraryOpen, setLibraryOpen] = useState(!startup.provider)
@@ -52,7 +64,24 @@ export function UnifiedSimulatorRoot() {
   const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
   const designHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const practiceHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
-  const [progress] = useState(() => createProgressLedger(() => localStorage))
+  const [anonymousProgress] = useState(() => createProgressLedger(() => localStorage))
+  const anonymousLedger = useSyncExternalStore(anonymousProgress.subscribe, anonymousProgress.getSnapshot)
+  const [accountProgress] = useState(() => new Map<string, ProgressLedgerStore>())
+  const progressKey = accountId ? `${guidedProgressKey}:account:${encodeURIComponent(accountId)}` : guidedProgressKey
+  const progress = useMemo(() => {
+    if (!accountId) return anonymousProgress
+    let cached = accountProgress.get(progressKey)
+    if (!cached) {
+      cached = createProgressLedger(() => ({
+        getItem: key => key === legacyProgressKey ? null : localStorage.getItem(progressKey),
+        setItem: (_key, value) => localStorage.setItem(progressKey, value),
+        removeItem: () => localStorage.removeItem(progressKey),
+      }))
+      accountProgress.set(progressKey, cached)
+    }
+    return cached
+  }, [accountId, progressKey, anonymousProgress, accountProgress])
+  const learningIdentity = useRef(progress)
   const learningProgress = useSyncExternalStore(progress.subscribe, progress.getSnapshot)
   const { style, maximized } = useCanvasPresentation()
   const request = useRef(0)
@@ -64,7 +93,7 @@ export function UnifiedSimulatorRoot() {
       learningCourse.current = courseId
     }
     learningLoading.current ??= import('./learning/learning-session').then(({ createLearningSession }) => {
-      if (learningCourse.current !== courseId) throw new Error('Curriculum selection changed.')
+      if (learningCourse.current !== courseId || learningIdentity.current !== progress) throw new Error('Curriculum or account selection changed.')
       const runner = createLearningSession({
         changed: setLearningState,
         completions: progress.getSnapshot().ledger?.completions,
@@ -83,12 +112,20 @@ export function UnifiedSimulatorRoot() {
       learningRef.current = runner
       setLearning(runner)
       return runner
-    }).catch((error) => { if (learningCourse.current === courseId) learningLoading.current = undefined; throw error })
+    }).catch((error) => {
+      if (learningCourse.current === courseId && learningIdentity.current === progress) learningLoading.current = undefined
+      throw error
+    })
     return learningLoading.current
   }, [progress])
   useEffect(() => {
     const changed = (event: StorageEvent) => {
-      if (event.storageArea !== localStorage || (event.key !== null && ![guidedProgressKey, legacyProgressKey].includes(event.key))) return
+      if (event.storageArea !== localStorage) return
+      if (accountId && (event.key === null || [guidedProgressKey, legacyProgressKey].includes(event.key))) anonymousProgress.externalChange(false)
+      for (const [key, cached] of accountProgress) {
+        if (cached !== progress && (event.key === null || event.key === key)) cached.externalChange(false)
+      }
+      if (event.key !== null && ![progressKey, ...(accountId ? [] : [legacyProgressKey])].includes(event.key)) return
       const owned = practiceRef.current?.owns === true
       progress.externalChange(owned)
       if (owned) learningRef.current?.cancel()
@@ -98,8 +135,8 @@ export function UnifiedSimulatorRoot() {
     }
     window.addEventListener('storage', changed)
     return () => window.removeEventListener('storage', changed)
-  }, [progress, loadLearning])
-  const loadPractice = () => {
+  }, [progress, loadLearning, progressKey, accountId, anonymousProgress, accountProgress])
+  const loadPractice = useCallback(() => {
     practiceLoading.current ??= import('./learning/practice-session').then(({ createPracticeSession }) => {
       practiceRef.current = createPracticeSession({
         storage: () => localStorage,
@@ -113,7 +150,34 @@ export function UnifiedSimulatorRoot() {
       return practiceRef.current
     }).catch((error) => { practiceLoading.current = undefined; throw error })
     return practiceLoading.current
-  }
+  }, [])
+  const applyCloudProgress = useCallback(async (ledger: ProgressLedger) => {
+    const expected = progress.getSnapshot()
+    const session = await loadPractice()
+    if (!await session.acquire()) return false
+    try {
+      if (learningIdentity.current !== progress || progress.getSnapshot() !== expected) return false
+      if (!progress.replace(ledger, session.owns)) return false
+      learningRef.current?.cancel()
+      if (learningRef.current) await loadLearning()
+      learningRef.current?.replaceProgress(ledger.completions)
+      return true
+    } finally { session.release() }
+  }, [loadPractice, progress, loadLearning])
+  const sync = useMemo(() => cloud?.api ? createProgressSync(cloud.api, progress, applyCloudProgress) : undefined,
+    [cloud?.api, progress, applyCloudProgress])
+  const cloudProgressStatus = useSyncExternalStore(sync?.subscribe ?? noSubscribe, sync?.getSnapshot ?? noSync)
+  useEffect(() => { sync?.start(); return () => sync?.stop() }, [sync])
+  useEffect(() => {
+    learningIdentity.current = progress
+    learningRef.current?.cancel()
+    learningRef.current = undefined; learningLoading.current = undefined; learningCourse.current = undefined
+    // Account changes must not reuse a runner whose completion callback belongs to another ledger.
+    // oxlint-disable-next-line react/set-state-in-effect
+    setLearning(undefined)
+    // oxlint-disable-next-line react/set-state-in-effect
+    setLearningState(undefined)
+  }, [progress])
   const leavePractice = () => {
     request.current++
     practiceRef.current?.leave()
@@ -313,6 +377,21 @@ export function UnifiedSimulatorRoot() {
     learningProgress, resetLearningProgress: (expected) => writeProgress(true, expected),
     retryLearningProgress: () => writeProgress(),
     backupLearningProgress: progress.backup,
+    cloudProgress: accountId ? {
+      status: cloudProgressStatus,
+      refresh: (choice) => sync?.refresh(choice),
+      hasAnonymousProgress: !!anonymousLedger.ledger?.completions.length && ['saved', 'session', 'ownership'].includes(anonymousLedger.status),
+      importAnonymous: async () => {
+        const source = anonymousProgress.getSnapshot()
+        if (!['saved', 'session', 'ownership'].includes(source.status)) return false
+        const local = source.ledger
+        let next = progress.getSnapshot().ledger
+        if (!local || !next || !cloudProgressStatus || ['loading', 'conflict'].includes(cloudProgressStatus)) return false
+        for (const completion of local.completions) next = recordCompletion(next, completion)
+        if (!next.enrollment && local.enrollment) next = { ...next, enrollment: local.enrollment }
+        return applyCloudProgress(next)
+      },
+    } : undefined,
   }}>
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}

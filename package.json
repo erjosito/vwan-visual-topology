@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:user-cloud": "tsc -p functions/user-cloud/tsconfig.json && node scripts/build-user-cloud.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "test": "vitest run",
@@ -30,6 +31,7 @@
     "test:desktop-cli": "pwsh -NoLogo -NoProfile -File tests/desktop-azure-read.test.ps1"
   },
   "dependencies": {
+    "@azure/msal-browser": "5.29.1",
     "@resvg/resvg-js": "2.6.2",
     "gifenc": "1.0.3",
     "react": "^19.3.1",

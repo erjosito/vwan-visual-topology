@@ -94,6 +94,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.files.some(({ path }: { path: string }) => /\/japanese-catalog-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:practice-session|PracticeWorkspaceBar)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/flow-gif-codec-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:LearningStatusDetails|TrackOverview|tracks|concept-bodies)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => mode === 'vwan' ? /\/AzureNetApp-/.test(path) : /\/App-/.test(path))).toBe(false)
     await page.getByTestId('learning-status').click()
@@ -166,8 +167,28 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       body: JSON.stringify({ readyMs, firstOptionalPanelMs, firstInactiveWorkspaceMs: performance.now() - switchStart, graph, compression: 'local gzip; not Azure transfer' }, null, 2),
       contentType: 'application/json',
     })
+
   })
 }
+
+test('authentication bridge is standalone, same-origin frameable and does not relax application framing', async ({ page }) => {
+  const response = await page.goto('/auth-redirect.html')
+  expect(response!.headers()['cross-origin-opener-policy']).toBeUndefined()
+  expect(response!.headers()['content-security-policy']).toContain("frame-ancestors 'self'")
+  expect(response!.headers()['x-frame-options']).toBe('SAMEORIGIN')
+  await expect(page.locator('#root')).toHaveCount(0)
+  await expect(page.locator('body')).toContainText(/Sign-in|Completing Microsoft/)
+  const app = await page.goto('/')
+  expect(app!.headers()['content-security-policy']).toContain("frame-ancestors 'none'")
+  expect(app!.headers()['x-frame-options']).toBe('DENY')
+  await page.evaluate(() => {
+    const frame = document.createElement('iframe')
+    frame.id = 'auth-frame'
+    frame.src = '/auth-redirect.html'
+    document.body.append(frame)
+  })
+  await expect(page.frameLocator('#auth-frame').locator('body')).toContainText(/Sign-in|Completing Microsoft/)
+})
 
 test('a delayed Japanese switch preserves drafts and both cached languages work offline', async ({ page, context }) => {
   const topology = JSON.parse(await readFile('public/docs/samples/hub-routing-preferences.json', 'utf8'))
