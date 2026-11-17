@@ -44,6 +44,7 @@ jobs:
           az bicep build --file infra/github-statistics-domain-dns.bicep --stdout > "$RUNNER_TEMP/github-statistics-domain-dns.json"
           az bicep build --file infra/github-statistics-domain-certificate.bicep --stdout > "$RUNNER_TEMP/github-statistics-domain-certificate.json"
           az bicep build --file infra/github-statistics-domain.bicep --stdout > "$RUNNER_TEMP/github-statistics-domain.json"
+          az bicep build --file infra/user-cloud.bicep --stdout > "$RUNNER_TEMP/user-cloud.json"
           az bicep build --file test-artifacts/azure-files/bicep/connectivity-public-lb.bicep --stdout > test-artifacts/azure-files/bicep/connectivity-public-lb.json
           az bicep build --file test-artifacts/azure-files/bicep/connectivity-private-lb.bicep --stdout > test-artifacts/azure-files/bicep/connectivity-private-lb.json
           az bicep build --file test-artifacts/azure-files/bicep/connectivity-firewall-dnat.bicep --stdout > test-artifacts/azure-files/bicep/connectivity-firewall-dnat.json
@@ -52,6 +53,9 @@ jobs:
       - run: npm run build
         env:
           VITE_APP_REVISION: ${{ github.sha }}
+          VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
+          VITE_CLOUD_API_SCOPE: ${{ vars.VITE_CLOUD_API_SCOPE }}
+          VITE_CLOUD_API_BASE_URL: ${{ vars.VITE_CLOUD_API_BASE_URL }}
       - name: Run browser suite with matching preinstalled browsers
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
@@ -103,10 +107,17 @@ jobs:
           npm ci --omit=dev --prefix test-artifacts/github-statistics-function
           cd test-artifacts/github-statistics-function
           zip -q -r ../github-statistics-function.zip .
+      - name: Package locked user-cloud Function candidate (no deployment)
+        run: |
+          node scripts/package-user-cloud-function.mjs
+          npm ci --omit=dev --prefix test-artifacts/user-cloud-function
+          cd test-artifacts/user-cloud-function
+          zip -q -r ../user-cloud-function.zip .
       - name: Record immutable release candidates
         run: |
           node scripts/release-candidate.mjs create web
           node scripts/release-candidate.mjs create statistics
+          node scripts/release-candidate.mjs create user-cloud
       - uses: actions/upload-artifact@v4
         with:
           name: static-site-${{ github.run_attempt }}
@@ -118,6 +129,13 @@ jobs:
         with:
           name: statistics-function-${{ github.run_attempt }}
           path: test-artifacts/candidates/statistics/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: user-cloud-function-${{ github.run_attempt }}
+          path: test-artifacts/candidates/user-cloud/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
