@@ -142,10 +142,11 @@ bindings and configuration-only packet predicates. Unknown health, allocation,
 mapping or filtering cannot certify either connectivity or isolation. Supported
 repairs are open-ended; no guest/listener or live-session readiness is certified.
 
-The lazy, non-modal learning sidebar runs four sequential missions through blue
-belt (24 tasks, 550 first-earned points) from `course-examples.ts` and
-`course-routing.ts`. They cover direct peering, equal-prefix UDR preference,
-longest-prefix diagnosis and shared-gateway return routing. `runner.ts` is the single progression authority: scoped
+The lazy, non-modal learning sidebar runs six sequential missions through black
+belt (40 tasks, 1,325 first-earned points) from `course-examples.ts`,
+`course-routing.ts` and `course-wan.ts`. They cover direct peering, equal-prefix
+UDR preference, longest-prefix diagnosis, shared-gateway return routing, secured
+Virtual WAN and a two-fault hybrid capstone. `runner.ts` is the single progression authority: scoped
 setup, observation, direct-peering configuration plus engine outcome, open-design
 requirements, and quizzes unlock the next task only after a passing current
 check and explicit **Complete task & continue**. The root keeps task/completion
@@ -178,7 +179,11 @@ Pending checks and passing candidates bind the live editor's monotonic revision,
 practice scope, runtime session, course/content/task and assessment version.
 Edits, edit/undo, reset, pause and provider changes abort or discard old evidence.
 Unknown/incomplete/unsupported engine assessments never pass; quizzes have
-answer-specific retry feedback. Completed-task review is historical, not proof
+answer-specific retry feedback. Unmet flow feedback names required inspection
+waypoints in both directions, without exposing engine IDs or JSON. Explicit
+advance focuses the next task or completion heading when the replaced button
+loses focus; ordinary renders and canvas interactions do not move focus.
+Completed-task review is historical, not proof
 that today's canvas is still valid. Explicit lesson replay preserves history
 and cannot emit duplicate completion events. Newly inserted/revised unmet
 tasks gate the next uncompleted task even if later historical records exist.
@@ -230,14 +235,21 @@ accepted events remain session-only and exportable, never reported as durable.
 Known conflicts refuse completion/advance and preserve originals. Confirmed reset
 rechecks the confirmation snapshot and removes only guided history/points.
 Status details and explanation bodies load on demand to preserve startup budgets.
-The shipped four-mission preview is not the complete white-to-black curriculum
-(#184). Secured Virtual WAN and the mixed-network capstone remain planned, not
-available assessments. Blue belt is explicitly preview practice, not qualification.
+The six-mission curriculum (#184) provides the complete local white-to-black
+practice path, not Azure certification or evidence of educational effectiveness.
+Independent subject-matter/novice evaluation remains #181/#160.
 The original course/task/award identities and 175 first-earned preview points are
-retained. Advanced gateway content assesses diagnosis of preconfigured transit,
-not an unimplemented gateway-configuration guidance adapter. Exact current-route
-and forward/return checks, supported alternative repairs and a complete
+retained, as are the first 24 tasks' 550 points. Advanced gateway/WAN content
+assesses diagnosis of preconfigured transit/intent, not an unimplemented
+gateway/hub-configuration guidance adapter. Exact Default-table requirements and
+both-direction Firewall waypoints prevent route-presence or bypass-only passes.
+Exact current-route and forward/return checks, supported alternative repairs and a complete
 real-control journey are covered by the learning unit/browser suites.
+Complete EN and JA native-control journeys, plus keyboard transition and
+dark/narrow/reduced-motion samples, are technical regressions rather than human
+usability or learning outcomes. #181 records the qualification and #160 retains
+the explicitly pending opt-in human study. Exact hub-table guidance (#204) and
+a less-scaffolded transfer diagnosis (#205) remain tracked enhancements.
 
 Retained legacy progress uses `aznet-simulator:practice:v1` in localStorage, independently
 of normal topology saves: at most nine 200,000-character drafts within the existing

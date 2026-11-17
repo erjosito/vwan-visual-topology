@@ -1,6 +1,6 @@
 import type { BeltPlan } from './course-contract'
 
-// Planning budgets, not awarded points or a claim that these lessons have shipped.
+// Reviewed chapter allocations; actual credit comes from first-earned task awards.
 export const courseOutline: BeltPlan[] = [
   {
     id: 'white', name: { en: 'White belt', ja: '白帯' }, color: '#ffffff',
