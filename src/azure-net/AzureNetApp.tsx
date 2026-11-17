@@ -149,6 +149,7 @@ const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((mo
 const TopologyContextMenu = lazy(() => import('../TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
+const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
@@ -204,6 +205,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     })
   }, [workspaceSession, topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, pendingUrlSample])
   const [activeTab, setActiveTab] = useState<InspectorTab | null>(null)
+  const [vnraCreationVnetId, setVnraCreationVnetId] = useState<string>()
   const [guidanceNavigation, setGuidanceNavigation] = useState(false)
   const [guidanceRevision, setGuidanceRevision] = useState(0)
   const [frameRequest, setFrameRequest] = useState<{ vnetId: string; revision: number }>()
@@ -1262,6 +1264,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     })
   }
 
+  const openVnraCreation = (vnetId: string) => {
+    setVnraCreationVnetId(vnetId)
+    setSelected({ kind: 'vnet', vnetId })
+    setActiveTab('editor')
+  }
+
   const removeApplianceFromVnet = (vnetId: string, applianceId: string) => {
     commitTopology((draft) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
@@ -1614,6 +1622,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 label: '+ Add BGP NVA Appliance',
                 onSelect: () => addFirewallToVnet(vnet.id, 'nva-vm'),
               },
+              {
+                label: 'Add Managed VNRA',
+                onSelect: () => openVnraCreation(vnet.id),
+              },
               ...(!hasErGw
                 ? [
                     {
@@ -1938,7 +1950,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               inspectRoutes({ kind: 'appliance', vnetId: vnet.id, applianceId: app.id })
             },
           },
-          {
+          ...(app.kind === 'vnra' ? [] : [{
             label: app.enableIpForwarding
               ? 'Disable NIC IP Forwarding'
               : 'Enable NIC IP Forwarding',
@@ -1949,7 +1961,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 if (targetA) targetA.enableIpForwarding = !targetA.enableIpForwarding
               })
             },
-          },
+          }]),
           {
             label: 'Configure Appliance',
             onSelect: () => {
@@ -2725,6 +2737,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         commit={(mutate) => commitTopology((next) => mutate(next))} onClose={() => setSnatHubId(undefined)} /></Suspense>}
       {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'vnet', id: detailOwner }} simulation={simulation} returnFocus={detailReturnFocus}
         selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => commitTopology((next) => mutate(next))}
+        onApplianceAction={(vnetId, applianceId, action) => {
+          const entity = { kind: 'appliance' as const, vnetId, applianceId }
+          if (action === 'routes') inspectRoutes(entity)
+          else { setSelected(entity); setActiveTab('editor') }
+        }}
         boundaries={[
           ...(singleFlowForCustomIp ?? pairAnalysis?.forward ? [{ direction: 'forward' as const,
             destination: (singleFlowForCustomIp ?? pairAnalysis!.forward)!.destinationIp,
@@ -4031,6 +4048,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
+                {vnraCreationVnetId && selectedVnetId === vnraCreationVnetId && <ManagedVnraEditor key={`create-${vnraCreationVnetId}`}
+                  topology={topology} vnetId={vnraCreationVnetId} commit={commitTopology}
+                  onCancel={() => setVnraCreationVnetId(undefined)} onSaved={(applianceId) => {
+                    setSelected({ kind: 'appliance', vnetId: vnraCreationVnetId, applianceId })
+                    setVnraCreationVnetId(undefined)
+                  }} />}
                 </Suspense>
 
                 {/* VNet Peerings & Connections Editor (#38, #42, #47, #48) */}
@@ -4501,6 +4524,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           >
                             + Firewall / NVA
                           </button>
+                          <button type="button" className="aznet-btn" onClick={() => openVnraCreation(vnet.id)}>
+                            {t('Add Managed VNRA')}
+                          </button>
                           {!hasErGw ? (
                             <button
                               type="button"
@@ -4678,10 +4704,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             }}
                           >
                             <span>
-                              🔥 {app.name} (<code>{app.privateIp}</code>)
+                              {app.kind === 'vnra' ? t('Managed VNRA') : '🔥'} {app.name} (<code>{app.privateIp}</code>)
                             </span>
                             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              <label className="aznet-checkbox-row">
+                              {app.kind === 'vnra' ? <button type="button" className="aznet-btn" onClick={() => {
+                                setSelected({ kind: 'appliance', vnetId: vnet.id, applianceId: app.id })
+                                setActiveTab('editor')
+                              }}>{t('Configure Managed VNRA')}</button> : <label className="aznet-checkbox-row">
                                 <input
                                   type="checkbox"
                                   checked={app.enableIpForwarding}
@@ -4697,7 +4726,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                   }}
                                 />
                                 <span>NIC IP Forwarding</span>
-                              </label>
+                              </label>}
                               <button
                                 type="button"
                                 className="aznet-btn"

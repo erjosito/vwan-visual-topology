@@ -2,7 +2,8 @@ import { expect, test } from './vwan-example-fixture'
 import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { AZURE_NET_SAMPLES, createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
+import AxeBuilder from '@axe-core/playwright'
+import { AZURE_NET_SAMPLES, createEmptyAzNetTopology, sampleDualHubVnraGlobalPeering, type AzNetTopology } from '../src/azure-net/model'
 
 async function openNodeMenu(page: Page, testId: string) {
   await page.getByTestId(testId.replace(/^aznet-vnet-/, 'aznet-select-vnet-')).focus()
@@ -20,6 +21,112 @@ async function loadTopology(page: Page, topology: AzNetTopology) {
   }, topology)
   await page.goto('/?mode=hub-spoke')
 }
+
+test('authors Managed VNRA transit with original ownership, scoped inspection, history and JSON round trips', async ({ page }) => {
+  test.slow()
+  const topology = structuredClone(sampleDualHubVnraGlobalPeering)
+  topology.vnets[0].appliances = []
+  topology.vnets[0].subnets = []
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+  await page.addInitScript((value) => {
+    if (sessionStorage.getItem('vnra-arranged')) return
+    sessionStorage.setItem('vnra-arranged', '1')
+    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
+  }, topology)
+  await page.goto('/?mode=full')
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-r1')
+  await page.getByRole('menuitem', { name: 'Add / Remove VNet Elements', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Add Managed VNRA', exact: true }).click()
+  const editor = page.getByTestId('aznet-vnra-editor')
+  await expect(editor).toContainText('vnet-hub-r1')
+  await expect(editor.getByLabel('Peer ASN', { exact: true })).toHaveCount(0)
+  await editor.getByLabel('VNRA name', { exact: true }).fill('Authored transit')
+  await editor.getByLabel('VNRA subnet prefix', { exact: true }).fill('10.10.2.0/24')
+  await editor.getByLabel('VNRA private IPv4 address', { exact: true }).fill('10.10.3.4')
+  await editor.getByRole('button', { name: 'Create Managed VNRA', exact: true }).click()
+  await expect(editor.getByRole('alert')).toContainText('selected subnet')
+  expect((await saved()).vnets[0].appliances).toHaveLength(0)
+  await editor.getByLabel('VNRA private IPv4 address', { exact: true }).fill('10.10.2.4')
+  await editor.getByRole('button', { name: 'Create Managed VNRA', exact: true }).click()
+  await expect(editor.getByRole('heading', { name: 'Configure Managed VNRA', exact: true })).toBeVisible()
+  expect((await new AxeBuilder({ page }).include('[data-testid="aznet-vnra-editor"]').include('.network-device-chip').analyze()).violations).toEqual([])
+  const app = (await saved()).vnets[0].appliances[0]
+  expect(app.kind).toBe('vnra')
+  expect((await saved()).vnetPeerings).toEqual(topology.vnetPeerings)
+  expect((await saved()).udrTables).toEqual(topology.udrTables)
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(0)
+  await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances[0]).toEqual(app)
+  await page.reload()
+  expect((await saved()).vnets[0].appliances[0]).toEqual(app)
+
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-r1')
+  await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()
+  const detail = page.getByTestId('network-detail-dialog')
+  const device = detail.getByTestId('detail-vnra')
+  await expect(device).toContainText(app.id)
+  await expect(device).toContainText('Authored transit')
+  await device.getByRole('button', { name: 'Configure Managed VNRA', exact: true }).click()
+  await expect(detail).toHaveCount(0)
+  await editor.getByLabel('VNRA name', { exact: true }).fill('Renamed transit')
+  await editor.getByRole('button', { name: 'Save Managed VNRA', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances[0].name).toBe('Renamed transit')
+  expect((await saved()).vnets[0].appliances[0].id).toBe(app.id)
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-r1')
+  await page.getByRole('menuitem', { name: 'Open VNet detail', exact: true }).click()
+  await device.getByRole('button', { name: 'Inspect Appliance Subnet Effective Routes', exact: true }).click()
+  await expect(page.getByTestId('aznet-effective-route-table')).toBeVisible()
+  await expect(page.getByTestId('aznet-editor-scope-banner')).toHaveCount(0)
+
+  await openNodeMenu(page, 'aznet-subnet-sub-r1a-work')
+  await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
+  await page.getByTestId('aznet-trace-source-select').selectOption('subnet:vnet-spoke-r1-a:sub-r1a-work')
+  await page.getByTestId('aznet-trace-dest-select').selectOption('subnet:vnet-spoke-r2-b:sub-r2b-work')
+  await expect(page.getByTestId('aznet-forward-hops')).toContainText('Renamed transit')
+  await expect(page.getByTestId('aznet-forward-hops')).toContainText('VNRA-Hub-NEU')
+  await expect(page.getByTestId('aznet-reverse-hops')).toContainText('Renamed transit')
+  await expect(page.getByTestId('aznet-forward-hops').locator('.delivered')).toHaveCount(1)
+  await expect(page.getByTestId('aznet-reverse-hops').locator('.delivered')).toHaveCount(1)
+  await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
+
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: /Export JSON/ }).click()
+  const file = (await (await download).path())!
+  const exported = JSON.parse(readFileSync(file, 'utf8')) as AzNetTopology
+  expect(exported.vnets[0].appliances[0]).toEqual((await saved()).vnets[0].appliances[0])
+  await page.getByTestId(`aznet-chip-${app.id}`).focus()
+  await page.keyboard.press('Shift+F10')
+  await expect(page.getByRole('menuitem', { name: /NIC IP Forwarding/ })).toHaveCount(0)
+  await page.getByRole('menuitem', { name: 'Remove Appliance', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(0)
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances[0].id).toBe(app.id)
+  await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(0)
+  await page.locator('input[type=file]').first().setInputFiles(file)
+  await expect.poll(async () => (await saved()).vnets[0].appliances[0]?.id).toBe(app.id)
+})
+
+test('edits Managed VNRA in Japanese using keyboard submission without exposing BGP settings', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.addInitScript(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
+  await loadTopology(page, structuredClone(sampleDualHubVnraGlobalPeering))
+  await page.getByTestId('aznet-chip-app-vnra-r1').focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: /アプライアンス.*構成|Configure Appliance/ }).click()
+  const editor = page.getByTestId('aznet-vnra-editor')
+  await expect(editor.getByRole('heading', { name: 'マネージド VNRA を構成', exact: true })).toBeVisible()
+  expect((await new AxeBuilder({ page }).include('[data-testid="aznet-vnra-editor"]').include('.network-device-chip').analyze()).violations).toEqual([])
+  await expect(editor.locator('input[name="asn"]')).toHaveCount(0)
+  await editor.getByLabel('VNRA 名', { exact: true }).fill('日本語 VNRA')
+  await editor.getByLabel('VNRA プライベート IPv4 アドレス', { exact: true }).fill('10.10.2.3')
+  await page.keyboard.press('Enter')
+  await expect(editor.getByRole('alert')).toContainText('最初の 4 個')
+  await editor.getByLabel('VNRA プライベート IPv4 アドレス', { exact: true }).fill('10.10.2.4')
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances[0].name)).toBe('日本語 VNRA')
+})
 
 test('resumable routing checks retain pair coverage, cancel honestly and invalidate edited topology', async ({ page }) => {
   const topology = createEmptyAzNetTopology()

@@ -122,8 +122,8 @@ function deviceChips(vnet: AzVNet, width: number) {
     }] : []),
     ...vnet.appliances.map((app) => ({
       key: app.id,
-      label: app.kind === 'azure-firewall' ? 'AzFirewall' : app.kind === 'vnra' ? 'VNRA 100G' : `NVA (${app.privateIp})`,
-      title: `${app.name} · ${app.privateIp} · IP forwarding ${app.enableIpForwarding ? 'On' : 'Off'}`,
+      label: app.kind === 'azure-firewall' ? 'AzFirewall' : app.kind === 'vnra' ? 'VNRA' : `NVA (${app.privateIp})`,
+      title: `${app.name} · ${app.privateIp} · ${app.kind === 'vnra' ? 'Managed VNRA' : `IP forwarding ${app.enableIpForwarding ? 'On' : 'Off'}`}`,
       disabled: false,
       tone: app.kind === 'azure-firewall' ? 'warning' as const : app.kind === 'vnra' ? 'info' as const : 'purple' as const,
       entity: { kind: 'appliance' as const, vnetId: vnet.id, applianceId: app.id },
