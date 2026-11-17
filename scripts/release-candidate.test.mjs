@@ -66,6 +66,13 @@ test('Function package and desktop evidence must match the candidate identity an
   const zip = resolve(root, 'function.zip')
   await writeFile(zip, 'locked Function package')
   await createCandidate('statistics', resolve(root, 'statistics'), [[zip, 'function.zip']], env)
+  const cloudDirectory = resolve(root, 'user-cloud')
+  const cloud = await createCandidate('user-cloud', cloudDirectory, [[zip, 'function.zip']], env)
+  assert.equal((await verifyCandidate(cloudDirectory, cloud)).target, 'user-cloud')
+  await assert.rejects(verifyCandidate(cloudDirectory, { ...cloud, target: 'statistics' }), /target mismatch/)
+  await assert.rejects(createCandidate('user-cloud', resolve(root, 'bad-cloud'), [[zip, 'other.zip']], env), /Unexpected Function package/)
+  await writeFile(resolve(cloudDirectory, 'payload', 'function.zip'), 'changed cloud package')
+  await assert.rejects(verifyCandidate(cloudDirectory, cloud), /checksum mismatch/)
   const version = candidateVersion(new Date('2026-11-17T23:59:59Z'), '789')
   const installer = resolve(root, `Azure-Network-Simulator-${version.build}-x64.exe`)
   await writeFile(installer, 'tested installer')
@@ -102,6 +109,19 @@ test('desktop CI identities need no source version bump and fail closed at Windo
   assert.equal(desktopIdentity(runs[2], runs).build, '2026.11.17.2')
   assert.equal(desktopIdentity({ ...runs[2], run_attempt: 2 }, runs).build, '2026.11.17.2')
   assert.throws(() => desktopIdentity(runs[2], []), /missing from daily history/)
+})
+
+test('user-cloud staging preserves the built entry and locked runtime files without test fixtures', async (t) => {
+  const { root } = await fixture(t)
+  const output = resolve(root, 'staged-cloud')
+  childProcess.execFileSync(process.execPath, ['scripts/package-user-cloud-function.mjs', '--output', output])
+  for (const file of ['package.json', 'package-lock.json', 'host.json', 'dist/index.mjs']) {
+    assert.deepEqual(await readFile(resolve(output, file)), await readFile(resolve('functions/user-cloud', file)))
+  }
+  const staged = JSON.parse(await readFile(resolve(output, 'package.json'), 'utf8'))
+  await readFile(resolve(output, staged.main))
+  await assert.rejects(readFile(resolve(output, 'tests/user-cloud-fixture.ts')), { code: 'ENOENT' })
+  assert.throws(() => childProcess.execFileSync(process.execPath, ['scripts/package-user-cloud-function.mjs', '--output', output], { stdio: 'pipe' }))
 })
 
 function runFixture() {

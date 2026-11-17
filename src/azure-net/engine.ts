@@ -5,7 +5,7 @@ import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
 import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
-import { applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes } from './ars-route-maps'
+import { ARS_MAX_BGP_PEERS, applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes } from './ars-route-maps'
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, propagatesLocally, propagatesRemotely } from '../hub-routing'
 import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
 import type { RouteMapDirection, Transport } from '../model'
@@ -825,9 +825,9 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   for (const vnet of topology.vnets) {
     const ars = vnet.routeServer
     if (!ars || !ars.enabled) continue
-    if (ars.peerApplianceIds.length > 8) {
+    if (ars.peerApplianceIds.length > ARS_MAX_BGP_PEERS) {
       warnings.push(
-        `Azure Route Server "${ars.name}" in "${vnet.name}" has ${ars.peerApplianceIds.length} BGP peers configured (maximum supported by Azure is 8).`,
+        `Azure Route Server "${ars.name}" in "${vnet.name}" has ${ars.peerApplianceIds.length} BGP peers configured (maximum supported by Azure is ${ARS_MAX_BGP_PEERS}).`,
       )
     }
     const entries: AzBgpRibEntry[] = []

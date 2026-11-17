@@ -49,6 +49,48 @@ async function inspectSite(page: Page, id: string) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} supports sixteen ARS peers with late-peer policy evidence and persistent membership`, async ({ page }) => {
+    const topology = bgpTopology()
+    const hub = topology.vnets[0]
+    hub.subnets.push({ id: 'nvas', name: 'NVAs', prefix: '10.0.2.0/24' })
+    hub.appliances = Array.from({ length: 17 }, (_, index) => ({
+      id: `peer-${index + 1}`, name: `NVA ${index + 1}`, kind: 'nva-vm', subnetId: 'nvas',
+      privateIp: `10.0.2.${index + 4}`, asn: 65010 + index, bgpEnabled: true, enableIpForwarding: true,
+      advertisedPrefixes: [`198.19.${index}.0/24`], staticRoutes: [],
+    }))
+    hub.routeServer!.peerApplianceIds = hub.appliances.slice(0, 8).map((app) => app.id)
+    hub.routeServer!.routeMaps = [{ id: 'late-peer-map', name: 'Late peer policy', rules: [{
+      id: 'late-rule', prefixes: ['198.19.15.0/24'], match: 'equals', action: 'prepend',
+      prepend: [64501], summaryPrefixes: [], nextStep: 'terminate',
+    }] }]
+    await load(page, mode, topology)
+    const open = async () => {
+      await page.getByTestId('aznet-chip-ars').focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'Manage ARS Route Maps', exact: true }).click()
+    }
+    await open()
+    const policy = page.getByRole('dialog', { name: 'Route maps · Route Server', exact: true })
+    await policy.getByText('BGP peers (local or directly peered VNets)', { exact: true }).click()
+    for (let number = 9; number <= 16; number++) {
+      const peer = policy.getByRole('checkbox', { name: `BGP peer Hub / NVA ${number}`, exact: true })
+      await expect(peer).toBeEnabled()
+      await peer.check()
+    }
+    await expect(policy.getByRole('checkbox', { name: 'BGP peer Hub / NVA 17', exact: true })).toBeDisabled()
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('nva:peer-16')
+    await policy.getByRole('combobox', { name: 'Inbound route map', exact: true }).selectOption('late-peer-map')
+    await policy.getByTestId('aznet-policy-inbound').locator(':scope > summary').click()
+    await expect(policy.getByTestId('aznet-policy-inbound').locator('[data-prefix="198.19.15.0/24"]').locator('td').nth(2)).toHaveText('64501 65025')
+    await page.reload()
+    await open()
+    await policy.getByText('BGP peers (local or directly peered VNets)', { exact: true }).click()
+    await expect(policy.locator('input[type="checkbox"]:checked')).toHaveCount(16)
+    await expect(policy.getByRole('checkbox', { name: 'BGP peer Hub / NVA 17', exact: true })).toBeDisabled()
+    await policy.getByRole('combobox', { name: 'Route map connection', exact: true }).selectOption('nva:peer-16')
+    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue('late-peer-map')
+  })
+
   test(`${mode} edits advanced ARS AND conditions and attributes without losing rows and round-trips source communities`, async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))

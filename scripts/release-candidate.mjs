@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 export const artifacts = {
   web: 'static-site',
   statistics: 'statistics-function',
+  'user-cloud': 'user-cloud-function',
   desktop: 'unsigned-windows-development-build',
 }
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
@@ -85,7 +86,7 @@ export async function verifyCandidate(root, expected) {
   requireValue(JSON.stringify(actual) === JSON.stringify(manifest.files), 'Candidate checksum mismatch')
   if (manifest.target === 'web') {
     requireValue(Object.hasOwn(actual, 'index.html') && Object.hasOwn(actual, 'staticwebapp.config.json'), 'Missing web entry/configuration')
-  } else if (manifest.target === 'statistics') {
+  } else if (manifest.target === 'statistics' || manifest.target === 'user-cloud') {
     requireValue(Object.keys(actual).length === 1 && Object.hasOwn(actual, 'function.zip'), 'Unexpected Function package')
   } else {
     requireValue(/^\d{4}\.\d{2}\.\d{2}\.[1-9]\d*$/.test(manifest.version ?? ''), 'Missing desktop build identity')
@@ -308,8 +309,8 @@ async function main() {
     await output({ CANDIDATE_VERSION: version.build, CANDIDATE_PACKAGE_VERSION: version.package })
   } else if (command === 'create') {
     const root = resolve('test-artifacts', 'candidates', target)
-    const inputs = target === 'web' ? [['dist', '']] : target === 'statistics'
-      ? [['test-artifacts/github-statistics-function.zip', 'function.zip']]
+    const inputs = target === 'web' ? [['dist', '']] : target === 'statistics' || target === 'user-cloud'
+      ? [[`test-artifacts/${target === 'statistics' ? 'github-statistics' : 'user-cloud'}-function.zip`, 'function.zip']]
       : (await readdir('release')).filter((name) => name.endsWith('-x64.exe')).map((name) => [resolve('release', name), name])
         .concat((await readdir('test-artifacts/desktop')).filter((name) => name.endsWith('checks.json') || name.endsWith('sha256.json'))
           .map((name) => [resolve('test-artifacts/desktop', name), name]))

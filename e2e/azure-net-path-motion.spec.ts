@@ -49,6 +49,44 @@ async function speeds(page: Page) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} keeps active flow evidence and dialogs independent of canvas selection`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await trace(page, mode)
+    const svg = page.getByTestId('aznet-diagram-svg')
+    const edge = page.getByTestId('aznet-erlink-er-gateway')
+    const path = edge.locator('.aznet-edge-path')
+    const flowEvidence = () => page.locator('.path-flow').evaluateAll((flows) => flows.map((flow) => ({
+      direction: flow.getAttribute('data-direction'), segments: flow.getAttribute('data-segments'),
+      track: flow.querySelector('path')!.getAttribute('d'),
+    })))
+    await expect(page.locator('.path-flow')).toHaveCount(2)
+    const evidence = await flowEvidence()
+    await expect(path).toHaveAttribute('stroke', 'var(--forward)')
+    await edge.focus()
+    await page.keyboard.press('Enter')
+    await expect(edge).toHaveAttribute('aria-pressed', 'true')
+    await expect(path).toHaveAttribute('stroke', 'var(--forward)')
+    await svg.click({ position: { x: 12, y: 12 } })
+    await expect(edge).toHaveAttribute('aria-pressed', 'false')
+    expect(await flowEvidence()).toEqual(evidence)
+    await expect(page.getByRole('dialog', { name: 'Path explorer', exact: true })).toBeVisible()
+    await edge.focus()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Escape')
+    await expect(edge).toHaveAttribute('aria-pressed', 'false')
+    await expect(path).toHaveAttribute('stroke', 'var(--forward)')
+    expect(await flowEvidence()).toEqual(evidence)
+    const node = page.getByTestId('aznet-select-vnet-hub')
+    await node.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: 'VNet detail', exact: true }).click()
+    await expect(page.locator('dialog[open]')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.locator('dialog[open]')).toHaveCount(0)
+    await expect(node).toHaveAttribute('aria-pressed', 'true')
+    expect(await flowEvidence()).toEqual(evidence)
+  })
+
   test(`${mode} streams filled circles along independent forward/return paths and keeps motion aligned`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
     await trace(page, mode)

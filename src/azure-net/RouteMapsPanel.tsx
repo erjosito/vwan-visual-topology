@@ -5,7 +5,7 @@ import type { RouteMap, RouteMapDirection } from '../model'
 import type { AzAppliance, AzNetTopology } from './model'
 import { parseAsPath } from '../validation'
 import { azHubPolicyLinks, azSitePolicyLinks, pruneAzSiteRouteMaps, validateAzSiteRouteMaps } from './route-maps'
-import { azArsPeerHosts, azArsPolicyLinks, parseArsPrependAsPath, parseBgpCommunities, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
+import { ARS_MAX_BGP_PEERS, azArsPeerHosts, azArsPolicyLinks, parseArsPrependAsPath, parseBgpCommunities, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
 import { BgpRouteTable } from './BgpRouteTable'
 import type { AzBgpRibEntry } from './engine'
 
@@ -87,7 +87,7 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
       <p className="muted">BGP peering requires VNet access, not gateway transit. Injecting routes into spokes still requires gateway-transit settings. Remote policy assignments remain limited to eligible spoke virtual network connections. Enabling a BGP peer here does not create VNet peering or packet connectivity.</p>
       {azArsPeerHosts(arsVnet, topology).flatMap((host) => host.appliances.filter((app) => app.bgpEnabled).map((app) => <div key={app.id}><label className="aznet-hover-toggle">
         <input type="checkbox" aria-label={`BGP peer ${host.name} / ${app.name}`}
-          checked={ars.peerApplianceIds.includes(app.id)} disabled={!ars.peerApplianceIds.includes(app.id) && ars.peerApplianceIds.length >= 8}
+          checked={ars.peerApplianceIds.includes(app.id)} disabled={!ars.peerApplianceIds.includes(app.id) && ars.peerApplianceIds.length >= ARS_MAX_BGP_PEERS}
           onChange={(event) => {
             try {
               const next = structuredClone(topology)

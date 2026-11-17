@@ -8,6 +8,7 @@ button, .button-link { border: 1px solid var(--border); background: var(--surfac
 button:hover, .button-link:hover { background: var(--surface-muted); border-color: var(--border); }
 button:disabled { opacity: .45; cursor: not-allowed; }
 button:focus-visible, .button-link:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, g:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.diagram g:focus:not(:focus-visible), .aznet-diagram-svg g:focus:not(:focus-visible) { outline: none; }
 input, select, textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font-size: 13px; min-width: 0; }
 textarea { resize: vertical; line-height: 1.6; }
 input:disabled { background: var(--surface-muted); }

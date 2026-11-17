@@ -62,6 +62,12 @@ export function CanvasBackground({ x, y, width, height }: { x: number; y: number
   </>
 }
 
+export function CanvasEdgeSelection({ selected, path }: { selected: boolean; path: string }) {
+  return selected ? <path className="canvas-edge-selection" d={path} fill="none" stroke="var(--focus)"
+    strokeWidth={8} strokeDasharray="1 5" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+    pointerEvents="none" aria-hidden="true" /> : null
+}
+
 export function CanvasControls({ zoom, onZoom, onResetView, onFitView, minZoom = 0.75, maxZoom = 1.5, zoomStep = 0.25, children, status }: {
   zoom: number
   onZoom: (zoom: number) => void

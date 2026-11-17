@@ -2,7 +2,7 @@ import { t } from './i18n'
 import { inventoryCounts } from './inventory'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
-import { CanvasBackground, CanvasControls } from './CanvasPresentation'
+import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from './CanvasPresentation'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { topologyObject, transportLabels } from './model'
 import { diagnosticFlowCount, type DiagnosticsFinding } from './diagnostics'
@@ -45,6 +45,7 @@ interface Props {
   onNodeMove: (id: string, position: NodePosition) => void
   onShowRouteMapRules: (router: RouterSelection, direction: RouteMapDirection, connectionId: string) => void
   onZoom: (zoom: number) => void
+  onClearSelection: () => void
   layoutControls?: ReactNode
   canvasStatus?: ReactNode
 }
@@ -56,7 +57,7 @@ function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
   </g>
 }
 
-export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, layoutControls, canvasStatus }: Props) {
+export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, onClearSelection, layoutControls, canvasStatus }: Props) {
   const { connectionStyle } = useCanvasPresentation()
   const diagramCurve = (a: NodePosition, b: NodePosition, aSize: NodePosition, bSize: NodePosition, bend = 0, index = 0, count = 1, reversed = false) =>
     baseDiagramCurve(a, b, aSize, bSize, connectionBend(connectionStyle, bend, index, count) * (reversed && connectionStyle !== 'default' ? -1 : 1))
@@ -85,7 +86,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
   const [moving, setMoving] = useState<{ id: string; position: NodePosition }>()
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
-  const panDrag = useRef<{ pointerId: number; start: NodePosition; origin: NodePosition; unitsPerPixel: number } | undefined>(undefined)
+  const panDrag = useRef<{ pointerId: number; start: NodePosition; origin: NodePosition; unitsPerPixel: number; moved: boolean } | undefined>(undefined)
   useCanvasZoom({
     svgRef: svg, zoom, onZoom: (next) => { closePreview(); onZoom(next) }, ...zoomLimits,
     onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
@@ -345,6 +346,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
   }))
   const endPan = (event: PointerEvent<SVGSVGElement>) => {
     if (panDrag.current?.pointerId !== event.pointerId) return
+    if (event.type === 'pointerup' && !panDrag.current.moved && Math.hypot(event.clientX - panDrag.current.start.x, event.clientY - panDrag.current.start.y) < 4) onClearSelection()
     panDrag.current = undefined; setPanning(false)
   }
   return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')} onPointerDownCapture={closePreview}
@@ -354,7 +356,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       event.preventDefault()
       const matrix = event.currentTarget.getScreenCTM()
       if (!matrix) return
-      panDrag.current = { pointerId: event.pointerId, start: { x: event.clientX, y: event.clientY }, origin: pan, unitsPerPixel: 1 / matrix.a }
+      panDrag.current = { pointerId: event.pointerId, start: { x: event.clientX, y: event.clientY }, origin: pan, unitsPerPixel: 1 / matrix.a, moved: false }
       setPanning(true)
       event.currentTarget.setPointerCapture(event.pointerId)
       event.currentTarget.focus({ preventScroll: true })
@@ -362,6 +364,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     onPointerMove={(event) => {
       const drag = panDrag.current
       if (!drag || drag.pointerId !== event.pointerId) return
+      if (Math.hypot(event.clientX - drag.start.x, event.clientY - drag.start.y) >= 4) drag.moved = true
       setPan({ x: drag.origin.x - (event.clientX - drag.start.x) * drag.unitsPerPixel,
         y: drag.origin.y - (event.clientY - drag.start.y) * drag.unitsPerPixel })
     }}
@@ -371,6 +374,15 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     event.preventDefault()
     onObjectContextMenu({ x: event.clientX, y: event.clientY, invoker: event.currentTarget })
   }} onKeyDown={(event) => {
+    if (event.key === 'Escape' && !event.defaultPrevented && event.currentTarget.contains(event.target as Node)) {
+      event.preventDefault(); event.stopPropagation()
+      if (drag.current || panDrag.current) {
+        suppressClick.current = !!drag.current
+        drag.current = undefined; panDrag.current = undefined
+        setMoving(undefined); setPanning(false)
+      } else { closePreview(); onClearSelection() }
+      return
+    }
     if (event.target === event.currentTarget && event.key === 'Home') {
       event.preventDefault(); setPan({ x: 0, y: 0 }); return
     }
@@ -412,16 +424,16 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       const edge = curves.get(connection.id)!
       const active = connection.enabled && activeConnections.has(connection.id)
       const name = connection.transport === 'ExpressRoute' ? 'ER' : connection.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'
-      return <g key={connection.id} className="clickable" {...selectable('connection', connection.id, t("Edit connection {0}", connection.name))}><title>{connection.name} · {transportLabels[connection.transport]} · {connection.enabled ? active ? t("Preferred") : t("Alternative") : t("Down")}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`link-${connection.id}`} data-preferred={active} className={`network-link ${connection.transport} ${active ? 'preferred-link' : ''} ${connection.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`${name}${connection.enabled ? '' : t(' (down)')}`, edge.label)}</g>
+      return <g key={connection.id} className="clickable" {...selectable('connection', connection.id, t("Edit connection {0}", connection.name))}><title>{connection.name} · {transportLabels[connection.transport]} · {connection.enabled ? active ? t("Preferred") : t("Alternative") : t("Down")}</title><path className="link-hitbox" d={edge.d} /><CanvasEdgeSelection selected={selection?.kind === 'connection' && selection.id === connection.id} path={edge.d} /><path data-testid={`link-${connection.id}`} data-preferred={active} className={`network-link ${connection.transport} ${active ? 'preferred-link' : ''} ${connection.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`${name}${connection.enabled ? '' : t(' (down)')}`, edge.label)}</g>
     })}
     {topology.siteLinks.map((link) => {
       const edge = curves.get(link.id)!
-      return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, t("Select on-premises link {0}", link.name))}><title>{link.name}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${link.enabled && exactSiteLinks.has(link.id) ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(link.name.length > 30 ? `${link.name.slice(0, 28)}…` : link.name, edge.label)}</g>
+      return <g key={link.id} className="clickable" {...selectable('siteLink', link.id, t("Select on-premises link {0}", link.name))}><title>{link.name}</title><path className="link-hitbox" d={edge.d} /><CanvasEdgeSelection selected={selection?.kind === 'siteLink' && selection.id === link.id} path={edge.d} /><path data-testid={`peer-link-${link.id}`} className={`network-link peer-link ${link.enabled && exactSiteLinks.has(link.id) ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(link.name.length > 30 ? `${link.name.slice(0, 28)}…` : link.name, edge.label)}</g>
     })}
     {(topology.erLinks ?? []).map((link) => {
       const edge = curves.get(link.id)!
       const active = link.enabled && activeErLinks.has(link.id)
-      return <g key={link.id} className="clickable" {...selectable('erLink', link.id, t("Edit ER connection {0}", link.name))}><title>{link.name}  {t("· ExpressRoute ·")} {link.enabled ? t("Enabled") : t("Down")}</title><path className="link-hitbox" d={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : t(' (down)')}`, edge.label)}</g>
+      return <g key={link.id} className="clickable" {...selectable('erLink', link.id, t("Edit ER connection {0}", link.name))}><title>{link.name}  {t("· ExpressRoute ·")} {link.enabled ? t("Enabled") : t("Down")}</title><path className="link-hitbox" d={edge.d} /><CanvasEdgeSelection selected={selection?.kind === 'erLink' && selection.id === link.id} path={edge.d} /><path data-testid={`er-link-${link.id}`} className={`network-link ExpressRoute ${active ? 'preferred-link' : ''} ${link.enabled ? '' : 'disabled-link'}`} d={edge.d} />{badge(`ER${link.enabled ? '' : t(' (down)')}`, edge.label)}</g>
     })}
     {(topology.erLocations ?? []).flatMap((loc) =>
       (loc.globalReachLocationIds ?? []).filter((peerId) => loc.id < peerId).map((peerId) => {
