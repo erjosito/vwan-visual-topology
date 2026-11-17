@@ -40,6 +40,7 @@ registerJapaneseMessages({
   'Empty AS path': '空の AS パス',
   'None modeled': 'モデル上はなし',
   'No received candidates in this scope. Check peer availability and ARS export policies.': 'このスコープには受信候補がありません。ピアの可用性と ARS エクスポートポリシーを確認してください。',
+  'The selected ARS peer is no longer configured. No received-route evidence is available in this scope.': '選択した ARS ピアは構成されていません。このスコープで利用できる受信ルートの証跡はありません。',
 })
 
 const peerStates: Record<AzNvaBgpPeer['state'], string> = {
@@ -63,10 +64,11 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
   const [editing, setEditing] = useState(false)
   const owner = topology.vnets.find((vnet) => vnet.id === vnetId)
   const app = owner?.appliances.find((app) => app.id === applianceId)
-  const peers = simulation.nvaBgpPeers?.[applianceId] ?? []
   const arsHosts = topology.vnets.filter((vnet) => vnet.routeServer)
-  const scope = peers.some((peer) => peer.routeServerId === filter) ? filter : ''
-  const rows = peers.filter((peer) => !scope || peer.routeServerId === scope)
+  const configuredHosts = arsHosts.filter((host) => host.routeServer!.peerApplianceIds.includes(applianceId))
+  const peers = (simulation.nvaBgpPeers?.[applianceId] ?? []).filter((peer) => configuredHosts.some((host) => host.routeServer!.id === peer.routeServerId))
+  const missingPeer = Boolean(filter) && !configuredHosts.some((host) => host.routeServer!.id === filter)
+  const rows = peers.filter((peer) => !filter || peer.routeServerId === filter)
     .flatMap((peer) => peer.routes.map((route) => ({ peer, route })))
   const title = `${t('NVA learned BGP routes')} · ${app?.name ?? applianceId}`
   return <CanvasOverlay title={title} className="nva-bgp-panel aznet-routes-window" onClose={onClose}>
@@ -98,11 +100,12 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
           </tr>
         })}</tbody>
       </table></div>
-      {!peers.length && <p role="status">{t('No ARS peers configured for this NVA.')}</p>}
-      <label className="field"><span>{t('NVA BGP peer filter')}</span><select aria-label={t('NVA BGP peer filter')} value={scope} onChange={(event) => setFilter(event.target.value)}>
+      {!configuredHosts.length && <p role="status">{t('No ARS peers configured for this NVA.')}</p>}
+      <label className="field"><span>{t('NVA BGP peer filter')}</span><select aria-label={t('NVA BGP peer filter')} value={filter} onChange={(event) => setFilter(event.target.value)}>
         <option value="">{t('All ARS peers')}</option>
-        {peers.map((peer) => <option key={peer.routeServerId} value={peer.routeServerId}>
-          {arsHosts.find((host) => host.id === peer.routeServerVnetId)?.routeServer?.name ?? peer.routeServerId} ({peer.routeServerId})
+        {missingPeer && <option value={filter}>{filter} ({t('Not configured')})</option>}
+        {configuredHosts.map((host) => <option key={host.routeServer!.id} value={host.routeServer!.id}>
+          {host.routeServer!.name} ({host.routeServer!.id})
         </option>)}
       </select></label>
       <h3>{t('Received candidates')} ({rows.length})</h3>
@@ -118,7 +121,9 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
             <details><summary>{t('Evidence')}</summary><p>{route.explanation}</p>{route.routeMapTrace?.map((trace, index) => <p key={index}>{trace}</p>)}</details></td>
         </tr>)}</tbody>
       </table></div>
-      {!rows.length && <p role="status">{t('No received candidates in this scope. Check peer availability and ARS export policies.')}</p>}
+      {!rows.length && <p role="status">{t(missingPeer
+        ? 'The selected ARS peer is no longer configured. No received-route evidence is available in this scope.'
+        : 'No received candidates in this scope. Check peer availability and ARS export policies.')}</p>}
     </>}
   </CanvasOverlay>
 }
