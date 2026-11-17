@@ -205,6 +205,17 @@ describe('original regional Standard Load Balancer', () => {
     expect(() => validateInventory(invalid)).toThrow(/original workload/)
   })
 
+  it.each([false, true])('keeps internal HA ports with Floating IP %s explicitly unassessed', (floatingIp) => {
+    const topology = network(true), rule = topology.inventory!.loadBalancers![0].rules[0]
+    rule.haPorts = true; rule.floatingIp = floatingIp
+    rule.protocol = 'all'; rule.frontendPort = 0; rule.backendPort = 0
+    const native = parseAzNetTopology(topology)
+    const result = tracePacket(native, privateRequest)
+    expect(result).toMatchObject({ ingress: 'not-assessed', translation: 'not-assessed', delivery: 'not-assessed' })
+    expect(result.forward.reasons).toContainEqual(expect.stringMatching(/HA ports and Floating IP\/DSR require separate/))
+    expect(native.inventory!.loadBalancers![0].rules[0]).toMatchObject({ haPorts: true, floatingIp })
+  })
+
   it('prunes deleted original backends and internal subnets without deleting shared LB identities or public allocations', () => {
     const before = network(), next = structuredClone(before)
     next.inventory!.workloads = next.inventory!.workloads.filter((workload) => workload.id !== backend.workloadId)
