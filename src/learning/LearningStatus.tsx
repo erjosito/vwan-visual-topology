@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useLanguage } from '../i18n'
+import { t, useLanguage } from '../i18n'
 import { useWorkspaceSession } from '../workspace-context'
 import { selectedEdition } from './editions'
 import { beltProgress } from './progress-ledger'
@@ -22,13 +22,18 @@ export function LearningStatus() {
   const trigger = useRef<HTMLButtonElement>(null)
   const progress = state?.ledger ? beltProgress(state.ledger, course, assessments) : undefined
   const unknown = language === 'ja' ? '学習の進捗を利用不可' : 'Learning progress unavailable'
+  const description = `${cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points}` : unknown}`
   return <>
     <button ref={trigger} type="button" className="learning-status-trigger" data-testid="learning-status"
+      title={session?.presentationPreview ? description : undefined}
+      aria-label={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
       onKeyDown={(event) => { if (open && event.key === 'Escape') { event.stopPropagation(); setOpen(false) } }}
       aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
-      {cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')} · {course.title[language]} · {name[language]} - {progress ? <>
+      {session?.presentationPreview ? t('Learning status') : <>{cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')} · {course.title[language]} · {name[language]} - </>}{progress ? <>
+        {!session?.presentationPreview && <>
         <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={progress.belt.color} stroke="currentColor" /></svg>
         {progress.belt.name[language]} · {progress.points} {language === 'ja' ? 'ポイント' : 'points'}
+        </>}
         {state?.status !== 'saved' && <> · {state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown}</>}
       </> : unknown}
     </button>

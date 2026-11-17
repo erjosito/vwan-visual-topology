@@ -3,6 +3,13 @@ import { sampleCatalogJa } from './sample-catalog-ja'
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
   ...sampleCatalogJa,
+  'Preview UI': 'UI プレビュー',
+  'Try a less cluttered presentation. Your design and settings stay unchanged.': '操作を整理した表示を試します。設計や設定は変更されません。',
+  'Settings & help': '設定とヘルプ',
+  'File': 'ファイル',
+  'Explore': '探索',
+  'All VNet actions': 'VNet のすべての操作',
+  'Learning status': '学習の状況',
   'Add Azure Firewall': 'Azure Firewall を追加',
   'Configure Azure Firewall': 'Azure Firewall を構成',
   'Gateway capabilities (modeled)': 'ゲートウェイ機能 (モデル)',

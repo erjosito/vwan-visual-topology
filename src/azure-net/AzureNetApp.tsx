@@ -16,6 +16,8 @@ import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceMenu } from '../WorkspaceSession'
+import { PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
+import { previewVnetActions } from '../context-actions'
 import { useWorkspaceSession } from '../workspace-context'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
@@ -165,6 +167,7 @@ function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttr
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
+  const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
   const [cachedHistory] = useState(() => workspaceSession?.getEditorHistory?.())
   const [initialResolved] = useState(() => {
     if (cachedHistory?.provider === 'azure-net') return {
@@ -1427,6 +1430,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })),
       {
         label: 'Open path explorer',
+        previewPrimary: true,
         disabled: anchors.length === 0,
         onSelect: () => {
           setTraceSourceKey(anchors[0].key)
@@ -1559,12 +1563,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `VNet · ${vnet.name} (${vnet.region})`,
         actions: [
-          { label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) },
+          { label: t('Open VNet detail'), previewPrimary: true, onSelect: () => openDetail(vnet.id) },
           ...(vnet.vwanHubAttachment ? [{
             label: t('Configure virtual hub connection'),
+            previewPrimary: true,
             onSelect: () => openHubConnections(vnet.vwanHubAttachment!.hubId),
           }] : [{
-            label: t('Connect to virtual hub'), allowDisabledChildren: true,
+            label: t('Connect to virtual hub'), previewPrimary: true, allowDisabledChildren: true,
             children: topology.vwanHubs.length ? topology.vwanHubs.map((hub) => ({
               label: hub.name,
               onSelect: () => { attachVnetToHub(vnet.id, hub.id); openHubConnections(hub.id) },
@@ -1574,6 +1579,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             e.ref.vnetId === vnet.id && e.group === 'workload')),
           {
             label: 'Inspect Effective Routes',
+            previewPrimary: true,
             disabled: !firstSub,
             onSelect: () => {
               if (!firstSub) return
@@ -1680,6 +1686,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           },
           {
             label: 'Peer with VNet',
+            previewPrimary: true,
             guidanceAnchor: guidanceAnchor('peer-menu', vnet.id),
             disabled: peerableVnets.length === 0,
             children: peerableVnets.map((other) => ({
@@ -1716,6 +1723,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           },
           {
             label: 'Configure VNet & Elements',
+            previewPrimary: true,
             onSelect: () => {
               setSelected({ kind: 'vnet', vnetId: vnet.id })
               setActiveTab('editor')
@@ -2691,7 +2699,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     : 'siteId' in target ? target.siteId : 'hubId' in target ? target.hubId
       : 'locationId' in target ? target.locationId : 'linkId' in target ? target.linkId
         : 'peeringId' in target ? target.peeringId : 'connectionId' in target ? target.connectionId : target.siteLinkId
-  const getContextMenuSpec = (target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number }): { title: string; actions: ContextAction[] } | null => {
+  const getContextMenuSpec = (target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number }, fullActions = false): { title: string; actions: ContextAction[] } | null => {
     if (target.kind === 'canvas') return getOrdinaryContextMenuSpec(target)
     const id = entityId(target)
     const applicable = scenario.affected[id] ?? []
@@ -2699,12 +2707,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       label: `Restore ${failureLabel(fault)}`, onSelect: () => restoreFault(fault),
     })) }
     const ordinary = getOrdinaryContextMenuSpec(target)
+    const presented = ordinary && workspaceSession?.presentationPreview && !fullActions && target.kind === 'vnet'
+      ? previewVnetActions(ordinary.actions, () => setToolsOpenRequest((request) => request + 1)) : ordinary?.actions ?? []
     const domain = failureDomains.find((f) =>
       (f.kind === 'site' && target.kind === 'site' || f.kind === 'er-location' && target.kind === 'er-location') && f.id === id ||
       f.kind === 'region' && ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) &&
         f.id === regionKey([...topology.vnets, ...topology.vwanHubs].find((n) => n.id === id)?.region))
     return ordinary && { ...ordinary, actions: [...(domain ? [{ label: `Simulate failure of ${failureLabel(domain)}`, onSelect: () => addFault(domain) }]
-      : ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...ordinary.actions] }
+      : ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) ? [{ label: 'Azure region failure unassessed — set an explicit recognized region', disabled: true }] : []), ...presented] }
   }
   const openRouteMapRules = (selection: AzRouteMapSelection) => {
     setActiveTab(null)
@@ -2753,7 +2763,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         onSelectTarget={(target) => setCanvasSelection(detailEntity(target))}
         getContextActions={(target) => {
           const entity = detailEntity(target)
-          return (getContextMenuSpec(entity)?.actions ?? []).map(function wrap(action): ContextAction {
+          return (getContextMenuSpec(entity, true)?.actions ?? []).map(function wrap(action): ContextAction {
             return { ...action, children: action.children?.map(wrap), ...(action.onSelect || action.run ? { onSelect: () => {
               setCanvasSelection(entity)
               ;(action.run ?? action.onSelect)?.()
@@ -2810,7 +2820,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         <div className="aznet-topbar-controls">
           {canvasSelection && 'vnetId' in canvasSelection && <button type="button" className="aznet-btn"
             onClick={() => openDetail(canvasSelection.vnetId)}>{t('VNet detail')}</button>}
-          <WorkspaceTools dismissRequest={guidanceRevision} creationActions={[
+          <WorkspaceTools openRequest={toolsOpenRequest} dismissRequest={guidanceRevision} creationActions={[
             { label: t('+ VNet'), testId: 'aznet-add-vnet-btn', run: addDefaultVnet },
             { label: t('+ Site'), testId: 'aznet-add-site-btn', run: () => addSiteNode() },
             { label: t('+ ER location'), testId: 'aznet-add-erloc-btn', run: () => addErLocationNode() },
@@ -2818,7 +2828,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             ...(simulatorMode === 'full' ? [{ label: t('+ Virtual WAN hub'), testId: 'aznet-add-vwan-hub-btn', run: () => addVwanHub() }] : []),
           ]} getSelection={() => {
             if (!canvasSelection) return
-            const spec = getContextMenuSpec(canvasSelection)
+            const spec = getContextMenuSpec(canvasSelection, true)
             const deletion = spec?.actions.find((action) => action.danger && !action.disabled && action.onSelect)
             return spec && { ...spec, actions: spec.actions.map((action) => action === deletion
               ? { ...action, onSelect: () => setDeleteTarget(canvasSelection) } : action) }
@@ -2858,6 +2868,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               }
               setGuidanceNavigation(true)
             }} />
+          <PresentationGroup label={t('Explore')}>
           <button
             type="button"
             className="aznet-btn aznet-btn-gallery"
@@ -2907,16 +2918,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   <option key={s.id} value={s.id}>{t(s.title)}</option>)}
               </optgroup>)}
           </select>
-
-          <button
-            type="button"
-            className="aznet-btn"
-            data-testid="aznet-clear-topology-btn"
-            onClick={() => setClearRequested(true)}
-            title={t('Clear canvas to an empty topology')}
-          >
-            {t('Clear')}
-          </button>
+          </PresentationGroup>
 
           <button
             type="button"
@@ -2959,6 +2961,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             Advanced checks ({actionableCount})
           </button>
 
+          <PresentationGroup label={t('File')}>
           <button
             type="button"
             className="aznet-btn"
@@ -2989,6 +2992,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           >
             ⬆ Import JSON
           </button>
+          <button type="button" className="aznet-btn" data-testid="aznet-clear-topology-btn"
+            onClick={() => setClearRequested(true)} title={t('Clear canvas to an empty topology')}>{t('Clear')}</button>
+          </PresentationGroup>
+          <PresentationToggle />
           <input
             data-desktop-import
             ref={fileInputRef}
