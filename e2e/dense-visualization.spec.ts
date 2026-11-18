@@ -18,6 +18,39 @@ test('synthetic visualization alternatives preserve the native graph and saved c
   }
 })
 
+for (const theme of ['light', 'dark']) {
+  test(`${theme}: production dense connection focus retains every connection and manual coordinate`, async ({ page }, info) => {
+    test.setTimeout(90_000)
+    await page.setViewportSize({ width: 1600, height: 1100 })
+    await page.addInitScript(({ topology, theme }) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+      localStorage.setItem('aznet-theme', theme)
+    }, { topology: denseVisualizationTopology(), theme })
+    await page.goto('/?mode=full')
+    await expect(page.getByTestId('ui-preview-toggle')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme)
+    const svg = page.getByTestId('aznet-diagram-svg')
+    await expect(svg.locator('[data-canvas-connection-id]')).toHaveCount(52)
+    await page.getByRole('button', { name: 'Fit view', exact: true }).click()
+    const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    await page.getByTestId('aznet-select-vnet-hub-0').focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: 'Focus selected connections', exact: true }).click()
+    const dimmed = svg.locator('[data-connection-dimmed="true"]')
+    expect(await dimmed.count()).toBeGreaterThan(0)
+    await expect(svg.locator('[data-canvas-connection-id]')).toHaveCount(52)
+    await expect(svg.locator('.policy-marker')).toHaveCount(40)
+    await expect(page.getByTestId('connection-focus-status')).toContainText('0 hidden')
+    await expect(page.getByTestId('aznet-erlink-er-site-0')).not.toHaveAttribute('data-connection-dimmed')
+    expect((await new AxeBuilder({ page }).include('[data-testid="aznet-canvas-shell"]').analyze()).violations).toEqual([])
+    await info.attach(`production-focus-${theme}`, { body: await page.screenshot({ path: info.outputPath(`production-focus-${theme}.png`) }), contentType: 'image/png' })
+    await page.getByRole('button', { name: 'Restore all connections', exact: true }).click()
+    await expect(dimmed).toHaveCount(0)
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+  })
+}
+
 for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
   test(`${count} regions: ${theme} comparative geometry and inspection`, async ({ page }, info) => {
     test.setTimeout(120_000)

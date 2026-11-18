@@ -44,6 +44,7 @@ for (const language of ['en', 'ja'] as const) for (const taskId of ['wan.verify'
       sessionId: 'prior-tasks', revision, scope: 1, engineVersion: 'earlier', completedAt: '2026-11-18T12:00:00.000Z',
     }))
     await page.addInitScript(({ language, completions, document, scenarioId, progressKey, practiceKey }) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
       localStorage.setItem('vwan-visual-topology:language:v1', language)
       localStorage.setItem(progressKey, JSON.stringify({ version: 1, policyVersion: 1, enrollment: 'azure-networking-preview', completions }))
       localStorage.setItem(practiceKey, JSON.stringify({ version: 1, courseId: 'azure-networking-preview',
