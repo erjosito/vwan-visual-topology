@@ -99,7 +99,12 @@ for (const mode of ['vwan', 'full'] as const) {
     await expect(file).not.toHaveAttribute('open')
     await expect(file.locator('summary')).toBeFocused()
     expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(original)
-    await expect(page.getByRole('button', { name: mode === 'full' ? /Advanced checks/ : 'Open model notes and warnings' })).toBeVisible()
+    if (mode === 'full') {
+      const checks = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Routing checks$/ }) })
+      await checks.locator('summary').click()
+      await expect(checks.getByRole('button', { name: /Advanced checks/ })).toBeVisible()
+      await page.keyboard.press('Escape')
+    } else await expect(page.getByRole('button', { name: 'Open model notes and warnings' })).toBeVisible()
     await toggle.click()
     await expect(toggle).toHaveAttribute('aria-pressed', 'false')
     expect(await node.getAttribute('aria-pressed')).toBe(selected)
@@ -215,3 +220,39 @@ test('default UI can switch to legacy with keyboard and persist across reload', 
   await page.reload()
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
 })
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  for (const language of ['en', 'ja']) {
+    test(`${mode}: ${language} routing checks share an accessible menu without hiding results`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 900 })
+      await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
+      const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
+      await page.goto(`/?mode=${mode}&sample=${sample}`)
+      const checks = page.locator('.presentation-group').filter({
+        has: page.locator('summary', { hasText: language === 'ja' ? /^ルーティングの確認$/ : /^Routing checks$/ }),
+      })
+      const summary = checks.locator('summary')
+      await summary.focus()
+      await page.keyboard.press('Enter')
+      const run = checks.getByRole('button', { name: language === 'ja' ? 'ルーティングを診断' : 'Check routing', exact: true })
+      const advanced = checks.getByRole('button', { name: language === 'ja' ? /詳細な診断/ : /Advanced checks/ })
+      await expect(run).toBeVisible()
+      await expect(advanced).toBeVisible()
+      expect((await new AxeBuilder({ page }).include('.presentation-group[open]').analyze()).violations).toEqual([])
+      const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+      const before = await page.evaluate(key => localStorage.getItem(key), key)
+      await run.click()
+      await expect(checks).not.toHaveAttribute('open')
+      await expect(summary).toBeFocused()
+      const status = page.locator(mode === 'vwan' ? '.routing-check-status' : '[data-testid="aznet-routing-check-status"]')
+      await expect(status).toBeVisible()
+      await expect(status).not.toContainText(language === 'ja' ? '確認中' : 'Checking all modeled networks', { timeout: 30000 })
+      await summary.click()
+      await advanced.click()
+      await expect(checks).not.toHaveAttribute('open')
+      await expect(page.getByRole('dialog')).toBeVisible()
+      expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(before)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+  }
+}

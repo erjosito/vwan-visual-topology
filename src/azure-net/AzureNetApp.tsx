@@ -2950,27 +2950,30 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             ↷ Redo
           </button>
 
+          <PresentationGroup label={t('Routing checks')}>
           <button
             type="button"
-            className="aznet-btn aznet-btn-primary"
+            className={`aznet-btn${workspaceSession?.presentationPreview ? '' : ' aznet-btn-primary'}`}
             data-testid="aznet-check-routing-btn"
             onClick={checkRouting}
-            title="Check connectivity and stateful routing symmetry across all workload subnets and on-premises sites"
+            title={t('Check connectivity across the modeled landscape')}
           >
-            Check routing
+            {t('Check routing')}
           </button>
           <button
             type="button"
             className="aznet-btn"
             data-testid="aznet-run-diagnostics-btn"
+            title={t('Inspect findings and assess declared connectivity requirements')}
             onClick={() => {
               setShowDiagnosticBadges(true)
               setReviewFindingIds(null)
               setActiveTab('diagnostics')
             }}
           >
-            Advanced checks ({actionableCount})
+            {t('Advanced checks')} ({actionableCount})
           </button>
+          </PresentationGroup>
 
           <PresentationGroup label={t('File')}>
           <button
