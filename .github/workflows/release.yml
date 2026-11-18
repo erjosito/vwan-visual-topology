@@ -201,6 +201,11 @@ jobs:
             --resource-group "$AZURE_RESOURCE_GROUP" --name "$AZURE_FUNCTION_APP" \
             --src release-input/candidate/payload/function.zip \
             --build-remote false --timeout 600 --only-show-errors --output none
+      - name: Verify user-cloud routes and browser write preflight
+        if: inputs.target == 'user-cloud' && steps.guard.outputs.no_op != 'true'
+        env:
+          AZURE_FUNCTION_APP: ${{ vars.AZURE_USER_CLOUD_FUNCTION_APP }}
+        run: node scripts/check-user-cloud.mjs "https://${AZURE_FUNCTION_APP}.azurewebsites.net/api/cloud" "https://aznet-simulator.com"
       - name: Publish desktop download or durable deployment receipt
         if: steps.guard.outputs.no_op != 'true'
         env:

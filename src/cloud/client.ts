@@ -16,7 +16,7 @@ export function createCloudClient(base: string, token: () => Promise<string>, si
       method, headers, signal: AbortSignal.any([signal, AbortSignal.timeout(20000)]), body: value === undefined ? undefined : JSON.stringify(value),
       credentials: 'omit', cache: 'no-store', redirect: 'error',
     })
-    if (response.status === 404 && method === 'GET') return undefined
+    if (response.status === 404 && method === 'GET' && path !== '/topologies') return undefined
     if (!response.ok) throw new CloudHttpError(response.status, response.status === 412
       ? 'Cloud data changed on another device. Reload before replacing it.'
       : response.status === 401 ? 'Your cloud session expired. Sign in again.'

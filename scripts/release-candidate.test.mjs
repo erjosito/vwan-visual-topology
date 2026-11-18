@@ -8,10 +8,25 @@ import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { artifacts, candidateVersion, createCandidate, guard, preflight, promotionDecision, record, validateArchivePaths, validateRun, verifyCandidate } from './release-candidate.mjs'
+import { checkUserCloud } from './check-user-cloud.mjs'
 
 const sourceSha = 'a'.repeat(40)
 const env = { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sourceSha, GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1' }
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
+
+test('cloud release probe rejects unregistered endpoints and broken browser write preflight', async () => {
+  const origin = 'https://app.test', base = 'https://api.test/api/cloud'
+  const reply = async (_url, init) => init.method === 'OPTIONS'
+    ? new Response(null, { status: 204, headers: { 'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET,PUT,DELETE,OPTIONS',
+      'Access-Control-Allow-Headers': init.headers['Access-Control-Request-Headers'] } })
+    : new Response('{"error":"Sign in again."}', { status: 401, headers: {
+      'WWW-Authenticate': 'Bearer', 'Access-Control-Allow-Origin': origin } })
+  await checkUserCloud(base, origin, reply)
+  await assert.rejects(checkUserCloud(base, origin, async () => new Response(null, { status: 404 })), /authentication route/)
+  await assert.rejects(checkUserCloud(base, origin, async (url, init) =>
+    init.method === 'OPTIONS' ? new Response(null, { status: 204 }) : reply(url, init)), /write preflight/)
+})
 
 async function fixture(t) {
   const root = await mkdtemp(resolve(tmpdir(), 'aznet-release-'))

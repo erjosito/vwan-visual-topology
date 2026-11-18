@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { cloudConfiguration } from './configuration'
 import { cloudSessionKey, createCloudSession } from './session'
 import type { MicrosoftClient } from './microsoft'
+import { CloudHttpError, createCloudClient } from './client'
 
 const config = { clientId: '11111111-1111-4111-8111-111111111111',
   scope: 'api://22222222-2222-4222-8222-222222222222/Cloud.Access', base: 'https://app.test/api/cloud' }
@@ -17,6 +18,13 @@ const microsoft = (): MicrosoftClient => ({
 })
 
 describe('optional personal-account sessions', () => {
+  it('distinguishes an undeployed list endpoint from missing individual cloud data', async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 })) as unknown as typeof fetch
+    const api = createCloudClient(config.base, async () => 'test-access-token', new AbortController().signal, fetcher)
+    await expect(api.listTopologies()).rejects.toBeInstanceOf(CloudHttpError)
+    await expect(api.getProgress()).resolves.toBeUndefined()
+    await expect(api.getTopology('missing')).resolves.toBeUndefined()
+  })
   it('does not load Microsoft auth or call the API without configuration or explicit sign-in', async () => {
     const cache = storage(), load = vi.fn(async () => microsoft())
     const session = createCloudSession(config, { storage: () => cache, load })
