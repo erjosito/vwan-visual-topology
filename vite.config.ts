@@ -1,8 +1,10 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
 
 const isAzureNetMode = process.env.VITE_APP_MODE === 'azure-net'
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -10,6 +12,10 @@ export default defineConfig({
   server: { watch: { ignored: ['**/test-artifacts/**', '**/test-results/**', '**/release/**', '**/dist/**'] } },
   plugins: [
     react(),
+    {
+      name: 'application-version',
+      transformIndexHtml: () => [{ tag: 'meta', attrs: { name: 'application-version', content: version } }],
+    },
     ...(isAzureNetMode
       ? [
           {

@@ -836,10 +836,11 @@ npm run test:desktop
 
 `release` contains an assisted per-user NSIS installer and packaged application.
 Artifacts are unsigned **development** builds, not enterprise production
-releases. The filename/build identity uses `YYYY.MM.DD.N`; the package uses
-three-part semver. CI allocates the UTC date and per-date CI build number before
-packaging in its disposable checkout and records the actual executable versions;
-merging requires no version-bump commit. Publication is a separate manual
+releases. The root `package.json` supplies the semantic app/installer version,
+starting at `0.1.0`; its installer is `Azure-Network-Simulator-0.1.0-x64.exe`.
+Windows resource versions use `0.1.0.0`, and CI verifies those actual resources
+and the packaged runtime. Commit a source version bump before building a new
+release; publication never changes versions or tested bytes. Publication is a separate manual
 promotion of the tested candidate, not an effect of merging or packaging.
 See the [release runbook](docs/releasing.md). The application and installer use
 the repository's Windows icon resources.

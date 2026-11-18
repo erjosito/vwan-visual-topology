@@ -15,8 +15,8 @@ let brandedWindowsResources = false
 if (executablePath) {
   const { NtExecutable, NtExecutableResource } = await import('resedit')
   const icon = await readFile(resolve('public', 'desktop-icon.png'))
-  const { buildVersion } = JSON.parse(await readFile(resolve('electron-builder.json'), 'utf8'))
-  for (const file of [executablePath, resolve('release', `Azure-Network-Simulator-${buildVersion}-x64.exe`)]) {
+  const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8'))
+  for (const file of [executablePath, resolve('release', `Azure-Network-Simulator-${version}-x64.exe`)]) {
     const resources = NtExecutableResource.from(NtExecutable.from(await readFile(file))).entries
     expect(resources.some((entry) => entry.type === 3 && Buffer.from(entry.bin).equals(icon))).toBe(true)
   }

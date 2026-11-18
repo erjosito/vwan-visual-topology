@@ -21,6 +21,14 @@ after(async () => {
   await new Promise((accept) => server.close(accept))
 })
 
+test('built application and auth pages identify the canonical source version', async () => {
+  const { version } = JSON.parse(await readFile('package.json', 'utf8'))
+  for (const page of ['index.html', 'auth-redirect.html']) {
+    const html = await readFile(`dist/${page}`, 'utf8')
+    assert.ok(html.includes(`<meta name="application-version" content="${version}">`), page)
+  }
+})
+
 test('serves exact dist bytes, SWA headers, asset caching and navigation exclusions', async () => {
   const response = await fetch(origin)
   assert.equal(await response.text(), await readFile('dist/index.html', 'utf8'))
