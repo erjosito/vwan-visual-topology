@@ -1,0 +1,23 @@
+name: Label external reports
+on:
+  issues:
+    types: [opened, transferred]
+
+permissions:
+  issues: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue = context.payload.issue
+            if (issue.user.type !== 'User' ||
+                issue.user.login.toLowerCase() === context.repo.owner.toLowerCase()) return
+            await github.rest.issues.addLabels({
+              ...context.repo,
+              issue_number: issue.number,
+              labels: ['external-report'],
+            })
