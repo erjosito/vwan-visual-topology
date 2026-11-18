@@ -44,6 +44,39 @@ async function signIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
 }
 
+test.describe('new UI account and belt summary', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  test('shows highest local belt independently of enrollment and updates on account changes', async ({ page }) => {
+    await setup(page)
+    const raw = JSON.stringify({ version: 1, policyVersion: 1, enrollment: 'azure-routing-scenarios',
+      completions: orderedTasks(exampleCourse).map(({ task, lesson }) => ({
+        courseId: exampleCourse.course.id, contentVersion: exampleCourse.course.contentVersion,
+        lessonId: lesson.id, taskId: task.id, assessmentVersion: task.assessmentVersion,
+        checkId: task.checkId, awardId: task.awardId, points: task.points, title: task.title,
+        sessionId: 'original-local', revision: 1, scope: 1, engineVersion: 'test', completedAt: '2026-11-17T12:00:00Z',
+      })) })
+    await page.addInitScript(({ key, raw }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, raw)
+    }, { key: guidedProgressKey, raw })
+    await page.goto('/?mode=full')
+    const status = page.getByTestId('learning-status')
+    await expect(status).toContainText('Not signed in')
+    await expect(status).toContainText('Black belt')
+    await expect(status).not.toContainText('x2')
+    await signIn(page)
+    await expect(status).toContainText('Test Alice')
+    await expect(status).toContainText('White belt')
+    await page.getByRole('button', { name: 'Sign out of this app', exact: true }).click()
+    await expect(status).toContainText('Not signed in')
+    await expect(status).toContainText('Black belt')
+    await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+    await status.click()
+    await page.getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
+    await page.getByRole('button', { name: 'Delete guided history & points', exact: true }).click()
+    await expect(status).toContainText('White belt')
+  })
+})
+
 test('anonymous history requires import consent; reload, switching and sign-out preserve account isolation', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', error => errors.push(error.message))

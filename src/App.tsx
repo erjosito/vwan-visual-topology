@@ -1,6 +1,6 @@
 import { t, localizeDiagnostic, useLanguage, documentTitles } from './i18n'
 import { LearningTools } from './learning/LearningTools'
-import { WorkspaceMenu } from './WorkspaceSession'
+import { WorkspaceAccountStatus, WorkspaceMenu } from './WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
 import { previewVnetActions } from './context-actions'
 import { useWorkspaceSession } from './workspace-context'
@@ -673,6 +673,7 @@ function App() {
         </PresentationGroup>
         <PresentationToggle />
         <input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
+      <WorkspaceAccountStatus />
     </header>
     {panel === 'samples' && <Suspense fallback={null}><SampleGallery testIdPrefix="vwan"
       hasWorkspace={topology.name !== 'New topology' || !!(topology.hubs.length || topology.spokes.length || topology.sites.length || topology.connections.length || topology.routeMaps?.length || topology.erLocations?.length)}
