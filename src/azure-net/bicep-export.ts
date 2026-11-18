@@ -286,6 +286,12 @@ export function generateAzNetBicep(
           continue
         }
         const activeActive = gw.kind === 'Vpn' && Boolean(gw.activeActive)
+        if (gw.kind === 'Vpn') {
+          if (gw.activeActive === undefined) warnings.push(`VPN gateway '${gw.name}' has unspecified mode; export retains the legacy active/standby default. Select a mode explicitly before deployment.`)
+          if (vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic && (!activeActive || gw.asn !== 65515)) {
+            warnings.push(`VPN gateway '${gw.name}' does not meet ARS route-exchange requirements: active/active and ASN 65515 are required, even when VPN BGP is disabled.`)
+          }
+        }
         const pip1Sym = uniqueSymbol(`pip_${gw.id}_1`, 'pip')
         resourceCount++
         lines.push(`resource ${pip1Sym} 'Microsoft.Network/publicIPAddresses@2024-05-01' = {`)
