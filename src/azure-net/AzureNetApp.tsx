@@ -5188,7 +5188,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {/* Subnet CRUD, Route Table Associations & Policies (#41, #49) */}
                 {showVnetEditor && (
                 <div className="aznet-card" data-testid="aznet-subnet-security-editor">
-                  <h3>Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies</h3>
+                  <h3>{workspaceSession?.presentationPreview ? t('Subnet configuration') : 'Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies'}</h3>
+                  <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('These settings do not prove Internet or private-service reachability.')}</p>
                   {filteredVnets.map((vnet) => {
                     const subnetsToShow =
                       selected.kind === 'subnet' && selected.vnetId === vnet.id
@@ -5260,11 +5261,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             }}
                           >
                             <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Subnet name')}</span>
                               <input
                                 type="text"
                                 className="aznet-input"
                                 data-testid={`aznet-subnet-name-${subnet.id}`}
-                                aria-label={`Subnet name ${subnet.name}`}
+                                aria-label={t('Subnet name {0}', subnet.name)}
                                 value={subnet.name}
                                 onChange={(e) => {
                                   const val = e.target.value
@@ -5276,12 +5278,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 }}
                                 style={{ fontWeight: 700, width: 145 }}
                               />
+                              </label>
+                              <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Subnet prefix')}</span>
                               <PrefixInput
                                 key={topology.inventory ? subnet.prefix : undefined}
                                 type="text"
                                 className="aznet-input"
                                 data-testid={`aznet-subnet-prefix-${subnet.id}`}
-                                aria-label={`Subnet prefix ${subnet.name}`}
+                                aria-label={t('Subnet prefix {0}', subnet.name)}
                                 value={subnet.prefix}
                                 deferred={topology.inventory !== undefined}
                                 onCommit={(val) => {
@@ -5293,10 +5297,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 }}
                                 style={{ width: 120, fontFamily: 'monospace', fontSize: 11.5 }}
                               />
+                              </label>
                               <label
                                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
                               >
-                                <span>Route Table:</span>
+                                <span>{t('Route Table:')}</span>
                                 <select
                                   className="aznet-select"
                                   data-testid={`aznet-subnet-rt-select-${subnet.id}`}
@@ -5328,8 +5333,23 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 </select>
                               </label>
                             </div>
-
-                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              className="aznet-btn"
+                              data-testid={`aznet-delete-subnet-${subnet.id}`}
+                              style={{ fontSize: 11, padding: '2px 7px', color: 'var(--error)', borderColor: 'var(--border)' }}
+                              onClick={() => deleteSubnetFromVnet(vnet.id, subnet.id)}
+                            >
+                              Delete Subnet
+                            </button>
+                          </div>
+                          <InspectorSection title={t('Outbound and private endpoint settings')}
+                            summary={t('Default outbound: {0}; PE policies: {1}; endpoints: {2}',
+                              subnet.defaultOutboundAccess === undefined ? t('Not specified') : t(subnet.defaultOutboundAccess ? 'Enabled' : 'Disabled'),
+                              t(subnet.privateEndpointNetworkPolicies ?? 'Disabled'), subnet.privateEndpoints?.length ?? 0)}
+                            initialOpen={subnet.defaultOutboundAccess !== undefined || subnet.internetEgressStatus === 'unknown' ||
+                              !!subnet.privateEndpointNetworkPolicies && subnet.privateEndpointNetworkPolicies !== 'Disabled' || !!subnet.privateEndpoints?.length}>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '8px 0' }}>
                               <label className="aznet-checkbox-row">
                                 <input
                                   type="checkbox"
@@ -5346,12 +5366,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                     })
                                   }}
                                 />
-                                <span>Default Outbound</span>
+                                <span>{t('Default Outbound')}</span>
                               </label>
                               <label
                                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
                               >
-                                <span>PE Route Policies:</span>
+                                <span>{t('PE Route Policies:')}</span>
                                 <select
                                   className="aznet-select"
                                   data-testid={`aznet-subnet-pe-policy-${subnet.id}`}
@@ -5402,24 +5422,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                   })
                                 }}
                               >
-                                + Private Endpoint
-                              </button>
-                              <button
-                                type="button"
-                                className="aznet-btn"
-                                data-testid={`aznet-delete-subnet-${subnet.id}`}
-                                style={{
-                                  fontSize: 11,
-                                  padding: '2px 7px',
-                                  color: 'var(--error)',
-                                  borderColor: 'var(--border)',
-                                }}
-                                onClick={() => deleteSubnetFromVnet(vnet.id, subnet.id)}
-                              >
-                                Delete Subnet
+                                {t('+ Private Endpoint')}
                               </button>
                             </div>
-                          </div>
 
                           {(subnet.privateEndpoints ?? []).length > 0 && (
                             <div style={{ marginTop: 6, paddingLeft: 8, borderLeft: '2px solid var(--border)' }}>
@@ -5439,6 +5444,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                   <input
                                     type="text"
                                     className="aznet-input"
+                                    aria-label={t('Private endpoint name {0}', pe.name)}
                                     value={pe.name}
                                     onChange={(e) => {
                                       const val = e.target.value
@@ -5455,6 +5461,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                   <input
                                     type="text"
                                     className="aznet-input"
+                                    aria-label={t('Private endpoint address {0}', pe.name)}
                                     value={pe.ipAddress}
                                     onChange={(e) => {
                                       const val = e.target.value
@@ -5471,6 +5478,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                   <button
                                     type="button"
                                     className="aznet-btn"
+                                    aria-label={t('Remove private endpoint {0}', pe.name)}
                                     style={{ fontSize: 10.5, padding: '1px 6px', color: 'var(--error)' }}
                                     onClick={() => {
                                       commitTopology((draft) => {
@@ -5491,6 +5499,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               ))}
                             </div>
                           )}
+                          </InspectorSection>
+                          {subnet.internetEgressStatus === 'unknown' && <p role="status">{t('Outbound capture is incomplete. Internet access is not assessed.')}</p>}
                         </div>
                       ))}
                     </div>

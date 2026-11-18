@@ -77,6 +77,7 @@ for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
         const report = await new AxeBuilder({ page }).analyze()
         baselineFindings = findings(report)
         await info.attach('baseline-axe', { body: JSON.stringify(report), contentType: 'application/json' })
+        expect(baselineFindings).toEqual([])
       }
     }
     await info.attach('visualization-observations', { body: JSON.stringify({ count, theme, observations }, null, 2), contentType: 'application/json' })

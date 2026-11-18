@@ -155,7 +155,7 @@ for (const mode of ['hub-spoke', 'full']) {
   test(`${mode} calls gateway attachments ER connections and deletes only the selected subnet or connection`, async ({ page }) => {
     await loadHybrid(page, mode)
     const link = page.getByTestId('aznet-erlink-gateway-connection')
-    await expect(link).toHaveAccessibleName('Select ER connection Gateway attachment')
+    await expect(link).toHaveAccessibleName('Select ER connection Gateway attachment ER')
     await link.focus()
     await page.keyboard.press('Shift+F10')
     await expect(page.getByRole('menu', { name: 'ER connection · Gateway attachment', exact: true })).toBeVisible()
@@ -165,7 +165,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(confirmation(page, 'Delete ER connection')).toContainText('Gateway attachment')
     await confirmation(page, 'Delete ER connection').getByRole('button', { name: 'Confirm deletion', exact: true }).click()
     await expect(link).toHaveCount(0)
-    await expect(page.getByTestId('aznet-erlink-site-link')).toHaveAccessibleName('Select ExpressRoute link Site attachment')
+    await expect(page.getByTestId('aznet-erlink-site-link')).toHaveAccessibleName('Select ExpressRoute link Site attachment ER')
     await expect(page.getByTestId('aznet-chip-gateway')).toBeVisible()
     await selectAndDelete(page, 'aznet-subnet-workload')
     await expect(confirmation(page, 'Delete Subnet')).toContainText('Workload')
