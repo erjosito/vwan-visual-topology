@@ -16,7 +16,7 @@ import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
-import { PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
+import { InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
 import { previewVnetActions } from '../context-actions'
 import { useWorkspaceSession } from '../workspace-context'
 import type { ContextAction } from '../TopologyContextMenu'
@@ -4425,7 +4425,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {/* VNets & VNet Elements Editor (#39, #42, #46, #47, #48, #49) */}
                 {showVnetEditor && (
                 <div className="aznet-card" data-testid="aznet-vnet-elements-editor">
-                  <h3>VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)</h3>
+                  <h3>{workspaceSession?.presentationPreview ? t('VNet configuration') : 'VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)'}</h3>
                   {filteredVnets.map((vnet) => {
                     const hasErGw = vnet.gateways.some((g) => g.kind === 'ExpressRoute')
                     const hasVpnGw = vnet.gateways.some((g) => g.kind === 'Vpn')
@@ -4454,11 +4454,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           }}
                         >
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('VNet name')}</span>
                             <input
                               type="text"
                               className="aznet-input"
                               value={vnet.name}
-                              aria-label={`VNet name ${vnet.name}`}
+                              aria-label={t('VNet name {0}', vnet.name)}
                               onChange={(e) => {
                                 const val = e.target.value
                                 commitTopology((draft) => {
@@ -4468,12 +4469,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               }}
                               style={{ fontWeight: 700, width: 145 }}
                             />
+                            </label>
+                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('VNet region')}</span>
                             <input
                               type="text"
                               className="aznet-input"
                               list={`aznet-region-datalist-${vnet.id}`}
                               data-testid={`aznet-vnet-region-${vnet.id}`}
-                              aria-label={`VNet region ${vnet.name}`}
+                              aria-label={t('VNet region {0}', vnet.name)}
                               title="Azure Region / Location (e.g. westeurope, eastus)"
                               value={vnet.region}
                               onChange={(e) => {
@@ -4485,11 +4488,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               }}
                               style={{ width: 130, fontSize: 11.5 }}
                             />
+                            </label>
                             <datalist id={`aznet-region-datalist-${vnet.id}`}>
                               {ALL_KNOWN_AZURE_REGIONS.map((reg) => (
                                 <option key={reg} value={reg} />
                               ))}
                             </datalist>
+                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Address spaces')}</span>
                             <PrefixInput
                               key={topology.inventory ? vnet.prefixes.join(', ') : undefined}
                               type="text"
@@ -4511,6 +4516,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               }}
                               style={{ width: 130, fontSize: 11.5 }}
                             />
+                            </label>
+                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Canvas layout role')}</span>
                             <select
                               className="aznet-select"
                               value={vnet.role}
@@ -4526,6 +4533,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               <option value="hub">Hub Layout Role</option>
                               <option value="spoke">Spoke Layout Role</option>
                             </select>
+                            </label>
                           </div>
                           <button
                             type="button"
@@ -4543,6 +4551,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           </button>
                         </div>
 
+                        <InspectorSection title={t('Gateway route advertisements')}
+                          summary={vnet.summarizedGatewayPrefixes?.length ? t('{0} configured prefixes', vnet.summarizedGatewayPrefixes.length) : t('Automatic advertisements')}
+                          initialOpen={!!vnet.summarizedGatewayPrefixes?.length}>
                         <label style={{ display: 'grid', gap: 4, marginBottom: 8, fontSize: 11.5 }}>
                           Advertised gateway prefixes (IPv4, comma-separated)
                           <input
@@ -4566,12 +4577,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           <span id={`aznet-gateway-prefix-help-${vnet.id}`} className="aznet-muted">
                             Read only by this VNet's ER/VPN gateway when GatewaySubnet exists; stored beforehand, ignored by a remote hub.
                             Include this gateway VNet's address spaces (recommended). Covered hub/spoke spaces are summarized; uncovered spaces remain advertised.
-                            Independent of local address spaces; no overlapping entries or IPv6. No Route Server required. Advertisements do not create forwarding routes.
+                            Independent of local address spaces; no overlapping entries or IPv6. No Route Server required.
                           </span>
-                          {validateAdvertisedGatewayPrefixes(vnet.summarizedGatewayPrefixes).map((error) => (
-                            <strong role="alert" key={error}>VNet "{vnet.name}" {error}</strong>
-                          ))}
                         </label>
+                        </InspectorSection>
+                        <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('Advertisements do not create forwarding routes.')}</p>
+                        {validateAdvertisedGatewayPrefixes(vnet.summarizedGatewayPrefixes).map((error) => (
+                          <strong role="alert" key={error}>VNet "{vnet.name}" {error}</strong>
+                        ))}
 
                         {usesRemoteGw && (
                           <div
@@ -4591,6 +4604,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         )}
 
                         {/* Quick Add/Remove VNet Elements (#39, #48) */}
+                        <InspectorSection title={t('Add or remove routing devices')}
+                          summary={t('Gateways: {0}; appliances: {1}; Route Server: {2}', vnet.gateways.length, vnet.appliances.length, vnet.routeServer ? 1 : 0)}
+                          initialOpen={!!(vnet.gateways.length || vnet.appliances.length || vnet.routeServer)}>
                         <div
                           style={{
                             display: 'flex',
@@ -4735,6 +4751,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           )}
                         </div>
 
+                        </InspectorSection>
                         {vnet.gateways.filter((gateway) => gateway.kind === 'Vpn').map((gateway) =>
                           <Suspense key={gateway.id} fallback={null}>
                             <VpnGatewaySettings gateway={gateway}

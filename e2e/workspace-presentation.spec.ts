@@ -1,7 +1,100 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
+import { createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
+import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
 
 test.use({ storageState: { cookies: [], origins: [] } })
+
+async function openVnetConfiguration(page: Page, mode: string, topology: AzNetTopology) {
+  await page.goto(`/?mode=${mode}`)
+  await page.locator('input[data-desktop-import]').setInputFiles({
+    name: 'inspector.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+  })
+  await page.getByTestId('aznet-diagram-svg').getByRole('button', { name: /^VNet / }).first().focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+}
+
+for (const mode of ['hub-spoke', 'full']) {
+  for (const language of ['en', 'ja']) {
+    test(`${mode}: ${language} VNet inspector groups optional tasks without losing deferred edits`, async ({ page }, info) => {
+      await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+      await page.addInitScript(language => {
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+      }, language)
+      const topology = createEmptyAzNetTopology()
+      topology.vnets = [{ id: 'hub', name: 'Simple VNet', role: 'hub', region: 'westeurope', prefixes: ['10.0.0.0/16'],
+        subnets: [{ id: 'app', name: 'Application', prefix: '10.0.1.0/24' }], gateways: [], appliances: [] }]
+      await openVnetConfiguration(page, mode, topology)
+      const card = page.getByTestId('aznet-vnet-config-hub')
+      const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+      const advertisements = card.locator('.presentation-inspector-section').filter({
+        has: page.locator('summary', { hasText: language === 'ja' ? 'ゲートウェイの経路アドバタイズ' : 'Gateway route advertisements' }),
+      })
+      const devices = card.locator('.presentation-inspector-section').filter({
+        has: page.locator('summary', { hasText: language === 'ja' ? 'ルーティング デバイスの追加と削除' : 'Add or remove routing devices' }),
+      })
+      await expect(card.getByRole('textbox', { name: language === 'ja' ? 'VNet 名 Simple VNet' : 'VNet name Simple VNet', exact: true })).toBeVisible()
+      await expect(card.getByTestId('aznet-vnet-region-hub')).toBeVisible()
+      await expect(advertisements).not.toHaveAttribute('open')
+      await expect(devices).not.toHaveAttribute('open')
+      await expect(advertisements.getByRole('textbox')).not.toBeVisible()
+      const groupedCount = await card.locator('button:visible, input:visible, select:visible').count()
+      await info.attach('grouped-inspector', { body: await page.screenshot({ path: info.outputPath('grouped-inspector.png') }), contentType: 'image/png' })
+      expect((await new AxeBuilder({ page }).include('[data-testid="aznet-vnet-config-hub"]').analyze()).violations).toEqual([])
+      await advertisements.locator('summary').focus()
+      await page.keyboard.press('Enter')
+      const draft = advertisements.getByRole('textbox')
+      await draft.fill('10.0.0.0/8')
+      const toggle = page.getByTestId('ui-preview-toggle')
+      // Avoid blur so this checks an uncommitted editor draft, not just saved JSON.
+      await toggle.dispatchEvent('click')
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+      await expect(draft).toHaveValue('10.0.0.0/8')
+      await expect(card.getByTestId('aznet-add-fw-hub')).toBeVisible()
+      const legacyCount = await card.locator('button:visible, input:visible, select:visible').count()
+      expect(groupedCount).toBeLessThan(legacyCount)
+      await info.attach('inspector-control-counts', { body: JSON.stringify({ mode, language, groupedCount, legacyCount }), contentType: 'application/json' })
+      await info.attach('legacy-inspector', { body: await page.screenshot({ path: info.outputPath('legacy-inspector.png') }), contentType: 'image/png' })
+      expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      await toggle.dispatchEvent('click')
+      await expect(draft).toHaveValue('10.0.0.0/8')
+      await draft.press('Tab')
+      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].summarizedGatewayPrefixes)).toEqual(['10.0.0.0/8'])
+      await page.getByRole('button', { name: /Undo/ }).click()
+      await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      await devices.locator('summary').focus()
+      await page.keyboard.press('Enter')
+      await card.getByTestId('aznet-add-fw-hub').click()
+      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances.length)).toBe(1)
+      await page.getByRole('button', { name: /Undo/ }).click()
+      await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+
+    test(`${mode}: ${language} imported VNet settings expand and keep warnings outside disclosure`, async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 1000 })
+      await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
+      const topology = vpnGatewayModeTopology()
+      topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/8']
+      topology.vnets[0].gateways[0].activeActive = false
+      await openVnetConfiguration(page, mode, topology)
+      const card = page.getByTestId('aznet-vnet-config-hub')
+      const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+      await expect(card.locator('.presentation-inspector-section[open]')).toHaveCount(2)
+      await expect(card.getByRole('textbox', { name: 'Advertised gateway prefixes VPN mode hub', exact: true })).toHaveValue('10.0.0.0/8')
+      for (const summary of await card.locator('.presentation-inspector-section > summary').all()) await summary.click()
+      await expect(card.locator('.presentation-inspector-section[open]')).toHaveCount(0)
+      const vpn = page.getByTestId('vpn-gateway-settings-vpn')
+      await expect(vpn.getByRole('combobox')).toBeVisible()
+      await expect(vpn).toContainText(language === 'ja' ? 'アクティブ/アクティブ' : 'ARS route exchange requires')
+      await expect(card.getByRole('combobox', { name: 'ARS Hub Routing Preference', exact: true })).toHaveValue('ASPath')
+      expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      expect((await new AxeBuilder({ page }).include('[data-testid="aznet-vnet-config-hub"]').analyze()).violations).toEqual([])
+    })
+  }
+}
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   for (const width of [390, 1440]) {
