@@ -1,0 +1,40 @@
+.compact-bgp-table th,
+.compact-bgp-table td {
+  vertical-align: top;
+}
+
+.compact-bgp-table th[scope="row"],
+.compact-bgp-table .as-path {
+  white-space: nowrap;
+}
+
+.compact-bgp-evidence {
+  min-width: 15rem;
+  max-width: 32rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.compact-bgp-evidence p {
+  margin: .4rem 0;
+}
+
+.compact-bgp-evidence pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.compact-bgp-copy {
+  margin-block: .6rem;
+}
+
+.compact-bgp-copy textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 8rem;
+  font-family: monospace;
+}
+
+.compact-bgp summary {
+  cursor: pointer;
+}

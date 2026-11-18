@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
+import AxeBuilder from '@axe-core/playwright'
 
 async function load(page: Page, mode: string, topology = nvaBgpTopology()) {
   await page.addInitScript((value) => {
@@ -21,6 +22,50 @@ async function saved(page: Page) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} compact NVA rows disclose provenance by keyboard and remain usable narrow, themed and Japanese`, async ({ page }) => {
+    const topology = nvaBgpTopology()
+    await load(page, mode, topology)
+    await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption(mode === 'full' ? 'dark' : 'light')
+    await open(page, 'reader', 'Inspect NVA Learned BGP Routes')
+    const inspector = page.getByRole('dialog', { name: 'NVA learned BGP routes · Dual-region NVA', exact: true })
+    const routes = inspector.getByTestId('nva-bgp-routes')
+    await expect(routes.locator('thead th')).toHaveText(['Status', 'Network', 'Advertising ARS / neighbor', 'Next hop', 'AS path', 'Route details'])
+    const row = routes.locator('[data-ars-id="west-ars"][data-prefix="198.18.0.0/24"]')
+    const evidence = row.locator('td > details')
+    await expect(evidence).not.toHaveAttribute('open')
+    await evidence.locator(':scope > summary').focus()
+    await page.keyboard.press('Space')
+    await expect(evidence).toHaveAttribute('open', '')
+    await expect(evidence).toContainText('65020:1')
+    await expect(evidence).toContainText('west-ars')
+    await page.keyboard.press('Space')
+    await expect(evidence).not.toHaveAttribute('open')
+    await inspector.getByRole('searchbox', { name: 'Filter by prefix', exact: true }).fill('198.18')
+    await expect(routes.locator('tbody tr')).toHaveCount(2)
+    await inspector.getByLabel('NVA BGP peer filter', { exact: true }).selectOption('east-ars')
+    await expect(routes.locator('tbody tr')).toHaveCount(1)
+    await inspector.getByText('Copyable route text', { exact: true }).click()
+    const copy = inspector.getByRole('textbox', { name: 'Select route text to copy' })
+    await copy.focus()
+    await expect(copy).toHaveValue(/east-ars/)
+    await expect(copy).not.toHaveValue(/west-ars/)
+    expect(await copy.evaluate((element: HTMLTextAreaElement) => element.selectionEnd - element.selectionStart)).toBeGreaterThan(0)
+    await page.setViewportSize({ width: 390, height: 844 })
+    const scroller = inspector.getByRole('region', { name: 'NVA learned BGP routes', exact: true })
+    await scroller.focus()
+    await expect(scroller).toBeFocused()
+    expect(await scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
+    await page.keyboard.press('End')
+    await routes.locator('td > details > summary').focus()
+    await page.keyboard.press('Enter')
+    await expect(routes.locator('td > details')).toHaveAttribute('open', '')
+    expect((await new AxeBuilder({ page }).include('.nva-bgp-panel .compact-bgp').analyze()).violations).toEqual([])
+    await page.locator('header [data-language-selector]').selectOption('ja')
+    await expect(page.getByTestId('nva-bgp-routes').locator('thead th')).toHaveText(['状態', 'ネットワーク', '広告元 ARS / ネイバー', 'ネクスト ホップ', 'AS パス', 'ルートの詳細'])
+    await expect(page.getByText('コピー用ルートテキスト', { exact: true })).toBeVisible()
+    expect(await saved(page)).toEqual(topology)
+  })
+
   test(`${mode} scopes unassessed gateway summaries to their original ARS without presenting them as received routes`, async ({ page }) => {
     const topology = nvaBgpTopology()
     topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']

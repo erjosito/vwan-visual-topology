@@ -378,8 +378,19 @@ try {
       await expect(inspector.getByTestId('nva-gateway-summary-boundary')).toContainText('west-ars')
     }
     await expect(inspector.getByTestId('nva-bgp-routes').locator('[data-prefix="198.18.0.0/24"]')).toHaveCount(2)
+    await expect(inspector.getByTestId('nva-bgp-routes').locator('thead th')).toHaveText(['Status', 'Network', 'Advertising ARS / neighbor', 'Next hop', 'AS path', 'Route details'])
+    const evidence = inspector.getByTestId('nva-bgp-routes').locator('[data-prefix="198.18.0.0/24"][data-ars-id="west-ars"] td > details')
+    await evidence.locator(':scope > summary').focus()
+    await page.keyboard.press('Enter')
+    await expect(evidence).toHaveAttribute('open', '')
+    await expect(evidence).toContainText('65020:1')
     await inspector.getByLabel('NVA BGP peer filter', { exact: true }).selectOption('west-ars')
     await expect(inspector.getByTestId('nva-bgp-routes').locator('[data-prefix="198.18.0.0/24"]')).toHaveCount(1)
+    await inspector.getByText('Copyable route text', { exact: true }).click()
+    const copy = inspector.getByRole('textbox', { name: 'Select route text to copy' })
+    await copy.focus()
+    await expect(copy).toHaveValue(/west-ars/)
+    await expect(copy).not.toHaveValue(/east-ars/)
     expect(await saved()).toEqual(expected.document.topology)
   }
   for (const mode of ['vwan', 'full']) {

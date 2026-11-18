@@ -18,8 +18,9 @@ import { azureRoutesAtSites } from './paths'
 import { erExportHasMixedAsPath, erLocationBgpTable, neighborRoutes } from './route-views'
 import type { RouteMode, RouteStage } from './route-views'
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubRoutingCoverageMessage } from './hub-routing'
+import { CompactBgpTable } from './CompactBgpTable'
 
-interface Row { key: string; asPath: number[]; localPreference?: number; preferred: boolean; nextHop?: string; via?: string; source: string; erExportUncertain?: boolean }
+interface Row { key: string; asPath: number[]; localPreference?: number; preferred: boolean; nextHop?: string; via?: string; source: string; erExportUncertain?: boolean; evidence?: unknown }
 interface Group { prefix: string; candidates: Row[]; explanation: string[] }
 
 export function RouteInspector({ topology, simulation, comparisonSession, router, view, mode, onRouter, onView, onPreference, onPrefix, onClose }: {
@@ -78,7 +79,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
           const azure = connection ? topology.hubs.find((hub) => hub.id === connection.hubId)?.name
             : erLink ? topology.erLocations?.find((location) => location.id === erLink.locationId)?.name : undefined
           return {
-            key, asPath: r.asPath, localPreference: r.localPreference, preferred: keys.has(key), nextHop: hops[0] ?? azure ?? t("Local origin"),
+            key, evidence: r, asPath: r.asPath, localPreference: r.localPreference, preferred: keys.has(key), nextHop: hops[0] ?? azure ?? t("Local origin"),
             via: hops.length > 1 ? hops.join(' → ') : connection?.name ?? erLink?.name
               ?? topology.connections.find((connection) => r.key.startsWith(`${connection.id}:`))?.name,
             source: hops.length ? t("On-premises BGP") : azure ? t("Azure BGP") : t("Originated at site"),
@@ -100,14 +101,14 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
         const peer = attachment?.hubId ? topology.hubs.find((hub) => hub.id === attachment.hubId)
           : attachment?.siteId ? topology.sites.find((site) => site.id === attachment.siteId) : undefined
         return {
-          key: r.key, asPath: r.asPath, preferred: d.selected.some((s) => s.key === r.key), source: label(r),
+          key: r.key, evidence: r, asPath: r.asPath, preferred: d.selected.some((s) => s.key === r.key), source: label(r),
           nextHop: location ? peer?.name : r.remote ? topology.hubs.find((h) => h.id === r.originHubId)?.name : r.transport === 'Firewall' ? hub?.firewall?.name ?? 'Azure Firewall' : r.transport === 'Internet' ? t("Internet egress") : exit,
           via: location || r.remote ? exit : r.erLocationId ? topology.erLocations?.find((location) => location.id === r.erLocationId)?.name : undefined,
         }
       }),
     }))
   const rows = peers.filter((peer) => !neighbor || peer.id === neighbor).flatMap((peer) => peer[stage].map((route, index) => ({
-    prefix: route.prefix, key: `${peer.id}:${route.key}:${index}`, asPath: route.asPath, localPreference: route.localPreference, preferred: false,
+    prefix: route.prefix, evidence: { neighborId: peer.id, route }, key: `${peer.id}:${route.key}:${index}`, asPath: route.asPath, localPreference: route.localPreference, preferred: false,
     nextHop: peerName(peer), source: 'transport' in route ? label(route) : t("On-premises BGP"),
     erExportUncertain: mode === 'advertised' && (location || stage === 'after')
       ? erExportHasMixedAsPath(topology, simulation, router, peer.id, route) : false,
@@ -118,6 +119,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
     .filter((group) => group.prefix.includes(filter.trim()))
   const title = mode !== 'bgp' ? mode === 'learned' ? t("Learned routes") : t("Advertised routes")
     : hub && view === 'hub' ? t("Hub forwarding table") : hub && view === 'firewall' ? t("Firewall forwarding table") : t("BGP table")
+  const compact = mode !== 'bgp' || !hub || view === 'bgp'
   return <CanvasOverlay title={`${title} · ${site?.name ?? hub?.name ?? location?.name ?? t("Router")}`} className="effective-routes" onClose={onClose}>
     <div className="inspector-controls">
       <label className="field"><span>{t("Inspect router")}</span><select aria-label={t("Inspect router")} value={`${router.kind}:${router.id}`} onChange={(e) => {
@@ -162,13 +164,38 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
       </tbody></table></div>
       {!filteredObservedRoutes.length && <p className="empty">{filter ? t("No routes match the current filters.") : t("No observed routes recorded in this Azure snapshot.")}</p>}
     </> : <>
-    {mode === 'bgp' && <p className="route-legend"><strong>{t("* Preferred")}</strong>  {t("· Click a prefix to highlight its paths.")}</p>}
+    {mode === 'bgp' && <p className="route-legend">{!compact && <strong>{t("* Preferred")}</strong>}  {t("· Click a prefix to highlight its paths.")}</p>}
     {hub && mode === 'bgp' && <p className="muted inspector-note">{t("Post-inbound candidates and preferred routes, including labeled system and VPN-static entries. Routing-intent redirection is separate in the hub forwarding table.")}</p>}
     {site && <p className="muted inspector-note">{t("Shortest-AS-path site routing includes Azure advertisements. Azure-originated routes are not re-exported to Azure.")}</p>}
     {mode !== 'bgp' && !location && <p className="muted inspector-note">{t("{0} {1} route maps; not best-path selection. VPN-static entries bypass BGP route maps. ER provider AS-path processing and inter-hub prepends occur in transit, outside the router's route maps.", t(stage === 'after' ? 'After' : 'Before'), t(mode === 'learned' ? 'inbound' : 'outbound'))}</p>}
     {location && mode === 'bgp' && <p className="muted inspector-note">{t("Candidates learned from enabled attachments after neighbor outbound maps. Shortest AS paths are preferred; equal-cost paths are retained. Click a prefix to highlight its preferred next hops.")}</p>}
     {location && <p className="muted inspector-note">{t("Circuit export rules still apply. Global Reach and shared-circuit hub reflection are not modeled.")}{mode !== 'bgp' && t(" Routes are shown from the ER location's perspective; it has no configurable route maps.")}</p>}
-    <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th>{showLocalPreference && <th>{t("Local preference")}</th>}</tr></thead>
+    {compact ? <CompactBgpTable label={title}
+      legend={t(mode === 'bgp' ? '* Preferred; - alternative. Selection is not a validity or live-session check.' : '? Selection not assessed in this received/advertised scope.')}
+      neighborLabel={mode !== 'bgp' ? t('Neighbor') : undefined}
+      rows={[...groups].sort((a, b) => (cidr(a.prefix)?.network ?? 0) - (cidr(b.prefix)?.network ?? 0)
+        || (cidr(a.prefix)?.length ?? 0) - (cidr(b.prefix)?.length ?? 0))
+        .flatMap((d) => [...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.key.localeCompare(b.key))
+          .map((r) => ({
+            id: r.key, prefix: d.prefix, asPath: r.asPath,
+            preferred: mode === 'bgp' ? r.preferred : undefined,
+            status: mode !== 'bgp' ? '?' as const : r.preferred ? '*' as const : '-' as const,
+            statusLabel: mode !== 'bgp' ? t('Not assessed') : t(r.preferred ? 'Preferred' : 'Alternative'),
+            nextHop: mode === 'bgp' ? r.nextHop ?? '—' : t('Not assessed'),
+            neighbor: mode !== 'bgp' ? r.nextHop : undefined,
+            network: mode === 'bgp' ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : undefined,
+            textEvidence: JSON.stringify({ resourceId: router.id, tableId, mode, stage: mode === 'bgp' ? undefined : stage, selection: d.explanation, ...r }),
+            details: <div data-reason-prefix={d.prefix}>
+              <p>{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</p>
+              <Explain concept={contextKnown ? 'selection' : 'coverage'} evidence={contextKnown ? d.explanation : []} />
+              <p>{r.source}{r.via && <> · {t('Via')} {r.via}</>}</p>
+              {r.localPreference !== undefined && <p>{t('Local preference')}: {r.localPreference}</p>}
+              <p>{router.id} · {tableId} · {r.key}</p>
+              {r.erExportUncertain && <p className="er-export-warning notice"><strong>{t('ExpressRoute AS-path uncertainty')}</strong>{' '}
+                {t("The simulator assumes all private ASNs are removed at the customer boundary. When non-private ASNs are also present, actual removal can depend on the MSEE implementation and configuration. Customer-visible paths may retain private ASNs, including 65520, affecting on-premises route selection. Verify against customer-router observations.")}</p>}
+              <details><summary>{t('Azure provenance and selection evidence')}</summary><pre>{JSON.stringify(r.evidence, null, 2)}</pre></details>
+            </div>,
+          })))} /> : <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th>{showLocalPreference && <th>{t("Local preference")}</th>}</tr></thead>
       {groups.map((d) => <tbody key={d.prefix}>
         <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={(mode === 'bgp' ? 3 : 2) + (showLocalPreference ? 1 : 0)} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span><Explain concept={contextKnown ? 'selection' : 'coverage'} evidence={contextKnown ? d.explanation : []} /></th></tr>
         {[...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((r) => <tr key={r.key} data-prefix={d.prefix} data-preferred={mode === 'bgp' ? r.preferred : undefined} className={mode === 'bgp' ? r.preferred ? 'preferred-route' : 'alternative-route' : undefined}>
@@ -180,7 +207,7 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
         <td className="as-path">{r.asPath.join(' ') || '—'}</td>
         {showLocalPreference && <td className="local-preference">{r.localPreference ?? 100}</td>}
       </tr>)}</tbody>)}
-    </table></div>
+    </table></div>}
     {!groups.length && <p className="empty">{filter || neighbor ? t("No routes match the current filters.") : t("No routes available on this router.")}</p>}
     </>}
   </CanvasOverlay>
