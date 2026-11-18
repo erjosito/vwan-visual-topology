@@ -1,4 +1,5 @@
 import type { DiagramLayout, HubRouteTable, HubRoutingConfiguration, LayoutMode, PrependRule, RouteMap, RouteMapAssignment, RouteMapRule, Topology } from './model'
+import { parseVnetBgpCommunities } from './vnet-communities'
 import { attachmentHubRouting, hubRouteTables, propagatesLocally, propagationLabels } from './hub-routing'
 import { validateInventory, type InventorySubnet, type NetworkInventory } from './inventory'
 import { validateApplicationInventory } from './application-inventory'
@@ -259,6 +260,7 @@ export function validateTopology(input: unknown): Topology {
     return {
       id: id(spoke.id),
       name: text(spoke.name, 'Spoke name'),
+      ...(spoke.bgpCommunities === undefined ? {} : { bgpCommunities: parseVnetBgpCommunities(spoke.bgpCommunities) }),
       ...(spoke.region === undefined || spoke.region === '' ? {} : { region: text(spoke.region, 'VNet region') }),
       ...(label === undefined ? {} : { label }),
       ...(hubId === undefined ? {} : { hubId }),

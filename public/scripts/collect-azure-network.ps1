@@ -183,7 +183,7 @@ $bgp = @{ asn = $true; bgpPeeringAddress = $true }
 $route = @{ name = $true; addressPrefix = $true; nextHopType = $true; nextHopIpAddress = $true }
 $peer = @{ id = $true; name = $true; remoteVirtualNetwork = $ref; allowVirtualNetworkAccess = $true; allowForwardedTraffic = $true; allowGatewayTransit = $true; useRemoteGateways = $true; peerCompleteVnets = $true; localSubnetNames = $true; remoteSubnetNames = $true; enableOnlyIPv6Peering = $true }
 $subnet = @{ id = $true; name = $true; addressPrefix = $true; addressPrefixes = $true; routeTable = $ref; networkSecurityGroup = $ref; defaultOutboundAccess = $true; natGateway = $ref; privateEndpointNetworkPolicies = $true; delegations = @(@{ serviceName = $true }); serviceEndpoints = @(@{ service = $true }); ipConfigurations = @($ref) }
-$vnet = @{ id = $true; name = $true; location = $true; addressSpace = @{ addressPrefixes = $true }; subnets = @($subnet); virtualNetworkPeerings = @($peer); summarizedGatewayPrefixes = @{ addressPrefixes = $true } }
+$vnet = @{ id = $true; name = $true; location = $true; addressSpace = @{ addressPrefixes = $true }; subnets = @($subnet); virtualNetworkPeerings = @($peer); summarizedGatewayPrefixes = @{ addressPrefixes = $true }; bgpCommunities = @{ virtualNetworkCommunity = $true; regionalCommunity = $true } }
 $gateway = @{ id = $true; name = $true; gatewayType = $true; enableBgp = $true; activeActive = $true; bgpSettings = $bgp; ipConfigurations = @($ipConfiguration); natRules = @($ref) }
 $bgpRoute = @{ network = $true; nextHop = $true; sourcePeer = $true; origin = $true; asPath = $true; localAddress = $true; weight = $true }
 $account = Invoke-AzJson 'account' @('account', 'show') @{ id = $true; tenantId = $true; environmentName = $true }

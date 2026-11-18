@@ -53,7 +53,7 @@ $response = switch -Wildcard ($path) {
         }
         @{ value = $connections }
     }
-    '*/virtualNetworks/app' { @{ id = $path; properties = @{ addressSpace = @{ addressPrefixes = @('10.20.0.0/16') } }; diagnosticSecret = 'must-not-be-exported' } }
+    '*/virtualNetworks/app' { @{ id = $path; properties = @{ addressSpace = @{ addressPrefixes = @('10.20.0.0/16') }; bgpCommunities = @{ virtualNetworkCommunity = '12076:20001'; regionalCommunity = '12076:50004'; secret = 'must-not-be-exported' } }; diagnosticSecret = 'must-not-be-exported' } }
     default { throw "Unexpected mock GET: $path" }
 }
 $response | ConvertTo-Json -Depth 20 -Compress

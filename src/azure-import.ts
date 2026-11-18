@@ -1,4 +1,5 @@
 import type { AzureImportInfo, Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
+import { parseVnetBgpCommunities } from './vnet-communities'
 import { armKey, parseAzureObservation } from './azure-observation'
 import { cidr, validateTopology } from './validation'
 import { VWAN_MAX_SPOKES } from './topology-limits'
@@ -203,6 +204,7 @@ export function importAzureCapture(input: unknown): Topology {
       }
       topology.spokes.push({
         id: stableId('spoke', vnetId), name: text(connection.name, 'Spoke name'), hubId: hub.id, prefixes: [...new Set(prefixes)],
+        ...(connection.bgpCommunities == null ? {} : { bgpCommunities: parseVnetBgpCommunities(connection.bgpCommunities) }),
         ...(connection.enableInternetSecurity === true ? { propagateDefaultRoute: true } : {}),
         ...(hubRouting ? { hubRouting } : {}),
       })

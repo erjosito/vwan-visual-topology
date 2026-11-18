@@ -23,6 +23,19 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it.each(['hub-spoke', 'full'] as const)('preserves VNet community advertisements and provenance in %s compiled headless execution', (mode) => {
+    const topology = parseAzNetTopology(sample('azure-net/uc9-expressroute-hairpin-two-vnets.json'))
+    topology.vnets[1].bgpCommunities = { virtualNetworkCommunity: '12076:20001', regionalCommunity: '12076:50004' }
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    const simulation = result.simulation as ReturnType<typeof simulateAzNet>
+    const advertisement = Object.values(simulation.erLocationRibs).flat().find((route) => route.prefix === topology.vnets[1].prefixes[0])!
+    expect(advertisement.communities).toEqual(['12076:20001', '12076:50004'])
+    expect(advertisement.vnetCommunityOrigin).toEqual({ vnetId: topology.vnets[1].id, ...topology.vnets[1].bgpCommunities })
+    expect(result.document?.topology).toEqual(topology)
+  })
   it('admits large imported WANs without bypassing isolated headless output budgets', async () => {
     const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
     try {

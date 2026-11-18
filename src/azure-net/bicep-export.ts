@@ -5,6 +5,7 @@ import { azArsPeers, azArsSpokes } from './ars-route-maps'
 import { natGatewayForSubnet, validateInventory } from '../inventory'
 import { generateConnectivityBicep } from '../connectivity-bicep'
 import { validateSubnetPeeringScopes } from './subnet-peering'
+import { parseVnetBgpCommunities, vnetCommunityHelp } from '../vnet-communities'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -45,6 +46,8 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  for (const vnet of topology.vnets) parseVnetBgpCommunities(vnet.bgpCommunities)
+  if (topology.vnets.some((vnet) => vnet.bgpCommunities)) warnings.push(vnetCommunityHelp)
   if (topology.vnets.some((vnet) => vnet.vwanHubAttachment?.staticRoutes?.length)) {
     warnings.push('Virtual WAN VNet-connection static routes and their propagation are not deployed by this Bicep starter. Preserve native JSON; this is not an equivalent indirect-spoke deployment.')
   }
@@ -223,6 +226,9 @@ export function generateAzNetBicep(
     }
     lines.push(`      ]`)
     lines.push(`    }`)
+    if (vnet.bgpCommunities?.virtualNetworkCommunity) {
+      lines.push(`    bgpCommunities: { virtualNetworkCommunity: '${escapeBicepString(vnet.bgpCommunities.virtualNetworkCommunity)}' }`)
+    }
     if (summaries !== undefined) {
       lines.push(`    summarizedGatewayPrefixes: {`)
       lines.push(`      addressPrefixes: [`)

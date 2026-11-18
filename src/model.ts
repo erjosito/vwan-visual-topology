@@ -1,5 +1,6 @@
 import type { InventorySubnet, NetworkInventory } from './inventory'
 import type { ApplicationInventory } from './application'
+import type { VnetBgpCommunities } from './vnet-communities'
 
 export type Preference = 'ExpressRoute' | 'VPN' | 'ASPath'
 export type Transport = 'ExpressRoute' | 'VPN' | 'SDWAN' | 'SpokeNVA'
@@ -140,6 +141,7 @@ export interface SiteLink {
 }
 
 export interface Spoke {
+  bgpCommunities?: VnetBgpCommunities
   id: string
   name: string
   region?: string

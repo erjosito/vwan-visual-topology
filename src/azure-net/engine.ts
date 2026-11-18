@@ -1,4 +1,5 @@
 import { cidr, contains, ipv4 } from '../validation'
+import { vnetCommunityHelp, vnetCommunityValues } from '../vnet-communities'
 import { mappedVpnAddress, translateVpnRoutes, validateVpnNat } from '../vpn-nat'
 import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
@@ -68,6 +69,7 @@ export interface AzBgpRibEntry {
   prefix: string
   asPath: number[]
   communities?: string[]
+  vnetCommunityOrigin?: { vnetId: string; virtualNetworkCommunity?: string; regionalCommunity?: string }
   sourceVnetId?: string
   nextHopName: string
   nextHopIp?: string
@@ -408,6 +410,12 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
 function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResult): AzSimulationResult {
   const peeringLimitations = [...validateSubnetPeeringScopes(topology), ...subnetPeeringLimitations(topology)]
   const warnings: string[] = [...peeringLimitations]
+  if (topology.vnets.some((vnet) => vnet.bgpCommunities)) {
+    warnings.push(vnetCommunityHelp)
+    if (topology.vnets.some((vnet) => vnet.summarizedGatewayPrefixes?.length)) {
+      warnings.push('VNet community tagging of gateway summaries is not assessed; only original VNet address-space advertisements receive VNet community metadata.')
+    }
+  }
   const siteRibs: Record<string, AzBgpRibEntry[]> = {}
   const erLocationRibs: Record<string, AzBgpRibEntry[]> = {}
   const gatewayRibs: Record<string, AzBgpRibEntry[]> = {}
@@ -542,13 +550,14 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     return groups
   }
   type VnetAdvertisement = {
-    prefix: string; asPath: number[]; communities?: string[]; sourceName: string; advertisedSummaryFrom?: string; protectedVnet?: boolean; routeMapTrace?: string[]; nvaRoute?: boolean
+    prefix: string; asPath: number[]; communities?: string[]; sourceName: string; sourceVnetId?: string; forwardingRoutes?: AzBgpRibEntry[]; advertisedSummaryFrom?: string; protectedVnet?: boolean; routeMapTrace?: string[]; nvaRoute?: boolean
   }
   const connectedVnetPrefixes = (vnet: AzVNet, processSpokes = true): VnetAdvertisement[] => {
     const result: VnetAdvertisement[] = vnet.prefixes.map((prefix) => ({
       prefix,
       asPath: [65515],
       sourceName: vnet.name,
+      sourceVnetId: vnet.id,
       protectedVnet: true,
     }))
     // Include peered spokes that have allowGatewayTransit (from this hub) + useRemoteGateways (from spoke)
@@ -582,7 +591,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         if (vnet.routeServer?.enabled && processSpokes) {
           result.push(...(receivedPeerRoutes(vnet)[`vnet:${other.id}`] ?? []).filter((route) => route.originProtocol === 'VNet')
             .map((route) => ({ ...route, sourceName: `${other.name} (via Gateway Transit)` })))
-        } else for (const p of other.prefixes) result.push({ prefix: p, asPath: [65515], sourceName: `${other.name} (via Gateway Transit)` })
+        } else for (const p of other.prefixes) result.push({ prefix: p, asPath: [65515], sourceVnetId: other.id, sourceName: `${other.name} (via Gateway Transit)` })
       }
     }
     return result
@@ -657,6 +666,10 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           continue
         }
         for (const adv of advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`)) {
+          // VNet resource communities are attached at classic ER export, not at peering/ARS/VWAN ingress.
+          const origin = !adv.nvaRoute && !adv.advertisedSummaryFrom && !adv.forwardingRoutes
+            ? topology.vnets.find((vnet) => vnet.id === adv.sourceVnetId) : undefined
+          const configured = origin?.bgpCommunities
           entries.push({
             id: `erloc:${loc.id}:vng:${link.id}:${adv.prefix}`,
             prefix: adv.prefix,
@@ -670,7 +683,9 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
             explanation: `Advertised by ${gw.name} from ${adv.sourceName}`,
             advertisedSummaryFrom: adv.advertisedSummaryFrom,
             routeMapTrace: adv.routeMapTrace,
-            communities: adv.communities,
+            ...(adv.communities || configured ? { communities: [...new Set([...(adv.communities ?? []), ...vnetCommunityValues(configured)])] } : {}),
+            ...(configured && origin ? { vnetCommunityOrigin: { vnetId: origin.id, ...configured } } : {}),
+            sourceVnetId: adv.sourceVnetId,
           })
         }
       } else if (link.targetKind === 'vwan-hub') {

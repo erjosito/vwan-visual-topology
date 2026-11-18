@@ -47,6 +47,7 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
         $capture = $text | ConvertFrom-Json
         Assert (!$text.Contains('must-not-be-exported')) "$mode leaked raw fields or CLI error text."
         Assert ($capture.vnets[0].subnets[0].defaultOutboundAccess -eq $false) "$mode lost the explicit private-subnet setting."
+        Assert ($capture.vnets[0].bgpCommunities.virtualNetworkCommunity -eq '12076:20001' -and $capture.vnets[0].bgpCommunities.regionalCommunity -eq '12076:50004') "$mode lost VNet community metadata."
         Assert ($capture.vnets[1].subnets[0].natGateway.id -eq "$prefix/natGateways/nat") "$mode lost the original NAT association."
         if ($mode -eq 'nat-denied') {
             Assert ($capture.sections.natGateways.state -eq 'denied' -and !$capture.configurationComplete) 'NAT denial became successful absence.'

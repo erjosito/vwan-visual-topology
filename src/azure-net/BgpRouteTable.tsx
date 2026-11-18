@@ -4,6 +4,7 @@ import type { AzBgpRibEntry } from './engine'
 import { Explain } from '../learning/Explain'
 import { t, localizeDiagnostic } from '../i18n'
 import '../vpn-nat-messages-ja'
+import '../vnet-community-messages-ja'
 import { CompactBgpTable } from '../CompactBgpTable'
 import { guidanceAnchor } from '../learning/guidance'
 
@@ -48,6 +49,9 @@ export function BgpRouteTable({ entries, available, learningScope }: {
             <p>{entry.id} · {entry.nextHopKind} · {entry.nextHopId} · {entry.originProtocol}</p>
             {entry.connectionId && <p>{t('Connection')}: {entry.connectionId}</p>}
             <p>{t('Communities')}: {entry.communities?.join(' ') || '—'}</p>
+            {entry.vnetCommunityOrigin && <p>{t('Original VNet community configuration')}: {entry.vnetCommunityOrigin.virtualNetworkCommunity ?? '—'}
+              {' · '}{t('Captured regional community')}: {entry.vnetCommunityOrigin.regionalCommunity ?? '—'}
+              {' · '}{entry.vnetCommunityOrigin.vnetId}</p>}
             {entry.natOriginalPrefix && <p>{t('Original VPN prefix')}: <code>{entry.natOriginalPrefix}</code>{' → '}
               {t('Translated VPN prefix')}: <code>{entry.prefix}</code></p>}
             {entry.routeMapTrace?.map((trace, index) => <p key={index}>{localizeDiagnostic(trace)}</p>)}

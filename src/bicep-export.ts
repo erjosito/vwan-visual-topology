@@ -204,6 +204,7 @@ export function generateBicep(input: Topology, settings: BicepSettings): BicepEx
   const omittedSpokesCount = topology.spokes.length - sortedSpokes.length
   const excludedSpokes = topology.spokes.filter((spoke) => !sortedSpokes.some((entry) => entry.spokeId === spoke.id)).map((spoke) => spoke.name)
   const warnings = [
+    ...(topology.spokes.some((spoke) => spoke.bgpCommunities) ? ['VNet BGP community configuration is preserved in native JSON only. This attachment starter does not modify existing VNets; VNet resource communities are not advertised through Virtual WAN.'] : []),
     ...(topology.spokes.some((spoke) => spoke.subnets) ? ['Existing VNet subnets and their subnet NSG/NAT associations are not modified by this VWAN attachment starter. Preserve native JSON and configure the reviewed target subnets explicitly.'] : []),
     ...(topology.inventory?.natGateways?.length ? ['NAT Gateway metadata is retained in native JSON; this VWAN attachment starter does not modify original VNet subnets or deploy their NAT resources.'] : []),
     ...(topology.inventory?.routerSnatPolicies?.length ? ['Explicit Firewall SNAT pools and private-range policies are retained in native JSON but are not configured by this VWAN Bicep starter.'] : []),

@@ -239,6 +239,7 @@ try {
         if ($mode -in @('normal', 'static-routes', 'vnet-only', 'missing-table-labels', 'missing-table-routes')) {
             Assert $capture.complete 'Successful reads should yield a complete capture.'
             Assert ($capture.hubs[0].connections[0].addressPrefixes[0] -eq '10.20.0.0/16') 'VNet address space should be captured.'
+            Assert ($capture.hubs[0].connections[0].bgpCommunities.virtualNetworkCommunity -eq '12076:20001' -and $capture.hubs[0].connections[0].bgpCommunities.regionalCommunity -eq '12076:50004') 'VNet communities should be captured as metadata.'
         } else {
             Assert (!$capture.complete) 'Denied route-map reads must be disclosed, never silently accepted.'
             Assert ($capture.hubs[0].unsupportedFeatures -like '*could not be read*') 'Denied read must have a limitation.'

@@ -191,7 +191,18 @@ test('nested peering cues name A-to-B, follow the submenu and never execute its 
 
 test('route-table guidance scopes prefix candidates and exact route, preserves typing, and recovers from missing association', async ({ page }) => {
   test.setTimeout(90_000)
-  await open(page); await load(page); await next(page, 7); await load(page); await next(page)
+  let delayEditor = false
+  let releaseEditor!: () => void
+  const editorReady = new Promise<void>((resolve) => { releaseEditor = resolve })
+  // Reveal any late editor import only after typing, exposing layout shifts above the guided row.
+  await page.route('**/src/VnetCommunityEditor.tsx*', async (route) => {
+    if (delayEditor) await editorReady
+    await route.continue()
+  })
+  page.on('close', releaseEditor)
+  await open(page)
+  delayEditor = true
+  await load(page); await next(page, 7); await load(page); await next(page)
   const original = (await saved(page)).document
   await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
   await expect(cue(page)).toHaveCount(2)
@@ -203,7 +214,10 @@ test('route-table guidance scopes prefix candidates and exact route, preserves t
   expect((await saved(page)).document).toEqual(original)
   const name = route.locator('input').nth(1)
   await name.fill('Learner drop route')
+  releaseEditor()
+  await expect(page.getByRole('textbox', { name: 'VNet BGP community', exact: true })).toBeAttached()
   await expect(name).toBeFocused()
+  await expect(name).toBeInViewport()
   await expect(cue(page)).toHaveCount(1)
   await page.getByTestId('aznet-delete-rt-blocking').click()
   await expect(sidebar(page).getByRole('status')).toContainText('no longer associated')

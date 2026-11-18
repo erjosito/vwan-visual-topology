@@ -24,6 +24,7 @@ import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
 import { CanvasOverlay } from '../CanvasOverlay'
+import VnetCommunityEditor from '../VnetCommunityEditor'
 import { azHubGatewayConnections } from '../hub-gateways'
 import { useDeleteShortcut } from '../useDeleteShortcut'
 import {
@@ -4509,7 +4510,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 const val = e.target.value
                                 commitTopology((draft) => {
                                   const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) v.region = val
+                                  if (v) {
+                                    if (v.region !== val && v.bgpCommunities?.regionalCommunity) {
+                                      if (v.bgpCommunities.virtualNetworkCommunity) v.bgpCommunities = { virtualNetworkCommunity: v.bgpCommunities.virtualNetworkCommunity }
+                                      else delete v.bgpCommunities
+                                    }
+                                    v.region = val
+                                  }
                                 })
                               }}
                               style={{ width: 130, fontSize: 11.5 }}
@@ -4543,6 +4550,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               style={{ width: 130, fontSize: 11.5 }}
                             />
                             </label>
+                            <VnetCommunityEditor
+                              key={vnet.id}
+                              value={vnet.bgpCommunities}
+                              onChange={(value) => commitTopology((draft) => {
+                                const target = draft.vnets.find((entry) => entry.id === vnet.id)
+                                if (target) {
+                                  if (value) target.bgpCommunities = value
+                                  else delete target.bgpCommunities
+                                }
+                              })} />
                             <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Canvas layout role')}</span>
                             <select
                               className="aznet-select"
