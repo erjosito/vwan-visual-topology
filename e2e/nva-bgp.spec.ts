@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
 import AxeBuilder from '@axe-core/playwright'
+import { resolve } from 'node:path'
 
 async function load(page: Page, mode: string, topology = nvaBgpTopology()) {
   await page.addInitScript((value) => {
@@ -22,6 +23,28 @@ async function saved(page: Page) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} keeps a newly opened NVA inspector interactive above the retained capture inspector`, async ({ page }) => {
+    const topology = nvaBgpTopology()
+    await load(page, mode, topology)
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'))
+    const capture = page.getByRole('dialog', { name: 'Azure & Bicep', exact: true })
+    await expect(capture.getByTestId('captured-bgp-neighbors')).toBeVisible()
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'nva-bgp-native.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await expect(capture.getByTestId('captured-bgp-neighbors')).toHaveCount(0)
+    await open(page, 'reader', 'Inspect NVA Learned BGP Routes')
+    const inspector = page.getByRole('dialog', { name: 'NVA learned BGP routes · Dual-region NVA', exact: true })
+    await expect(capture).toBeVisible()
+    await inspector.getByText('Copyable route text', { exact: true }).click()
+    await expect(inspector.getByRole('textbox', { name: 'Select route text to copy' })).toBeVisible()
+    await capture.focus()
+    await capture.getByRole('button', { name: 'Close Azure & Bicep', exact: true }).click()
+    await expect(capture).toHaveCount(0)
+    await expect(inspector).toBeVisible()
+    expect(await saved(page)).toEqual(topology)
+  })
+
   test(`${mode} compact NVA rows disclose provenance by keyboard and remain usable narrow, themed and Japanese`, async ({ page }) => {
     const topology = nvaBgpTopology()
     await load(page, mode, topology)
