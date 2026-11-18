@@ -5,6 +5,8 @@ import { registerJapaneseMessages } from '../messages'
 import { ARS_MAX_BGP_PEERS, azArsPeerHosts } from './ars-route-maps'
 import type { AzNvaBgpPeer, AzSimulationResult } from './engine'
 import type { AzNetTopology } from './model'
+import { CompactBgpTable } from '../CompactBgpTable'
+import { cidr } from '../validation'
 
 registerJapaneseMessages({
   'NVA learned BGP routes': 'NVA が学習した BGP ルート',
@@ -65,6 +67,7 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
   onClose: () => void
 }) {
   const [filter, setFilter] = useState('')
+  const [prefixFilter, setPrefixFilter] = useState('')
   const [editing, setEditing] = useState(false)
   const owner = topology.vnets.find((vnet) => vnet.id === vnetId)
   const app = owner?.appliances.find((app) => app.id === applianceId)
@@ -74,6 +77,11 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
   const missingPeer = Boolean(filter) && !configuredHosts.some((host) => host.routeServer!.id === filter)
   const rows = peers.filter((peer) => !filter || peer.routeServerId === filter)
     .flatMap((peer) => peer.routes.map((route) => ({ peer, route })))
+    .filter(({ route }) => route.prefix.includes(prefixFilter.trim()))
+    .sort((a, b) => (cidr(a.route.prefix)?.network ?? 0) - (cidr(b.route.prefix)?.network ?? 0)
+      || (cidr(a.route.prefix)?.length ?? 0) - (cidr(b.route.prefix)?.length ?? 0)
+      || a.peer.routeServerId.localeCompare(b.peer.routeServerId)
+      || a.route.id.localeCompare(b.route.id))
   const title = `${t('NVA learned BGP routes')} · ${app?.name ?? applianceId}`
   return <CanvasOverlay title={title} className="nva-bgp-panel aznet-routes-window" onClose={onClose}>
     {!app ? <p role="status">{t('NVA no longer exists. No received-route evidence is available.')}</p> : <>
@@ -112,27 +120,39 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
           {host.routeServer!.name} ({host.routeServer!.id})
         </option>)}
       </select></label>
+      <label className="field"><span>{t('Filter by prefix')}</span><input type="search" aria-label={t('Filter by prefix')}
+        value={prefixFilter} onChange={(event) => setPrefixFilter(event.target.value)} /></label>
       <h3>{t('Received candidates')} ({rows.length})</h3>
       {peers.filter((peer) => (!filter || peer.routeServerId === filter) && peer.gatewaySummaryAssessment).map((peer) => <p role="status" key={peer.routeServerId} data-testid="nva-gateway-summary-boundary">
         <strong>{peer.routeServerId}: {t('Configured gateway summaries (not assessed)')}</strong>
         {' '}{peer.gatewaySummaryAssessment!.configuredPrefixes.join(', ')}<br />
         {t('Gateway summary impact on ARS-to-NVA exports is not assessed. Shown candidates do not prove presence or absence of configured gateway summaries.')}
       </p>)}
-      <div className="table-scroll"><table className="aznet-route-table" data-testid="nva-bgp-routes">
-        <thead><tr><th>{t('Prefix')}</th><th>{t('Advertising ARS / neighbor')}</th><th>{t('Next hop')}</th>
-          <th>{t('AS path')}</th><th>{t('Communities')}</th><th>{t('ARS selection / policy evidence')}</th></tr></thead>
-        <tbody>{rows.map(({ peer, route }) => <tr key={`${peer.routeServerId}:${route.id}`} data-prefix={route.prefix} data-ars-id={peer.routeServerId}>
-          <td>{route.prefix}</td><td>{arsHosts.find((host) => host.id === peer.routeServerVnetId)?.routeServer?.name ?? peer.routeServerId}
-            <br /><small>{peer.routeServerId} · {peer.connectionId}</small></td>
-          <td>{route.nextHopName}<br /><small>{route.nextHopIp ?? t('IP not modeled')} · {route.nextHopId}</small></td>
-          <td>{route.asPath.join(' ') || t('Empty AS path')}</td><td>{route.communities?.join(', ') || t('None modeled')}</td>
-          <td>{t(route.selectedByArs ? 'Selected by ARS' : 'ARS selection not indicated')}
-            <details><summary>{t('Evidence')}</summary><p>{route.explanation}</p>{route.routeMapTrace?.map((trace, index) => <p key={index}>{trace}</p>)}</details></td>
-        </tr>)}</tbody>
-      </table></div>
+      <CompactBgpTable label={t('NVA learned BGP routes')} testId="nva-bgp-routes"
+        neighborLabel={t('Advertising ARS / neighbor')}
+        legend={t('* Selected by ARS; ? ARS selection not indicated. NVA best-path selection is not modeled.')}
+        rows={rows.map(({ peer, route }) => ({
+          id: `${peer.routeServerId}:${route.id}`, peerId: peer.routeServerId, prefix: route.prefix,
+          status: route.selectedByArs ? '*' : '?',
+          statusLabel: t(route.selectedByArs ? 'Selected by ARS' : 'ARS selection not indicated'),
+          neighbor: `${arsHosts.find((host) => host.id === peer.routeServerVnetId)?.routeServer?.name ?? peer.routeServerId} (${peer.routeServerId})`,
+          nextHop: route.nextHopIp && !route.nextHopName.includes(route.nextHopIp) ? `${route.nextHopName} (${route.nextHopIp})` : route.nextHopName,
+          asPath: route.asPath,
+          textEvidence: JSON.stringify({ routeServerId: peer.routeServerId, connectionId: peer.connectionId, policyConnectionId: peer.policyConnectionId, route }),
+          details: <>
+            <p>{t('ARS selection / policy evidence')}: {t(route.selectedByArs ? 'Selected by ARS' : 'ARS selection not indicated')}</p>
+            <p>{peer.routeServerId} · {peer.connectionId} · {peer.policyConnectionId}</p>
+            <p>{route.id} · {route.nextHopId} · {route.originProtocol}</p>
+            <p>{t('Next hop')}: {route.nextHopIp ?? t('IP not modeled')}</p>
+            <p>{t('Communities')}: {route.communities?.join(', ') || t('None modeled')}</p>
+            <p>{route.explanation}</p>{route.routeMapTrace?.map((trace, index) => <p key={index}>{trace}</p>)}
+            <details><summary>{t('Azure provenance and selection evidence')}</summary><pre>{JSON.stringify(route, null, 2)}</pre></details>
+          </>,
+        }))} />
       {!rows.length && <p role="status">{t(missingPeer
         ? 'The selected ARS peer is no longer configured. No received-route evidence is available in this scope.'
-        : 'No received candidates in this scope. Check peer availability and ARS export policies.')}</p>}
+        : prefixFilter ? 'No routes match the current filters.'
+          : 'No received candidates in this scope. Check peer availability and ARS export policies.')}</p>}
     </>}
   </CanvasOverlay>
 }
