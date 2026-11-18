@@ -108,6 +108,13 @@ export interface AzSubnetRouteTableResult {
 export type AzNvaReceivedRoute = Omit<AzBgpRibEntry, 'preferred'> & { selectedByArs: boolean }
 
 export interface AzNvaBgpPeer {
+  gatewaySummaryAssessment?: {
+    status: 'not-assessed'
+    configuredPrefixes: string[]
+    gatewayIds: string[]
+    gatewaySubnetId?: string
+    branchToBranch: boolean
+  }
   applianceId: string
   applianceVnetId: string
   routeServerId: string
@@ -857,6 +864,13 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         applianceId: id, applianceVnetId: owner.id, routeServerId: ars.id, routeServerVnetId: vnet.id,
         connectionId, ...(policyLinks.some((link) => link.id === connectionId) ? { policyConnectionId: connectionId } : {}),
         state, routes: [],
+        ...(vnet.summarizedGatewayPrefixes?.length ? { gatewaySummaryAssessment: {
+          status: 'not-assessed' as const,
+          configuredPrefixes: [...vnet.summarizedGatewayPrefixes],
+          gatewayIds: vnet.gateways.filter((gateway) => gateway.enabled).map((gateway) => gateway.id),
+          gatewaySubnetId: vnet.subnets.find((subnet) => subnet.name === 'GatewaySubnet')?.id,
+          branchToBranch: ars.branchToBranchTraffic,
+        } } : {}),
       }
       ;(nvaBgpPeers[id] ??= []).push(view)
       peerViews.push(view)

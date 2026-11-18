@@ -18,6 +18,8 @@ registerJapaneseMessages({
   'Changing membership affects only that ARS. BGP peering does not enable gateway transit, subnet route injection or packet forwarding.': 'メンバーシップの変更は対象の ARS のみに適用されます。BGP ピアリングはゲートウェイトランジット、サブネットへのルート注入、パケット転送を有効にしません。',
   'ARS peer {0}': 'ARS ピア {0}',
   'Modeled peer available': 'モデル上でピアが利用可能',
+  'Gateway summary impact on ARS-to-NVA exports is not assessed. Shown candidates do not prove presence or absence of configured gateway summaries.': 'ゲートウェイ集約プレフィックスが ARS から NVA への広告に与える影響は未評価です。表示候補は構成された集約プレフィックスの有無を証明しません。',
+  'Configured gateway summaries (not assessed)': '構成されたゲートウェイ集約プレフィックス（未評価）',
   'ARS disabled': 'ARS が無効',
   'NVA BGP disabled': 'NVA の BGP が無効',
   'Unsupported Azure-reserved peer ASN': 'Azure 予約済みのピア ASN は未対応',
@@ -109,6 +111,11 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
         </option>)}
       </select></label>
       <h3>{t('Received candidates')} ({rows.length})</h3>
+      {peers.filter((peer) => (!filter || peer.routeServerId === filter) && peer.gatewaySummaryAssessment).map((peer) => <p role="status" key={peer.routeServerId} data-testid="nva-gateway-summary-boundary">
+        <strong>{peer.routeServerId}: {t('Configured gateway summaries (not assessed)')}</strong>
+        {' '}{peer.gatewaySummaryAssessment!.configuredPrefixes.join(', ')}<br />
+        {t('Gateway summary impact on ARS-to-NVA exports is not assessed. Shown candidates do not prove presence or absence of configured gateway summaries.')}
+      </p>)}
       <div className="table-scroll"><table className="aznet-route-table" data-testid="nva-bgp-routes">
         <thead><tr><th>{t('Prefix')}</th><th>{t('Advertising ARS / neighbor')}</th><th>{t('Next hop')}</th>
           <th>{t('AS path')}</th><th>{t('Communities')}</th><th>{t('ARS selection / policy evidence')}</th></tr></thead>

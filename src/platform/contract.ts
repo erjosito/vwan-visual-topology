@@ -13,7 +13,7 @@ import type { ApplicationRequest, ApplicationResult } from '../application'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
-export const engineVersion = '2026.11.17.4'
+export const engineVersion = '2026.11.18.1'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -113,6 +113,7 @@ export const capabilities = {
     modes: ['hub-spoke', 'full'], evidence: 'simulation.nvaBgpPeers[originalApplianceId][]',
     scope: 'Original ARS/VNet and NVA/VNet identities, per-peer received candidates, explicit availability, supported outbound policy scope and receiving-AS loop rejection.',
     selection: 'selectedByArs is the exporting ARS selection, not an NVA best path. Distinct same-prefix candidates from different peers are retained.',
+    gatewaySummaries: 'When the exporting VNet configures summarizedGatewayPrefixes, each peer carries gatewaySummaryAssessment.status=not-assessed with original configuration/prerequisite identities. Received candidates cannot establish presence or absence of those summaries. Gateway-to-on-premises documentation does not qualify ARS-to-NVA behavior.',
     excluded: ['NVA best-path selection or forwarding from received candidates', 'unmodeled gateway summaries', 'ARS neighbor IPs',
       'per-instance sessions', 'live adjacency', 'vendor-specific per-neighbor configuration'],
   },

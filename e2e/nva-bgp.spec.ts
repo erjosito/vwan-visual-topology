@@ -21,6 +21,23 @@ async function saved(page: Page) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} scopes unassessed gateway summaries to their original ARS without presenting them as received routes`, async ({ page }) => {
+    const topology = nvaBgpTopology()
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
+    await load(page, mode, topology)
+    await open(page, 'reader', 'Inspect NVA Learned BGP Routes')
+    const inspector = page.getByRole('dialog', { name: 'NVA learned BGP routes · Dual-region NVA', exact: true })
+    const boundary = inspector.getByTestId('nva-gateway-summary-boundary')
+    await expect(boundary).toContainText('west-ars: Configured gateway summaries (not assessed)')
+    await expect(boundary).toContainText('203.0.113.0/24')
+    await expect(inspector.getByTestId('nva-bgp-routes').locator('[data-prefix="203.0.113.0/24"]')).toHaveCount(0)
+    await inspector.getByLabel('NVA BGP peer filter', { exact: true }).selectOption('east-ars')
+    await expect(boundary).toHaveCount(0)
+    await inspector.getByLabel('NVA BGP peer filter', { exact: true }).selectOption('west-ars')
+    await expect(boundary).toHaveCount(1)
+    expect(await saved(page)).toEqual(topology)
+  })
+
   test(`${mode} inspects duplicate NVA received routes read-only and independently of canvas and effective-route selection`, async ({ page }) => {
     const errors: string[] = []
     page.on('pageerror', (error) => errors.push(error.message))

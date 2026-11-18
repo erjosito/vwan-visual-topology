@@ -5,6 +5,39 @@ import { parseAzNetJson } from './admission'
 import { validateAzNetTopology } from './model'
 import { azArsPolicyLinks } from './ars-route-maps'
 
+it.each(['ExpressRoute', 'Vpn', 'none'] as const)('reports gateway-summary exports as unassessed for %s without inventing NVA received routes', (kind) => {
+  for (const branchToBranch of [false, true]) {
+    const topology = nvaBgpTopology()
+    const west = topology.vnets[0]
+    west.routeServer!.branchToBranchTraffic = branchToBranch
+    if (kind !== 'none') {
+      west.subnets.push({ id: 'gateway-subnet', name: 'GatewaySubnet', prefix: '10.10.254.0/27' })
+      west.gateways.push({ id: 'gateway', name: 'Gateway', kind, enabled: true, bgpEnabled: true, asn: 65515, activeActive: true })
+    }
+    const baseline = simulateAzNet(topology)
+    west.summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
+    const result = simulateAzNet(parseAzNetJson(JSON.stringify(topology)))
+    for (const nvaId of ['west-source', 'reader']) {
+      const peer = result.nvaBgpPeers![nvaId].find((peer) => peer.routeServerId === 'west-ars')!
+      expect(peer.gatewaySummaryAssessment).toEqual({
+        status: 'not-assessed', configuredPrefixes: ['10.0.0.0/12', '203.0.113.0/24'],
+        gatewayIds: kind === 'none' ? [] : ['gateway'],
+        gatewaySubnetId: kind === 'none' ? undefined : 'gateway-subnet',
+        branchToBranch,
+      })
+      expect(peer.routes).toEqual(baseline.nvaBgpPeers![nvaId].find((peer) => peer.routeServerId === 'west-ars')!.routes)
+    }
+    expect(result.nvaBgpPeers!.reader.find((peer) => peer.routeServerId === 'east-ars')!.gatewaySummaryAssessment).toBeUndefined()
+    expect(result.subnetTables['west-nvas'].routes).toEqual(baseline.subnetTables['west-nvas'].routes)
+    west.summarizedGatewayPrefixes = ['10.0.0.0/8']
+    expect(simulateAzNet(topology).nvaBgpPeers!.reader[0].gatewaySummaryAssessment!.configuredPrefixes).toEqual(['10.0.0.0/8'])
+    west.summarizedGatewayPrefixes = []
+    expect(simulateAzNet(topology).nvaBgpPeers!.reader[0].gatewaySummaryAssessment).toBeUndefined()
+    delete west.summarizedGatewayPrefixes
+    expect(simulateAzNet(topology)).toEqual(baseline)
+  }
+})
+
 it('projects original per-NVA received candidates from two ARS without requiring gateway transit or selecting an NVA best path', () => {
   const topology = nvaBgpTopology()
   const original = JSON.stringify(topology)

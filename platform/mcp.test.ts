@@ -37,6 +37,7 @@ it('exposes original per-NVA received-route evidence through the freshly built s
     expect(capabilities.nvaBgp.evidence).toBe('simulation.nvaBgpPeers[originalApplianceId][]')
     expect((await call('get_schema', { mode: 'full' })).nvaBgp).toEqual(capabilities.nvaBgp)
     const topology = nvaBgpTopology()
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
     const base = { contractVersion: 1 as const, document: { mode: 'full' as const, topology } }
     await run({ ...base, operation: 'validate' })
     const request = { ...base, operation: 'evaluate' as const, requirements: [
@@ -54,6 +55,10 @@ it('exposes original per-NVA received-route evidence through the freshly built s
     const simulation = JSON.parse(chunks.join(''))
     expect(simulation).toEqual(executePlatform(request).simulation)
     expect(simulation.nvaBgpPeers.reader).toHaveLength(2)
+    expect(simulation.nvaBgpPeers.reader[0].gatewaySummaryAssessment).toMatchObject({
+      status: 'not-assessed', configuredPrefixes: ['10.0.0.0/12', '203.0.113.0/24'], gatewayIds: [], branchToBranch: false,
+    })
+    expect(simulation.nvaBgpPeers.reader[1].gatewaySummaryAssessment).toBeUndefined()
     expect(simulation.nvaBgpPeers.reader.flatMap((peer: any) => peer.routes.filter((route: any) => route.prefix === '198.18.0.0/24'))).toHaveLength(2)
     const assessments = await call('get_evidence', { handle, section: 'assessments', limit: 16000 })
     expect(assessments.complete).toBe(true)
