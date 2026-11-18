@@ -28,7 +28,7 @@ export function LearningStatus() {
   return <>
     <button ref={trigger} type="button" className="learning-status-trigger" data-testid="learning-status"
       title={session?.presentationPreview ? description : undefined}
-      aria-label={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
+      aria-description={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
       onKeyDown={(event) => { if (open && event.key === 'Escape') { event.stopPropagation(); setOpen(false) } }}
       aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
       {session?.presentationPreview ? <>

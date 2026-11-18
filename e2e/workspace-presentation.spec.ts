@@ -11,7 +11,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       const status = page.getByTestId('learning-status')
       await expect(status).toContainText('Not signed in')
       await expect(status).toContainText('White belt')
-      await expect(status).toHaveAccessibleName(/Highest belt across tracks: White belt.*Tracks at this belt: 1/)
+      await expect(status).toHaveAttribute('aria-description', /Highest belt across tracks: White belt.*Tracks at this belt: 1/)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       const bounds = (await page.locator('.workspace-account-status').boundingBox())!
       const header = (await page.locator('header').boundingBox())!
