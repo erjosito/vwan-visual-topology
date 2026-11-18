@@ -46,6 +46,21 @@ test.describe('default presentation', () => {
   }
 })
 
+test('AzNetSim documentation branding and language switching work under production CSP', async ({ page }) => {
+  const response = await page.goto('/docs/index.html?lang=ja')
+  expect(response!.headers()['content-security-policy']).toContain("script-src 'self'")
+  await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+  await expect(page).toHaveTitle('Azure ネットワーク シミュレーター (AzNetSim) — ドキュメントと実践サンプル')
+  await expect(page.getByRole('heading', { name: 'Azure ネットワーク シミュレーター (AzNetSim) — ドキュメント', exact: true })).toBeVisible()
+  await page.locator('header [data-language-selector]').selectOption('en')
+  await expect(page).toHaveTitle('Azure Network Simulator (AzNetSim) — Documentation & Worked Examples')
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /VNets.*hub-and-spoke.*Virtual WAN.*hybrid/)
+  await page.getByRole('link', { name: 'classic hub-and-spoke', exact: true }).click()
+  await ready(page, 'full')
+  await expect(page.getByRole('heading', { name: 'Azure Network Simulator', exact: true })).toBeVisible()
+  await expect(page).toHaveTitle('Azure Network Simulator (AzNetSim)')
+})
+
 for (const hostname of ['vwan-simulator.com', 'www.vwan-simulator.com', 'aznet-simulator.com', 'www.aznet-simulator.com']) {
   test(`${hostname}: shared empty default and compatible aliases use the same artifact`, async ({ page }) => {
     const origin = `http://${hostname}:4174`

@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#0b162b"/>
+  <rect width="1200" height="6" fill="#38bdf8"/>
+  <g font-family="Segoe UI, sans-serif">
+    <text x="52" y="92" fill="#67e8f9" font-size="26" font-weight="700">AzNetSim</text>
+    <text x="52" y="171" fill="#ffffff" font-size="46" font-weight="700">Azure Network</text>
+    <text x="52" y="228" fill="#ffffff" font-size="46" font-weight="700">Simulator</text>
+    <g fill="#cbd5e1" font-size="24">
+      <text x="52" y="295">VNets and hub-and-spoke.</text>
+      <text x="52" y="331">Virtual WAN and hybrid networks.</text>
+      <text x="52" y="402">Explain effective routes.</text>
+      <text x="52" y="438">Explore forward and return paths.</text>
+      <text x="52" y="474">Simulate locally.</text>
+    </g>
+    <text x="52" y="566" fill="#67e8f9" font-size="25" font-weight="600">aznet-simulator.com</text>
+    <rect x="548" y="52" width="604" height="526" rx="24" fill="#f1f5f9"/>
+    <text x="578" y="97" fill="#334155" font-size="18" font-weight="600">ILLUSTRATIVE MIXED TOPOLOGY</text>
+    <g fill="none" stroke="#2568d7" stroke-width="4">
+      <path d="M715 209 715 279M715 367 715 445M827 323 875 323M964 279 964 209M964 367 964 445"/>
+      <path d="M827 489 964 489" stroke-dasharray="8 8"/>
+    </g>
+    <g fill="#ffffff" stroke="#94a3b8" stroke-width="2">
+      <rect x="589" y="139" width="238" height="70" rx="12"/>
+      <rect x="589" y="279" width="238" height="88" rx="12"/>
+      <rect x="589" y="445" width="238" height="88" rx="12"/>
+      <rect x="875" y="139" width="238" height="70" rx="12"/>
+      <rect x="875" y="279" width="238" height="88" rx="12"/>
+      <rect x="875" y="445" width="238" height="88" rx="12"/>
+    </g>
+    <g fill="#0f172a" font-size="22" text-anchor="middle" font-weight="600">
+      <text x="708" y="182">Spoke VNet</text>
+      <text x="708" y="315">Classic hub VNet</text>
+      <text x="708" y="481">On-premises site</text>
+      <text x="994" y="182">Connected VNet</text>
+      <text x="994" y="315">Virtual WAN hub</text>
+      <text x="994" y="481">ExpressRoute / VPN</text>
+    </g>
+    <g fill="#475569" font-size="17" text-anchor="middle">
+      <text x="708" y="344">UDRs / Route Server / NVA</text>
+      <text x="708" y="510">Hybrid connectivity</text>
+      <text x="994" y="344">Routing intent / BGP</text>
+      <text x="994" y="510">Declared connections</text>
+    </g>
+  </g>
+</svg>

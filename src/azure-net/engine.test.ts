@@ -35,7 +35,7 @@ import { AZNET_STORAGE_KEY, loadAzWorkspace } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { analyzeAzResilience } from '../failure-analysis'
 
-describe('Azure Networking Simulator Engine & Diagnostics', () => {
+describe('AzNetSim VNet Engine & Diagnostics', () => {
   function transitTopology(transport: 'ExpressRoute' | 'Vpn' = 'ExpressRoute'): AzNetTopology {
     const topology = createEmptyAzNetTopology()
     topology.vnets = [

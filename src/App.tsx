@@ -638,7 +638,7 @@ function App() {
       <div className="unified-topbar-left">
         <div className="brand unified-brand">
           <div className="brand-icon unified-brand-icon" aria-hidden="true">Az</div>
-          <h1>Azure Networking Simulator</h1>
+          <h1>Azure Network Simulator</h1>
         </div>
         <WorkspaceMenu />
       </div>
