@@ -269,7 +269,7 @@ without unrelated branch/ARS controls. It retains the original frontend, rule,
 pool, NVA and workload identities and has its own shared-engine counterexamples.
 The earlier authoring candidate below also covers branch routing; do not confuse
 its branch prefix with the learner mission's `10.82.0.0/16`. Inspect the application
-`work` subnet's route to `172.31.80.0/24`: the user route keeps the next hop
+`work` subnet's route to `10.82.0.0/16`: the user route keeps the next hop
 `10.80.3.10`, owned by `transit-lb` / `transit-vip`. A packet probe between the
 original client/server workloads retains the destination `10.82.1.10` and TCP
 ports 49152/443 while showing the selected original `primary-vm` identity.
