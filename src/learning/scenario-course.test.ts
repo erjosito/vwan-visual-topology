@@ -5,6 +5,8 @@ import { validateCourse } from './course-validation'
 import { scenarioTopologies } from './scenario-topologies'
 import type { CourseCheck } from './course-contract'
 import { hubFirewallTopology } from '../../tests/fixtures/hub-firewall'
+import { hybridLessonRequirements, hybridLessonTopology } from './hybrid-scenario'
+import { simulateAzNet } from '../azure-net/engine'
 
 const check = (id: string) => scenarioBundle.checks.find((entry) => entry.id === `${id}.repair-check`)! as Extract<CourseCheck, { kind: 'requirements.satisfied' }>
 const document = (id: string) => ({ mode: 'full' as const, topology: structuredClone(scenarioTopologies[id]) })
@@ -36,8 +38,71 @@ function repaired(id: string) {
 }
 
 describe('scenario edition routing qualification', () => {
+  it('qualifies independent ER/VPN preference, specificity, summary contributors and declared withdrawal', () => {
+    const topology = hybridLessonTopology()
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: hybridLessonRequirements })
+    expect(evaluate()).toMatchObject({ status: 'complete', errors: [], assessments: [
+      { outcome: 'violated' }, { outcome: 'satisfied' }, { outcome: 'satisfied' }, { outcome: 'satisfied' }, { outcome: 'satisfied' },
+    ] })
+    topology.vpnConnections[0].enabled = true
+    const both = simulateAzNet(topology)
+    expect(both.warnings).toEqual([])
+    expect(both.subnetTables.work.routes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prefix: '172.28.20.0/24', active: true, nextHopResourceId: 'primary-er' }),
+      expect.objectContaining({ prefix: '172.28.10.0/24', active: true, nextHopResourceId: 'backup-vpn' }),
+    ]))
+    expect(evaluate().assessments.every((entry) => entry.outcome === 'satisfied')).toBe(true)
+    topology.erLinks.find((link) => link.id === 'branch-er')!.enabled = false
+    const fallback = simulateAzNet(topology)
+    expect(fallback.subnetTables.work.routes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prefix: '172.28.20.0/24', active: true, nextHopResourceId: 'backup-vpn' }),
+    ]))
+    expect(evaluate().assessments.every((entry) => entry.outcome === 'satisfied')).toBe(true)
+    topology.vpnConnections[0].enabled = false
+    expect(evaluate().assessments.slice(0, 3).every((entry) => entry.outcome === 'violated')).toBe(true)
+  })
   it('validates every owned native scenario and all check/guidance scopes', () => {
     expect(validateCourse(scenarioBundle)).toEqual(scenarioBundle)
+  })
+  it.each(['foreign-connection', 'foreign-gateway', 'foreign-return', 'mismatched-return'])('rejects hybrid content with %s scope', (change) => {
+    const bundle = structuredClone(scenarioBundle)
+    const configuration = bundle.checks.find((check) => check.id === 'hybrid-preference.repair-check')!
+    const observation = bundle.checks.find((check) => check.id === 'hybrid-preference.return')!
+    if (configuration.kind !== 'connections.configured' || observation.kind !== 'control-routes.inspected'
+      || !('siteId' in observation.params)) throw new Error('Hybrid checks required')
+    if (change === 'foreign-connection') configuration.params.connections[0].connectionId = 'another-link'
+    if (change === 'foreign-gateway') configuration.params.selectedRoutes[0].nextHopResourceId = 'another-gateway'
+    if (change === 'foreign-return') observation.params.siteId = 'another-branch'
+    if (change === 'mismatched-return') observation.params = { ...observation.params, prefix: '10.90.0.0/16' }
+    expect(() => validateCourse(bundle)).toThrow()
+  })
+  it('does not confuse hybrid forward delivery, summary holes or a broken witness with a valid repair', () => {
+    const topology = hybridLessonTopology()
+    topology.vpnConnections[0].enabled = true
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: hybridLessonRequirements })
+    topology.routeMaps!.push({ id: 'return-drop', name: 'Missing application return', siteId: 'hybrid-branch', rules: [
+      { id: 'drop-application', prefixes: ['10.91.0.0/16'], match: 'equals', action: 'drop', summaryPrefixes: [], prepend: [], nextStep: 'terminate' },
+      { id: 'permit-rest', prefixes: [], match: 'contains', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate' },
+    ] })
+    topology.sites[0].routeMapAssignments = [
+      { connectionId: 'branch-er', outboundMapId: 'branch-er-summary', inboundMapId: 'return-drop' },
+      { connectionId: 'branch-vpn', inboundMapId: 'return-drop' },
+    ]
+    expect(evaluate().assessments[1].outcome).toBe('not assessed')
+    topology.sites[0].routeMapAssignments.forEach((assignment) => { delete assignment.inboundMapId })
+    expect(evaluate().assessments.every((entry) => entry.outcome === 'satisfied')).toBe(true)
+    topology.udrTables.push({ id: 'bad-repair', name: 'Broken Operations', disableBgpRoutePropagation: false, routes: [
+      { id: 'drop-ops', name: 'Operations drop', prefix: '10.91.2.0/24', enabled: true, nextHopType: 'None' },
+    ] })
+    topology.vnets[1].subnets[0].routeTableId = 'bad-repair'
+    expect(evaluate().assessments.map((entry) => entry.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied', 'violated', 'satisfied'])
+    const flow = hybridLessonRequirements[1]
+    if (flow.kind !== 'flow') throw new Error('Flow required')
+    const hole = executePlatform({ contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology },
+      requirements: [{ ...flow, destinationAddress: '172.28.99.10' }] })
+    expect(hole.assessments[0].outcome).toBe('not assessed')
   })
   it.each(Object.keys(scenarioTopologies))('qualifies the starter, real repair and witness for %s', (id) => {
     const starter = assess(id)

@@ -9,6 +9,13 @@ export type GuidancePlan = { anchors: string[]; reason?: undefined } | { reason:
 export function resolveGuidance(document: PlatformDocument, cue: CourseGuidance): GuidancePlan {
   if (document.mode === 'vwan') return { reason: 'provider' }
   const topology = document.topology
+  if (cue.action === 'connection.configure') {
+    const connections = cue.params.kind === 'er-link' ? topology.erLinks : topology.vpnConnections
+    return connections.some((connection) => connection.id === cue.params.connectionId)
+      ? { anchors: [guidanceAnchor('connection-editor', cue.params.kind, cue.params.connectionId)] } : { reason: 'entity' }
+  }
+  if (cue.action === 'site-routes.open') return topology.sites.some((site) => site.id === cue.params.siteId)
+    ? { anchors: [guidanceAnchor('site-effective-table', cue.params.siteId)] } : { reason: 'entity' }
   if (cue.action === 'packet-probe.open') return topology.vnets.some((vnet) => vnet.id === cue.params.vnetId)
     ? { anchors: [guidanceAnchor('packet-probe', cue.params.vnetId)] } : { reason: 'entity' }
   if (cue.action === 'hub.configure') return topology.vwanHubs.some((hub) => hub.id === cue.params.hubId)

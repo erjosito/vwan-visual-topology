@@ -4,8 +4,9 @@ The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
 and evidence-gated runner (#180) activate sequential assessed missions.
 The original edition has 40 tasks across six missions and 1,325 points; the
-scenario edition has 41 tasks across eight missions and 1,575 points through
-black belt, with its own thresholds and mastery checkpoints.
+scenario edition has 50 tasks across nine missions and 1,825 available points.
+Its first eight missions retain the 1,575-point black-belt threshold and
+mastery checkpoints; the hybrid extension adds practice without demotion.
 The root owns the runner across editor switches and pause/resume. A bounded
 browser-local ledger (#183) restores compatible completions after reload and
 derives first-earned points, checkpoint-gated belts and the header status.
@@ -50,7 +51,7 @@ Normal saved designs remain protected. This is an explicit beta exception to the
 published-threshold policy above, not a general migration policy.
 
 `editions.ts` is the lightweight edition catalog. Fresh learners start
-`azure-routing-scenarios` version 2. Historical original-course completions
+`azure-routing-scenarios` version 3. Historical original-course completions
 retain the original edition unless the learner explicitly opts in through
 **Curriculum editions** or header status details. A retained original practice
 canvas also retains its edition when no enrollment/history selects otherwise.
@@ -105,6 +106,7 @@ return, recovery and same-session history behavior.
 | `editions.ts` | Lightweight edition identities, scenario order, belts and cumulative mastery checkpoints |
 | `scenario-course.ts` | Localized scenario objectives, balanced diagnostic choices, requirements and native guidance |
 | `scenario-topologies.ts` | Independent original scenario-edition starter documents |
+| `hybrid-scenario.ts`, `hybrid-course.ts` | Original ER/VPN fixture and the appended hybrid incident |
 | `scenario-course.test.ts` | Actual-engine starter failures, valid repairs, preserved witnesses and independent faults |
 | `course-contract.ts` | A genuinely new reusable task/check/action shape |
 | `course-validation.ts` | Validation for a new shape/scope, not individual lesson IDs |
@@ -139,6 +141,7 @@ native reveal adapter and anchor, never a lesson-specific sidebar branch.
 | WAN isolation | 200 | Exact hub-table evidence, connection propagation and positive/negative witnesses |
 | Tiered incident | 250 | Indirect spoke with two independent faults; preserve the existing application conversation |
 | HA return path | 250 | Tuple-preserving floating HA-ports steering, independently routed return, original backend and Operations witness |
+| Hybrid preference | 250 | Equal-prefix ER preference, VPN specificity, declared ER withdrawal and independent branch return |
 
 Each mission is linear: explicitly load, inspect an exact starting scope,
 repair an open networking requirement, inspect the independent return scope,
@@ -148,6 +151,9 @@ and 1575; cumulative interpretation checkpoints gate each belt. Brown requires
 both the branch and WAN missions; black also requires the HA explanation.
 HA adds a 25-point packet diagnosis before repair, reducing its repair to 190
 points. Its six tasks award 5, 5, 25, 190, 5 and 20 points respectively.
+The nine-task hybrid extension awards 5, 5, 65, 10, 25, 80, 10, 10 and 40
+points. Existing thresholds, checkpoint IDs and first-earned awards are unchanged;
+its new awards do not grant earlier tasks automatically.
 
 Native guidance can reveal VNet configuration (`network.configure`), an
 associated UDR table including an empty one (`route-table.configure` without
@@ -157,6 +163,16 @@ highlights its native packet form, including inside the dialog top layer. It
 does not select endpoints, submit a probe or modify the topology; learners
 choose and run their own tuple and close the detail dialog to resume the lesson.
 These actions locate controls without making repairs.
+`connection.configure` reveals the original ER/VPN native editor without saving
+or changing its enabled/BGP flags. `site-routes.open` reveals an original site's
+received routes. `control-routes.inspected` requires an exact site/prefix or
+hub/table/prefix observation; a different table, Firewall onward view or stale
+token cannot substitute. Existing subnet observations remain distinct.
+`connections.configured` binds enabled/BGP state and original connection
+endpoints, asserts selected exact-prefix gateway rows from the shared engine's
+native effective-table evidence, and requires complete shared flow/route
+assessments. It does not infer a transport from delivery or implement another
+route-selection algorithm.
 The existing exact-route action remains available when a specific row is
 the intended observation. Requirements, not a prescribed edit sequence,
 grade repairs. Preserve positive and isolation witnesses when adding cases.
@@ -167,7 +183,52 @@ vendor overlay behavior, HA health/orchestration, convergence timing or
 session failover. Missing/unknown owners and unsupported providers cannot
 pass. Richer HA, BGP/export policies, subnet-scoped peering lessons and unsupported
 WAN connection controls remain capability-gated follow-up work; these eight
-cases do not claim exhaustive coverage of the book or blog.
+cases and the hybrid extension do not claim exhaustive coverage of the book or blog.
+
+## Hybrid routing qualification (#224)
+
+The original `hybrid-preference` fixture uses coexisting ER/VPN gateways in a
+/27 GatewaySubnet, an unchanged shared-gateway peering and two separately owned
+branch /24 services. The branch's **outbound ER policy** summarizes only the
+first real /24 contributor to /16; its VPN export retains both specifics.
+The starter's preconfigured BGP VPN connection is disabled. The learner enables
+and saves it, compares the actual active workload routes, then disables only
+the original branch-side ER attachment. This assesses connection operation,
+not construction or production readiness of a VPN gateway.
+
+Current shared engine `2026.11.18.2` qualifies ER for equal `172.28.20.0/24`
+candidates and VPN `172.28.10.0/24` over ER `172.28.0.0/16`. After declared ER
+withdrawal both original services and their independent replies remain routable
+through VPN; local Operations and restricted-tenant isolation remain separate
+requirements. Both original ER attachments must remain enabled in the
+coexistence stage, and the original VPN must retain BGP in both stages.
+The already-running local MCP uses older engine `2026.11.16.2`: native validation
+completed without errors and all five coexistence assertions were satisfied.
+It was not rebuilt/reconfigured; current source regressions additionally qualify
+the selected gateways, withdrawal and invalid alternatives.
+
+Negative coverage includes disabled backup, loss of both transports, wrong
+selected gateway despite passing shared assessments, stale proof, invalid BGP
+state, independent branch observation, and a broken Operations witness.
+A filtered return advertisement currently causes shared model warnings and
+therefore **Not assessed**, never credit. An address inside the aggregate but
+outside the original owned branch services is also **Not assessed**.
+Native saves prune absent one-direction route-map properties instead of writing
+`undefined`, preserving strict plain-JSON worker admission.
+
+Source: [Microsoft Learn, ExpressRoute and site-to-site coexistence](https://learn.microsoft.com/azure/expressroute/how-to-configure-coexisting-gateway-portal).
+Longest-prefix matching precedes equal-prefix transport preference; the
+on-premises return preference must be configured independently. These snapshots
+do not establish elapsed convergence, measured failover/failback, established
+session continuity, throughput or SLA. No live Azure resources were deployed.
+Gateway-summary export from ARS to NVA remains explicitly gated by #233 and is
+not graded here. Existing `branch-advertisement` supplies the earlier workload
+propagation case; further ARS/policy variants remain follow-up scope.
+
+EN/JA objectives, closed observations, native edits and original scenario
+questions have automated contract and native browser qualification. This is not
+an independent answer-blind SME/native-language/novice review or a learning-gain
+claim; those human evidence gates remain tracked under #160/#219.
 
 Quiz options use authored order, comparable detail and grammatical structure,
 and answer-specific explanations. Preserving old choice IDs preserves old

@@ -5,6 +5,18 @@ import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
 
 describe('semantic guidance admission', () => {
+  it('reveals original hybrid connections and branch routes without editing them, and rejects missing owners', () => {
+    const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'hybrid-preference')!.document)
+    const before = structuredClone(input)
+    const cues = scenarioBundle.guidance.filter((cue) => cue.id.startsWith('hybrid-preference.'))
+    for (const cue of cues) expect(resolveGuidance(input, cue).anchors?.length, cue.id).toBeGreaterThan(0)
+    expect(input).toEqual(before)
+    if (input.mode === 'vwan') throw new Error('Mixed topology required')
+    input.topology.vpnConnections = []
+    expect(resolveGuidance(input, cues.find((cue) => cue.id.endsWith('.vpn-guide'))!)).toEqual({ reason: 'entity' })
+    input.topology.sites = []
+    expect(resolveGuidance(input, cues.find((cue) => cue.id.endsWith('.return-guide'))!)).toEqual({ reason: 'entity' })
+  })
   it('scopes packet guidance to an owned VNet without applying a probe or modifying topology', () => {
     const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'ha-return-path')!.document)
     const before = structuredClone(input)

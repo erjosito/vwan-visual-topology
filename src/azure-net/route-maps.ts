@@ -125,7 +125,8 @@ export function pruneAzSiteRouteMaps(topology: AzNetTopology) {
       if (!links.some((link) => link.id === assignment.connectionId)) return []
       const inboundMapId = topology.routeMaps?.find((map) => map.id === assignment.inboundMapId && map.siteId === site.id)?.id
       const outboundMapId = topology.routeMaps?.find((map) => map.id === assignment.outboundMapId && map.siteId === site.id)?.id
-      return inboundMapId || outboundMapId ? [{ connectionId: assignment.connectionId, inboundMapId, outboundMapId }] : []
+      return inboundMapId || outboundMapId ? [{ connectionId: assignment.connectionId,
+        ...(inboundMapId ? { inboundMapId } : {}), ...(outboundMapId ? { outboundMapId } : {}) }] : []
     })
   }
   for (const hub of topology.vwanHubs) {
@@ -135,7 +136,8 @@ export function pruneAzSiteRouteMaps(topology: AzNetTopology) {
       if (!links.some((link) => link.id === assignment.connectionId)) return []
       const inboundMapId = topology.routeMaps?.find((map) => map.id === assignment.inboundMapId && map.hubId === hub.id)?.id
       const outboundMapId = topology.routeMaps?.find((map) => map.id === assignment.outboundMapId && map.hubId === hub.id)?.id
-      return inboundMapId || outboundMapId ? [{ connectionId: assignment.connectionId, inboundMapId, outboundMapId }] : []
+      return inboundMapId || outboundMapId ? [{ connectionId: assignment.connectionId,
+        ...(inboundMapId ? { inboundMapId } : {}), ...(outboundMapId ? { outboundMapId } : {}) }] : []
     })
   }
 }

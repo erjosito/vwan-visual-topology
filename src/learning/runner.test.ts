@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { executePlatform } from '../platform/service'
 import type { PlatformRequest, PlatformResult } from '../platform/contract'
 import { exampleCourse } from './course-examples'
+import { scenarioBundle } from './scenario-course'
+import type { CourseBundle } from './course-contract'
+import type { AzSimulationResult } from '../azure-net/engine'
 import { requirementDescription } from './runner-content'
 import { createCourseRunner, orderedTasks, type LearningWorkspace, type RunnerOptions, type TaskCompletion } from './runner'
 
-function harness(overrides: Partial<RunnerOptions> = {}) {
-  const bundle = structuredClone(exampleCourse)
+function harness(overrides: Partial<RunnerOptions> = {}, course = exampleCourse) {
+  const bundle = structuredClone(course)
   let live: LearningWorkspace | undefined
   const completed = vi.fn()
   const evaluate = vi.fn(async (request: PlatformRequest) => executePlatform(request))
@@ -45,7 +48,64 @@ function harness(overrides: Partial<RunnerOptions> = {}) {
     evaluate, completed, live: () => live }
 }
 
+function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
+  const tasks = orderedTasks(bundle)
+  return tasks.slice(0, tasks.findIndex(({ task }) => task.id === taskId)).map(({ task, lesson }) => ({
+    courseId: bundle.course.id, contentVersion: bundle.course.contentVersion, lessonId: lesson.id, taskId: task.id,
+    assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+    title: task.title, sessionId: 'earlier', revision: 1, scope: 1, engineVersion: 'earlier', completedAt: '2026-11-18T12:00:00Z',
+  }))
+}
+
 describe('evidence-gated course runner', () => {
+  it('requires original hybrid connection state and actual selected gateways in addition to shared outcomes', async () => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'hybrid-preference.repair') }, scenarioBundle)
+    h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === 'hybrid-preference'))
+    await h.runner.assess()
+    expect(h.state().canContinue).toBe(false)
+    h.edit((document) => {
+      if (document.mode !== 'vwan') document.topology.vpnConnections[0].enabled = true
+    })
+    h.evaluate.mockImplementation(async (request) => {
+      const result = executePlatform(request)
+      const simulation = result.simulation as AzSimulationResult
+      simulation.subnetTables.work.routes.forEach((route) => {
+        if (route.prefix === '172.28.20.0/24') route.nextHopResourceId = 'backup-vpn'
+      })
+      return result
+    })
+    await h.runner.assess()
+    expect(h.state().canContinue).toBe(false)
+    expect(h.state().feedback).toBe('requirements')
+    h.evaluate.mockImplementation(async (request) => executePlatform(request))
+    h.edit((document) => { if (document.mode !== 'vwan') document.topology.vpnConnections[0].bgpEnabled = false })
+    await h.runner.assess()
+    expect(h.state().canContinue).toBe(false)
+    h.edit((document) => { if (document.mode !== 'vwan') document.topology.vpnConnections[0].bgpEnabled = true })
+    await h.runner.assess()
+    expect(h.state().canContinue).toBe(true)
+    h.edit((document) => { if (document.mode !== 'vwan') document.topology.erLinks[1].enabled = false })
+    expect(h.runner.advance()).toBe(false)
+    await h.runner.assess()
+    expect(h.state().canContinue).toBe(false)
+    h.edit((document) => { if (document.mode !== 'vwan') document.topology.erLinks[1].enabled = true })
+    await h.pass()
+  })
+
+  it('requires the exact independent branch observation and invalidates it on edits and task changes', async () => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'hybrid-preference.return') }, scenarioBundle)
+    h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === 'hybrid-preference'))
+    const observation = h.state().observation!
+    h.runner.observe({ ...observation, siteId: 'another-branch' })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.edit(() => {})
+    h.runner.observe(observation)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    await h.inspect()
+    expect(h.state().taskId).toBe('hybrid-preference.explain')
+  })
   it.each(['refused', 'throws'])('does not advance or reuse proof when completion recording %s', async (failure) => {
     let accepted = false
     const h = harness({ completed: () => {

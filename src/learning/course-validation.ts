@@ -31,9 +31,26 @@ function checkScope(
   const params = definition.params
   if ('scenarioId' in params) {
     requireContent(params.scenarioId === scenarioId, `${definition.id} loads a different scenario`)
+  } else if ('connections' in params) {
+    requireContent(document.mode !== 'vwan'
+      && new Set(params.connections.map((state) => `${state.kind}:${state.connectionId}`)).size === params.connections.length
+      && params.connections.every((state) => (state.kind === 'er-link' ? document.topology.erLinks : document.topology.vpnConnections)
+        .some((connection) => connection.id === state.connectionId))
+      && params.selectedRoutes.every((scope) => !!cidr(scope.prefix)
+        && document.topology.vnets.some((vnet) => vnet.id === scope.vnetId && vnet.subnets.some((subnet) => subnet.id === scope.subnetId))
+        && document.topology.vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.id === scope.nextHopResourceId))),
+    `${definition.id} needs distinct original connections and owned selected-route scopes`)
+  } else if ('connectionId' in params) {
+    requireContent(document.mode !== 'vwan'
+      && (params.kind === 'er-link' ? document.topology.erLinks : document.topology.vpnConnections)
+        .some((connection) => connection.id === params.connectionId), `${definition.id} needs an owned connection`)
+  } else if ('siteId' in params) {
+    requireContent(document.mode !== 'vwan' && !!cidr(params.prefix)
+      && document.topology.sites.some((site) => site.id === params.siteId), `${definition.id} needs an owned site and exact prefix`)
   } else if ('hubId' in params) {
     requireContent(document.mode !== 'vwan' && document.topology.vwanHubs.some((hub) => hub.id === params.hubId
-      && (!('tableId' in params) || hubRouteTables(hub).some((table) => table.id === params.tableId))), `${definition.id} needs an owned hub/table`)
+      && (!('tableId' in params) || hubRouteTables(hub).some((table) => table.id === params.tableId)))
+      && (!('prefix' in params) || params.prefix === undefined || !!cidr(params.prefix)), `${definition.id} needs an owned hub/table`)
   } else if ((kind === 'network.configure' || kind === 'packet-probe.open') && 'vnetId' in params) {
     requireContent(document.mode !== 'vwan' && document.topology.vnets.some((vnet) => vnet.id === params.vnetId), `${definition.id} needs an owned VNet`)
   } else if ('vnetAId' in params || 'subnetId' in params) {
@@ -117,7 +134,7 @@ export function validateCourse(input: unknown): CourseBundle {
       usedChecks.add(check.id)
       checkScope(check, scenario.document, scenario.id)
       requireContent(new Set(task.guidanceIds).size === task.guidanceIds.length, `duplicate guidance for ${task.id}`)
-      if (check.kind === 'routes.inspected' || check.kind === 'vnet.peered') {
+      if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected' || check.kind === 'vnet.peered') {
         requireContent(task.guidanceIds.length > 0, `missing navigation guidance for ${task.id}`)
       }
       for (const targetId of task.guidanceIds) {
@@ -125,8 +142,9 @@ export function validateCourse(input: unknown): CourseBundle {
         requireContent(target, `unknown guidance target for ${task.id}`)
         checkScope(target, scenario.document, scenario.id)
         usedGuidance.add(target.id)
-        if (check.kind === 'routes.inspected' || check.kind === 'vnet.peered') {
-          const action = check.kind === 'routes.inspected' ? 'routes.open' : 'peering.command'
+        if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected' || check.kind === 'vnet.peered') {
+          const action = check.kind === 'routes.inspected' ? 'routes.open' : check.kind === 'vnet.peered' ? 'peering.command'
+            : 'siteId' in check.params ? 'site-routes.open' : 'hub-routes.open'
           requireContent(target.action === action
             && Object.entries(check.params).filter(([key]) => key !== 'requirements').every(([key, value]) =>
               Object.entries(target.params).some(([targetKey, targetValue]) => targetKey === key && targetValue === value)),
