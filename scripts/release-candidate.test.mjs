@@ -199,6 +199,7 @@ function fakeGitHub(t, candidateDirectory, overrides = {}) {
       return Buffer.alloc(0)
     }
     assert.equal(command, 'gh')
+    if (args[0] === 'api' && args.includes('--method') && overrides.createRelease) return overrides.createRelease(args)
     if (args[0] === 'release' && overrides.writeRelease) return overrides.writeRelease(args)
     assert.equal(args[0], 'api', 'Preflight/guard must never publish or deploy')
     const path = args.at(-1)
@@ -281,18 +282,24 @@ test('expired CI artifacts recover only from a published matching release archiv
 function releaseStore() {
   const releases = []
   let failUpload = false
+  const create = (tag, body) => {
+    assert.ok(!releases.some((entry) => entry.tag_name === tag))
+    const release = { id: releases.length + 1, tag_name: tag, draft: true, assets: [], body }
+    releases.push(release)
+    return release
+  }
+  const createRelease = (args) => {
+    assert.equal(args[args.indexOf('--method') + 1], 'POST')
+    assert.ok(args.includes('draft=true'))
+    assert.ok(args.includes(`target_commitish=${sourceSha}`))
+    const field = (name) => args.find((value) => value.startsWith(`${name}=`)).slice(name.length + 1)
+    return JSON.stringify(create(field('tag_name'), field('body')))
+  }
   const writeRelease = (args) => {
     const [, command, tag] = args
     assert.ok(!args.includes('--clobber'))
-    let release = releases.find((entry) => entry.tag_name === tag)
-    if (command === 'create') {
-      assert.equal(release, undefined)
-      assert.ok(args.includes('--draft'), 'Never publish a receipt before deployment succeeds')
-      assert.equal(args[args.indexOf('--target') + 1], sourceSha)
-      release = { id: releases.length + 1, tag_name: tag, draft: true, assets: [],
-        body: readFileSync(args[args.indexOf('--notes-file') + 1], 'utf8') }
-      releases.push(release)
-    } else if (command === 'upload') {
+    const release = releases.find((entry) => entry.tag_name === tag)
+    if (command === 'upload') {
       assert.equal(release.draft, true)
       const path = args[3]
       const name = path.split(/[\\/]/).at(-1)
@@ -310,8 +317,50 @@ function releaseStore() {
     } else assert.fail(`Unexpected release command: ${command}`)
     return Buffer.alloc(0)
   }
-  return { releases, writeRelease, interruptUpload: () => { failUpload = true } }
+  return { releases, createRelease, writeRelease, interruptUpload: () => { failUpload = true } }
 }
+
+test('new draft uses its returned identity even when the release list does not expose it yet', async (t) => {
+  const { directory, root } = await fixture(t)
+  const store = releaseStore()
+  const { calls } = fakeGitHub(t, directory, {
+    ...store,
+    get releases() { return [] },
+  })
+  const ready = resolve(root, 'ready')
+  await preflight('web', '123', ready, '1')
+  await record(ready, false, true)
+  assert.equal(store.releases.length, 1)
+  assert.equal(store.releases[0].draft, true)
+  assert.deepEqual(store.releases[0].assets.map((asset) => asset.name), ['candidate.zip', 'record.json'])
+  assert.equal(calls.filter((call) => call.includes('POST')).length, 1)
+})
+
+test('unreadable or conflicting creation responses preserve the draft and fail before asset writes', async (t) => {
+  const cases = [
+    { mutate: () => '', message: /Cannot resolve created release/ },
+    { mutate: () => '{}', message: /Cannot resolve created release/ },
+    { mutate: (release) => JSON.stringify({ ...release, tag_name: 'another-tag' }), message: /Cannot resolve created release/ },
+    { mutate: (release) => JSON.stringify({ ...release, body: 'unreadable' }), message: /Release identity is unreadable/ },
+    { mutate: (release) => JSON.stringify({ ...release, body: JSON.stringify({ ...JSON.parse(release.body), archiveSha256: '0'.repeat(64) }) }),
+      message: /Release identity already exists with different bytes/ },
+  ]
+  for (const { mutate, message } of cases) {
+    await t.test(message.source, async (t) => {
+      const { directory, root } = await fixture(t)
+      const store = releaseStore()
+      const { calls } = fakeGitHub(t, directory, { ...store, createRelease: (args) => mutate(JSON.parse(store.createRelease(args))) })
+      const ready = resolve(root, 'ready')
+      await preflight('web', '123', ready, '1')
+      await assert.rejects(record(ready, false, true), message)
+      assert.equal(store.releases.length, 1)
+      assert.equal(store.releases[0].draft, true)
+      assert.deepEqual(store.releases[0].assets, [])
+      assert.equal(calls.filter((call) => call.includes('POST')).length, 1)
+      assert.ok(!calls.some((call) => call.includes('upload') || call.includes('edit') || call.includes('delete')))
+    })
+  }
+})
 
 test('promotion reserves a draft before side effects, publishes after success, and never overwrites a retry', async (t) => {
   const { directory, root } = await fixture(t)

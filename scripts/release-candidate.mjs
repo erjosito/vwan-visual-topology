@@ -257,14 +257,21 @@ export async function record(directory, rollback, reserve = false) {
   const tag = `promotion-${receipt.target}-${promotionId}`
   const publish = async (name, title, assets, prerelease, draftOnly = false) => {
     let found = releases(receipt.repository).find((release) => release.tag_name === name)
-    if (found) {
-      const identity = JSON.parse(found.body)
-      requireValue(identity.archiveSha256 === receipt.archiveSha256 && identity.sourceSha === receipt.sourceSha, 'Release identity already exists with different bytes')
-    } else {
-      gh(['release', 'create', name, '--repo', receipt.repository, '--target', receipt.sourceSha, '--title', title,
-        '--notes-file', notes, '--draft'])
+    const created = !found
+    const unresolved = `Cannot resolve created release "${name}"; preserve its draft and resume the original promotion`
+    if (created) {
+      const response = gh(['api', '--method', 'POST', `repos/${receipt.repository}/releases`,
+        '-f', `tag_name=${name}`, '-f', `target_commitish=${receipt.sourceSha}`, '-f', `name=${title}`,
+        '-f', `body=${await readFile(notes, 'utf8')}`, '-F', 'draft=true'], { encoding: 'utf8' })
+      try { found = JSON.parse(response) }
+      catch { throw new Error(unresolved) }
     }
-    found = releases(receipt.repository).find((release) => release.tag_name === name)
+    requireValue(found?.tag_name === name && numericId(found.id) && Array.isArray(found.assets)
+      && typeof found.draft === 'boolean' && (!created || found.draft), unresolved)
+    let identity
+    try { identity = JSON.parse(found.body) }
+    catch { throw new Error(`Release identity is unreadable for "${name}"; preserve its draft and resume the original promotion`) }
+    requireValue(identity?.archiveSha256 === receipt.archiveSha256 && identity.sourceSha === receipt.sourceSha, 'Release identity already exists with different bytes')
     for (const path of assets) {
       const name = path.split(/[\\/]/).at(-1)
       const existing = found.assets.find((asset) => asset.name === name)
