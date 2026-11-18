@@ -99,6 +99,18 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
   }
 }
 
+async function configureHybrid(page: Page, taskId: string, language: 'en' | 'ja') {
+  const withdraw = taskId.endsWith('.withdraw')
+  const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+  await show(page, taskId, `hybrid-preference.${withdraw ? 'er' : 'vpn'}-guide`, language)
+  const editor = page.getByTestId('aznet-hybrid-connection-editor')
+  await expect(editor).toBeVisible()
+  await expect(learningAnchor(page, 'connection-editor', withdraw ? 'er-link' : 'vpn-connection', withdraw ? 'branch-er' : 'branch-vpn')).toBeVisible()
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
+  await editor.locator('input[name="enabled"]').setChecked(!withdraw)
+  await editor.getByRole('button', { name: translate(language, 'Save connection routing'), exact: true }).click()
+}
+
 for (const language of ['en', 'ja'] as const) {
   test(`${language}: complete the scenario edition through real native controls and preserve the design`, async ({ page }) => {
     test.setTimeout(240_000)
@@ -111,9 +123,14 @@ for (const language of ['en', 'ja'] as const) {
       await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', task.id)
       const check = scenarioBundle.checks.find((entry) => entry.id === task.checkId)!
       if (check.kind === 'scenario.loaded') await loadLearningNetwork(page, language)
-      if (check.kind === 'routes.inspected') {
+      if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') {
         await panel.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
         await page.getByTestId('learning-record-inspection').click()
+      }
+      if (check.kind === 'connections.configured') {
+        await panel.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
+        await expect(panel.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
+        await configureHybrid(page, task.id, language)
       }
       if (check.kind === 'requirements.satisfied') {
         await panel.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
@@ -130,19 +147,22 @@ for (const language of ['en', 'ja'] as const) {
       await panel.getByRole('button', { name: runnerLabels.continue[language], exact: true }).click()
     }
     await expect(panel.getByRole('heading', { name: runnerLabels.done[language], exact: true })).toBeVisible()
-    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? 'Black belt · 1575 points' : '黒帯 · 1575 ポイント')
+    const tasks = orderedTasks(scenarioBundle)
+    const points = tasks.reduce((sum, { task }) => sum + task.points, 0)
+    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? `Black belt · ${points} points` : `黒帯 · ${points} ポイント`)
     await page.getByTestId('practice-workspace-bar').getByRole('button', { name: language === 'en' ? 'Return to my design' : '自分の設計に戻る', exact: true }).click()
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
     await page.reload()
-    await expect(page.getByTestId('learning-status')).toContainText('1575')
+    await expect(page.getByTestId('learning-status')).toContainText(String(points))
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
-    expect(saved.completions).toHaveLength(41)
-    expect(new Set(saved.completions.map((entry: { awardId: string }) => entry.awardId)).size).toBe(41)
+    expect(saved.completions).toHaveLength(tasks.length)
+    expect(new Set(saved.completions.map((entry: { awardId: string }) => entry.awardId)).size).toBe(tasks.length)
   })
 }
 
 test('default mobile workspace reveals the scoped HA packet form without changing practice or awards', async ({ page }) => {
-  const completions = orderedTasks(scenarioBundle).filter(({ lesson }) => lesson.id !== 'ha-return-path')
+  const completions = orderedTasks(scenarioBundle).filter(({ lesson }) =>
+    scenarioBundle.course.lessonOrder.indexOf(lesson.id) < scenarioBundle.course.lessonOrder.indexOf('ha-return-path'))
     .map(({ lesson, task }, revision) => ({
       courseId: scenarioBundle.course.id, contentVersion: 2, lessonId: lesson.id, taskId: task.id,
       assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
@@ -163,6 +183,34 @@ test('default mobile workspace reveals the scoped HA packet form without changin
   await probeHa(page, 'ha-return-path.diagnose', 'en', 'asymmetric')
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'ha-return-path.diagnose')
+})
+
+test('default mobile connection guidance never configures the assessed hybrid backup', async ({ page }) => {
+  const completions = orderedTasks(scenarioBundle).filter(({ lesson }) =>
+    scenarioBundle.course.lessonOrder.indexOf(lesson.id) < scenarioBundle.course.lessonOrder.indexOf('hybrid-preference'))
+    .map(({ lesson, task }, revision) => ({
+      courseId: scenarioBundle.course.id, contentVersion: scenarioBundle.course.contentVersion, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'earlier-missions', revision, scope: 1, engineVersion: 'earlier',
+      completedAt: '2026-11-18T12:00:00.000Z',
+    }))
+  await page.addInitScript(({ key, completions }) => {
+    localStorage.setItem('aznet-ui-preview:v1', 'true')
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+  }, { key: guidedProgressKey, completions })
+  await page.setViewportSize({ width: 390, height: 1000 })
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1575$/)
+  await page.getByTestId('learning-open').click()
+  await loadLearningNetwork(page)
+  await completeLearningTasks(page, 2)
+  const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+  const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+  await show(page, 'hybrid-preference.repair', 'hybrid-preference.vpn-guide', 'en')
+  await expect(learningAnchor(page, 'connection-editor', 'vpn-connection', 'branch-vpn')).toBeVisible()
+  await expect(page.getByTestId('aznet-hybrid-connection-editor').locator('input[name="enabled"]')).not.toBeChecked()
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
+  expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
 })
 
 test('historical black belt stays intact across explicit edition opt-in, reload and return', async ({ page }) => {

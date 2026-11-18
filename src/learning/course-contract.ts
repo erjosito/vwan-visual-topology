@@ -9,10 +9,24 @@ const entityId = z.string().min(1).max(120)
 const subnet = z.strictObject({ vnetId: entityId, subnetId: entityId })
 const routeScope = subnet.extend({ prefix: z.string() })
 const peering = z.strictObject({ vnetAId: entityId, vnetBId: entityId })
+const controlRouteScope = z.union([
+  z.strictObject({ siteId: entityId, prefix: z.string() }),
+  z.strictObject({ hubId: entityId, tableId: entityId, prefix: z.string() }),
+])
+const connectionState = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('er-link'), connectionId: entityId, enabled: z.boolean() }),
+  z.strictObject({ kind: z.literal('vpn-connection'), connectionId: entityId, enabled: z.boolean(), bgpEnabled: z.boolean() }),
+])
 
 export const courseCheckSchema = z.discriminatedUnion('kind', [
   z.strictObject({ id, kind: z.literal('scenario.loaded'), params: z.strictObject({ scenarioId: id }) }),
   z.strictObject({ id, kind: z.literal('routes.inspected'), params: routeScope }),
+  z.strictObject({ id, kind: z.literal('control-routes.inspected'), params: controlRouteScope }),
+  z.strictObject({ id, kind: z.literal('connections.configured'), params: z.strictObject({
+    connections: z.array(connectionState).min(1).max(16),
+    selectedRoutes: z.array(routeScope.extend({ nextHopResourceId: entityId })).min(1).max(16),
+    requirements: z.array(z.custom<Requirement>()).min(1).max(64),
+  }) }),
   z.strictObject({ id, kind: z.literal('vnet.peered'),
     params: peering.extend({ requirements: z.array(z.custom<Requirement>()).min(1).max(64) }) }),
   z.strictObject({
@@ -30,10 +44,14 @@ export const courseCheckSchema = z.discriminatedUnion('kind', [
 ])
 
 export const courseGuidanceSchema = z.discriminatedUnion('action', [
+  z.strictObject({ id, action: z.literal('connection.configure'),
+    params: z.strictObject({ kind: z.enum(['er-link', 'vpn-connection']), connectionId: entityId }), instruction: localized }),
+  z.strictObject({ id, action: z.literal('site-routes.open'),
+    params: z.strictObject({ siteId: entityId, prefix: z.string() }), instruction: localized }),
   z.strictObject({ id, action: z.literal('packet-probe.open'), params: z.strictObject({ vnetId: entityId }), instruction: localized }),
   z.strictObject({ id, action: z.literal('network.configure'), params: z.strictObject({ vnetId: entityId }), instruction: localized }),
   z.strictObject({ id, action: z.literal('hub.configure'), params: z.strictObject({ hubId: entityId }), instruction: localized }),
-  z.strictObject({ id, action: z.literal('hub-routes.open'), params: z.strictObject({ hubId: entityId, tableId: entityId }), instruction: localized }),
+  z.strictObject({ id, action: z.literal('hub-routes.open'), params: z.strictObject({ hubId: entityId, tableId: entityId, prefix: z.string().optional() }), instruction: localized }),
   z.strictObject({ id, action: z.literal('routes.open'), params: routeScope, instruction: localized }),
   z.strictObject({ id, action: z.literal('peering.command'), params: peering, instruction: localized }),
   z.strictObject({
