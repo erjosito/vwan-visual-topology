@@ -39,8 +39,11 @@
   grid-column: 1 / -1;
   flex-basis: auto; flex-shrink: 1; flex-wrap: wrap; gap: 8px;
 }
-.workspace-account-status { grid-column: 2; grid-row: 1; align-self: start; max-width: min(320px, 40vw); }
-.workspace-account-status .learning-status-trigger { justify-content: flex-end; text-align: right; }
+.workspace-account-status { grid-column: 2; grid-row: 1; align-self: start; max-width: min(420px, 46vw); display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: flex-start; gap: 4px; }
+.workspace-account-status :is(.learning-status-trigger, .account-status-trigger, .account-status-unavailable) { justify-content: flex-start; text-align: left; min-height: 44px; max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; }
+.workspace-account-status .account-status-unavailable { display: grid; align-content: center; gap: 4px; font-size: 12px; }
+.account-status-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.account-status-unavailable small { font-size: 11px; color: var(--text-muted); }
 .learning-status-identity { width: 100%; overflow-wrap: anywhere; }
 .learning-status-belt { display: inline-flex; align-items: center; gap: 4px; }
 .simulator-shell[data-ui-preview] [data-testid="ui-preview-toggle"] { border-color: var(--accent); color: var(--accent); }

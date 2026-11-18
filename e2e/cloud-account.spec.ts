@@ -5,10 +5,11 @@ import { exampleCourse } from '../src/learning/course-examples'
 import { orderedTasks } from '../src/learning/runner'
 import { completeLearningTasks, loadLearningNetwork } from './learning-helpers'
 import { sampleHubSpokeFirewallUdr } from '../src/azure-net/model'
+import { example } from '../src/model'
 import AxeBuilder from '@axe-core/playwright'
 import { languageStorageKey } from '../src/i18n'
 
-async function setup(page: Page) {
+async function setup(page: Page, accountName?: string) {
   const service = cloudFixture([new URL(test.info().project.use.baseURL as string).origin])
   await page.route('**/src/cloud/configuration.ts*', route => route.fulfill({
     contentType: 'application/javascript', body: `export const readCloudConfiguration = () => window.desktopSimulator ? undefined : ({
@@ -20,7 +21,7 @@ async function setup(page: Page) {
   await page.route('**/src/cloud/microsoft.ts*', route => route.fulfill({
     contentType: 'application/javascript', body: `export async function createMicrosoftClient() {
       let user;
-      const account = () => ({id:user,name:user==='bob'?'Test Bob':'Test Alice'});
+      const account = () => ({id:user,name:${accountName === undefined ? "user==='bob'?'Test Bob':'Test Alice'" : JSON.stringify(accountName)}});
       return {
         restore:()=>{user=sessionStorage.getItem('mock-cloud-user')||'alice';return account()},
         signIn:async()=>{user=sessionStorage.getItem('mock-cloud-user')||'alice';return account()},
@@ -41,7 +42,7 @@ async function setup(page: Page) {
   return service
 }
 async function signIn(page: Page) {
-  await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
+  await page.getByTestId('cloud-account-open').click()
   await page.getByRole('button', { name: 'Sign in with Microsoft', exact: true }).click()
   await expect(page.getByTestId('cloud-progress-status')).toContainText('Synced')
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
@@ -71,7 +72,7 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
       localStorage.setItem('aznet-theme', theme)
     }, { language, theme })
     await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
-    await page.getByRole('button', { name: text('Cloud account', 'クラウド アカウント'), exact: true }).click()
+    await page.getByTestId('cloud-account-open').click()
     await page.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
     const dialog = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
     const rows = dialog.locator('tbody tr')
@@ -165,7 +166,7 @@ test.describe('new UI account and belt summary', () => {
       if (!localStorage.getItem(key)) localStorage.setItem(key, raw)
     }, { key: guidedProgressKey, raw })
     await page.goto('/?mode=full')
-    const status = page.getByTestId('learning-status')
+    const status = page.getByTestId('account-belt-status')
     await expect(status).toContainText('Not signed in')
     await expect(status).toContainText('Black belt')
     await expect(status).not.toContainText('x2')
@@ -176,12 +177,68 @@ test.describe('new UI account and belt summary', () => {
     await expect(status).toContainText('Not signed in')
     await expect(status).toContainText('Black belt')
     await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
-    await status.click()
+    await page.getByTestId('learning-status').click()
     await page.getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
     await page.getByRole('button', { name: 'Delete guided history & points', exact: true }).click()
     await expect(status).toContainText('White belt')
   })
 })
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja']) {
+  test(`${mode} ${language}: identity opens account actions and the adjacent belt opens learning`, async ({ page }, info) => {
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    const identity = language === 'ja' ? 'A long signed-in identity with multiple names '.repeat(3).trim() : 'Test Alice'
+    const service = await setup(page, identity)
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.addInitScript(({ language, topology, classic }) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+      localStorage.setItem('vwan-visual-topology:v1', JSON.stringify({ sampleId: '', topology: classic }))
+    }, { language, topology: sampleHubSpokeFirewallUdr, classic: example })
+    if (mode === 'full' && language === 'en') {
+      await page.route('**/api/cloud/topologies', route => route.fulfill({ status: 404, body: '' }))
+    }
+    await page.goto(`/?mode=${mode}`)
+    const localKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    const local = await page.evaluate(key => localStorage.getItem(key), localKey)
+    const account = page.getByTestId('cloud-account-open'), belt = page.getByTestId('learning-status')
+    const status = page.getByTestId('account-belt-status')
+    await expect(account).toHaveText(text('Not signed in', '未サインイン'))
+    await account.focus()
+    await page.keyboard.press('Enter')
+    const dialog = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
+    await expect(page.getByTestId('learning-status-details')).toHaveCount(0)
+    await dialog.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
+    await expect(account).toHaveText(identity)
+    await expect(account).toHaveAttribute('title', `${text('Cloud account', 'クラウド アカウント')}: ${identity}`)
+    if (mode === 'full' && language === 'en') await expect(dialog.getByRole('alert')).toContainText('Check the backend deployment')
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    await expect(account).toBeFocused()
+    await expect(belt).toHaveAccessibleName(new RegExp(text('Learning status', '学習の状況')))
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    expect(await account.evaluate(el => getComputedStyle(el).textAlign)).toBe('left')
+    expect((await account.boundingBox())!.height).toBeLessThanOrEqual(70)
+    expect((await new AxeBuilder({ page }).include('.workspace-account-status').analyze()).violations).toEqual([])
+    await status.screenshot({ path: info.outputPath(`account-belt-${mode}-${language}.png`) })
+    await belt.focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('learning-status-details')).toBeVisible()
+    await expect(dialog).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    await expect(page.getByTestId('learning-status-details')).toHaveCount(0)
+    await expect(belt).toBeFocused()
+    await account.click()
+    await dialog.getByRole('button', { name: text('Sign out of this app', 'このアプリからサインアウト'), exact: true }).click()
+    await expect(account).toHaveText(text('Not signed in', '未サインイン'))
+    await page.keyboard.press('Escape')
+    await expect(account).toBeFocused()
+    expect(await page.evaluate(key => localStorage.getItem(key), localKey)).toBe(local)
+    expect(service.data.size).toBe(0)
+  })
+}
 
 test('anonymous history requires import consent; reload, switching and sign-out preserve account isolation', async ({ page }) => {
   const errors: string[] = []
