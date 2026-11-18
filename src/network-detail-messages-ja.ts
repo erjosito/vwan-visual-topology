@@ -1,6 +1,10 @@
 import { registerJapaneseMessages } from './messages'
 
 registerJapaneseMessages({
+  'Attached devices and policies': '接続されたデバイスとポリシー',
+  'Shared original entities': '共有される元のエンティティ',
+  'Attachment reference → original entity': '接続の参照 → 元のエンティティ',
+  'Each shared entity is shown once here. Subnet branches are references to this original, not copies or forwarding paths.': '共有エンティティはここに一度だけ表示します。サブネットの枝は元のオブジェクトへの参照であり、複製や転送経路ではありません。',
   'Network actions': 'ネットワークの操作',
   'Containers and arrows show declared attachments, not forwarding links. Right-click or press Shift+F10 for actions.': '枠と矢印は定義済みの接続を示し、転送リンクではありません。右クリックまたは Shift+F10 で操作を開きます。',
   'Declared attachments': '定義済みの接続',
