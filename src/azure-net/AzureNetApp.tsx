@@ -15,7 +15,7 @@ import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalo
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
-import { WorkspaceMenu } from '../WorkspaceSession'
+import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
 import { previewVnetActions } from '../context-actions'
 import { useWorkspaceSession } from '../workspace-context'
@@ -3075,6 +3075,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             }}
           />
         </div>
+        <WorkspaceAccountStatus />
       </header>
 
       {/* Main Split Workspace */}

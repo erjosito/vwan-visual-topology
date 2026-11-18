@@ -3,6 +3,28 @@ import AxeBuilder from '@axe-core/playwright'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  for (const width of [390, 1440]) {
+    test(`${mode}: account and belt stay visible at the top right at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto(`/?mode=${mode}`)
+      const status = page.getByTestId('learning-status')
+      await expect(status).toContainText('Not signed in')
+      await expect(status).toContainText('White belt')
+      await expect(status).toHaveAccessibleName(/Highest belt across tracks: White belt.*Tracks at this belt: 1/)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      const bounds = (await page.locator('.workspace-account-status').boundingBox())!
+      const header = (await page.locator('header').boundingBox())!
+      expect(bounds.x + bounds.width).toBeGreaterThanOrEqual(header.x + header.width - 16)
+      expect(bounds.y).toBeLessThanOrEqual(header.y + 12)
+      await status.click()
+      await expect(page.getByTestId('learning-status-details')).toBeVisible()
+      await page.getByRole('button', { name: 'Close learning status', exact: true }).click()
+      await expect(status).toBeFocused()
+    })
+  }
+}
+
 for (const mode of ['vwan', 'full'] as const) {
   const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
   const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
