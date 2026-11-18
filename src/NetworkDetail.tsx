@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { t } from './i18n'
 import { inventoryOwners, pruneDeletedInventory, sameInventoryOwner, validateInventory, type InventoryOwner, type InventoryTopology } from './inventory'
 import { PacketFlowPanel } from './PacketFlowPanel'
@@ -41,9 +41,20 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
   const closeButton = useRef<HTMLButtonElement>(null)
   const saveButton = useRef<HTMLButtonElement>(null)
   const pendingAction = useRef<(() => void) | undefined>(undefined)
+  const focusEditor = (selector: string) => {
+    const element = dialog.current?.querySelector<HTMLElement>(selector)
+    if (!element) return
+    for (let ancestor: HTMLElement | null = element; ancestor && ancestor !== dialog.current; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLDetailsElement) ancestor.open = true
+    }
+    element.scrollIntoView({ block: 'center' })
+    ;(element.matches('button, input, select, summary') ? element : element.querySelector<HTMLElement>('summary, button, input, select'))?.focus()
+  }
   const [query, setQuery] = useState('')
   const [subnetQuery, setSubnetQuery] = useState('')
   const [subnetPage, setSubnetPage] = useState(0)
+  const [sharedFocus, setSharedFocus] = useState<{ key: string; sequence: number }>()
+  const [subnetFocus, setSubnetFocus] = useState<{ id: string; editor?: string }>()
   const [menu, setMenu] = useState<{ title: string; actions: ContextAction[]; x: number; y: number; invoker: HTMLElement }>()
   const [error, setError] = useState('')
   const [declarePublicIp, setDeclarePublicIp] = useState(false)
@@ -63,8 +74,33 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
     visible.push(selected)
   }
   const entities = networkDetailProjection(topology, owner)
+  const sharedEntities = entities.filter((entity) => entity.subnetIds.length > 1)
+  const subnetNames = new Map(network?.subnets.map((subnet) => [subnet.id, subnet.name]))
+  const revealOriginal = (entity: DetailEntity) => setSharedFocus((previous) => ({
+    key: `${entity.kind}:${entity.id}`, sequence: (previous?.sequence ?? 0) + 1,
+  }))
+  const revealSubnet = (id: string, editor?: string) => {
+    const index = network?.subnets.findIndex((subnet) => subnet.id === id) ?? -1
+    if (index < 0) return
+    setSubnetQuery('')
+    setSubnetPage(Math.floor(index / 100))
+    setSubnetFocus({ id, editor })
+  }
   const matchingSubnets = (network?.subnets ?? []).filter((subnet) => [subnet.id, subnet.name, subnet.prefix].join(' ').toLocaleLowerCase().includes(subnetQuery.toLocaleLowerCase()))
   const currentSubnetPage = Math.min(subnetPage, Math.max(0, Math.ceil(matchingSubnets.length / 100) - 1))
+  useLayoutEffect(() => {
+    if (!subnetFocus) return
+    const element = [...(dialog.current?.querySelectorAll<HTMLElement>('[data-subnet-id]') ?? [])].find((entry) => entry.dataset.subnetId === subnetFocus.id)
+    if (!element) return
+    const content = element.querySelector<HTMLDetailsElement>('.detail-subnet-content')
+    if (content) content.open = true
+    if (subnetFocus.editor) focusEditor(`[data-subnet-id=${JSON.stringify(subnetFocus.id)}] ${subnetFocus.editor}`)
+    else {
+      element.scrollIntoView({ block: 'center' })
+      element.querySelector<HTMLButtonElement>('.detail-subnet-target')?.focus({ preventScroll: true })
+    }
+    setSubnetFocus(undefined)
+  }, [subnetFocus, currentSubnetPage])
   const change = (update: (draft: InventoryTopology) => void) => {
     try {
       const candidate = structuredClone(topology)
@@ -90,15 +126,6 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
   }, [returnFocus])
   const close = () => dialog.current?.close()
   const leaveFor = (action: () => void) => { pendingAction.current = action; close() }
-  const focusEditor = (selector: string) => {
-    const element = dialog.current?.querySelector<HTMLElement>(selector)
-    if (!element) return
-    for (let ancestor: HTMLElement | null = element; ancestor && ancestor !== dialog.current; ancestor = ancestor.parentElement) {
-      if (ancestor instanceof HTMLDetailsElement) ancestor.open = true
-    }
-    element.scrollIntoView({ block: 'center' })
-    ;(element.matches('button, input, select, summary') ? element : element.querySelector<HTMLElement>('summary, button, input, select'))?.focus()
-  }
   const selectWorkload = (id: string) => {
     setQuery('')
     onSelect(id)
@@ -135,11 +162,9 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
         requestAnimationFrame(() => focusEditor(`[data-testid=${JSON.stringify(`nsg-editor-nic-${entity.id}`)}]`))
       } : undefined })
     }
-    if (entity.kind === 'nat') actions.push({ label: t('Internet egress'), run: () => {
-      const subnet = invoker.closest<HTMLElement>('[data-subnet-id]')
-        ?? dialog.current?.querySelector<HTMLElement>(`[data-subnet-id=${JSON.stringify(entity.subnetIds[0])}]`)
-      const editor = subnet?.querySelector<HTMLDetailsElement>('.nat-gateway-editor')
-      if (editor) { editor.open = true; editor.scrollIntoView({ block: 'center' }); editor.querySelector('summary')?.focus() }
+    if (entity.kind === 'nat') actions.push({ label: t('Internet egress'), disabled: !entity.subnetIds.length, run: () => {
+      const subnetId = invoker.closest<HTMLElement>('[data-subnet-id]')?.dataset.subnetId ?? entity.subnetIds[0]
+      if (subnetId) revealSubnet(subnetId, '.nat-gateway-editor summary')
     } })
     if (entity.kind === 'load-balancer') actions.push({ label: t('Standard Load Balancers'), run: () => focusEditor('[data-testid="load-balancer-editor"]') })
     if (entity.kind === 'private-endpoint' && entity.subnetIds[0]) {
@@ -205,9 +230,10 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
               {applicationSelection.subnetIds.has(subnet.id) && <p data-testid="application-subnet-reference"><strong>{t('Selected application reference')}</strong>: <code>{subnet.id}</code></p>}
               {directions.map((direction) => <p key={direction}><strong>{t(direction === 'forward' ? 'Forward routing' : 'Reply routing')}</strong></p>)}
               <p>{t('{0} NIC attachments', attached.length)}</p>
-              <p className="detail-attachment-label">{t('Declared attachments')} ↓</p>
+              <details open className="detail-subnet-content"><summary>{t('Attached devices and policies')}</summary>
               <NetworkDetailAttachments key={subnet.id} entities={entities.filter((entity) => entity.subnetIds.includes(subnet.id))}
-                workloads={workloads} selectedId={selectedId} selectedTargetId={selectedTargetId} subnetId={subnet.id} onSelect={selectWorkload} onActions={entityActions} />
+                workloads={workloads} selectedId={selectedId} selectedTargetId={selectedTargetId} subnetId={subnet.id}
+                onRevealOriginal={revealOriginal} onSelect={selectWorkload} onActions={entityActions} />
               <NatGatewayEditor topology={topology} owner={owner} subnetId={subnet.id} change={change} />
               <NsgEditor topology={topology} owner={owner} target={{ kind: 'subnet', id: subnet.id }} change={change} />
               {topology.version === 2 && topology.vnets.find((vnet) => vnet.id === owner.id)?.appliances
@@ -225,6 +251,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
                   <DnatEditor topology={topology} owner={{ kind: 'appliance', id: device.id }} name={device.name}
                     kind={device.kind === 'azure-firewall' ? 'firewall-dnat' : 'nva-dnat'} change={change} />
                 </div>)}
+              </details>
             </article>
           })}
           {matchingSubnets.length > 100 && <div className="row">
@@ -232,6 +259,12 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
             <span role="status">{t('Subnet page {0} of {1}', currentSubnetPage + 1, Math.ceil(matchingSubnets.length / 100))}</span>
             <button type="button" disabled={(currentSubnetPage + 1) * 100 >= matchingSubnets.length} onClick={() => setSubnetPage(currentSubnetPage + 1)}>{t('Next subnets')}</button>
           </div>}
+          {sharedEntities.length > 0 && <section className="detail-shared-devices" aria-label={t('Shared original entities')}>
+            <h4>{t('Shared original entities')}</h4>
+            <p>{t('Each shared entity is shown once here. Subnet branches are references to this original, not copies or forwarding paths.')}</p>
+            <NetworkDetailAttachments entities={sharedEntities} workloads={workloads} selectedId={selectedId} selectedTargetId={selectedTargetId}
+              focusRequest={sharedFocus} subnetNames={subnetNames} onRevealSubnet={revealSubnet} onSelect={selectWorkload} onActions={entityActions} />
+          </section>}
           {entities.some((entity) => !entity.subnetIds.length) && <section className="detail-network-devices" aria-label={t('Network-level associations')}>
             <h4>{t('Network-level associations')}</h4>
             <p>{t('No subnet association is declared for these entities. Gateway subnets are not inferred.')}</p>
