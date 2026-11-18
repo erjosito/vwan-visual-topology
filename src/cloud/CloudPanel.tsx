@@ -2,18 +2,35 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
 import { useWorkspaceSession } from '../workspace-context'
 import { parseCloudTopology, type CloudEntry } from './contracts'
+import { CloudHttpError } from './client'
 import { useCloudSession } from './useCloudSession'
 
 export function CloudPanel({ onClose }: { onClose: () => void }) {
   const cloud = useCloudSession()!, session = useWorkspaceSession(), language = useLanguage()
-  const text = (en: string, ja: string) => language === 'ja' ? ja : en
+  const text = useCallback((en: string, ja: string) => language === 'ja' ? ja : en, [language])
   const dialog = useRef<HTMLDialogElement>(null)
   const [entries, setEntries] = useState<CloudEntry[]>([])
   const [busy, setBusy] = useState(!!cloud.api)
   const [notice, setNotice] = useState('')
+  const [listError, setListError] = useState('')
+  const [listed, setListed] = useState(false)
   const [name, setName] = useState(() => session?.getEditorHistory?.()?.topology.name ?? '')
   const draftId = useRef(crypto.randomUUID())
   const api = cloud.api, progress = session?.cloudProgress
+  const failure = useCallback((error: unknown) => {
+    const status = error instanceof CloudHttpError ? error.status : undefined
+    return status === 401 || status === 403
+      ? text('Cloud access was denied. Sign in again; if it persists, check the API authorization configuration.',
+        'クラウドへのアクセスが拒否されました。再サインインし、解決しない場合は API の認可設定を確認してください。')
+      : status === 404 ? text('The cloud API is unavailable. Check the backend deployment, then refresh the cloud list.',
+        'クラウド API を利用できません。バックエンドのデプロイを確認し、一覧を更新してください。')
+        : status === 412 ? text('Cloud data changed. Refresh the cloud list before replacing or deleting it.',
+          'クラウドのデータが変更されています。置き換えや削除の前に一覧を更新してください。')
+          : status === 413 ? text('The cloud document or library limit was reached. Keep a local backup and reduce its size or delete an unused save.',
+            'クラウドのサイズまたは保存件数の上限に達しました。バックアップを保持し、サイズを減らすか不要な保存を削除してください。')
+            : text('Cloud storage could not be reached. Check your connection and retry. Signing in does not confirm storage availability.',
+              'クラウド ストレージに接続できません。接続を確認して再試行してください。サインインの成功はストレージの利用可能性を保証しません。')
+  }, [text])
   useEffect(() => {
     const previous = document.activeElement
     dialog.current?.showModal()
@@ -21,23 +38,23 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
   }, [])
   const refresh = useCallback(async () => {
     if (!api) return
-    try { setEntries(await api.listTopologies()); setNotice('') }
-    catch { setNotice(language === 'ja' ? 'クラウドの一覧を取得できません。サインインと接続を確認してください。' : 'Cloud list is unavailable. Check your session and connection, then retry.') }
+    try { setEntries(await api.listTopologies()); setListed(true); setListError('') }
+    catch (error) { setListed(false); setListError(failure(error)) }
     finally { setBusy(false) }
-  }, [api, language])
+  }, [api, failure])
   useEffect(() => {
     if (!api) return
     let active = true
-    void api.listTopologies().then(values => { if (active) setEntries(values) })
-      .catch(() => { if (active) setNotice(language === 'ja' ? 'クラウドの一覧を取得できません。再試行してください。' : 'Cloud list is unavailable. Retry when connected.') })
+    void api.listTopologies().then(values => { if (active) { setEntries(values); setListed(true); setListError('') } })
+      .catch(error => { if (active) { setListed(false); setListError(failure(error)) } })
       .finally(() => { if (active) setBusy(false) })
     return () => { active = false }
-  }, [api, language])
+  }, [api, failure])
   const run = async (operation: () => Promise<void>) => {
     setBusy(true); setNotice('')
     try { await operation() }
-    catch { setNotice(text('The cloud operation did not complete. Local data is unchanged. Check your connection/session or reload a changed cloud version before retrying.',
-      'クラウドの操作は完了しませんでした。ローカル データは変更されていません。接続、サインイン、クラウドの版を確認して再試行してください。')) }
+    catch (error) { setNotice(`${text('The cloud operation did not complete. Local data is unchanged.',
+      'クラウドの操作は完了しませんでした。ローカル データは変更されていません。')} ${failure(error)}`) }
     finally { setBusy(false) }
   }
   const save = async (entry?: CloudEntry) => {
@@ -46,10 +63,19 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
     const value = parseCloudTopology({ version: 1, name: name.trim() || history.topology.name, topology: history.topology })
     if (!window.confirm(text('Upload this topology to your private cloud library? It may contain network configuration. Do not upload secrets or confidential data without approval.',
       'このトポロジを自分のクラウドにアップロードしますか。ネットワーク構成が含まれる場合があります。許可のない機密データや秘密情報を保存しないでください。'))) return
-    await api.saveTopology(entry?.id ?? draftId.current, value, entry?.etag ?? null)
+    const id = entry?.id ?? draftId.current
+    let etag: string
+    try { etag = await api.saveTopology(id, value, entry?.etag ?? null) }
+    catch (error) {
+      if (entry || !(error instanceof CloudHttpError) || error.status !== 412) throw error
+      const existing = await api.getTopology(id)
+      if (!existing || JSON.stringify(existing.value) !== JSON.stringify(value)) throw error
+      etag = existing.etag
+    }
+    setEntries(values => [...values.filter(item => item.id !== id), { id, name: value.name, etag, updatedAt: '' }])
     if (!entry) draftId.current = crypto.randomUUID()
-    setEntries(await api.listTopologies())
     setNotice(text('Topology saved to your cloud library.', 'トポロジをクラウドに保存しました。'))
+    await refresh()
   }
   const load = async (entry: CloudEntry) => {
     if (!api || !session) return
@@ -123,8 +149,9 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
         <button type="button" disabled={busy || !!session?.practice || !session?.getEditorHistory?.()} onClick={() => { void run(() => save()) }}>
           {text('Save current topology to cloud', '現在のトポロジをクラウドに保存')}
         </button>
-        <button type="button" disabled={busy} onClick={() => { setBusy(true); void refresh() }}>{text('Refresh cloud topologies', 'クラウドの一覧を更新')}</button>
-        {!busy && !entries.length && <p>{text('No saved cloud topologies.', 'クラウドに保存されたトポロジはありません。')}</p>}
+        <button type="button" disabled={busy} onClick={() => { setBusy(true); setNotice(''); void refresh() }}>{text('Refresh cloud topologies', 'クラウドの一覧を更新')}</button>
+        {listError && <p role="alert">{listError}</p>}
+        {!busy && listed && !entries.length && <p>{text('No saved cloud topologies.', 'クラウドに保存されたトポロジはありません。')}</p>}
         {entries.map(entry => <section key={entry.id}><h4>{entry.name}</h4>
           <p>{entry.updatedAt}</p>
           <button type="button" disabled={busy || !!session?.practice} onClick={() => { void run(() => load(entry)) }}>{text('Load', '読み込む')} {entry.name}</button>

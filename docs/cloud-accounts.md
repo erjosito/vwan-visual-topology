@@ -149,9 +149,11 @@ Choose a supported hosting arrangement before deploying:
   `https://<function-host>/api/cloud`. Add that exact API origin to the main
   page's `connect-src` in `public/staticwebapp.config.json`. Keep Microsoft's
   existing entries and do not use `*`. Configure exact frontend origins in
-  `CLOUD_ALLOWED_ORIGINS`. If platform CORS is also enabled, it must agree with
-  the handler's policy and expose `ETag` while allowing Authorization,
-  Content-Type, If-Match and If-None-Match. Cookies are not used.
+  `CLOUD_ALLOWED_ORIGINS`. Configure the same exact origins in Function App
+  platform CORS: the host handles browser OPTIONS preflights before the handler.
+  Handler-only CORS is insufficient. Verify exposed `ETag` and allowed
+  Authorization, Content-Type, If-Match and If-None-Match headers. Cookies and
+  credentialed CORS are not used.
 
 Build from the repository root in PowerShell:
 
@@ -209,6 +211,21 @@ Configure these **repository variables** before the selected CI build:
 CI injects them into the web build only, not the Electron build. Update the main
 SWA CSP's exact `connect-src` API origin if provisioning another Function host.
 Changing variables does not change an already-built candidate or the live site.
+
+A running Function resource is not a deployed API. Promote the **user-cloud**
+candidate separately from **web**; frontend sign-in can succeed while the backend
+has no registered functions. The release workflow checks that the unauthenticated
+topology-list route returns the expected 401 (not an empty 404) and that browser
+write preflight works before recording a successful promotion. This probe does
+not verify a personal account or storage writes. After release, verify an explicit
+save, list, refresh and reopen with an authorized personal account.
+
+The cloud panel distinguishes a failed list from an empty library. If a write is
+confirmed but the following list refresh fails, the confirmed save remains
+visible: retry **Refresh cloud topologies**, rather than saving another copy.
+An interrupted write acknowledgement is not reported as success; retrying the
+same save within the open panel confirms the original record without creating a
+duplicate. Keep a local export if a write cannot be confirmed.
 
 Configure **user-cloud-production** with deployment branches restricted to
 `main`, retaining any required reviewers. Set its environment variables:
