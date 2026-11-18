@@ -5,6 +5,16 @@ import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
 
 describe('semantic guidance admission', () => {
+  it('scopes packet guidance to an owned VNet without applying a probe or modifying topology', () => {
+    const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'ha-return-path')!.document)
+    const before = structuredClone(input)
+    const cue = scenarioBundle.guidance.find((cue) => cue.id === 'ha-return-path.packet')!
+    expect(resolveGuidance(input, cue)).toEqual({ anchors: [guidanceAnchor('packet-probe', 'hub')] })
+    expect(input).toEqual(before)
+    if (input.mode === 'vwan') throw new Error('Mixed topology required')
+    input.topology.vnets = input.topology.vnets.filter((vnet) => vnet.id !== 'hub')
+    expect(resolveGuidance(input, cue)).toEqual({ reason: 'entity' })
+  })
   const document = () => structuredClone(exampleCourse.scenarios[1].document)
   const cue = (id: string) => exampleCourse.guidance.find((item) => item.id === id)!
   it('resolves owned hub scopes, VNet configuration and empty associated UDR tables without mutation', () => {

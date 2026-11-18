@@ -3,8 +3,8 @@
 The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
 and evidence-gated runner (#180) activate sequential assessed missions.
-The original edition has 40 tasks across six missions; the scenario edition
-has 35 tasks across seven missions. Each edition offers 1,325 points through
+The original edition has 40 tasks across six missions and 1,325 points; the
+scenario edition has 41 tasks across eight missions and 1,575 points through
 black belt, with its own thresholds and mastery checkpoints.
 The root owns the runner across editor switches and pause/resume. A bounded
 browser-local ledger (#183) restores compatible completions after reload and
@@ -39,10 +39,18 @@ Future additions need an explicit compatibility review: expose compatible new
 material as new modules, or scope incompatible belt requirements to a separate
 extension/edition while retaining historic achievements. Do not silently change
 published thresholds/checkpoints and thereby revoke an earned belt. This slice
-adds no automatic historical credit.
+adds no automatic historical credit. For the beta HA extension (#222), the user
+explicitly waived preservation of previous curriculum sessions. Scenario content
+version 2 therefore extends the existing course rather than creating another
+edition or session migration: all earlier task/award IDs and first-earned points
+stay unchanged; the new six-task HA mission adds 250 points. The current black-belt
+requirement is now 1,575 points plus the HA explanation checkpoint. Earlier
+completion records are not deleted or rewritten, but do not grant HA credit.
+Normal saved designs remain protected. This is an explicit beta exception to the
+published-threshold policy above, not a general migration policy.
 
 `editions.ts` is the lightweight edition catalog. Fresh learners start
-`azure-routing-scenarios` version 1. Historical original-course completions
+`azure-routing-scenarios` version 2. Historical original-course completions
 retain the original edition unless the learner explicitly opts in through
 **Curriculum editions** or header status details. A retained original practice
 canvas also retains its edition when no enrollment/history selects otherwise.
@@ -130,18 +138,25 @@ native reveal adapter and anchor, never a lesson-specific sidebar branch.
 | Branch advertisement | 200 | Gateway route propagation into workload subnets; learning versus attachment |
 | WAN isolation | 200 | Exact hub-table evidence, connection propagation and positive/negative witnesses |
 | Tiered incident | 250 | Indirect spoke with two independent faults; preserve the existing application conversation |
+| HA return path | 250 | Tuple-preserving floating HA-ports steering, independently routed return, original backend and Operations witness |
 
 Each mission is linear: explicitly load, inspect an exact starting scope,
 repair an open networking requirement, inspect the independent return scope,
 then explain a design/diagnostic decision. Task points are 5, 5,
 `mission budget - 35`, 5 and 20. Thresholds are 0, 100, 225, 425, 675, 1075
-and 1325; cumulative interpretation checkpoints gate each belt. Brown requires
-both the branch and WAN missions.
+and 1575; cumulative interpretation checkpoints gate each belt. Brown requires
+both the branch and WAN missions; black also requires the HA explanation.
+HA adds a 25-point packet diagnosis before repair, reducing its repair to 190
+points. Its six tasks award 5, 5, 25, 190, 5 and 20 points respectively.
 
 Native guidance can reveal VNet configuration (`network.configure`), an
 associated UDR table including an empty one (`route-table.configure` without
 `routeId`), hub configuration (`hub.configure`) or an exact hub route table
-(`hub-routes.open`). These actions locate controls without making repairs.
+(`hub-routes.open`). `packet-probe.open` opens an owned VNet detail dialog and
+highlights its native packet form, including inside the dialog top layer. It
+does not select endpoints, submit a probe or modify the topology; learners
+choose and run their own tuple and close the detail dialog to resume the lesson.
+These actions locate controls without making repairs.
 The existing exact-route action remains available when a specific row is
 the intended observation. Requirements, not a prescribed edit sequence,
 grade repairs. Preserve positive and isolation witnesses when adding cases.
@@ -150,8 +165,8 @@ Ordered chain checks require separately authored forward/reverse appliance
 IDs. They assess complete modeled forwarding, not live security rules,
 vendor overlay behavior, HA health/orchestration, convergence timing or
 session failover. Missing/unknown owners and unsupported providers cannot
-pass. HA, richer BGP/export policies, subnet-scoped peering and unsupported
-WAN connection controls remain capability-gated follow-up work; these seven
+pass. Richer HA, BGP/export policies, subnet-scoped peering lessons and unsupported
+WAN connection controls remain capability-gated follow-up work; these eight
 cases do not claim exhaustive coverage of the book or blog.
 
 Quiz options use authored order, comparable detail and grammatical structure,
@@ -164,7 +179,9 @@ review and does not establish learning effectiveness.
 `tests/fixtures/ha-routing.ts` is an original two-NVA/ARS/branch fixture, not a
 published mission. `ha-routing.test.ts` qualifies independent forward/return
 paths, an unaffected local operations flow and invalid/unknown alternatives.
-Neither released edition, its awards, nor its 1,325-point ladder changes.
+The original BGP qualification did not change curriculum awards. The bounded
+HA-ports mission below now adds learner grading without publishing the broader
+BGP withdrawal or controller mechanisms as working HA lessons.
 
 | Mechanism | Qualified scope or remaining gate |
 | --- | --- |
@@ -244,10 +261,14 @@ and [HA ports configuration/symmetry boundaries](https://learn.microsoft.com/azu
 These document-derived tests are not live-Azure qualification, answer-blind SME
 review or evidence of learning effectiveness.
 
-### Bounded HA-ports learner candidate (#245)
+### Bounded HA-ports learner mission (#222, forwarding #245)
 
-Use the original `tests/fixtures/ha-ports.ts` ownership, not a copied diagram.
-This is an authoring candidate, not an installed lesson. Inspect the application
+The published `ha-return-path` mission uses `ha-scenario.ts`: a smaller original
+workload/workload variant of the qualified `tests/fixtures/ha-ports.ts` mechanism,
+without unrelated branch/ARS controls. It retains the original frontend, rule,
+pool, NVA and workload identities and has its own shared-engine counterexamples.
+The earlier authoring candidate below also covers branch routing; do not confuse
+its branch prefix with the learner mission's `10.82.0.0/16`. Inspect the application
 `work` subnet's route to `172.31.80.0/24`: the user route keeps the next hop
 `10.80.3.10`, owned by `transit-lb` / `transit-vip`. A packet probe between the
 original client/server workloads retains the destination `10.82.1.10` and TCP
@@ -255,9 +276,9 @@ ports 49152/443 while showing the selected original `primary-vm` identity.
 The VIP's owning subnet is context, not an extra subnet route lookup.
 EN: "Inspect the transit VIP route, then compare the packet's destination and
 selected NVA." JA: "中継 VIP へのルートを確認し、パケットの宛先と選択された NVA を比較してください。"
-Route inspection uses existing exact-scope guidance. Packet/probe controls need
-a scoped learning guidance adapter and mounted-control tests before publication;
-do not expose the fixture JSON to learners or substitute a menu of tools.
+Route inspection uses existing exact-scope guidance. Scoped packet guidance and
+mounted EN/JA control tests now cover the learner mission. Do not expose fixture
+JSON to learners or substitute a menu of tools.
 
 Seed the remote subnet's independent return UDR with next hop `10.80.2.4`.
 Both legs can be routable while the packet check fails for different NVAs.
@@ -288,14 +309,27 @@ JA: "実際の NVA 障害をまたいだ TCP セッションの継続性を裏�
 A: "正常なバックエンドのプローブ スナップショットと Floating IP を使う HA ポート ルールの構成。"
 B: "両方のバックエンドのスナップショットにおける往復の有効なルート テーブル。"
 C: "既存セッションの状態複製と、障害の前後を含むトラフィック キャプチャ。"
-These are technically authored drafts; independent answer-blind EN/JA review
-remains a pre-grading gate under #222. The current model supplies A/B of the
-tradeoff question, not C. No session-continuity conclusion may earn credit.
+These historical drafts are not the published quiz text. `scenario-course.ts`
+contains the reviewed diagnosis and time-dependent tradeoff questions. An
+independent answer-blind AI technical review identified ambiguity in the original
+tradeoff stem; the revised stem explicitly confirms tuple and return evidence.
+A second key-free UTF-8 AI review selected the intended unique answers and
+confirmed EN/JA equivalence. Neither review is human SME/native-language or
+novice learning-effectiveness evidence; those remain under #160/#219. The model
+does not supply session-continuity evidence. No continuity conclusion earns credit.
 
-Award-compatibility decision: #245 changes no released task, award identity,
-point value or belt threshold and awards no new XP. Publishing this candidate
-requires an explicit curriculum-edition/award decision under #222 and the
-existing historical-award regression checks, not insertion into released editions.
+The learner starter pins the remote return to the standby NVA: both legs remain
+routable but the HA packet and independently ordered flow checks fail. The
+canonical repair uses the transit VIP. A return pinned to the current primary
+also satisfies this declared snapshot; it does not follow a later backend
+selection. Direct forward bypass, unknown health, altered original addresses,
+missing forwarding declarations and broken Operations cannot pass. This is
+neither a universal symmetry guarantee nor proof of stateful firewall delivery.
+
+Award decision: #245 itself added no XP; #222 now publishes the six new awards
+under existing course ID `azure-routing-scenarios`, content version 2, using the
+explicit beta policy above. No previous-session migration, new edition, saved
+design conversion, historical award deletion or automatic HA credit is added.
 
 ## Original-edition ladder
 

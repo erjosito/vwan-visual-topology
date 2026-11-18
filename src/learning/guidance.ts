@@ -9,6 +9,8 @@ export type GuidancePlan = { anchors: string[]; reason?: undefined } | { reason:
 export function resolveGuidance(document: PlatformDocument, cue: CourseGuidance): GuidancePlan {
   if (document.mode === 'vwan') return { reason: 'provider' }
   const topology = document.topology
+  if (cue.action === 'packet-probe.open') return topology.vnets.some((vnet) => vnet.id === cue.params.vnetId)
+    ? { anchors: [guidanceAnchor('packet-probe', cue.params.vnetId)] } : { reason: 'entity' }
   if (cue.action === 'hub.configure') return topology.vwanHubs.some((hub) => hub.id === cue.params.hubId)
     ? { anchors: [guidanceAnchor('hub-editor', cue.params.hubId)] } : { reason: 'entity' }
   if (cue.action === 'network.configure') return topology.vnets.some((vnet) => vnet.id === cue.params.vnetId)

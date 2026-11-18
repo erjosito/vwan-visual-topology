@@ -3,6 +3,8 @@ import AxeBuilder from '@axe-core/playwright'
 import { readFile } from 'node:fs/promises'
 import { guidedProgressKey, legacyProgressKey } from '../src/learning/progress-ledger'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
+import { scenarioBundle } from '../src/learning/scenario-course'
+import { orderedTasks } from '../src/learning/runner'
 import { completeLearningTasks, learningSidebar, loadLearningNetwork } from './learning-helpers'
 
 const status = (page: Page) => page.getByTestId('learning-status')
@@ -51,7 +53,7 @@ for (const language of ['en', 'ja'] as const) {
     await page.getByTestId('learning-open').click()
     const panel = learningSidebar(page)
     await expect(panel.getByTestId('learning-active-track')).toContainText(name)
-    await expect(panel.getByTestId('learning-completion-count')).toHaveText(`0 / 35 ${language === 'en' ? 'Completed' : '完了'}`)
+    await expect(panel.getByTestId('learning-completion-count')).toHaveText(`0 / ${orderedTasks(scenarioBundle).length} ${language === 'en' ? 'Completed' : '完了'}`)
     const overview = panel.getByTestId('learning-tracks')
     await overview.locator('summary').focus()
     await page.keyboard.press('Enter')

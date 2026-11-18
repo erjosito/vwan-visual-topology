@@ -3,6 +3,7 @@ import type { Localized } from './content'
 import type { FlowRequirement } from '../platform/contract'
 import { scenarioCourse } from './editions'
 import { scenarioTopologies } from './scenario-topologies'
+import { haLessonRequirements } from './ha-scenario'
 
 const l = (en: string, ja: string): Localized => ({ en, ja })
 const subnet = (vnetId: string, subnetId = `${vnetId}-work`) => ({ kind: 'subnet' as const, vnetId, subnetId })
@@ -125,6 +126,33 @@ const definitions = [
       [l('The existing partner conversation uses the new tier as its reply.', '既存のパートナー通信は、新しい階層を復路として使用します。'), l('The existing and new conversations have different source owners and are assessed separately.', '既存と新規の通信は送信元の所有関係が異なり、別々に評価されます。')],
     ], correct: 0,
   },
+  {
+    id: 'ha-return-path', points: 250,
+    title: l('HA transit: an independent return path', 'HA 転送: 独立した復路'),
+    objective: l('Diagnose asymmetric NVA transit without confusing a declared health snapshot with live failover.', '宣言された正常性のスナップショットとライブ フェールオーバーを区別し、NVA 転送の非対称性を診断します。'),
+    repair: l('Restore the original client/server conversation through the same eligible NVA in both directions. Keep forward HA-ports steering and the original primary backend. Preserve original endpoints and local Operations reachability. Compare a return route through Transit VIP 10.80.3.10 with pinning the currently selected NVA: either must meet this snapshot, but a pinned route does not follow a later backend selection. This is a configuration repair, not automated failover.',
+      '元のクライアントとサーバーの双方向通信が、同じ適格な NVA を通るように復旧します。往路の HA ポート転送と元のプライマリ バックエンドを保持し、元のエンドポイントと Operations への到達性も保持します。Transit VIP 10.80.3.10 を通る復路と、現在選択された NVA に固定する復路を比較してください。どちらもこのスナップショットを満たす必要がありますが、固定ルートは後のバックエンド選択に追従しません。これは構成の修復であり、自動フェールオーバーではありません。'),
+    before: { vnetId: 'application', subnetId: 'work', prefix: '10.82.0.0/16' },
+    after: { vnetId: 'remote', subnetId: 'remote-work', prefix: '10.81.0.0/16' },
+    requirements: haLessonRequirements,
+    guidance: [{ id: 'ha-return-path.packet', action: 'packet-probe.open', params: { vnetId: 'hub' },
+      instruction: l('In the native packet probe, choose Application client as source and Remote server as destination, TCP 49152 to 443. Run the trace and compare forward/reply tuples, backend identities and symmetry. Close VNet detail to return to the lesson. No configuration is applied for you.',
+        '標準のパケット プローブで、送信元に Application client、宛先に Remote server、TCP 49152 から 443 を選びます。トレースを実行し、往復のタプル、バックエンドの識別子、対称性を比較します。VNet 詳細を閉じると課題に戻れます。構成は自動で変更されません。') }] satisfies CourseGuidance[],
+    diagnosis: {
+      question: l('In the unchanged starter trace, what explains the reported asymmetry?', '変更していない初期構成のトレースで、非対称と報告される理由は何ですか。'),
+      answers: [
+        [l('The client packet is translated to the frontend address.', 'クライアントのパケットがフロントエンドのアドレスに変換されます。'), l('This rule explicitly preserves the original packet tuple; compare the independent onward routes.', 'このルールは元のパケット タプルを明示的に保持します。独立した後続ルートを比較してください。')],
+        [l('The reply route pins a different appliance than the selected backend.', '復路が、選択されたバックエンドとは別の装置に固定されています。'), l('The forward snapshot selects primary-vm; the remote UDR sends the reply to the standby NVA. Reachability alone is insufficient.', '往路のスナップショットは primary-vm を選びますが、リモートの UDR は復路を待機 NVA に向けています。到達性だけでは不十分です。')],
+        [l('Forward HA-ports steering also fixes the remote subnet next hop.', '往路の HA ポート転送により、リモート サブネットのネクストホップも固定されます。'), l('HA-ports steering does not rewrite the remote subnet UDR. Inspect that independent route.', 'HA ポート転送は、リモート サブネットの UDR を書き換えません。独立したルートを確認してください。')],
+      ], correct: 1,
+    },
+    question: l('The repaired evidence confirms the original tuples and intended return NVA. Which behavior over time remains untested?', '修復後の根拠では、元のタプルと意図した復路の NVA を確認できました。時間の経過に伴うどの動作が、まだ検証されていませんか。'),
+    answers: [
+      [l('Whether the original addresses and ports are retained.', '元のアドレスとポートが保持されるかどうか。'), l('Tuple preservation is part of this bounded declaration and its packet evidence.', 'タプルの保持は、この限定された宣言とパケットの根拠に含まれます。')],
+      [l('Whether the independent return follows the declared NVA.', '独立した復路が、宣言された NVA を通るかどうか。'), l('Both directions and the original backend are checked separately in this configuration.', 'この構成では、双方向と元のバックエンドを個別に確認しています。')],
+      [l('Whether established sessions survive a real backend failure.', '実際のバックエンド障害で、確立済みセッションが維持されるかどうか。'), l('Declared eligibility and steady-state routing do not prove live probes, convergence, Azure hashing or vendor state replication. Session continuity needs separate live evidence.', '宣言された適格性と定常状態のルーティングは、ライブ プローブ、収束、Azure のハッシュ処理、ベンダーの状態複製を証明しません。セッション継続には別の実環境の根拠が必要です。')],
+    ], correct: 2,
+  },
 ]
 
 export const scenarioBundle: CourseBundle = { schemaVersion: 1, course: scenarioCourse, lessons: [], scenarios: [], checks: [], guidance: [] }
@@ -160,6 +188,12 @@ for (const [index, definition] of definitions.entries()) {
     { id: `${id}.after`, kind: 'routes.inspected', params: after },
     { id: `${id}.quiz`, kind: 'quiz.answered', params: { question: definition.question, correctChoiceId: `choice-${definition.correct}`,
       choices: definition.answers.map(([text, feedback], choice) => ({ id: `choice-${choice}`, text, feedback })) } })
+  if (definition.diagnosis) scenarioBundle.checks.push({
+    id: `${id}.diagnosis-check`, kind: 'quiz.answered', params: {
+      question: definition.diagnosis.question, correctChoiceId: `choice-${definition.diagnosis.correct}`,
+      choices: definition.diagnosis.answers.map(([text, feedback], choice) => ({ id: `choice-${choice}`, text, feedback })),
+    },
+  })
   const tasks = [
     { suffix: 'load', points: 5, title: l('Open this scenario', 'このシナリオを開く'),
       instruction: l('Confirm loading this original practice network. Your normal design stays protected; no Azure resources are deployed.', '初期練習ネットワークの読み込みを確認します。通常の設計は保護され、Azure リソースはデプロイされません。'),
@@ -168,7 +202,10 @@ for (const [index, definition] of definitions.entries()) {
       instruction: l(`Inspect ${scopeName(before)} for ${before.prefix}. Note the source and next hop, or the absence of an exact route. Record the inspection there.`,
         `${scopeName(before)} で ${before.prefix} を調べます。生成元とネクストホップ、または完全一致ルートがないことを確認し、その画面で記録してください。`),
       checkId: `${id}.before`, guidanceIds: [`${id}.before-guide`] },
-    { suffix: 'repair', points: definition.points - 35, title: l('Meet the network requirements', 'ネットワーク要件を満たす'),
+    ...(definition.diagnosis ? [{ suffix: 'diagnose', points: 25, title: l('Diagnose the packet evidence', 'パケットの根拠から診断する'),
+      instruction: l('Run the unchanged starter packet probe using Show me where. Compare the original tuple and the independent reply before choosing an explanation.', '「場所を表示」で初期構成のパケット プローブを実行します。元のタプルと独立した復路を比較してから、理由を選んでください。'),
+      checkId: `${id}.diagnosis-check`, guidanceIds: [`${id}.packet`] }] : []),
+    { suffix: 'repair', points: definition.points - 35 - (definition.diagnosis ? 25 : 0), title: l('Meet the network requirements', 'ネットワーク要件を満たす'),
       instruction: definition.repair, checkId: `${id}.repair-check`, guidanceIds: repairGuidance.map((entry) => entry.id) },
     { suffix: 'return', points: 5, title: l('Inspect the independent return scope', '独立した復路の範囲を調べる'),
       instruction: l(`Inspect ${scopeName(after)} for ${after.prefix}. Compare this scope with the source; then record the inspection.`,

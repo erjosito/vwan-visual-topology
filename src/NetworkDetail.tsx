@@ -357,7 +357,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
         <label>{t('Public IPv4 address (blank means unknown)')}<input name="publicAddress" disabled={!declarePublicIp} /></label>
         <button type="submit" disabled={!network.subnets.length}>{t('Add workload and NIC')}</button>
       </form>
-      <PacketFlowPanel topology={topology} simulation={simulation} onHighlight={(id) => {
+      <PacketFlowPanel topology={topology} simulation={simulation} guidanceVnetId={owner.kind === 'vnet' ? owner.id : undefined} onHighlight={(id) => {
         if (workloads.some((workload) => workload.id === id)) { setQuery(''); onSelect(id) }
       }} />
     </>}
