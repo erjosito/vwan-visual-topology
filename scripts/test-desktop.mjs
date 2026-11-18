@@ -209,7 +209,7 @@ try {
     const menu = page.getByRole('menu').first()
     expect(await menu.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
     await page.keyboard.press('End')
-    expect(await menu.evaluate((element) => {
+    await expect.poll(() => menu.evaluate((element) => {
       const focused = document.activeElement
       if (!focused || !element.contains(focused)) return false
       const bounds = element.getBoundingClientRect(), item = focused.getBoundingClientRect()

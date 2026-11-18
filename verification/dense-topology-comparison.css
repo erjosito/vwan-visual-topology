@@ -1,0 +1,14 @@
+html, body, #root { height: auto; overflow: auto; }
+body { margin: 0; background: var(--page); color: var(--text); }
+main { padding: 12px; }
+h1 { margin: 0; font-size: 20px; }
+p { margin: 6px 0; font-size: 13px; }
+.research-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin: 8px 0; }
+.research-toolbar label { display: grid; gap: 4px; font-size: 12px; }
+.research-canvas { height: 850px; display: flex; border: 1px solid var(--border); }
+.research-muted > .aznet-edge-path { opacity: .2; }
+.research-muted:hover > .aznet-edge-path, .research-muted:focus-within > .aznet-edge-path { opacity: 1; }
+.research-chain > .aznet-edge-path { stroke-width: 5px; stroke-dasharray: 12 4; }
+.research-canvas .aznet-edge-group:focus-visible { outline: 3px solid var(--focus); }
+details { margin-top: 8px; }
+pre { max-height: 300px; overflow: auto; font-size: 11px; }

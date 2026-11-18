@@ -602,7 +602,7 @@ export function AzureNetDiagram({
         <path transform={`translate(${marker.point.x},${marker.point.y}) rotate(${marker.angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow-halo" />
         <path transform={`translate(${marker.point.x},${marker.point.y}) rotate(${marker.angle})`} d="M -9 0 H 9 M 4 -4 L 9 0 L 4 4" className="policy-arrow" />
       </g>
-      <g className={`policy-marker ${direction} ${marker.enabled ? '' : 'is-down'}`} role="button" tabIndex={0} aria-label={label}
+      <DiagramButton className={`policy-marker ${direction} ${marker.enabled ? '' : 'is-down'}`} role="button" tabIndex={0} aria-label={label}
         data-connection-id={connectionId} data-router-id={ownerId} data-direction={direction}
         aria-describedby={policyPreview?.id === marker.id ? policyPreviewId : undefined}
         transform={`translate(${marker.position.x},${marker.position.y})`}
@@ -627,7 +627,7 @@ export function AzureNetDiagram({
         <rect x="-23" y="-11" width="46" height="22" rx="7" />
         <path className="policy-filter" d="M -17 -5 H -7 L -10 0 V 5 L -14 3 V 0 Z" />
         <text x="7" y="4">{t(direction === 'inbound' ? 'IN' : 'OUT')}</text>
-      </g>
+      </DiagramButton>
     </Fragment>
   }
   const motionEdges = new Map<string, MotionSegment>()
@@ -800,7 +800,7 @@ export function AzureNetDiagram({
           }
 
           return (
-            <g
+            <DiagramButton
               key={peering.id}
               className="aznet-edge-group"
               data-testid={`aznet-peering-${peering.id}`}
@@ -873,7 +873,7 @@ export function AzureNetDiagram({
               >
                 Peer · {flagsSummary.join(' · ')}
               </text>
-            </g>
+            </DiagramButton>
           )
         })}
 
@@ -943,7 +943,7 @@ export function AzureNetDiagram({
                     ? 'var(--return)'
                     : 'var(--warning)'
           return (
-            <g
+            <DiagramButton
               key={link.id}
               className="aznet-edge-group"
               data-testid={`aznet-erlink-${link.id}`}
@@ -1000,7 +1000,7 @@ export function AzureNetDiagram({
                 {hasSkuMismatch ? ' · ! SKU' : ''}
                 {!link.enabled ? ' · OFF' : ''}
               </text>
-            </g>
+            </DiagramButton>
           )
         })}
 
@@ -1023,7 +1023,7 @@ export function AzureNetDiagram({
                   ? 'var(--return)'
                   : 'var(--info)'
           return (
-            <g
+            <DiagramButton
               key={grLink.id}
               className="aznet-edge-group"
               data-testid={`aznet-ergrlink-${grLink.id}`}
@@ -1083,7 +1083,7 @@ export function AzureNetDiagram({
               >
                 🌐 Global Reach{!grLink.enabled ? ' · OFF' : ''}
               </text>
-            </g>
+            </DiagramButton>
           )
         })}
 
@@ -1120,7 +1120,7 @@ export function AzureNetDiagram({
                   ? 'var(--return)'
                   : 'var(--purple)'
           return (
-            <g
+            <DiagramButton
               key={conn.id}
               className="aznet-edge-group"
               data-testid={`aznet-vpnconn-${conn.id}`}
@@ -1181,7 +1181,7 @@ export function AzureNetDiagram({
                 {conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} · {conn.bgpEnabled ? 'BGP' : 'Static'}
                 {!conn.enabled ? ' · OFF' : ''}
               </text>
-            </g>
+            </DiagramButton>
           )
         })}
 
@@ -1203,7 +1203,7 @@ export function AzureNetDiagram({
                   ? 'var(--return)'
                   : 'var(--link)'
           return (
-            <g
+            <DiagramButton
               key={sLink.id}
               className="aznet-edge-group"
               data-testid={`aznet-sitelink-${sLink.id}`}
@@ -1257,7 +1257,7 @@ export function AzureNetDiagram({
               >
                 WAN Link{!sLink.enabled ? ' · OFF' : ''}
               </text>
-            </g>
+            </DiagramButton>
           )
         })}
 
@@ -1760,7 +1760,7 @@ export function AzureNetDiagram({
           if (!box) return null
           const isSelected = selected?.kind === 'er-location' && selected.locationId === loc.id
           return (
-            <g
+            <DiagramButton
               key={loc.id}
               data-testid={`aznet-erloc-${loc.id}`}
               className="network-node"
@@ -1844,7 +1844,7 @@ export function AzureNetDiagram({
                   </text>
                 </g>
               ) : null}
-            </g>
+            </DiagramButton>
           )
         })}
 
@@ -1854,7 +1854,7 @@ export function AzureNetDiagram({
           if (!box) return null
           const isSelected = selected?.kind === 'site' && selected.siteId === site.id
           return (
-            <g
+            <DiagramButton
               key={site.id}
               data-testid={`aznet-site-${site.id}`}
               className="network-node"
@@ -1938,7 +1938,7 @@ export function AzureNetDiagram({
                   </text>
                 </g>
               ) : null}
-            </g>
+            </DiagramButton>
           )
         })}
         {diagnosticNodes.filter(({ id, box }) => risks[id] && !faults[id] && box).map(({ id, box }) => <g key={`risk:${id}`}

@@ -57,6 +57,52 @@ The whole-inspector hierarchy and other dialogs remain candidates for later
 evaluation, not silently included in this implementation. Human comparison is
 still pending with zero participants; #228 remains open for that broader work.
 
+### Subnet and accessible-inspection follow-up
+
+The next slice applies the same mounted-editor disclosure to the **subnet
+configuration card** in hub-spoke/full. Name, prefix, route-table association and
+deletion stay visible. Outbound/private-endpoint settings have a state summary
+with explicit unspecified/enabled/disabled status, policy value and endpoint
+count. Existing explicit outbound configuration, non-default PE policies,
+endpoints or unknown outbound capture start expanded. Unspecified outbound
+configuration is not described as verified Internet access.
+
+The incomplete-capture warning and the Internet/private-service modeling
+boundary remain outside the disclosure. Existing endpoints receive accessible
+name/address/remove labels. These remain configuration controls, not evidence
+of live reachability. Subnet deletion now sits beside the common fields in both
+presentations; legacy retains all controls without disclosure.
+
+Eight EN/JA cases cover simple and imported configurations in both modes,
+including narrow screens. A simple subnet exposes 4 inputs/selects/buttons
+instead of 7, plus one disclosure summary; this is a card control count, not a
+human-discovery or above-the-fold measurement. They check a deferred prefix across presentation
+switches, explicit commit/undo, policy changes, endpoint addition/undo, exact
+saved JSON, imported route-table/endpoint settings and unknown warnings after
+collapse. Scoped axe checks cover the expanded endpoint form.
+
+The dense-visualization research in #284 also exposed existing native diagram
+accessible names that omitted visible labels. Reuse the existing `DiagramButton`
+mechanism for connection groups, policy markers, ER locations and sites, so
+visible text, direction and OFF state participate in the name without losing
+original owner identity. Event handlers, geometry and selection are unchanged.
+The dense/small research browser cases now require a clean whole-page baseline
+axe result instead of merely comparing inherited findings; the original #240
+findings remain historical evidence, not silently rewritten results.
+
+Validation: the combined 88-case regression passed 86 cases, with two desktop
+practice cases timing out. Both passed unchanged in a one-worker rerun alongside
+the eight subnet cases and five existing native-workspace workflows (15/15).
+All five dense-visualization cases passed, including clean baseline axe checks.
+Six production default/startup cases, the Electron smoke, build, localization
+(12 tests) and lint passed; lint retains the existing `ErLocationInfoModal`
+warning. The desktop smoke now polls its existing post-End visible-item
+assertion, rather than racing the browser's keyboard-scroll completion.
+
+This is not a global basic/advanced mode, a routing/schema change or a completed
+human usability study. Native VWAN and other dialog hierarchies remain outside
+this slice; human participants are still zero.
+
 ## Initial preview decision and scope (historical)
 
 For #228, choose contextual progressive disclosure plus shallow, task-oriented
