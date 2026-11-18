@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { Page } from '@playwright/test'
 
 const storageKey = 'vwan-feedback-draft:v1'
-const publicFeedbackRepoUrl = 'https://github.com/erjosito/vwan-visual-topology-feedback'
+const publicFeedbackRepoUrl = 'https://github.com/erjosito/vwan-visual-topology'
 
 async function fill(page: Page) {
   await page.getByLabel('Summary', { exact: true }).fill('Improve route table display')
@@ -42,7 +42,8 @@ test('submission prepares a pre-filled public GitHub issue URL without OAuth con
   await page.getByLabel('Category').selectOption('feature')
   await fill(page)
   await page.getByText('Review what will be sent', { exact: true }).click()
-  await expect(page.getByRole('definition').filter({ hasText: 'erjosito/vwan-visual-topology-feedback' })).toBeVisible()
+  await expect(page.getByRole('definition').filter({ hasText: /^erjosito\/vwan-visual-topology$/ })).toBeVisible()
+  await expect(page.locator('#feedback-privacy')).toContainText('(erjosito/vwan-visual-topology)')
   await page.getByRole('button', { name: 'Open issue on GitHub', exact: true }).click()
   await expect(page.getByRole('status')).toContainText('Feedback prepared for GitHub. Reference:')
   const openedUrls = await page.evaluate(() => (window as unknown as { __openedUrls: string[] }).__openedUrls)

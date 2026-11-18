@@ -5,7 +5,7 @@ import type { FormEvent } from 'react'
 
 const appRevision = import.meta.env.VITE_APP_REVISION || 'development'
 const draftKey = 'vwan-feedback-draft:v1'
-const publicFeedbackRepo = 'erjosito/vwan-visual-topology-feedback'
+const publicFeedbackRepo = 'erjosito/vwan-visual-topology'
 const publicFeedbackRepoUrl = `https://github.com/${publicFeedbackRepo}`
 
 interface Draft {
@@ -93,7 +93,7 @@ export function FeedbackDialog({ onClose }: { onClose: () => void }) {
   return <dialog ref={dialog} className="object-dialog feedback-dialog" aria-labelledby="feedback-title"
     aria-describedby="feedback-privacy" onClose={onClose}>
     <div className="row dialog-heading"><h2 id="feedback-title">{t("Send feedback")}</h2><LanguageSelector /><button type="button" aria-label={t("Close feedback")} onClick={onClose}>{t("Close")}</button></div>
-    <p id="feedback-privacy">{t("Feedback is optional and opens a pre-filled issue in the public GitHub feedback repository (erjosito/vwan-visual-topology-feedback) without requiring OAuth app consent. Only the text you enter and the app revision are included. No topology, network configuration, screenshots or browser logs are attached. Do not include secrets or confidential information.")}</p>
+    <p id="feedback-privacy">{t("Feedback is optional and opens a pre-filled issue in the public GitHub feedback repository (erjosito/vwan-visual-topology) without requiring OAuth app consent. Only the text you enter and the app revision are included. No topology, network configuration, screenshots or browser logs are attached. Do not include secrets or confidential information.")}</p>
     {submitted ? <div role="status"><p>{t("Feedback prepared for GitHub. Reference:")} <strong>{submitted.reference}</strong></p><p>{t("Submit the pre-filled issue in the new GitHub tab to publish your report in the public feedback repository.")}</p><div className="row dialog-actions"><a className="button primary" href={submitted.issueUrl} target="_blank" rel="noopener noreferrer">{t("Continue to GitHub issue form")}</a><a className="button ghost" href={`${publicFeedbackRepoUrl}/issues`} target="_blank" rel="noopener noreferrer">{t("Browse public feedback")}</a></div></div> : <form onSubmit={submit}>
       <label className="field"><span>{t("Category")}</span><select value={draft.category} onChange={(event) => change('category', event.target.value)}><option value="bug">{t("Bug")}</option><option value="feature">{t("Feature request")}</option><option value="other">{t("Other")}</option></select></label>
       <label className="field"><span>{t("Summary")}</span><input required minLength={5} maxLength={120} value={draft.title} onChange={(event) => change('title', event.target.value)} /></label>
