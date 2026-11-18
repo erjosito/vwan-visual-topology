@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useLanguage } from '../i18n'
 import { useWorkspaceSession } from '../workspace-context'
 import { parseCloudTopology, type CloudEntry } from './contracts'
@@ -6,7 +6,7 @@ import { CloudHttpError } from './client'
 import { useCloudSession } from './useCloudSession'
 import './cloud-panel.css'
 
-export function CloudPanel({ onClose }: { onClose: () => void }) {
+export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; returnFocus?: RefObject<HTMLElement | null> }) {
   const cloud = useCloudSession()!, session = useWorkspaceSession(), language = useLanguage()
   const text = useCallback((en: string, ja: string) => language === 'ja' ? ja : en, [language])
   const dialog = useRef<HTMLDialogElement>(null)
@@ -41,10 +41,10 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
               'クラウド ストレージに接続できません。接続を確認して再試行してください。サインインの成功はストレージの利用可能性を保証しません。')
   }, [text])
   useEffect(() => {
-    const previous = document.activeElement
+    const previous = returnFocus?.current ?? document.activeElement
     dialog.current?.showModal()
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus() }
-  }, [])
+  }, [returnFocus])
   const refresh = useCallback(async () => {
     if (!api) return
     try { setEntries(await api.listTopologies()); setListed(true); setListError('') }

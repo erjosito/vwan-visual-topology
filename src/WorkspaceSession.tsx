@@ -26,12 +26,12 @@ export function WorkspaceMenu() {
       <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
     </PresentationGroup>}
     {!session?.presentationPreview && <LearningStatus />}
-    <CloudMenu />
+    {!session?.presentationPreview && <CloudMenu />}
     {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}
   </>
 }
 
 export function WorkspaceAccountStatus() {
   return useWorkspaceSession()?.presentationPreview
-    ? <div className="workspace-account-status"><LearningStatus /></div> : null
+    ? <div className="workspace-account-status" data-testid="account-belt-status"><CloudMenu status /><LearningStatus showIdentity={false} /></div> : null
 }
