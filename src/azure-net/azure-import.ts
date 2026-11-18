@@ -769,6 +769,10 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     root.vngLearnedRoutes && typeof root.vngLearnedRoutes === 'object'
       ? (root.vngLearnedRoutes as Record<string, AzCapturedBgpPeerRoute[]>)
       : undefined
+  const arsAdvertised =
+    root.arsAdvertisedRoutes && typeof root.arsAdvertisedRoutes === 'object'
+      ? (root.arsAdvertisedRoutes as Record<string, AzCapturedBgpPeerRoute[]>)
+      : undefined
 
   if (arsLearned) {
     for (const vnet of vnets) {
@@ -869,7 +873,8 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
 
   const vngBgpPeerStatus = capturedBgpNeighbors(root.vngBgpPeerStatus)
   let observations: AzCapturedObservations | undefined
-  if (Array.isArray(root.nicEffectiveRoutes) || vngBgpPeerStatus !== undefined) {
+  if (Array.isArray(root.nicEffectiveRoutes) || vngBgpPeerStatus !== undefined ||
+      arsLearned !== undefined || vngLearned !== undefined || arsAdvertised !== undefined) {
     const nicEffectiveRoutes: AzCapturedNicObservation[] = asArray(root.nicEffectiveRoutes).map(
       (rawObs) => {
         const o = asObject(rawObs, 'NicObservation')
@@ -904,6 +909,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       nicEffectiveRoutes,
       arsLearnedRoutes: arsLearned,
       vngLearnedRoutes: vngLearned,
+      arsAdvertisedRoutes: arsAdvertised,
       ...(vngBgpPeerStatus !== undefined ? { vngBgpPeerStatus } : {}),
       ...(sections ? { observationVersion: 1, configurationComplete, sections } : {}),
       unknownAddressing,

@@ -27,8 +27,23 @@ fabricated defaults. Malformed recognized neighbor observations are rejected
 rather than converted into a successful empty list. A BGP-only capture can be
 inspected without requiring an unrelated NIC effective-route observation.
 
-No live Azure qualification was performed for this increment. The committed
-fixture is synthetic and is explicitly labeled as such.
+The initial increment used synthetic tests. Subsequent #259 Azure lab captures
+confirmed two active VPN endpoints versus one active/standby endpoint, including
+native self-address rows with state **Unknown** and zero counters. Private
+native-output replay through the importer and both web modes checks exact
+endpoint-scoped rows, states, durations and counters. The committed fixture is
+still synthetic; no private capture or original resource identifiers are included.
+
+The importer also retains collector-projected ARS advertised routes and accepts
+BGP route observations without NIC observations or a neighbor table. Local
+addresses, next hops, AS paths and missing `sourcePeer` stay as captured; a next
+hop is not substituted for the advertising neighbor.
+
+This is not full simulator-to-Azure BGP route-result parity. Gateway advertised
+route collection, captured ARS route/neighbor inspection, physical-instance
+bindings, MSEE/provider sessions and data-plane/failover qualification remain
+outside these bounded checks. Historical lab results do not certify sessions
+after later configuration drift.
 
 Reference: [Azure BgpPeerStatus fields](https://learn.microsoft.com/en-us/dotnet/api/microsoft.azure.management.network.models.bgppeerstatus).
 
