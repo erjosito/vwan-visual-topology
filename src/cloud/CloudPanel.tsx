@@ -91,7 +91,7 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
   const status = progress?.status
   return <dialog ref={dialog} className="object-dialog" aria-labelledby="cloud-account-title" onClose={onClose}>
     <header className="row dialog-heading"><h2 id="cloud-account-title">{text('Cloud account', 'クラウド アカウント')}</h2>
-      <button type="button" onClick={onClose}>{text('Close cloud account', 'クラウド アカウントを閉じる')}</button></header>
+      <button type="button" onClick={onClose}>{text('Close', '閉じる')}</button></header>
     <p>{text('Optional personal Microsoft sign-in. Anonymous simulation and local files remain available. No Azure resource access is requested.',
       '個人用 Microsoft アカウントで任意にサインインできます。匿名での利用とローカル ファイルは引き続き使えます。Azure リソースへのアクセスは要求しません。')}</p>
     {cloud.account ? <p>{text('Signed in as', 'サインイン中')}: <strong>{cloud.account.name}</strong></p>
