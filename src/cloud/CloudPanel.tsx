@@ -4,6 +4,7 @@ import { useWorkspaceSession } from '../workspace-context'
 import { parseCloudTopology, type CloudEntry } from './contracts'
 import { CloudHttpError } from './client'
 import { useCloudSession } from './useCloudSession'
+import './cloud-panel.css'
 
 export function CloudPanel({ onClose }: { onClose: () => void }) {
   const cloud = useCloudSession()!, session = useWorkspaceSession(), language = useLanguage()
@@ -14,9 +15,17 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
   const [notice, setNotice] = useState('')
   const [listError, setListError] = useState('')
   const [listed, setListed] = useState(false)
+  const [query, setQuery] = useState('')
+  const [sort, setSort] = useState('updated')
+  const search = useRef<HTMLInputElement>(null)
+  const refreshButton = useRef<HTMLButtonElement>(null)
+  const restoreFocus = useRef(false)
   const [name, setName] = useState(() => session?.getEditorHistory?.()?.topology.name ?? '')
   const draftId = useRef(crypto.randomUUID())
   const api = cloud.api, progress = session?.cloudProgress
+  useEffect(() => {
+    if (!busy && restoreFocus.current) { restoreFocus.current = false; refreshButton.current?.focus() }
+  }, [busy])
   const failure = useCallback((error: unknown) => {
     const status = error instanceof CloudHttpError ? error.status : undefined
     return status === 401 || status === 403
@@ -76,6 +85,7 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
     if (!entry) draftId.current = crypto.randomUUID()
     setNotice(text('Topology saved to your cloud library.', 'トポロジをクラウドに保存しました。'))
     await refresh()
+    if (entry) search.current?.focus()
   }
   const load = async (entry: CloudEntry) => {
     if (!api || !session) return
@@ -83,14 +93,21 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
     const found = await api.getTopology(entry.id)
     if (!found || revision !== session.getRequestVersion()) throw new Error('Cloud selection changed.')
     const value = parseCloudTopology(found.value)
-    if (!window.confirm(text('Load this cloud topology into the active workspace? Export any unsaved design first.',
-      'クラウドのトポロジを現在のワークスペースに読み込みますか。未保存のデザインは先にエクスポートしてください。'))) return
+    if (!window.confirm(text(`Load cloud save "${entry.name}" (${entry.id}) into the active workspace? Export any unsaved design first. The cloud save is not changed.`,
+      `クラウドの保存「${entry.name}」(${entry.id}) を現在のワークスペースに読み込みますか。未保存のデザインは先にエクスポートしてください。クラウドの保存は変更しません。`))) return
     await session.openDocument(value.topology)
     onClose()
   }
   const status = progress?.status
-  return <dialog ref={dialog} className="object-dialog" aria-labelledby="cloud-account-title" onClose={onClose}>
-    <header className="row dialog-heading"><h2 id="cloud-account-title">{text('Cloud account', 'クラウド アカウント')}</h2>
+  const matching = entries.filter(entry => entry.name.toLocaleLowerCase(language).includes(query.trim().toLocaleLowerCase(language)))
+    .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name, language)
+      : (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0)) || a.id.localeCompare(b.id))
+  const updated = (value: string) => {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? text('Not available', '不明') : date.toLocaleString(language)
+  }
+  return <dialog ref={dialog} className="object-dialog cloud-panel" aria-labelledby="cloud-account-title" onClose={onClose}>
+    <header role="presentation" className="row dialog-heading"><h2 id="cloud-account-title">{text('Cloud account', 'クラウド アカウント')}</h2>
       <button type="button" onClick={onClose}>{text('Close', '閉じる')}</button></header>
     <p>{text('Optional personal Microsoft sign-in. Anonymous simulation and local files remain available. No Azure resource access is requested.',
       '個人用 Microsoft アカウントで任意にサインインできます。匿名での利用とローカル ファイルは引き続き使えます。Azure リソースへのアクセスは要求しません。')}</p>
@@ -143,27 +160,51 @@ export function CloudPanel({ onClose }: { onClose: () => void }) {
         </div>}
       </section>
       <section><h3>{text('Cloud topology library', 'クラウド トポロジ ライブラリ')}</h3>
-        <p>{text('Topologies are uploaded only when you explicitly save. Loading does not deploy anything to Azure.',
-          'トポロジは明示的に保存した場合だけアップロードします。読み込んでも Azure にはデプロイしません。')}</p>
+        <p id="cloud-library-help">{text('Load into workspace opens a cloud save locally. Overwrite cloud save uploads your current design to that save. Delete removes only the cloud save. Nothing is deployed to Azure.',
+          'ワークスペースに読み込むと、保存内容をローカルで開きます。クラウドの保存を上書きすると、現在のデザインをアップロードします。削除はクラウドの保存だけを削除します。Azure へのデプロイは行いません。')}</p>
         <label>{text('Cloud topology name', 'クラウドのトポロジ名')}<input maxLength={120} value={name} onChange={event => setName(event.target.value)} /></label>
         <button type="button" disabled={busy || !!session?.practice || !session?.getEditorHistory?.()} onClick={() => { void run(() => save()) }}>
           {text('Save current topology to cloud', '現在のトポロジをクラウドに保存')}
         </button>
-        <button type="button" disabled={busy} onClick={() => { setBusy(true); setNotice(''); void refresh() }}>{text('Refresh cloud topologies', 'クラウドの一覧を更新')}</button>
+        <button ref={refreshButton} type="button" disabled={busy} onClick={() => { setBusy(true); setNotice(''); void refresh() }}>{text('Refresh cloud topologies', 'クラウドの一覧を更新')}</button>
         {listError && <p role="alert">{listError}</p>}
+        {busy && <p role="status">{text('Cloud operation in progress…', 'クラウドの操作中…')}</p>}
         {!busy && listed && !entries.length && <p>{text('No saved cloud topologies.', 'クラウドに保存されたトポロジはありません。')}</p>}
-        {entries.map(entry => <section key={entry.id}><h4>{entry.name}</h4>
-          <p>{entry.updatedAt}</p>
-          <button type="button" disabled={busy || !!session?.practice} onClick={() => { void run(() => load(entry)) }}>{text('Load', '読み込む')} {entry.name}</button>
-          <button type="button" disabled={busy || !!session?.practice} onClick={() => {
-            if (window.confirm(text('Replace this saved cloud topology with the current design?', '保存済みのクラウド トポロジを現在のデザインで置き換えますか。'))) void run(() => save(entry))
-          }}>{text('Replace', '置き換える')} {entry.name}</button>
-          <button type="button" disabled={busy} onClick={() => {
-            if (window.confirm(text('Permanently delete this cloud topology? Your current local design is kept.', 'このクラウド トポロジを完全に削除しますか。現在のローカル デザインは保持します。'))) {
-              void run(async () => { await api.deleteTopology(entry.id, entry.etag); setEntries(await api.listTopologies()) })
-            }
-          }}>{text('Delete', '削除')} {entry.name}</button>
-        </section>)}
+        {!!entries.length && <>
+          <div className="cloud-library-tools">
+            <label>{text('Find cloud saves', 'クラウドの保存を検索')}<input ref={search} type="search" value={query} onChange={event => setQuery(event.target.value)} /></label>
+            <label>{text('Sort cloud saves', 'クラウドの保存の並べ替え')}<select value={sort} onChange={event => setSort(event.target.value)}>
+              <option value="updated">{text('Recently updated', '更新日時が新しい順')}</option>
+              <option value="name">{text('Name', '名前順')}</option>
+            </select></label>
+          </div>
+          <p role="status">{text(`${matching.length} of ${entries.length} cloud saves`, `${entries.length} 件中 ${matching.length} 件の保存`)}</p>
+          {!matching.length && <p>{text('No matching cloud saves. Change your search.', '一致する保存はありません。検索条件を変更してください。')}</p>}
+          {!!matching.length && <div className="cloud-library-scroll" tabIndex={0} role="region" aria-label={text('Cloud saves', 'クラウドの保存')} aria-describedby="cloud-library-help">
+            <table className="cloud-library" role="table"><caption>{text('Saved configurations', '保存済みの構成')}</caption>
+              <thead><tr role="row"><th scope="col" role="columnheader">{text('Configuration', '構成')}</th><th scope="col" role="columnheader">{text('Last updated', '最終更新')}</th><th scope="col" role="columnheader">{text('Actions', '操作')}</th></tr></thead>
+              <tbody>{matching.map(entry => <tr role="row" key={entry.id} data-cloud-save-id={entry.id}>
+                <th scope="row" role="rowheader"><h4>{entry.name}</h4><small>{text('Save ID', '保存 ID')}: {entry.id}</small></th>
+                <td role="cell"><time dateTime={entry.updatedAt || undefined}>{updated(entry.updatedAt)}</time></td>
+                <td role="cell"><div className="cloud-library-actions">
+                  <button type="button" aria-label={`${text('Load into workspace', 'ワークスペースに読み込む')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice}
+                    onClick={() => { void run(() => load(entry)) }}>{text('Load into workspace', 'ワークスペースに読み込む')}</button>
+                  <button type="button" aria-label={`${text('Overwrite cloud save', 'クラウドの保存を上書き')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice} onClick={() => {
+                    if (window.confirm(text(`Overwrite cloud save "${entry.name}" (${entry.id}) with the current design? The cloud copy will change; the local workspace is kept.`,
+                      `クラウドの保存「${entry.name}」(${entry.id}) を現在のデザインで上書きしますか。クラウドの内容を変更し、ローカルのワークスペースは保持します。`))) void run(() => save(entry))
+                  }}>{text('Overwrite cloud save', 'クラウドの保存を上書き')}</button>
+                  <button type="button" aria-label={`${text('Delete', '削除')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice} onClick={() => {
+                    if (window.confirm(text(`Permanently delete cloud save "${entry.name}" (${entry.id})? Your current local design is kept.`,
+                      `クラウドの保存「${entry.name}」(${entry.id}) を完全に削除しますか。現在のローカル デザインは保持します。`))) {
+                      restoreFocus.current = true
+                      void run(async () => { await api.deleteTopology(entry.id, entry.etag); await refresh() })
+                    }
+                  }}>{text('Delete', '削除')}</button>
+                </div></td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
+        </>}
       </section>
     </>}
     {notice && <p role="status">{notice}</p>}
