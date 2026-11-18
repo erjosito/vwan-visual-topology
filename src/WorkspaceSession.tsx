@@ -6,6 +6,7 @@ import { lazy, Suspense, useState } from 'react'
 import { LearningStatus } from './learning/LearningStatus'
 import { CloudMenu } from './cloud/CloudMenu'
 import { PresentationGroup } from './WorkspacePresentation'
+import { CanvasStyleSettings } from './CanvasPresentation'
 
 const FeedbackDialog = lazy(() => import('./FeedbackDialog').then((module) => ({ default: module.FeedbackDialog })))
 
@@ -15,11 +16,15 @@ export function WorkspaceMenu() {
   const [feedbackOpen, setFeedbackOpen] = useState(() => !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1')
   return <>
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
-    <PresentationGroup label={t('Settings & help')}>
+    <PresentationGroup label={t(session?.presentationPreview ? 'Settings' : 'Settings & help')}>
     <ThemeSelector />
     <LanguageSelector />
-    <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
+    {session?.presentationPreview ? <CanvasStyleSettings /> : <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>}
     </PresentationGroup>
+    {session?.presentationPreview && <PresentationGroup label={t('Help & feedback')}>
+      <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>
+      <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
+    </PresentationGroup>}
     {!session?.presentationPreview && <LearningStatus />}
     <CloudMenu />
     {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}

@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import { t } from './i18n'
 import { CanvasPresentationContext, useCanvasPresentation, type CanvasStyle, type ConnectionStyle } from './useCanvasPresentation'
+import { useWorkspaceSession } from './workspace-context'
 import './canvas-presentation.css'
 
 const storageKey = 'aznet-canvas-style:v1'
@@ -79,7 +80,7 @@ export function CanvasControls({ zoom, onZoom, onResetView, onFitView, minZoom =
   children?: ReactNode
   status?: ReactNode
 }) {
-  const { style, setStyle, connectionStyle, setConnectionStyle } = useCanvasPresentation()
+  const preview = useWorkspaceSession()?.presentationPreview
   const zoomLevels = [...new Set([minZoom, 0.75, 1, 1.25, 1.5, maxZoom, zoom])]
     .filter((level) => level === zoom || (level >= minZoom && level <= maxZoom)).sort((a, b) => a - b)
   return <div className="canvas-controls-stack">{status}<div className="canvas-controls" role="group" aria-label={t('Canvas controls')}>
@@ -95,17 +96,24 @@ export function CanvasControls({ zoom, onZoom, onResetView, onFitView, minZoom =
     <button type="button" onClick={onResetView}>{t('Reset view')}</button>
     {onFitView && <button type="button" onClick={onFitView}>{t('Fit view')}</button>}
     {children}
-    <select aria-label={t('Canvas style')} value={style} onChange={(event) => setStyle(event.target.value as CanvasStyle)}>
+    {!preview && <CanvasStyleSettings labeled={false} />}
+  </div></div>
+}
+
+export function CanvasStyleSettings({ labeled = true }: { labeled?: boolean }) {
+  const { style, setStyle, connectionStyle, setConnectionStyle } = useCanvasPresentation()
+  return <>
+    <label>{labeled && t('Canvas style')}<select aria-label={t('Canvas style')} value={style} onChange={(event) => setStyle(event.target.value as CanvasStyle)}>
       <option value="grid">{t('Grid / edge-to-edge')}</option>
       <option value="dots">{t('Dots / framed')}</option>
-    </select>
-    <select aria-label={t('Connection style')} title={t('Parallel connections stay separated in every style.')}
+    </select></label>
+    <label>{labeled && t('Connection style')}<select aria-label={t('Connection style')} title={t('Parallel connections stay separated in every style.')}
       value={connectionStyle} onChange={(event) => setConnectionStyle(event.target.value as ConnectionStyle)}>
       <option value="default">{t('Mode-default links')}</option>
       <option value="curved">{t('Curved links')}</option>
       <option value="straight">{t('Straight links')}</option>
-    </select>
-  </div></div>
+    </select></label>
+  </>
 }
 
 export function CanvasMaximizeButton() {
