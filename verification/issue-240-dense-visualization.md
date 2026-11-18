@@ -159,6 +159,12 @@ accessibility audit or WCAG conformance claim**. Correct those inherited names
 before promoting a new production visualization. Do not waive them by disabling
 the rule or excluding diagram controls.
 
+Those counts describe the original research capture on source base `c652c18`.
+The subsequent #228 follow-up reuses the native accessible-label helper for
+these controls and strengthens the browser regression to require zero baseline
+violations. The committed geometry observations and contact sheets above remain
+the original comparison, rather than relabeling historical evidence as a new run.
+
 Build, research-entry type checking, five browser tests and lint pass (one
 existing `ErLocationInfoModal` warning). No simulation code, saved schema,
 production layout, desktop integration or application entry point changes.
