@@ -603,7 +603,10 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       ...route, sourceName: route.nextHopName, asPath: route.originProtocol === 'VNet' ? route.asPath : [65515, ...route.asPath],
     }))
     let result = connectedVnetPrefixes(vnet)
-    const summaries = connectionId.startsWith('gateway:') && vnet.gateways.some((g) => g.enabled) && vnet.subnets.some((s) => s.name === 'GatewaySubnet')
+    const hasConnectionRouteMap = vnet.routeServer?.enabled && vnet.routeServer.routeMapAssignments?.some((binding) =>
+      binding.connectionId === connectionId && (binding.inboundMapId || binding.outboundMapId))
+    // An ARS route-map association overrides gateway summarization only on that connection.
+    const summaries = connectionId.startsWith('gateway:') && !hasConnectionRouteMap && vnet.gateways.some((g) => g.enabled) && vnet.subnets.some((s) => s.name === 'GatewaySubnet')
       ? (vnet.summarizedGatewayPrefixes ?? []).filter((prefix) => typeof prefix === 'string' && cidr(prefix))
       : []
     if (summaries.length) {
