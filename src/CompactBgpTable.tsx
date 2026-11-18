@@ -31,6 +31,7 @@ export interface CompactBgpRow {
   network?: ReactNode
   preferred?: boolean
   peerId?: string
+  warning?: ReactNode
 }
 
 export function CompactBgpTable({ rows, label, legend, testId, neighborLabel }: {
@@ -60,7 +61,7 @@ export function CompactBgpTable({ rows, label, legend, testId, neighborLabel }: 
           <th scope="row">{row.network ?? <code>{row.prefix}</code>}</th>
           {neighborLabel && <td>{row.neighbor}</td>}
           <td>{row.nextHop}</td><td className="as-path">{row.asPath.join(' ') || '—'}</td>
-          <td><details><summary aria-label={`${t('Evidence')} · ${row.prefix} · ${row.id}`}>{t('Evidence')}</summary>
+          <td>{row.warning}<details><summary aria-label={`${t('Evidence')} · ${row.prefix} · ${row.id}`}>{t('Evidence')}</summary>
             <div className="compact-bgp-evidence">{row.details}</div>
           </details></td>
         </tr>)}</tbody>

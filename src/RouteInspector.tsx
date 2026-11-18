@@ -185,14 +185,16 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
             neighbor: mode !== 'bgp' ? r.nextHop : undefined,
             network: mode === 'bgp' && index === 0 ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : undefined,
             textEvidence: JSON.stringify({ resourceId: router.id, tableId, mode, stage: mode === 'bgp' ? undefined : stage, selection: d.explanation, ...r }),
+            warning: r.erExportUncertain ? <details className="er-export-warning notice">
+              <summary>{t('ExpressRoute AS-path uncertainty')}</summary>
+              <p>{t("The simulator assumes all private ASNs are removed at the customer boundary. When non-private ASNs are also present, actual removal can depend on the MSEE implementation and configuration. Customer-visible paths may retain private ASNs, including 65520, affecting on-premises route selection. Verify against customer-router observations.")}</p>
+            </details> : undefined,
             details: <div data-reason-prefix={d.prefix}>
               <p>{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</p>
               <Explain concept={contextKnown ? 'selection' : 'coverage'} evidence={contextKnown ? d.explanation : []} />
               <p>{r.source}{r.via && <> · {t('Via')} {r.via}</>}</p>
-              {r.localPreference !== undefined && <p>{t('Local preference')}: {r.localPreference}</p>}
+              {r.localPreference !== undefined && <p>{t('Local preference')}: <span className="local-preference">{r.localPreference}</span></p>}
               <p>{router.id} · {tableId} · {r.key}</p>
-              {r.erExportUncertain && <p className="er-export-warning notice"><strong>{t('ExpressRoute AS-path uncertainty')}</strong>{' '}
-                {t("The simulator assumes all private ASNs are removed at the customer boundary. When non-private ASNs are also present, actual removal can depend on the MSEE implementation and configuration. Customer-visible paths may retain private ASNs, including 65520, affecting on-premises route selection. Verify against customer-router observations.")}</p>}
               <details><summary>{t('Azure provenance and selection evidence')}</summary><pre>{JSON.stringify(r.evidence, null, 2)}</pre></details>
             </div>,
           })))} /> : <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th>{showLocalPreference && <th>{t("Local preference")}</th>}</tr></thead>
