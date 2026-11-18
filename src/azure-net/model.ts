@@ -6,6 +6,7 @@ import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
 import { parseAzNetTopology } from './admission'
 import type { ClassicVpnNatGateway, VpnNat, VwanVpnNatGateway } from '../vpn-nat'
+import { indirectFirewallTopology } from './indirect-firewall-sample'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -122,6 +123,8 @@ export interface AzVwanHubAttachment {
   enabled: boolean
   propagateDefaultRoute?: boolean
   hubRouting?: HubRoutingConfiguration
+  propagateStaticRoutes?: boolean
+  staticRoutes?: { name: string; addressPrefixes: string[]; nextHopIpAddress: string }[]
 }
 
 export interface AzVNet {
@@ -1192,6 +1195,13 @@ export const AZURE_NET_SAMPLES: AzSampleMetadata[] = [
       'Hub-WEU and Hub-NEU share Equinix AM5 MSEE alongside Global VNet Peering, demonstrating cross-region firewall chaining and MSEE hairpin paths.',
     ],
     topology: sampleEnterpriseVnetAllFeaturesShowcase,
+  },
+  {
+    id: 'azure-vnet-indirect-firewall',
+    title: 'Virtual WAN indirect spoke through Azure Firewall',
+    subtitle: 'A VNet-connection static route reaches an indirectly peered workload through a spoke Azure Firewall.',
+    highlights: ['Remove the indirect spoke return UDR to compare successful forwarding with a missing return path.'],
+    topology: indirectFirewallTopology(),
   },
 ]
 

@@ -9,6 +9,7 @@ import { peeringPrefixes, peeringSubnetIds, subnetPeeringLimitations, validateSu
 import { ARS_MAX_BGP_PEERS, applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes } from './ars-route-maps'
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, propagatesLocally, propagatesRemotely } from '../hub-routing'
 import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
+import { connectionStaticRoutes } from './vnet-connection-routes'
 import type { RouteMapDirection, Transport } from '../model'
 import type {
   AzAppliance,
@@ -346,7 +347,7 @@ function chooseHubWinners(hub: { id: string; preference: 'ExpressRoute' | 'VPN' 
     const routes = entries.filter((route) => route.prefix === prefix)
     const candidates = routes.map((route): Candidate => ({
       key: route.id, prefix, asPath: route.asPath, weight: route.weight,
-      kind: route.nextHopKind === 'hub-firewall' ? 'hub-static' : route.originProtocol === 'VNet' ? 'system' : route.vpnStatic ? 'vpn-static' : 'bgp',
+      kind: route.nextHopKind === 'hub-firewall' || (route.staticRouteName && !route.originHubTableId) ? 'hub-static' : route.originProtocol === 'VNet' ? 'system' : route.vpnStatic ? 'vpn-static' : 'bgp',
       transport: route.nextHopKind === 'hub-firewall' ? 'Firewall' : route.hubTransport ?? (route.originProtocol === 'VNet' ? 'VNet' : route.originProtocol === 'BGP-NVA' ? 'SpokeNVA' : route.originProtocol === 'VPN' ? 'VPN' : 'ExpressRoute'),
       connectionId: route.connectionId ?? '', siteId: '', originHubId: route.originHubTableId ? route.nextHopId : hub.id,
       remote: Boolean(route.originHubTableId), secureOrigin: route.secureOrigin,
@@ -984,6 +985,16 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     const entries: AzBgpRibEntry[] = []
     for (const vnet of topology.vnets) {
       if (vnet.vwanHubAttachment?.enabled && vnet.vwanHubAttachment.hubId === hub.id) {
+        for (const route of connectionStaticRoutes(topology, vnet)) {
+          entries.push({
+            id: JSON.stringify(['connection-static', hub.id, vnet.id, route.name, route.prefix]),
+            prefix: route.prefix, asPath: [], nextHopName: route.appliance.name,
+            nextHopKind: 'appliance', nextHopId: route.appliance.id, nextHopIp: route.appliance.privateIp,
+            originProtocol: 'Static', hubTransport: 'VNet', preferred: true, staticRouteName: route.name,
+            connectionId: `vhub-attach:${vnet.id}:${hub.id}`, sourceVnetId: vnet.id,
+            explanation: `Static route ${route.name} on VNet connection ${vnet.name}`,
+          })
+        }
         for (const prefix of vnet.prefixes) {
           entries.push({
             id: `vhub:${hub.id}:vnet:${vnet.id}:${prefix}`,
@@ -1086,8 +1097,8 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     const attachments = azHubAttachments(topology, hub.id)
     const imported = [...new Set(entries.map((route) => route.connectionId!))].flatMap((connectionId) => {
       const routes = entries.filter((route) => route.connectionId === connectionId)
-      return [...routes.filter((route) => route.vpnStatic), ...applyAzHubRouteMap(
-        topology, hub.id, connectionId, 'inbound', routes.filter((route) => !route.vpnStatic))]
+      return [...routes.filter((route) => route.vpnStatic || route.staticRouteName), ...applyAzHubRouteMap(
+        topology, hub.id, connectionId, 'inbound', routes.filter((route) => !route.vpnStatic && !route.staticRouteName))]
     })
     vwanFirewallRibs[hub.id] = chooseHubWinners(hub, imported)
     vwanHubTables[hub.id] = Object.fromEntries(hubRouteTables(hub).map((table) => [
@@ -1495,6 +1506,10 @@ function compileSingleSubnetEffectiveRoutes(
         vwanHubTables[hub.id]?.[tableId] ?? [], vnet.vwanHubAttachment.propagateDefaultRoute, false)
       for (const r of hubWinners) {
         if (r.nextHopKind === 'local' && r.nextHopId === vnet.id) continue
+        // Peering system routes remain preferred over connection routes exported through the hub.
+        if (r.staticRouteName && candidates.some((route) => route.source === 'System' &&
+          route.nextHopType === 'VNetPeering' && cidr(r.prefix) &&
+          (cidr(route.prefix)?.length ?? 33) <= cidr(r.prefix)!.length && contains(route.prefix, cidr(r.prefix)!.network))) continue
         const viaSecuredFirewall = hub.routingIntent.private
         rawBgpRoutes.push({
           id: `bgp:vhub:${subnet.id}:${hub.id}:${r.id}`,
@@ -3383,7 +3398,7 @@ export function traceAzNetFlow(
           pushHop({
             nodeKind: 'vwan-hub', nodeId: hub.id, nodeName: hub.name, action: 'vwan-transit',
             edgeId: selectedHubRoute.connectionId, hubTableId: tableId,
-            detail: `${hub.name} forwards over the original VNet connection to BGP NVA ${selectedHubRoute.nextHopName}`,
+            detail: `${hub.name} forwards over the original VNet connection to ${selectedHubRoute.staticRouteName ? 'static next hop' : 'BGP NVA'} ${selectedHubRoute.nextHopName}`,
           })
           cursor = { kind: 'appliance', vnetId: owner.id, applianceId: selectedHubRoute.nextHopId }
           continue
