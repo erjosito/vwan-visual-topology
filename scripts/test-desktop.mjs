@@ -332,6 +332,7 @@ try {
   }
   for (const mode of ['hub-spoke', 'full']) {
     const topology = nvaBgpTopology()
+    if (mode === 'full') topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
     await page.goto(`app://simulator/?mode=${mode}`)
     await page.getByTestId('aznet-app').waitFor()
     await page.locator('input[type="file"]').first().setInputFiles({
@@ -349,6 +350,10 @@ try {
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menuitem', { name: 'Inspect NVA Learned BGP Routes', exact: true }).click()
     const inspector = page.getByRole('dialog', { name: 'NVA learned BGP routes · Dual-region NVA', exact: true })
+    if (mode === 'full') {
+      expect(result.value.simulation.nvaBgpPeers.reader[0].gatewaySummaryAssessment.status).toBe('not-assessed')
+      await expect(inspector.getByTestId('nva-gateway-summary-boundary')).toContainText('west-ars')
+    }
     await expect(inspector.getByTestId('nva-bgp-routes').locator('[data-prefix="198.18.0.0/24"]')).toHaveCount(2)
     await inspector.getByLabel('NVA BGP peer filter', { exact: true }).selectOption('west-ars')
     await expect(inspector.getByTestId('nva-bgp-routes').locator('[data-prefix="198.18.0.0/24"]')).toHaveCount(1)
