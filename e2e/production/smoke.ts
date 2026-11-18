@@ -28,6 +28,24 @@ async function ready(page: Page, mode: string) {
   await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
 }
 
+test.describe('default presentation', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  for (const mode of ['vwan', 'hub-spoke', 'full']) {
+    test(`${mode}: new UI starts by default and legacy remains available`, async ({ page }) => {
+      await page.goto(`/?mode=${mode}`)
+      await ready(page, mode)
+      const toggle = page.getByTestId('ui-preview-toggle')
+      await expect(toggle).toHaveText('Use legacy UI')
+      await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.locator('.presentation-group > summary').filter({ hasText: /^File$/ })).toBeVisible()
+      await toggle.click()
+      await expect(toggle).toHaveText('Use new UI')
+      await page.reload()
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    })
+  }
+})
+
 for (const hostname of ['vwan-simulator.com', 'www.vwan-simulator.com', 'aznet-simulator.com', 'www.aznet-simulator.com']) {
   test(`${hostname}: shared empty default and compatible aliases use the same artifact`, async ({ page }) => {
     const origin = `http://${hostname}:4174`

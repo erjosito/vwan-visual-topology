@@ -5,8 +5,8 @@ import { useWorkspaceSession } from './workspace-context'
 export function PresentationToggle() {
   const session = useWorkspaceSession()
   return <button type="button" data-testid="ui-preview-toggle" aria-pressed={!!session?.presentationPreview}
-    title={t('Try a less cluttered presentation. Your design and settings stay unchanged.')}
-    onClick={() => session?.setPresentationPreview?.(!session.presentationPreview)}>{t('Preview UI')}</button>
+    title={t('Switch interfaces. Your design and settings stay unchanged.')}
+    onClick={() => session?.setPresentationPreview?.(!session.presentationPreview)}>{t(session?.presentationPreview ? 'Use legacy UI' : 'Use new UI')}</button>
 }
 
 export function PresentationGroup({ label, children }: { label: string; children: ReactNode }) {

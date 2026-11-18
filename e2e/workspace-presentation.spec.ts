@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
+test.use({ storageState: { cookies: [], origins: [] } })
+
 for (const mode of ['vwan', 'full'] as const) {
   const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
   const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
@@ -8,6 +10,9 @@ for (const mode of ['vwan', 'full'] as const) {
 
   test(`${mode}: preview preserves the selected design and history while exposing every VNet action`, async ({ page }, info) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.addInitScript(() => {
+      if (localStorage.getItem('aznet-ui-preview:v1') === null) localStorage.setItem('aznet-ui-preview:v1', 'false')
+    })
     await page.goto(`/?mode=${mode}&sample=${sample}`)
     await expect(page.getByTestId(rootId)).toBeVisible()
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), key)).not.toBeNull()
@@ -148,10 +153,43 @@ test('Japanese preview and unavailable preference storage remain usable in-sessi
   })
   await page.goto('/?mode=full')
   const toggle = page.getByTestId('ui-preview-toggle')
-  await expect(toggle).toHaveText('UI プレビュー')
+  await expect(toggle).toHaveText('従来の UI を使用')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await expect(toggle).toHaveText('新しい UI を使用')
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await expect(page.locator('.presentation-group > summary').filter({ hasText: 'ファイル' })).toBeVisible()
-  await toggle.click()
+})
+
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  for (const preference of [null, 'false', 'true', 'invalid']) {
+    test(`${mode}: presentation default and saved preference ${preference}`, async ({ page }) => {
+      if (preference !== null) await page.addInitScript(value => {
+        localStorage.setItem('aznet-ui-preview:v1', value)
+      }, preference)
+      await page.goto(`/?mode=${mode}`)
+      const toggle = page.getByTestId('ui-preview-toggle')
+      const enabled = preference !== 'false'
+      await expect(toggle).toHaveAttribute('aria-pressed', String(enabled))
+      await expect(toggle).toHaveText(enabled ? 'Use legacy UI' : 'Use new UI')
+      await expect(page.locator('.presentation-group > summary').filter({ hasText: /^File$/ })).toHaveCount(enabled ? 1 : 0)
+    })
+  }
+}
+
+test('default UI can switch to legacy with keyboard and persist across reload', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 })
+  await page.goto('/?mode=full')
+  const toggle = page.getByTestId('ui-preview-toggle')
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await toggle.focus()
+  await page.keyboard.press('Enter')
   await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await page.reload()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+  await page.reload()
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true')
 })
