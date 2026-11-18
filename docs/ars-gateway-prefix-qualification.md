@@ -9,7 +9,8 @@ remain, independent prefixes are allowed, and aggregate holes do not become
 reachable. A gateway and GatewaySubnet are required for gateway summarization.
 Spoke-local configuration does not configure the hub's gateway.
 
-**ARS-to-NVA summary behavior is not assessed.** Do not interpret the displayed
+**Automatic ARS-to-NVA summary projection remains unassessed.** The bounded live
+observations below do not qualify every gateway/peer combination. Do not interpret the displayed
 ordinary received candidates, or absence of a configured summary among them, as
 proof of actual Azure advertisements. Do not substitute an ARS RIB or a hosting
 subnet's effective routes for an NVA's received BGP table.
@@ -39,24 +40,78 @@ map on such a connection takes precedence. It describes branch-to-branch route
 exchange separately. Neither statement establishes whether gateway summaries
 replace/coexist with connected advertisements sent to a BGP NVA.
 
-## Qualification matrix
+## Recorded Azure observations (2026-11-18)
 
-| Gateway | Branch-to-branch | Peer placement | Azure observation |
+An approved lab recorded native ARS advertised routes and the local NVA's
+retained **pre-import-filter Adj-RIB-In**, independently for both established
+ARS endpoints. ExpressRoute and active/active VPN gateways coexisted in the
+tested VNet. Their simultaneous presence prevents unique gateway-source
+attribution; this is not separate ER-only and VPN-only qualification.
+
+The following prefixes are synthetic replacements for the private lab address
+plan, not native captures:
+
+| Phase | Branch-to-branch | Configured gateway prefix | ARS outbound and actual local NVA receipt, both endpoints |
 |---|---|---|---|
-| ExpressRoute + GatewaySubnet | Off / on | Local / directly peered | Not assessed |
-| VPN + GatewaySubnet | Off / on | Local / directly peered | Not assessed |
-| No gateway (control) | Off / on | Local / directly peered | Not assessed for ARS exports; gateway prerequisite documented |
-| Either gateway, one NVA on two ARS | Off / on | Original per-ARS scope | Not assessed |
+| Baseline | Off | None | Original `10.80.0.0/16` |
+| Summary configured | Off | `10.80.0.0/13` | Original `/16`; configured `/13` absent in the bounded capture |
+| Exchange enabled | On | `10.80.0.0/13` | Original `/16` **and** configured `/13` |
+| Summary edited | On | `10.80.0.0/15` | Original `/16` **and** new `/15`; previously observed `/13` withdrawn |
+| Summary cleared | On | None | Original `/16`; previously observed `/15` withdrawn |
 
-Repository regressions exercise these configurations and preserve the ordinary
-modeled candidates; they are **not Azure observations**. They also check distinct
-summaries, an independent/outside summary, edit/clear/remove behavior, original
-identities and absence of local route changes. Existing gateway tests remain the
-separate qualification of the modeled gateway-advertisement path.
+Both positive native ARS role arrays retained their actual `localAddress`,
+`asPath: "65515"`, matching local `nextHop`, `origin: "Igp"` and numeric
+`weight: 0`. The independent NVA observations confirmed the original and
+aggregate route sets. Role labels are not a physical-instance mapping.
 
-A separately approved recorded Azure lab is still required to close #233.
-Capture the actual ARS advertisements and NVA received tables alongside gateway
-exports for the matrix above, including a distinguishable covered summary and an
-uncovered hub/spoke prefix. Establish replacement versus coexistence, outside
-prefixes, and edit/clear/remove results before changing the ARS export algorithm.
-No live Azure resources were provisioned for this boundary change.
+The summary-off negative is scoped to the captured internal exchange: native
+gateway summary origination and all four gateway-to-ARS endpoint pairs supplied
+positive controls. It is not a universal absence claim or proof that external
+VPN transport was healthy.
+
+The run ended with 17 passing checks, two scoped negative observations and
+eight unknown results. These counts include configuration and restoration checks,
+not 27 independently qualified routing features. Exact configuration was
+restored; both ARS branch-to-branch flags and all VNet summary properties were
+returned to their original state. AA/AS operational baseline was verified after
+a configuration-free re-initiation of the existing AA VPN profiles.
+
+### Remaining unknowns
+
+- **External VPN summary receipt:** the AA VPN positive control degraded during
+  the summary windows. A wide aggregate overlapped the emulator's peer-loopback
+  address; a narrower aggregate excluded it but did not recover the sessions in
+  that window. Later baseline recovery does not retroactively qualify those
+  observations or establish the cause.
+- **ER-only, VPN-only and external MSEE behavior:** no external provider circuit
+  was present; coexistence alone does not identify which gateway originated
+  the summary received by ARS.
+- **Directly peered NVA and one NVA on two ARS:** cross-VNet sessions were already
+  disabled/down in the baseline. Empty output is not evidence of no routes.
+- **Eligible uncovered spoke, outside prefix and gatewayless control:** the
+  existing spoke did not use remote gateways, no outside-prefix positive control
+  was established, and neither existing ARS VNet was gatewayless.
+- **Route-map precedence in Azure:** no precedence experiment was performed.
+  The FAQ's documented per-connection rule is distinct from these observations.
+- **Aggregate holes and packet delivery:** BGP receipt does not establish a
+  forwarding route or delivery to an address inside the aggregate.
+
+## Simulator boundary and follow-up
+
+The live result rules out blanket replacement of the original ARS-native VNet
+prefix by gateway summaries: the local NVA can receive both. It does not justify
+unconditional synthesis of summaries for arbitrary gateways, remote peers or
+gatewayless designs. The generic engine therefore retains explicit
+`gatewaySummaryAssessment.status: "not-assessed"` rather than inventing missing
+ownership or forwarding evidence. Historical captures can be inspected with the
+endpoint-scoped ARS route viewer.
+
+Repository regressions preserve ordinary modeled candidates, per-ARS identity,
+edit/clear annotations and unchanged local forwarding; they are **not Azure
+observations**. Existing gateway-advertisement tests remain separate from this
+ARS-to-NVA boundary.
+
+#233 remains open for the missing matrix and a safely attributed shared
+control-plane projection. Native Azure captures, execution ledgers and exact
+restoration evidence remain private; this document contains only sanitized
+conclusions.
