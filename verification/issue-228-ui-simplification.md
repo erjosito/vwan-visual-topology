@@ -1,6 +1,63 @@
-# UI simplification comparison and opt-in preview
+# UI simplification comparison and inspector follow-up
 
-## Decision and scope
+## Current status
+
+The initial evaluation below describes the opt-in preview delivered in #252.
+The maintainer subsequently approved making it the default in #262, retaining
+the legacy presentation for comparison and retrofit work. #264 consolidated
+routing checks; #265 split Settings from Help & feedback. The original toolbar
+measurements and surface audit below are historical, not measurements of those
+later changes. Maintainer approval is formative feedback, not a human study.
+
+The next bounded slice applies contextual disclosure to the **VNet configuration
+card in hub-spoke and mixed/full documents**. Common identity, address-space and
+layout fields receive visible labels. Gateway advertisements and device
+addition/removal have separate, keyboard-operable sections with current-state
+summaries. Existing configured prefixes and devices start expanded. Users can
+collapse them without hiding VPN settings, Route Server preferences, validation
+alerts or the warning that advertisements do not create forwarding routes.
+
+This keeps the selected contextual-disclosure approach rather than adding a
+global capability mode or another configuration wizard. The same mounted editor,
+original handlers, topology and history serve both presentations; toggling does
+not discard an uncommitted advertisement draft. Native VWAN configuration,
+peerings, NSGs, route tables and the rest of the inspector are unchanged.
+
+### Inspector comparison
+
+Eight browser cases cover simple and imported advanced VNets in hub-spoke/full
+and English/Japanese. For the simple VNet, the card exposes **5 inputs, selects
+and buttons instead of 11** in all four mode/language combinations. Two
+additional disclosure summaries are not included in that count. This measures
+CSS-visible controls in the card, not controls simultaneously inside the viewport
+or successful task discovery. Configured advanced designs start expanded, so
+this is not a universal control-count reduction.
+
+English/light cases use 1440 x 1000; Japanese/dark cases use 390 x 1000.
+`grouped-inspector` and `legacy-inspector` screenshot attachments show the task
+states, including the draft-preservation comparison. Focus and toolbar heights
+can differ between those states; their screenshots are not a controlled
+pixel-height comparison. Reproduce the screenshots and JSON count attachments:
+
+```powershell
+npx playwright test workspace-presentation.spec.ts -g "VNet inspector|imported VNet" --workers=2
+```
+
+The cases check keyboard disclosure, exact saved-JSON preservation, a deferred
+draft across presentation switches, commit/undo, device addition/undo, imported
+settings, persistent VPN warnings, narrow-page overflow and scoped axe results.
+The combined presentation/discovery run passed all 57 cases; the production
+default/startup checks passed all six cases and localization passed 12 tests.
+Build and lint pass, with the existing `ErLocationInfoModal` lint warning.
+
+Tradeoffs remain: optional tasks cost an extra disclosure; visible labels take
+vertical space, especially in Japanese; and the existing peering section still
+precedes the VNet card. No task-time or mobile-space improvement is claimed.
+The whole-inspector hierarchy and other dialogs remain candidates for later
+evaluation, not silently included in this implementation. Human comparison is
+still pending with zero participants; #228 remains open for that broader work.
+
+## Initial preview decision and scope (historical)
 
 For #228, choose contextual progressive disclosure plus shallow, task-oriented
 global menus. Implement an opt-in **Preview UI** button, not a permanent
@@ -127,7 +184,12 @@ indicators. Investigate every misclassification of model limitations and require
 no regressions in keyboard/touch completion. Report raw participant results and
 sample-size limitations rather than claiming statistical proof.
 
-Keep the preview opt-in until those gates and maintainer acceptance are met.
+The original recommendation was to keep the preview opt-in until those gates
+and maintainer acceptance were met. The maintainer later explicitly approved
+the new default in #262 without collecting the proposed human-comparison data.
+The remaining recommendations below are evaluation proposals, not a scheduled
+removal of the legacy UI.
+
 Revise the mobile layout if its height harms the tasks. If accepted, promote in a
 separate reviewed change, retain a seven-day rollback window, then remove the
 temporary flag and old presentation. If not accepted, revise or remove this

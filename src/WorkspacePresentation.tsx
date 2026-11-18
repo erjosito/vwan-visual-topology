@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from './i18n'
 import { useWorkspaceSession } from './workspace-context'
 
@@ -7,6 +7,18 @@ export function PresentationToggle() {
   return <button type="button" data-testid="ui-preview-toggle" aria-pressed={!!session?.presentationPreview}
     title={t('Switch interfaces. Your design and settings stay unchanged.')}
     onClick={() => session?.setPresentationPreview?.(!session.presentationPreview)}>{t(session?.presentationPreview ? 'Use legacy UI' : 'Use new UI')}</button>
+}
+
+export function InspectorSection({ title, summary, initialOpen, children }: {
+  title: string; summary: string; initialOpen: boolean; children: ReactNode
+}) {
+  const preview = useWorkspaceSession()?.presentationPreview
+  const [expanded, setExpanded] = useState(initialOpen)
+  return <details className="presentation-inspector-section" data-grouped={!!preview}
+    open={!preview || expanded} onToggle={event => { if (preview) setExpanded(event.currentTarget.open) }}>
+    <summary hidden={!preview}>{title}<span>{summary}</span></summary>
+    {children}
+  </details>
 }
 
 export function PresentationGroup({ label, children }: { label: string; children: ReactNode }) {
