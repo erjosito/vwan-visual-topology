@@ -51,10 +51,12 @@ export async function auditAccessibility({ baseURL, artifacts }) {
               } else await expect(sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true })).toBeVisible()
             }
           }
+          await page.locator('.presentation-group:has([data-language-selector]) > summary').click()
           await page.locator('header [data-language-selector]').selectOption(sample.language)
           await expect(page.locator('html')).toHaveAttribute('lang', sample.language)
           // The existing theme control sets the application's own supported preference.
           await page.getByLabel('Theme', { exact: true }).selectOption(sample.viewport.theme)
+          await page.keyboard.press('Escape')
           const controls = page.getByRole('button', {
             name: sample.language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', exact: true,
           })
