@@ -665,6 +665,11 @@ function App() {
           <button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button>
           <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button>
         </PresentationGroup>
+        {workspaceSession?.presentationPreview && <PresentationGroup label={t('Routing checks')}>
+          <button disabled={currentCheck?.status === 'running'} onClick={checkRouting}
+            title={t('Check connectivity across the modeled landscape')}>{t('Check routing')}</button>
+          <button onClick={openDiagnostics} title={t('Inspect findings and assess declared connectivity requirements')}>{t('Advanced checks')}</button>
+        </PresentationGroup>}
         <PresentationGroup label={t('File')}>
           <button onClick={() => exportTopology()}>{t("Export JSON")}</button>
           <button onClick={() => importer.current?.click()}>{t("Import JSON")}</button>
@@ -706,7 +711,7 @@ function App() {
         <div className="canvas-toolbar"><div><h2>{t("Network topology")}</h2><p className="muted">{t("Drag blank canvas to pan; drag nodes to arrange. Right-click for actions. Alt+Arrow moves a focused node.")}</p></div>
           <div className="canvas-tools"><label className="checkbox-field"><input type="checkbox" checked={topology.allowBranchToBranchTraffic !== false} onChange={(event) => update((next) => { next.allowBranchToBranchTraffic = event.target.checked })} />{t('Allow branch-to-branch traffic (WAN-wide)')}</label>
             <button disabled={!canUndo} title={t("Undo last topology change (Ctrl+Z)")} onClick={undo}>{t("Undo")}</button><button disabled={!canRedo} title={t("Redo topology change (Ctrl+Y)")} onClick={redo}>{t("Redo")}</button>
-            <button onClick={() => openRouteMaps()}>{t("Route maps")}</button><button disabled={currentCheck?.status === 'running'} onClick={checkRouting}>{t("Check routing")}</button><button aria-label={t("Open model notes and warnings")} onClick={() => setPanel('notes')}>{t("Notes")}{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
+            <button onClick={() => openRouteMaps()}>{t("Route maps")}</button>{!workspaceSession?.presentationPreview && <button disabled={currentCheck?.status === 'running'} onClick={checkRouting}>{t("Check routing")}</button>}<button aria-label={t("Open model notes and warnings")} onClick={() => setPanel('notes')}>{t("Notes")}{simulation.warnings.length ? ` (${simulation.warnings.length})` : ''}</button></div>
         </div>
         {routingCheck && <div className="routing-check-status" role="status">
           <span>{t(!currentCheck ? 'Routing changed. Check routing again.' : currentCheck.status === 'running' ? 'Checking all modeled networks…'
@@ -729,7 +734,7 @@ function App() {
           {currentCheck?.report?.continuation && <span>{describeDiagnosticsProgress(currentCheck.report, t)}</span>}
           {currentCheck?.status !== 'running' && currentCheck?.report?.continuation?.status === 'paused' && <button onClick={continueRoutingCheck}>{t('Continue analysis')}</button>}
           {(currentCheck?.status === 'running' || currentCheck?.report?.continuation?.status === 'paused') && <button onClick={() => { checkWorker.current?.worker.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
-          <button onClick={openDiagnostics}>{t('Advanced checks')}</button>
+          {!workspaceSession?.presentationPreview && <button onClick={openDiagnostics}>{t('Advanced checks')}</button>}
         </div>}
         <div className="canvas-stage">
           {panel === 'diagnostics' && <DiagnosticsPanel topology={activeTopology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
