@@ -31,3 +31,27 @@ No live Azure qualification was performed for this increment. The committed
 fixture is synthetic and is explicitly labeled as such.
 
 Reference: [Azure BgpPeerStatus fields](https://learn.microsoft.com/en-us/dotnet/api/microsoft.azure.management.network.models.bgppeerstatus).
+
+## Standalone VPN gateway mode
+
+The gateway editor exposes the existing `activeActive` field for standalone
+VNet VPN gateways only. Active/standby has one active BGP endpoint; active/active
+has two. Both have two physical instances. These are configuration semantics,
+not observed addresses or proof of established sessions. The setting does not
+apply to Virtual WAN gateways.
+
+Newly authored standalone VPN gateways explicitly use active/standby, matching
+the existing Bicep export default. Older native designs and captures without a
+mode retain its absence and show **Unspecified (legacy design)**. Export keeps
+its former active/standby fallback, now with a warning. A missing capture field
+is no longer silently represented as an observed false value.
+
+ARS route exchange requires active/active and ASN 65515, including for
+VPN-static routes with VPN BGP disabled. The editor, diagnostics and Bicep export
+warn when an enabled local ARS has branch-to-branch exchange enabled and the
+VPN gateway does not explicitly meet both requirements. They do not reject old
+designs or change the resource-level routing engine. Such simulated routes are
+not qualification of unsupported combinations. Per-instance failure, failover
+timing and physical alias/session mappings remain unassessed.
+
+Reference: [ARS support for ExpressRoute and VPN](https://learn.microsoft.com/en-us/azure/route-server/expressroute-vpn-support).

@@ -366,7 +366,8 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
         : undefined
     const asn = Number(bgpSettings?.asn ?? gw.asn ?? 65515)
     const bgpEnabled = Boolean(props.enableBgp ?? gw.enableBgp ?? true)
-    const activeActive = Boolean(props.activeActive ?? gw.activeActive ?? false)
+    const activeActive = props.activeActive ?? gw.activeActive
+    if (activeActive !== undefined && typeof activeActive !== 'boolean') throw new Error('Invalid VPN gateway activeActive mode.')
 
     // Determine parent VNet from ipConfigurations[0].subnet.id
     let vnetName = asString(gw.vnetName)
@@ -393,7 +394,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       kind,
       asn,
       bgpEnabled,
-      activeActive,
+      ...(activeActive !== undefined ? { activeActive } : {}),
       enabled: true,
     })
     gatewaysByVnetName.set(vnetName.toLowerCase(), list)

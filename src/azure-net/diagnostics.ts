@@ -567,6 +567,21 @@ export function runAzNetDiagnostics(
 
     const ars = vnet.routeServer
     if (ars && ars.enabled) {
+      if (ars.branchToBranchTraffic) {
+        for (const gateway of vnet.gateways.filter((candidate) => candidate.enabled && candidate.kind === 'Vpn')) {
+          if (gateway.activeActive === true && gateway.asn === 65515) continue
+          findings.push({
+            id: `ars-vpn-mode:${ars.id}:${gateway.id}`,
+            severity: 'warning',
+            category: 'ars-configuration',
+            title: `VPN gateway "${gateway.name}" does not establish supported ARS route-exchange configuration`,
+            summary: `ARS "${ars.name}" has route exchange enabled, but VPN gateway "${gateway.name}" has ${gateway.activeActive === undefined ? 'unspecified mode' : gateway.activeActive ? 'active/active mode' : 'active/standby mode'} and ASN ${gateway.asn}. Azure requires active/active and ASN 65515, even when VPN BGP is disabled. Resource-level simulated routes do not qualify this combination.`,
+            remediation: `Configure active/active and ASN 65515 for ARS integration, or use a separate standalone active/standby scenario. Instance failure, failover timing and live BGP establishment are not assessed.`,
+            vnetId: vnet.id,
+            subnetId: ars.subnetId,
+          })
+        }
+      }
       if (!ars.branchToBranchTraffic && vnet.gateways.some((g) => g.enabled)) {
         findings.push({
           id: `ars-b2b-off:${ars.id}`,
