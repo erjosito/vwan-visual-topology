@@ -146,6 +146,13 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
             && ((peering.vnetAId === check.params.vnetAId && peering.vnetBId === check.params.vnetBId)
               || (peering.vnetBId === check.params.vnetAId && peering.vnetAId === check.params.vnetBId)))
         }
+        if (check.kind === 'hub-associations.configured') {
+          configured = document.mode !== 'vwan' && check.params.associations.every((scope) => {
+            const attachment = document.topology.vnets.find((vnet) => vnet.id === scope.vnetId)?.vwanHubAttachment
+            return attachment?.enabled && attachment.hubId === scope.hubId
+              && attachment.hubRouting?.status === 'configured' && attachment.hubRouting.associatedTableId === scope.tableId
+          })
+        }
         if (check.kind === 'connections.configured') {
           const starter = bundle.scenarios.find((scenario) => scenario.id === item.lesson.scenarioId)!.document
           configured = document.mode !== 'vwan' && starter.mode !== 'vwan' && check.params.connections.every((state) => {

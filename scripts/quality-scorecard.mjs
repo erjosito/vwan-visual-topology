@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 11
+export const scorecardVersion = 12
 // Keep document-derived contract fixtures distinct from regression and live Azure evidence.
 export const modelContractPlan = {
   unit: [{ id: 'static-firewall-model-contracts', label: 'Document-derived static Firewall model-contract conformance',

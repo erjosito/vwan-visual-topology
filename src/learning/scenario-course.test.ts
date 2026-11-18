@@ -7,6 +7,7 @@ import type { CourseCheck } from './course-contract'
 import { hubFirewallTopology } from '../../tests/fixtures/hub-firewall'
 import { hybridLessonRequirements, hybridLessonTopology } from './hybrid-scenario'
 import { simulateAzNet } from '../azure-net/engine'
+import { multihubLessonRequirements, multihubLessonTopology } from './multihub-scenario'
 
 const check = (id: string) => scenarioBundle.checks.find((entry) => entry.id === `${id}.repair-check`)! as Extract<CourseCheck, { kind: 'requirements.satisfied' }>
 const document = (id: string) => ({ mode: 'full' as const, topology: structuredClone(scenarioTopologies[id]) })
@@ -38,6 +39,55 @@ function repaired(id: string) {
 }
 
 describe('scenario edition routing qualification', () => {
+  it('qualifies multi-hub destination labels, independent return tables and two native repair alternatives', () => {
+    const topology = multihubLessonTopology()
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: multihubLessonRequirements })
+    const starter = evaluate()
+    expect(starter.errors).toEqual([])
+    expect(starter.status).toBe('complete')
+    expect(starter.assessments.map((entry) => entry.outcome)).toEqual([
+      'violated', 'satisfied', 'satisfied', 'satisfied', 'violated', 'satisfied', 'satisfied', 'satisfied', 'satisfied',
+    ])
+    expect(starter.assessments[0].evidence).toMatchObject({ reverse: { status: 'delivered' } })
+    topology.vwanHubs[0].routeTables![0].labels = ['shared']
+    expect(evaluate().assessments.every((entry) => entry.outcome === 'satisfied')).toBe(true)
+    topology.vwanHubs[0].routeTables![0].labels = ['Shared']
+    topology.vnets[1].vwanHubAttachment!.hubRouting!.labels.push('Shared')
+    expect(evaluate().assessments.every((entry) => entry.outcome === 'satisfied')).toBe(true)
+    topology.vnets[0].vwanHubAttachment!.hubRouting!.labels = []
+    expect(evaluate().assessments[0]).toMatchObject({ outcome: 'violated', evidence: { forward: { status: 'delivered' } } })
+  })
+  it.each(['local-id', 'local-only', 'source-default', 'broken-operations', 'tenant-leak'])('does not accept the multi-hub %s non-fix', (change) => {
+    const topology = multihubLessonTopology()
+    topology.vwanHubs[0].routeTables![0].labels = ['shared']
+    if (change === 'local-id') topology.vwanHubs[0].routeTables![0].labels = ['east-services']
+    if (change === 'local-only') topology.vnets[1].vwanHubAttachment!.hubRouting!.labels = []
+    if (change === 'source-default') topology.vnets[0].vwanHubAttachment!.hubRouting!.associatedTableId = 'defaultRouteTable'
+    if (change === 'broken-operations') topology.vnets[3].vwanHubAttachment!.enabled = false
+    if (change === 'tenant-leak') topology.vnets[2].vwanHubAttachment!.hubRouting!.labels = ['shared']
+    const result = executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: multihubLessonRequirements })
+    expect(result.status).toBe('complete')
+    expect(result.assessments.some((entry) => entry.outcome !== 'satisfied')).toBe(true)
+    if (change === 'tenant-leak') expect(result.assessments[2].outcome).toBe('violated')
+  })
+  it.each(['unknown', 'remote-only', 'secured-custom'])('keeps multi-hub %s coverage explicitly unassessed', (change) => {
+    const topology = multihubLessonTopology()
+    topology.vwanHubs[0].routeTables![0].labels = ['shared']
+    if (change === 'unknown') topology.vnets[2].vwanHubAttachment!.hubRouting!.status = 'unknown'
+    if (change === 'secured-custom') topology.vwanHubs[0].routingIntent.private = true
+    if (change === 'remote-only') {
+      topology.vnets[1].vwanHubAttachment!.hubRouting!.propagatedTableIds = []
+      topology.vnets[1].vwanHubAttachment!.hubRouting!.labels = ['remote-only']
+      topology.vwanHubs[0].routeTables![0].labels = ['remote-only']
+    }
+    const result = executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: multihubLessonRequirements })
+    expect(result.status).toBe('not assessed')
+    expect(result.assessments.some((entry) => entry.outcome === 'not assessed')).toBe(true)
+    expect(result.assessments[2].outcome).toBe('not assessed')
+  })
   it('qualifies independent ER/VPN preference, specificity, summary contributors and declared withdrawal', () => {
     const topology = hybridLessonTopology()
     const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',
@@ -64,6 +114,21 @@ describe('scenario edition routing qualification', () => {
   })
   it('validates every owned native scenario and all check/guidance scopes', () => {
     expect(validateCourse(scenarioBundle)).toEqual(scenarioBundle)
+  })
+  it.each(['foreign-vnet', 'wrong-hub', 'foreign-table', 'duplicate-vnet', 'wrong-return-guide'])('rejects multi-hub authoring with %s scope', (change) => {
+    const bundle = structuredClone(scenarioBundle)
+    const check = bundle.checks.find((entry) => entry.id === 'multihub-labels.repair-check')!
+    if (check.kind !== 'hub-associations.configured') throw new Error('Association check required')
+    if (change === 'foreign-vnet') check.params.associations[0].vnetId = 'not-owned'
+    if (change === 'wrong-hub') check.params.associations[0].hubId = 'east-hub'
+    if (change === 'foreign-table') check.params.associations[0].tableId = 'east-services'
+    if (change === 'duplicate-vnet') check.params.associations.push(check.params.associations[0])
+    if (change === 'wrong-return-guide') {
+      const guide = bundle.guidance.find((entry) => entry.id === 'multihub-labels.return-guide')!
+      if (guide.action !== 'hub-routes.open') throw new Error('Hub routes guidance required')
+      guide.params = { ...guide.params, tableId: 'tenant-only' }
+    }
+    expect(() => validateCourse(bundle)).toThrow()
   })
   it.each(['foreign-connection', 'foreign-gateway', 'foreign-return', 'mismatched-return'])('rejects hybrid content with %s scope', (change) => {
     const bundle = structuredClone(scenarioBundle)

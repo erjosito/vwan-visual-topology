@@ -42,7 +42,7 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
       const choice = check.params.choices.find((item) => item.id === check.params.correctChoiceId)!
       await sidebar.getByRole('radio', { name: choice.text[language], exact: true }).check()
     }
-    if (check.kind === 'routes.inspected') {
+    if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') {
       await sidebar.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
       await page.getByTestId('learning-record-inspection').click()
     }
