@@ -107,7 +107,7 @@ export const wanLessons: CourseBundle['lessons'] = [
         id: 'capstone.verify', assessmentVersion: 1, awardId: 'capstone.verify', points: 110,
         title: { en: 'Verify both repairs survived together', ja: '両方の修復が維持されているか検証する' },
         instruction: { en: 'Recheck both conversations, both inspection directions and A’s advertised prefix in this WAN hub’s Default table. Neither a restored branch alone nor an inspected one-way path is enough.', ja: '両方の通信、双方向の検査、この WAN ハブの Default テーブルの A の広告プレフィックスを再確認します。拠点だけの復旧や片方向だけの検査では不十分です。' },
-        checkId: 'hybrid-complete', guidanceIds: ['routes-a'], hints: [],
+        checkId: 'hybrid-complete', guidanceIds: ['hybrid-default-routes'], hints: [],
       },
       {
         id: capstoneCheckpoint.taskId, assessmentVersion: capstoneCheckpoint.assessmentVersion, awardId: 'capstone.explain', points: 80,
@@ -217,8 +217,10 @@ export const wanChecks: CourseBundle['checks'] = [
 ]
 
 export const wanGuidance: CourseBundle['guidance'] = [
-  { id: 'wan-default-routes', action: 'hub-routes.open', params: { hubId: 'wan', tableId: 'defaultRouteTable' },
-    instruction: { en: 'Open the secured WAN hub and its exact Default effective-route table.', ja: '保護された WAN ハブの正確な Default 有効ルート テーブルを開きます。' } },
+  { id: 'wan-default-routes', action: 'hub-routes.open', params: { hubId: 'wan', tableId: 'defaultRouteTable', prefix: '10.2.0.0/16' },
+    instruction: { en: 'Open the secured WAN hub’s Default table and highlight 10.2.0.0/16.', ja: '保護された WAN ハブの Default テーブルを開き、10.2.0.0/16 を強調表示します。' } },
+  { id: 'hybrid-default-routes', action: 'hub-routes.open', params: { hubId: 'wan', tableId: 'defaultRouteTable', prefix: '10.1.0.0/16' },
+    instruction: { en: 'Open this WAN hub’s Default table and highlight A’s advertised 10.1.0.0/16 prefix.', ja: 'この WAN ハブの Default テーブルを開き、A が広告した 10.1.0.0/16 を強調表示します。' } },
   { id: 'workload-return-routes', action: 'routes.open', params: { vnetId: 'b', subnetId: 'work-b', prefix: '10.1.0.0/16' },
     instruction: { en: 'Open Workload B / work-b and highlight the return prefix to A.', ja: 'Workload B / work-b を開き、A への復路のプレフィックスを強調表示します。' } },
   { id: 'hybrid-branch-repair', action: 'route-table.configure', params: { vnetId: 'a', subnetId: 'work-a', routeTableId: 'branch-policy', routeId: 'drop-branch' },

@@ -5,6 +5,24 @@ import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
 
 describe('semantic guidance admission', () => {
+  it('scopes every hub prefix candidate before its exact table, and rejects missing or uncaptured tables', () => {
+    const input = structuredClone(exampleCourse.scenarios.find((scenario) => scenario.id === 'secured-wan')!.document)
+    if (input.mode === 'vwan') throw new Error('Mixed topology required')
+    const cue: CourseGuidance = { id: 'exact-hub', action: 'hub-routes.open',
+      params: { hubId: 'wan', tableId: 'defaultRouteTable', prefix: '10.2.0.0/16' },
+      instruction: { en: 'Inspect', ja: '確認' } }
+    const before = structuredClone(input)
+    expect(resolveGuidance(input, cue)).toEqual({ anchors: [
+      guidanceAnchor('hub-effective-prefix', 'wan', 'defaultRouteTable', '10.2.0.0/16'),
+      guidanceAnchor('hub-effective-table', 'wan', 'defaultRouteTable'),
+    ] })
+    expect(input).toEqual(before)
+    expect(resolveGuidance(input, { ...cue, params: { ...cue.params, tableId: 'missing' } })).toEqual({ reason: 'entity' })
+    input.topology.vwanHubs[0].routeTablesStatus = 'unknown'
+    expect(resolveGuidance(input, cue)).toEqual({ reason: 'capture' })
+    input.topology.vwanHubs = []
+    expect(resolveGuidance(input, cue)).toEqual({ reason: 'entity' })
+  })
   it('reveals original hybrid connections and branch routes without editing them, and rejects missing owners', () => {
     const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'hybrid-preference')!.document)
     const before = structuredClone(input)

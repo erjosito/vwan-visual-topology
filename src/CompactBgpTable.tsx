@@ -32,6 +32,7 @@ export interface CompactBgpRow {
   preferred?: boolean
   peerId?: string
   warning?: ReactNode
+  learningAnchor?: string
 }
 
 export function CompactBgpTable({ rows, label, legend, testId, neighborLabel }: {
@@ -55,6 +56,7 @@ export function CompactBgpTable({ rows, label, legend, testId, neighborLabel }: 
           {neighborLabel && <th scope="col">{neighborLabel}</th>}
           <th scope="col">{t('Next hop')}</th><th scope="col">{t('AS path')}</th><th scope="col">{t('Route details')}</th></tr></thead>
         <tbody>{rows.map((row) => <tr key={`${row.prefix}:${row.id}`} data-prefix={row.prefix} data-route-id={row.id}
+          data-learning-anchor={row.learningAnchor}
           data-ars-id={row.peerId} data-preferred={row.preferred}
           className={row.preferred === undefined ? undefined : row.preferred ? 'preferred-route' : 'alternative-route'}>
           <td className="route-state" aria-label={row.statusLabel}><span aria-hidden="true">{row.status}</span></td>

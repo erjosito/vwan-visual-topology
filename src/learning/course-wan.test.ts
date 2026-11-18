@@ -23,6 +23,16 @@ function outcomes(input: ReturnType<typeof document>, id: string) {
 }
 
 describe('secured WAN and hybrid transfer content', () => {
+  it.each(['wan.verify', 'capstone.verify'])('guides %s to its assessed hub, table and exact prefix without changing grading', (taskId) => {
+    const task = exampleCourse.lessons.flatMap((lesson) => lesson.tasks).find((task) => task.id === taskId)!
+    const check = exampleCourse.checks.find((check) => check.id === task.checkId)!
+    if (check.kind !== 'requirements.satisfied') throw new Error('Engine check required')
+    const route = check.params.requirements.find((requirement) => requirement.kind === 'route')!
+    if (route.kind !== 'route') throw new Error('Exact route required')
+    const cue = exampleCourse.guidance.find((cue) => task.guidanceIds.includes(cue.id))!
+    expect(cue).toMatchObject({ action: 'hub-routes.open',
+      params: { hubId: route.table, tableId: route.hubTableId, prefix: route.prefix } })
+  })
   it('requires both-direction inspection, not just delivered traffic or a route in a table', () => {
     expect(validateCourse(exampleCourse)).toEqual(exampleCourse)
     const input = document('secured-wan')
