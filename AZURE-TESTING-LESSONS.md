@@ -331,7 +331,7 @@ Validated empirically in `rg-aznet-sim-lab-20261103` (`verification/azure-net-20
 ## References
 
 - [Lab tracking and evidence](https://github.com/erjosito/vwan-visual-topology/issues/5)
-- [Standalone Azure Networking Simulator empirical captures (`verification/azure-net-2026-11-03/`)](verification/azure-net-2026-11-03/README.md)
+- [AzNetSim classic VNet empirical captures (`verification/azure-net-2026-11-03/`)](verification/azure-net-2026-11-03/README.md)
 - [Virtual hub routing preference](https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference)
 - [Virtual WAN routing deep dive](https://learn.microsoft.com/azure/virtual-wan/routing-deep-dive)
 - [Routing intent and routing policies](https://learn.microsoft.com/azure/virtual-wan/how-to-routing-policies)

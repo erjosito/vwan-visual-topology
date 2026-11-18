@@ -1,10 +1,13 @@
-# Virtual WAN トポロジ ラボ — ユーザー ガイドと実践サンプル
+# Azure Network Simulator (AzNetSim) — ユーザー ガイドと実践サンプル
 
 **言語 / Language:** [English](./README.md) | **日本語**  
-**ライブ アプリケーション:** [https://vwan-simulator.com](https://vwan-simulator.com)  
-**インタラクティブ Web ドキュメント (日本語):** [https://vwan-simulator.com/docs/?lang=ja](https://vwan-simulator.com/docs/?lang=ja)
+**ライブ アプリケーション:** [https://aznet-simulator.com](https://aznet-simulator.com)
 
-**Virtual WAN トポロジ ラボ (Virtual WAN Topology Lab)** は、ローカル ファーストで動作する説明可能な Azure Virtual WAN トポロジ デザイナーおよびルーティング シミュレーターです。Azure の資格情報は一切不要で、ブラウザー内のみで有効なルート、BGP パス選択、セキュリティで保護された仮想ハブ (Secured Virtual Hub) のルーティング インテント、ルート マップ、スポーク BGP NVA トランジット、およびペアワイズ ルーティング診断をリアルタイムに計算・可視化します。
+**インタラクティブ Web ドキュメント (日本語):** [https://aznet-simulator.com/docs/?lang=ja](https://aznet-simulator.com/docs/?lang=ja)
+
+**Azure Network Simulator (AzNetSim)** は、クラシック Azure VNet、ハブ＆スポーク、Virtual WAN、ハイブリッド／オンプレミス ネットワークを対象とする、ローカル ファーストのトポロジ デザイナー兼説明可能な計画用シミュレーターです。ブラウザー版と Windows デスクトップ版は共通のシミュレーション基盤を使用し、シミュレーションに Azure の資格情報は不要です。有効なルート、BGP／UDR、Route Server、Firewall／NVA の経路、対応するパケット フローを確認できます。実際の Azure コントロール プレーンやパケット配信を保証するものではありません。
+
+以下の実践サンプルは、AzNetSim の一部である **Virtual WAN** を中心に説明します。クラシック VNet と混在構成は[サンプル カタログ（英語）](./sample-catalog.md)、[Azure VNet サンプル](../samples/README.ja.md)、[現在の対応範囲と制限（英語）](../README.md#scope)を参照してください。`vwan-simulator.com` と既存のファイル／リンクは引き続き利用できます。保存データは Web サイトのオリジンごとに独立しています。
 
 ---
 
@@ -23,11 +26,10 @@
 
 ## 1. 基本的な使い方（ステップバイステップ）
 
-1. **アーキテクチャ モードの選択**: 上部バーのスイッチャーで **Full Hybrid Mode**（ハブ＆スポーク VNet + Virtual WAN + オンプレミス）、**Hub & Spoke-Only**、**Virtual WAN-Only**（`?mode=full`、`?mode=hub-spoke`、`?mode=vwan`）を切り替えられます。
-2. **トポロジ オブジェクトの追加**: ワークスペース ツールバーのボタン（`+ ハブ`、`+ VNet`、`+ サイト`、`+ ER ピアリングの場所`、または Full Hybrid / Hub & Spoke モードの **Configure** タブ）を使用するか、キャンバスの空白部分を右クリックして、Virtual WAN ハブ、スポーク/ハブ VNet、オンプレミス サイト、および ExpressRoute ピアリングの場所を追加します。
+1. **ワークスペースを開く**: 新規セッションは空の混在ネットワークから始まります。**ワークスペース (Workspace)** で保存済み設計を開いたり、新規作成したりできます。アーキテクチャ モードの選択は不要で、クラシック VNet と Virtual WAN ハブを同じ設計に配置できます。従来の Virtual WAN ファイルとサンプルは、互換性のあるエディターでそのまま開きます。
+2. **トポロジ オブジェクトの追加**: ワークスペースのコンテキストに応じた操作、またはキャンバスの空白部分の右クリックから、Virtual WAN ハブ、スポーク/ハブ VNet、オンプレミス サイト、および ExpressRoute ピアリングの場所を追加します。
 3. **ノードへのカスタム テキスト ラベル（任意）の追加**: すべてのノード（ハブ、スポーク/VNet、ExpressRoute ピアリングの場所、オンプレミス サイト）に、図上にピル型バッジとして表示される任意の `label`（最大 120 文字）を設定できます。
-   - **Virtual WAN-Only** モードでは、対象のノードを右クリック → **構成を編集 (Edit configuration)** から **ラベル（任意・図に表示）** を入力します。
-   - **Full Hybrid** / **Hub & Spoke-Only** モードでは、**Configure** タブの **Node Labels & Annotations**（またはノード追加時の `Label` 欄）で設定・編集できます。
+   - 選択したオブジェクトの設定ダイアログまたはインスペクターで編集します。従来の Virtual WAN オブジェクトでは、**構成を編集 (Edit configuration)** → **ラベル（任意・図に表示）** を使用します。
 4. **接続とルーティング ポリシーの構成**: キャンバス上の任意のノードまたはリンクを右クリックしてコンテキスト メニューを開きます。
    - **仮想ハブ**: ハブのルーティングの優先順位（`ExpressRoute`、`VPN`、または `ASPath`）の設定、**セキュリティで保護された仮想ハブ** の Azure Firewall ルーティング インテント（プライベート トラフィック / インターネット トラフィック）の有効化、**BGP テーブル** / **学習したルート** / **アドバタイズしたルート** / **ファイアウォールのルートを表示** の確認、または **優先ルートを強調表示** を実行できます。
    - **スポーク VNet**: **BGP NVA を追加** したり、NVA の背後にスタンドアロン Azure VNet やダウンストリームのオンプレミス サイトを接続したり、スポーク接続のルート マップを構成したりできます。
@@ -43,17 +45,17 @@
 
 | サンプル | シナリオ | サンプル JSON ファイル | ワンクリック起動 |
 | :--- | :--- | :--- | :--- |
-| **サンプル 1** | ハブのルーティングの優先順位 (`ExpressRoute` vs `ASPath`) | [`hub-routing-preferences.json`](../samples/hub-routing-preferences.json) | [シミュレーターで開く](https://vwan-simulator.com/?sample=hub-routing-preferences) |
-| **サンプル 2** | セキュリティで保護された仮想ハブとルーティング インテント | [`secured-hub-routing-intent.json`](../samples/secured-hub-routing-intent.json) | [シミュレーターで開く](https://vwan-simulator.com/?sample=secured-hub-routing-intent) |
-| **サンプル 3** | スポーク BGP NVA トランジット（ダウンストリーム VNet + パートナー拠点） | [`spoke-bgp-nva-transit.json`](../samples/spoke-bgp-nva-transit.json) | [シミュレーターで開く](https://vwan-simulator.com/?sample=spoke-bgp-nva-transit) |
-| **サンプル 4** | 3 ハブ全機能ショーケース（非対称ルーティングを含む） | [`three-hub-all-features-asymmetric.json`](../samples/three-hub-all-features-asymmetric.json) | [シミュレーターで開く](https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric) |
+| **サンプル 1** | ハブのルーティングの優先順位 (`ExpressRoute` vs `ASPath`) | [`hub-routing-preferences.json`](../samples/hub-routing-preferences.json) | [シミュレーターで開く](https://aznet-simulator.com/?sample=hub-routing-preferences) |
+| **サンプル 2** | セキュリティで保護された仮想ハブとルーティング インテント | [`secured-hub-routing-intent.json`](../samples/secured-hub-routing-intent.json) | [シミュレーターで開く](https://aznet-simulator.com/?sample=secured-hub-routing-intent) |
+| **サンプル 3** | スポーク BGP NVA トランジット（ダウンストリーム VNet + パートナー拠点） | [`spoke-bgp-nva-transit.json`](../samples/spoke-bgp-nva-transit.json) | [シミュレーターで開く](https://aznet-simulator.com/?sample=spoke-bgp-nva-transit) |
+| **サンプル 4** | 3 ハブ全機能ショーケース（非対称ルーティングを含む） | [`three-hub-all-features-asymmetric.json`](../samples/three-hub-all-features-asymmetric.json) | [シミュレーターで開く](https://aznet-simulator.com/?sample=three-hub-all-features-asymmetric) |
 
 ---
 
 ## 3. サンプル 1: ハブのルーティングの優先順位 (`ExpressRoute` vs `VPN` vs `ASPath`)
 
 - **サンプル JSON:** [`samples/hub-routing-preferences.json`](../samples/hub-routing-preferences.json)
-- **ライブ リンク:** [https://vwan-simulator.com/?sample=hub-routing-preferences](https://vwan-simulator.com/?sample=hub-routing-preferences)
+- **ライブ リンク:** [https://aznet-simulator.com/?sample=hub-routing-preferences](https://aznet-simulator.com/?sample=hub-routing-preferences)
 
 このシナリオでは、**Dublin Campus**（`10.50.0.0/16`、ASN `65050`）が **ExpressRoute**（アウトバウンド ルート マップで `65050 65050` をプリペンドし、AS パス長が 3 ホップ）と **BGP S2S VPN**（1 ホップ）の両方で 2 つの Virtual WAN ハブに同一プレフィックスをアドバタイズしています。
 
@@ -67,7 +69,7 @@
 ## 4. サンプル 2: セキュリティで保護された仮想ハブと Azure Firewall ルーティング インテント
 
 - **サンプル JSON:** [`samples/secured-hub-routing-intent.json`](../samples/secured-hub-routing-intent.json)
-- **ライブ リンク:** [https://vwan-simulator.com/?sample=secured-hub-routing-intent](https://vwan-simulator.com/?sample=secured-hub-routing-intent)
+- **ライブ リンク:** [https://aznet-simulator.com/?sample=secured-hub-routing-intent](https://aznet-simulator.com/?sample=secured-hub-routing-intent)
 
 このシナリオでは、**プライベート トラフィック**（`10.0.0.0/8`、`172.16.0.0/12`）と **インターネット トラフィック**（`0.0.0.0/0`）の両方で Azure Firewall ルーティング インテントを有効化した **East US Secured Hub** をモデル化しています。
 
@@ -81,7 +83,7 @@
 ## 5. サンプル 3: スポーク BGP NVA によるダウンストリーム VNet・パートナー サイトへのトランジット
 
 - **サンプル JSON:** [`samples/spoke-bgp-nva-transit.json`](../samples/spoke-bgp-nva-transit.json)
-- **ライブ リンク:** [https://vwan-simulator.com/?sample=spoke-bgp-nva-transit](https://vwan-simulator.com/?sample=spoke-bgp-nva-transit)
+- **ライブ リンク:** [https://aznet-simulator.com/?sample=spoke-bgp-nva-transit](https://aznet-simulator.com/?sample=spoke-bgp-nva-transit)
 
 **Central US Hub** は、**Transit NVA Spoke**（`10.10.0.0/16`）内のネットワーク仮想アプライアンス（`10.10.0.4`、ASN `65100`）と BGP ピアリングしています。この NVA は以下の両方へのトランジットを提供します。
 - **AI Shared Services VNet (Downstream)**（`10.99.0.0/16`）— Virtual WAN に直接接続せず、NVA スポークにピアリングされたスタンドアロン Azure VNet。
@@ -94,7 +96,7 @@
 ## 6. サンプル 4: 3 ハブ全機能エンタープライズ ショーケース（非対称ルーティングを含む）
 
 - **サンプル JSON:** [`samples/three-hub-all-features-asymmetric.json`](../samples/three-hub-all-features-asymmetric.json)
-- **ライブ リンク:** [https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric](https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric)
+- **ライブ リンク:** [https://aznet-simulator.com/?sample=three-hub-all-features-asymmetric](https://aznet-simulator.com/?sample=three-hub-all-features-asymmetric)
 
 この 3 ハブ構成のエンタープライズ トポロジは、**West Europe Hub**（Secured、`ExpressRoute` 優先）、**East US Hub**（`VPN` 優先）、**Japan East Hub**（Secured、`ASPath` 優先）と、ExpressRoute、BGP VPN、静的 VPN、SD-WAN、スポーク BGP NVA、オンプレミス サイト間 WAN リンク、インバウンド / アウトバウンド ルート マップを組み合わせています。
 

@@ -2,7 +2,9 @@
 
 **Compared projects:**
 - **Azure Routing Simulator** by Pieterbas Nagengast (`https://pieterbasnagengast.github.io/Azure-RoutingSimulator/`, [`PieterbasNagengast/Azure-RoutingSimulator`](https://github.com/PieterbasNagengast/Azure-RoutingSimulator))
-- **AzNet & Virtual WAN Topology Lab** (`https://vwan-simulator.com/`, [`erjosito/vwan-visual-topology`](https://github.com/erjosito/vwan-visual-topology))
+- **Azure Network Simulator (AzNetSim)** (`https://aznet-simulator.com/`, [`erjosito/vwan-visual-topology`](https://github.com/erjosito/vwan-visual-topology))
+
+**Historical comparison:** the capability assessments below describe the comparison-time implementation, not a current support or certification matrix. AzNetSim's current [scope and limitations](../README.md#scope) and [platform contract](../PLATFORM.md) take precedence. Earlier names and mode-switch descriptions refer to the product's history; the current UI uses one workspace with compatible native providers.
 
 ---
 
@@ -11,7 +13,7 @@
 Both projects are client-side, zero-backend browser simulators designed to make Azure's control-plane and data-plane routing behavior transparent, visual, and testable before touching production infrastructure. Rather than duplicating the exact same scope, the two tools originally approached the problem from complementary angles:
 
 1. **Pieterbas Nagengast's Azure Routing Simulator** started from **classical Hub-and-Spoke VNet routing, Azure Route Server, UDRs, and practical operational footguns** (such as Default Outbound Access retirement, `disablePeeringRoutePropagation` preview, MSEE ExpressRoute hairpinning when on-premises advertises summary routes, and one-click URL `#s=` state sharing). Its single-screen cockpit and guided walkthroughs are remarkably clean and fast to learn.
-2. **AzNet & Virtual WAN Topology Lab (`erjosito/vwan-visual-topology`)** started from **multi-hub Enterprise Virtual WAN BGP control-plane simulation** (Route Maps with match/action rules, Hub Routing Preference across ExpressRoute/VPN/AS-Path, Secured Virtual Hub Routing Intent, Spoke BGP NVA transit, and MSEE Global Reach) and subsequently expanded into a **general-purpose Hub-and-Spoke + Hybrid VNet graph simulator** backed by **deployable Bicep generation, a read-only Azure PowerShell collector, and automated NIC effective-route diffing against live Azure deployments**.
+2. **Azure Network Simulator (AzNetSim; `erjosito/vwan-visual-topology`)** started from **multi-hub Enterprise Virtual WAN BGP control-plane simulation** (Route Maps with match/action rules, Hub Routing Preference across ExpressRoute/VPN/AS-Path, Secured Virtual Hub Routing Intent, Spoke BGP NVA transit, and MSEE Global Reach) and subsequently expanded into a **general-purpose Hub-and-Spoke + Hybrid VNet graph simulator** backed by **deployable Bicep generation, a read-only Azure PowerShell collector, and automated NIC effective-route diffing against live Azure deployments**.
 
 This document provides a candid, code-level comparison of where each tool shines, where each has gaps, and what we learned from studying `Azure-RoutingSimulator`.
 
@@ -19,7 +21,7 @@ This document provides a candid, code-level comparison of where each tool shines
 
 ## Side-by-Side Capability Matrix
 
-| Capability Area | Pieterbas Nagengast — `Azure-RoutingSimulator` | `erjosito/vwan-visual-topology` (Unified AzNet + vWAN Lab) | Notes |
+| Capability Area | Pieterbas Nagengast — `Azure-RoutingSimulator` | Azure Network Simulator (AzNetSim) | Notes |
 |---|---|---|---|
 | **Topology Cardinality** | Fixed canonical topology (1 Hub VNet, up to 3 Spokes, 1 On-Premises site) with quick toggles | Arbitrary graph topology (multiple Hub VNets, arbitrary Spokes & Subnets, multiple vWAN Hubs, multiple ER MSEE locations, multiple On-Prem sites & site-to-site links) | Fixed topology keeps UI ultra-compact; arbitrary graph supports multi-region / multi-hub designs |
 | **Virtual WAN Deep Control Plane** | High-level `Hub Mode: Standard VNet vs vWAN` toggle (`Routing Intent: Private / Internet`, `Branch-to-Branch`) | Full multi-hub vWAN simulator: Inbound/Outbound Route Maps, AS-Path prepending/filtering, community matching, Hub Routing Preference (`ExpressRoute`, `VpnGateway`, `ASPath`), Secured Hub Firewall tables, Spoke BGP NVA peering | `vwan-visual-topology` models full multi-hub BGP convergence |
@@ -52,7 +54,7 @@ This document provides a candid, code-level comparison of where each tool shines
 
 ---
 
-## Where `vwan-visual-topology` (AzNet + vWAN Simulator) Excels
+## Where Azure Network Simulator (AzNetSim) Excels
 
 1. **Empirical Verification Against Live Azure (Bicep -> Deploy -> Capture -> Route Diff):**
    - Can export any topology to a deployable Azure **Bicep** template, collect the live Azure resource group state and NIC effective route tables via a read-only PowerShell script (using an auxiliary proxy subnet sharing `GatewaySubnet`'s route table to work around Azure's prohibition on probe VMs in `GatewaySubnet`), and run an automated **route-by-route diff** inside the UI.

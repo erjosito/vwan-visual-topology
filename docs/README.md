@@ -1,10 +1,13 @@
-# Virtual WAN Topology Lab — User Guide & Worked Examples
+# Azure Network Simulator (AzNetSim) — User Guide & Worked Examples
 
 **Language / 言語:** **English** | [日本語](./README.ja.md)  
-**Live Application:** [https://vwan-simulator.com](https://vwan-simulator.com)  
-**Interactive Web Documentation:** [https://vwan-simulator.com/docs/](https://vwan-simulator.com/docs/) ([日本語版](https://vwan-simulator.com/docs/?lang=ja))
+**Live Application:** [https://aznet-simulator.com](https://aznet-simulator.com)
 
-**Virtual WAN Topology Lab** is a local-first, explainable Azure Virtual WAN topology designer and routing simulator. It runs entirely in your browser (with zero Azure credentials required) and calculates effective routes, BGP path selection, Secured Virtual Hub Routing Intent, Route Maps, Spoke BGP NVA transit, and pairwise routing diagnostics in real time.
+**Interactive Web Documentation:** [https://aznet-simulator.com/docs/](https://aznet-simulator.com/docs/) ([日本語版](https://aznet-simulator.com/docs/?lang=ja))
+
+**Azure Network Simulator (AzNetSim)** is a local-first topology designer and explainable planning simulator for classic Azure VNets, hub-and-spoke, Virtual WAN, and hybrid/on-premises networks. Browser and Windows desktop clients share the simulation platform; no Azure credentials are needed for simulation. Explore effective routes, BGP/UDRs, Route Server, Firewall/NVA paths, and supported packet-flow declarations. It is not a live Azure control plane or a guarantee of packet delivery.
+
+The worked examples below focus on **Virtual WAN**, one part of AzNetSim. For classic VNet and mixed-network examples, see the [sample catalog](./sample-catalog.md), [Azure VNet samples](../samples/README.md#comprehensive-azure-vnet-topologies-samplesazure-net), and the [current feature scope and limitations](../README.md#scope). `vwan-simulator.com` and legacy files/links remain supported; browser saves remain separate per website origin.
 
 ---
 
@@ -23,11 +26,10 @@
 
 ## 1. Step-by-Step Instructions
 
-1. **Choose an Architecture Mode**: Use the **Architecture View** switcher in the top bar to switch between **Full Hybrid Mode** (Hub & Spoke VNets + Virtual WAN + On-Premises), **Hub & Spoke-Only**, and **Virtual WAN-Only** (`?mode=full`, `?mode=hub-spoke`, or `?mode=vwan`).
-2. **Add Topology Objects**: Use the workspace toolbar buttons (`+ Hub`, `+ VNet`, `+ Site`, `+ ER location` in Virtual WAN-Only mode, or the **Configure** tab in Full Hybrid / Hub & Spoke modes) or right-click blank canvas to add Virtual WAN hubs, spoke/hub VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.
+1. **Open a workspace**: New sessions start with an empty mixed-network design; **Workspace** opens saved designs or creates a new one. There is no architecture-mode selector. Classic VNets and Virtual WAN hubs can coexist. Legacy Virtual WAN files and samples open in their compatible native editor without lossy conversion.
+2. **Add Topology Objects**: Use the contextual workspace controls or right-click blank canvas to add Virtual WAN hubs, spoke/hub VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.
 3. **Add Optional Custom Node Labels**: Every node (Hub, Spoke/VNet, ExpressRoute Location, and On-Premises Site) supports an optional `label` text annotation (up to 120 characters) rendered as an amber pill badge directly on the diagram:
-   - In **Virtual WAN-Only** mode, right-click any node → **Edit configuration** and enter **Optional diagram label**.
-   - In **Full Hybrid** and **Hub & Spoke-Only** modes, open the **Configure** tab → **Node Labels & Annotations** (or set the `Label` field when adding a node).
+   - Open the selected object's configuration dialog or inspector to edit its label. Legacy Virtual WAN objects expose **Edit configuration** → **Optional diagram label**.
 4. **Configure Connections & Routing Policies**: Right-click any node or link on the canvas to open its context menu:
    - **Virtual Hubs**: Configure the hub routing preference (`ExpressRoute`, `VPN`, or `ASPath`), enable **Secured Virtual Hub** Azure Firewall Routing Intent (Private traffic and/or Internet traffic), inspect the **BGP table** / **Learned routes** / **Advertised routes** / **Firewall routes**, or click **Highlight preferred routes**.
    - **Spoke VNets**: Attach a **BGP NVA**, connect downstream standalone Azure VNets or downstream on-premises sites behind that NVA, or configure spoke connection route maps.
@@ -42,17 +44,17 @@ Every screenshot in this guide was captured directly from the sample JSON files 
 
 | Example | Scenario | Sample JSON File | One-Click Launch |
 | :--- | :--- | :--- | :--- |
-| **Example 1** | Hub Routing Preferences (`ExpressRoute` vs `ASPath`) | [`hub-routing-preferences.json`](../samples/hub-routing-preferences.json) | [Open in Simulator](https://vwan-simulator.com/?sample=hub-routing-preferences) |
-| **Example 2** | Secured Virtual Hub & Firewall Routing Intent | [`secured-hub-routing-intent.json`](../samples/secured-hub-routing-intent.json) | [Open in Simulator](https://vwan-simulator.com/?sample=secured-hub-routing-intent) |
-| **Example 3** | Spoke BGP NVA Transit (Downstream VNet + Partner Site) | [`spoke-bgp-nva-transit.json`](../samples/spoke-bgp-nva-transit.json) | [Open in Simulator](https://vwan-simulator.com/?sample=spoke-bgp-nva-transit) |
-| **Example 4** | 3-Hub All-Features Showcase (with Asymmetric Routing) | [`three-hub-all-features-asymmetric.json`](../samples/three-hub-all-features-asymmetric.json) | [Open in Simulator](https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric) |
+| **Example 1** | Hub Routing Preferences (`ExpressRoute` vs `ASPath`) | [`hub-routing-preferences.json`](../samples/hub-routing-preferences.json) | [Open in Simulator](https://aznet-simulator.com/?sample=hub-routing-preferences) |
+| **Example 2** | Secured Virtual Hub & Firewall Routing Intent | [`secured-hub-routing-intent.json`](../samples/secured-hub-routing-intent.json) | [Open in Simulator](https://aznet-simulator.com/?sample=secured-hub-routing-intent) |
+| **Example 3** | Spoke BGP NVA Transit (Downstream VNet + Partner Site) | [`spoke-bgp-nva-transit.json`](../samples/spoke-bgp-nva-transit.json) | [Open in Simulator](https://aznet-simulator.com/?sample=spoke-bgp-nva-transit) |
+| **Example 4** | 3-Hub All-Features Showcase (with Asymmetric Routing) | [`three-hub-all-features-asymmetric.json`](../samples/three-hub-all-features-asymmetric.json) | [Open in Simulator](https://aznet-simulator.com/?sample=three-hub-all-features-asymmetric) |
 
 ---
 
 ## 3. Example 1: Hub Routing Preferences (`ExpressRoute` vs `VPN` vs `ASPath`)
 
 - **Sample JSON:** [`samples/hub-routing-preferences.json`](../samples/hub-routing-preferences.json)
-- **Live Link:** [https://vwan-simulator.com/?sample=hub-routing-preferences](https://vwan-simulator.com/?sample=hub-routing-preferences)
+- **Live Link:** [https://aznet-simulator.com/?sample=hub-routing-preferences](https://aznet-simulator.com/?sample=hub-routing-preferences)
 
 In this scenario, **Dublin Campus** (`10.50.0.0/16`, ASN `65050`) advertises the same prefix to two Virtual WAN hubs over both **ExpressRoute** (with an outbound route map prepending `65050 65050` so the ExpressRoute AS path is 3 hops long) and **BGP S2S VPN** (1 hop):
 
@@ -66,7 +68,7 @@ In this scenario, **Dublin Campus** (`10.50.0.0/16`, ASN `65050`) advertises the
 ## 4. Example 2: Secured Virtual Hub & Azure Firewall Routing Intent
 
 - **Sample JSON:** [`samples/secured-hub-routing-intent.json`](../samples/secured-hub-routing-intent.json)
-- **Live Link:** [https://vwan-simulator.com/?sample=secured-hub-routing-intent](https://vwan-simulator.com/?sample=secured-hub-routing-intent)
+- **Live Link:** [https://aznet-simulator.com/?sample=secured-hub-routing-intent](https://aznet-simulator.com/?sample=secured-hub-routing-intent)
 
 This scenario models **East US Secured Hub** with Azure Firewall Routing Intent enabled for both **Private traffic** (`10.0.0.0/8`, `172.16.0.0/12`) and **Internet traffic** (`0.0.0.0/0`):
 
@@ -80,7 +82,7 @@ This scenario models **East US Secured Hub** with Azure Firewall Routing Intent 
 ## 5. Example 3: Spoke BGP NVA Transit to Downstream VNet & Partner Site
 
 - **Sample JSON:** [`samples/spoke-bgp-nva-transit.json`](../samples/spoke-bgp-nva-transit.json)
-- **Live Link:** [https://vwan-simulator.com/?sample=spoke-bgp-nva-transit](https://vwan-simulator.com/?sample=spoke-bgp-nva-transit)
+- **Live Link:** [https://aznet-simulator.com/?sample=spoke-bgp-nva-transit](https://aznet-simulator.com/?sample=spoke-bgp-nva-transit)
 
 **Central US Hub** peers over BGP with a Network Virtual Appliance (`10.10.0.4`, ASN `65100`) inside **Transit NVA Spoke** (`10.10.0.0/16`). The NVA provides transit to both:
 - **AI Shared Services VNet (Downstream)** (`10.99.0.0/16`) — a standalone Azure VNet peered to the NVA spoke rather than directly to Virtual WAN.
@@ -93,7 +95,7 @@ This scenario models **East US Secured Hub** with Azure Firewall Routing Intent 
 ## 6. Example 4: 3-Hub All-Features Enterprise Showcase (with Asymmetric Routing)
 
 - **Sample JSON:** [`samples/three-hub-all-features-asymmetric.json`](../samples/three-hub-all-features-asymmetric.json)
-- **Live Link:** [https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric](https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric)
+- **Live Link:** [https://aznet-simulator.com/?sample=three-hub-all-features-asymmetric](https://aznet-simulator.com/?sample=three-hub-all-features-asymmetric)
 
 This 3-hub enterprise topology combines **West Europe Hub** (Secured, `ExpressRoute` preference), **East US Hub** (`VPN` preference), and **Japan East Hub** (Secured, `ASPath` preference) with ExpressRoute, BGP VPN, Static VPN, SD-WAN, a Spoke BGP NVA, on-premises site-to-site WAN links, and inbound/outbound Route Maps.
 

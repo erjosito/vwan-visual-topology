@@ -1,10 +1,10 @@
 # Privacy policy
 
-Last updated: 16 November 2026
+Last updated: 17 November 2026
 
 ## Scope and maintainer
 
-This policy describes the Virtual WAN Topology Lab / Azure Network Simulator
+This policy describes the Azure Network Simulator (AzNetSim; formerly Virtual WAN Topology Lab)
 web application, Windows desktop application, and optional local MCP server
 maintained in [erjosito/vwan-visual-topology](https://github.com/erjosito/vwan-visual-topology).
 This is an independent project, not an official Microsoft product or service.

@@ -1,5 +1,10 @@
 # Local simulation platform
 
+Azure Network Simulator (**AzNetSim**) provides a shared local simulation platform
+for classic VNets/hub-and-spoke, Virtual WAN and hybrid networks. The product name
+does not expand any provider's supported semantics; existing API identifiers,
+native formats, desktop identity and saved-data keys remain compatible.
+
 P0/P1/P2A/P2B of #112 add a browser-independent contract and local clients.
 The existing React UI, native JSON formats, validators and TypeScript engines
 remain the source of routing behavior. There is no separate desktop engine.
