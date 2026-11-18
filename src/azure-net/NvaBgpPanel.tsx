@@ -20,6 +20,7 @@ registerJapaneseMessages({
   'Modeled peer available': 'モデル上でピアが利用可能',
   'Gateway summary impact on ARS-to-NVA exports is not assessed. Shown candidates do not prove presence or absence of configured gateway summaries.': 'ゲートウェイ集約プレフィックスが ARS から NVA への広告に与える影響は未評価です。表示候補は構成された集約プレフィックスの有無を証明しません。',
   'Configured gateway summaries (not assessed)': '構成されたゲートウェイ集約プレフィックス（未評価）',
+  'BGP over subnet peering is not assessed': 'サブネット ピアリング経由の BGP は未評価です',
   'ARS disabled': 'ARS が無効',
   'NVA BGP disabled': 'NVA の BGP が無効',
   'Unsupported Azure-reserved peer ASN': 'Azure 予約済みのピア ASN は未対応',
@@ -52,6 +53,7 @@ const peerStates: Record<AzNvaBgpPeer['state'], string> = {
   'unsupported-asn': 'Unsupported Azure-reserved peer ASN',
   'unsupported-appliance': 'Unsupported appliance kind',
   unreachable: 'No active direct VNet peering with bidirectional VNet access',
+  'subnet-peering-not-assessed': 'BGP over subnet peering is not assessed',
 }
 
 export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId, onPeerChange, onClose }: {

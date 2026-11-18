@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "kind": "azure-network-topology",
+  "name": "Selected subnet peering",
+  "vnets": [
+    {
+      "id": "vnet-a", "name": "VNet A", "region": "westeurope", "role": "standalone",
+      "prefixes": ["10.80.0.0/16"],
+      "subnets": [
+        { "id": "a1", "name": "Participating A", "prefix": "10.80.1.0/24", "defaultOutboundAccess": false },
+        { "id": "a2", "name": "Unselected A", "prefix": "10.80.2.0/24", "defaultOutboundAccess": false }
+      ],
+      "gateways": [], "appliances": []
+    },
+    {
+      "id": "vnet-b", "name": "VNet B", "region": "westeurope", "role": "standalone",
+      "prefixes": ["10.81.0.0/16"],
+      "subnets": [
+        { "id": "b1", "name": "Participating B", "prefix": "10.81.1.0/24", "defaultOutboundAccess": false },
+        { "id": "b2", "name": "Unselected B", "prefix": "10.81.2.0/24", "defaultOutboundAccess": false }
+      ],
+      "gateways": [], "appliances": []
+    }
+  ],
+  "vnetPeerings": [
+    {
+      "id": "peer-a-b", "name": "A to B selected subnets", "vnetAId": "vnet-a", "vnetBId": "vnet-b", "enabled": true,
+      "aToB": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": false, "allowGatewayTransit": false, "useRemoteGateways": false },
+      "bToA": { "allowVirtualNetworkAccess": true, "allowForwardedTraffic": false, "allowGatewayTransit": false, "useRemoteGateways": false },
+      "scope": { "type": "subnets", "subnetAIds": ["a1"], "subnetBIds": ["b1"] }
+    }
+  ],
+  "udrTables": [], "vwanHubs": [], "erLocations": [], "erLinks": [], "sites": [], "vpnConnections": [], "siteLinks": []
+}

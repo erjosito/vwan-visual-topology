@@ -4,6 +4,7 @@ import type { AzNetTopology, AzVNet } from './model'
 import { azArsPeers, azArsSpokes } from './ars-route-maps'
 import { natGatewayForSubnet, validateInventory } from '../inventory'
 import { generateConnectivityBicep } from '../connectivity-bicep'
+import { validateSubnetPeeringScopes } from './subnet-peering'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -34,6 +35,8 @@ export function generateAzNetBicep(
   options: AzNetBicepOptions = {},
 ): BicepExport {
   validateInventory(topology)
+  const peeringErrors = validateSubnetPeeringScopes(topology)
+  if (peeringErrors.length) throw new Error(peeringErrors.join(' '))
   const defaultLoc =
     canonicalLocation(options.defaultLocation ?? '') ||
     canonicalLocation(topology.vnets[0]?.region ?? '') ||
@@ -42,6 +45,9 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.vnetPeerings.some((peering) => peering.scope?.type === 'subnets')) {
+    warnings.push('Subnet peering exports explicit peerCompleteVnets=false and mirrored subnet names. Azure subscription allowlisting, current VM SKU prerequisites and live deployment are not verified. Changing whole-VNet/subnet type requires deleting/recreating the Azure peering; membership edits update and synchronize the existing link. Delegations and unsupported transit composition are not an equivalent deployment.')
+  }
   if (topology.vnets.some((vnet) => vnet.appliances.some((app) => app.kind === 'vnra'))) {
     warnings.push('Managed VNRA appliances are not deployed by this Bicep starter. UDRs may reference their private IPs, but the forwarding resources are omitted. Preserve native JSON and deploy VNRA separately; this is not an equivalent transit deployment.')
   }
@@ -556,6 +562,11 @@ export function generateAzNetBicep(
     }
     lines.push(`  properties: {`)
     lines.push(`    remoteVirtualNetwork: { id: ${vnetBSym}.id }`)
+    if (peering.scope?.type === 'subnets') {
+      lines.push('    peerCompleteVnets: false', '    enableOnlyIPv6Peering: false',
+        `    localSubnetNames: [${peering.scope.subnetAIds.map((id) => `'${escapeBicepString(vnetA.subnets.find((subnet) => subnet.id === id)!.name)}'`).join(', ')}]`,
+        `    remoteSubnetNames: [${peering.scope.subnetBIds.map((id) => `'${escapeBicepString(vnetB.subnets.find((subnet) => subnet.id === id)!.name)}'`).join(', ')}]`)
+    }
     lines.push(
       `    allowVirtualNetworkAccess: ${peering.aToB.allowVirtualNetworkAccess ? 'true' : 'false'}`,
     )
@@ -578,6 +589,11 @@ export function generateAzNetBicep(
     }
     lines.push(`  properties: {`)
     lines.push(`    remoteVirtualNetwork: { id: ${vnetASym}.id }`)
+    if (peering.scope?.type === 'subnets') {
+      lines.push('    peerCompleteVnets: false', '    enableOnlyIPv6Peering: false',
+        `    localSubnetNames: [${peering.scope.subnetBIds.map((id) => `'${escapeBicepString(vnetB.subnets.find((subnet) => subnet.id === id)!.name)}'`).join(', ')}]`,
+        `    remoteSubnetNames: [${peering.scope.subnetAIds.map((id) => `'${escapeBicepString(vnetA.subnets.find((subnet) => subnet.id === id)!.name)}'`).join(', ')}]`)
+    }
     lines.push(
       `    allowVirtualNetworkAccess: ${peering.bToA.allowVirtualNetworkAccess ? 'true' : 'false'}`,
     )
