@@ -269,6 +269,7 @@ export function AzureNetDiagram({
   }, [])
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [focusSelection, setFocusSelection] = useState<AzSelectedEntity>()
   const [hoverPopover, setHoverPopover] = useState<
     | { kind: 'peering'; peeringId: string; x: number; y: number }
     | { kind: 'route-table'; vnetId: string; subnetId: string; routeTableId: string; x: number; y: number }
@@ -514,6 +515,44 @@ export function AzureNetDiagram({
     return [[link.id, { from: link.from, to: link.to, curve: diagramCurve(centerOfBox(a), centerOfBox(b),
       { x: a.width / 2, y: a.height / 2 }, { x: b.width / 2, y: b.height / 2 }, bend) }] as const]
   }))
+  const resolveFocus = (entity?: AzSelectedEntity): { name: string; node?: string; connectionId?: string } | undefined => {
+    if (!entity) return
+    const nodeKey = 'vnetId' in entity ? `vnet:${entity.vnetId}`
+      : entity.kind === 'vwan-hub' ? `vwan-hub:${entity.hubId}`
+        : entity.kind === 'er-location' ? `er-location:${entity.locationId}`
+          : entity.kind === 'site' ? `site:${entity.siteId}` : undefined
+    if (nodeKey) {
+      const node = diagnosticNodes.find((node) => `${node.kind}:${node.id}` === nodeKey)
+      return node ? { name: node.name, node: nodeKey } : undefined
+    }
+    const id = entity.kind === 'peering' ? entity.peeringId
+      : entity.kind === 'er-link' || entity.kind === 'er-global-reach-link' ? entity.linkId
+        : entity.kind === 'vpn-connection' ? entity.connectionId
+          : entity.kind === 'site-link' ? entity.siteLinkId : undefined
+    const link = [...topology.vnetPeerings, ...topology.erLinks, ...(topology.erGlobalReachLinks ?? []),
+      ...topology.vpnConnections, ...topology.siteLinks].find((link) => link.id === id)
+    return link && connectionCurves.has(link.id) ? { name: link.name, connectionId: link.id } : undefined
+  }
+  const focusCandidate = resolveFocus(selected)
+  const focusTarget = resolveFocus(focusSelection)
+  const disabledDevices = new Set(topology.vnets.flatMap((vnet) => vnet.gateways.filter((gateway) => !gateway.enabled).map((gateway) => gateway.id)))
+  const prominent = new Set([
+    ...forwardEdges, ...reverseEdges, ...Object.keys(faults),
+    ...topology.vnetPeerings.filter((link) => !link.enabled || !link.aToB.allowVirtualNetworkAccess || !link.bToA.allowVirtualNetworkAccess).map((link) => link.id),
+    ...[...topology.erLinks, ...topology.vpnConnections].filter((link) => !link.enabled || disabledDevices.has(link.targetId) || faults[link.targetId]).map((link) => link.id),
+    ...[...(topology.erGlobalReachLinks ?? []), ...topology.siteLinks].filter((link) => !link.enabled).map((link) => link.id),
+    ...(showDiagnosticBadges ? diagnostics.flatMap((finding) => (finding.occurrences ?? [finding])
+      .filter((finding) => finding.severity !== 'info').flatMap((finding) => [finding.peeringId, finding.erLinkId]).filter((id): id is string => !!id)) : []),
+    ...(focusCandidate?.connectionId ? [focusCandidate.connectionId] : []),
+  ])
+  const dimmedConnections = new Set([...connectionCurves].filter(([id, edge]) => focusTarget
+    && id !== focusTarget.connectionId && edge.from !== focusTarget.node && edge.to !== focusTarget.node
+    && !prominent.has(id) && !faults[edge.from.slice(edge.from.indexOf(':') + 1)] && !faults[edge.to.slice(edge.to.indexOf(':') + 1)])
+    .map(([id]) => id))
+  const focusAttributes = (id: string) => ({
+    'data-canvas-connection-id': id,
+    'data-connection-dimmed': dimmedConnections.has(id) ? 'true' : undefined,
+  })
   const policyMarkers: {
     id: string; selection: AzRouteMapSelection; ownerName: string; connectionName: string; map: RouteMap; enabled: boolean
     point: { x: number; y: number }; position: { x: number; y: number }; angle: number
@@ -802,6 +841,7 @@ export function AzureNetDiagram({
           return (
             <DiagramButton
               key={peering.id}
+              {...focusAttributes(peering.id)}
               className="aznet-edge-group"
               data-testid={`aznet-peering-${peering.id}`}
               role="button"
@@ -881,7 +921,7 @@ export function AzureNetDiagram({
           const curve = connectionCurves.get(link.id)?.curve
           if (!curve) return null
           const forward = forwardEdges.has(link.id), reverse = reverseEdges.has(link.id)
-          return <path key={link.id} data-testid="aznet-inter-hub-edge" className="aznet-edge-path" d={curve.d}
+          return <path key={link.id} {...focusAttributes(link.id)} data-testid="aznet-inter-hub-edge" className="aznet-edge-path" d={curve.d}
             fill="none" stroke={forward ? 'var(--forward)' : reverse ? 'var(--return)' : 'var(--link)'}
             strokeWidth={forward || reverse ? 4 : 2} strokeDasharray={forward ? undefined : '7 4'}>
             <title>{t('Virtual WAN inter-hub transit')}</title>
@@ -899,7 +939,7 @@ export function AzureNetDiagram({
           const inForward = forwardEdges.has(edgeId)
           const inReverse = reverseEdges.has(edgeId)
           return (
-            <g key={edgeId}>
+            <g key={edgeId} {...focusAttributes(edgeId)}>
               <path className="aznet-edge-path" d={curve.d} fill="none"
                 stroke={inForward ? 'var(--forward)' : inReverse ? 'var(--return)' : 'var(--info)'}
                 strokeWidth={inForward || inReverse ? 4 : 2.5}
@@ -945,6 +985,7 @@ export function AzureNetDiagram({
           return (
             <DiagramButton
               key={link.id}
+              {...focusAttributes(link.id)}
               className="aznet-edge-group"
               data-testid={`aznet-erlink-${link.id}`}
               role="button"
@@ -1025,6 +1066,7 @@ export function AzureNetDiagram({
           return (
             <DiagramButton
               key={grLink.id}
+              {...focusAttributes(grLink.id)}
               className="aznet-edge-group"
               data-testid={`aznet-ergrlink-${grLink.id}`}
               role="button"
@@ -1122,6 +1164,7 @@ export function AzureNetDiagram({
           return (
             <DiagramButton
               key={conn.id}
+              {...focusAttributes(conn.id)}
               className="aznet-edge-group"
               data-testid={`aznet-vpnconn-${conn.id}`}
               role="button"
@@ -1205,6 +1248,7 @@ export function AzureNetDiagram({
           return (
             <DiagramButton
               key={sLink.id}
+              {...focusAttributes(sLink.id)}
               className="aznet-edge-group"
               data-testid={`aznet-sitelink-${sLink.id}`}
               role="button"
@@ -2232,18 +2276,30 @@ export function AzureNetDiagram({
       })()}
 
       <CanvasControls zoom={zoom} onZoom={setZoom} {...zoomLimits}
+        status={focusSelection && <div className="connection-focus-status" role="status" data-testid="connection-focus-status">
+          <p>{focusTarget
+            ? t('Focus: {0}. {1} rendered connections: {2} emphasized, {3} dimmed, 0 hidden.',
+              focusTarget.name, connectionCurves.size, connectionCurves.size - dimmedConnections.size, dimmedConnections.size)
+            : t('The focus target no longer exists. All {0} rendered connections are emphasized.', connectionCurves.size)}</p>
+          <p>{t('View only, not a routed path. Inactive, failed and highlighted links stay prominent. Labels and policies stay visible; hover or focus a dimmed link to emphasize it.')}</p>
+        </div>}
         onFitView={() => {
           const bounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
           setZoom(1180 / bounds.width); setPan({ x: bounds.x, y: bounds.y })
         }}
         onResetView={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>
+        <button type="button" disabled={!focusCandidate} onClick={() => setFocusSelection(selected)}
+          title={t('Emphasize direct connections for the selected node or the selected connection. Device selections use their parent VNet.')}>
+          {t('Focus selected connections')}
+        </button>
+        {focusSelection && <button type="button" onClick={() => setFocusSelection(undefined)}>{t('Restore all connections')}</button>}
         {onResetLayout && <button type="button" onClick={onResetLayout}>{t('Reset layout')}</button>}
         {hasActiveHighlights && (
           <button
             type="button"
             className="aznet-clear-highlights-btn"
             data-testid="aznet-clear-highlights-btn"
-            onClick={onClearHighlights}
+            onClick={() => { setFocusSelection(undefined); onClearHighlights() }}
           >
             ✕ Clear highlights & icons
           </button>

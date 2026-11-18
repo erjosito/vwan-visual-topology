@@ -27,6 +27,10 @@
 .simulator-shell .canvas-zoom-controls { display: flex; align-items: center; gap: 4px; }
 .simulator-shell .canvas-zoom-controls > button { width: 30px; }
 .simulator-shell .canvas-controls-stack .highlight-status { position: static; max-width: 100%; }
+.connection-focus-status { max-width: 72ch; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: 12px; overflow-wrap: anywhere; }
+.connection-focus-status p { margin: 0; }
+.aznet-diagram-svg :is([data-connection-dimmed="true"] > .aznet-edge-path, .aznet-edge-path[data-connection-dimmed="true"]) { opacity: .2; }
+.aznet-diagram-svg :is([data-connection-dimmed="true"]:hover > .aznet-edge-path, [data-connection-dimmed="true"]:focus-within > .aznet-edge-path, .aznet-edge-path[data-connection-dimmed="true"]:hover) { opacity: 1; }
 .simulator-shell :is(.canvas-stage, .aznet-canvas-shell) { display: flex; flex-direction: column; }
 .simulator-shell .canvas-stage .diagram-scroll { flex: 1; min-height: 0; height: auto; }
 .simulator-shell .aznet-diagram-svg { flex: 1; min-height: 0; height: 0; }

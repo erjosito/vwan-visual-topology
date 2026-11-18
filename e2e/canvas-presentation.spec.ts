@@ -1,8 +1,110 @@
 import { expect, test } from '@playwright/test'
 import { example } from '../src/model'
 import { sampleHybridVwanAndHubSpoke, sampleArsSdwanNvaCoexistence } from '../src/azure-net/model'
+import AxeBuilder from '@axe-core/playwright'
+import { denseVisualizationTopology } from '../tests/fixtures/dense-visualization'
+import { loadLanguage, translate } from '../src/messages'
 
 const styleKey = 'aznet-canvas-style:v1'
+
+for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja'] as const) {
+  test(`${mode}: ${language} connection focus preserves inspection, failures and the saved design`, async ({ page }, info) => {
+    await loadLanguage(language)
+    const text = (message: string, ...values: unknown[]) => translate(language, message, ...values)
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.addInitScript(({ topology, language }) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    }, { topology: denseVisualizationTopology(2), language })
+    await page.goto(`/?mode=${mode}`)
+    await expect(page.getByTestId('ui-preview-toggle')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', language === 'ja' ? 'dark' : 'light')
+    const svg = page.getByTestId('aznet-diagram-svg')
+    const focus = page.getByRole('button', { name: text('Focus selected connections'), exact: true })
+    await expect(focus).toBeDisabled()
+    await page.getByRole('button', { name: text('Fit view'), exact: true }).click()
+    const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    const geometry = () => svg.locator('.aznet-edge-path').evaluateAll((paths) => paths.map((path) => path.getAttribute('d')))
+    const paths = await geometry()
+    const labels = await svg.locator('text').allTextContents()
+    const viewBox = await svg.getAttribute('viewBox')
+    await page.getByTestId('aznet-select-vnet-hub-0').focus()
+    await page.keyboard.press('Enter')
+    await focus.click()
+    const dimmed = svg.locator('[data-connection-dimmed="true"]')
+    expect(await dimmed.count()).toBeGreaterThan(0)
+    const total = await svg.locator('[data-canvas-connection-id]').count()
+    const count = await dimmed.count()
+    await expect(page.getByTestId('connection-focus-status')).toContainText(
+      text('Focus: {0}. {1} rendered connections: {2} emphasized, {3} dimmed, 0 hidden.', 'Regional hub 1', total, total - count, count))
+    await expect(page.getByTestId('aznet-erlink-er-site-0')).not.toHaveAttribute('data-connection-dimmed')
+    expect(await svg.locator('text').allTextContents()).toEqual(labels)
+    const link = dimmed.first()
+    const linkId = await link.getAttribute('data-testid')
+    await link.focus()
+    await expect(link.locator('> .aznet-edge-path')).toHaveCSS('opacity', '1')
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId(linkId!)).toHaveAttribute('aria-pressed', 'true')
+    const marker = svg.locator('.policy-marker[data-router-id="ars-0"][data-direction="inbound"]').first()
+    await marker.focus()
+    await page.keyboard.press('Enter')
+    const policy = page.getByRole('dialog', { name: 'Route maps · Route Server 1', exact: true })
+    await expect(policy).toBeVisible()
+    await expect(policy.getByRole('combobox', { name: 'Route map connection', exact: true })).toHaveValue('nva:nva-0-0')
+    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(policy).toHaveCount(0)
+    if (mode === 'hub-spoke' && language === 'en') {
+      await page.getByTestId(linkId!).focus()
+      await page.keyboard.press('Enter')
+      await focus.click()
+      await expect(page.getByTestId(linkId!)).not.toHaveAttribute('data-connection-dimmed')
+      expect(await dimmed.count()).toBeGreaterThan(0)
+    }
+    if (mode === 'full' && language === 'en') {
+      await page.getByTestId('aznet-erloc-location-1').focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'Simulate failure of ER location ER location 2', exact: true }).click()
+      await expect(page.getByTestId('active-faults')).toBeVisible()
+      await expect(page.getByTestId('aznet-erlink-er-site-1')).not.toHaveAttribute('data-connection-dimmed')
+    }
+    expect((await new AxeBuilder({ page }).include('[data-testid="aznet-canvas-shell"]').analyze()).violations).toEqual([])
+    await info.attach('connection-focus', { body: await page.screenshot({ path: info.outputPath('connection-focus.png') }), contentType: 'image/png' })
+    await page.getByRole('button', { name: text('Restore all connections'), exact: true }).click()
+    await expect(dimmed).toHaveCount(0)
+    await expect(page.getByTestId('connection-focus-status')).toHaveCount(0)
+    expect(await geometry()).toEqual(paths)
+    await expect(svg).toHaveAttribute('viewBox', viewBox!)
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+  })
+}
+
+test('connection focus never dims existing engine path highlights or changes the inspected pair', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('aznet-ui-preview:v1', 'true'))
+  await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
+  await page.getByTestId('aznet-subnet-sub-data-db').focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
+  await page.getByTestId('aznet-trace-source-select').selectOption('subnet:vnet-spoke-data:sub-data-db')
+  await page.getByTestId('aznet-trace-dest-select').selectOption('site:site-munich-hq:172.16.10.0/24')
+  const forward = await page.getByTestId('aznet-forward-hops').textContent()
+  const reverse = await page.getByTestId('aznet-reverse-hops').textContent()
+  const svg = page.getByTestId('aznet-diagram-svg')
+  const highlighted = svg.locator('.aznet-edge-path[stroke="var(--forward)"], .aznet-edge-path[stroke="var(--return)"]')
+  expect(await highlighted.count()).toBeGreaterThan(0)
+  await page.getByTestId('aznet-select-vnet-vnet-spoke-app').focus()
+  await page.keyboard.press('Enter')
+  await page.getByRole('button', { name: 'Focus selected connections', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  expect(await highlighted.evaluateAll((paths) => paths.some((path) => path.closest('[data-connection-dimmed="true"]')))).toBe(false)
+  await page.getByRole('button', { name: 'Restore all connections', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('aznet-forward-hops')).toHaveText(forward!)
+  await expect(page.getByTestId('aznet-reverse-hops')).toHaveText(reverse!)
+})
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode}: canvas keyboard and anchored wheel zoom share bounds without changing topology`, async ({ page }) => {
