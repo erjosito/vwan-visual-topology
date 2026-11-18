@@ -45,6 +45,9 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.vnets.some((vnet) => vnet.vwanHubAttachment?.staticRoutes?.length)) {
+    warnings.push('Virtual WAN VNet-connection static routes and their propagation are not deployed by this Bicep starter. Preserve native JSON; this is not an equivalent indirect-spoke deployment.')
+  }
   if (topology.vnetPeerings.some((peering) => peering.scope?.type === 'subnets')) {
     warnings.push('Subnet peering exports explicit peerCompleteVnets=false and mirrored subnet names. Azure subscription allowlisting, current VM SKU prerequisites and live deployment are not verified. Changing whole-VNet/subnet type requires deleting/recreating the Azure peering; membership edits update and synchronize the existing link. Delegations and unsupported transit composition are not an equivalent deployment.')
   }

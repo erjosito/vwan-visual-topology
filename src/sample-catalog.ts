@@ -106,6 +106,17 @@ export const VWAN_SAMPLE_GALLERY: readonly SampleGalleryEntry[] = [
 
 export const AZURE_NET_SAMPLE_GALLERY: readonly SampleGalleryEntry[] = [
   {
+    id: 'azure-vnet-indirect-firewall',
+    title: 'Virtual WAN indirect spoke through Azure Firewall',
+    summary: 'A connection static route reaches an indirectly peered workload through a spoke Firewall.',
+    category: 'flagship', track: 'security-inspection', difficulty: 'intermediate', disposition: 'kept',
+    purpose: 'Distinguish a spoke Firewall from a secured virtual hub and verify the indirect return path.',
+    prerequisites: peeringPrerequisites, concepts: ['Connection static routes', 'Indirect spokes'],
+    capabilities: azCapabilities, limitations: [routingLimits, 'Full Hybrid mode only. Propagated non-default connection routes; routing intent and hosting-VNet overlap are unassessed.'],
+    suggestedExperiment: 'Trace both directions, remove the indirect spoke return UDR, then disable static route propagation.',
+    fullHybridOnly: true,
+  },
+  {
     id: 'subnet-peering', title: 'Selected subnet peering',
     summary: 'Two VNets connect selected subnets while other subnets remain outside the forwarding scope.',
     category: 'validation', track: 'foundations-selection', difficulty: 'intermediate', disposition: 'kept',

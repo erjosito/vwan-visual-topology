@@ -1,0 +1,48 @@
+import { expect, test } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+
+test('authors connection static routes, restores undo, and retains them after reload', async ({ page }) => {
+  await page.goto('/?mode=full&sample=azure-vnet-indirect-firewall')
+  const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
+  await tools.getByRole('searchbox').fill('Virtual hub')
+  await tools.getByRole('button', { name: 'Select Virtual WAN hub: Virtual hub', exact: true }).click()
+  await tools.getByRole('button', { name: 'Configure Hub & Labels', exact: true }).click()
+  const panel = page.getByTestId('connection-static-security')
+  await expect(panel).toContainText('10.2.0.0/16')
+  await panel.getByRole('button', { name: 'Remove connection static route Indirect spoke', exact: true }).click()
+  await expect(panel).toContainText('No connection static routes')
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect(panel).toContainText('10.2.0.0/16')
+  await panel.getByLabel('Indirect spoke prefixes', { exact: true }).fill('10.3.0.0/16')
+  await panel.getByLabel('Spoke Firewall/NVA next hop', { exact: true }).selectOption('10.0.0.4')
+  const add = panel.getByRole('button', { name: 'Add connection static route', exact: true })
+  await add.focus()
+  await page.keyboard.press('Enter')
+  await expect(panel).toContainText('10.3.0.0/16')
+  await expect(panel.getByLabel('Propagate static route', { exact: true })).toBeChecked()
+  const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  await expect.poll(async () => (await read()).vnets[0].vwanHubAttachment.staticRoutes.length).toBe(2)
+  await page.reload()
+  expect((await read()).vnets[0].vwanHubAttachment.staticRoutes).toEqual(expect.arrayContaining([
+    expect.objectContaining({ addressPrefixes: ['10.3.0.0/16'], nextHopIpAddress: '10.0.0.4' }),
+  ]))
+})
+
+test('keeps the indirect route editor keyboard-accessible in narrow Japanese dark mode', async ({ page }) => {
+  await page.goto('/?mode=full&sample=azure-vnet-indirect-firewall')
+  const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
+  await tools.getByRole('searchbox').fill('Virtual hub')
+  await tools.getByRole('button', { name: 'Select Virtual WAN hub: Virtual hub', exact: true }).click()
+  await tools.getByRole('button', { name: 'Configure Hub & Labels', exact: true }).click()
+  await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark')
+  await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+  await page.setViewportSize({ width: 700, height: 1000 })
+  const panel = page.getByTestId('connection-static-security')
+  await expect(panel.getByRole('heading', { name: '接続の静的ルート', exact: true })).toBeVisible()
+  const propagate = panel.getByLabel('静的ルートを伝達', { exact: true })
+  await propagate.focus()
+  await page.keyboard.press('Space')
+  await expect(propagate).not.toBeChecked()
+  await expect(panel.getByRole('status')).toContainText('not assessed')
+  expect((await new AxeBuilder({ page }).include('[data-testid="connection-static-security"]').analyze()).violations).toEqual([])
+})
