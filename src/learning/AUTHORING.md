@@ -24,6 +24,13 @@ binding, points, unlocks or start actions. `TrackOverview` is shared by the
 on-demand status details and sidebar. The eager header uses only lightweight
 course metadata; it must not import the catalog or overview.
 
+The new header shows the highest checkpoint-qualified belt across published
+editions, independent of enrollment. Editions with the same `trackId` count
+once; an `xN` suffix appears only when multiple distinct tracks share that
+highest belt. Planned tracks and unknown course completions do not count.
+The tooltip/accessibility label explains the track count; status details
+retain the selected edition's separate belt and points.
+
 Belts describe completion of a track's published curriculum, not all Azure
 networking or professional certification. Available-course denominators and
 XP exclude planned tracks; future tracks must use their own course identity.

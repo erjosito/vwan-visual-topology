@@ -20,8 +20,13 @@ export function WorkspaceMenu() {
     <LanguageSelector />
     <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
     </PresentationGroup>
-    <LearningStatus />
+    {!session?.presentationPreview && <LearningStatus />}
     <CloudMenu />
     {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}
   </>
+}
+
+export function WorkspaceAccountStatus() {
+  return useWorkspaceSession()?.presentationPreview
+    ? <div className="workspace-account-status"><LearningStatus /></div> : null
 }

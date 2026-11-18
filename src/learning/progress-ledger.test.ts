@@ -5,7 +5,7 @@ import { beltProgress, createProgressLedger, earnedAwards, guidedProgressKey, le
   parseProgressLedger, progressLimits, recordCompletion, type ProgressLedger } from './progress-ledger'
 import { orderedTasks, type TaskCompletion } from './runner'
 import { learningTracks } from './tracks'
-import { editions, scenarioCourse, selectedEdition } from './editions'
+import { editions, highestTrackBelt, scenarioAssessments, scenarioCourse, selectedEdition } from './editions'
 
 const empty = (): ProgressLedger => ({ version: 1, policyVersion: 1, completions: [] })
 const completion = (index = 0, changes: Partial<TaskCompletion> = {}): TaskCompletion => {
@@ -24,6 +24,15 @@ const storage = () => {
 }
 
 describe('versioned completion and first-award ledger', () => {
+  it('summarizes the highest earned belt independently of enrollment without counting editions as tracks', () => {
+    expect(highestTrackBelt(empty())).toMatchObject({ belt: { id: 'white' }, trackCount: 1 })
+    const historical = { ...empty(), enrollment: scenarioCourse.id,
+      completions: orderedTasks(exampleCourse).map((_, index) => completion(index)) }
+    expect(beltProgress(historical, scenarioCourse, scenarioAssessments)).toMatchObject({ belt: { id: 'white' } })
+    expect(highestTrackBelt(historical)).toMatchObject({ belt: { id: 'black' }, trackCount: 1 })
+    expect(highestTrackBelt({ ...empty(), completions: [completion(0, { courseId: 'future-dns', points: 9999 })] }))
+      .toMatchObject({ belt: { id: 'white' }, trackCount: 1 })
+  })
   it('defaults new learners to scenarios but preserves original-edition enrollment and historical black belts', () => {
     expect(selectedEdition(empty()).course.id).toBe(scenarioCourse.id)
     const historical = { ...empty(), completions: orderedTasks(exampleCourse).map((_, index) => completion(index)) }

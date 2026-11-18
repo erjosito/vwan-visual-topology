@@ -15,7 +15,7 @@ import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalo
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
-import { WorkspaceMenu } from '../WorkspaceSession'
+import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
 import { previewVnetActions } from '../context-actions'
 import { useWorkspaceSession } from '../workspace-context'
@@ -2952,27 +2952,30 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             ↷ Redo
           </button>
 
+          <PresentationGroup label={t('Routing checks')}>
           <button
             type="button"
-            className="aznet-btn aznet-btn-primary"
+            className={`aznet-btn${workspaceSession?.presentationPreview ? '' : ' aznet-btn-primary'}`}
             data-testid="aznet-check-routing-btn"
             onClick={checkRouting}
-            title="Check connectivity and stateful routing symmetry across all workload subnets and on-premises sites"
+            title={t('Check connectivity across the modeled landscape')}
           >
-            Check routing
+            {t('Check routing')}
           </button>
           <button
             type="button"
             className="aznet-btn"
             data-testid="aznet-run-diagnostics-btn"
+            title={t('Inspect findings and assess declared connectivity requirements')}
             onClick={() => {
               setShowDiagnosticBadges(true)
               setReviewFindingIds(null)
               setActiveTab('diagnostics')
             }}
           >
-            Advanced checks ({actionableCount})
+            {t('Advanced checks')} ({actionableCount})
           </button>
+          </PresentationGroup>
 
           <PresentationGroup label={t('File')}>
           <button
@@ -3077,6 +3080,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             }}
           />
         </div>
+        <WorkspaceAccountStatus />
       </header>
 
       {/* Main Split Workspace */}
