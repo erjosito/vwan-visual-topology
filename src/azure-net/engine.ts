@@ -5,6 +5,7 @@ import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
 import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
+import { peeringPrefixes, peeringSubnetIds, subnetPeeringLimitations, validateSubnetPeeringScopes } from './subnet-peering'
 import { ARS_MAX_BGP_PEERS, applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes } from './ars-route-maps'
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, propagatesLocally, propagatesRemotely } from '../hub-routing'
 import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
@@ -121,7 +122,8 @@ export interface AzNvaBgpPeer {
   routeServerVnetId: string
   connectionId: string
   policyConnectionId?: string
-  state: 'available' | 'ars-disabled' | 'bgp-disabled' | 'unsupported-asn' | 'unsupported-appliance' | 'unreachable'
+  state: 'available' | 'ars-disabled' | 'bgp-disabled' | 'unsupported-asn' | 'unsupported-appliance'
+    | 'unreachable' | 'subnet-peering-not-assessed'
   routes: AzNvaReceivedRoute[]
 }
 
@@ -403,7 +405,8 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
 }
 
 function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResult): AzSimulationResult {
-  const warnings: string[] = []
+  const peeringLimitations = [...validateSubnetPeeringScopes(topology), ...subnetPeeringLimitations(topology)]
+  const warnings: string[] = [...peeringLimitations]
   const siteRibs: Record<string, AzBgpRibEntry[]> = {}
   const erLocationRibs: Record<string, AzBgpRibEntry[]> = {}
   const gatewayRibs: Record<string, AzBgpRibEntry[]> = {}
@@ -554,6 +557,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       if (other.id === vnet.id) continue
       const rel = getActivePeeringBetween(topology, vnet.id, other.id)
       if (!rel) continue
+      if (rel.peering.scope?.type === 'subnets') continue
       if (
         rel.forwardFlags.allowVirtualNetworkAccess &&
         rel.reverseFlags.allowVirtualNetworkAccess &&
@@ -859,7 +863,8 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         : app.kind !== 'nva-vm' ? 'unsupported-appliance'
           : !app.bgpEnabled ? 'bgp-disabled'
             : app.asn === 65515 || app.asn === 12076 ? 'unsupported-asn'
-              : !resolvedPeers.some(({ peer }) => peer.id === id) ? 'unreachable' : 'available'
+              : getActivePeeringBetween(topology, vnet.id, owner.id)?.peering.scope?.type === 'subnets' ? 'subnet-peering-not-assessed'
+                : !resolvedPeers.some(({ peer }) => peer.id === id) ? 'unreachable' : 'available'
       const view: AzNvaBgpPeer = {
         applianceId: id, applianceVnetId: owner.id, routeServerId: ars.id, routeServerVnetId: vnet.id,
         connectionId, ...(policyLinks.some((link) => link.id === connectionId) ? { policyConnectionId: connectionId } : {}),
@@ -1266,7 +1271,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   }
 
   return {
-    controlPlaneComplete: true,
+    controlPlaneComplete: peeringLimitations.length === 0,
     subnetTables,
     gatewayRibs,
     routeServerRibs,
@@ -1331,8 +1336,9 @@ function compileSingleSubnetEffectiveRoutes(
   })
 
   // C. System Routes: Direct VNet Peerings (Non-Transitive!) & Private Endpoints (/32)
-  const addPeRoutesFromVnet = (targetVnet: AzVNet, viaPeeringName?: string) => {
+  const addPeRoutesFromVnet = (targetVnet: AzVNet, viaPeeringName?: string, participatingIds?: string[]) => {
     for (const s of targetVnet.subnets) {
+      if (participatingIds && !participatingIds.includes(s.id)) continue
       for (const pe of s.privateEndpoints ?? []) {
         const pePolicy = s.privateEndpointNetworkPolicies ?? 'Disabled'
         const id = `sys:pe:${subnet.id}:${pe.id}`
@@ -1361,7 +1367,7 @@ function compileSingleSubnetEffectiveRoutes(
     const rel = getActivePeeringBetween(topology, vnet.id, otherVnet.id)
     if (!rel) continue
     // Connected peerings retain address-space routes even when access blocks forwarding.
-    for (const prefix of otherVnet.prefixes) {
+    for (const prefix of peeringPrefixes(rel.peering, otherVnet)) {
       const peeringRoute: AzEffectiveRoute = {
         id: `sys:peering:${subnet.id}:${rel.peering.id}:${prefix}`,
         prefix,
@@ -1369,14 +1375,16 @@ function compileSingleSubnetEffectiveRoutes(
         nextHopType: 'VNetPeering',
         nextHopResourceId: otherVnet.id,
         nextHopName: otherVnet.name,
-        originLabel: `System · VNet Peering (${rel.peering.name})`,
+        originLabel: rel.peering.scope?.type === 'subnets'
+          ? `System · Subnet Peering (${rel.peering.name}); current preview also exposes routes in nonparticipating local subnets; forwarding still requires participation on both ends`
+          : `System · VNet Peering (${rel.peering.name})`,
         asPath: [],
         active: true,
       }
       candidates.push(peeringRoute)
     }
     if (rel.forwardFlags.allowVirtualNetworkAccess && rel.reverseFlags.allowVirtualNetworkAccess) {
-      addPeRoutesFromVnet(otherVnet, rel.peering.name)
+      addPeRoutesFromVnet(otherVnet, rel.peering.name, peeringSubnetIds(rel.peering, otherVnet.id))
     }
   }
 
@@ -1466,6 +1474,7 @@ function compileSingleSubnetEffectiveRoutes(
       if (peerVnet.id === vnet.id) continue
       const rel = getActivePeeringBetween(topology, vnet.id, peerVnet.id)
       if (!rel) continue
+      if (rel.peering.scope?.type === 'subnets') continue
       if (
         rel.forwardFlags.allowVirtualNetworkAccess &&
         rel.reverseFlags.allowVirtualNetworkAccess &&
@@ -1993,6 +2002,8 @@ export function traceAzNetFlow(
     toVnet: AzVNet,
     isForwardedPacket: boolean,
     involvesVnra: boolean,
+    fromSubnetId?: string,
+    toSubnetId?: string,
   ): { ok: true; peering: AzVnetPeering } | { ok: false; status: AzTraceStatus; reason: string; peeringId?: string } => {
     const rel = getActivePeeringBetween(topology, fromVnet.id, toVnet.id)
     if (!rel) {
@@ -2000,6 +2011,17 @@ export function traceAzNetFlow(
         ok: false,
         status: 'dropped-peering-non-transitive',
         reason: `No active VNet peering between "${fromVnet.name}" and "${toVnet.name}". VNet peering is non-transitive.`,
+      }
+    }
+    if (rel.peering.scope?.type === 'subnets') {
+      if (!fromSubnetId || !toSubnetId || isForwardedPacket || involvesVnra) {
+        return { ok: false, status: 'not-assessed', peeringId: rel.peering.id,
+          reason: `Subnet peering "${rel.peering.name}": only direct owned-subnet forwarding is assessed; transit and ambiguous subnet handoffs are not assessed.` }
+      }
+      if (!peeringSubnetIds(rel.peering, fromVnet.id)!.includes(fromSubnetId) ||
+        !peeringSubnetIds(rel.peering, toVnet.id)!.includes(toSubnetId)) {
+        return { ok: false, status: 'dropped-peering-access', peeringId: rel.peering.id,
+          reason: `Subnet peering "${rel.peering.name}" drops traffic unless both source and destination subnets participate. Effective-route visibility alone does not grant forwarding.` }
       }
     }
     if (!rel.forwardFlags.allowVirtualNetworkAccess || !rel.reverseFlags.allowVirtualNetworkAccess) {
@@ -2283,7 +2305,8 @@ export function traceAzNetFlow(
             summaryReason: 'Target peered VNet not found.',
           }
         }
-        const check = validatePeeringTransition(vnet, peerVnet, stepCursor.fromExternalVnet, stepCursor.viaVnra)
+        const targetSubnet = peerVnet.subnets.find((s) => cidr(s.prefix) && contains(s.prefix, ipNum))
+        const check = validatePeeringTransition(vnet, peerVnet, stepCursor.fromExternalVnet, stepCursor.viaVnra, subnet.id, targetSubnet?.id)
         if (!check.ok) {
           pushHop({
             nodeKind: 'subnet',
@@ -2309,8 +2332,6 @@ export function traceAzNetFlow(
             summaryReason: check.reason,
           }
         }
-        const targetSubnet =
-          peerVnet.subnets.find((s) => cidr(s.prefix) && contains(s.prefix, ipNum)) ?? peerVnet.subnets[0]
         pushHop({
           nodeKind: 'subnet',
           nodeId: subnet.id,
@@ -2326,7 +2347,7 @@ export function traceAzNetFlow(
         cursor = {
           kind: 'subnet',
           vnetId: peerVnet.id,
-          subnetId: targetSubnet.id,
+          subnetId: (targetSubnet ?? peerVnet.subnets[0]).id,
           fromExternalVnet: true,
           viaVnra: stepCursor.viaVnra,
         }

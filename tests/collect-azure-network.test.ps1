@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([switch]$VpnNatOnly)
+param([switch]$VpnNatOnly, [switch]$SubnetPeeringOnly)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $output = Join-Path $repo 'test-artifacts' 'azure-files' 'collector-network'
@@ -22,8 +22,8 @@ try {
     $env:MOCK_NETWORK_LOG = Join-Path $output 'requests.log'
     $env:MOCK_NETWORK_TIMEOUT_START = Join-Path $output 'timeout-start-ticks.txt'
     $natModes = @('vpn-nat-gateway', 'vpn-nat-ingress', 'vpn-nat-egress')
-    $modes = if ($VpnNatOnly) { $natModes } else {
-        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated') + $natModes
+    $modes = if ($SubnetPeeringOnly) { @('subnet-peering') } elseif ($VpnNatOnly) { $natModes } else {
+        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated', 'subnet-peering') + $natModes
     }
     $importer = Join-Path $output 'vpn-nat-importer.cjs'
     @'
@@ -54,6 +54,23 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
         if ($mode -eq 'nat-prefix') { Assert ($capture.publicIpPrefixes[0].prefixLength -eq 31) 'Public prefix size was not preserved.' }
         if ($mode -eq 'nat-unallocated') { Assert (!$capture.publicIpAddresses[0].ipAddress) 'An unknown public address was invented.' }
         Assert ($capture.observationVersion -eq 1 -and $capture.version -eq 2) "$mode lost compatible versioned provenance."
+        if ($mode -eq 'subnet-peering') {
+            foreach ($vnet in $capture.vnets) {
+                $peer = $vnet.virtualNetworkPeerings[0]
+                Assert ($peer.peerCompleteVnets -eq $false -and $peer.enableOnlyIPv6Peering -eq $false) 'Subnet peering type was lost during collection.'
+                Assert ($peer.localSubnetNames[0] -eq 'RouteServerSubnet' -and $peer.remoteSubnetNames[0] -eq 'RouteServerSubnet') 'Participating subnet names were not preserved.'
+            }
+            @'
+const { readFileSync } = require('node:fs');
+const { importAzNetCapture } = require(process.argv[2]);
+const topology = importAzNetCapture(readFileSync(process.argv[3], 'utf8')).topology;
+if (topology.vnetPeerings.length !== 1 || topology.vnetPeerings[0].scope?.type !== 'subnets') throw new Error('Collected subnet peering became whole-VNet peering.');
+for (const ids of [topology.vnetPeerings[0].scope.subnetAIds, topology.vnetPeerings[0].scope.subnetBIds]) {
+  if (ids.length !== 1) throw new Error('Collected participating subnet identity was lost.');
+}
+'@ | node - $importer $file
+            Assert ($LASTEXITCODE -eq 0) 'Collected subnet-peering scope did not survive current capture import.'
+        }
         foreach ($name in @('first', 'second')) {
             $server = $capture.routeServers | Where-Object name -eq "ars-$name"
             Assert ($server.subnetId -eq "$prefix/virtualNetworks/vnet-$name/subnets/RouteServerSubnet") "$mode has incorrect Route Server ownership."
@@ -106,7 +123,7 @@ if (!rejected) throw new Error('Known collected VPN NAT became healthy ordinary 
         }
         Write-Host "Passed $mode bounded capture, projections and provenance."
     }
-    if ($VpnNatOnly) { return }
+    if ($VpnNatOnly -or $SubnetPeeringOnly) { return }
     $env:MOCK_NETWORK_MODE = 'direct'
     $configFile = Join-Path $output 'configuration-only.json'
     & (Join-Path $repo 'public' 'scripts' 'collect-azure-network.ps1') -ResourceGroupName network -OutputFile $configFile -Force

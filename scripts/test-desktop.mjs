@@ -331,6 +331,29 @@ try {
     expect(await readSaved()).toEqual(retainedWorkspace)
   }
   for (const mode of ['hub-spoke', 'full']) {
+    const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'azure-net', 'subnet-peering.json'), 'utf8'))
+    await page.goto(`app://simulator/?mode=${mode}`)
+    await page.getByTestId('aznet-app').waitFor()
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'subnet-peering.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')).topology)
+    await expect.poll(saved).toEqual(topology)
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
+    const result = await page.evaluate((request) => window.desktopSimulator.simulate(request), input)
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual(executePlatform(input))
+    expect(result.value.simulation.subnetTables.a2.routes.some((route) => route.prefix === '10.81.1.0/24')).toBe(true)
+    await page.getByTestId('aznet-peering-peer-a-b').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Configure Peering State & Flags', exact: true }).click()
+    const editor = page.getByTestId('peering-scope-editor')
+    await expect(editor.getByLabel('Peering scope', { exact: true })).toHaveValue('subnets')
+    await editor.getByRole('checkbox', { name: 'VNet A: Unselected A (a2)', exact: true }).check()
+    await editor.getByRole('button', { name: 'Apply peering scope', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnetPeerings[0].scope.subnetAIds).toEqual(['a1', 'a2'])
+  }
+  for (const mode of ['hub-spoke', 'full']) {
     const topology = nvaBgpTopology()
     if (mode === 'full') topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
     await page.goto(`app://simulator/?mode=${mode}`)

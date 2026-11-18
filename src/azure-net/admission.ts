@@ -7,6 +7,7 @@ import { validateApplicationInventory } from '../application-inventory'
 import { azHubPolicyLinks } from './route-maps'
 import { isVwanNvaAsn } from '../validation'
 import { validateVpnNat } from '../vpn-nat'
+import { validateSubnetPeeringScopes } from './subnet-peering'
 
 export const AZNET_MAX_JSON_LENGTH = 4_000_000
 const MAX_ITEMS = 4096
@@ -56,7 +57,7 @@ const schema = object({
   vnets: array(object({
     ...named, region: text, prefixes: strings, role: choice('hub-vnet', 'spoke-vnet', 'transit-vnet', 'shared-services', 'hub', 'spoke', 'transit', 'standalone'),
     subnets: array(object({ ...named, prefix: text }, {
-      routeTableId: id, defaultOutboundAccess: bool,
+      routeTableId: id, defaultOutboundAccess: bool, delegations: strings,
       internetEgressStatus: choice('unknown'),
       privateEndpointNetworkPolicies: choice('Disabled', 'Enabled', 'RouteTableEnabled', 'NetworkSecurityGroupEnabled'),
       privateEndpoints: array(object({ ...named, ipAddress: text, serviceName: text })),
@@ -80,7 +81,14 @@ const schema = object({
       hubRoutingPreference: choice('ExpressRoute', 'VpnGateway', 'ASPath'), peerApplianceIds: array(id),
     }, { subnetId: id, routeMaps: maps, routeMapAssignments: array(assignment) }),
   })),
-  vnetPeerings: array(object({ ...named, vnetAId: id, vnetBId: id, enabled: bool, aToB: flags, bToA: flags })),
+  vnetPeerings: array(object({ ...named, vnetAId: id, vnetBId: id, enabled: bool, aToB: flags, bToA: flags }, {
+    scope: (value, path) => {
+      object({ type: choice('whole-vnet', 'subnets') })(value, path)
+      const scope = value as Record<string, unknown>
+      if (scope.type === 'subnets') object({ subnetAIds: array(id), subnetBIds: array(id) })(value, path)
+      else if (scope.subnetAIds !== undefined || scope.subnetBIds !== undefined) fail(path, 'whole-VNet scope cannot carry selected subnet sets')
+    },
+  })),
   udrTables: array(object({
     ...named, disableBgpRoutePropagation: bool,
     routes: array(object({ ...named, prefix: text, nextHopType: choice('VirtualAppliance', 'VirtualNetworkGateway', 'VnetLocal', 'Internet', 'None'), enabled: bool }, { nextHopIp: text })),
@@ -249,6 +257,8 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   }
   for (const table of topology.udrTables) unique(table.routes, new Set())
   for (const p of topology.vnetPeerings) { ref(p.vnetAId, topology.vnets, 'Peering A'); ref(p.vnetBId, topology.vnets, 'Peering B') }
+  const peeringErrors = validateSubnetPeeringScopes(topology)
+  if (peeringErrors.length) fail('Subnet peering', peeringErrors.join(' '))
   for (const l of topology.erLinks) {
     ref(l.locationId, topology.erLocations, 'ER location')
     ref(l.targetId, l.targetKind === 'site' ? topology.sites : l.targetKind === 'vwan-hub' ? topology.vwanHubs : gateways, 'ER target')

@@ -509,6 +509,11 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
         id: sId,
         name: sName,
         prefix,
+        ...(asArray(sProps.delegations).length ? { delegations: asArray(sProps.delegations).map((raw) => {
+          const item = asObject(raw, 'Subnet delegation')
+          const properties = item.properties && typeof item.properties === 'object' ? item.properties as Record<string, unknown> : item
+          return asString(properties.serviceName, 'unknown')
+        }) } : {}),
         ...(typeof defaultOutboundAccess === 'boolean' ? { defaultOutboundAccess } : {}),
         ...(natGatewayArm ? { internetEgressStatus: 'unknown' as const } : {}),
         ...(routeTableId ? { routeTableId } : {}),
@@ -621,6 +626,9 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
   // Consolidate bidirectional VNet peerings into AzVnetPeering pairs
   const vnetPeerings: AzVnetPeering[] = []
   const pairMap = new Map<string, AzVnetPeering>()
+  const pairDirections = new Map<string, Set<string>>()
+  const scopeSignature = (scope: AzVnetPeering['scope']) => scope?.type === 'subnets'
+    ? JSON.stringify([[...scope.subnetAIds].sort(), [...scope.subnetBIds].sort()]) : 'whole-vnet'
 
   for (const item of rawPeeringsToResolve) {
     const p = item.rawPeering
@@ -631,13 +639,43 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
         : undefined
     const remoteArmId = asString(remoteRef?.id ?? p.remoteVirtualNetworkId).toLowerCase()
     const targetVnetId = vnetIdByArmId.get(remoteArmId)
-    if (!targetVnetId) continue
+    if (!targetVnetId) {
+      if (props.peerCompleteVnets === false || asArray(props.localSubnetNames).length || asArray(props.remoteSubnetNames).length) {
+        throw new Error('Captured subnet peering requires the remote VNet and its original subnets; incomplete scope is not inferred.')
+      }
+      continue
+    }
 
     const [firstId, secondId] =
       item.sourceVnetId < targetVnetId
         ? [item.sourceVnetId, targetVnetId]
         : [targetVnetId, item.sourceVnetId]
     const pairKey = `${firstId}::${secondId}`
+    if (props.enableOnlyIPv6Peering !== undefined && typeof props.enableOnlyIPv6Peering !== 'boolean') throw new Error('Captured enableOnlyIPv6Peering must be boolean.')
+    if (props.enableOnlyIPv6Peering === true) throw new Error('IPv6 subnet peering is not supported; preserve the original capture.')
+    if (props.peerCompleteVnets !== undefined && typeof props.peerCompleteVnets !== 'boolean') throw new Error('Captured peerCompleteVnets must be boolean.')
+    const selected = props.peerCompleteVnets === false
+    if (!selected && (props.localSubnetNames !== undefined || props.remoteSubnetNames !== undefined)) {
+      if (asArray(props.localSubnetNames).length || asArray(props.remoteSubnetNames).length) throw new Error('Captured subnet membership requires explicit peerCompleteVnets=false; peering scope is ambiguous.')
+    }
+    const subnetIds = (vnetId: string, value: unknown) => {
+      if (!Array.isArray(value) || !value.length || value.some((name) => typeof name !== 'string')) throw new Error('Captured subnet peering requires explicit local and remote subnet names on both directions.')
+      const owner = vnets.find((vnet) => vnet.id === vnetId)!
+      return value.map((name: string) => {
+        const matches = owner.subnets.filter((subnet) => subnet.name.toLowerCase() === name.toLowerCase())
+        if (matches.length !== 1) throw new Error(`Captured subnet peering references unknown or ambiguous subnet "${name}" in "${owner.name}".`)
+        return matches[0].id
+      })
+    }
+    const localIds = selected ? subnetIds(item.sourceVnetId, props.localSubnetNames) : []
+    const remoteIds = selected ? subnetIds(targetVnetId, props.remoteSubnetNames) : []
+    const scope: AzVnetPeering['scope'] = selected ? { type: 'subnets',
+      subnetAIds: item.sourceVnetId === firstId ? localIds : remoteIds,
+      subnetBIds: item.sourceVnetId === firstId ? remoteIds : localIds } : undefined
+    const directions = pairDirections.get(pairKey) ?? new Set<string>()
+    if (selected && directions.has(item.sourceVnetId)) throw new Error('Duplicate captured subnet-peering direction.')
+    directions.add(item.sourceVnetId)
+    pairDirections.set(pairKey, directions)
     const flags = {
       allowVirtualNetworkAccess: Boolean(props.allowVirtualNetworkAccess ?? true),
       allowForwardedTraffic: Boolean(props.allowForwardedTraffic ?? false),
@@ -665,16 +703,22 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
           allowGatewayTransit: false,
           useRemoteGateways: false,
         },
+        ...(scope ? { scope } : {}),
       }
       pairMap.set(pairKey, created)
       vnetPeerings.push(created)
     } else {
+      if (scopeSignature(scope) !== scopeSignature(existing.scope)) throw new Error('Captured subnet-peering directions have mismatched types or participating subnet sets; asymmetric scope is not assessed.')
       if (item.sourceVnetId === existing.vnetAId) {
         existing.aToB = flags
       } else {
         existing.bToA = flags
       }
     }
+  }
+
+  for (const [pairKey, peering] of pairMap) if (peering.scope?.type === 'subnets' && pairDirections.get(pairKey)?.size !== 2) {
+    throw new Error('Subnet peering requires both captured directions; a missing reverse configuration is not inferred.')
   }
 
   // Parse optional observations (NIC effective route tables & ARS/VNG BGP routes)

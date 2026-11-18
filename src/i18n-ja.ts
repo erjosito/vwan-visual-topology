@@ -2,6 +2,14 @@ import { sampleCatalogJa } from './sample-catalog-ja'
 
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  'Selected subnet peering': '選択したサブネットのピアリング',
+  'Two VNets connect selected subnets while other subnets remain outside the forwarding scope.': '2 つの VNet で選択したサブネットを接続し、その他のサブネットを転送の対象外にします。',
+  'Distinguish preview effective-route visibility from permission to cross a subnet peering.': 'プレビューでの有効ルートの表示とサブネット ピアリングの通過許可を区別します。',
+  'VNet and subnet address spaces.': 'VNet とサブネットのアドレス空間。',
+  'Subnet peering': 'サブネット ピアリング',
+  'Route visibility versus forwarding': 'ルートの表示と転送の違い',
+  'Direct IPv4 subnet routing only; transit, private endpoints, delegated subnets and live Azure enablement are not assessed.': 'IPv4 サブネット間の直接ルーティングのみが対象です。トランジット、プライベート エンドポイント、委任サブネット、Azure での有効化は未評価です。',
+  'Trace Participating A and Unselected A to Participating B, then edit the participating subnet sets.': 'Participating A と Unselected A から Participating B への経路を確認し、参加サブネットを変更します。',
   ...sampleCatalogJa,
   'Inspect NVA Learned BGP Routes': 'NVA が学習した BGP ルートを確認',
   'Preview UI': 'UI プレビュー',

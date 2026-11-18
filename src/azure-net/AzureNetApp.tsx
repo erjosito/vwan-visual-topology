@@ -155,6 +155,7 @@ const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module)
 const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
+const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
   value: string; deferred: boolean; onCommit: (value: string) => void
@@ -4378,6 +4379,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 </button>
                               </div>
                             </div>
+                            <Suspense fallback={null}><PeeringScopeEditor
+                              key={`${activePeering.id}:${JSON.stringify(activePeering.scope)}:${JSON.stringify([vA?.subnets.map((subnet) => subnet.id), vB?.subnets.map((subnet) => subnet.id)])}`}
+                              topology={topology} peering={activePeering} onApply={(scope) => commitTopology((draft) => {
+                                const peering = draft.vnetPeerings.find((item) => item.id === activePeering.id)
+                                if (peering) peering.scope = scope
+                                pruneAzArsRouteMaps(draft)
+                              })} /></Suspense>
                             <div className="aznet-field-grid">
                               {renderDirFlags(
                                 `${vA?.name} → ${vB?.name}`,

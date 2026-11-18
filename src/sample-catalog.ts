@@ -106,6 +106,16 @@ export const VWAN_SAMPLE_GALLERY: readonly SampleGalleryEntry[] = [
 
 export const AZURE_NET_SAMPLE_GALLERY: readonly SampleGalleryEntry[] = [
   {
+    id: 'subnet-peering', title: 'Selected subnet peering',
+    summary: 'Two VNets connect selected subnets while other subnets remain outside the forwarding scope.',
+    category: 'validation', track: 'foundations-selection', difficulty: 'intermediate', disposition: 'kept',
+    purpose: 'Distinguish preview effective-route visibility from permission to cross a subnet peering.',
+    prerequisites: 'VNet and subnet address spaces.', concepts: ['Subnet peering', 'Route visibility versus forwarding'],
+    capabilities: ['Subnet effective routes', 'Path and symmetry tracing'],
+    limitations: ['Direct IPv4 subnet routing only; transit, private endpoints, delegated subnets and live Azure enablement are not assessed.'],
+    suggestedExperiment: 'Trace Participating A and Unselected A to Participating B, then edit the participating subnet sets.',
+  },
+  {
     id: 'hub-spoke-firewall-udr', aliases: ['hub-spoke-firewall', 'azfw-hub-spoke'],
     title: 'Hub-and-Spoke + AzFW + GatewaySubnet UDR',
     summary: 'Classic hub-and-spoke inspection with spoke UDRs, gateway return routes and a private endpoint.',
