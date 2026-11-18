@@ -9,6 +9,13 @@ remain, independent prefixes are allowed, and aggregate holes do not become
 reachable. A gateway and GatewaySubnet are required for gateway summarization.
 Spoke-local configuration does not configure the hub's gateway.
 
+An inbound or outbound ARS route-map association on a particular ER/VPN
+connection takes precedence over `summarizedGatewayPrefixes` for that connection,
+even when the map itself has no summarization rule. Removing the association
+restores the configured gateway summaries. An unassigned map or a map on an NVA
+peer does not disable summaries on other connections. This per-connection
+precedence does not establish which summary routes an NVA receives from ARS.
+
 **ARS-to-NVA summary behavior is not assessed.** Do not interpret the displayed
 ordinary received candidates, or absence of a configured summary among them, as
 proof of actual Azure advertisements. Do not substitute an ARS RIB or a hosting
