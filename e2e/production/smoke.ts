@@ -28,6 +28,24 @@ async function ready(page: Page, mode: string) {
   await expect(page.getByTestId('simulator-mode-switch')).toHaveCount(0)
 }
 
+test.describe('default presentation', () => {
+  test.use({ storageState: { cookies: [], origins: [] } })
+  for (const mode of ['vwan', 'hub-spoke', 'full']) {
+    test(`${mode}: new UI starts by default and legacy remains available`, async ({ page }) => {
+      await page.goto(`/?mode=${mode}`)
+      await ready(page, mode)
+      const toggle = page.getByTestId('ui-preview-toggle')
+      await expect(toggle).toHaveText('Use legacy UI')
+      await expect(toggle).toHaveAttribute('aria-pressed', 'true')
+      await expect(page.locator('.presentation-group > summary').filter({ hasText: /^File$/ })).toBeVisible()
+      await toggle.click()
+      await expect(toggle).toHaveText('Use new UI')
+      await page.reload()
+      await expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    })
+  }
+})
+
 test('AzNetSim documentation branding and language switching work under production CSP', async ({ page }) => {
   const response = await page.goto('/docs/index.html?lang=ja')
   expect(response!.headers()['content-security-policy']).toContain("script-src 'self'")

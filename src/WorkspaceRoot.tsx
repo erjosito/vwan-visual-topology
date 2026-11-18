@@ -43,7 +43,7 @@ const noSync = () => undefined
 
 function Workspace() {
   const [presentationPreview, setPresentationPreview] = useState(() => {
-    try { return localStorage.getItem('aznet-ui-preview:v1') === 'true' } catch { return false }
+    try { return localStorage.getItem('aznet-ui-preview:v1') !== 'false' } catch { return true }
   })
   const cloud = useCloudSession()
   const accountId = cloud?.account?.id

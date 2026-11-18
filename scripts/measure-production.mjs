@@ -31,7 +31,9 @@ try {
     await page.waitForLoadState('networkidle')
     const initialRequests = await assetGraph([...requests], root)
     const start = performance.now()
-    await (mode === 'vwan' ? page.getByRole('button', { name: 'Azure files', exact: true }) : page.getByTestId('aznet-open-sample-gallery-btn')).click()
+    const panelOpener = mode === 'vwan' ? page.getByRole('button', { name: 'Azure files', exact: true, includeHidden: true }) : page.getByTestId('aznet-open-sample-gallery-btn')
+    await page.locator('.presentation-group').filter({ has: panelOpener }).locator('summary').click()
+    await panelOpener.click()
     await (mode === 'vwan' ? page.getByRole('dialog', { name: 'Azure files', exact: true }) : page.getByTestId('aznet-sample-gallery-modal')).waitFor()
     const firstOptionalPanelMs = performance.now() - start
     await (mode === 'vwan' ? page.getByRole('button', { name: 'Close Azure files', exact: true }) : page.getByTestId('aznet-close-sample-gallery-btn')).click()
@@ -44,9 +46,10 @@ try {
     await page.getByTestId(nextMode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     const firstInactiveWorkspaceMs = performance.now() - switchStart
     const languageStart = performance.now()
+    await page.locator('.presentation-group:has([data-language-selector]) > summary').click()
     await page.locator('header [data-language-selector]').selectOption('ja')
     await page.locator('html[lang="ja"]').waitFor()
-    await page.locator('header [data-language-selector][aria-label="言語 / Language"]').waitFor()
+    await page.locator('header [data-language-selector][aria-label="言語 / Language"]').waitFor({ state: 'attached' })
     const firstJapaneseSwitchMs = performance.now() - languageStart
     result.modes.push({ mode, language: 'en', readyMs, initialRequests, firstOptionalPanelMs, firstInactiveWorkspaceMs,
       firstJapaneseSwitchMs, firstJapaneseSwitchWorkspace: nextMode })
@@ -62,7 +65,7 @@ try {
   })
   await page.goto(`http://127.0.0.1:${server.address().port}/?mode=full`)
   await page.getByTestId('aznet-app').waitFor()
-  await page.locator('header [data-language-selector][aria-label="言語 / Language"]').waitFor()
+  await page.locator('header [data-language-selector][aria-label="言語 / Language"]').waitFor({ state: 'attached' })
   const readyMs = await page.evaluate(() => performance.now())
   await page.waitForLoadState('networkidle')
   result.initialJapaneseWorkspace = { mode: 'full', language: 'ja', readyMs, initialRequests: await assetGraph([...requests], root) }
