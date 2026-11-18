@@ -23,6 +23,14 @@ Both `validate` and `desktop` must have completed successfully in that attempt,
 even for a web-only or Function-only promotion. This deliberately tightens the
 old web deployment's accidental independence from Windows validation.
 
+Browser gates use the matching Playwright image for its preinstalled browsers,
+but mount the `actions/setup-node` runtime read-only and put it first on `PATH`.
+Keep dev-server, production and accessibility checks on that configured runtime,
+not the image's independently selected Node version. This also avoids the native
+HTTP/Buffer V8 abort documented in
+[nodejs/node#66870](https://github.com/nodejs/node/issues/66870); do not mask a
+server crash by relaxing assertions, retries or test timeouts.
+
 ## One-time repository setup
 
 Before the first actual promotion:

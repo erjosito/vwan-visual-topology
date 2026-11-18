@@ -24,6 +24,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Locate configured Node runtime for browser containers
+        run: echo "CI_NODE_HOME=$(dirname "$(dirname "$(command -v node)")")" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm ci --prefix functions/user-cloud
       - run: npm run build:user-cloud
@@ -60,21 +62,29 @@ jobs:
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
           docker run --rm --init --ipc=host -e CI=true \
+            -v "$CI_NODE_HOME:/opt/ci-node:ro" \
+            -e PATH=/opt/ci-node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
-            xvfb-run -a npm run test:e2e -- --workers=2
+            bash -ec 'node --version; exec xvfb-run -a npm run test:e2e -- --workers=2'
       - name: Smoke exact production artifact with SWA headers
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
           docker run --rm --init --ipc=host -e CI=true \
+            -v "$CI_NODE_HOME:/opt/ci-node:ro" \
+            -e PATH=/opt/ci-node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
             npm run test:production -- --workers=2
           docker run --rm --init --ipc=host \
+            -v "$CI_NODE_HOME:/opt/ci-node:ro" \
+            -e PATH=/opt/ci-node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
             npm run measure:production -- test-results/production-measurements.json
       - name: Gate the versioned whole-document accessibility sample
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
           docker run --rm --init --ipc=host \
+            -v "$CI_NODE_HOME:/opt/ci-node:ro" \
+            -e PATH=/opt/ci-node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/work \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
             npm run evaluate:accessibility
