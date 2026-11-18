@@ -154,6 +154,8 @@ const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
 const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
+const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
+const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
   value: string; deferred: boolean; onCommit: (value: string) => void
@@ -168,6 +170,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
   const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
+  const [toolsDismissRequest, setToolsDismissRequest] = useState(0)
   const [cachedHistory] = useState(() => workspaceSession?.getEditorHistory?.())
   const [initialResolved] = useState(() => {
     if (cachedHistory?.provider === 'azure-net') return {
@@ -237,6 +240,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [routeMapArsId, setRouteMapArsId] = useState<string>()
   const [routeMapHubId, setRouteMapHubId] = useState<string>()
   const [routeMapInspection, setRouteMapInspection] = useState<AzRouteMapSelection>()
+  const [nvaBgpInspection, setNvaBgpInspection] = useState<{ vnetId: string; applianceId: string }>()
   const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
     setInspectedEntity(entity)
@@ -1953,6 +1957,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `Appliance · ${app.name} (${app.privateIp})`,
         actions: [
+          ...(app.kind === 'nva-vm' ? [{
+            label: t('Inspect NVA Learned BGP Routes'),
+            onSelect: () => {
+              setToolsDismissRequest((request) => request + 1)
+              setNvaBgpInspection({ vnetId: vnet.id, applianceId: app.id })
+            },
+          }] : []),
           {
             label: 'Inspect Appliance Subnet Effective Routes',
             onSelect: () => {
@@ -2820,7 +2831,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         <div className="aznet-topbar-controls">
           {canvasSelection && 'vnetId' in canvasSelection && <button type="button" className="aznet-btn"
             onClick={() => openDetail(canvasSelection.vnetId)}>{t('VNet detail')}</button>}
-          <WorkspaceTools openRequest={toolsOpenRequest} dismissRequest={guidanceRevision} creationActions={[
+          <WorkspaceTools openRequest={toolsOpenRequest} dismissRequest={guidanceRevision + toolsDismissRequest} creationActions={[
             { label: t('+ VNet'), testId: 'aznet-add-vnet-btn', run: addDefaultVnet },
             { label: t('+ Site'), testId: 'aznet-add-site-btn', run: () => addSiteNode() },
             { label: t('+ ER location'), testId: 'aznet-add-erloc-btn', run: () => addErLocationNode() },
@@ -3257,6 +3268,15 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           )}
         </section>
 
+        {nvaBgpInspection && <Suspense fallback={null}><NvaBgpPanel key={`${nvaBgpInspection.vnetId}:${nvaBgpInspection.applianceId}`}
+          topology={topology} simulation={simulation} {...nvaBgpInspection}
+          onPeerChange={(routeServerId, checked) => commitTopology((draft) => {
+            const ars = draft.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)?.routeServer
+            if (!ars) return
+            ars.peerApplianceIds = checked ? [...new Set([...ars.peerApplianceIds, nvaBgpInspection.applianceId])]
+              : ars.peerApplianceIds.filter((id) => id !== nvaBgpInspection.applianceId)
+            pruneAzArsRouteMaps(draft)
+          })} onClose={() => setNvaBgpInspection(undefined)} /></Suspense>}
         {(routeMapSiteId || routeMapArsId || routeMapHubId) && <Suspense fallback={null}><AzRouteMapsPanel key={`${routeMapHubId ? `hub:${routeMapHubId}` : routeMapArsId ? `ars:${routeMapArsId}` : `site:${routeMapSiteId}`}:${routeMapInspection?.connectionId ?? ''}:${routeMapInspection?.direction ?? ''}`} topology={topology}
           initialConnectionId={routeMapInspection?.connectionId} initialDirection={routeMapInspection?.direction}
           siteId={routeMapSiteId} hubId={routeMapHubId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
@@ -4359,6 +4379,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 </button>
                               </div>
                             </div>
+                            <Suspense fallback={null}><PeeringScopeEditor
+                              key={`${activePeering.id}:${JSON.stringify(activePeering.scope)}:${JSON.stringify([vA?.subnets.map((subnet) => subnet.id), vB?.subnets.map((subnet) => subnet.id)])}`}
+                              topology={topology} peering={activePeering} onApply={(scope) => commitTopology((draft) => {
+                                const peering = draft.vnetPeerings.find((item) => item.id === activePeering.id)
+                                if (peering) peering.scope = scope
+                                pruneAzArsRouteMaps(draft)
+                              })} /></Suspense>
                             <div className="aznet-field-grid">
                               {renderDirFlags(
                                 `${vA?.name} → ${vB?.name}`,

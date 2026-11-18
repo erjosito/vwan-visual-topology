@@ -138,7 +138,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await expect(gallery.locator('article')).toHaveCount(4)
     await expect(gallery).toContainText('not assessed practice')
     await collection.selectOption('validation')
-    await expect(gallery.locator('article')).toHaveCount(mode === 'vwan' ? 1 : 10)
+    await expect(gallery.locator('article')).toHaveCount(mode === 'vwan' ? 1 : 11)
+    if (mode !== 'vwan') await expect(gallery.getByRole('heading', { name: 'Selected subnet peering', exact: true })).toBeVisible()
     if (mode === 'vwan') {
       await gallery.getByRole('combobox', { name: 'Concept track', exact: true }).selectOption('routing-traps-diagnostics')
       await gallery.getByRole('combobox', { name: 'Complexity', exact: true }).selectOption('advanced')

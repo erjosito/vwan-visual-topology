@@ -645,3 +645,9 @@
 
 [data-testid="aznet-hub-tables-editor"] fieldset { min-width: 0; margin: 12px 0; }
 [data-testid="aznet-hub-tables-editor"] input { max-width: 100%; }
+.peering-scope-editor,
+.peering-scope-editor fieldset {
+  min-width: 0;
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}

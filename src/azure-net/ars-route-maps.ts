@@ -24,6 +24,7 @@ export function parseBgpCommunities(value: string) {
 
 export function azArsSpokes(vnet: AzVNet, topology?: AzNetTopology) {
   return (topology?.vnetPeerings ?? []).flatMap((peering) => {
+    if (peering.scope?.type === 'subnets') return []
     const forward = peering.vnetAId === vnet.id ? peering.aToB : peering.vnetBId === vnet.id ? peering.bToA : undefined
     const reverse = peering.vnetAId === vnet.id ? peering.bToA : peering.aToB
     const spoke = topology!.vnets.find((other) => other.id === (peering.vnetAId === vnet.id ? peering.vnetBId : peering.vnetAId))
@@ -35,6 +36,7 @@ export function azArsSpokes(vnet: AzVNet, topology?: AzNetTopology) {
 
 export function azArsPeerHosts(vnet: AzVNet, topology?: AzNetTopology) {
   const remote = (topology?.vnetPeerings ?? []).flatMap((peering) => {
+    if (peering.scope?.type === 'subnets') return []
     if (!peering.enabled || !peering.aToB.allowVirtualNetworkAccess || !peering.bToA.allowVirtualNetworkAccess) return []
     const remoteId = peering.vnetAId === vnet.id ? peering.vnetBId : peering.vnetBId === vnet.id ? peering.vnetAId : undefined
     const host = topology!.vnets.find((candidate) => candidate.id === remoteId)

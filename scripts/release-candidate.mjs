@@ -18,19 +18,14 @@ const numericId = (value) => /^[1-9]\d*$/.test(String(value))
 const sourceSha = (value) => /^[a-f0-9]{40}$/.test(value ?? '')
 const digest = (value) => /^[a-f0-9]{64}$/.test(value ?? '')
 
-export function candidateVersion(date, buildNumber) {
-  requireValue(numericId(buildNumber) && Number(buildNumber) <= 65535, 'Daily CI build number exceeds Windows version bounds')
-  const [year, month, day] = date.toISOString().slice(0, 10).split('-')
-  return { build: `${year}.${month}.${day}.${buildNumber}`, package: `${Number(year)}.${Number(month)}.${Number(day)}` }
-}
+const semanticVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
+const legacyDesktopVersion = /^\d{4}\.\d{2}\.\d{2}\.[1-9]\d*$/
+const desktopReleaseTag = (version) => legacyDesktopVersion.test(version) ? `desktop-dev-${version}` : `v${version}`
 
-export function desktopIdentity(run, runs) {
-  const date = run.created_at?.slice(0, 10)
-  requireValue(/^\d{4}-\d{2}-\d{2}$/.test(date ?? '') && numericId(run.run_number), 'Missing CI creation identity')
-  const sameDay = runs.filter((entry) => entry.created_at?.slice(0, 10) === date && entry.run_number <= run.run_number)
-  requireValue(sameDay.some((entry) => entry.id === run.id), 'Current CI run missing from daily history')
-  const first = Math.min(...sameDay.map((entry) => entry.run_number))
-  return candidateVersion(new Date(`${date}T00:00:00Z`), run.run_number - first + 1)
+export function candidateVersion(version) {
+  requireValue(typeof version === 'string' && version === version.trim() && semanticVersion.test(version), 'Release version must be MAJOR.MINOR.PATCH without prerelease/build suffixes')
+  requireValue(version.split('.').every((part) => Number(part) <= 65535), 'Release version exceeds Windows version bounds')
+  return { build: version, package: version, file: `${version}.0` }
 }
 
 async function filesIn(root, prefix = '') {
@@ -53,6 +48,10 @@ async function filesIn(root, prefix = '') {
 export async function createCandidate(target, root, inputs, env = process.env) {
   requireValue(Object.hasOwn(artifacts, target), 'Unknown release target')
   requireValue(sourceSha(env.GITHUB_SHA) && numericId(env.GITHUB_RUN_ID) && numericId(env.GITHUB_RUN_ATTEMPT), 'Missing CI provenance')
+  const versioned = target === 'desktop' || (target === 'web' && env.CANDIDATE_VERSION != null)
+  if (versioned) {
+    requireValue(candidateVersion(env.CANDIDATE_VERSION).package === env.CANDIDATE_PACKAGE_VERSION, 'Candidate package version mismatch')
+  }
   await mkdir(resolve(root, 'payload'), { recursive: true })
   for (const [source, destination] of inputs) {
     const entries = destination ? [[source, destination]]
@@ -64,8 +63,8 @@ export async function createCandidate(target, root, inputs, env = process.env) {
   const manifest = {
     schema: 1, target, repository: env.GITHUB_REPOSITORY, sourceSha: env.GITHUB_SHA,
     runId: String(env.GITHUB_RUN_ID), runAttempt: Number(env.GITHUB_RUN_ATTEMPT),
-    version: target === 'desktop' ? env.CANDIDATE_VERSION : null,
-    packageVersion: target === 'desktop' ? env.CANDIDATE_PACKAGE_VERSION : null,
+    version: versioned ? env.CANDIDATE_VERSION : null,
+    packageVersion: versioned ? env.CANDIDATE_PACKAGE_VERSION : null,
     files: await filesIn(resolve(root, 'payload')),
   }
   await save(resolve(root, 'manifest.json'), manifest)
@@ -86,18 +85,30 @@ export async function verifyCandidate(root, expected) {
   requireValue(JSON.stringify(actual) === JSON.stringify(manifest.files), 'Candidate checksum mismatch')
   if (manifest.target === 'web') {
     requireValue(Object.hasOwn(actual, 'index.html') && Object.hasOwn(actual, 'staticwebapp.config.json'), 'Missing web entry/configuration')
+    if (manifest.version != null || manifest.packageVersion != null) {
+      requireValue(candidateVersion(manifest.version).package === manifest.packageVersion, 'Candidate package version mismatch')
+      const html = await readFile(resolve(root, 'payload', 'index.html'), 'utf8')
+      requireValue(html.includes(`<meta name="application-version" content="${manifest.version}">`), 'Web application version does not match manifest')
+    }
   } else if (manifest.target === 'statistics' || manifest.target === 'user-cloud') {
     requireValue(Object.keys(actual).length === 1 && Object.hasOwn(actual, 'function.zip'), 'Unexpected Function package')
   } else {
-    requireValue(/^\d{4}\.\d{2}\.\d{2}\.[1-9]\d*$/.test(manifest.version ?? ''), 'Missing desktop build identity')
-    requireValue(/^\d{4}\.\d{1,2}\.\d{1,2}$/.test(manifest.packageVersion ?? ''), 'Missing desktop package version')
+    let fileVersion
+    if (legacyDesktopVersion.test(manifest.version ?? '')) {
+      requireValue(/^\d{4}\.\d{1,2}\.\d{1,2}$/.test(manifest.packageVersion ?? ''), 'Missing desktop package version')
+      fileVersion = manifest.version
+    } else {
+      const identity = candidateVersion(manifest.version)
+      requireValue(manifest.packageVersion === identity.package, 'Candidate package version mismatch')
+      fileVersion = identity.file
+    }
     requireValue(Object.hasOwn(actual, `Azure-Network-Simulator-${manifest.version}-x64.exe`), 'Installer version does not match manifest')
     requireValue(Object.hasOwn(actual, 'installer-sha256.json'), 'Missing desktop checksum evidence')
     const evidence = await json(resolve(root, 'payload', 'installer-sha256.json'))
     const checksums = Array.isArray(evidence) ? evidence : [evidence]
     requireValue(checksums.length === 1 && checksums[0].Hash?.toLowerCase() === actual[`Azure-Network-Simulator-${manifest.version}-x64.exe`], 'Installer checksum evidence mismatch')
     const version = await json(resolve(root, 'payload', 'version-checks.json'))
-    requireValue(version.fileVersion === manifest.version && version.productVersion === `${manifest.packageVersion}.0`
+    requireValue(version.fileVersion === fileVersion && version.productVersion === `${manifest.packageVersion}.0`
       && version.runtimeVersion === manifest.packageVersion
       && version.buildVersion === manifest.version && version.packageVersion === manifest.packageVersion, 'Packaged version evidence mismatch')
   }
@@ -135,6 +146,16 @@ export function promotionDecision(candidate, records, rollback, relation) {
     if (relation === 'identical') {
       requireValue(current.archiveSha256 === candidate.archiveSha256, 'Same source has different bytes; select the already released candidate')
     }
+    if ((candidate.target === 'web' || candidate.target === 'desktop') && semanticVersion.test(current.version ?? '')) {
+      candidateVersion(candidate.version)
+      const previous = current.version.split('.').map(Number)
+      const difference = candidate.version.split('.').map((part, index) => Number(part) - previous[index]).find((value) => value !== 0) ?? 0
+      requireValue(difference >= 0, 'Semantic release version must not go backwards')
+    }
+  }
+  if (!rollback && (candidate.target === 'web' || candidate.target === 'desktop') && semanticVersion.test(candidate.version ?? '')) {
+    requireValue(records.every((record) => record.version !== candidate.version || record.archiveSha256 === candidate.archiveSha256),
+      'Semantic version is already published with different bytes; bump package.json before CI')
   }
   return current?.archiveSha256 === candidate.archiveSha256
 }
@@ -232,7 +253,7 @@ export async function guard(directory, rollback) {
     'Unresolved promotion draft exists; rerun that release or reconcile it before another promotion')
   }
   if (receipt.target === 'desktop') {
-    const existing = releases(receipt.repository).find((release) => release.tag_name === `desktop-dev-${receipt.version}`)
+    const existing = releases(receipt.repository).find((release) => release.tag_name === desktopReleaseTag(receipt.version))
     if (existing) {
       const identity = JSON.parse(existing.body)
       requireValue(identity.archiveSha256 === receipt.archiveSha256 && identity.sourceSha === receipt.sourceSha, 'Desktop version is already published with different bytes')
@@ -257,14 +278,21 @@ export async function record(directory, rollback, reserve = false) {
   const tag = `promotion-${receipt.target}-${promotionId}`
   const publish = async (name, title, assets, prerelease, draftOnly = false) => {
     let found = releases(receipt.repository).find((release) => release.tag_name === name)
-    if (found) {
-      const identity = JSON.parse(found.body)
-      requireValue(identity.archiveSha256 === receipt.archiveSha256 && identity.sourceSha === receipt.sourceSha, 'Release identity already exists with different bytes')
-    } else {
-      gh(['release', 'create', name, '--repo', receipt.repository, '--target', receipt.sourceSha, '--title', title,
-        '--notes-file', notes, '--draft'])
+    const created = !found
+    const unresolved = `Cannot resolve created release "${name}"; preserve its draft and resume the original promotion`
+    if (created) {
+      const response = gh(['api', '--method', 'POST', `repos/${receipt.repository}/releases`,
+        '-f', `tag_name=${name}`, '-f', `target_commitish=${receipt.sourceSha}`, '-f', `name=${title}`,
+        '-f', `body=${await readFile(notes, 'utf8')}`, '-F', 'draft=true'], { encoding: 'utf8' })
+      try { found = JSON.parse(response) }
+      catch { throw new Error(unresolved) }
     }
-    found = releases(receipt.repository).find((release) => release.tag_name === name)
+    requireValue(found?.tag_name === name && numericId(found.id) && Array.isArray(found.assets)
+      && typeof found.draft === 'boolean' && (!created || found.draft), unresolved)
+    let identity
+    try { identity = JSON.parse(found.body) }
+    catch { throw new Error(`Release identity is unreadable for "${name}"; preserve its draft and resume the original promotion`) }
+    requireValue(identity?.archiveSha256 === receipt.archiveSha256 && identity.sourceSha === receipt.sourceSha, 'Release identity already exists with different bytes')
     for (const path of assets) {
       const name = path.split(/[\\/]/).at(-1)
       const existing = found.assets.find((asset) => asset.name === name)
@@ -279,7 +307,7 @@ export async function record(directory, rollback, reserve = false) {
     gh(['release', 'edit', name, '--repo', receipt.repository, '--draft=false', prerelease ? '--prerelease' : '--latest'])
   }
   if (!reserve && receipt.target === 'desktop') {
-    await publish(`desktop-dev-${receipt.version}`, `Windows development build ${receipt.version} (unsigned)`,
+    await publish(desktopReleaseTag(receipt.version), `Windows development build ${receipt.version} (unsigned)`,
       [resolve(directory, 'candidate', 'payload', `Azure-Network-Simulator-${receipt.version}-x64.exe`), notes], false)
   }
   await publish(tag, `${rollback ? 'Rollback' : 'Promotion'}: ${receipt.target} ${receipt.sourceSha.slice(0, 12)}`,
@@ -292,21 +320,11 @@ export async function record(directory, rollback, reserve = false) {
 async function main() {
   const [command, target, argument, directory, attempt = '1'] = process.argv.slice(2)
   if (command === 'prepare-desktop') {
-    requireValue(numericId(process.env.GITHUB_RUN_ID), 'Missing CI run ID')
-    const repository = process.env.GITHUB_REPOSITORY
-    const run = api(`repos/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}`)
-    const runs = pages(`repos/${repository}/actions/workflows/${run.workflow_id}/runs?created=${run.created_at.slice(0, 10)}&per_page=100`)
-      .flatMap((page) => page.workflow_runs)
-    const version = desktopIdentity(run, runs)
-    const config = await json('electron-builder.json')
-    config.buildVersion = version.build
-    config.buildNumber = '0'
-    config.extraMetadata.version = version.package
-    await save('electron-builder.json', config)
+    const version = candidateVersion((await json('package.json')).version)
     if (process.env.GITHUB_ENV) {
-      await writeFile(process.env.GITHUB_ENV, `CANDIDATE_VERSION=${version.build}\nCANDIDATE_PACKAGE_VERSION=${version.package}\n`, { flag: 'a' })
+      await writeFile(process.env.GITHUB_ENV, `CANDIDATE_VERSION=${version.build}\nCANDIDATE_PACKAGE_VERSION=${version.package}\nCANDIDATE_FILE_VERSION=${version.file}\n`, { flag: 'a' })
     }
-    await output({ CANDIDATE_VERSION: version.build, CANDIDATE_PACKAGE_VERSION: version.package })
+    await output({ CANDIDATE_VERSION: version.build, CANDIDATE_PACKAGE_VERSION: version.package, CANDIDATE_FILE_VERSION: version.file })
   } else if (command === 'create') {
     const root = resolve('test-artifacts', 'candidates', target)
     const inputs = target === 'web' ? [['dist', '']] : target === 'statistics' || target === 'user-cloud'
@@ -314,7 +332,8 @@ async function main() {
       : (await readdir('release')).filter((name) => name.endsWith('-x64.exe')).map((name) => [resolve('release', name), name])
         .concat((await readdir('test-artifacts/desktop')).filter((name) => name.endsWith('checks.json') || name.endsWith('sha256.json'))
           .map((name) => [resolve('test-artifacts/desktop', name), name]))
-    await createCandidate(target, root, inputs)
+    const version = candidateVersion((await json('package.json')).version)
+    await createCandidate(target, root, inputs, { ...process.env, CANDIDATE_VERSION: version.build, CANDIDATE_PACKAGE_VERSION: version.package })
   } else if (command === 'preflight') await preflight(target, argument, resolve(directory), attempt)
   else if (command === 'guard') await guard(resolve(target), argument === 'true')
   else if (command === 'record') await record(resolve(target), argument === 'true')

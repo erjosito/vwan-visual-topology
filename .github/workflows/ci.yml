@@ -160,9 +160,7 @@ jobs:
       - run: npm ci
       - run: npm run test:platform
       - run: npm run test:desktop-cli
-      - name: Allocate candidate version in this disposable checkout
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Read candidate semantic version from package.json
         run: node scripts/release-candidate.mjs prepare-desktop
       - run: npm run build:desktop
         env:
@@ -193,7 +191,7 @@ jobs:
             packageVersion = $env:CANDIDATE_PACKAGE_VERSION
           } | ConvertTo-Json | Set-Content test-artifacts\desktop\version-checks.json
           Get-Content test-artifacts\desktop\version-checks.json
-          if ($info.FileVersion -ne $env:CANDIDATE_VERSION -or $info.ProductVersion -ne "$env:CANDIDATE_PACKAGE_VERSION.0" -or $runtimeVersion -ne $env:CANDIDATE_PACKAGE_VERSION) {
+          if ($info.FileVersion -ne $env:CANDIDATE_FILE_VERSION -or $info.ProductVersion -ne "$env:CANDIDATE_PACKAGE_VERSION.0" -or $runtimeVersion -ne $env:CANDIDATE_PACKAGE_VERSION) {
             throw 'Packaged executable resource/runtime versions do not match the recorded candidate identity'
           }
       - name: Record immutable desktop candidate

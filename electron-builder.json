@@ -9,9 +9,8 @@
     { "from": "platform-dist/worker.cjs", "to": "platform/worker.cjs" }
   ],
   "asar": true,
-  "extraMetadata": { "version": "2026.11.16" },
-  "buildVersion": "2026.11.16.13",
-  "artifactName": "Azure-Network-Simulator-${buildVersion}-${arch}.${ext}",
+  "buildNumber": "0",
+  "artifactName": "Azure-Network-Simulator-${version}-${arch}.${ext}",
   "win": { "target": ["nsis"], "icon": "public\\desktop-icon.ico", "signExecutable": false },
   "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true }
 }

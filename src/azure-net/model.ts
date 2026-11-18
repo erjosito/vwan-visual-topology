@@ -31,6 +31,7 @@ export interface AzPrivateEndpoint {
 }
 
 export interface AzSubnet {
+  delegations?: string[]
   id: string
   name: string
   prefix: string
@@ -148,6 +149,7 @@ export interface AzPeeringDirectionFlags {
 }
 
 export interface AzVnetPeering {
+  scope?: { type: 'whole-vnet' } | { type: 'subnets'; subnetAIds: string[]; subnetBIds: string[] }
   id: string
   name: string
   vnetAId: string

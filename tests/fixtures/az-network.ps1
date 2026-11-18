@@ -102,12 +102,20 @@ if ($command -eq 'network nic show-effective-route-table') {
 } elseif ($command -eq 'network vnet list') {
     $result = @('second', 'first') | ForEach-Object {
         $id = "$prefix/virtualNetworks/vnet-$_"
+        $subnetPeering = $env:MOCK_NETWORK_MODE -eq 'subnet-peering'
+        $octet = if ($subnetPeering -and $_ -eq 'second') { 83 } else { 82 }
         @{
             id = $id; name = "vnet-$_"; location = 'swedencentral'; secret = 'must-not-be-exported'
-            addressSpace = @{ addressPrefixes = @('10.82.0.0/16') }
+            addressSpace = @{ addressPrefixes = @("10.$octet.0.0/16") }
+            virtualNetworkPeerings = @(if ($subnetPeering) {
+                $remote = if ($_ -eq 'first') { 'second' } else { 'first' }
+                @{ name = "to-$remote"; remoteVirtualNetwork = @{ id = "$prefix/virtualNetworks/vnet-$remote" }
+                    peerCompleteVnets = $false; localSubnetNames = @('RouteServerSubnet'); remoteSubnetNames = @('RouteServerSubnet')
+                    enableOnlyIPv6Peering = $false; allowVirtualNetworkAccess = $true; secret = 'must-not-be-exported' }
+            })
             subnets = @(@{
                 id = "$id/subnets/RouteServerSubnet"; name = 'RouteServerSubnet'; secret = 'must-not-be-exported'
-                addressPrefix = '10.82.254.0/26'
+                addressPrefix = "10.$octet.254.0/26"
                 ipConfigurations = @(@{ id = "$prefix/virtualHubs/ars-$_/ipConfigurations/default" })
                 defaultOutboundAccess = $false
                 natGateway = if ($_ -eq 'first') { @{ id = "$prefix/natGateways/nat" } } else { $null }

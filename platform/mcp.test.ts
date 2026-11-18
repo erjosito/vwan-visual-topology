@@ -10,6 +10,107 @@ import { scenarioTopologies } from '../src/learning/scenario-topologies'
 import { scenarioBundle } from '../src/learning/scenario-course'
 import { haRoutingRequirements, haRoutingTopology } from '../tests/fixtures/ha-routing'
 import { haBackend, haPacket, haPortsTopology } from '../tests/fixtures/ha-ports'
+import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
+import { readFileSync } from 'node:fs'
+
+it('qualifies subnet-peering route visibility separately from forwarding through the actual stdio engine', async () => {
+  const client = new Client({ name: 'subnet-peering-contract-test', version: '1' })
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    if (response.isError) throw new Error(JSON.stringify(response.content))
+    return response.structuredContent as Record<string, any>
+  }
+  try {
+    expect((await call('get_schema', { mode: 'full' })).subnetPeering.modes).toEqual(['hub-spoke', 'full'])
+    const topology = JSON.parse(readFileSync(resolve('public', 'docs', 'samples', 'azure-net', 'subnet-peering.json'), 'utf8'))
+    const request = { contractVersion: 1 as const, operation: 'evaluate' as const, document: { mode: 'full' as const, topology }, requirements: [
+      { id: 'preview-visibility', kind: 'route' as const, table: 'a2', prefix: '10.81.1.0/24', expectation: 'present' as const },
+      { id: 'no-whole-vnet-route', kind: 'route' as const, table: 'a1', prefix: '10.81.0.0/16', expectation: 'absent' as const },
+      { id: 'selected-forwarding', kind: 'flow' as const, source: { kind: 'subnet' as const, vnetId: 'vnet-a', subnetId: 'a1' },
+        target: { kind: 'subnet' as const, vnetId: 'vnet-b', subnetId: 'b1' }, sourceAddress: '10.80.1.4', destinationAddress: '10.81.1.4', expectation: 'allow' as const },
+      { id: 'unselected-forwarding', kind: 'flow' as const, source: { kind: 'subnet' as const, vnetId: 'vnet-a', subnetId: 'a2' },
+        target: { kind: 'subnet' as const, vnetId: 'vnet-b', subnetId: 'b1' }, sourceAddress: '10.80.2.4', destinationAddress: '10.81.1.4', expectation: 'deny' as const },
+    ] }
+    const { handle } = await call('start_simulation', { request })
+    let state
+    for (let attempt = 0; attempt < 100; attempt++) {
+      state = await call('get_job', { handle })
+      if (state.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    expect(state?.status).toBe('finished')
+    const result: Record<string, any> = {}
+    for (const section of ['simulation', 'assessments', 'document']) {
+      const chunks: string[] = []
+      for (let offset = 0; offset < 1_000_000;) {
+        const chunk = await call('get_evidence', { handle, section, offset, limit: 4000 })
+        chunks.push(chunk.jsonText)
+        if (chunk.complete) break
+        expect(chunk.jsonText.length).toBeGreaterThan(0)
+        offset += chunk.jsonText.length
+      }
+      result[section] = JSON.parse(chunks.join(''))
+    }
+    const expected = executePlatform(request)
+    expect(result).toEqual({ simulation: expected.simulation, assessments: expected.assessments, document: expected.document })
+    expect(result.assessments.map((assessment: any) => assessment.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied', 'satisfied'])
+  } finally { await client.close() }
+}, 20000)
+
+it('exposes original per-NVA received-route evidence through the freshly built stdio engine without implying subnet injection', async () => {
+  const client = new Client({ name: 'nva-bgp-contract-test', version: '1' })
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    if (response.isError) throw new Error(JSON.stringify(response.content))
+    return response.structuredContent as Record<string, any>
+  }
+  const run = async (request: unknown) => {
+    const { handle } = await call('start_simulation', { request })
+    let state
+    for (let attempt = 0; attempt < 100; attempt++) {
+      state = await call('get_job', { handle })
+      if (state.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    expect(state?.status).toBe('finished')
+    expect(state?.resultStatus).toBe('complete')
+    return handle
+  }
+  try {
+    const capabilities = await call('get_capabilities')
+    expect(capabilities.nvaBgp.evidence).toBe('simulation.nvaBgpPeers[originalApplianceId][]')
+    expect((await call('get_schema', { mode: 'full' })).nvaBgp).toEqual(capabilities.nvaBgp)
+    const topology = nvaBgpTopology()
+    topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
+    const base = { contractVersion: 1 as const, document: { mode: 'full' as const, topology } }
+    await run({ ...base, operation: 'validate' })
+    const request = { ...base, operation: 'evaluate' as const, requirements: [
+      { id: 'bgp-reception-does-not-inject-host-subnet', kind: 'route' as const, table: 'reader-subnet', prefix: '198.18.0.0/24', expectation: 'absent' as const },
+    ] }
+    const handle = await run(request)
+    const chunks: string[] = []
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle, section: 'simulation', offset, limit: 2000 })
+      chunks.push(chunk.jsonText)
+      if (chunk.complete) break
+      expect(chunk.jsonText.length).toBeGreaterThan(0)
+      offset += chunk.jsonText.length
+    }
+    const simulation = JSON.parse(chunks.join(''))
+    expect(simulation).toEqual(executePlatform(request).simulation)
+    expect(simulation.nvaBgpPeers.reader).toHaveLength(2)
+    expect(simulation.nvaBgpPeers.reader[0].gatewaySummaryAssessment).toMatchObject({
+      status: 'not-assessed', configuredPrefixes: ['10.0.0.0/12', '203.0.113.0/24'], gatewayIds: [], branchToBranch: false,
+    })
+    expect(simulation.nvaBgpPeers.reader[1].gatewaySummaryAssessment).toBeUndefined()
+    expect(simulation.nvaBgpPeers.reader.flatMap((peer: any) => peer.routes.filter((route: any) => route.prefix === '198.18.0.0/24'))).toHaveLength(2)
+    const assessments = await call('get_evidence', { handle, section: 'assessments', limit: 16000 })
+    expect(assessments.complete).toBe(true)
+    expect(JSON.parse(assessments.jsonText)[0].outcome).toBe('satisfied')
+  } finally { await client.close() }
+}, 20000)
 
 it('qualifies owned HA-port forwarding and fail-closed alternatives through the actual stdio engine', async () => {
   const client = new Client({ name: 'ha-ports-contract-test', version: '1' })
