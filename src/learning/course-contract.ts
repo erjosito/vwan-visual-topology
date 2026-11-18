@@ -30,6 +30,7 @@ export const courseCheckSchema = z.discriminatedUnion('kind', [
 ])
 
 export const courseGuidanceSchema = z.discriminatedUnion('action', [
+  z.strictObject({ id, action: z.literal('packet-probe.open'), params: z.strictObject({ vnetId: entityId }), instruction: localized }),
   z.strictObject({ id, action: z.literal('network.configure'), params: z.strictObject({ vnetId: entityId }), instruction: localized }),
   z.strictObject({ id, action: z.literal('hub.configure'), params: z.strictObject({ hubId: entityId }), instruction: localized }),
   z.strictObject({ id, action: z.literal('hub-routes.open'), params: z.strictObject({ hubId: entityId, tableId: entityId }), instruction: localized }),

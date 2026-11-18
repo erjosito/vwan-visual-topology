@@ -2853,7 +2853,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
               setContextMenu(null)
               setGuidanceRevision((revision) => revision + 1)
-              if (cue.action === 'hub.configure') {
+              if (cue.action === 'packet-probe.open') {
+                openDetail(cue.params.vnetId)
+              } else if (cue.action === 'hub.configure') {
                 setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })
                 setActiveTab('editor')
               } else if (cue.action === 'hub-routes.open') {

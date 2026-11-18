@@ -34,7 +34,7 @@ function checkScope(
   } else if ('hubId' in params) {
     requireContent(document.mode !== 'vwan' && document.topology.vwanHubs.some((hub) => hub.id === params.hubId
       && (!('tableId' in params) || hubRouteTables(hub).some((table) => table.id === params.tableId))), `${definition.id} needs an owned hub/table`)
-  } else if (kind === 'network.configure' && 'vnetId' in params) {
+  } else if ((kind === 'network.configure' || kind === 'packet-probe.open') && 'vnetId' in params) {
     requireContent(document.mode !== 'vwan' && document.topology.vnets.some((vnet) => vnet.id === params.vnetId), `${definition.id} needs an owned VNet`)
   } else if ('vnetAId' in params || 'subnetId' in params) {
     requireContent(document.mode !== 'vwan', `${definition.id} needs the mixed-network provider`)

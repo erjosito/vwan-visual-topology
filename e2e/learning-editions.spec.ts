@@ -6,6 +6,9 @@ import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { sidebarLabels } from '../src/learning/sidebar-content'
 import { runnerLabels } from '../src/learning/runner-content'
+import { loadLanguage, translate } from '../src/messages'
+import '../src/packet-messages-ja'
+import '../src/network-detail-messages-ja'
 import { completeLearningTasks, createLessonPeering, learningAnchor, learningSidebar, loadLearningNetwork } from './learning-helpers'
 
 async function show(page: Page, taskId: string, guidanceId: string, language: 'en' | 'ja') {
@@ -18,6 +21,26 @@ async function openTable(page: Page, taskId: string, tableId: string, language: 
     && entry.action === 'route-table.configure' && entry.params.routeTableId === tableId)!
   await show(page, taskId, cue.id, language)
   return page.getByTestId(`aznet-rt-card-${tableId}`)
+}
+async function probeHa(page: Page, taskId: string, language: 'en' | 'ja', symmetry: 'symmetric' | 'asymmetric') {
+  await loadLanguage(language)
+  const t = (text: string) => translate(language, text)
+  const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+  await show(page, taskId, 'ha-return-path.packet', language)
+  const dialog = page.getByTestId('network-detail-dialog')
+  const panel = dialog.getByTestId('packet-flow-panel')
+  await expect(learningAnchor(page, 'packet-probe', 'hub')).toBeVisible()
+  await expect(dialog.locator('.learning-cue')).toBeVisible()
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
+  await expect(panel.getByTestId('packet-flow-result')).toHaveCount(0)
+  await panel.getByLabel(t('Packet source'), { exact: true }).selectOption(JSON.stringify(['workload', 'client', 'client-nic', 'client-ip']))
+  await panel.getByLabel(t('Packet destination'), { exact: true }).selectOption(JSON.stringify(['workload', 'server', 'server-nic', 'server-ip']))
+  await panel.getByRole('button', { name: t('Trace packet routing'), exact: true }).click()
+  await expect(panel.getByTestId('packet-ha-ports-result')).toContainText(t(symmetry))
+  await expect(panel.getByTestId('packet-ha-ports-result')).toContainText('primary-vm')
+  await expect(panel.getByTestId('packet-flow-result')).toContainText('10.81.1.10:49152')
+  await expect(panel.getByTestId('packet-flow-result')).toContainText('10.82.1.10:443')
+  await dialog.getByRole('button', { name: t('Close VNet detail'), exact: true }).click()
 }
 async function repair(page: Page, id: string, language: 'en' | 'ja') {
   const taskId = `${id}.repair`
@@ -60,6 +83,20 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
     await learningAnchor(page, 'udr-route', 'hub', 'hub-work', 'inspection-onward', 'indirect-return')
       .locator('input[type="text"]').nth(2).fill('10.21.3.4')
   }
+  if (id === 'ha-return-path') {
+    const card = await openTable(page, taskId, 'remote-steering', language)
+    await card.locator('tbody tr').first().locator('input[type="text"]').nth(2).fill('10.80.3.10')
+    await probeHa(page, taskId, language, 'symmetric')
+    const sidebar = learningSidebar(page)
+    await sidebar.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
+    await expect(sidebar.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeEnabled()
+    const returnTable = await openTable(page, taskId, 'remote-steering', language)
+    const nextHop = returnTable.locator('tbody tr').first().locator('input[type="text"]').nth(2)
+    await nextHop.fill('10.80.2.4')
+    await expect(sidebar.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
+    await nextHop.fill('10.80.3.10')
+    await expect(sidebar.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
+  }
 }
 
 for (const language of ['en', 'ja'] as const) {
@@ -84,6 +121,7 @@ for (const language of ['en', 'ja'] as const) {
         await repair(page, lesson.id, language)
       }
       if (check.kind === 'quiz.answered') {
+        if (task.id === 'ha-return-path.diagnose') await probeHa(page, task.id, language, 'asymmetric')
         const answer = check.params.choices.find((choice) => choice.id === check.params.correctChoiceId)!
         await panel.getByRole('radio', { name: answer.text[language], exact: true }).check()
       }
@@ -92,16 +130,40 @@ for (const language of ['en', 'ja'] as const) {
       await panel.getByRole('button', { name: runnerLabels.continue[language], exact: true }).click()
     }
     await expect(panel.getByRole('heading', { name: runnerLabels.done[language], exact: true })).toBeVisible()
-    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? 'Black belt · 1325 points' : '黒帯 · 1325 ポイント')
+    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? 'Black belt · 1575 points' : '黒帯 · 1575 ポイント')
     await page.getByTestId('practice-workspace-bar').getByRole('button', { name: language === 'en' ? 'Return to my design' : '自分の設計に戻る', exact: true }).click()
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
     await page.reload()
-    await expect(page.getByTestId('learning-status')).toContainText('1325')
+    await expect(page.getByTestId('learning-status')).toContainText('1575')
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
-    expect(saved.completions).toHaveLength(35)
-    expect(new Set(saved.completions.map((entry: { awardId: string }) => entry.awardId)).size).toBe(35)
+    expect(saved.completions).toHaveLength(41)
+    expect(new Set(saved.completions.map((entry: { awardId: string }) => entry.awardId)).size).toBe(41)
   })
 }
+
+test('default mobile workspace reveals the scoped HA packet form without changing practice or awards', async ({ page }) => {
+  const completions = orderedTasks(scenarioBundle).filter(({ lesson }) => lesson.id !== 'ha-return-path')
+    .map(({ lesson, task }, revision) => ({
+      courseId: scenarioBundle.course.id, contentVersion: 2, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'earlier-missions', revision, scope: 1, engineVersion: 'earlier',
+      completedAt: '2026-11-18T12:00:00.000Z',
+    }))
+  await page.addInitScript(({ key, completions }) => {
+    localStorage.setItem('aznet-ui-preview:v1', 'true')
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+  }, { key: guidedProgressKey, completions })
+  await page.setViewportSize({ width: 390, height: 1000 })
+  await page.goto('/?mode=full')
+  await page.getByTestId('learning-open').click()
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'ha-return-path.load')
+  await loadLearningNetwork(page)
+  await completeLearningTasks(page, 2)
+  const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+  await probeHa(page, 'ha-return-path.diagnose', 'en', 'asymmetric')
+  expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'ha-return-path.diagnose')
+})
 
 test('historical black belt stays intact across explicit edition opt-in, reload and return', async ({ page }) => {
   const completions = orderedTasks(exampleCourse).map(({ lesson, task }, revision) => ({

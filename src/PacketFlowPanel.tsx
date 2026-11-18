@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import './packet-messages-ja'
 import { t } from './i18n'
+import { guidanceAnchor } from './learning/guidance'
 import type { InventoryTopology } from './inventory'
 import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
@@ -8,8 +9,8 @@ import { packetEndpointOptions, tracePacket, type FiveTuple, type PacketEndpoint
 
 const tupleText = (tuple: FiveTuple) => `${tuple.protocol.toUpperCase()} ${tuple.sourceAddress}:${tuple.sourcePort} -> ${tuple.destinationAddress}:${tuple.destinationPort}`
 
-export function PacketFlowPanel({ topology, simulation, onHighlight }: {
-  topology: InventoryTopology; simulation: Simulation | AzSimulationResult; onHighlight?: (id: string) => void
+export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVnetId }: {
+  topology: InventoryTopology; simulation: Simulation | AzSimulationResult; onHighlight?: (id: string) => void; guidanceVnetId?: string
 }) {
   const options = packetEndpointOptions(topology, t('Address unknown'))
   const [source, setSource] = useState('')
@@ -49,7 +50,7 @@ export function PacketFlowPanel({ topology, simulation, onHighlight }: {
   return <section className="packet-panel" aria-label={t('Workload packet probe')} data-testid="packet-flow-panel">
     <h3>{t('Workload packet probe')}</h3>
     <p>{t('Forward/reply routing with explicit Internet egress, public ingress and private-tuple NSGs where supported. Inverse translations are conditional responses, not new reverse initiations; listeners and application delivery remain unassessed.')}</p>
-    <form onSubmit={(event) => {
+    <form data-learning-anchor={guidanceVnetId ? guidanceAnchor('packet-probe', guidanceVnetId) : undefined} onSubmit={(event) => {
       event.preventDefault()
       try {
         const from = resolve(source), to = resolve(target)

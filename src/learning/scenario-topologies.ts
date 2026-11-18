@@ -1,4 +1,5 @@
 import { createEmptyAzNetTopology, type AzNetTopology, type AzVNet, type AzVnetPeering } from '../azure-net/model'
+import { haLessonTopology } from './ha-scenario'
 
 const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
 const network = (id: string, octet: number): AzVNet => ({
@@ -103,4 +104,5 @@ tiered.udrTables.find((entry) => entry.id === 'transport-return')!.routes.push(r
 export const scenarioTopologies: Record<string, AzNetTopology> = {
   'private-link': privateLink, 'inspection-bypass': bypass, 'colocated-chain': colocated, 'dedicated-chain': dedicated,
   'branch-advertisement': branch, 'wan-isolation': isolation, 'tiered-incident': tiered,
+  'ha-return-path': haLessonTopology(),
 }
