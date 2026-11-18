@@ -663,7 +663,7 @@ function App() {
           <span className="local-badge">{t("Local-first · no Azure credentials")}</span>
           <button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button>
           <button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button>
-          <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button>
+          {!workspaceSession?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button>}
         </PresentationGroup>
         {workspaceSession?.presentationPreview && <PresentationGroup label={t('Routing checks')}>
           <button disabled={currentCheck?.status === 'running'} onClick={checkRouting}

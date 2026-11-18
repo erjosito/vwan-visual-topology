@@ -18,6 +18,8 @@ export const ja: Record<string, string> = {
   'Switch interfaces. Your design and settings stay unchanged.': '表示を切り替えます。設計や設定は変更されません。',
   'Try a less cluttered presentation. Your design and settings stay unchanged.': '操作を整理した表示を試します。設計や設定は変更されません。',
   'Settings & help': '設定とヘルプ',
+  'Settings': '設定',
+  'Help & feedback': 'ヘルプとフィードバック',
   'Routing checks': 'ルーティングの確認',
   'Check connectivity across the modeled landscape': 'モデル化されたネットワーク全体の接続を確認します',
   'Inspect findings and assess declared connectivity requirements': '検出結果を確認し、宣言された接続要件を評価します',
