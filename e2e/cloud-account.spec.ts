@@ -4,6 +4,9 @@ import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { exampleCourse } from '../src/learning/course-examples'
 import { orderedTasks } from '../src/learning/runner'
 import { completeLearningTasks, loadLearningNetwork } from './learning-helpers'
+import { sampleHubSpokeFirewallUdr } from '../src/azure-net/model'
+import AxeBuilder from '@axe-core/playwright'
+import { languageStorageKey } from '../src/i18n'
 
 async function setup(page: Page) {
   const service = cloudFixture([new URL(test.info().project.use.baseURL as string).origin])
@@ -44,6 +47,109 @@ async function signIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
 }
 
+for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
+  test(`${language} ${theme}: compact cloud library keeps fifty sorted and filtered saves distinct`, async ({ page }, info) => {
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    const service = await setup(page)
+    const ids = Array.from({ length: 50 }, () => crypto.randomUUID())
+    for (const [index, id] of ids.entries()) {
+      const name = index === 44 || index === 45 ? 'Duplicate name'
+        : index === 49 ? 'Long configuration '.repeat(6).trim() : `Saved ${String(index).padStart(2, '0')}`
+      await service.store.put(`users/${testOwner('alice')}/topologies/${id}.json`, JSON.stringify({
+        version: 1, name, topology: { ...sampleHubSpokeFirewallUdr, name: `Cloud topology ${index}` },
+      }), null, name)
+    }
+    const list = service.store.list
+    service.store.list = async prefix => (await list(prefix)).map((entry, index) => ({
+      ...entry, updatedAt: new Date(Date.UTC(2026, 9, index + 1)).toISOString(),
+    }))
+    const original = new Map([...service.data].map(([key, value]) => [key, value.raw]))
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.addInitScript(({ language, theme }) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-theme', theme)
+    }, { language, theme })
+    await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
+    await page.getByRole('button', { name: text('Cloud account', 'クラウド アカウント'), exact: true }).click()
+    await page.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
+    const rows = dialog.locator('tbody tr')
+    await expect(rows).toHaveCount(50)
+    await expect(rows.first()).toHaveAttribute('data-cloud-save-id', ids[49])
+    const local = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    const search = dialog.getByRole('searchbox', { name: text('Find cloud saves', 'クラウドの保存を検索'), exact: true })
+    const sort = dialog.getByRole('combobox', { name: text('Sort cloud saves', 'クラウドの保存の並べ替え'), exact: true })
+    await sort.selectOption('name')
+    await expect(rows.first()).toContainText('Duplicate name')
+    const region = dialog.getByRole('region', { name: text('Cloud saves', 'クラウドの保存'), exact: true })
+    await region.scrollIntoViewIfNeeded()
+    expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await region.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await region.locator('button').evaluateAll(buttons => buttons.every(button => {
+      const bounds = button.getBoundingClientRect(), parent = button.closest('[role="region"]')!.getBoundingClientRect()
+      return bounds.left >= parent.left && bounds.right <= parent.right && bounds.height >= 36
+    }))).toBe(true)
+    expect((await new AxeBuilder({ page }).include('dialog').analyze()).violations).toEqual([])
+    await region.screenshot({ path: info.outputPath(`cloud-library-${language}-${theme}.png`) })
+    await search.fill('no matching configuration')
+    await expect(rows).toHaveCount(0)
+    await search.fill('Duplicate name')
+    await expect(rows).toHaveCount(2)
+    if (language === 'en' && theme === 'light') {
+      page.removeAllListeners('dialog')
+      page.once('dialog', dialog => { void dialog.dismiss() })
+      await rows.first().getByRole('button', { name: /^Overwrite cloud save / }).click()
+      expect([...service.data].map(([key, value]) => [key, value.raw])).toEqual([...original])
+      page.on('dialog', dialog => { void dialog.accept() })
+    }
+    const deletedKey = `users/${testOwner('alice')}/topologies/${ids[44]}.json`
+    await dialog.locator(`[data-cloud-save-id="${ids[44]}"]`).getByRole('button', { name: /^Delete |^削除 / }).click()
+    await expect(rows).toHaveCount(1)
+    expect(service.data.has(deletedKey)).toBe(false)
+    await expect(dialog.getByRole('button', { name: text('Refresh cloud topologies', 'クラウドの一覧を更新'), exact: true })).toBeFocused()
+    await dialog.getByLabel(text('Cloud topology name', 'クラウドのトポロジ名'), { exact: true }).fill('Updated cloud copy')
+    await rows.getByRole('button', { name: /^Overwrite cloud save |^クラウドの保存を上書き / }).focus()
+    await page.keyboard.press('Enter')
+    const overwrittenKey = `users/${testOwner('alice')}/topologies/${ids[45]}.json`
+    await expect.poll(() => JSON.parse(service.data.get(overwrittenKey)!.raw).name).toBe('Updated cloud copy')
+    await expect(search).toBeFocused()
+    for (const [key, raw] of original) {
+      if (key !== deletedKey && key !== overwrittenKey) expect(service.data.get(key)?.raw).toBe(raw)
+    }
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(local)
+    await search.fill('Saved 00')
+    await rows.getByRole('button', { name: /^Load into workspace |^ワークスペースに読み込む / }).click()
+    await expect(dialog).toHaveCount(0)
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.name)).toBe('Cloud topology 0')
+    for (const [key, raw] of original) {
+      if (key !== deletedKey && key !== overwrittenKey) expect(service.data.get(key)?.raw).toBe(raw)
+    }
+  })
+}
+
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: Close dismisses the cloud dialog without signing out or changing the design`, async ({ page }) => {
+    await setup(page)
+    await page.addInitScript(({ key, language }) => localStorage.setItem(key, language), { key: languageStorageKey, language })
+    await page.goto('/?mode=full')
+    const accountName = language === 'ja' ? 'クラウド アカウント' : 'Cloud account'
+    const account = page.getByRole('button', { name: accountName, exact: true })
+    await account.click()
+    const dialog = page.getByRole('dialog', { name: accountName, exact: true })
+    await dialog.getByRole('button', { name: language === 'ja' ? 'Microsoft でサインイン' : 'Sign in with Microsoft', exact: true }).click()
+    const signOut = dialog.getByRole('button', { name: language === 'ja' ? 'このアプリからサインアウト' : 'Sign out of this app', exact: true })
+    await expect(signOut).toBeVisible()
+    const design = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    await dialog.getByRole('button', { name: language === 'ja' ? '閉じる' : 'Close', exact: true }).click()
+    await expect(dialog).toHaveCount(0)
+    await expect(page.getByTestId('learning-status')).toContainText('Test Alice')
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(design)
+    await account.click()
+    await expect(signOut).toBeVisible()
+  })
+}
+
 test.describe('new UI account and belt summary', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
   test('shows highest local belt independently of enrollment and updates on account changes', async ({ page }) => {
@@ -69,7 +175,7 @@ test.describe('new UI account and belt summary', () => {
     await page.getByRole('button', { name: 'Sign out of this app', exact: true }).click()
     await expect(status).toContainText('Not signed in')
     await expect(status).toContainText('Black belt')
-    await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
     await status.click()
     await page.getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
     await page.getByRole('button', { name: 'Delete guided history & points', exact: true }).click()
@@ -111,7 +217,7 @@ test('anonymous history requires import consent; reload, switching and sign-out 
   await expect(page.getByTestId('cloud-progress-status')).toContainText('Synced')
   expect(JSON.parse(service.data.get(`users/${testOwner('alice')}/progress.json`)!.raw).completions).toHaveLength(1)
   expect(await page.evaluate(key => localStorage.getItem(key), guidedProgressKey)).toBe(original)
-  await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('Test Alice')
   await expect(page.getByTestId('learning-status')).toContainText(`${task.points} points`)
@@ -132,7 +238,7 @@ test('switching accounts preserves session-only history when both local and clou
   await setup(page)
   await page.goto('/?mode=full')
   await signIn(page)
-  await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await page.route('**/api/cloud/progress', async route => {
     if (route.request().method() === 'PUT') await route.abort()
     else await route.fallback()
@@ -166,7 +272,7 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   const service = await setup(page)
   await page.goto('/?mode=full')
   await signIn(page)
-  await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByTestId('learning-open').click()
   await loadLearningNetwork(page)
   await completeLearningTasks(page, 2)
@@ -190,7 +296,7 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   await page.getByRole('button', { name: 'Refresh cloud progress', exact: true }).click()
   await expect(page.getByTestId('cloud-progress-status')).toContainText('Synced')
   expect(JSON.parse(service.data.get(key)!.raw).completions).toHaveLength(0)
-  await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByTestId('learning-status').click()
   await page.getByRole('button', { name: 'Switch to Original edition', exact: true }).click()
   await page.getByRole('button', { name: 'Confirm edition switch', exact: true }).click()
@@ -216,12 +322,12 @@ test('a missing API is not an empty library and a confirmed save survives a fail
   await page.unroute('**/api/cloud/topologies', unavailable)
   await page.getByRole('button', { name: 'Refresh cloud topologies', exact: true }).click()
   await expect(page.getByRole('alert')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await page.reload()
   await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Confirmed save', exact: true })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(local)
-  await page.getByRole('button', { name: 'Load Confirmed save', exact: true }).click()
+  await page.getByRole('button', { name: /^Load into workspace Confirmed save / }).click()
   await expect(page.getByRole('dialog', { name: 'Cloud account', exact: true })).toHaveCount(0)
 })
 
@@ -264,7 +370,7 @@ for (const theme of ['light', 'dark']) {
     changed.topology.name = 'Remote topology'
     await service.store.put(key, JSON.stringify(changed), record.etag, changed.name)
     const local = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
-    await page.getByRole('button', { name: 'Replace Saved cloud design', exact: true }).click()
+    await page.getByRole('button', { name: /^Overwrite cloud save Saved cloud design / }).click()
     await expect(page.getByRole('status').filter({ hasText: 'cloud operation did not complete' })).toBeVisible()
     expect(JSON.parse(service.data.get(key)!.raw).topology.name).toBe('Remote topology')
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(local)
@@ -272,11 +378,11 @@ for (const theme of ['light', 'dark']) {
     await expect(page.getByRole('heading', { name: 'Remote changed', exact: true })).toBeVisible()
     await expect(page.getByRole('status').filter({ hasText: 'cloud operation did not complete' })).toHaveCount(0)
     await page.getByRole('dialog', { name: 'Cloud account', exact: true }).screenshot({ path: testInfo.outputPath(`cloud-${theme}.png`) })
-    await page.getByRole('button', { name: 'Load Remote changed', exact: true }).click()
+    await page.getByRole('button', { name: /^Load into workspace Remote changed / }).click()
     await expect(page.getByRole('dialog', { name: 'Cloud account', exact: true })).toHaveCount(0)
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.name)).toBe('Remote topology')
     await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
-    await page.getByRole('button', { name: 'Delete Remote changed', exact: true }).click()
+    await page.getByRole('button', { name: /^Delete Remote changed / }).click()
     await expect(page.getByText('No saved cloud topologies.', { exact: true })).toBeVisible()
     expect(service.data.has(key)).toBe(false)
     expect(errors).toEqual([])

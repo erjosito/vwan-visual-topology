@@ -1182,6 +1182,41 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     expect(advertised()).toEqual(original)
   })
 
+  it.each([
+    ['ExpressRoute', 'inboundMapId'], ['ExpressRoute', 'outboundMapId'],
+    ['Vpn', 'inboundMapId'], ['Vpn', 'outboundMapId'],
+  ] as const)('lets an ARS %s %s association override gateway summaries only on that connection', (transport, direction) => {
+    const topology = arsTopology(transport)
+    const hub = topology.vnets[0]
+    const ars = hub.routeServer!
+    hub.summarizedGatewayPrefixes = ['10.0.0.0/15', '198.18.0.0/15']
+    hub.gateways.push({ ...hub.gateways[0], id: 'control-gw' })
+    topology.sites.push({ ...topology.sites[0], id: 'control-site', prefixes: ['172.17.0.0/24'] })
+    if (transport === 'ExpressRoute') {
+      topology.erLocations.push({ ...topology.erLocations[0], id: 'control-er' })
+      topology.erLinks.push(
+        { id: 'control-gateway-link', name: 'Control gateway', locationId: 'control-er', targetKind: 'vnet-gateway', targetId: 'control-gw', enabled: true },
+        { id: 'control-site-link', name: 'Control site', locationId: 'control-er', targetKind: 'site', targetId: 'control-site', enabled: true },
+      )
+    } else {
+      topology.vpnConnections.push({ ...topology.vpnConnections[0], id: 'control-vpn', targetId: 'control-gw', siteId: 'control-site' })
+    }
+    const advertised = (siteId: string) => simulateAzNet(topology).siteRibs[siteId]
+      .filter((route) => route.preferred && route.advertisedSummaryFrom).map((route) => route.prefix).sort()
+    const summaries = ['10.0.0.0/15', '198.18.0.0/15']
+    expect(advertised('site')).toEqual(summaries)
+    ars.routeMapAssignments = [{ connectionId: 'nva:one', [direction]: 'ars-map' }]
+    expect(advertised('site')).toEqual(summaries)
+    ars.routeMapAssignments.push({ connectionId: 'gateway:gw', [direction]: 'ars-map' })
+    expect(validateAzNetTopology(topology)).toEqual([])
+    expect(advertised('site')).toEqual([])
+    expect(advertised('control-site')).toEqual(summaries)
+    const routes = simulateAzNet(topology).siteRibs.site.filter((route) => route.preferred).map((route) => route.prefix)
+    expect(routes).toEqual(expect.arrayContaining(['10.0.0.0/16', '10.1.0.0/16']))
+    ars.routeMapAssignments.pop()
+    expect(advertised('site')).toEqual(summaries)
+  })
+
   it.each(['ExpressRoute', 'Vpn'] as const)('ignores remote-spoke summaries and requires GatewaySubnet for %s summaries', (transport) => {
     const topology = transitTopology(transport)
     topology.vnets[1].summarizedGatewayPrefixes = ['198.18.0.0/15']

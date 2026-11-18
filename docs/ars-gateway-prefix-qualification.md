@@ -3,11 +3,26 @@
 ## Supported boundary
 
 `summarizedGatewayPrefixes` configures gateway advertisements, not local
-address ownership. Existing ER/VPN gateway advertisement behavior is unchanged:
+address ownership. For ER/VPN connections without an overriding map, in the snapshot model
 configured summaries replace covered hub/spoke advertisements, uncovered prefixes
 remain, independent prefixes are allowed, and aggregate holes do not become
 reachable. A gateway and GatewaySubnet are required for gateway summarization.
 Spoke-local configuration does not configure the hub's gateway.
+
+An inbound or outbound ARS route-map association on a particular ER/VPN
+connection takes precedence over `summarizedGatewayPrefixes` for that connection,
+even when the map itself has no summarization rule. The snapshot model applies
+this documented override per connection; other connections retain their previous
+modeled behavior, and removing the association restores modeled summaries.
+This does not establish which summary routes an NVA receives from ARS.
+
+**First-map creation is a separate, unqualified transition.** The FAQ documents
+a software upgrade triggered by creating the first route map. A user reported
+VPN prefix loss after this creation even without any connection associations
+(#298). The cause and ER behavior are not established. The snapshot model does
+not track that upgrade history; an empty map/assignment list or map deletion does
+not prove legacy software state or restore it. Unassigned-map advertisements
+must not be treated as live-qualified against this report.
 
 **Automatic ARS-to-NVA summary projection remains unassessed.** The bounded live
 observations below do not qualify every gateway/peer combination. Do not interpret the displayed
