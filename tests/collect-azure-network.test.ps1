@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([switch]$VpnNatOnly, [switch]$SubnetPeeringOnly, [switch]$BgpNeighborsOnly)
+param([switch]$VpnNatOnly, [switch]$SubnetPeeringOnly, [switch]$BgpNeighborsOnly, [switch]$ArsRoutesOnly)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $output = Join-Path $repo 'test-artifacts' 'azure-files' 'collector-network'
@@ -22,8 +22,8 @@ try {
     $env:MOCK_NETWORK_LOG = Join-Path $output 'requests.log'
     $env:MOCK_NETWORK_TIMEOUT_START = Join-Path $output 'timeout-start-ticks.txt'
     $natModes = @('vpn-nat-gateway', 'vpn-nat-ingress', 'vpn-nat-egress')
-    $modes = if ($BgpNeighborsOnly) { @('bgp-neighbors') } elseif ($SubnetPeeringOnly) { @('subnet-peering') } elseif ($VpnNatOnly) { $natModes } else {
-        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated', 'subnet-peering', 'bgp-neighbors') + $natModes
+    $modes = if ($ArsRoutesOnly) { @('ars-roles') } elseif ($BgpNeighborsOnly) { @('bgp-neighbors') } elseif ($SubnetPeeringOnly) { @('subnet-peering') } elseif ($VpnNatOnly) { $natModes } else {
+        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated', 'subnet-peering', 'bgp-neighbors', 'ars-roles') + $natModes
     }
     $importer = Join-Path $output 'vpn-nat-importer.cjs'
     @'
@@ -89,7 +89,14 @@ for (const ids of [topology.vnetPeerings[0].scope.subnetAIds, topology.vnetPeeri
             $server = $capture.routeServers | Where-Object name -eq "ars-$name"
             Assert ($server.subnetId -eq "$prefix/virtualNetworks/vnet-$name/subnets/RouteServerSubnet") "$mode has incorrect Route Server ownership."
         }
-        Assert ($capture.arsLearnedRoutes.'ars-first/same-peer'.Count -eq 1 -and $capture.arsLearnedRoutes.'ars-second/same-peer'.Count -eq 1) "$mode overwrote a same-named peer from another server."
+        $routeCount = if ($mode -eq 'ars-roles') { 2 } else { 1 }
+        Assert ($capture.arsLearnedRoutes.'ars-first/same-peer'.Count -eq $routeCount -and $capture.arsLearnedRoutes.'ars-second/same-peer'.Count -eq $routeCount) "$mode overwrote a same-named peer from another server."
+        Assert ($capture.arsLearnedRoutes.'ars-first/same-peer'[0].localRole -eq 'RouteServiceRole_IN_0') "$mode lost the reported ARS role."
+        if ($mode -eq 'ars-roles') {
+            Assert ($capture.arsLearnedRoutes.'ars-first/same-peer'[1].localRole -eq 'RouteServiceRole_IN_1') 'Merged the second Azure role into the first.'
+            Assert ($capture.arsAdvertisedRoutes.'ars-first/same-peer'[1].localRole -eq 'RouteServiceRole_IN_1') 'Lost advertised-route role ownership.'
+            Assert ($capture.arsAdvertisedRoutes.'ars-first/same-peer'[0].asPath -eq '65515-65050' -and $capture.arsAdvertisedRoutes.'ars-first/same-peer'[0].weight -eq 0) 'Rewrote native AS path or zero weight.'
+        }
         if ($mode -in $natModes) {
             $reference = "$prefix/virtualNetworkGateways/vpn/natRules/overlap"
             $observed = switch ($mode) {
@@ -137,7 +144,7 @@ if (!rejected) throw new Error('Known collected VPN NAT became healthy ordinary 
         }
         Write-Host "Passed $mode bounded capture, projections and provenance."
     }
-    if ($VpnNatOnly -or $SubnetPeeringOnly -or $BgpNeighborsOnly) { return }
+    if ($VpnNatOnly -or $SubnetPeeringOnly -or $BgpNeighborsOnly -or $ArsRoutesOnly) { return }
     $env:MOCK_NETWORK_MODE = 'direct'
     $configFile = Join-Path $output 'configuration-only.json'
     & (Join-Path $repo 'public' 'scripts' 'collect-azure-network.ps1') -ResourceGroupName network -OutputFile $configFile -Force

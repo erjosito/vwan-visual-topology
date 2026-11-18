@@ -158,6 +158,7 @@ const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => 
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
+const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
@@ -6011,6 +6012,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               <>
                 {captureObservations?.vngBgpPeerStatus && <Suspense fallback={null}>
                   <GatewayBgpNeighborsPanel observations={captureObservations} />
+                </Suspense>}
+                {(captureObservations?.arsLearnedRoutes || captureObservations?.arsAdvertisedRoutes) && <Suspense fallback={null}>
+                  <CapturedArsRoutesPanel observations={captureObservations!} />
                 </Suspense>}
                 <div className="aznet-card" data-testid="aznet-azure-capture-card">
                   <h3>1. Azure Live Capture & Effective-Route Comparison</h3>

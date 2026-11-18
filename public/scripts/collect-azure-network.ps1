@@ -229,6 +229,18 @@ $routeServers = @()
 $arsLearnedRoutes = @{}
 $arsAdvertisedRoutes = @{}
 
+function Get-ArsRoleRoutes($Response) {
+    foreach ($role in @('RouteServiceRole_IN_0', 'RouteServiceRole_IN_1')) {
+        foreach ($route in @($Response[$role])) {
+            if ($null -eq $route) { continue }
+            $row = [ordered]@{}
+            foreach ($key in $route.Keys) { $row[$key] = $route[$key] }
+            $row.localRole = $role
+            $row
+        }
+    }
+}
+
 foreach ($rs in $rawRouteServers) {
     if ($null -eq $rs) { continue }
     $rsName = [string]$rs.name
@@ -273,11 +285,11 @@ foreach ($rs in $rawRouteServers) {
             $key = "$rsName/$peerName"
             $learned = Invoke-AzJson "arsLearnedRoutes:$key" @('network', 'routeserver', 'peering', 'list-learned-routes', '-g', $ResourceGroupName, '--routeserver', $rsName, '-n', $peerName) @{ RouteServiceRole_IN_0 = @($bgpRoute); RouteServiceRole_IN_1 = @($bgpRoute) }
             if ($learned) {
-                $arsLearnedRoutes[$key] = @((@($learned.RouteServiceRole_IN_0) + @($learned.RouteServiceRole_IN_1)) | Where-Object { $null -ne $_ })
+                $arsLearnedRoutes[$key] = @(Get-ArsRoleRoutes $learned)
             }
             $advertised = Invoke-AzJson "arsAdvertisedRoutes:$key" @('network', 'routeserver', 'peering', 'list-advertised-routes', '-g', $ResourceGroupName, '--routeserver', $rsName, '-n', $peerName) @{ RouteServiceRole_IN_0 = @($bgpRoute); RouteServiceRole_IN_1 = @($bgpRoute) }
             if ($advertised) {
-                $arsAdvertisedRoutes[$key] = @((@($advertised.RouteServiceRole_IN_0) + @($advertised.RouteServiceRole_IN_1)) | Where-Object { $null -ne $_ })
+                $arsAdvertisedRoutes[$key] = @(Get-ArsRoleRoutes $advertised)
             }
         }
     }
