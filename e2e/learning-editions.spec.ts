@@ -200,7 +200,7 @@ test('default mobile connection guidance never configures the assessed hybrid ba
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
-  await expect(page.getByTestId('learning-status')).toContainText('Black belt · 1575 points')
+  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1575$/)
   await page.getByTestId('learning-open').click()
   await loadLearningNetwork(page)
   await completeLearningTasks(page, 2)
