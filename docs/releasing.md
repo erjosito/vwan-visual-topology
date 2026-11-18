@@ -93,25 +93,44 @@ gh workflow run release.yml --ref main -f candidate_run_id=123456789 -f candidat
 Targets are **web**, **statistics**, **user-cloud**, or **desktop**, one per dispatch. Web and
 Function deployments reuse exact CI bytes without installing dependencies or
 rebuilding. Desktop publication reuses the tested unsigned installer and names
-it `desktop-dev-YYYY.MM.DD.N`; it does not sign it or add an updater (#146).
+it `v<version>` (for example `v0.1.0`); it does not sign it or add an updater (#146).
 There is no cross-target atomic release: one target succeeding says nothing
 about the others. Release them independently and inspect each run's result.
 
-For CI desktop packaging, `N` is the CI run's ordinal within its original UTC
-creation date (including PR/manual/failed builds), not the all-time run number
-or a required consecutive release counter. The date/build identity is allocated
-before packaging in the disposable checkout, with actual FileVersion/ProductVersion
-evidence. The package/runtime version remains three-part `YYYY.M.D` semver;
-electron-builder represents the Windows executable ProductVersion as
-`YYYY.M.D.0`. FileVersion retains the separate four-part dated build identity,
-and CI checks all three values against the actual packaged application.
-No version-bump commit or source edit is required to merge. The allocator fails
-closed beyond Windows' 65535 component bound; revise the allocation policy
-before that limit rather than wrapping/reusing identities. Keep daily CI run
-history so the daily ordinal remains reproducible. A rerun retains its build
-version but has a distinct attempt/archive identity; it cannot replace an
-already published version with different bytes. Merge a new change for a fresh
-publishable build rather than renaming old bytes.
+## Application semantic versions
+
+The root `package.json` is the single source of the app/installer version,
+starting at **0.1.0**. Before CI builds a new release, use
+`npm version patch --no-git-tag-version` (or `minor` / `major`) and commit both
+`package.json` and `package-lock.json`. During `0.x` development, increment
+the patch for compatible fixes and the minor for features or breaking changes;
+document breaking changes in the release notes. Reserve `1.0.0` for an explicitly
+declared stable compatibility contract. Internal topology schemas, engine
+revisions, saved workspaces and learning awards keep their independent versions.
+
+Versions must be plain `MAJOR.MINOR.PATCH`, without leading zeroes, prerelease
+or build suffixes; each component must fit Windows' 0-65535 bound. Local and CI
+desktop builds both read the root version. The runtime reports `0.1.0`, the
+installer is `Azure-Network-Simulator-0.1.0-x64.exe`, and Windows FileVersion and
+ProductVersion are `0.1.0.0`. CI verifies the actual packaged runtime/resources.
+Web HTML also records `application-version` metadata, verified against its
+candidate manifest. Source SHA, CI run/attempt and archive hashes remain the
+exact build identities; CI no longer queries daily history or edits versions.
+
+A version bump is required **before building** different bytes for a version
+already published to that target. Unreleased changes may share a pending version.
+Forward promotion rejects lower semantic versions and reuse with different
+archives, even if the source commit is newer. A rerun cannot replace a published
+version. Never bump, rename or rebuild during promotion; build a new candidate
+from a committed version bump instead.
+
+Historical `desktop-dev-YYYY.MM.DD.N` releases and unversioned web archives remain
+verifiable and retain their original bytes/tags, including exact web rollback.
+The first semantic release is a new identity, not a renaming of a date release.
+Its numeric version is lower than historical `2026.*` Windows versions; in-place
+installation over those builds is not qualified. The app ID/profile location
+remain unchanged, but do not claim a tested upgrade or delete user data to force
+one. Desktop downgrade/rollback remains a deliberate manual reinstall.
 
 ## Retention and durable release records
 
