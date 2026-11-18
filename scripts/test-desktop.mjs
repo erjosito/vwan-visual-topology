@@ -355,12 +355,21 @@ try {
   }
   for (const mode of ['hub-spoke', 'full']) {
     const topology = nvaBgpTopology()
-    if (mode === 'full') topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
     await page.goto(`app://simulator/?mode=${mode}`)
     await page.getByTestId('aznet-app').waitFor()
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'))
+    const capturedNeighbors = page.getByTestId('captured-bgp-neighbors')
+    await expect(capturedNeighbors.locator('tbody tr')).toHaveCount(2)
+    await expect(capturedNeighbors).not.toContainText('192.0.2.10')
+    await capturedNeighbors.getByRole('combobox', { name: 'Local BGP endpoint', exact: true }).selectOption('10.1.0.5')
+    await expect(capturedNeighbors.locator('tbody tr')).toHaveCount(1)
+    await expect(capturedNeighbors).toContainText('Idle')
+    await expect(capturedNeighbors.locator('tbody tr td').last()).toHaveText('0')
+    if (mode === 'full') topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
     await page.locator('input[type="file"]').first().setInputFiles({
       name: 'nva-bgp-native.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
     })
+    await expect(page.getByTestId('captured-bgp-neighbors')).toHaveCount(0)
     const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')).topology)
     const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
     const expected = executePlatform(input)

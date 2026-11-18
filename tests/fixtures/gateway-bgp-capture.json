@@ -1,0 +1,26 @@
+{
+  "kind": "azure-network-capture",
+  "version": 2,
+  "fixture": "Synthetic test data, not recorded Azure evidence.",
+  "resourceGroup": "bgp-capture-test",
+  "capturedAt": "2026-11-18T00:00:00Z",
+  "collectorVersion": "test",
+  "vnets": [],
+  "routeTables": [],
+  "vnetGateways": [],
+  "localNetworkGateways": [],
+  "vpnConnections": [],
+  "routeServers": [],
+  "networkInterfaces": [],
+  "vngBgpPeerStatus": {
+    "vpn-aa": [
+      { "localAddress": "10.1.0.4", "neighbor": "192.0.2.9", "asn": 65001, "state": "Connected", "routesReceived": 2, "connectedDuration": "00:10:00", "messagesSent": 18, "messagesReceived": 21 },
+      { "localAddress": "10.1.0.5", "neighbor": "192.0.2.10", "asn": 65002, "state": "Idle", "routesReceived": 0 },
+      { "localAddress": "10.1.0.4", "neighbor": "192.0.2.11", "asn": 65003, "state": "Connected", "routesReceived": 0 },
+      { "neighbor": "192.0.2.12", "state": "Unknown" }
+    ],
+    "vpn-as": [
+      { "localAddress": "10.2.0.4", "neighbor": "192.0.2.20", "asn": 65004, "state": "Connected" }
+    ]
+  }
+}

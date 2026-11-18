@@ -1,0 +1,46 @@
+import { expect, test } from '@playwright/test'
+import { resolve } from 'node:path'
+import AxeBuilder from '@axe-core/playwright'
+
+for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} scopes captured gateway neighbors to one local endpoint without inventing instance mappings or counters`, async ({ page }) => {
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'))
+    const panel = page.getByTestId('captured-bgp-neighbors')
+    await expect(panel).toBeVisible()
+    await expect(panel.getByRole('combobox', { name: 'Local BGP endpoint', exact: true })).toHaveValue('10.1.0.4')
+    await expect(panel.locator('tbody tr')).toHaveCount(2)
+    await expect(panel).toContainText('192.0.2.9')
+    await expect(panel).toContainText('192.0.2.11')
+    await expect(panel).not.toContainText('192.0.2.10')
+    await expect(panel).toContainText('1 rows have no local address')
+    await expect(panel).toContainText('historical Azure observation')
+    await expect(panel).toContainText('coverage: unknown')
+    await panel.getByRole('combobox', { name: 'Local BGP endpoint', exact: true }).selectOption('10.1.0.5')
+    await expect(panel.locator('tbody tr')).toHaveCount(1)
+    await expect(panel).toContainText('Idle')
+    await expect(panel.locator('tbody tr td').last()).toHaveText('0')
+    await expect(panel).not.toContainText('192.0.2.9')
+    await panel.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-as')
+    await expect(panel.getByRole('combobox', { name: 'Local BGP endpoint', exact: true }).locator('option')).toHaveCount(1)
+    await expect(panel.locator('tbody tr')).toHaveCount(1)
+    await expect(panel.locator('tbody tr td').last()).toHaveText('Not captured')
+  })
+}
+
+test('keeps captured gateway neighbors readable and keyboard-operable in a narrow dark Japanese workspace', async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 900 })
+  await page.goto('/?mode=full')
+  await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark')
+  await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+  await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'))
+  const panel = page.getByTestId('captured-bgp-neighbors')
+  await expect(panel.getByRole('heading', { name: '取得済みゲートウェイ BGP ネイバー' })).toBeVisible()
+  const endpoint = panel.getByRole('combobox', { name: 'ローカル BGP エンドポイント' })
+  await endpoint.focus()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  await expect(endpoint).toHaveValue('10.1.0.5')
+  await expect(panel.locator('tbody tr')).toHaveCount(1)
+  expect((await new AxeBuilder({ page }).include('[data-testid="captured-bgp-neighbors"]').analyze()).violations).toEqual([])
+})

@@ -218,7 +218,7 @@ if ($IncludeEffectiveRoutes) {
         if ($learned) {
             $vngLearnedRoutes[$vngName] = @($learned.value)
         }
-        $peerStatus = Invoke-AzJson "vngBgpPeerStatus:$vngName" @('network', 'vnet-gateway', 'list-bgp-peer-status', '-g', $ResourceGroupName, '-n', $vngName) @{ value = @(@{ neighbor = $true; state = $true; localAddress = $true; asn = $true }) }
+        $peerStatus = Invoke-AzJson "vngBgpPeerStatus:$vngName" @('network', 'vnet-gateway', 'list-bgp-peer-status', '-g', $ResourceGroupName, '-n', $vngName) @{ value = @(@{ neighbor = $true; state = $true; localAddress = $true; asn = $true; routesReceived = $true; connectedDuration = $true; messagesSent = $true; messagesReceived = $true }) }
         if ($peerStatus) {
             $vngBgpPeerStatus[$vngName] = @($peerStatus.value)
         }

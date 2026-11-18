@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([switch]$VpnNatOnly, [switch]$SubnetPeeringOnly)
+param([switch]$VpnNatOnly, [switch]$SubnetPeeringOnly, [switch]$BgpNeighborsOnly)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $output = Join-Path $repo 'test-artifacts' 'azure-files' 'collector-network'
@@ -22,8 +22,8 @@ try {
     $env:MOCK_NETWORK_LOG = Join-Path $output 'requests.log'
     $env:MOCK_NETWORK_TIMEOUT_START = Join-Path $output 'timeout-start-ticks.txt'
     $natModes = @('vpn-nat-gateway', 'vpn-nat-ingress', 'vpn-nat-egress')
-    $modes = if ($SubnetPeeringOnly) { @('subnet-peering') } elseif ($VpnNatOnly) { $natModes } else {
-        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated', 'subnet-peering') + $natModes
+    $modes = if ($BgpNeighborsOnly) { @('bgp-neighbors') } elseif ($SubnetPeeringOnly) { @('subnet-peering') } elseif ($VpnNatOnly) { $natModes } else {
+        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated', 'subnet-peering', 'bgp-neighbors') + $natModes
     }
     $importer = Join-Path $output 'vpn-nat-importer.cjs'
     @'
@@ -54,6 +54,20 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
         if ($mode -eq 'nat-prefix') { Assert ($capture.publicIpPrefixes[0].prefixLength -eq 31) 'Public prefix size was not preserved.' }
         if ($mode -eq 'nat-unallocated') { Assert (!$capture.publicIpAddresses[0].ipAddress) 'An unknown public address was invented.' }
         Assert ($capture.observationVersion -eq 1 -and $capture.version -eq 2) "$mode lost compatible versioned provenance."
+        if ($mode -eq 'bgp-neighbors') {
+            $peer = $capture.vngBgpPeerStatus.vpn[0]
+            Assert ($peer.localAddress -eq '10.82.253.4' -and $peer.neighbor -eq '192.0.2.9') 'Captured BGP endpoint identities were lost.'
+            Assert ($peer.routesReceived -eq 0 -and $peer.messagesSent -eq 12 -and $peer.messagesReceived -eq 11 -and $peer.connectedDuration -eq '00:01:00') 'Captured BGP counters were dropped or invented.'
+            Assert ($capture.sections.'vngBgpPeerStatus:vpn'.complete) 'Successful neighbor projection lost capture coverage.'
+            @'
+const { readFileSync } = require('node:fs');
+const { importAzNetCapture } = require(process.argv[2]);
+const capture = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+const observed = importAzNetCapture(capture).observations;
+require('node:assert/strict').deepEqual(JSON.parse(JSON.stringify(observed.vngBgpPeerStatus)), capture.vngBgpPeerStatus);
+'@ | node - $importer $file
+            Assert ($LASTEXITCODE -eq 0) 'Collected BGP neighbors did not survive current capture import.'
+        }
         if ($mode -eq 'subnet-peering') {
             foreach ($vnet in $capture.vnets) {
                 $peer = $vnet.virtualNetworkPeerings[0]
@@ -123,7 +137,7 @@ if (!rejected) throw new Error('Known collected VPN NAT became healthy ordinary 
         }
         Write-Host "Passed $mode bounded capture, projections and provenance."
     }
-    if ($VpnNatOnly -or $SubnetPeeringOnly) { return }
+    if ($VpnNatOnly -or $SubnetPeeringOnly -or $BgpNeighborsOnly) { return }
     $env:MOCK_NETWORK_MODE = 'direct'
     $configFile = Join-Path $output 'configuration-only.json'
     & (Join-Path $repo 'public' 'scripts' 'collect-azure-network.ps1') -ResourceGroupName network -OutputFile $configFile -Force

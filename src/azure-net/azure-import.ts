@@ -63,6 +63,17 @@ export interface AzCapturedBgpPeerRoute {
   weight?: number
 }
 
+export interface AzCapturedBgpNeighbor {
+  localAddress?: string
+  neighbor?: string
+  asn?: number
+  state?: string
+  routesReceived?: number
+  connectedDuration?: string
+  messagesSent?: number
+  messagesReceived?: number
+}
+
 export interface AzCapturedObservations {
   capturedAt: string
   collectorVersion: string
@@ -74,6 +85,7 @@ export interface AzCapturedObservations {
   arsAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
+  vngBgpPeerStatus?: Record<string, AzCapturedBgpNeighbor[]>
   observationVersion?: 1
   configurationComplete?: boolean
   sections?: Record<string, AzCaptureSection>
@@ -146,6 +158,32 @@ function captureSection(value: unknown): AzCaptureSection {
     throw new Error('Invalid capture section state/completeness.')
   }
   return { state: section.state as AzCaptureSection['state'], complete: section.complete }
+}
+
+function capturedBgpNeighbors(value: unknown): Record<string, AzCapturedBgpNeighbor[]> | undefined {
+  if (value === undefined) return undefined
+  const result: Record<string, AzCapturedBgpNeighbor[]> = Object.create(null)
+  let count = 0
+  for (const [gateway, rows] of Object.entries(asObject(value, 'Gateway BGP peer observations'))) {
+    if (!Array.isArray(rows) || (count += rows.length) > 10000) throw new Error('Invalid or oversized gateway BGP peer observations.')
+    result[gateway] = rows.map((row) => {
+      const input = asObject(row, 'Gateway BGP peer observation')
+      const peer: AzCapturedBgpNeighbor = {}
+      for (const key of ['localAddress', 'neighbor', 'state', 'connectedDuration'] as const) {
+        if (input[key] === undefined || input[key] === null) continue
+        if (typeof input[key] !== 'string' || input[key].length > 512) throw new Error('Invalid gateway BGP peer observation text.')
+        peer[key] = input[key]
+      }
+      for (const key of ['asn', 'routesReceived', 'messagesSent', 'messagesReceived'] as const) {
+        if (input[key] === undefined || input[key] === null) continue
+        if (!Number.isSafeInteger(input[key]) || (input[key] as number) < 0 ||
+            (key === 'asn' && (input[key] as number) > 4294967295)) throw new Error('Invalid gateway BGP peer observation counter or ASN.')
+        peer[key] = input[key] as number
+      }
+      return peer
+    })
+  }
+  return result
 }
 
 function armResourceName(armId: string): string {
@@ -828,8 +866,9 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     })
   }
 
+  const vngBgpPeerStatus = capturedBgpNeighbors(root.vngBgpPeerStatus)
   let observations: AzCapturedObservations | undefined
-  if (Array.isArray(root.nicEffectiveRoutes)) {
+  if (Array.isArray(root.nicEffectiveRoutes) || vngBgpPeerStatus !== undefined) {
     const nicEffectiveRoutes: AzCapturedNicObservation[] = asArray(root.nicEffectiveRoutes).map(
       (rawObs) => {
         const o = asObject(rawObs, 'NicObservation')
@@ -857,13 +896,14 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     )
 
     observations = {
-      capturedAt: asString(root.capturedAt, new Date().toISOString()),
+      capturedAt: asString(root.capturedAt),
       collectorVersion: asString(root.collectorVersion, '2026.11.03.1'),
       resourceGroup: rgName,
       subscriptionId: asString(root.subscriptionId) || undefined,
       nicEffectiveRoutes,
       arsLearnedRoutes: arsLearned,
       vngLearnedRoutes: vngLearned,
+      ...(vngBgpPeerStatus !== undefined ? { vngBgpPeerStatus } : {}),
       ...(sections ? { observationVersion: 1, configurationComplete, sections } : {}),
       unknownAddressing,
     }
