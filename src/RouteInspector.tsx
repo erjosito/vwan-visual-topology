@@ -176,14 +176,14 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
       rows={[...groups].sort((a, b) => (cidr(a.prefix)?.network ?? 0) - (cidr(b.prefix)?.network ?? 0)
         || (cidr(a.prefix)?.length ?? 0) - (cidr(b.prefix)?.length ?? 0))
         .flatMap((d) => [...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.key.localeCompare(b.key))
-          .map((r) => ({
+          .map((r, index) => ({
             id: r.key, prefix: d.prefix, asPath: r.asPath,
             preferred: mode === 'bgp' ? r.preferred : undefined,
             status: mode !== 'bgp' ? '?' as const : r.preferred ? '*' as const : '-' as const,
             statusLabel: mode !== 'bgp' ? t('Not assessed') : t(r.preferred ? 'Preferred' : 'Alternative'),
             nextHop: mode === 'bgp' ? r.nextHop ?? '—' : t('Not assessed'),
             neighbor: mode !== 'bgp' ? r.nextHop : undefined,
-            network: mode === 'bgp' ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : undefined,
+            network: mode === 'bgp' && index === 0 ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : undefined,
             textEvidence: JSON.stringify({ resourceId: router.id, tableId, mode, stage: mode === 'bgp' ? undefined : stage, selection: d.explanation, ...r }),
             details: <div data-reason-prefix={d.prefix}>
               <p>{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</p>
