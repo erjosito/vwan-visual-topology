@@ -14,6 +14,8 @@ Azure Network Simulator (**AzNetSim**) is a local-first topology designer and **
 
 **Local platform (development):** [PLATFORM.md](PLATFORM.md) documents the shared browser/Node service, local stdio MCP/Copilot skill and unsigned Windows Electron build, including privacy boundaries, supported requirements and production release gates. The existing web UI remains browser-local; no hosting migration or cloud progress backend is introduced.
 
+**Diagnostics and learning roadmap:** [Cross-layer investigations, service coverage and curriculum stages](docs/diagnostics-learning-roadmap.md) connects planned DNS/application support, evidence-backed troubleshooting and curated learning content.
+
 **Quality evaluation:** [the scorecard](docs/quality-evaluation.md) separates automated regression conformance from human usability and learning outcomes. Run `npm run evaluate` or `npm run evaluate -- --browser` for a versioned local JSON report; passing tests do not imply a perfect usability, training or Azure-fidelity score.
 
 **Future L7/DNS design:** [the scoped contract](docs/l7-dns-design.md) separates Application Gateway/Front Door proxy legs from Traffic Manager DNS answers. These services are planned, not implemented.
