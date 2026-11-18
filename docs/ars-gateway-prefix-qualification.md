@@ -22,7 +22,8 @@ VPN prefix loss after this creation even without any connection associations
 (#298). The cause and ER behavior are not established. The snapshot model does
 not track that upgrade history; an empty map/assignment list or map deletion does
 not prove legacy software state or restore it. Unassigned-map advertisements
-must not be treated as live-qualified against this report.
+must not be treated as live-qualified against this report. The fresh attempt
+below failed and also encountered independently recorded VNet configuration drift.
 
 **Automatic ARS-to-NVA summary projection remains unassessed.** The bounded live
 observations below do not qualify every gateway/peer combination. Do not interpret the displayed
@@ -55,7 +56,7 @@ map on such a connection takes precedence. It describes branch-to-branch route
 exchange separately. Neither statement establishes whether gateway summaries
 replace/coexist with connected advertisements sent to a BGP NVA.
 
-## Recorded Azure observations (2026-11-18)
+## Coexisting ER/VPN observations (2026-11-18)
 
 An approved lab recorded native ARS advertised routes and the local NVA's
 retained **pre-import-filter Adj-RIB-In**, independently for both established
@@ -91,7 +92,7 @@ restored; both ARS branch-to-branch flags and all VNet summary properties were
 returned to their original state. AA/AS operational baseline was verified after
 a configuration-free re-initiation of the existing AA VPN profiles.
 
-### Remaining unknowns
+### Unknowns in the coexisting-gateway run
 
 - **External VPN summary receipt:** the AA VPN positive control degraded during
   the summary windows. A wide aggregate overlapped the emulator's peer-loopback
@@ -111,12 +112,74 @@ a configuration-free re-initiation of the existing AA VPN profiles.
 - **Aggregate holes and packet delivery:** BGP receipt does not establish a
   forwarding route or delivery to an address inside the aggregate.
 
+## Fresh sole-VPN and first-map observations (2026-11-18 UTC)
+
+A separate, newly created lab had one Route Server, an active/active VPN gateway,
+a local BGP NVA and an independent IPsec/BGP receiver. There was no ExpressRoute
+gateway or provider circuit. A covered spoke and an uncovered spoke used gateway
+transit; outside-prefix controls did not overlap the configured aggregates or
+the receiver's BGP peering addresses. No route map had previously been created
+on this Route Server.
+
+Before the first map request, both actual VPN receiver neighbors and both local
+NVA/ARS neighbors were established. All four internal gateway/ARS endpoint pairs
+also supplied positive controls. Actual retained pre-import-filter Adj-RIB-In
+was captured separately per neighbor, not inferred from a selected best route.
+
+| Pre-map phase | VPN receiver, both neighbors | Local NVA, both ARS neighbors |
+|---|---|---|
+| No AGP, no map definitions or assignments | Original hub, covered spoke, uncovered spoke and outside-NVA prefixes | Original hub, covered spoke, uncovered spoke and outside-on-premises prefixes |
+| AGP configured, still no map definitions or assignments | Covering aggregate and independent AGP present; covered hub/spoke originals suppressed; uncovered and outside-NVA routes retained | Original hub/spoke and outside-on-premises routes retained; neither configured AGP received |
+
+These are bounded sole-VPN observations. They qualify the pre-map gateway
+advertisement controls and show why the earlier coexisting-gateway NVA result
+must not be generalized: additive NVA summaries are not unconditional. They do
+not identify the gateway source of the earlier mixed result or qualify ER.
+
+### First unassigned map: failed operation and configuration drift
+
+The first harmless, unassigned map request was accepted at 23:04:31 UTC.
+Native Activity Log records terminal failure at 23:44:26 UTC. Azure returned
+`ResourceOperationFailure` with a nested `InternalServerError`
+(`An error occurred.`), with no further inner error. The map was Failed while
+the ARS root remained Succeeded. This is asynchronous provisioning failure,
+not evidence distinguishing a request-definition defect from a service/upgrade
+failure.
+
+A separate successful VNet PUT at 23:14:21-23:14:27 UTC used API `2022-07-01`.
+Native resource-change evidence associates removal of both AGP entries and
+addition of a subnet NSG reference with that same write/correlation. The lab's
+earlier conditional AGP-set write used API `2026-03-01`; the set, map request
+and concurrent VNet write had distinct correlations. No lab clear/restoration
+write explains that property removal.
+
+This proves concurrent VNet-property drift, not its purpose, the field-removal
+mechanism, caller identity or route-map causation. Resource-change indexing time
+was later than the native operation timestamps; those times are not interchangeable.
+No security automation was disabled or modified to protect the experiment.
+
+The causal comparison is therefore confounded: AGP configuration was not
+continuously preserved across the pending map operation, and no successful
+first-map completion was observed. Pending-state VPN captures did not have two
+healthy, complete receiver tables; missing or incomplete output is **unknown**,
+not proof that a prefix was withdrawn. Both local NVA neighbors remained
+established with original and outside-on-premises routes in that bounded capture.
+
+No map was resubmitted. A separately authorized post-success AGP reapplication
+control was not run because its success precondition never occurred. Failure,
+map deletion or cleanup does not establish a software downgrade.
+
+#298 remains open. This attempt does not reproduce a completed first-map upgrade
+ignoring still-configured AGP, establish global AGP disablement, qualify ER
+behavior or justify a simulator rule based on mere map existence.
+
 ## Simulator boundary and follow-up
 
-The live result rules out blanket replacement of the original ARS-native VNet
-prefix by gateway summaries: the local NVA can receive both. It does not justify
-unconditional synthesis of summaries for arbitrary gateways, remote peers or
-gatewayless designs. The generic engine therefore retains explicit
+The coexisting-gateway result rules out blanket replacement of the original
+ARS-native VNet prefix by gateway summaries: the local NVA can receive both.
+The fresh sole-VPN result also rules out unconditional additive summaries to
+local NVAs. Neither justifies generic synthesis for arbitrary gateways, remote
+peers or gatewayless designs. The engine therefore retains explicit
 `gatewaySummaryAssessment.status: "not-assessed"` rather than inventing missing
 ownership or forwarding evidence. Historical captures can be inspected with the
 endpoint-scoped ARS route viewer.
