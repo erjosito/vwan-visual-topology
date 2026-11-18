@@ -78,6 +78,15 @@ it('rejects empty, duplicated, deleted, wrong-owner and oversized membership, du
   acrossLinks.vnetPeerings.push({ ...structuredClone(acrossLinks.vnetPeerings[0]), id: 'a-c', vnetBId: 'vnet-c',
     scope: { type: 'subnets', subnetAIds: ['a2'], subnetBIds: ['c1'] } })
   expect(validateAzNetTopology(acrossLinks).join()).toMatch(/overlap across peering links/)
+  for (const wholeLink of [0, 1]) {
+    const mixed = structuredClone(acrossLinks)
+    delete mixed.vnetPeerings[wholeLink].scope
+    for (const peerings of [mixed.vnetPeerings, [...mixed.vnetPeerings].reverse()]) {
+      mixed.vnetPeerings = peerings
+      expect(validateAzNetTopology(mixed).join()).toMatch(/overlap across peering links/)
+      expect(simulateAzNet(mixed).controlPlaneComplete).toBe(false)
+    }
+  }
 })
 
 it('fails closed for unsupported composition and never certifies its partial tables or inferred remote ARS reachability', () => {

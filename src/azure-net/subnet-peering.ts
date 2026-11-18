@@ -64,13 +64,13 @@ export function validateSubnetPeeringScopes(topology: AzNetTopology): string[] {
       for (const prefix of parents) {
         seen.push({ peeringId: peering.id, prefix, selected: true })
       }
-      for (const [vnetId, spaces] of remoteSpaces) if (spaces.some((entry, index) => spaces.slice(index + 1).some((other) =>
-        entry.peeringId !== other.peeringId && (entry.selected || other.selected) && overlaps(entry.prefix, other.prefix)))) {
-        errors.push(`VNet "${vnetId}": participating remote address spaces overlap across peering links.`)
-      }
       remoteSpaces.set(remoteId, seen)
       counts.set(remoteId, (counts.get(remoteId) ?? 0) + ids.length)
     }
+  }
+  for (const [vnetId, spaces] of remoteSpaces) if (spaces.some((entry, index) => spaces.slice(index + 1).some((other) =>
+    entry.peeringId !== other.peeringId && (entry.selected || other.selected) && overlaps(entry.prefix, other.prefix)))) {
+    errors.push(`VNet "${vnetId}": participating remote address spaces overlap across peering links.`)
   }
   for (const [vnetId, count] of counts) if (count > 1000) errors.push(`VNet "${vnetId}": at most 1,000 remote subnets may participate across subnet-peering links.`)
   return [...new Set(errors)]
