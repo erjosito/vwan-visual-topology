@@ -1,0 +1,24 @@
+.object-dialog.cloud-panel { width: min(1000px, calc(100vw - 32px)); }
+.cloud-library-tools { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.cloud-library-tools label { display: grid; gap: 4px; flex: 1 1 180px; }
+.cloud-library-tools input, .cloud-library-tools select { width: 100%; box-sizing: border-box; min-height: 36px; }
+.cloud-library-scroll { max-height: 52dvh; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.cloud-library { border-collapse: collapse; width: 100%; font-size: 12px; text-align: left; }
+.cloud-library caption { text-align: left; padding: 8px; font-weight: 600; }
+.cloud-library :is(th, td) { padding: 8px; vertical-align: top; border-bottom: 1px solid var(--border); }
+.cloud-library thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
+.cloud-library tbody th { width: 34%; font-weight: normal; overflow-wrap: anywhere; }
+.cloud-library h4 { margin: 0 0 4px; font-size: 13px; }
+.cloud-library small { color: var(--text-muted); font-size: 11px; }
+.cloud-library time { white-space: nowrap; }
+.cloud-library-actions { display: flex; flex-wrap: wrap; gap: 4px; }
+.cloud-library-actions button { min-height: 36px; padding: 6px 8px; text-align: left; }
+@media (max-width: 640px) {
+  .object-dialog.cloud-panel { padding: 12px; }
+  .cloud-library thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .cloud-library :is(table, tbody, tr, th, td) { display: block; width: auto; }
+  .cloud-library tbody th { width: auto; border-bottom: 0; padding-bottom: 0; }
+  .cloud-library td { border-bottom: 0; padding-top: 4px; }
+  .cloud-library tr { border-bottom: 1px solid var(--border); }
+  .cloud-library-actions button { min-height: 44px; }
+}
