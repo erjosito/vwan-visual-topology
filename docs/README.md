@@ -26,6 +26,15 @@ The worked examples below focus on **Virtual WAN**, one part of AzNetSim. For cl
 
 ## 1. Step-by-Step Instructions
 
+The new interface is the default; **Use legacy UI** retains access to the old
+presentation without changing the design. **Settings** holds theme, language,
+canvas background and connection styles. **Help & feedback** holds **Docs** and
+**Feedback**, keeping assistance separate from display preferences. Desktop Docs
+opens the bundled offline guide; desktop feedback remains disabled. Zoom,
+fit/reset view and layout controls stay beside the canvas for frequent use.
+**Routing checks** groups **Check routing** and **Advanced checks**; results and
+warnings remain visible in the workspace.
+
 1. **Open a workspace**: New sessions start with an empty mixed-network design; **Workspace** opens saved designs or creates a new one. There is no architecture-mode selector. Classic VNets and Virtual WAN hubs can coexist. Legacy Virtual WAN files and samples open in their compatible native editor without lossy conversion.
 2. **Add Topology Objects**: Use the contextual workspace controls or right-click blank canvas to add Virtual WAN hubs, spoke/hub VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.
 3. **Add Optional Custom Node Labels**: Every node (Hub, Spoke/VNet, ExpressRoute Location, and On-Premises Site) supports an optional `label` text annotation (up to 120 characters) rendered as an amber pill badge directly on the diagram:

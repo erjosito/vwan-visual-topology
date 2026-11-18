@@ -23,6 +23,7 @@
 }
 .simulator-shell .canvas-controls :is(button, select) { width: auto; min-height: 32px; padding: 5px 8px; font-size: 12px; }
 .simulator-shell .canvas-controls > select { max-width: 100%; }
+.simulator-shell .canvas-controls > label { display: contents; font-size: 12px; }
 .simulator-shell .canvas-zoom-controls { display: flex; align-items: center; gap: 4px; }
 .simulator-shell .canvas-zoom-controls > button { width: 30px; }
 .simulator-shell .canvas-controls-stack .highlight-status { position: static; max-width: 100%; }

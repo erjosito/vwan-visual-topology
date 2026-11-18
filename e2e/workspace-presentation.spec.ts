@@ -138,7 +138,7 @@ for (const mode of ['vwan', 'full'] as const) {
       await expect(page.getByTestId(rootId)).toBeVisible()
       await expect(page.getByTestId('ui-preview-toggle')).toHaveAttribute('aria-pressed', 'true')
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
-      const settings = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: 'Settings & help' }) })
+      const settings = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Settings$/ }) })
       const summary = settings.locator('summary')
       await summary.tap()
       await expect(settings.getByRole('combobox', { name: 'Theme', exact: true })).toBeVisible()
@@ -223,6 +223,58 @@ test('default UI can switch to legacy with keyboard and persist across reload', 
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   for (const language of ['en', 'ja']) {
+    test(`${mode}: ${language} settings persist outside canvas controls and help opens local docs`, async ({ page, context }) => {
+      await page.setViewportSize({ width: 390, height: 900 })
+      await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
+      const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
+      await page.goto(`/?mode=${mode}&sample=${sample}`)
+      const settings = page.locator('.presentation-group').filter({
+        has: page.locator('summary', { hasText: language === 'ja' ? /^設定$/ : /^Settings$/ }),
+      })
+      const help = page.locator('.presentation-group').filter({
+        has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプとフィードバック$/ : /^Help & feedback$/ }),
+      })
+      const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+      await expect.poll(() => page.evaluate(key => localStorage.getItem(key), key)).not.toBeNull()
+      const before = await page.evaluate(key => localStorage.getItem(key), key)
+      const controls = page.getByRole('group', { name: language === 'ja' ? 'キャンバス コントロール' : 'Canvas controls' })
+      await expect(controls.locator('select')).toHaveCount(mode === 'vwan' ? 2 : 1)
+      await settings.locator('summary').click()
+      const background = settings.getByRole('combobox', { name: language === 'ja' ? 'キャンバスのスタイル' : 'Canvas style', exact: true })
+      const connections = settings.getByRole('combobox', { name: language === 'ja' ? '接続線のスタイル' : 'Connection style', exact: true })
+      await background.selectOption('dots')
+      await connections.selectOption('straight')
+      await expect(page.locator('.simulator-shell')).toHaveAttribute('data-canvas-style', 'dots')
+      expect((await new AxeBuilder({ page }).include('.presentation-group[open]').analyze()).violations).toEqual([])
+      await page.keyboard.press('Escape')
+      await expect(settings.locator('summary')).toBeFocused()
+      await page.reload()
+      await settings.locator('summary').click()
+      await expect(background).toHaveValue('dots')
+      await expect(connections).toHaveValue('straight')
+      await page.keyboard.press('Escape')
+      await help.locator('summary').click()
+      await expect(settings).not.toHaveAttribute('open')
+      expect((await new AxeBuilder({ page }).include('.presentation-group[open]').analyze()).violations).toEqual([])
+      const pending = context.waitForEvent('page')
+      await help.getByRole('button', { name: language === 'ja' ? 'ドキュメント' : 'Docs', exact: true }).click()
+      const docs = await pending
+      await docs.waitForLoadState()
+      expect(new URL(docs.url()).pathname).toBe('/docs/index.html')
+      expect(new URL(docs.url()).searchParams.get('lang')).toBe(language === 'ja' ? 'ja' : null)
+      await expect(docs.getByRole('heading', { level: 1 })).toBeVisible()
+      await docs.close()
+      await expect(help).not.toHaveAttribute('open')
+      await help.locator('summary').click()
+      await help.getByRole('button', { name: language === 'ja' ? 'フィードバック' : 'Feedback', exact: true }).click()
+      await expect(page.getByRole('dialog')).toBeVisible()
+      await page.keyboard.press('Escape')
+      expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(before)
+      await page.getByTestId('ui-preview-toggle').click()
+      await expect(page.getByRole('combobox', { name: language === 'ja' ? 'キャンバスのスタイル' : 'Canvas style', exact: true })).toHaveValue('dots')
+      await expect(page.getByRole('combobox', { name: language === 'ja' ? '接続線のスタイル' : 'Connection style', exact: true })).toHaveValue('straight')
+    })
+
     test(`${mode}: ${language} routing checks share an accessible menu without hiding results`, async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 900 })
       await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
