@@ -18,7 +18,7 @@ qualification**. A local address is not proof of a physical instance identity:
 an instance can have IP aliases. The view does not guess alias mappings, invent
 instance IPs, duplicate resource-level relationships or infer a second active
 speaker for an active/standby VPN gateway. Configured gateways without captured
-observations have no inferred neighbor table. ARS, MSEE and simulator-generated
+observations have no inferred neighbor table. ARS neighbors, MSEE and simulator-generated
 instance/session inspection remain separate follow-up work.
 
 The collector retains reported prefix counts, connected duration and message
@@ -40,10 +40,35 @@ addresses, next hops, AS paths and missing `sourcePeer` stay as captured; a next
 hop is not substituted for the advertising neighbor.
 
 This is not full simulator-to-Azure BGP route-result parity. Gateway advertised
-route collection, captured ARS route/neighbor inspection, physical-instance
+route collection, captured ARS neighbor inspection, physical-instance
 bindings, MSEE/provider sessions and data-plane/failover qualification remain
 outside these bounded checks. Historical lab results do not certify sessions
 after later configuration drift.
+
+## Captured ARS learned and advertised routes
+
+The Azure capture view also exposes historical ARS routes. Choose the original
+`route-server/peering` key, learned versus advertised direction, and one captured
+local role/address. The collector retains Azure's `RouteServiceRole_IN_0` or
+`RouteServiceRole_IN_1` envelope key as `localRole` on each projected route,
+instead of discarding it when flattening the two arrays.
+
+An Azure role is not a guessed physical identity or IP-alias mapping. Legacy
+rows without a role can still be scoped by their captured local address; rows
+without either remain explicitly unassigned. Endpoints with no rows are not
+invented from an expected redundant pair. A missing row does not establish an
+empty Adj-RIB, a disconnected peer or successful withdrawal.
+
+Next hop and source peer remain separate. Native hyphenated or empty AS paths,
+zero weight and missing attributes are preserved. The view renders at most 100
+rows per page, accepts at most 10,000 rows per peering/direction and 256 peering
+keys, and reports malformed/oversized observations instead of asserting complete
+coverage. It does not mark observed routes as simulator best paths.
+
+These observations remain capture-session data, not saved topology configuration.
+No new Azure reads, deployments, route advertisements or packet-delivery claims
+are introduced by this inspection view. Captured ARS neighbor state and complete
+physical-instance bindings remain separate follow-up work.
 
 Reference: [Azure BgpPeerStatus fields](https://learn.microsoft.com/en-us/dotnet/api/microsoft.azure.management.network.models.bgppeerstatus).
 

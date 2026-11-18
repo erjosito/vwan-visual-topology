@@ -16,6 +16,48 @@ but retaining readable labels means label congestion is not solved. A later
 regional-overview/semantic-zoom experiment may help; it has not been validated
 here and must not silently hide devices, policies or failures.
 
+### Approved production follow-up
+
+After reviewing the recommendation, the maintainer approved a bounded
+production connection-focus command. The hub-spoke/full canvas now offers
+**Focus selected connections** and **Restore all connections**. A node focuses
+its direct rendered attachments; a device/subnet uses its parent VNet; a
+connection focuses that individual connection. Focus stays on that original
+scope while other objects are inspected, until explicitly refocused or restored.
+It is local view state, not a saved topology edit or a routing/path assertion.
+
+Only unrelated connection strokes become translucent. All labels, nodes,
+policy markers and interaction targets remain mounted and undimmed. OFF/access-
+disabled connections, simulated failures, visible connection-specific findings
+and existing forward/return highlights remain prominent. Hover or keyboard
+focus temporarily emphasizes a dimmed connection. The status identifies the
+scope and counts rendered connections, emphasized/dimmed strokes and zero hidden
+connections; logical BGP relationships are not included in that count. The
+global clear-highlights command also clears connection focus.
+
+The explicit Restore action preserves selection, faults, routing highlights,
+manual coordinates, zoom and pan. Deleted targets fall back to an emphasized
+overview with an honest status rather than silently choosing a replacement.
+Native VWAN mode is outside this native-topology slice; automatic layouts,
+clustering, filtering, aggregation and production path-chain selection are not
+introduced. The existing synthetic comparison and its historical measurements
+remain separate from the production feature. Human participants remain zero,
+and label congestion remains unresolved.
+
+Seven new browser cases explicitly use the new UI and cover small hub-spoke/full
+documents in EN/light and JA/dark (including 390 px), plus the eight-region
+workload in both themes with Fit view.
+They check counts, exact saved JSON/coordinates, connection and directional
+policy inspection, keyboard emphasis, failure visibility, restore and scoped
+axe checks. An existing engine path is also kept prominent, with its inspected
+forward/reverse pair unchanged while the Path explorer remains open.
+Screenshots are saved in their Playwright output directories.
+Reproduce the production cases with:
+
+```powershell
+npx playwright test canvas-presentation.spec.ts dense-visualization.spec.ts -g "connection focus" --workers=1
+```
+
 ## Fixture, privacy and model boundary
 
 `tests\fixtures\dense-visualization.ts` is independently authored from the public

@@ -55,6 +55,7 @@ export interface AzUnknownAddressing {
 
 export interface AzCapturedBgpPeerRoute {
   localAddress?: string
+  localRole?: string
   network: string
   nextHop?: string
   sourcePeer?: string

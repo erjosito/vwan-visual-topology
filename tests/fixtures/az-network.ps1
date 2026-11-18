@@ -191,6 +191,8 @@ if ($command -eq 'network nic show-effective-route-table') {
 } elseif ($command -eq 'network routeserver peering') {
     if ($args -contains 'list') {
         '[{"name":"same-peer","peerIp":"10.82.254.4","peerAsn":65001,"secret":"must-not-be-exported"}]'
+    } elseif ($env:MOCK_NETWORK_MODE -eq 'ars-roles') {
+        '{"RouteServiceRole_IN_0":[{"network":"10.90.0.0/16","sourcePeer":"10.82.254.4","asPath":"65515-65050","weight":0,"secret":"must-not-be-exported"}],"RouteServiceRole_IN_1":[{"network":"10.91.0.0/16","sourcePeer":"10.82.254.4","secret":"must-not-be-exported"}]}'
     } else {
         '{"RouteServiceRole_IN_0":[{"network":"10.90.0.0/16","sourcePeer":"10.82.254.4","secret":"must-not-be-exported"}],"RouteServiceRole_IN_1":[]}'
     }
