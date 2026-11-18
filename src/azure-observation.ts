@@ -1,6 +1,7 @@
 import { azureObjectId, importAzureCapture } from './azure-import'
 import type { AzureObservedTable, HubRouteTable, HubRoutingConfiguration, Preference, Topology } from './model'
 import { ipv4 } from './validation'
+import { VWAN_MAX_SPOKES } from './topology-limits'
 
 export type ObservationStatus = 'complete' | 'empty' | 'denied' | 'failed' | 'truncated' | 'unsupported'
 export interface ObservedRoute {
@@ -119,7 +120,7 @@ export function parseAzureObservation(input: unknown): AzureObservation {
       privateIntent: hub.routingIntent.private, internetIntent: hub.routingIntent.internet, limitations: info.limitations,
       ...(hub.routeTables === undefined ? {} : { routeTables: hub.routeTables, routeTablesStatus: hub.routeTablesStatus }),
       ...(info.routingScopeComplete === undefined ? {} : { routingScopeComplete: info.routingScopeComplete }),
-      spokes: list(source.connections, 60).map((value) => {
+      spokes: list(source.connections, VWAN_MAX_SPOKES).map((value) => {
         const connection = record(value), virtualNetworkId = text(connection.virtualNetworkId)
         const resourceId = text(connection.id)
         const prefix = `${armKey(info.resourceId)}/hubvirtualnetworkconnections/`

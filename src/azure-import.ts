@@ -1,6 +1,7 @@
 import type { AzureImportInfo, Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
 import { armKey, parseAzureObservation } from './azure-observation'
 import { cidr, validateTopology } from './validation'
+import { VWAN_MAX_SPOKES } from './topology-limits'
 
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(`${label} must be an object.`)
@@ -76,6 +77,7 @@ export function importAzureCapture(input: unknown): Topology {
   const sources: AzureImportInfo['hubs'] = []
   const seen = new Set<string>([wanId.toLowerCase()])
   const seenVnets = new Set<string>()
+  let connectionCount = 0
   for (const value of list(root.hubs, 'Captured hubs', 20)) {
     const source = object(value, 'Captured hub')
     const armId = resourceId(source.id, 'virtualHubs')
@@ -143,7 +145,10 @@ export function importAzureCapture(input: unknown): Topology {
       warnings.add(`${name}: ${gateway} gateway connectivity is not reconstructed.`)
     }
     topology.hubs.push(hub)
-    for (const value of list(source.connections, 'VNet connections', 60)) {
+    const connections = list(source.connections, 'VNet connections', VWAN_MAX_SPOKES)
+    connectionCount += connections.length
+    if (connectionCount > VWAN_MAX_SPOKES) throw new Error(`This WAN exceeds the app limit of ${VWAN_MAX_SPOKES} total VNet connections across all captured hubs.`)
+    for (const value of connections) {
       const connection = object(value, 'VNet connection')
       const vnetId = resourceId(connection.virtualNetworkId, 'virtualNetworks')
       if (seenVnets.has(vnetId.toLowerCase())) throw new Error('A VNet appears in multiple captured connections; ambiguous attachments are not supported.')

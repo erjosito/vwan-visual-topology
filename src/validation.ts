@@ -3,6 +3,7 @@ import { attachmentHubRouting, hubRouteTables, propagatesLocally, propagationLab
 import { validateInventory, type InventorySubnet, type NetworkInventory } from './inventory'
 import { validateApplicationInventory } from './application-inventory'
 import type { ApplicationInventory } from './application'
+import { VWAN_LARGE_MAX_PREFIXES, VWAN_LEGACY_SPOKES, VWAN_MAX_LAYOUT_POSITIONS, VWAN_MAX_SPOKES } from './topology-limits'
 
 const canonicalHubTable = (value: string) => value.toLowerCase() === 'defaultroutetable' ? 'defaultRouteTable'
   : value.toLowerCase() === 'noneroutetable' ? 'noneRouteTable' : value
@@ -238,7 +239,7 @@ export function validateTopology(input: unknown): Topology {
     return { id: id(link.id), name: text(link.name, 'Link name'), a: link.a as string, b: link.b as string,
       enabled: link.enabled as boolean, aToB: policy(link.aToB), bToA: policy(link.bToA) }
   })
-  const spokes = array(root.spokes, 60, 'Spokes').map((value) => {
+  const spokes = array(root.spokes, VWAN_MAX_SPOKES, 'Spokes').map((value) => {
     const spoke = record(value)
     const rawHubId = typeof spoke.hubId === 'string' && !spoke.hubId.trim() ? undefined : spoke.hubId
     const hubId = rawHubId === undefined ? undefined : text(rawHubId, 'Spoke hub')
@@ -271,6 +272,9 @@ export function validateTopology(input: unknown): Topology {
       }) }),
     }
   })
+  if (spokes.length > VWAN_LEGACY_SPOKES && spokes.reduce((sum, spoke) => sum + spoke.prefixes.length, 0) > VWAN_LARGE_MAX_PREFIXES) {
+    fail(`Topologies above ${VWAN_LEGACY_SPOKES} spokes support at most ${VWAN_LARGE_MAX_PREFIXES} total spoke IPv4 prefixes; reduce the captured scope or prefix inventory.`)
+  }
   for (const spoke of spokes) {
     for (const nvaSpokeId of spoke.nvaSpokeIds ?? []) {
       const host = spokes.find((candidate) => candidate.id === nvaSpokeId)
@@ -548,7 +552,7 @@ export function validateTopology(input: unknown): Topology {
     for (const mode of ['layered', 'constellation'] as const) {
       if (positions[mode] === undefined) continue
       const entries = Object.entries(record(positions[mode]))
-      if (entries.length > 200) fail('Node positions must contain at most 200 entries per layout.')
+      if (entries.length > VWAN_MAX_LAYOUT_POSITIONS) fail(`Node positions must contain at most ${VWAN_MAX_LAYOUT_POSITIONS} entries per layout.`)
       layout.positions[mode] = Object.fromEntries(entries.map(([id, value]) => {
         const point = record(value)
         if (typeof point.x !== 'number' || typeof point.y !== 'number' || !Number.isFinite(point.x) || !Number.isFinite(point.y)
