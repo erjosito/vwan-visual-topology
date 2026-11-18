@@ -78,7 +78,10 @@ const schema = object({
       if (!Array.isArray(v)) fail(p, 'advertised gateway prefixes must be an array')
       array((entry, path) => { if (typeof entry !== 'string') fail(path, 'invalid advertised gateway prefix'); text(entry, path) })(v, p)
     },
-    vwanHubAttachment: object({ hubId: id, enabled: bool }, { propagateDefaultRoute: bool, hubRouting }),
+    vwanHubAttachment: object({ hubId: id, enabled: bool }, {
+      propagateDefaultRoute: bool, hubRouting, propagateStaticRoutes: bool,
+      staticRoutes: array(object({ name: text, addressPrefixes: strings, nextHopIpAddress: text })),
+    }),
     routeServer: object({
       ...named, enabled: bool, branchToBranchTraffic: bool,
       hubRoutingPreference: choice('ExpressRoute', 'VpnGateway', 'ASPath'), peerApplianceIds: array(id),
@@ -247,6 +250,13 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
     }
     ref(vnet.vwanHubAttachment?.hubId, topology.vwanHubs, 'VNet hub attachment')
     if (vnet.vwanHubAttachment) routingRefs(vnet.vwanHubAttachment.hubId, vnet.vwanHubAttachment.hubRouting)
+    if (vnet.vwanHubAttachment?.staticRoutes) {
+      const routes = vnet.vwanHubAttachment.staticRoutes
+      if (routes.length > 64 || routes.reduce((count, route) => count + route.addressPrefixes.length, 0) > 256) {
+        fail(vnet.id, 'VNet connection static routes exceed 64 routes or 256 prefixes')
+      }
+      if (new Set(routes.map((route) => route.name)).size !== routes.length) fail(vnet.id, 'duplicate VNet connection static route name')
+    }
     if (vnet.routeServer) {
       ref(vnet.routeServer.subnetId, vnet.subnets, 'Route Server subnet')
       const peers = new Set<string>()

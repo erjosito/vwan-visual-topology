@@ -6,8 +6,12 @@ import { t, localizeDiagnostic } from '../i18n'
 import '../vpn-nat-messages-ja'
 import '../vnet-community-messages-ja'
 import { CompactBgpTable } from '../CompactBgpTable'
+import { guidanceAnchor } from '../learning/guidance'
 
-export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]; available: boolean }) {
+export function BgpRouteTable({ entries, available, learningScope }: {
+  entries: AzBgpRibEntry[]; available: boolean
+  learningScope?: { hubId: string; tableId: string; prefix?: string }
+}) {
   const [filter, setFilter] = useState('')
   const groups = useMemo(() => {
     const byPrefix = new Map<string, AzBgpRibEntry[]>()
@@ -20,8 +24,10 @@ export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]
       (cidr(a)?.network ?? 0) - (cidr(b)?.network ?? 0) || (cidr(a)?.length ?? 0) - (cidr(b)?.length ?? 0))
   }, [entries])
   const visible = groups.filter(([prefix]) => prefix.includes(filter.trim()))
-  if (!available) return <p role="status" data-testid="aznet-rib-unavailable">The requested router is no longer available. No other router's routes are shown.</p>
+  if (!available) return <p role="status" data-testid="aznet-rib-unavailable">{t("The requested router is no longer available. No other router's routes are shown.")}</p>
   return <>
+    {learningScope?.prefix && !entries.some((entry) => entry.prefix === learningScope.prefix)
+      && <p role="status">{t('The requested prefix {0} is absent from this exact table. No other table is substituted.', learningScope.prefix)}</p>}
     <label className="aznet-field"><span>{t('Filter by prefix')}</span><input type="search" className="aznet-input" aria-label={t('Filter BGP prefixes')} value={filter} onChange={(e) => setFilter(e.target.value)} /></label>
     <CompactBgpTable label={t('Requested router BGP table')}
       legend={`${t('* Preferred; - alternative. Selection is not a validity or live-session check.')} ${t('BGP candidates; subnet forwarding routes are inspected separately.')}`}
@@ -29,6 +35,7 @@ export function BgpRouteTable({ entries, available }: { entries: AzBgpRibEntry[]
         .sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.id.localeCompare(b.id))
         .map((entry) => ({
           id: entry.id, prefix, preferred: entry.preferred,
+          learningAnchor: learningScope ? guidanceAnchor('hub-effective-prefix', learningScope.hubId, learningScope.tableId, prefix) : undefined,
           status: entry.preferred ? '*' as const : '-' as const,
           statusLabel: t(entry.preferred ? 'Preferred' : 'Alternative'),
           nextHop: entry.nextHopIp && !entry.nextHopName.includes(entry.nextHopIp) ? `${entry.nextHopName} (${entry.nextHopIp})` : entry.nextHopName,

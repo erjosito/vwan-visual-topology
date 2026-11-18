@@ -4,6 +4,7 @@ import { t } from '../i18n'
 import type { AzNetTopology, AzVwanHub } from './model'
 import { azHubRouting } from './hub-routing'
 import { HubStaticRoutesEditor } from '../HubStaticRoutesEditor'
+import { ConnectionStaticRoutesEditor } from './ConnectionStaticRoutesEditor'
 
 const words = (value: string) => [...new Set(value.split(',').map((word) => word.trim()).filter(Boolean))]
 
@@ -96,6 +97,8 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
             if (JSON.stringify(labels) !== JSON.stringify(config.labels)) change({ labels })
           }} /></label>
         <p>{t('Configuration status')}: {config.status}</p>
+        {!attachment.branch && <ConnectionStaticRoutesEditor
+          vnet={topology.vnets.find((vnet) => vnet.id === attachment.id)!} topology={topology} commit={commit} />}
         {config.status !== 'configured' && <button type="button" className="aznet-btn" disabled={!config.associatedTableId}
           onClick={() => change({ status: 'configured', limitations: [] })}>{t('Use edited configuration')}</button>}
       </fieldset>

@@ -1,4 +1,11 @@
 export const sampleCatalogJa: Record<string, string> = {
+  'Virtual WAN indirect spoke through Azure Firewall': 'Azure Firewall 経由の Virtual WAN 間接スポーク',
+  'A connection static route reaches an indirectly peered workload through a spoke Firewall.': '接続の静的ルートにより、スポーク Firewall 経由で間接ピアリングされたワークロードに到達します。',
+  'Distinguish a spoke Firewall from a secured virtual hub and verify the indirect return path.': 'スポーク Firewall とセキュリティ保護された仮想ハブの違いを理解し、間接スポークの戻り経路を確認します。',
+  'Connection static routes': '接続の静的ルート',
+  'Indirect spokes': '間接スポーク',
+  'Full Hybrid mode only. Propagated non-default connection routes; routing intent and hosting-VNet overlap are unassessed.': 'Full Hybrid モードのみ。既定以外の接続ルートの伝達に対応します。ルーティング インテントとの組み合わせとホスト VNet の重複は未評価です。',
+  'Trace both directions, remove the indirect spoke return UDR, then disable static route propagation.': '双方向を追跡し、間接スポークの戻り UDR を削除してから静的ルートの伝達を無効にしてください。',
   'Hub-and-Spoke + AzFW + GatewaySubnet UDR': 'ハブアンドスポーク + Azure Firewall + GatewaySubnet UDR',
   'Azure Route Server + SD-WAN BGP NVA + ER/VPN B2B': 'Azure Route Server + SD-WAN BGP NVA + ER/VPN 拠点間接続',
   'Dual-Region Managed VNRA + Chained Global Peering UDRs': '2 リージョンのマネージド VNRA + グローバル ピアリングの連鎖 UDR',

@@ -1,6 +1,7 @@
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubTableCoverage, propagatesLocally } from '../hub-routing'
 import type { HubRoutingConfiguration, Topology } from '../model'
 import type { AzNetTopology, AzVwanHub } from './model'
+import { connectionStaticLimitations, connectionStaticRoutes } from './vnet-connection-routes'
 
 export const legacyAzHubRouting: HubRoutingConfiguration = {
   status: 'configured', associatedTableId: DEFAULT_HUB_TABLE,
@@ -54,6 +55,23 @@ export function azHubTableCoverage(topology: AzNetTopology) {
     sites: [], connections: [], siteLinks: [],
   }
   const coverage = hubTableCoverage(projection)
+  const staticLimitations = topology.vnets.flatMap((vnet) => connectionStaticLimitations(topology, vnet))
+  for (const hub of topology.vwanHubs) {
+    const statics = topology.vnets.filter((vnet) => vnet.vwanHubAttachment?.enabled && vnet.vwanHubAttachment.hubId === hub.id)
+      .flatMap((vnet) => connectionStaticRoutes(topology, vnet))
+    const nextHops = new Map<string, string>()
+    for (const route of statics) {
+      if (nextHops.has(route.prefix) && nextHops.get(route.prefix) !== route.appliance.id) {
+        staticLimitations.push('Multiple next hops for the same connection static prefix require exhaustive assessment.')
+        break
+      }
+      nextHops.set(route.prefix, route.appliance.id)
+    }
+  }
+  if (staticLimitations.length) for (const tables of Object.values(coverage)) for (const entry of Object.values(tables)) {
+    entry.complete = false
+    entry.limitations = [...entry.limitations, ...new Set(staticLimitations)]
+  }
   if (topology.vnets.some((vnet) => vnet.vwanHubAttachment?.enabled && 'hubRouting' in vnet)) {
     for (const tables of Object.values(coverage)) for (const entry of Object.values(tables)) {
       entry.complete = false

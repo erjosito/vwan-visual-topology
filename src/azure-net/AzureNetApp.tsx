@@ -312,7 +312,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [sampleId, topology, recoveryAcknowledged, pendingUrlSample])
 
   const [testIpQuery, setTestIpQuery] = useState<string>('')
-  const [hubTableInspection, setHubTableInspection] = useState<{ hubId: string; tableId: string; firewall?: boolean }>()
+  const [hubTableInspection, setHubTableInspection] = useState<{ hubId: string; tableId: string; prefix?: string; firewall?: boolean }>()
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
   const [captureComparison, setCaptureComparison] = useState<AzNetComparisonReport | null>(null)
   const [captureNotices, setCaptureNotices] = useState<string[]>([])
@@ -2876,7 +2876,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 setActiveTab('editor')
               } else if (cue.action === 'hub-routes.open') {
                 inspectRoutes({ kind: 'vwan-hub', hubId: cue.params.hubId })
-                setHubTableInspection({ hubId: cue.params.hubId, tableId: cue.params.tableId })
+                setHubTableInspection({ ...cue.params })
               } else if (cue.action === 'network.configure') {
                 setSelected({ kind: 'vnet', vnetId: cue.params.vnetId })
                 setActiveTab('editor')
@@ -3631,14 +3631,21 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         {hubRouteTables(hub).map((table) => <option key={table.id} value={table.id}>{table.name} · {table.id}</option>)}
                       </select></label>{!coverage?.complete && <p role="status">{t('Routing not assessed')}: {coverage?.limitations.join(' ')}</p>}</>
                     })()}
-                    <Suspense fallback={null}><BgpRouteTable key={JSON.stringify(routeSelection)} entries={inspectedControlRib.entries} available={inspectedControlRib.available} /></Suspense>
+                    <Suspense fallback={null}><BgpRouteTable key={JSON.stringify([routeSelection, hubTableInspection, guidanceRevision])}
+                      entries={inspectedControlRib.entries} available={inspectedControlRib.available}
+                      learningScope={routeSelection.kind === 'vwan-hub' && !hubTableInspection?.firewall ? {
+                        hubId: routeSelection.hubId,
+                        tableId: hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE,
+                        prefix: hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.prefix : undefined,
+                      } : undefined} /></Suspense>
                     {workspaceSession?.learningView?.open && !workspaceSession.learningState?.reviewId
                       && workspaceSession.learningState?.observation && inspectedControlRib.available
                       && ((routeSelection.kind === 'site' && routeSelection.siteId === workspaceSession.learningState.observation.siteId)
                         || (routeSelection.kind === 'vwan-hub' && routeSelection.hubId === workspaceSession.learningState.observation.hubId
                           && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
                           && (hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
-                            === workspaceSession.learningState.observation.tableId))
+                            === workspaceSession.learningState.observation.tableId
+                          && simulation.vwanHubTableCoverage[routeSelection.hubId]?.[workspaceSession.learningState.observation.tableId!]?.complete))
                       && <p><button type="button" data-testid="learning-record-inspection"
                         onClick={() => workspaceSession.reportLearningObservation?.(workspaceSession.learningState!.observation!)}>
                         {language === 'ja' ? '確認を記録' : 'Record inspection'}: {workspaceSession.learningState.observation.prefix}
