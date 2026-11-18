@@ -23,7 +23,7 @@ async function saved(page: Page) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
-  test(`${mode} keeps a newly opened NVA inspector interactive above the retained capture inspector`, async ({ page }) => {
+  test(`${mode} keeps independent canvas inspectors interactive when focus changes`, async ({ page }) => {
     const topology = nvaBgpTopology()
     await load(page, mode, topology)
     await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'))
@@ -35,7 +35,11 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(capture.getByTestId('captured-bgp-neighbors')).toHaveCount(0)
     await open(page, 'reader', 'Inspect NVA Learned BGP Routes')
     const inspector = page.getByRole('dialog', { name: 'NVA learned BGP routes · Dual-region NVA', exact: true })
+    await expect(capture).toHaveCount(0)
+    await expect(inspector).toBeVisible()
+    await page.getByRole('button', { name: /Azure & Bicep$/ }).click()
     await expect(capture).toBeVisible()
+    await inspector.focus()
     await inspector.getByText('Copyable route text', { exact: true }).click()
     await expect(inspector.getByRole('textbox', { name: 'Select route text to copy' })).toBeVisible()
     await capture.focus()
