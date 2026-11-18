@@ -40,6 +40,7 @@ import {
 import {
   compareAzNetWithObservations,
   importAzNetCapture,
+  type AzCapturedObservations,
   type AzNetComparisonReport,
 } from './azure-import'
 import { validateVpnNat } from '../vpn-nat'
@@ -156,6 +157,7 @@ const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((modul
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
+const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
   value: string; deferred: boolean; onCommit: (value: string) => void
@@ -312,6 +314,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useState<boolean>(true)
   const [captureComparison, setCaptureComparison] = useState<AzNetComparisonReport | null>(null)
   const [captureNotices, setCaptureNotices] = useState<string[]>([])
+  const [captureObservations, setCaptureObservations] = useState<AzCapturedObservations | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const compareFileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -583,6 +586,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
     nextTopology = parseAzNetTopology(nextTopology)
+    setCaptureObservations(null)
     sampleRequest.current++
     setSampleId(id)
     setTopology(nextTopology)
@@ -612,6 +616,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     applyLoadedTopology('', admitted)
     setCaptureNotices(imported.warnings)
     setCaptureComparison(importedComparison)
+    setCaptureObservations(imported.observations ?? null)
     setWorkspaceNotice('')
     setActiveTab('azure')
   }
@@ -696,6 +701,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       .then((loaded) => {
         loaded = parseAzNetTopology(loaded)
         setSampleId(requested)
+        setCaptureObservations(null)
         setTopology(loaded)
         setHistory([])
         setFuture([])
@@ -3062,6 +3068,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 if (raw.kind === 'azure-network-capture') {
                   const imported = importAzNetCapture(raw)
                   setCaptureNotices(imported.warnings)
+                  setCaptureObservations(imported.observations ?? null)
                   if (imported.observations) {
                     const report = compareAzNetWithObservations(
                       topology,
@@ -5932,6 +5939,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
             {activeTab === 'azure' && (
               <>
+                {captureObservations?.vngBgpPeerStatus && <Suspense fallback={null}>
+                  <GatewayBgpNeighborsPanel observations={captureObservations} />
+                </Suspense>}
                 <div className="aznet-card" data-testid="aznet-azure-capture-card">
                   <h3>1. Azure Live Capture & Effective-Route Comparison</h3>
                   <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>

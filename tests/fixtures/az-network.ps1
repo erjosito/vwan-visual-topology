@@ -129,7 +129,7 @@ if ($command -eq 'network nic show-effective-route-table') {
         }
     }
     ConvertTo-Json -InputObject @($result) -Depth 10 -Compress
-} elseif ($command -eq 'network vnet-gateway list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+} elseif ($command -eq 'network vnet-gateway list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors')) {
     $gateway = @{ id = "$prefix/virtualNetworkGateways/vpn"; name = 'vpn'; gatewayType = 'Vpn'; enableBgp = $true
         bgpSettings = @{ asn = 65515; bgpPeeringAddress = '10.82.253.4' }
         ipConfigurations = @(@{ id = "$prefix/virtualNetworkGateways/vpn/ipConfigurations/default"
@@ -155,6 +155,8 @@ if ($command -eq 'network nic show-effective-route-table') {
     ConvertTo-Json -InputObject @(@{ id = "$prefix/localNetworkGateways/site"; name = 'site'
         localNetworkAddressSpace = @{ addressPrefixes = @('10.90.0.0/16') }
         bgpSettings = @{ asn = 65001; bgpPeeringAddress = '10.90.0.4' } }) -Depth 10 -Compress
+} elseif ($command -eq 'network vnet-gateway list-bgp-peer-status' -and $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors') {
+    '{"value":[{"localAddress":"10.82.253.4","neighbor":"192.0.2.9","asn":65001,"state":"Connected","routesReceived":0,"connectedDuration":"00:01:00","messagesSent":12,"messagesReceived":11,"secret":"must-not-be-exported"}]}'
 } elseif ($command -in @('network vnet-gateway list-learned-routes', 'network vnet-gateway list-bgp-peer-status')) {
     '{"value":[]}'
 } elseif ($command -eq 'network public-ip list') {
