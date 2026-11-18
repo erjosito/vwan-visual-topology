@@ -8,6 +8,7 @@ import { azHubPolicyLinks } from './route-maps'
 import { isVwanNvaAsn } from '../validation'
 import { validateVpnNat } from '../vpn-nat'
 import { validateSubnetPeeringScopes } from './subnet-peering'
+import { parseVnetBgpCommunities } from '../vnet-communities'
 
 export const AZNET_MAX_JSON_LENGTH = 4_000_000
 const MAX_ITEMS = 4096
@@ -71,7 +72,9 @@ const schema = object({
       advertisedRouteAttributes: array(object({ prefix: text }, { asPath: asns, communities: strings })),
     })),
   }, {
-    ...positioned, summarizedGatewayPrefixes: (v, p) => {
+    ...positioned, bgpCommunities: (v, p) => {
+      try { parseVnetBgpCommunities(v) } catch (error) { fail(p, (error as Error).message) }
+    }, summarizedGatewayPrefixes: (v, p) => {
       if (!Array.isArray(v)) fail(p, 'advertised gateway prefixes must be an array')
       array((entry, path) => { if (typeof entry !== 'string') fail(path, 'invalid advertised gateway prefix'); text(entry, path) })(v, p)
     },

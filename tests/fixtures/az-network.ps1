@@ -107,6 +107,7 @@ if ($command -eq 'network nic show-effective-route-table') {
         @{
             id = $id; name = "vnet-$_"; location = 'swedencentral'; secret = 'must-not-be-exported'
             addressSpace = @{ addressPrefixes = @("10.$octet.0.0/16") }
+            bgpCommunities = @{ virtualNetworkCommunity = '12076:20001'; regionalCommunity = '12076:50004'; secret = 'must-not-be-exported' }
             virtualNetworkPeerings = @(if ($subnetPeering) {
                 $remote = if ($_ -eq 'first') { 'second' } else { 'first' }
                 @{ name = "to-$remote"; remoteVirtualNetwork = @{ id = "$prefix/virtualNetworks/vnet-$remote" }

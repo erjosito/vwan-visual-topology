@@ -23,6 +23,17 @@ function capture() {
 }
 
 describe('offline Azure capture import', () => {
+  it('preserves captured VNet custom and regional communities without enabling VWAN auto tagging', () => {
+    const input = capture()
+    const bgpCommunities = { virtualNetworkCommunity: '12076:20001', regionalCommunity: '12076:50004' }
+    Object.assign(input.hubs[0].connections[0], { bgpCommunities })
+    const result = importAzureCapture(input)
+    expect(result.spokes[0].bgpCommunities).toEqual(bgpCommunities)
+    expect(validateTopology(JSON.parse(JSON.stringify(result))).spokes[0].bgpCommunities).toEqual(bgpCommunities)
+    expect(generateBicep(result, bicepDefaults(result)).warnings.join(' ')).toContain('VNet resource communities are not advertised through Virtual WAN')
+    Object.assign(input.hubs[0].connections[0], { bgpCommunities: { virtualNetworkCommunity: '65001:1' } })
+    expect(() => importAzureCapture(input)).toThrow(/12076/)
+  })
   it('migrates explicit contexts without mistaking incomplete or contradictory scope for complete provenance', () => {
     const input = contextObservationFixture()
     const load = () => importAzureCapture({ ...input, version: 1 })

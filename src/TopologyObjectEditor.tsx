@@ -1,4 +1,5 @@
 import { t, localizeDiagnostic } from './i18n'
+import VnetCommunityEditor from './VnetCommunityEditor'
 import { cloneElement, lazy, Suspense, useState } from 'react'
 import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
@@ -75,6 +76,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         } else if (request.kind === 'spoke') {
           const hubIdValue = text('hub') || undefined
           const selectedNvaSpokes = data.getAll('nvaSpokeIds').map(String).filter(Boolean)
+          const virtualNetworkCommunity = text('virtualNetworkCommunity')
+          const regionalCommunity = text('region') === (spoke?.region ?? '') ? spoke?.bgpCommunities?.regionalCommunity : undefined
           const value = {
             id,
             name,
@@ -83,6 +86,10 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             ...(hubIdValue ? { hubId: hubIdValue } : {}),
             ...(spoke?.hubRouting ? { hubRouting: structuredClone(spoke.hubRouting) } : {}),
             ...(spoke?.subnets ? { subnets: structuredClone(spoke.subnets) } : {}),
+            ...((virtualNetworkCommunity || regionalCommunity) ? { bgpCommunities: {
+              ...(virtualNetworkCommunity ? { virtualNetworkCommunity } : {}),
+              ...(regionalCommunity ? { regionalCommunity } : {}),
+            } } : {}),
             prefixes: prefixes(text('prefixes')),
             ...(selectedNvaSpokes.length ? { nvaSpokeIds: selectedNvaSpokes } : {}),
             ...(hubIdValue && data.has('propagateDefaultRoute') ? { propagateDefaultRoute: true } : {}),
@@ -335,6 +342,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <Field title="Azure region (failure domain)"><input name="region" maxLength={120} defaultValue={spoke?.region ?? ''} placeholder="West Europe" /></Field>
           <p className="muted">Region is explicit, not inferred from hub attachment or ER location. Missing or unrecognized regions are unassessed in failure analysis.</p>
           <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
+          <VnetCommunityEditor value={spoke?.bgpCommunities} formField />
           {selectedSpokeHubId && <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>}
           {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
             <p className="muted">{t("Attach this VNet behind one or more spoke BGP NVAs so those NVAs advertise its prefixes to Virtual WAN.")}</p>

@@ -279,6 +279,7 @@ $selectedHubs = @($allHubs | Where-Object { $_.properties.virtualWan.id -ieq $Vi
 if ($selectedHubs.Count -gt 20) { throw 'This WAN exceeds the app limit of 20 hubs.' }
 $capturedHubs = [System.Collections.Generic.List[object]]::new()
 $vnetCache = @{}
+$vnetCommunityCache = @{}
 $connectionCount = 0
 foreach ($hub in $selectedHubs) {
     $limitations = [System.Collections.Generic.List[string]]::new()
@@ -351,6 +352,13 @@ foreach ($hub in $selectedHubs) {
                     $vnet = Read-Resource $vnetId
                     if ($vnet.id -ine $vnetId) { throw 'Unexpected VNet resource.' }
                     $prefixes = @($vnet.properties.addressSpace.addressPrefixes)
+                    if ($null -ne $vnet.properties.bgpCommunities) {
+                        $communities = @{}
+                        foreach ($field in @('virtualNetworkCommunity', 'regionalCommunity')) {
+                            if ($null -ne $vnet.properties.bgpCommunities.$field) { $communities[$field] = $vnet.properties.bgpCommunities.$field }
+                        }
+                        $vnetCommunityCache[$vnetId] = $communities
+                    }
                 } catch {
                     $script:complete = $false
                     $limitations.Add('A referenced VNet read failed; check read permissions.')
@@ -385,6 +393,7 @@ foreach ($hub in $selectedHubs) {
             name = ($vnetId -split '/')[-1]
             virtualNetworkId = $vnetId
             addressPrefixes = $vnetCache[$vnetId]
+            bgpCommunities = $vnetCommunityCache[$vnetId]
             defaultRouting = [bool]$defaultRouting
             routingConfiguration = @{
                 status = $(if ($routingKnown) { 'captured' } else { 'unknown' })

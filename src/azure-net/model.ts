@@ -6,6 +6,7 @@ import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
 import { parseAzNetTopology } from './admission'
 import type { ClassicVpnNatGateway, VpnNat, VwanVpnNatGateway } from '../vpn-nat'
+import { parseVnetBgpCommunities, type VnetBgpCommunities } from '../vnet-communities'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -125,6 +126,7 @@ export interface AzVwanHubAttachment {
 }
 
 export interface AzVNet {
+  bgpCommunities?: VnetBgpCommunities
   id: string
   name: string
   label?: string
@@ -1255,6 +1257,8 @@ export function validateAzNetTopology(input: unknown): string[] {
     return errors
   }
   for (const vnet of candidate.vnets) {
+    try { parseVnetBgpCommunities(vnet.bgpCommunities) }
+    catch (error) { errors.push(`VNet "${vnet.name}": ${(error as Error).message}`) }
     if (!vnet.id || !vnet.name) errors.push('Every VNet must have an id and name.')
     if (vnet.label !== undefined && (typeof vnet.label !== 'string' || vnet.label.length > 120)) {
       errors.push(`VNet "${vnet.name}" label must be a string of at most 120 characters.`)

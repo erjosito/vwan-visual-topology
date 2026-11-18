@@ -1,4 +1,5 @@
 import { azureObjectId } from '../azure-import'
+import { parseVnetBgpCommunities } from '../vnet-communities'
 import { cidr, ipv4 } from '../validation'
 import { importNatCapture } from './nat-capture'
 import { importConnectivityCapture } from './connectivity-capture'
@@ -643,6 +644,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     vnets.push({
       id,
       name,
+      ...(props.bgpCommunities == null && v.bgpCommunities == null ? {} : { bgpCommunities: parseVnetBgpCommunities(props.bgpCommunities ?? v.bgpCommunities) }),
       region: asString(v.location, 'swedencentral'),
       prefixes,
       role,

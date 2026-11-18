@@ -157,6 +157,7 @@ const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((modul
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
+const VnetCommunityEditor = lazy(() => import('../VnetCommunityEditor'))
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
 const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
 
@@ -4483,7 +4484,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 const val = e.target.value
                                 commitTopology((draft) => {
                                   const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) v.region = val
+                                  if (v) {
+                                    if (v.region !== val && v.bgpCommunities?.regionalCommunity) {
+                                      if (v.bgpCommunities.virtualNetworkCommunity) v.bgpCommunities = { virtualNetworkCommunity: v.bgpCommunities.virtualNetworkCommunity }
+                                      else delete v.bgpCommunities
+                                    }
+                                    v.region = val
+                                  }
                                 })
                               }}
                               style={{ width: 130, fontSize: 11.5 }}
@@ -4517,6 +4524,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               style={{ width: 130, fontSize: 11.5 }}
                             />
                             </label>
+                            <Suspense fallback={null}><VnetCommunityEditor
+                              key={vnet.id}
+                              value={vnet.bgpCommunities}
+                              onChange={(value) => commitTopology((draft) => {
+                                const target = draft.vnets.find((entry) => entry.id === vnet.id)
+                                if (target) {
+                                  if (value) target.bgpCommunities = value
+                                  else delete target.bgpCommunities
+                                }
+                              })} /></Suspense>
                             <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Canvas layout role')}</span>
                             <select
                               className="aznet-select"

@@ -1,4 +1,5 @@
 import type { Connection, ErLink, Hub, RouteKind, RouteMapDirection, RouterSelection, Topology, Transport } from './model'
+import { vnetCommunityHelp } from './vnet-communities'
 import { cidr, contains, ipv4 } from './validation'
 import { applyRouteMapRules, connectionMapRules, propagateSites, routerMapRules, siteExports } from './bgp'
 import type { SiteRoute, SiteRouting } from './bgp'
@@ -216,6 +217,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
     }
   }
   const warnings: string[] = []
+  if (topology.spokes.some((spoke) => spoke.bgpCommunities)) warnings.push(vnetCommunityHelp)
   const erLinks = (topology.erLinks ?? []).filter((link) => link.enabled)
   const erAdvertisements: Record<string, Candidate[]> = {}
   for (const link of erLinks.filter((link) => link.siteId)) {

@@ -5,6 +5,7 @@ import { azArsPeers, azArsSpokes } from './ars-route-maps'
 import { natGatewayForSubnet, validateInventory } from '../inventory'
 import { generateConnectivityBicep } from '../connectivity-bicep'
 import { validateSubnetPeeringScopes } from './subnet-peering'
+import { parseVnetBgpCommunities, vnetCommunityHelp } from '../vnet-communities'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -45,6 +46,8 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  for (const vnet of topology.vnets) parseVnetBgpCommunities(vnet.bgpCommunities)
+  if (topology.vnets.some((vnet) => vnet.bgpCommunities)) warnings.push(vnetCommunityHelp)
   if (topology.vnetPeerings.some((peering) => peering.scope?.type === 'subnets')) {
     warnings.push('Subnet peering exports explicit peerCompleteVnets=false and mirrored subnet names. Azure subscription allowlisting, current VM SKU prerequisites and live deployment are not verified. Changing whole-VNet/subnet type requires deleting/recreating the Azure peering; membership edits update and synchronize the existing link. Delegations and unsupported transit composition are not an equivalent deployment.')
   }
@@ -220,6 +223,9 @@ export function generateAzNetBicep(
     }
     lines.push(`      ]`)
     lines.push(`    }`)
+    if (vnet.bgpCommunities?.virtualNetworkCommunity) {
+      lines.push(`    bgpCommunities: { virtualNetworkCommunity: '${escapeBicepString(vnet.bgpCommunities.virtualNetworkCommunity)}' }`)
+    }
     if (summaries !== undefined) {
       lines.push(`    summarizedGatewayPrefixes: {`)
       lines.push(`      addressPrefixes: [`)

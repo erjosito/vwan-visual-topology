@@ -12,6 +12,10 @@ Azure Network Simulator (**AzNetSim**) is a local-first topology designer and **
 
 **Routing behavior and prioritized application recommendations:** [ROUTING-LOGIC.md](ROUTING-LOGIC.md).
 
+**VNet BGP communities:** Configure one optional `12076:<0–65535>` community on each VNet. Native JSON and Azure captures preserve `bgpCommunities.virtualNetworkCommunity` and Azure-returned `regionalCommunity`; Bicep emits only the writable custom value (the VWAN attachment-only starter does not modify existing VNets). Classic ExpressRoute private-peering advertisements, including gateway-transit spokes, carry these values to site route maps and BGP inspectors with original VNet provenance. Regional values are never inferred from region names; changing a VNet region in the editor clears stale regional metadata (recapture to refresh it). Original VNet address spaces are supported; community tagging of gateway summaries is unassessed.
+
+Microsoft documents [VNet communities as incompatible with Virtual WAN](https://learn.microsoft.com/azure/expressroute/how-to-configure-custom-bgp-communities). Accordingly, saved VNet configuration does **not** automatically tag VWAN, VPN, peering or NVA-origin advertisements. Use existing explicit [VWAN community route-map actions](https://learn.microsoft.com/azure/virtual-wan/route-maps-about) when appropriate; these are distinct from the VNet resource property. This is modeled routing, not live Azure qualification.
+
 **Local platform (development):** [PLATFORM.md](PLATFORM.md) documents the shared browser/Node service, local stdio MCP/Copilot skill and unsigned Windows Electron build, including privacy boundaries, supported requirements and production release gates. The existing web UI remains browser-local; no hosting migration or cloud progress backend is introduced.
 
 **Quality evaluation:** [the scorecard](docs/quality-evaluation.md) separates automated regression conformance from human usability and learning outcomes. Run `npm run evaluate` or `npm run evaluate -- --browser` for a versioned local JSON report; passing tests do not imply a perfect usability, training or Azure-fidelity score.

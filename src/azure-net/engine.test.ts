@@ -71,6 +71,84 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
 
+  it.each([false, true])('exports original per-VNet communities over classic ER and preserves alternatives and origin through site policy (ARS: %s)', (ars) => {
+    const topology = transitTopology()
+    if (ars) topology.vnets[0].routeServer = {
+      id: 'ars', name: 'Route Server', enabled: true, branchToBranchTraffic: false, hubRoutingPreference: 'ExpressRoute', peerApplianceIds: [],
+    }
+    topology.vnets[0].bgpCommunities = { virtualNetworkCommunity: '12076:20001' }
+    topology.vnets[1].bgpCommunities = { virtualNetworkCommunity: '12076:20002', regionalCommunity: '12076:50004' }
+    topology.vnets[0].gateways.push({ ...topology.vnets[0].gateways[0], id: 'alternate' })
+    topology.erLinks.push({ ...topology.erLinks[0], id: 'alternate-link', targetId: 'alternate', weight: 1 })
+    let result = simulateAzNet(topology)
+    const spokeRoutes = result.erLocationRibs.er.filter((route) => route.prefix === '10.1.0.0/16')
+    expect(spokeRoutes).toHaveLength(2)
+    expect(spokeRoutes.filter((route) => route.preferred)).toHaveLength(1)
+    for (const route of spokeRoutes) {
+      expect(route.communities).toEqual(['12076:20002', '12076:50004'])
+      expect(route.vnetCommunityOrigin).toEqual({ vnetId: 'spoke', ...topology.vnets[1].bgpCommunities })
+      expect(route.sourceVnetId).toBe('spoke')
+    }
+    expect(result.siteRibs.site.find((route) => route.prefix === '10.0.0.0/16')?.communities).toEqual(['12076:20001'])
+    topology.routeMaps = [{
+      id: 'community-policy', name: 'Community policy', siteId: 'site', rules: [{
+        id: 'tag', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate',
+        matchConditions: [{ property: 'community', match: 'contains', values: ['12076:20002'] }],
+        modifications: [
+          { property: 'community', action: 'remove', values: ['12076:20002'] },
+          { property: 'community', action: 'add', values: ['65001:281'] },
+        ],
+      }],
+    }]
+    topology.sites[0].routeMapAssignments = [{ connectionId: 'er-site', inboundMapId: 'community-policy' }]
+    result = simulateAzNet(topology)
+    const received = result.siteRibs.site.find((route) => route.prefix === '10.1.0.0/16')!
+    expect(received.communities).toEqual(['12076:50004', '65001:281'])
+    expect(received.vnetCommunityOrigin).toEqual({ vnetId: 'spoke', ...topology.vnets[1].bgpCommunities })
+    expect(received.routeMapTrace?.join(' ')).toContain('Community policy')
+    expect(result.siteRibs.site.find((route) => route.prefix === '10.0.0.0/16')?.communities).toEqual(['12076:20001'])
+  })
+
+  it('does not inject VNet communities into VPN or gateway summaries', () => {
+    const vpn = transitTopology('Vpn')
+    vpn.vnets[0].bgpCommunities = vpn.vnets[1].bgpCommunities = { virtualNetworkCommunity: '12076:20001' }
+    const result = simulateAzNet(vpn)
+    expect(result.siteRibs.site.filter((route) => route.originProtocol === 'VPN').length).toBeGreaterThan(0)
+    expect(result.siteRibs.site.every((route) => !route.communities?.length)).toBe(true)
+    expect(result.warnings.join(' ')).toContain('not Virtual WAN')
+    const er = transitTopology()
+    er.vnets[0].bgpCommunities = { virtualNetworkCommunity: '12076:20001' }
+    er.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/15']
+    expect(simulateAzNet(er).siteRibs.site.find((route) => route.prefix === '10.0.0.0/15')?.communities?.length ?? 0).toBe(0)
+  })
+
+  it('keeps VNet configuration separate from explicit VWAN route-map tagging', () => {
+    const topology = transitTopology()
+    topology.vnets = [topology.vnets[1]]
+    topology.vnetPeerings = []
+    topology.vnets[0].bgpCommunities = { virtualNetworkCommunity: '12076:20002' }
+    topology.vnets[0].vwanHubAttachment = { hubId: 'virtual-hub', enabled: true }
+    topology.vwanHubs = [{ id: 'virtual-hub', name: 'Virtual Hub', region: 'West Europe', preference: 'ExpressRoute',
+      routingIntent: { private: false, internet: false } }]
+    topology.erLinks[0] = { ...topology.erLinks[0], targetKind: 'vwan-hub', targetId: 'virtual-hub' }
+    let result = simulateAzNet(topology)
+    const original = result.siteRibs.site.find((route) => route.prefix === '10.1.0.0/16')!
+    expect(original).toBeDefined()
+    expect(original.communities?.length ?? 0).toBe(0)
+    topology.routeMaps = [{
+      id: 'tag-map', name: 'Explicit hub tagging', hubId: 'virtual-hub', rules: [{
+        id: 'tag', prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate',
+        modifications: [{ property: 'community', action: 'add', values: ['65001:281'] }],
+      }],
+    }]
+    topology.vwanHubs[0].routeMapAssignments = [{ connectionId: 'spoke', inboundMapId: 'tag-map' }]
+    result = simulateAzNet(topology)
+    const tagged = result.siteRibs.site.find((route) => route.prefix === '10.1.0.0/16')!
+    expect(tagged.communities).toEqual(['65001:281'])
+    expect(tagged.vnetCommunityOrigin).toBeUndefined()
+    expect(tagged.routeMapTrace?.join(' ')).toContain('Explicit hub tagging')
+  })
+
   it('totally admits bounded v2 shapes and rejects malformed, duplicate and dangling inputs', () => {
     const valid = transitTopology()
     const bad: unknown[] = [null, [], 42, { ...valid, vnets: [null] }, { ...valid, siteLinks: undefined },
