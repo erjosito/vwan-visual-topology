@@ -10,6 +10,8 @@ await build({ entryPoints: [resolve('tests', 'fixtures', 'hub-firewall.ts')], bu
   format: 'cjs', outfile: join(artifacts, 'hub-firewall-fixture.cjs') })
 await build({ entryPoints: [resolve('tests', 'fixtures', 'nva-bgp.ts')], bundle: true, platform: 'node',
   format: 'cjs', outfile: join(artifacts, 'nva-bgp-fixture.cjs') })
+await build({ entryPoints: [resolve('tests', 'fixtures', 'vpn-gateway-mode.ts')], bundle: true, platform: 'node',
+  format: 'cjs', outfile: join(artifacts, 'vpn-gateway-mode-fixture.cjs') })
 const executablePath = process.env.DESKTOP_EXECUTABLE
 let brandedWindowsResources = false
 if (executablePath) {
@@ -30,6 +32,7 @@ const require = createRequire(import.meta.url)
 const { executePlatform } = require('../platform-dist/service.cjs')
 const { hubFirewallTopology, azHubFirewallTopology } = require(join(artifacts, 'hub-firewall-fixture.cjs'))
 const { nvaBgpTopology } = require(join(artifacts, 'nva-bgp-fixture.cjs'))
+const { vpnGatewayModeTopology } = require(join(artifacts, 'vpn-gateway-mode-fixture.cjs'))
 const outbound = [], failures = []
 try {
   const page = await application.firstWindow()
@@ -365,6 +368,18 @@ try {
     const topology = nvaBgpTopology()
     await page.goto(`app://simulator/?mode=${mode}`)
     await page.getByTestId('aznet-app').waitFor()
+    await page.locator('input[data-desktop-import]').setInputFiles({
+      name: 'vpn-mode.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(vpnGatewayModeTopology())),
+    })
+    await page.getByTestId('aznet-chip-vpn').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
+    const vpnMode = page.getByTestId('vpn-gateway-settings-vpn').getByRole('combobox', { name: 'Standalone VPN gateway mode', exact: true })
+    await expect(vpnMode).toHaveValue('unspecified')
+    await vpnMode.selectOption('active-active')
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')).topology.vnets[0].gateways[0].activeActive)).toBe(true)
+    await vpnMode.selectOption('active-standby')
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')).topology.vnets[0].gateways[0].activeActive)).toBe(false)
     await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'))
     const capturedNeighbors = page.getByTestId('captured-bgp-neighbors')
     await expect(capturedNeighbors.locator('tbody tr')).toHaveCount(2)

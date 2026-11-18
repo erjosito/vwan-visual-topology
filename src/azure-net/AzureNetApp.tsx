@@ -158,6 +158,7 @@ const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => 
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
+const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
 
 function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
   value: string; deferred: boolean; onCommit: (value: string) => void
@@ -1320,6 +1321,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         asn: 65515,
         bgpEnabled: true,
         enabled: true,
+        ...(kind === 'Vpn' ? { activeActive: false } : {}),
       })
     })
   }
@@ -1967,6 +1969,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             label: t('Inspect NVA Learned BGP Routes'),
             onSelect: () => {
               setToolsDismissRequest((request) => request + 1)
+              setActiveTab(null)
               setNvaBgpInspection({ vnetId: vnet.id, applianceId: app.id })
             },
           }] : []),
@@ -4731,6 +4734,19 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             </button>
                           )}
                         </div>
+
+                        {vnet.gateways.filter((gateway) => gateway.kind === 'Vpn').map((gateway) =>
+                          <Suspense key={gateway.id} fallback={null}>
+                            <VpnGatewaySettings gateway={gateway}
+                              routeExchange={!!(gateway.enabled && vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic)}
+                              onMode={(mode) => commitTopology((draft) => {
+                                const target = draft.vnets.find((candidate) => candidate.id === vnet.id)?.gateways.find((candidate) => candidate.id === gateway.id)
+                                if (target) {
+                                  if (mode === undefined) delete target.activeActive
+                                  else target.activeActive = mode
+                                }
+                              })} />
+                          </Suspense>)}
 
                         {/* ARS settings if present */}
                         {vnet.routeServer && (
