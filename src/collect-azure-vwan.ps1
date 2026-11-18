@@ -10,7 +10,9 @@ Requires metadata reads (including subscription hub discovery) and
 Microsoft.Network/virtualHubs/effectiveRoutes/action; Reader alone is insufficient.
 Only discovered selected-WAN hub route tables are queried, not connection/NIC
 tables. Observations are non-atomic and independent of configuration completeness.
-Limits: 500 CLI invocations, 20 hubs, 20 minutes overall, 180 seconds per
+Limits: 500 CLI invocations, 20 hubs, 200 total VNet references across all hubs
+(including unread VNets), 1000 total IPv4 prefixes when more than 60 VNets are
+importable, 20 minutes overall, 180 seconds per
 effective-route invocation, no diagnostic retries, 100 route tables, 10000 rows/table, 20000 total.
 CLI-owned polling/retries share the invocation deadline, not a separate REST backend.
 Version 2 also records only the CLI version and selected subscription/tenant/cloud
@@ -338,7 +340,7 @@ foreach ($hub in $selectedHubs) {
     })
     $connections = [System.Collections.Generic.List[object]]::new()
     foreach ($connection in @(Read-HubCollection "$($hub.id)/hubVirtualNetworkConnections" 'VNet connections' $limitations)) {
-        if (++$connectionCount -gt 60) { throw 'This WAN exceeds the app limit of 60 VNet connections.' }
+        if (++$connectionCount -gt 200) { throw 'This WAN exceeds the app limit of 200 total VNet connections across all captured hubs.' }
         $vnetId = $connection.properties.remoteVirtualNetwork.id
         if ($vnetId -notmatch '^/subscriptions/([a-f0-9-]{36})/resourceGroups/[^/?#\r\n]+/providers/Microsoft\.Network/virtualNetworks/[^/?#\r\n]+$') { throw 'Invalid referenced VNet ID.' }
         $crossSubscription = $Matches[1] -ine $subscriptionId
@@ -421,9 +423,23 @@ foreach ($hub in $selectedHubs) {
         routeTablesStatus = $(if ($tablesKnown) { 'captured' } else { 'unknown' })
         routeTables = $projectedTables
         branchRoutingStatus = $(if ($branchScopeKnown) { 'captured' } else { 'unknown' })
-        connections = $connections.ToArray(); unsupportedFeatures = $limitations.ToArray()
+        connections = $connections.ToArray(); unsupportedFeatures = @($limitations | Select-Object -Unique)
     })
 }
+function Assert-VnetWorkBudget($Hubs) {
+    $vnets = 0
+    $prefixCount = 0
+    foreach ($hub in $Hubs) {
+        foreach ($connection in $hub.connections) {
+            $ipv4 = @($connection.addressPrefixes | Where-Object { $_ -is [string] -and $_ -notlike '*:*' } | Select-Object -Unique)
+            if ($ipv4.Count) { $vnets++; $prefixCount += $ipv4.Count }
+        }
+    }
+    if ($vnets -gt 60 -and $prefixCount -gt 1000) {
+        throw 'Topologies above 60 spokes support at most 1000 total spoke IPv4 prefixes; no file was written.'
+    }
+}
+Assert-VnetWorkBudget $capturedHubs
 $capture = @{
     kind = 'azure-vwan-capture'; version = 1; collectorVersion = '1'; routingContextVersion = 1
     capturedAt = [DateTime]::UtcNow.ToString('o'); complete = $script:complete

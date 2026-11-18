@@ -4,6 +4,7 @@ import { createEmptyAzNetTopology, validateAzNetTopology } from './model'
 import { parseAzNetTopology } from './admission'
 import { applyAzHubRouteMap, pruneAzSiteRouteMaps } from './route-maps'
 import type { RouteMapRule } from '../model'
+import { validateRequest } from '../platform/service'
 
 function mixedTopology() {
   const topology = createEmptyAzNetTopology()
@@ -36,6 +37,19 @@ const rule = (values: Partial<RouteMapRule> = {}): RouteMapRule => ({
 })
 
 describe('Mixed native capability bridge', () => {
+  it('keeps one-direction site and hub assignments valid plain JSON after native edits prune them', () => {
+    const topology = mixedTopology()
+    topology.routeMaps = [
+      { id: 'site-out', name: 'Site export', siteId: 'branch', rules: [rule()] },
+      { id: 'hub-in', name: 'Hub import', hubId: 'wan', rules: [rule()] },
+    ]
+    topology.sites[0].routeMapAssignments = [{ connectionId: 'branch-vpn', outboundMapId: 'site-out' }]
+    topology.vwanHubs[0].routeMapAssignments = [{ connectionId: 'branch-vpn', inboundMapId: 'hub-in' }]
+    pruneAzSiteRouteMaps(topology)
+    expect(topology.sites[0].routeMapAssignments).toStrictEqual([{ connectionId: 'branch-vpn', outboundMapId: 'site-out' }])
+    expect(topology.vwanHubs[0].routeMapAssignments).toStrictEqual([{ connectionId: 'branch-vpn', inboundMapId: 'hub-in' }])
+    expect(() => validateRequest({ contractVersion: 1, operation: 'validate', document: { mode: 'full', topology } })).not.toThrow()
+  })
   it('rejects own-AS loops before replacement policies can hide them and after policies introduce them', () => {
     const topology = mixedTopology()
     const replacement = rule({ modifications: [{ property: 'asPath', action: 'replace', values: ['64496'] }] })

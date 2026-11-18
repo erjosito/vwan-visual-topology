@@ -1,4 +1,5 @@
 import type { LayoutMode, NodePosition, Topology } from './model'
+import { VWAN_LEGACY_SPOKES } from './topology-limits'
 
 export function diagramLayout(topology: Topology, mode: LayoutMode) {
   const positions = new Map<string, NodePosition>()
@@ -9,7 +10,24 @@ export function diagramLayout(topology: Topology, mode: LayoutMode) {
   const hubSpokes = topology.spokes.filter((spoke) => Boolean(spoke.hubId))
   let width = Math.max(1000, topology.hubs.length * 260, visibleSites.length * 200, topology.spokes.length * 200, locations.length * 200)
   let height = locations.length ? (standaloneSpokes.length ? 960 : 900) : topology.siteLinks.length ? (standaloneSpokes.length ? 820 : 750) : (standaloneSpokes.length ? 720 : 650)
-  if (mode === 'layered') {
+  if (mode === 'layered' && topology.spokes.length > VWAN_LEGACY_SPOKES) {
+    const columns = 12, rowHeight = 120
+    width = Math.max(1000, Math.min(columns, Math.max(topology.spokes.length, visibleSites.length, locations.length, topology.hubs.length)) * 260)
+    let y = 85
+    const grid = (nodes: { id: string }[], spacing = rowHeight) => {
+      nodes.forEach((node, i) => positions.set(node.id, {
+        x: width * ((i % columns) + 1) / (Math.min(columns, nodes.length) + 1),
+        y: y + Math.floor(i / columns) * spacing,
+      }))
+      if (nodes.length) y += Math.ceil(nodes.length / columns) * spacing + 100
+    }
+    grid(standaloneSpokes)
+    grid(hubSpokes)
+    grid(topology.hubs, 260)
+    grid(locations)
+    grid(visibleSites)
+    height = Math.max(height, y)
+  } else if (mode === 'layered') {
     const row = (nodes: { id: string }[], y: number) => nodes.forEach((node, i) => positions.set(node.id, { x: width * (i + 1) / (nodes.length + 1), y }))
     if (standaloneSpokes.length) {
       row(standaloneSpokes, 65)

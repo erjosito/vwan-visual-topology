@@ -2863,7 +2863,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
               setContextMenu(null)
               setGuidanceRevision((revision) => revision + 1)
-              if (cue.action === 'packet-probe.open') {
+              if (cue.action === 'connection.configure') {
+                setSelected(cue.params.kind === 'er-link' ? { kind: 'er-link', linkId: cue.params.connectionId }
+                  : { kind: 'vpn-connection', connectionId: cue.params.connectionId })
+                setActiveTab('editor')
+              } else if (cue.action === 'site-routes.open') {
+                inspectRoutes({ kind: 'site', siteId: cue.params.siteId })
+              } else if (cue.action === 'packet-probe.open') {
                 openDetail(cue.params.vnetId)
               } else if (cue.action === 'hub.configure') {
                 setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })
@@ -3610,7 +3616,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {inspectedControlRib && (
                   <div className="aznet-card" data-testid="aznet-control-rib-card"
                     data-learning-anchor={routeSelection.kind === 'vwan-hub' && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
-                      ? guidanceAnchor('hub-effective-table', routeSelection.hubId, hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE) : undefined}>
+                      ? guidanceAnchor('hub-effective-table', routeSelection.hubId, hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
+                      : routeSelection.kind === 'site' ? guidanceAnchor('site-effective-table', routeSelection.siteId) : undefined}>
                     <h3>{inspectedControlRib.title}</h3>
                     {routeSelection.kind === 'vwan-hub' && (() => {
                       const hub = topology.vwanHubs.find((hub) => hub.id === routeSelection.hubId)
@@ -3625,6 +3632,17 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       </select></label>{!coverage?.complete && <p role="status">{t('Routing not assessed')}: {coverage?.limitations.join(' ')}</p>}</>
                     })()}
                     <Suspense fallback={null}><BgpRouteTable key={JSON.stringify(routeSelection)} entries={inspectedControlRib.entries} available={inspectedControlRib.available} /></Suspense>
+                    {workspaceSession?.learningView?.open && !workspaceSession.learningState?.reviewId
+                      && workspaceSession.learningState?.observation && inspectedControlRib.available
+                      && ((routeSelection.kind === 'site' && routeSelection.siteId === workspaceSession.learningState.observation.siteId)
+                        || (routeSelection.kind === 'vwan-hub' && routeSelection.hubId === workspaceSession.learningState.observation.hubId
+                          && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
+                          && (hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
+                            === workspaceSession.learningState.observation.tableId))
+                      && <p><button type="button" data-testid="learning-record-inspection"
+                        onClick={() => workspaceSession.reportLearningObservation?.(workspaceSession.learningState!.observation!)}>
+                        {language === 'ja' ? '確認を記録' : 'Record inspection'}: {workspaceSession.learningState.observation.prefix}
+                      </button></p>}
                   </div>
                 )}
               </>

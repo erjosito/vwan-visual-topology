@@ -5,6 +5,7 @@ import type { AzNetTopology } from './model'
 import { PeerRouteAttributes } from './RouteMapsPanel'
 import { VpnNatConnectionEditor } from '../VpnNatEditor'
 import { saveManagedVnra, vnraSubnetName } from './vnra-authoring'
+import { guidanceAnchor } from '../learning/guidance'
 
 type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => void }
 const prefixes = (text: string) => {
@@ -22,7 +23,8 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
   const [bgp, setBgp] = useState(vpn?.bgpEnabled ?? true)
   if (!connection) return null
   const hub = connection.targetKind === 'vwan-hub'
-  return <><section className="aznet-card" data-testid="aznet-hybrid-connection-editor">
+  return <><section className="aznet-card" data-testid="aznet-hybrid-connection-editor"
+    data-learning-anchor={guidanceAnchor('connection-editor', vpn ? 'vpn-connection' : 'er-link', connectionId)}>
     <h3>{t('Hybrid connection routing')}</h3>
     <p className="muted">{connection.id}</p>
     <form onSubmit={(event) => {

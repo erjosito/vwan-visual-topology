@@ -11,6 +11,8 @@ import { PlatformJobs } from './jobs'
 import type { PlatformRequest } from '../src/platform/contract'
 import { engineVersion } from '../src/platform/contract'
 import { resolve } from 'node:path'
+import { largeVwanCapture } from '../tests/large-vwan-fixture'
+import { importAzureCapture } from '../src/azure-import'
 
 const require = createRequire(import.meta.url)
 const compiled = require('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
@@ -34,6 +36,24 @@ describe('browser-free platform contract', () => {
     expect(advertisement.vnetCommunityOrigin).toEqual({ vnetId: topology.vnets[1].id, ...topology.vnets[1].bgpCommunities })
     expect(result.document?.topology).toEqual(topology)
   })
+  it('admits large imported WANs without bypassing isolated headless output budgets', async () => {
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      const topology = importAzureCapture(largeVwanCapture(200))
+      const input = { contractVersion: 1, operation: 'validate', document: { mode: 'vwan', topology } }
+      const validated = await jobs.run(input)
+      expect(validated.status).toBe('complete')
+      expect(validated.document).toEqual(input.document)
+      expect(compiled.executePlatform(input)).toEqual(executePlatform(input))
+      const oversized = await jobs.run({ ...input, operation: 'simulate' })
+      expect(oversized).toMatchObject({ status: 'not assessed', errors: [{ code: 'OUTPUT_LIMIT' }] })
+      expect(oversized.simulation).toBeUndefined()
+      const smaller = importAzureCapture(largeVwanCapture(61, 1, 1))
+      const result = await jobs.run({ ...input, operation: 'simulate', document: { mode: 'vwan', topology: smaller } })
+      expect(result.status).toBe('complete')
+      expect(result.simulation).toEqual(simulate(smaller))
+    } finally { jobs.close() }
+  }, 15000)
   it('counts original NSG and Load Balancer entities against the existing platform node bound', () => {
     const owner = { kind: 'spoke', id: 'network' }
     const topology = { version: 1, name: 'Bounded services', hubs: [], sites: [], connections: [], siteLinks: [],

@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([ValidateSet('All', 'Metadata', 'Contexts')][string]$Suite = 'All')
+param([ValidateSet('All', 'Metadata', 'Contexts', 'Bounds')][string]$Suite = 'All')
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot
 $output = Join-Path $repo 'test-artifacts' 'azure-files' 'collector'
@@ -97,6 +97,17 @@ if ($path -like '*/hubRouteTables') {
     if ($env:MOCK_AZ_MODE -eq 'missing-table-routes') { $data.value[0].properties.Remove('routes') }
 }
 if ($path -like '*/hubVirtualNetworkConnections') {
+    if ($env:MOCK_VNET_COUNT) {
+        $template = $data.value[0]
+        $total = [int]$env:MOCK_VNET_COUNT
+        $hubIndex = if ($path -like '*/west2/*') { 1 } else { 0 }
+        $data.value = @(for ($i = $hubIndex; $i -lt $total; $i += 2) {
+            $connection = $template | ConvertTo-Json -Depth 20 | ConvertFrom-Json -AsHashtable
+            $connection.name = "synthetic-$i"
+            $connection.properties.remoteVirtualNetwork.id = "/subscriptions/22222222-2222-2222-2222-222222222222/resourceGroups/network/providers/Microsoft.Network/virtualNetworks/synthetic-$i"
+            $connection
+        })
+    }
     foreach ($connection in $data.value) {
         $connection.id = "$path/$($connection.name)"
         if ($env:MOCK_EFFECTIVE_MODE -ne 'null-security') { $connection.properties.enableInternetSecurity = $env:MOCK_EFFECTIVE_MODE -ne 'false-security' }
@@ -113,6 +124,10 @@ if ($path -like '*/hubVirtualNetworkConnections') {
     }
 }
 if ($path -like '*/providers/Microsoft.Network/virtualHubs' -and $uri -notlike '*skipToken=*') {
+    if ($env:MOCK_VNET_COUNT) {
+        $first = $data.value[0]
+        $data.value += @{ id = "$($first.id)2"; name = 'Synthetic second hub'; location = $first.location; properties = $first.properties }
+    }
     if ($env:MOCK_METADATA_MODE -and $env:MOCK_METADATA_MODE -notin @('failure', 'missing-fields')) { $data = @{ value = @() } }
     if ($env:MOCK_EFFECTIVE_MODE -eq 'total-bound') {
         $first = $data.value[0]
@@ -151,6 +166,48 @@ try {
     Set-Content -LiteralPath $env:MOCK_METADATA_LOG -Value ''
     Set-Content -LiteralPath $env:MOCK_EFFECTIVE_LOG -Value ''
     Set-Content -LiteralPath $env:MOCK_AZ_LOG -Value ''
+    if ($Suite -in @('All', 'Bounds')) {
+        Assert ((Get-FileHash $collector).Hash -eq (Get-FileHash (Join-Path $repo 'public' 'scripts' 'collect-azure-vwan.ps1')).Hash) 'Published and source collectors must match.'
+        $tokens = $null
+        $parseErrors = $null
+        $ast = [Management.Automation.Language.Parser]::ParseFile($collector, [ref]$tokens, [ref]$parseErrors)
+        $workBudget = $ast.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Assert-VnetWorkBudget' }, $true)
+        . ([scriptblock]::Create($workBudget.Extent.Text))
+        foreach ($case in @(@(60, 30, $true), @(200, 5, $true), @(61, 17, $false))) {
+            $connections = @(for ($i = 0; $i -lt $case[0]; $i++) {
+                @{ addressPrefixes = @(for ($p = 0; $p -lt $case[1]; $p++) { "10.$i.$p.0/24" }) }
+            })
+            $accepted = $true
+            try { Assert-VnetWorkBudget @(@{ connections = $connections }) }
+            catch { $accepted = $false; Assert ($_.Exception.Message -like '*1000 total spoke IPv4 prefixes*') 'Prefix work bound must fail explicitly.' }
+            Assert ($accepted -eq $case[2]) 'Preserve the old 60-spoke envelope and enforce the qualified large-workload prefix budget.'
+        }
+        foreach ($count in @(61, 200, 201)) {
+            $env:MOCK_VNET_COUNT = "$count"
+            $env:MOCK_AZ_MODE = 'normal'
+            $file = Join-Path $output "synthetic-$count.json"
+            if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
+            $result = & $pwshPath -NoLogo -NoProfile -NonInteractive -File $collector -VirtualWanId $wanId -OutputFile $file 2>&1 | Out-String
+            $code = $LASTEXITCODE
+            if ($count -gt 200) {
+                Assert ($code -ne 0 -and $result -like '*200 total VNet connections*') 'Aggregate reference admission must reject the 201st connection across hubs.'
+                Assert (!(Test-Path -LiteralPath $file)) 'Over-budget captures must not be written.'
+            } else {
+                Assert ($code -eq 0) "Bounded synthetic collector failed: $result"
+                $capture = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+                Assert ($capture.hubs.Count -eq 2) 'Synthetic bound case must exercise two hubs in one WAN.'
+                $references = @($capture.hubs | ForEach-Object { $_.connections })
+                Assert ($references.Count -eq $count) 'References must not be silently truncated at 60 or per hub.'
+                Assert (!$capture.complete -and @($references | Where-Object { $null -ne $_.addressPrefixes }).Count -eq 0) 'Unread cross-subscription references still consume the aggregate budget.'
+                foreach ($hub in $capture.hubs) {
+                    Assert ($hub.unsupportedFeatures.Count -le 100 -and $hub.unsupportedFeatures.Count -eq @($hub.unsupportedFeatures | Select-Object -Unique).Count) 'Repeated per-VNet limitations must not overflow capture warning admission.'
+                }
+            }
+            Write-Host "Verified synthetic $count-reference collector bound."
+        }
+        Remove-Item Env:MOCK_VNET_COUNT
+        if ($Suite -eq 'Bounds') { return }
+    }
     $configModes = if ($Suite -eq 'Metadata') { @('normal') } elseif ($Suite -eq 'Contexts') { @('missing-table-labels', 'missing-table-routes') } else { @('normal', 'static-routes', 'partial', 'cross', 'vnet-only', 'basic', 'bad-next') }
     foreach ($mode in $configModes) {
         $env:MOCK_AZ_MODE = if ($mode -eq 'cross') { 'partial' } else { $mode }
@@ -349,5 +406,5 @@ try {
     Write-Host "Collector $Suite integration checks passed, including metadata scope/privacy, 429, missing extension and bounded subprocess timeout."
 } finally {
     $env:PATH = $originalPath
-    Remove-Item Env:MOCK_AZ_MODE, Env:MOCK_AZ_LOG, Env:MOCK_BASE_FIXTURE, Env:MOCK_EFFECTIVE_MODE, Env:MOCK_EFFECTIVE_LOG, Env:MOCK_METADATA_MODE, Env:MOCK_METADATA_LOG -ErrorAction SilentlyContinue
+    Remove-Item Env:MOCK_AZ_MODE, Env:MOCK_AZ_LOG, Env:MOCK_BASE_FIXTURE, Env:MOCK_EFFECTIVE_MODE, Env:MOCK_EFFECTIVE_LOG, Env:MOCK_METADATA_MODE, Env:MOCK_METADATA_LOG, Env:MOCK_VNET_COUNT -ErrorAction SilentlyContinue
 }

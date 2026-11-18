@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 
-export const scorecardVersion = 10
+export const scorecardVersion = 11
 // Keep document-derived contract fixtures distinct from regression and live Azure evidence.
 export const modelContractPlan = {
   unit: [{ id: 'static-firewall-model-contracts', label: 'Document-derived static Firewall model-contract conformance',
@@ -11,7 +11,7 @@ export const modelContractPlan = {
 export const unitPlan = [
   { id: 'routing-packet-regressions', label: 'Routing/packet regression conformance', files: [
     'src/routing.test.ts', 'src/paths.test.ts', 'src/vpn-routing.test.ts', 'src/vpn-nat.test.ts', 'src/hub-routing.test.ts',
-    'src/azure-net/engine.test.ts', 'src/packet-egress.test.ts', 'src/packet-ingress.test.ts',
+    'src/azure-net/engine.test.ts', 'src/azure-net/mixed-capabilities.test.ts', 'src/packet-egress.test.ts', 'src/packet-ingress.test.ts',
     'src/packet-load-balancer.test.ts', 'src/ha-ports.test.ts', 'src/packet-security.test.ts', 'src/azure-comparison.test.ts',
   ] },
   { id: 'requirement-grading-regressions', label: 'Requirement grading regression conformance', files: [
