@@ -5,13 +5,16 @@ import { createRequire } from 'node:module'
 import { resolve, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
-const artifacts = resolve('test-artifacts', 'desktop', `detail-${randomUUID()}`)
+const executablePath = process.env.DESKTOP_EXECUTABLE
+const flavor = executablePath ? 'packaged' : 'development'
+const artifacts = resolve('test-artifacts', 'desktop', `${flavor}-detail-${randomUUID()}`)
 await mkdir(artifacts, { recursive: true })
 const fixture = join(artifacts, 'network-detail.cjs')
 await build({ entryPoints: [resolve('tests', 'fixtures', 'network-detail.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: fixture })
 const { graphicalDetailTopology } = createRequire(import.meta.url)(fixture)
 const application = await electron.launch({
-  args: [resolve('platform-dist', 'electron', 'main.cjs'), `--user-data-dir=${join(artifacts, 'profile')}`],
+  ...(executablePath ? { executablePath } : {}),
+  args: [...(executablePath ? [] : [resolve('platform-dist', 'electron', 'main.cjs')]), `--user-data-dir=${join(artifacts, 'profile')}`],
 })
 const results = []
 try {
@@ -71,8 +74,8 @@ try {
     results.push({ mode, preview: true, attachments: 145, originalIdentity: true, editUndoRedo: true, keyboardFocus: true })
   }
   expect(errors).toEqual([])
-  await writeFile(join(artifacts, 'results.json'), `${JSON.stringify({ results, errors }, null, 2)}\n`)
-  console.log(JSON.stringify({ artifacts, results }))
+  await writeFile(join(artifacts, 'results.json'), `${JSON.stringify({ flavor, results, errors }, null, 2)}\n`)
+  console.log(JSON.stringify({ artifacts, flavor, results }))
 } finally {
   await application.close()
 }
