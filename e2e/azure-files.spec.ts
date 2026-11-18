@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import type { Download, Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 import type { Topology } from '../src/model'
+import { largeVwanCapture } from '../tests/large-vwan-fixture'
 
 const base = '/subscriptions/11111111-1111-1111-1111-111111111111/resourceGroups/network/providers/Microsoft.Network'
 function capture() {
@@ -85,6 +86,46 @@ test('partial imports disclose omissions, require renewed acknowledgement, and r
   await upload(page, { ...capture(), warnings: ['x'.repeat(2_000_000)] })
   await expect(page.getByRole('alert')).toContainText('2 MB')
   expect(await saved(page)).toEqual(original)
+})
+
+test('synthetic 200-VNet capture remains selectable, bounded and lossless through both views and native reload', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', (error) => errors.push(error.message))
+  await page.goto('/?mode=vwan')
+  await upload(page, largeVwanCapture(200, 4, 5))
+  await expect(panel(page).getByText(/4 hubs · 200 IPv4 spokes/)).toBeVisible()
+  await panel(page).getByLabel('I understand this is a structure-only import, not verified Azure routing.').check()
+  await panel(page).getByRole('button', { name: 'Replace workspace with Azure capture' }).click()
+  await expect(page.getByLabel('Topology name')).toHaveValue('Synthetic large WAN')
+  const svg = page.locator('svg.diagram')
+  await expect(svg.locator('.spoke-node')).toHaveCount(200)
+  await expect(svg.locator('.hub-node')).toHaveCount(4)
+  for (const mode of ['layered', 'constellation']) {
+    await page.getByLabel('Visualization mode', { exact: true }).selectOption(mode)
+    const positions = await svg.locator('[data-node-id]').evaluateAll((nodes) => nodes.map((node) => {
+      const { e: x, f: y } = (node as SVGGraphicsElement).transform.baseVal.consolidate()!.matrix
+      return { x, y }
+    }))
+    expect(positions).toHaveLength(204)
+    expect(positions.every(({ x, y }) => Number.isFinite(x) && Number.isFinite(y) && x >= 120 && y >= 65 && x < 20000 && y < 20000)).toBe(true)
+    expect(new Set(positions.map(({ x, y }) => `${x},${y}`)).size).toBe(204)
+    const last = page.getByLabel('Select spoke Synthetic VNet 199', { exact: true })
+    await last.focus()
+    await page.keyboard.press('Enter')
+    await expect(last).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('Escape')
+  }
+  const before = await saved(page)
+  expect(before.spokes).toHaveLength(200)
+  expect(before.azureImport?.spokes).toHaveLength(200)
+  const download = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+  const native = JSON.parse((await contents(await download)).toString()) as Topology
+  await upload(page, native)
+  await page.reload()
+  await expect(svg.locator('.spoke-node')).toHaveCount(200)
+  expect(await saved(page)).toEqual(native)
+  expect(errors).toEqual([])
 })
 
 test('Bicep download uses explicit reviewed infrastructure settings and invalidates a stale preview', async ({ page }) => {

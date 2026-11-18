@@ -96,6 +96,76 @@ for (const mode of ['hub-spoke', 'full']) {
   }
 }
 
+for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja']) {
+  for (const configured of [false, true]) {
+    test(`${mode}: ${language} subnet inspector preserves ${configured ? 'configured policies and unknown warnings' : 'simple defaults and deferred drafts'}`, async ({ page }, info) => {
+      await page.setViewportSize({ width: configured || language === 'ja' ? 390 : 1440, height: 1000 })
+      await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
+      const topology = createEmptyAzNetTopology()
+      topology.inventory = { workloads: [], nics: [], publicIps: [] }
+      topology.vnets = [{ id: 'hub', name: 'Subnet host', region: 'westeurope', role: 'hub', prefixes: ['10.0.0.0/16'],
+        gateways: [], appliances: [], subnets: [{ id: 'app', name: 'Application', prefix: '10.0.1.0/24', ...(configured ? {
+          defaultOutboundAccess: false, internetEgressStatus: 'unknown' as const, privateEndpointNetworkPolicies: 'Enabled' as const,
+          routeTableId: 'existing', privateEndpoints: [{ id: 'pe', name: 'Existing service', ipAddress: '10.0.1.10', serviceName: 'service.example.test' }],
+        } : {}) }] }]
+      if (configured) topology.udrTables = [{ id: 'existing', name: 'Existing table', disableBgpRoutePropagation: true, routes: [] }]
+      await openVnetConfiguration(page, mode, topology)
+      const row = page.getByTestId('aznet-subnet-row-app')
+      const section = row.locator('.presentation-inspector-section')
+      const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+      await expect(row.getByTestId('aznet-subnet-name-app')).toBeVisible()
+      await expect(row.getByTestId('aznet-subnet-prefix-app')).toBeVisible()
+      if (configured) {
+        await expect(section).toHaveAttribute('open')
+        await expect(row.getByTestId('aznet-subnet-outbound-app')).not.toBeChecked()
+        await expect(row.getByTestId('aznet-subnet-pe-policy-app')).toHaveValue('Enabled')
+        await expect(row.getByRole('textbox', { name: language === 'ja' ? 'プライベート エンドポイント名 Existing service' : 'Private endpoint name Existing service', exact: true })).toHaveValue('Existing service')
+        expect((await new AxeBuilder({ page }).include('[data-testid="aznet-subnet-row-app"]').analyze()).violations).toEqual([])
+        await section.locator('summary').focus()
+        await page.keyboard.press('Enter')
+        await expect(section).not.toHaveAttribute('open')
+        await expect(row.getByTestId('aznet-subnet-outbound-app')).not.toBeVisible()
+        await expect(row.getByTestId('aznet-subnet-rt-select-app')).toHaveValue('existing')
+        await expect(row.getByRole('status')).toContainText(language === 'ja' ? '評価されていません' : 'Internet access is not assessed')
+        await page.getByTestId('ui-preview-toggle').click()
+        await expect(row.getByTestId('aznet-subnet-outbound-app')).toBeVisible()
+        await expect(row.getByTestId('aznet-subnet-pe-policy-app')).toHaveValue('Enabled')
+        await page.getByTestId('ui-preview-toggle').click()
+      } else {
+        await expect(section).not.toHaveAttribute('open')
+        await expect(section.locator('summary')).toContainText(language === 'ja' ? '未指定' : 'Not specified')
+        const groupedCount = await row.locator('button:visible, input:visible, select:visible').count()
+        const prefix = row.getByTestId('aznet-subnet-prefix-app')
+        await prefix.fill('10.0.2.0/24')
+        await page.getByTestId('ui-preview-toggle').dispatchEvent('click')
+        await expect(prefix).toHaveValue('10.0.2.0/24')
+        const legacyCount = await row.locator('button:visible, input:visible, select:visible').count()
+        expect(groupedCount).toBeLessThan(legacyCount)
+        await info.attach('subnet-inspector-control-counts', { body: JSON.stringify({ mode, language, groupedCount, legacyCount }), contentType: 'application/json' })
+        expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+        await page.getByTestId('ui-preview-toggle').dispatchEvent('click')
+        await expect(prefix).toHaveValue('10.0.2.0/24')
+        await prefix.press('Tab')
+        await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].prefix)).toBe('10.0.2.0/24')
+        await page.getByRole('button', { name: /Undo/ }).click()
+        await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+        await section.locator('summary').focus()
+        await page.keyboard.press('Enter')
+        await row.getByTestId('aznet-subnet-pe-policy-app').selectOption('RouteTableEnabled')
+        await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].privateEndpointNetworkPolicies)).toBe('RouteTableEnabled')
+        await page.getByRole('button', { name: /Undo/ }).click()
+        await row.getByTestId('aznet-subnet-add-pe-app').click()
+        await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].privateEndpoints.length)).toBe(1)
+        expect((await new AxeBuilder({ page }).include('[data-testid="aznet-subnet-row-app"]').analyze()).violations).toEqual([])
+        await page.getByRole('button', { name: /Undo/ }).click()
+      }
+      await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await info.attach('subnet-inspector', { body: await page.screenshot(), contentType: 'image/png' })
+    })
+  }
+}
+
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   for (const width of [390, 1440]) {
     test(`${mode}: account and belt stay visible at the top right at ${width}px`, async ({ page }) => {

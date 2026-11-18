@@ -1,0 +1,274 @@
+{
+  "viewport": {
+    "width": 1600,
+    "height": 1100
+  },
+  "sourceBase": "c652c18",
+  "profile": "dev-only native renderer; single scripted switch+fit+two-frame sample per cell; not a production benchmark",
+  "observations": [
+    {
+      "count": 8,
+      "theme": "light",
+      "observations": [
+        {
+          "variant": "saved",
+          "settleMs": 1101,
+          "labelOverlapPairs": 28,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 85,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "-240 -157.31779661016958 3765 2520.635593220339"
+        },
+        {
+          "variant": "circular",
+          "settleMs": 1446,
+          "labelOverlapPairs": 8,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 85,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "-312.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "geographic",
+          "settleMs": 1708,
+          "labelOverlapPairs": 7,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 83,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "-312.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "lanes",
+          "settleMs": 1919,
+          "labelOverlapPairs": 48,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 4,
+          "medianTextHeight": 5,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "40 -496.5127118644068 3195 2139.0254237288136"
+        },
+        {
+          "variant": "focus",
+          "settleMs": 1196,
+          "labelOverlapPairs": 28,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 85,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 42,
+          "markerCount": 40,
+          "viewBox": "-240 -157.31779661016958 3765 2520.635593220339"
+        }
+      ]
+    },
+    {
+      "count": 8,
+      "theme": "dark",
+      "observations": [
+        {
+          "variant": "saved",
+          "settleMs": 1031,
+          "labelOverlapPairs": 28,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 85,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "-240 -157.31779661016958 3765 2520.635593220339"
+        },
+        {
+          "variant": "circular",
+          "settleMs": 1457,
+          "labelOverlapPairs": 8,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 85,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "-312.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "geographic",
+          "settleMs": 1715,
+          "labelOverlapPairs": 7,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 83,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "-312.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "lanes",
+          "settleMs": 1233,
+          "labelOverlapPairs": 48,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 4,
+          "medianTextHeight": 5,
+          "edgeCount": 52,
+          "dimmedCount": 0,
+          "markerCount": 40,
+          "viewBox": "40 -496.5127118644068 3195 2139.0254237288136"
+        },
+        {
+          "variant": "focus",
+          "settleMs": 1520,
+          "labelOverlapPairs": 28,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 85,
+          "medianTextHeight": 4,
+          "edgeCount": 52,
+          "dimmedCount": 42,
+          "markerCount": 40,
+          "viewBox": "-240 -157.31779661016958 3765 2520.635593220339"
+        }
+      ]
+    },
+    {
+      "count": 2,
+      "theme": "light",
+      "observations": [
+        {
+          "variant": "saved",
+          "settleMs": 545,
+          "labelOverlapPairs": 1,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-199.13291139240505 -140 3713.26582278481 2486"
+        },
+        {
+          "variant": "circular",
+          "settleMs": 690,
+          "labelOverlapPairs": 0,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-297.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "geographic",
+          "settleMs": 557,
+          "labelOverlapPairs": 0,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-297.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "lanes",
+          "settleMs": 528,
+          "labelOverlapPairs": 0,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 9,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-403.4367088607595 10 1681.873417721519 1126"
+        },
+        {
+          "variant": "focus",
+          "settleMs": 487,
+          "labelOverlapPairs": 1,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 3,
+          "markerCount": 10,
+          "viewBox": "-199.13291139240505 -140 3713.26582278481 2486"
+        }
+      ]
+    },
+    {
+      "count": 2,
+      "theme": "dark",
+      "observations": [
+        {
+          "variant": "saved",
+          "settleMs": 991,
+          "labelOverlapPairs": 1,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-199.13291139240505 -140 3713.26582278481 2486"
+        },
+        {
+          "variant": "circular",
+          "settleMs": 755,
+          "labelOverlapPairs": 0,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-297.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "geographic",
+          "settleMs": 673,
+          "labelOverlapPairs": 0,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-297.8670886075947 10 4310.734177215189 2885.9999999999995"
+        },
+        {
+          "variant": "lanes",
+          "settleMs": 720,
+          "labelOverlapPairs": 0,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 9,
+          "edgeCount": 7,
+          "dimmedCount": 0,
+          "markerCount": 10,
+          "viewBox": "-403.4367088607595 10 1681.873417721519 1126"
+        },
+        {
+          "variant": "focus",
+          "settleMs": 1055,
+          "labelOverlapPairs": 1,
+          "markerOverlapPairs": 0,
+          "approximateCrossingEdgePairs": 0,
+          "medianTextHeight": 4,
+          "edgeCount": 7,
+          "dimmedCount": 3,
+          "markerCount": 10,
+          "viewBox": "-199.13291139240505 -140 3713.26582278481 2486"
+        }
+      ]
+    }
+  ]
+}

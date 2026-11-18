@@ -15,6 +15,7 @@
     "test": "vitest run",
     "pretest": "npm run build:platform",
     "benchmark:diagnostics": "node scripts/benchmark-diagnostics.mjs",
+    "benchmark:import": "npm run build:platform && node scripts/benchmark-vwan-import.mjs",
     "evaluate": "node scripts/evaluate-quality.mjs",
     "test:evaluation": "node --test scripts/quality-scorecard.test.mjs scripts/accessibility-scorecard.test.mjs",
     "evaluate:accessibility": "node scripts/evaluate-quality.mjs --accessibility-only",
