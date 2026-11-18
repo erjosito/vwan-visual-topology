@@ -44,6 +44,15 @@ async function probeHa(page: Page, taskId: string, language: 'en' | 'ja', symmet
 }
 async function repair(page: Page, id: string, language: 'en' | 'ja') {
   const taskId = `${id}.repair`
+  if (id === 'multihub-labels') {
+    const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+    await show(page, taskId, `${id}.west-guide`, language)
+    await expect(learningAnchor(page, 'hub-editor', 'west-hub')).toBeVisible()
+    expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
+    const labels = page.getByTestId('aznet-hub-tables-editor').getByLabel(`${translate(language, 'Table labels')} west-workloads`, { exact: true })
+    await labels.fill('shared')
+    await labels.press('Tab')
+  }
   if (id === 'private-link') await createLessonPeering(page, language)
   if (id === 'inspection-bypass') {
     for (const [tableId, prefix] of [['application-policy', '10.22.0.0/16'], ['partner-policy', '10.21.0.0/16']]) {
@@ -132,7 +141,7 @@ for (const language of ['en', 'ja'] as const) {
         await expect(panel.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
         await configureHybrid(page, task.id, language)
       }
-      if (check.kind === 'requirements.satisfied') {
+      if (check.kind === 'requirements.satisfied' || check.kind === 'hub-associations.configured') {
         await panel.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
         await expect(panel.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
         await repair(page, lesson.id, language)
@@ -183,6 +192,44 @@ test('default mobile workspace reveals the scoped HA packet form without changin
   await probeHa(page, 'ha-return-path.diagnose', 'en', 'asymmetric')
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'ha-return-path.diagnose')
+})
+
+test('default mobile table guidance preserves practice and requires each exact multi-hub observation', async ({ page }) => {
+  const tasks = orderedTasks(scenarioBundle)
+  const completions = tasks.slice(0, tasks.findIndex(({ task }) => task.id === 'multihub-labels.load'))
+    .map(({ lesson, task }, revision) => ({
+      courseId: scenarioBundle.course.id, contentVersion: scenarioBundle.course.contentVersion, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'earlier-missions', revision, scope: 1, engineVersion: 'earlier',
+      completedAt: '2026-11-18T12:00:00.000Z',
+    }))
+  await page.addInitScript(({ key, completions }) => {
+    localStorage.setItem('aznet-ui-preview:v1', 'true')
+    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+  }, { key: guidedProgressKey, completions })
+  await page.setViewportSize({ width: 390, height: 1000 })
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1825$/)
+  await page.getByTestId('learning-open').click()
+  await loadLearningNetwork(page)
+  await completeLearningTasks(page, 1)
+  const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+  const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+  await show(page, 'multihub-labels.inspect', 'multihub-labels.source-guide', 'en')
+  await expect(learningAnchor(page, 'hub-effective-table', 'west-hub', 'west-workloads')).toBeVisible()
+  await expect(page.getByTestId('learning-record-inspection')).toBeVisible()
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
+  expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+  await page.getByRole('combobox', { name: 'Hub routing table', exact: true }).selectOption('defaultRouteTable')
+  await expect(page.getByTestId('learning-record-inspection')).toHaveCount(0)
+  await completeLearningTasks(page, 1)
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'multihub-labels.compare')
+  await learningSidebar(page).getByRole('button', { name: runnerLabels.check.en, exact: true }).click()
+  await expect(learningSidebar(page).getByRole('button', { name: runnerLabels.continue.en, exact: true })).toBeDisabled()
+  await show(page, 'multihub-labels.compare', 'multihub-labels.return-guide', 'en')
+  await expect(learningAnchor(page, 'hub-effective-table', 'east-hub', 'east-services')).toBeVisible()
+  await expect(page.getByTestId('learning-record-inspection')).toBeVisible()
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
 })
 
 test('default mobile connection guidance never configures the assessed hybrid backup', async ({ page }) => {

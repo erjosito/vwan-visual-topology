@@ -22,6 +22,10 @@ export const courseCheckSchema = z.discriminatedUnion('kind', [
   z.strictObject({ id, kind: z.literal('scenario.loaded'), params: z.strictObject({ scenarioId: id }) }),
   z.strictObject({ id, kind: z.literal('routes.inspected'), params: routeScope }),
   z.strictObject({ id, kind: z.literal('control-routes.inspected'), params: controlRouteScope }),
+  z.strictObject({ id, kind: z.literal('hub-associations.configured'), params: z.strictObject({
+    associations: z.array(z.strictObject({ vnetId: entityId, hubId: entityId, tableId: entityId })).min(1).max(16),
+    requirements: z.array(z.custom<Requirement>()).min(1).max(64),
+  }) }),
   z.strictObject({ id, kind: z.literal('connections.configured'), params: z.strictObject({
     connections: z.array(connectionState).min(1).max(16),
     selectedRoutes: z.array(routeScope.extend({ nextHopResourceId: entityId })).min(1).max(16),

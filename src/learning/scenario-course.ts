@@ -5,6 +5,7 @@ import { scenarioCourse } from './editions'
 import { scenarioTopologies } from './scenario-topologies'
 import { haLessonRequirements } from './ha-scenario'
 import { appendHybridLesson } from './hybrid-course'
+import { appendMultihubLesson } from './multihub-course'
 
 const l = (en: string, ja: string): Localized => ({ en, ja })
 const subnet = (vnetId: string, subnetId = `${vnetId}-work`) => ({ kind: 'subnet' as const, vnetId, subnetId })
@@ -220,3 +221,4 @@ for (const [index, definition] of definitions.entries()) {
     prerequisites: index ? [definitions[index - 1].id] : [], taskOrder: tasks.map((task) => task.id), tasks })
 }
 appendHybridLesson(scenarioBundle)
+appendMultihubLesson(scenarioBundle)

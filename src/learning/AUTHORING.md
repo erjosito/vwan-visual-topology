@@ -4,9 +4,9 @@ The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
 and evidence-gated runner (#180) activate sequential assessed missions.
 The original edition has 40 tasks across six missions and 1,325 points; the
-scenario edition has 50 tasks across nine missions and 1,825 available points.
+scenario edition has 58 tasks across ten missions and 2,075 available points.
 Its first eight missions retain the 1,575-point black-belt threshold and
-mastery checkpoints; the hybrid extension adds practice without demotion.
+mastery checkpoints; the hybrid and multi-hub extensions add practice without demotion.
 The root owns the runner across editor switches and pause/resume. A bounded
 browser-local ledger (#183) restores compatible completions after reload and
 derives first-earned points, checkpoint-gated belts and the header status.
@@ -51,7 +51,7 @@ Normal saved designs remain protected. This is an explicit beta exception to the
 published-threshold policy above, not a general migration policy.
 
 `editions.ts` is the lightweight edition catalog. Fresh learners start
-`azure-routing-scenarios` version 3. Historical original-course completions
+`azure-routing-scenarios` version 4. Historical original-course completions
 retain the original edition unless the learner explicitly opts in through
 **Curriculum editions** or header status details. A retained original practice
 canvas also retains its edition when no enrollment/history selects otherwise.
@@ -107,6 +107,7 @@ return, recovery and same-session history behavior.
 | `scenario-course.ts` | Localized scenario objectives, balanced diagnostic choices, requirements and native guidance |
 | `scenario-topologies.ts` | Independent original scenario-edition starter documents |
 | `hybrid-scenario.ts`, `hybrid-course.ts` | Original ER/VPN fixture and the appended hybrid incident |
+| `multihub-scenario.ts`, `multihub-course.ts` | Original two-hub fixture and destination-label incident |
 | `scenario-course.test.ts` | Actual-engine starter failures, valid repairs, preserved witnesses and independent faults |
 | `course-contract.ts` | A genuinely new reusable task/check/action shape |
 | `course-validation.ts` | Validation for a new shape/scope, not individual lesson IDs |
@@ -142,6 +143,7 @@ native reveal adapter and anchor, never a lesson-specific sidebar branch.
 | Tiered incident | 250 | Indirect spoke with two independent faults; preserve the existing application conversation |
 | HA return path | 250 | Tuple-preserving floating HA-ports steering, independently routed return, original backend and Operations witness |
 | Hybrid preference | 250 | Equal-prefix ER preference, VPN specificity, declared ER withdrawal and independent branch return |
+| Multi-hub labels | 250 | Destination-label import, independently scoped source/return tables and connected-tenant isolation |
 
 Each mission is linear: explicitly load, inspect an exact starting scope,
 repair an open networking requirement, inspect the independent return scope,
@@ -154,6 +156,9 @@ points. Its six tasks award 5, 5, 25, 190, 5 and 20 points respectively.
 The nine-task hybrid extension awards 5, 5, 65, 10, 25, 80, 10, 10 and 40
 points. Existing thresholds, checkpoint IDs and first-earned awards are unchanged;
 its new awards do not grant earlier tasks automatically.
+The eight-task multi-hub extension awards 5, 10, 10, 25, 150, 10, 10 and 30
+points. It follows hybrid practice without changing black-belt requirements,
+old task/award identities or first-earned points.
 
 Native guidance can reveal VNet configuration (`network.configure`), an
 associated UDR table including an empty one (`route-table.configure` without
@@ -180,6 +185,11 @@ endpoints, asserts selected exact-prefix gateway rows from the shared engine's
 native effective-table evidence, and requires complete shared flow/route
 assessments. It does not infer a transport from delivery or implement another
 route-selection algorithm.
+`hub-associations.configured` retains each declared original enabled VNet
+attachment, its hub and configured associated table, then requires the exact
+complete shared assessment set. It prevents detachment, unknown association or
+an unrelated table's routes from substituting for connected-tenant isolation.
+It does not prescribe propagation edits or compute another routing result.
 The existing exact-route action remains available when a specific row is
 the intended observation. Requirements, not a prescribed edit sequence,
 grade repairs. Preserve positive and isolation witnesses when adding cases.
@@ -190,7 +200,53 @@ vendor overlay behavior, HA health/orchestration, convergence timing or
 session failover. Missing/unknown owners and unsupported providers cannot
 pass. Richer HA, BGP/export policies, subnet-scoped peering lessons and unsupported
 WAN connection controls remain capability-gated follow-up work; these eight
-cases and the hybrid extension do not claim exhaustive coverage of the book or blog.
+cases and the hybrid/multi-hub extensions do not claim exhaustive book/blog coverage.
+
+## Multi-hub routing qualification (#225)
+
+The original `multihub-labels` fixture has two unsecured hubs, different local
+custom-table IDs and four original enabled VNet attachments. West application
+and West Operations use `west-workloads`; East shared service uses
+`east-services`; the connected restricted tenant uses `tenant-only`.
+The starter's West destination label `Shared` differs from the original
+connections' `shared` propagation label. Explicit local table propagation seeds
+the application export, so East already contains the application's return route;
+West lacks the service route. This is intentionally not a union of hub tables.
+
+Current shared engine `2026.11.18.2` qualifies two native alternatives: change
+the West table's label to `shared`, or include its existing `Shared` label in
+the East service connection's propagation. Both retain independent source and
+return routing, West Operations and forbidden initiations in both directions
+between West application and the restricted tenant. Four exact hub-table
+presence/absence goals and a separate Default-table absence goal supplement the
+four original-endpoint flow goals. Original attachment/association checks remain
+separate from those routing outcomes, so removing the tenant is not a repair.
+
+The already-running local MCP uses older engine `2026.11.16.2`: native validation
+completed without errors and all nine repaired-case assertions were satisfied.
+Its complete evidence shows forward `west-workloads` → `east-services` and the
+independently evaluated reverse order, not a route union. It was not rebuilt or
+reconfigured. Current-source regressions additionally qualify the asymmetric
+starter, both repairs, case-sensitive non-match, local-ID/local-only non-fixes,
+independent return loss, broken Operations and tenant leakage.
+Unknown retained policy, remote-only propagation without a local seed and
+secured/custom-table combinations remain **Not assessed**, including isolation.
+
+Source: [Microsoft Learn, virtual hub routing](https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing).
+Association chooses a connection's lookup table; labels group propagation
+destinations across hubs, while explicit table IDs are local. Exact label case
+is a qualified simulator boundary here, not a measured live-Azure claim.
+Default is another table, not a union. Empty-label fallback rules are not a
+substitute for the explicit custom-table propagation used in this incident.
+This mission does not grade static connection next hops, indirect BGP/NVA
+export, routing-intent/custom-table composition, timed convergence or live
+firewall enforcement; native support for other bounded cases does not publish
+them as learning tasks automatically. No Azure resources were deployed.
+
+EN/JA closed observations and native edits have automated contract/browser
+qualification, including exact mobile table navigation with no mutation or
+automatic credit. Human answer-blind SME/native-language/novice review and
+learning-gain evidence remain under #160/#219.
 
 ## Hybrid routing qualification (#224)
 

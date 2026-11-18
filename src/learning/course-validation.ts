@@ -31,6 +31,14 @@ function checkScope(
   const params = definition.params
   if ('scenarioId' in params) {
     requireContent(params.scenarioId === scenarioId, `${definition.id} loads a different scenario`)
+  } else if ('associations' in params) {
+    requireContent(document.mode !== 'vwan'
+      && new Set(params.associations.map((scope) => scope.vnetId)).size === params.associations.length
+      && params.associations.every((scope) => document.topology.vnets.some((vnet) =>
+        vnet.id === scope.vnetId && vnet.vwanHubAttachment?.hubId === scope.hubId)
+        && document.topology.vwanHubs.some((hub) => hub.id === scope.hubId
+          && hubRouteTables(hub).some((table) => table.id === scope.tableId))),
+    `${definition.id} needs distinct original VNet attachments and owned hub/table associations`)
   } else if ('connections' in params) {
     requireContent(document.mode !== 'vwan'
       && new Set(params.connections.map((state) => `${state.kind}:${state.connectionId}`)).size === params.connections.length

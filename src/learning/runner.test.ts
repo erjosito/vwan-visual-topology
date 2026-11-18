@@ -58,6 +58,56 @@ function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
 }
 
 describe('evidence-gated course runner', () => {
+  it.each(['disabled', 'different-hub', 'different-table', 'unknown', 'removed'])('retains the original multi-hub tenant attachment and association: %s', async (change) => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'multihub-labels.repair') }, scenarioBundle)
+    h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === 'multihub-labels'))
+    await h.runner.assess()
+    expect(h.state().canContinue).toBe(false)
+    h.edit((document) => {
+      if (document.mode !== 'vwan') document.topology.vwanHubs[0].routeTables![0].labels = ['shared']
+    })
+    await h.runner.assess()
+    expect(h.state().canContinue).toBe(true)
+    h.evaluate.mockClear()
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      const tenant = document.topology.vnets[2]
+      if (change === 'disabled') tenant.vwanHubAttachment!.enabled = false
+      if (change === 'different-hub') tenant.vwanHubAttachment!.hubId = 'west-hub'
+      if (change === 'different-table') tenant.vwanHubAttachment!.hubRouting!.associatedTableId = 'defaultRouteTable'
+      if (change === 'unknown') tenant.vwanHubAttachment!.hubRouting!.status = 'unknown'
+      if (change === 'removed') delete tenant.vwanHubAttachment
+    })
+    expect(h.runner.advance()).toBe(false)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.state().canContinue).toBe(false)
+    expect(h.evaluate).not.toHaveBeenCalled()
+  })
+
+  it('requires exact multi-hub table observations and fresh source/return evidence after task or revision changes', async () => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'multihub-labels.inspect') }, scenarioBundle)
+    h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === 'multihub-labels'))
+    const original = h.state().observation!
+    for (const change of [{ hubId: 'east-hub' }, { tableId: 'defaultRouteTable' }, { prefix: '10.101.0.0/16' }]) {
+      h.runner.observe({ ...original, ...change })
+      await h.runner.assess()
+      expect(h.state().feedback).toBe('inspect')
+    }
+    await h.inspect()
+    expect(h.state().taskId).toBe('multihub-labels.compare')
+    h.runner.observe(original)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    const reply = h.state().observation!
+    h.edit(() => {})
+    h.runner.observe(reply)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    await h.inspect()
+    expect(h.state().taskId).toBe('multihub-labels.diagnose')
+  })
+
   it('requires original hybrid connection state and actual selected gateways in addition to shared outcomes', async () => {
     const h = harness({ completions: beforeTask(scenarioBundle, 'hybrid-preference.repair') }, scenarioBundle)
     h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === 'hybrid-preference'))
