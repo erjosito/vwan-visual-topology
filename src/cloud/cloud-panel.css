@@ -3,16 +3,18 @@
 .cloud-library-tools label { display: grid; gap: 4px; flex: 1 1 180px; }
 .cloud-library-tools input, .cloud-library-tools select { width: 100%; box-sizing: border-box; min-height: 36px; }
 .cloud-library-scroll { max-height: 52dvh; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
-.cloud-library { border-collapse: collapse; width: 100%; font-size: 12px; text-align: left; }
+.cloud-library { border-collapse: collapse; table-layout: fixed; width: 100%; font-size: 12px; text-align: left; }
 .cloud-library caption { text-align: left; padding: 8px; font-weight: 600; }
-.cloud-library :is(th, td) { padding: 8px; vertical-align: top; border-bottom: 1px solid var(--border); }
+.cloud-library :is(th, td) { padding: 8px; vertical-align: top; border-bottom: 1px solid var(--border); white-space: normal; overflow-wrap: anywhere; }
+.cloud-library thead th:first-child { width: 34%; }
+.cloud-library thead th:nth-child(2) { width: 20%; }
 .cloud-library thead th { position: sticky; top: 0; background: var(--surface); z-index: 1; }
 .cloud-library tbody th { width: 34%; font-weight: normal; overflow-wrap: anywhere; }
 .cloud-library h4 { margin: 0 0 4px; font-size: 13px; }
 .cloud-library small { color: var(--text-muted); font-size: 11px; }
 .cloud-library time { white-space: nowrap; }
 .cloud-library-actions { display: flex; flex-wrap: wrap; gap: 4px; }
-.cloud-library-actions button { min-height: 36px; padding: 6px 8px; text-align: left; }
+.cloud-library-actions button { min-height: 36px; max-width: 100%; padding: 6px 8px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 @media (max-width: 640px) {
   .object-dialog.cloud-panel { padding: 12px; }
   .cloud-library thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }

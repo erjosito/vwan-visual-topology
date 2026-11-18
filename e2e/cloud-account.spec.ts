@@ -84,12 +84,24 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     const region = dialog.getByRole('region', { name: text('Cloud saves', 'クラウドの保存'), exact: true })
     await region.scrollIntoViewIfNeeded()
     expect(await dialog.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await region.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await region.locator('button').evaluateAll(buttons => buttons.every(button => {
+      const bounds = button.getBoundingClientRect(), parent = button.closest('[role="region"]')!.getBoundingClientRect()
+      return bounds.left >= parent.left && bounds.right <= parent.right && bounds.height >= 36
+    }))).toBe(true)
     expect((await new AxeBuilder({ page }).include('dialog').analyze()).violations).toEqual([])
     await region.screenshot({ path: info.outputPath(`cloud-library-${language}-${theme}.png`) })
     await search.fill('no matching configuration')
     await expect(rows).toHaveCount(0)
     await search.fill('Duplicate name')
     await expect(rows).toHaveCount(2)
+    if (language === 'en' && theme === 'light') {
+      page.removeAllListeners('dialog')
+      page.once('dialog', dialog => { void dialog.dismiss() })
+      await rows.first().getByRole('button', { name: /^Overwrite cloud save / }).click()
+      expect([...service.data].map(([key, value]) => [key, value.raw])).toEqual([...original])
+      page.on('dialog', dialog => { void dialog.accept() })
+    }
     const deletedKey = `users/${testOwner('alice')}/topologies/${ids[44]}.json`
     await dialog.locator(`[data-cloud-save-id="${ids[44]}"]`).getByRole('button', { name: /^Delete |^削除 / }).click()
     await expect(rows).toHaveCount(1)
