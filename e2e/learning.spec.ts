@@ -5,6 +5,9 @@ import { exampleCourse } from '../src/learning/course-examples'
 import { completeLearningTasks as next, loadLearningNetwork as load } from './learning-helpers'
 import { runnerLabels } from '../src/learning/runner-content'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
+import { orderedTasks } from '../src/learning/runner'
+import { sidebarLabels } from '../src/learning/sidebar-content'
+import { loadLanguage, translate } from '../src/messages'
 
 const sidebar = (page: Page) => page.getByTestId('learning-sidebar')
 const cue = (page: Page) => page.locator('.learning-cue')
@@ -23,6 +26,66 @@ async function open(page: Page) {
   await page.goto('/?mode=full')
   await page.getByTestId('learning-open').click()
   await expect(sidebar(page)).toBeVisible()
+}
+
+for (const language of ['en', 'ja'] as const) for (const taskId of ['wan.verify', 'capstone.verify']) {
+  test(`${language}: exact hub-table guidance for ${taskId} recovers its prefix without editing or granting evidence`, async ({ page }) => {
+    await loadLanguage(language)
+    const tasks = orderedTasks(exampleCourse)
+    const target = tasks.findIndex(({ task }) => task.id === taskId)
+    const { lesson, task } = tasks[target]
+    const document = structuredClone(exampleCourse.scenarios.find((scenario) => scenario.id === lesson.scenarioId)!.document)
+    const guidance = exampleCourse.guidance.find((cue) => task.guidanceIds.includes(cue.id))!
+    if (guidance.action !== 'hub-routes.open') throw new Error('Hub guidance required')
+    const completions = tasks.slice(0, target).map(({ lesson, task }, revision) => ({
+      courseId: exampleCourse.course.id, contentVersion: exampleCourse.course.contentVersion,
+      lessonId: lesson.id, taskId: task.id, assessmentVersion: task.assessmentVersion,
+      checkId: task.checkId, awardId: task.awardId, points: task.points, title: task.title,
+      sessionId: 'prior-tasks', revision, scope: 1, engineVersion: 'earlier', completedAt: '2026-11-18T12:00:00.000Z',
+    }))
+    await page.addInitScript(({ language, completions, document, scenarioId, progressKey, practiceKey }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem(progressKey, JSON.stringify({ version: 1, policyVersion: 1, enrollment: 'azure-networking-preview', completions }))
+      localStorage.setItem(practiceKey, JSON.stringify({ version: 1, courseId: 'azure-networking-preview',
+        scenarioId, returnProvider: 'azure-net', active: true, document }))
+    }, { language, completions, document, scenarioId: lesson.scenarioId, progressKey: guidedProgressKey, practiceKey: practiceWorkspaceKey })
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.goto('/')
+    await page.getByTestId('learning-open').click()
+    await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', taskId)
+    const before = await saved(page)
+    const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+    const show = sidebar(page).getByRole('button', { name: sidebarLabels.show[language], exact: true })
+    const scope = guidance.params
+    await show.click()
+    await expect(show).toBeFocused()
+    const row = anchor(page, 'hub-effective-prefix', scope.hubId, scope.tableId, scope.prefix!)
+    await expect(row.first()).toBeVisible()
+    await expect(cue(page)).toHaveCount(await row.count())
+    await sidebar(page).getByRole('button', { name: sidebarLabels.focus[language], exact: true }).click()
+    await expect(row.first()).toBeFocused()
+    await page.getByRole('button', { name: translate(language, 'Move {0} to left', 'Effective routes'), exact: true }).click()
+    await expect(cue(page).first()).toBeVisible()
+    const tableSelect = page.getByTestId('aznet-control-rib-card').getByRole('combobox')
+    await tableSelect.selectOption('noneRouteTable')
+    await expect(cue(page)).toHaveCount(0)
+    await show.click()
+    await expect(tableSelect).toHaveValue(scope.tableId)
+    const filter = page.getByTestId('aznet-control-rib-card').getByRole('searchbox')
+    await filter.fill('192.0.2.0/24')
+    await expect(row).toHaveCount(0)
+    await show.click()
+    await expect(filter).toHaveValue('')
+    await expect(row.first()).toBeVisible()
+    await page.getByRole('button', { name: translate(language, 'Close {0}', 'Effective routes'), exact: true }).click()
+    await expect(cue(page)).toHaveCount(0)
+    await show.click()
+    await expect(row.first()).toBeVisible()
+    await expect(page.getByTestId('learning-record-inspection')).toHaveCount(0)
+    await expect(sidebar(page).getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
+    expect((await saved(page)).document).toEqual(before.document)
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+  })
 }
 
 test('sidebar is non-modal, has no JSON or picker, confirms loading and pauses without losing its place', async ({ page }) => {

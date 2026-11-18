@@ -3,7 +3,7 @@ import type { PlatformDocument } from '../platform/contract'
 import { hubRouteTables } from '../hub-routing'
 
 export const guidanceAnchor = (...scope: string[]) => JSON.stringify(scope)
-export type GuidanceReason = 'provider' | 'entity' | 'association' | 'peered'
+export type GuidanceReason = 'provider' | 'entity' | 'association' | 'peered' | 'capture'
 export type GuidancePlan = { anchors: string[]; reason?: undefined } | { reason: GuidanceReason; anchors?: undefined }
 
 export function resolveGuidance(document: PlatformDocument, cue: CourseGuidance): GuidancePlan {
@@ -24,8 +24,12 @@ export function resolveGuidance(document: PlatformDocument, cue: CourseGuidance)
     ? { anchors: [guidanceAnchor('network-editor', cue.params.vnetId)] } : { reason: 'entity' }
   if (cue.action === 'hub-routes.open') {
     const hub = topology.vwanHubs.find((hub) => hub.id === cue.params.hubId)
+    if (hub?.routeTablesStatus === 'unknown') return { reason: 'capture' }
     return hub && hubRouteTables(hub).some((table) => table.id === cue.params.tableId)
-      ? { anchors: [guidanceAnchor('hub-effective-table', hub.id, cue.params.tableId)] } : { reason: 'entity' }
+      ? { anchors: [
+        ...(cue.params.prefix ? [guidanceAnchor('hub-effective-prefix', hub.id, cue.params.tableId, cue.params.prefix)] : []),
+        guidanceAnchor('hub-effective-table', hub.id, cue.params.tableId),
+      ] } : { reason: 'entity' }
   }
   if (cue.action === 'peering.command') {
     const { vnetAId, vnetBId } = cue.params

@@ -233,6 +233,8 @@ export const ja: Record<string, string> = {
   'Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.': '関連付けは受信時の参照テーブルを選択し、伝達設定はルートの広告先を制御します。ラベルは大文字と小文字を区別し、None は伝達を抑止します。',
   'Custom tables with routing intent, static hub next hops and mixed ER export of remote or VPN routes are not assessed. Hub route-map editing remains available in the dedicated VWAN workspace.': 'ルーティング インテント付きカスタム テーブル、静的ハブ ネクスト ホップ、リモートまたは VPN ルートの混在 ER 広告は未評価です。ハブ ルート マップの編集は専用 VWAN ワークスペースで利用できます。',
   'Routing not assessed': 'ルーティング未評価',
+  "The requested router is no longer available. No other router's routes are shown.": '指定されたルーターは使用できません。他のルーターのルートは表示しません。',
+  'The requested prefix {0} is absent from this exact table. No other table is substituted.': '指定されたプレフィックス {0} は、この正確なテーブルに存在しません。別のテーブルには置き換えません。',
   'Virtual WAN inter-hub transit': 'Virtual WAN ハブ間中継',
   '{0} workloads, {1} NICs, {2} public IP associations. Open VNet detail for the original entities.': 'ワークロード {0} 件、NIC {1} 件、パブリック IP 関連付け {2} 件。元のオブジェクトは VNet の詳細で確認できます。',
   'ExpressRoute gateway': 'ExpressRoute ゲートウェイ',

@@ -163,6 +163,13 @@ highlights its native packet form, including inside the dialog top layer. It
 does not select endpoints, submit a probe or modify the topology; learners
 choose and run their own tuple and close the detail dialog to resume the lesson.
 These actions locate controls without making repairs.
+Hub-route guidance can name an exact prefix: all matching candidates in the
+original hub/table scope are highlighted, with the exact table as the fallback
+when absent. Repeating guidance reopens that table and clears stale display
+filters; it never substitutes the Firewall onward view or another table.
+Unknown route-table capture gets explicit feedback, not a successful location.
+The original secured-WAN and capstone verification tasks use this navigation
+without changing their assessments, task identities, points or stored awards.
 `connection.configure` reveals the original ER/VPN native editor without saving
 or changing its enabled/BGP flags. `site-routes.open` reveals an original site's
 received routes. `control-routes.inspected` requires an exact site/prefix or
