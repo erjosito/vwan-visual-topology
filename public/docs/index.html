@@ -3,54 +3,29 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="User documentation, step-by-step instructions, and downloadable sample JSON topologies for the Azure Virtual WAN Visual Topology Simulator." />
+  <meta name="description" content="Azure Network Simulator (AzNetSim) guides and samples for VNets, hub-and-spoke, Virtual WAN and hybrid networks, with explainable routing and modeled packet paths." />
   <meta name="theme-color" content="#0b1020" />
-  <link rel="canonical" href="https://vwan-simulator.com/docs/" />
+  <link rel="canonical" href="https://aznet-simulator.com/docs/" />
   <meta property="og:type" content="article" />
-  <meta property="og:site_name" content="Virtual WAN Topology Lab" />
-  <meta property="og:title" content="Virtual WAN Topology Lab — Documentation &amp; Worked Examples" />
-  <meta property="og:description" content="Step-by-step instructions, worked examples, annotated screenshots, and downloadable sample JSON topologies for the Azure Virtual WAN Visual Topology Simulator." />
-  <meta property="og:url" content="https://vwan-simulator.com/docs/" />
-  <meta property="og:image" content="https://vwan-simulator.com/og-image.png" />
+  <meta property="og:site_name" content="Azure Network Simulator (AzNetSim)" />
+  <meta property="og:title" content="Azure Network Simulator (AzNetSim) — Documentation &amp; Worked Examples" />
+  <meta property="og:description" content="Guides and sample topologies for Azure VNets, hub-and-spoke, Virtual WAN and hybrid networks. Explore effective routes, BGP/UDRs and supported packet-flow behavior locally." />
+  <meta property="og:url" content="https://aznet-simulator.com/docs/" />
+  <meta property="og:image" content="https://aznet-simulator.com/og-image.png" />
   <meta property="og:image:type" content="image/png" />
   <meta property="og:image:width" content="1200" />
   <meta property="og:image:height" content="630" />
-  <meta property="og:image:alt" content="Virtual WAN Topology Lab preview showing a 3-hub Azure Virtual WAN topology with spokes, ExpressRoute, VPN, SD-WAN, and route maps." />
+  <meta property="og:image:alt" content="Azure Network Simulator (AzNetSim): illustrative mixed topology with classic hub-and-spoke VNets, a Virtual WAN hub and an on-premises site." />
   <meta property="og:locale" content="en_US" />
   <meta property="og:locale:alternate" content="ja_JP" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Virtual WAN Topology Lab — Documentation &amp; Worked Examples" />
-  <meta name="twitter:description" content="Step-by-step instructions, worked examples, annotated screenshots, and downloadable sample JSON topologies for the Azure Virtual WAN Visual Topology Simulator." />
-  <meta name="twitter:image" content="https://vwan-simulator.com/og-image.png" />
-  <meta name="twitter:image:alt" content="Virtual WAN Topology Lab preview showing a 3-hub Azure Virtual WAN topology with spokes, ExpressRoute, VPN, SD-WAN, and route maps." />
+  <meta name="twitter:title" content="Azure Network Simulator (AzNetSim) — Documentation &amp; Worked Examples" />
+  <meta name="twitter:description" content="Guides and sample topologies for Azure VNets, hub-and-spoke, Virtual WAN and hybrid networks. Explore effective routes, BGP/UDRs and supported packet-flow behavior locally." />
+  <meta name="twitter:image" content="https://aznet-simulator.com/og-image.png" />
+  <meta name="twitter:image:alt" content="Azure Network Simulator (AzNetSim): illustrative mixed topology with classic hub-and-spoke VNets, a Virtual WAN hub and an on-premises site." />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-  <title>Virtual WAN Topology Lab — Documentation &amp; Worked Examples</title>
-  <script>
-    (function () {
-      var storageKey = 'vwan-visual-topology:language:v1';
-      var titles = {
-        en: 'Virtual WAN Topology Lab — Documentation & Worked Examples',
-        ja: 'Virtual WAN トポロジ ラボ — ドキュメントと実践サンプル'
-      };
-      function resolveInitialLanguage() {
-        try {
-          var param = new URLSearchParams(window.location.search).get('lang');
-          if (param === 'ja' || param === 'en') {
-            try { localStorage.setItem(storageKey, param); } catch (e) {}
-            return param;
-          }
-        } catch (e) {}
-        try {
-          return localStorage.getItem(storageKey) === 'ja' ? 'ja' : 'en';
-        } catch (e) {
-          return 'en';
-        }
-      }
-      var initial = resolveInitialLanguage();
-      document.documentElement.lang = initial;
-      document.title = titles[initial];
-    })();
-  </script>
+  <title>Azure Network Simulator (AzNetSim) — Documentation &amp; Worked Examples</title>
+  <script src="./language.js"></script>
   <style>
     :root {
       --bg: #0b1020;
@@ -320,11 +295,11 @@
 </head>
 <body>
   <header class="site-header">
-    <a class="brand" href="https://vwan-simulator.com/">
-      <div class="brand-icon" aria-hidden="true">W</div>
+    <a class="brand" href="/">
+      <div class="brand-icon" aria-hidden="true">Az</div>
       <div>
-        <h1 data-i18n-lang="en">Virtual WAN Topology Lab — Documentation</h1>
-        <h1 data-i18n-lang="ja">Virtual WAN トポロジ ラボ — ドキュメント</h1>
+        <h1 data-i18n-lang="en">Azure Network Simulator (AzNetSim) — Documentation</h1>
+        <h1 data-i18n-lang="ja">Azure ネットワーク シミュレーター (AzNetSim) — ドキュメント</h1>
         <p data-i18n-lang="en">Interactive routing simulator, policy inspector &amp; worked topology examples</p>
         <p data-i18n-lang="ja">インタラクティブなルーティング シミュレーター、ポリシー インスペクター、実践トポロジ サンプル</p>
       </div>
@@ -338,11 +313,11 @@
           <option value="ja" lang="ja">日本語</option>
         </select>
       </label>
-      <a class="btn primary" href="https://vwan-simulator.com/">
+      <a class="btn primary" href="/">
         <span data-i18n-lang="en">Launch Simulator</span>
         <span data-i18n-lang="ja">シミュレーターを起動</span>
       </a>
-      <a class="btn" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">
+      <a class="btn" href="/?sample=three-hub-all-features-asymmetric">
         <span data-i18n-lang="en">Load 3-Hub Showcase</span>
         <span data-i18n-lang="ja">3 ハブ サンプルを開く</span>
       </a>
@@ -386,9 +361,18 @@
         <div data-i18n-lang="en">
           <h2>1. Overview &amp; Key Concepts</h2>
           <p>
-            <strong>Virtual WAN Topology Lab</strong> (<a href="https://vwan-simulator.com/" style="color:var(--accent)">vwan-simulator.com</a>) is a local-first, explainable Azure Virtual WAN routing simulator. Everything runs locally in your browser without requiring Azure credentials.
+            <strong>Azure Network Simulator (AzNetSim)</strong> is a local-first topology designer and explainable planning simulator for classic Azure VNets, hub-and-spoke, Virtual WAN, and hybrid/on-premises networks. Simulation runs locally in the browser or Windows desktop without requiring Azure credentials. It is not a live Azure control plane or proof of packet delivery.
           </p>
+          <p>The detailed worked examples below focus on Virtual WAN. Explore <a href="/?sample=hub-spoke-firewall-udr" style="color:var(--accent)">classic hub-and-spoke</a> or a <a href="/?sample=hybrid-vwan-and-hub-spoke" style="color:var(--accent)">mixed Virtual WAN and VNet topology</a> for the broader scope. Saved designs stay separate per website origin; legacy files and links remain compatible.</p>
           <div class="grid-2">
+            <div class="feature-box">
+              <h4>Classic VNets &amp; Hybrid Networks</h4>
+              <p>Inspect VNet peering, subnets, UDRs, Azure Route Server, Firewall/NVA paths, Private Endpoints, ExpressRoute, and VPN alongside Virtual WAN.</p>
+            </div>
+            <div class="feature-box">
+              <h4>Bounded Packet-Flow Planning</h4>
+              <p>Explore modeled forward/return paths and supported NSG, NAT, ingress, and Standard Load Balancer declarations. Unsupported or incomplete cases remain explicit; application delivery and DNS execution are not implemented.</p>
+            </div>
             <div class="feature-box">
               <h4>Hub Routing Preferences</h4>
               <p>Compare <code>ExpressRoute</code>, <code>VPN</code>, and <code>ASPath</code> hub routing preferences side-by-side and inspect the exact tie-breaker reason on every route.</p>
@@ -410,9 +394,18 @@
         <div data-i18n-lang="ja">
           <h2>1. 概要と主な概念</h2>
           <p>
-            <strong>Virtual WAN トポロジ ラボ</strong> (<a href="https://vwan-simulator.com/" style="color:var(--accent)">vwan-simulator.com</a>) は、ローカル ファーストで動作する説明可能な Azure Virtual WAN ルーティング シミュレーターです。Azure の資格情報は一切不要で、すべての計算と可視化がブラウザー内で完結します。
+            <strong>Azure Network Simulator (AzNetSim)</strong> は、クラシック Azure VNet、ハブ＆スポーク、Virtual WAN、ハイブリッド／オンプレミス ネットワークを対象とする、ローカル ファーストのトポロジ デザイナー兼説明可能な計画用シミュレーターです。シミュレーションは Azure の資格情報を必要とせず、ブラウザーまたは Windows デスクトップ上で実行されます。実際の Azure コントロール プレーンやパケット配信を保証するものではありません。
           </p>
+          <p>以下の詳細サンプルは Virtual WAN を中心に説明します。より広い対応範囲は、<a href="/?sample=hub-spoke-firewall-udr" style="color:var(--accent)">クラシック ハブ＆スポーク</a>や<a href="/?sample=hybrid-vwan-and-hub-spoke" style="color:var(--accent)">Virtual WAN と VNet の混在構成</a>で確認できます。保存データは Web サイトのオリジンごとに独立し、既存のファイルとリンクは引き続き利用できます。</p>
           <div class="grid-2">
+            <div class="feature-box">
+              <h4>クラシック VNet とハイブリッド ネットワーク</h4>
+              <p>VNet ピアリング、サブネット、UDR、Azure Route Server、Firewall／NVA の経路、Private Endpoint、ExpressRoute、VPN と Virtual WAN を確認できます。</p>
+            </div>
+            <div class="feature-box">
+              <h4>対応範囲を明示したパケット フロー計画</h4>
+              <p>往路・復路と、対応する NSG、NAT、受信経路、Standard Load Balancer の宣言をモデル化します。未対応・不完全なケースは明示し、アプリケーション配信と DNS の実行は未実装です。</p>
+            </div>
             <div class="feature-box">
               <h4>ハブのルーティングの優先順位</h4>
               <p><code>ExpressRoute</code>、<code>VPN</code>、<code>ASPath</code> の各ハブ ルーティング優先順位を比較し、すべてのルートで選択理由（タイブレーカー）を確認できます。</p>
@@ -438,9 +431,9 @@
           <h2>2. Step-by-Step Instructions</h2>
           <h3>Building or Editing a Topology</h3>
           <ol>
-            <li><strong>Choose an architecture mode</strong>: Use the <strong>Architecture View</strong> switcher in the top bar to switch between <strong>Full Hybrid Mode</strong> (Hub &amp; Spoke VNets + Virtual WAN + On-Premises), <strong>Hub &amp; Spoke-Only</strong>, and <strong>Virtual WAN-Only</strong>.</li>
-            <li><strong>Add nodes from the toolbar</strong>: Click <code>+ Hub</code>, <code>+ VNet</code>, <code>+ Site</code>, or <code>+ ER location</code> in the workspace toolbar, or right-click blank canvas.</li>
-            <li><strong>Add optional custom node labels</strong>: Every node (Hub, Spoke/VNet, ExpressRoute Location, and On-Premises Site) supports an optional <code>label</code> text annotation (up to 120 characters) displayed as a pill badge on the diagram. Edit it via right-click → <strong>Edit configuration</strong> → <strong>Optional diagram label</strong> in Virtual WAN-Only mode, or via <strong>Configure → Node Labels &amp; Annotations</strong> in Full Hybrid / Hub &amp; Spoke-Only modes.</li>
+            <li><strong>Open a workspace</strong>: Start with an empty mixed-network design or open saved work through <strong>Workspace</strong>. There is no architecture-mode selector. Classic VNets and Virtual WAN hubs coexist; legacy Virtual WAN files and samples retain their compatible native editor.</li>
+            <li><strong>Add nodes</strong>: Use contextual workspace controls or right-click blank canvas to create the applicable hubs, VNets, sites, and ExpressRoute locations.</li>
+            <li><strong>Add optional custom node labels</strong>: Nodes support an optional <code>label</code> text annotation (up to 120 characters). Edit it in the selected object's configuration dialog or inspector; legacy Virtual WAN objects expose <strong>Edit configuration → Optional diagram label</strong>.</li>
             <li><strong>Arrange the canvas</strong>: Drag any node to reposition it, drag blank canvas to pan, or switch between <em>Layered topology</em> and <em>Network constellation</em> views.</li>
             <li><strong>Right-click any node or link for context actions</strong>:
               <ul>
@@ -457,9 +450,9 @@
           <h2>2. 基本的な使い方（ステップバイステップ）</h2>
           <h3>トポロジの作成と編集</h3>
           <ol>
-            <li><strong>アーキテクチャ モードの選択</strong>: 上部バーのスイッチャーで <strong>Full Hybrid Mode</strong>、<strong>Hub &amp; Spoke-Only</strong>、<strong>Virtual WAN-Only</strong> を切り替えられます。</li>
-            <li><strong>ツールバーからノードを追加</strong>: ワークスペース ツールバーの <code>+ ハブ</code>、<code>+ VNet</code>、<code>+ サイト</code>、<code>+ ER ピアリングの場所</code> をクリックするか、キャンバスの空白部分を右クリックします。</li>
-            <li><strong>ノードへのカスタム テキスト ラベル（任意）の追加</strong>: すべてのノード（ハブ、スポーク/VNet、ExpressRoute ピアリングの場所、オンプレミス サイト）に、図上にピル型バッジとして表示される任意の <code>label</code>（最大 120 文字）を設定できます（Virtual WAN-Only モードの <strong>構成を編集 → 図のラベル（省略可能）</strong>、または Full Hybrid / Hub &amp; Spoke-Only モードの <strong>Configure → Node Labels &amp; Annotations</strong> から編集）。</li>
+            <li><strong>ワークスペースを開く</strong>: 空の混在ネットワークから始めるか、<strong>ワークスペース (Workspace)</strong> で保存済み設計を開きます。モードの選択は不要で、クラシック VNet と Virtual WAN ハブを同じ設計に配置できます。従来の Virtual WAN ファイルとサンプルは互換性のあるエディターで開きます。</li>
+            <li><strong>ノードを追加</strong>: ワークスペースのコンテキストに応じた操作、または空白キャンバスの右クリックから、適用可能なハブ、VNet、サイト、ExpressRoute ピアリングの場所を追加します。</li>
+            <li><strong>ノードへのカスタム テキスト ラベル（任意）の追加</strong>: ノードには任意の <code>label</code>（最大 120 文字）を設定できます。選択したオブジェクトの設定ダイアログまたはインスペクターで編集し、従来の Virtual WAN オブジェクトでは <strong>構成を編集 → 図のラベル（省略可能）</strong> を使用します。</li>
             <li><strong>キャンバスの配置と表示切替</strong>: ノードをドラッグして位置を調整したり、空白部分をドラッグしてパン移動したり、<em>階層型トポロジ (Layered topology)</em> と <em>ネットワーク配置図 (Network constellation)</em> を切り替えたりできます。</li>
             <li><strong>ノードやリンクを右クリックしてコンテキスト メニューを表示</strong>:
               <ul>
@@ -492,25 +485,25 @@
                 <td><strong>1. Hub Routing Preferences</strong></td>
                 <td><code>ExpressRoute</code> vs <code>ASPath</code> hub routing preference with dual ExpressRoute + BGP VPN links</td>
                 <td><a href="./samples/hub-routing-preferences.json" download style="color:var(--accent)">hub-routing-preferences.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=hub-routing-preferences" style="color:var(--accent)">Open in Simulator →</a></td>
+                <td><a href="/?sample=hub-routing-preferences" style="color:var(--accent)">Open in Simulator →</a></td>
               </tr>
               <tr>
                 <td><strong>2. Secured Hub &amp; Routing Intent</strong></td>
                 <td>Azure Firewall Private &amp; Internet Routing Intent, <code>0.0.0.0/0</code> propagation to Spokes &amp; Static S2S VPN</td>
                 <td><a href="./samples/secured-hub-routing-intent.json" download style="color:var(--accent)">secured-hub-routing-intent.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=secured-hub-routing-intent" style="color:var(--accent)">Open in Simulator →</a></td>
+                <td><a href="/?sample=secured-hub-routing-intent" style="color:var(--accent)">Open in Simulator →</a></td>
               </tr>
               <tr>
                 <td><strong>3. Spoke BGP NVA Transit</strong></td>
                 <td>Spoke VNet BGP NVA peering with hub, downstream standalone VNet, and downstream partner site</td>
                 <td><a href="./samples/spoke-bgp-nva-transit.json" download style="color:var(--accent)">spoke-bgp-nva-transit.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit" style="color:var(--accent)">Open in Simulator →</a></td>
+                <td><a href="/?sample=spoke-bgp-nva-transit" style="color:var(--accent)">Open in Simulator →</a></td>
               </tr>
               <tr>
                 <td><strong>4. 3-Hub Enterprise Showcase (Asymmetric)</strong></td>
                 <td>3 Hubs, all preferences, Secured Hubs, ER + BGP/Static VPN + SD-WAN, Spoke NVA, Route Maps, Asymmetric routing</td>
                 <td><a href="./samples/three-hub-all-features-asymmetric.json" download style="color:var(--accent)">three-hub-all-features-asymmetric.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric" style="color:var(--accent)">Open in Simulator →</a></td>
+                <td><a href="/?sample=three-hub-all-features-asymmetric" style="color:var(--accent)">Open in Simulator →</a></td>
               </tr>
             </tbody>
           </table>
@@ -532,25 +525,25 @@
                 <td><strong>1. ハブのルーティングの優先順位</strong></td>
                 <td>ExpressRoute と BGP VPN の二重接続における <code>ExpressRoute</code> 優先と <code>ASPath</code> 優先の比較</td>
                 <td><a href="./samples/hub-routing-preferences.json" download style="color:var(--accent)">hub-routing-preferences.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=hub-routing-preferences" style="color:var(--accent)">シミュレーターで開く →</a></td>
+                <td><a href="/?sample=hub-routing-preferences" style="color:var(--accent)">シミュレーターで開く →</a></td>
               </tr>
               <tr>
                 <td><strong>2. セキュリティで保護された仮想ハブとルーティング インテント</strong></td>
                 <td>Azure Firewall のプライベート / インターネット ルーティング インテント、スポークおよび静的 S2S VPN への <code>0.0.0.0/0</code> 伝達</td>
                 <td><a href="./samples/secured-hub-routing-intent.json" download style="color:var(--accent)">secured-hub-routing-intent.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=secured-hub-routing-intent" style="color:var(--accent)">シミュレーターで開く →</a></td>
+                <td><a href="/?sample=secured-hub-routing-intent" style="color:var(--accent)">シミュレーターで開く →</a></td>
               </tr>
               <tr>
                 <td><strong>3. スポーク BGP NVA トランジット</strong></td>
                 <td>スポーク VNet 内の BGP NVA とハブのピアリング、配下のスタンドアロン VNet およびパートナー サイトのトランジット</td>
                 <td><a href="./samples/spoke-bgp-nva-transit.json" download style="color:var(--accent)">spoke-bgp-nva-transit.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit" style="color:var(--accent)">シミュレーターで開く →</a></td>
+                <td><a href="/?sample=spoke-bgp-nva-transit" style="color:var(--accent)">シミュレーターで開く →</a></td>
               </tr>
               <tr>
                 <td><strong>4. 3 ハブ全機能ショーケース（非対称ルーティング）</strong></td>
                 <td>3 ハブ、全優先順位、Secured Hub、ER + BGP/静的 VPN + SD-WAN、スポーク NVA、ルート マップ、非対称ルーティング診断</td>
                 <td><a href="./samples/three-hub-all-features-asymmetric.json" download style="color:var(--accent)">three-hub-all-features-asymmetric.json</a></td>
-                <td><a href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric" style="color:var(--accent)">シミュレーターで開く →</a></td>
+                <td><a href="/?sample=three-hub-all-features-asymmetric" style="color:var(--accent)">シミュレーターで開く →</a></td>
               </tr>
             </tbody>
           </table>
@@ -568,7 +561,7 @@
             <li><strong>North Europe Hub (ASPath Preference)</strong> prefers the <strong>BGP S2S VPN</strong> path because its routing preference is set to <code>ASPath</code> and 1 hop beats 3 hops.</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=hub-routing-preferences">Open Example 1 in Simulator</a>
+            <a class="btn primary" href="/?sample=hub-routing-preferences">Open Example 1 in Simulator</a>
             <a class="btn" href="./samples/hub-routing-preferences.json" download>Download hub-routing-preferences.json</a>
           </div>
         </div>
@@ -582,7 +575,7 @@
             <li><strong>North Europe Hub (ASPath Preference)</strong> はハブのルーティングの優先順位が <code>ASPath</code> に設定されているため、AS パスが短い（1 ホップの）<strong>BGP S2S VPN</strong> を優先します。</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=hub-routing-preferences">サンプル 1 をシミュレーターで開く</a>
+            <a class="btn primary" href="/?sample=hub-routing-preferences">サンプル 1 をシミュレーターで開く</a>
             <a class="btn" href="./samples/hub-routing-preferences.json" download>hub-routing-preferences.json をダウンロード</a>
           </div>
         </div>
@@ -607,7 +600,7 @@
             <li><strong>Boston Retail Branch</strong> connects over a <strong>Static S2S VPN</strong> with <code>Propagate Default Route (0.0.0.0/0)</code> enabled, learning the Secured Hub's firewall-backed default route.</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=secured-hub-routing-intent">Open Example 2 in Simulator</a>
+            <a class="btn primary" href="/?sample=secured-hub-routing-intent">Open Example 2 in Simulator</a>
             <a class="btn" href="./samples/secured-hub-routing-intent.json" download>Download secured-hub-routing-intent.json</a>
           </div>
         </div>
@@ -621,7 +614,7 @@
             <li><strong>Boston Retail Branch</strong> は <code>既定ルートの伝達 (0.0.0.0/0)</code> を有効にした <strong>静的 S2S VPN</strong> で接続されており、Secured Hub の Azure Firewall を次ホップとする既定ルートを学習します。</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=secured-hub-routing-intent">サンプル 2 をシミュレーターで開く</a>
+            <a class="btn primary" href="/?sample=secured-hub-routing-intent">サンプル 2 をシミュレーターで開く</a>
             <a class="btn" href="./samples/secured-hub-routing-intent.json" download>secured-hub-routing-intent.json をダウンロード</a>
           </div>
         </div>
@@ -646,7 +639,7 @@
             <li>Behind the NVA sits a standalone Azure VNet (<strong>AI Shared Services VNet</strong>, <code>10.99.0.0/16</code>) that is peered only to the NVA spoke, plus an on-premises partner site (<strong>Chicago Partner Enclave</strong>, <code>172.30.0.0/16</code>).</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit">Open Example 3 in Simulator</a>
+            <a class="btn primary" href="/?sample=spoke-bgp-nva-transit">Open Example 3 in Simulator</a>
             <a class="btn" href="./samples/spoke-bgp-nva-transit.json" download>Download spoke-bgp-nva-transit.json</a>
           </div>
         </div>
@@ -660,7 +653,7 @@
             <li>NVA の背後には、NVA スポークにのみ VNet ピアリングされたスタンドアロン Azure VNet（<strong>AI Shared Services VNet</strong>、<code>10.99.0.0/16</code>）と、オンプレミスのパートナー拠点（<strong>Chicago Partner Enclave</strong>、<code>172.30.0.0/16</code>）が接続されています。</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=spoke-bgp-nva-transit">サンプル 3 をシミュレーターで開く</a>
+            <a class="btn primary" href="/?sample=spoke-bgp-nva-transit">サンプル 3 をシミュレーターで開く</a>
             <a class="btn" href="./samples/spoke-bgp-nva-transit.json" download>spoke-bgp-nva-transit.json をダウンロード</a>
           </div>
         </div>
@@ -685,7 +678,7 @@
             <li><strong>Return path (Amsterdam Core DC → Azure)</strong>: An outbound route map on <code>West Europe Hub</code>'s ExpressRoute link prepends <code>64496 64496</code> to routes advertised over ExpressRoute. Consequently, <code>Amsterdam Core DC</code> sees a 1-hop AS path over its <strong>BGP VPN</strong> backup link (<code>65515</code>) vs. a 3-hop AS path over ExpressRoute (<code>65515 64496 64496</code>) and sends return traffic back over <strong>BGP VPN</strong>.</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">Open 3-Hub Showcase in Simulator</a>
+            <a class="btn primary" href="/?sample=three-hub-all-features-asymmetric">Open 3-Hub Showcase in Simulator</a>
             <a class="btn" href="./samples/three-hub-all-features-asymmetric.json" download>Download three-hub-all-features-asymmetric.json</a>
           </div>
         </div>
@@ -699,7 +692,7 @@
             <li><strong>復路（Amsterdam Core DC → Azure）</strong>: <code>West Europe Hub</code> の ExpressRoute リンクに適用されたアウトバウンド ルート マップが <code>64496 64496</code> をプリペンドするため、<code>Amsterdam Core DC</code> から見ると ExpressRoute 経由は 3 ホップ（<code>65515 64496 64496</code>）、バックアップの <strong>BGP VPN</strong> 経由は 1 ホップ（<code>65515</code>）となり、復路トラフィックは <strong>BGP VPN</strong> を通って戻ります。</li>
           </ul>
           <div class="sample-actions">
-            <a class="btn primary" href="https://vwan-simulator.com/?sample=three-hub-all-features-asymmetric">3 ハブ ショーケースをシミュレーターで開く</a>
+            <a class="btn primary" href="/?sample=three-hub-all-features-asymmetric">3 ハブ ショーケースをシミュレーターで開く</a>
             <a class="btn" href="./samples/three-hub-all-features-asymmetric.json" download>three-hub-all-features-asymmetric.json をダウンロード</a>
           </div>
         </div>
@@ -820,54 +813,5 @@
       </section>
     </main>
   </div>
-  <script>
-    (function () {
-      var storageKey = 'vwan-visual-topology:language:v1';
-      var titles = {
-        en: 'Virtual WAN Topology Lab — Documentation & Worked Examples',
-        ja: 'Virtual WAN トポロジ ラボ — ドキュメントと実践サンプル'
-      };
-      var select = document.getElementById('doc-language-selector');
-      var toc = document.getElementById('doc-toc');
-
-      function applyLanguage(next, updateUrl) {
-        var lang = next === 'ja' ? 'ja' : 'en';
-        document.documentElement.lang = lang;
-        document.title = titles[lang];
-        try { localStorage.setItem(storageKey, lang); } catch (e) {}
-        if (select) {
-          select.value = lang;
-          select.setAttribute('aria-label', lang === 'ja' ? '言語 / Language' : 'Language / 言語');
-        }
-        if (toc) {
-          toc.setAttribute('aria-label', lang === 'ja' ? '目次' : 'Table of contents');
-        }
-        var images = document.querySelectorAll('img[data-alt-en][data-alt-ja]');
-        for (var i = 0; i < images.length; i++) {
-          var img = images[i];
-          var alt = img.getAttribute(lang === 'ja' ? 'data-alt-ja' : 'data-alt-en');
-          if (alt) img.setAttribute('alt', alt);
-        }
-        if (updateUrl && window.history && window.history.replaceState) {
-          try {
-            var url = new URL(window.location.href);
-            if (lang === 'ja') {
-              url.searchParams.set('lang', 'ja');
-            } else {
-              url.searchParams.delete('lang');
-            }
-            window.history.replaceState(null, '', url.pathname + url.search + url.hash);
-          } catch (e) {}
-        }
-      }
-
-      applyLanguage(document.documentElement.lang, false);
-      if (select) {
-        select.addEventListener('change', function (event) {
-          applyLanguage(event.target.value, true);
-        });
-      }
-    })();
-  </script>
 </body>
 </html>

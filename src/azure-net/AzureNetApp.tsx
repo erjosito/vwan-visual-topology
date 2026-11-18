@@ -2811,7 +2811,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             <div className="aznet-brand-icon" aria-hidden="true">
               Az
             </div>
-            <h1>Azure Networking Simulator</h1>
+            <h1>Azure Network Simulator</h1>
           </div>
 
           <WorkspaceMenu />

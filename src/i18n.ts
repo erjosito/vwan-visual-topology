@@ -7,8 +7,8 @@ export type { Language } from './messages'
 
 export const languageStorageKey = 'vwan-visual-topology:language:v1'
 export const documentTitles: Record<Language, string> = {
-  en: 'Azure Networking Simulator',
-  ja: 'Azure ネットワーク シミュレーター',
+  en: 'Azure Network Simulator (AzNetSim)',
+  ja: 'Azure ネットワーク シミュレーター (AzNetSim)',
 }
 export function readLanguage(storage?: Pick<Storage, 'getItem'>): Language {
   try { return (storage ?? localStorage).getItem(languageStorageKey) === 'ja' ? 'ja' : 'en' }
