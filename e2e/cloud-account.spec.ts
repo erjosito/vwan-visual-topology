@@ -198,6 +198,55 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   expect(await page.evaluate(key => localStorage.getItem(key), guidedProgressKey)).toBeNull()
 })
 
+test('a missing API is not an empty library and a confirmed save survives a failed list refresh', async ({ page }) => {
+  const service = await setup(page)
+  const unavailable = async (route: import('@playwright/test').Route) => route.fulfill({ status: 404, body: '' })
+  await page.route('**/api/cloud/topologies', unavailable)
+  await page.goto('/?mode=full')
+  await signIn(page)
+  await expect(page.getByRole('alert')).toContainText('Check the backend deployment')
+  await expect(page.getByText('No saved cloud topologies.', { exact: true })).toHaveCount(0)
+  const local = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await page.getByLabel('Cloud topology name', { exact: true }).fill('Confirmed save')
+  await page.getByRole('button', { name: 'Save current topology to cloud', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'Topology saved to your cloud library.' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Confirmed save', exact: true })).toBeVisible()
+  await expect(page.getByRole('alert')).toContainText('Check the backend deployment')
+  expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(1)
+  await page.unroute('**/api/cloud/topologies', unavailable)
+  await page.getByRole('button', { name: 'Refresh cloud topologies', exact: true }).click()
+  await expect(page.getByRole('alert')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Close cloud account', exact: true }).click()
+  await page.reload()
+  await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Confirmed save', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(local)
+  await page.getByRole('button', { name: 'Load Confirmed save', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Cloud account', exact: true })).toHaveCount(0)
+})
+
+test('retrying a lost save acknowledgement confirms the original record without creating duplicates', async ({ page }) => {
+  const service = await setup(page)
+  await page.goto('/?mode=full')
+  await signIn(page)
+  await page.getByLabel('Cloud topology name', { exact: true }).fill('Lost acknowledgement')
+  const interrupted = async (route: import('@playwright/test').Route) => {
+    const request = route.request()
+    if (request.method() !== 'PUT') return route.fallback()
+    await service.request(request.url(), { method: 'PUT', headers: request.headers(), body: request.postData()! })
+    await route.abort()
+  }
+  await page.route('**/api/cloud/topologies/*', interrupted)
+  await page.getByRole('button', { name: 'Save current topology to cloud', exact: true }).click()
+  await expect(page.getByRole('status').filter({ hasText: 'cloud operation did not complete' })).toBeVisible()
+  await expect(page.getByText('Topology saved to your cloud library.', { exact: true })).toHaveCount(0)
+  await page.unroute('**/api/cloud/topologies/*', interrupted)
+  await page.getByRole('button', { name: 'Save current topology to cloud', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Lost acknowledgement', exact: true })).toBeVisible()
+  await expect(page.getByText('Topology saved to your cloud library.', { exact: true })).toBeVisible()
+  expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(1)
+})
+
 for (const theme of ['light', 'dark']) {
   test(`${theme}: explicit cloud topology saves, stale-version protection, loading and deletion`, async ({ page }, testInfo) => {
     const errors: string[] = []
@@ -221,6 +270,7 @@ for (const theme of ['light', 'dark']) {
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(local)
     await page.getByRole('button', { name: 'Refresh cloud topologies', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Remote changed', exact: true })).toBeVisible()
+    await expect(page.getByRole('status').filter({ hasText: 'cloud operation did not complete' })).toHaveCount(0)
     await page.getByRole('dialog', { name: 'Cloud account', exact: true }).screenshot({ path: testInfo.outputPath(`cloud-${theme}.png`) })
     await page.getByRole('button', { name: 'Load Remote changed', exact: true }).click()
     await expect(page.getByRole('dialog', { name: 'Cloud account', exact: true })).toHaveCount(0)
