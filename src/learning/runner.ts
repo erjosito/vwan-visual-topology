@@ -2,12 +2,16 @@ import { contractVersion, engineVersion, type PlatformRequest, type PlatformResu
 import type { CourseBundle, CourseTask } from './course-contract'
 import type { Localized } from './content'
 import type { PracticeWorkspace } from './practice-workspace'
+import type { AzSimulationResult } from '../azure-net/engine'
 
 export type LearningWorkspace = { practice: PracticeWorkspace; revision: number; scope: number }
 export type LearningObservation = {
   token: string
-  vnetId: string
-  subnetId: string
+  vnetId?: string
+  subnetId?: string
+  siteId?: string
+  hubId?: string
+  tableId?: string
   prefix: string
 }
 export type TaskCompletion = {
@@ -93,7 +97,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   const publish = () => {
     const key = binding()
     const check = bundle.checks.find((item) => item.id === current()?.task.checkId)
-    if (check?.kind === 'routes.inspected' && key) {
+    if ((check?.kind === 'routes.inspected' || check?.kind === 'control-routes.inspected') && key) {
       if (!observation || observationKey !== key) observation = { token: crypto.randomUUID(), ...check.params }
       observationKey = key
     } else { observation = undefined; observationKey = undefined }
@@ -132,7 +136,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
         const choice = check.params.choices.find((entry) => entry.id === answerId)
         detail = choice?.feedback
         result = !choice ? 'answer' : choice.id === check.params.correctChoiceId ? 'passed' : 'incorrect'
-      } else if (check.kind === 'routes.inspected' && observed !== key) result = 'inspect'
+      } else if ((check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') && observed !== key) result = 'inspect'
       else {
         const document = structuredClone(live.practice.document)
         let configured = true
@@ -142,7 +146,21 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
             && ((peering.vnetAId === check.params.vnetAId && peering.vnetBId === check.params.vnetBId)
               || (peering.vnetBId === check.params.vnetAId && peering.vnetAId === check.params.vnetBId)))
         }
-        if (!configured) result = 'peering'
+        if (check.kind === 'connections.configured') {
+          const starter = bundle.scenarios.find((scenario) => scenario.id === item.lesson.scenarioId)!.document
+          configured = document.mode !== 'vwan' && starter.mode !== 'vwan' && check.params.connections.every((state) => {
+            const actual = (state.kind === 'er-link' ? document.topology.erLinks : document.topology.vpnConnections)
+              .find((connection) => connection.id === state.connectionId)
+            const original = (state.kind === 'er-link' ? starter.topology.erLinks : starter.topology.vpnConnections)
+              .find((connection) => connection.id === state.connectionId)
+            return actual && original && actual.enabled === state.enabled
+              && actual.targetId === original.targetId && actual.targetKind === original.targetKind
+              && ('siteId' in original ? 'siteId' in actual && actual.siteId === original.siteId
+                : 'locationId' in actual && actual.locationId === original.locationId)
+              && (state.kind !== 'vpn-connection' || 'bgpEnabled' in actual && actual.bgpEnabled === state.bgpEnabled)
+          })
+        }
+        if (!configured) result = check.kind === 'vnet.peered' ? 'peering' : 'requirements'
         else {
           const requirements = 'requirements' in check.params ? check.params.requirements : undefined
           const evaluated = await options.evaluate({ contractVersion, engineVersion, document,
@@ -157,6 +175,15 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
               if (exact && evaluated.assessments.every((entry) => entry.outcome === 'satisfied' || entry.outcome === 'violated')) {
                 failures = evaluated.assessments.filter((entry) => entry.outcome !== 'satisfied').map((entry) => entry.id)
                 result = failures.length ? 'requirements' : 'passed'
+              }
+              if (result === 'passed' && check.kind === 'connections.configured') {
+                const simulation = evaluated.simulation as AzSimulationResult | undefined
+                const selected = check.params.selectedRoutes.every((scope) => {
+                  const table = simulation?.subnetTables?.[scope.subnetId]
+                  return table?.vnetId === scope.vnetId && table.routes.some((route) =>
+                    route.active && route.prefix === scope.prefix && route.nextHopResourceId === scope.nextHopResourceId)
+                })
+                if (!selected) result = 'requirements'
               }
             }
           }
