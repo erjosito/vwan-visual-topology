@@ -4415,7 +4415,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               )
               const vnetEditor = showVnetEditor && (
                 <InspectorSection key={`vnet-${selectedVnetId}`} title={t('VNet configuration')}
-                  summary={filteredVnets.map(vnet => `${vnet.name} · ${vnet.prefixes.join(', ')}`).join('; ')} initialOpen={false}>
+                  summary={filteredVnets.map(vnet => `${vnet.name} · ${vnet.prefixes.join(', ')}`).join('; ')}
+                  initialOpen={guidanceNavigation && selected.kind === 'vnet'}>
                 <div className="aznet-card" data-testid="aznet-vnet-elements-editor">
                   <h3 hidden={workspaceSession?.presentationPreview}>VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)</h3>
                   {filteredVnets.map((vnet) => {
@@ -4878,7 +4879,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               )
               const routeTableEditor = showVnetEditor && (
                 <InspectorSection key={`routes-${selectedVnetId}`} title={t('Route tables')}
-                  summary={t('{0} route tables', topology.udrTables.length)} initialOpen={false}>
+                  summary={t('{0} route tables', topology.udrTables.length)}
+                  initialOpen={guidanceNavigation && selected.kind === 'subnet'}>
                 <div className="aznet-card" data-testid="aznet-udr-editor">
                   <div
                     style={{
@@ -5857,7 +5859,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   topology.vwanHubs
                     .filter((h) => selected.kind !== 'vwan-hub' || h.id === selected.hubId)
                     .map((hub) => (
-                      <InspectorSection key={hub.id} title={t('Virtual WAN hub configuration')} summary={`${hub.name} · ${hub.prefix}`} initialOpen={false}>
+                      <InspectorSection key={hub.id} title={t('Virtual WAN hub configuration')} summary={`${hub.name} · ${hub.prefix}`} initialOpen={guidanceNavigation}>
                       <div className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`} data-learning-anchor={guidanceAnchor('hub-editor', hub.id)}>
                         <h3 hidden={workspaceSession?.presentationPreview}>Virtual WAN Hub: {hub.name}</h3>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>

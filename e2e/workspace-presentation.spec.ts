@@ -227,7 +227,7 @@ test.describe('subnet and gateway menu disclosure', () => {
   }
 })
 
-async function openVnetConfiguration(page: Page, mode: string, topology: AzNetTopology) {
+async function openVnetConfiguration(page: Page, mode: string, topology: AzNetTopology, section: 'vnet' | 'subnet' | false = 'vnet') {
   await page.goto(`/?mode=${mode}`)
   await page.locator('input[data-desktop-import]').setInputFiles({
     name: 'inspector.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
@@ -235,10 +235,61 @@ async function openVnetConfiguration(page: Page, mode: string, topology: AzNetTo
   await page.getByTestId('aznet-diagram-svg').getByRole('button', { name: /^VNet / }).first().focus()
   await page.keyboard.press('Shift+F10')
   await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+  if (section) await page.getByTestId(section === 'vnet' ? 'aznet-vnet-elements-editor' : 'aznet-subnet-security-editor')
+    .locator('..').locator(':scope > summary').click()
 }
 
 for (const mode of ['hub-spoke', 'full']) {
   for (const language of ['en', 'ja']) {
+    test(`${mode}: ${language} detailed configuration starts collapsed with basic settings first`, async ({ page }, info) => {
+      await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+      await page.addInitScript(language => {
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+      }, language)
+      const topology = createEmptyAzNetTopology()
+      topology.vnets = [
+        { id: 'app', name: 'Application', role: 'spoke', region: 'westeurope', prefixes: ['10.0.0.0/16'],
+          subnets: [{ id: 'work', name: 'Workload', prefix: '10.0.1.0/24' }], gateways: [], appliances: [] },
+        { id: 'peer', name: 'Partner', role: 'spoke', region: 'westeurope', prefixes: ['10.1.0.0/16'],
+          subnets: [], gateways: [], appliances: [] },
+      ]
+      const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+      topology.vnetPeerings = [{ id: 'peer-link', name: 'Partner link', vnetAId: 'app', vnetBId: 'peer', enabled: true, aToB: { ...flags }, bToA: { ...flags } }]
+      await openVnetConfiguration(page, mode, topology, false)
+      const panel = page.getByTestId('aznet-editor-scope-banner').locator('..')
+      const sections = panel.locator(':scope > .presentation-inspector-section')
+      const titles = language === 'ja'
+        ? ['VNet の構成', 'サブネットの構成', 'VNet ピアリング', 'ルート テーブル', 'ノードのラベルと注釈']
+        : ['VNet configuration', 'Subnet configuration', 'VNet peerings', 'Route tables', 'Node labels and annotations']
+      await expect(sections.locator(':scope > summary')).toHaveText(titles.map(title => new RegExp(title)))
+      await expect(panel.locator(':scope > .presentation-inspector-section[open]')).toHaveCount(0)
+      const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+      await info.attach('collapsed-configuration', { body: await page.screenshot(), contentType: 'image/png' })
+      for (const section of await sections.all()) {
+        const summary = section.locator(':scope > summary')
+        await summary.focus()
+        await page.keyboard.press('Enter')
+        await expect(section).toHaveAttribute('open')
+        await page.keyboard.press('Space')
+        await expect(section).not.toHaveAttribute('open')
+      }
+      expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      const peerings = page.getByTestId('aznet-peering-editor').locator('..')
+      await peerings.locator(':scope > summary').click()
+      const enabled = peerings.getByRole('checkbox', { name: 'Peering Enabled', exact: true })
+      await enabled.uncheck()
+      await expect(peerings).toHaveAttribute('open')
+      await peerings.locator(':scope > summary').click()
+      await expect(enabled).not.toBeVisible()
+      await peerings.locator(':scope > summary').click()
+      await expect(enabled).not.toBeChecked()
+      await page.getByRole('button', { name: /Undo/ }).click()
+      await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      expect((await new AxeBuilder({ page }).include('.presentation-inspector-section').analyze()).violations).toEqual([])
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+
     test(`${mode}: ${language} VNet inspector groups optional tasks without losing deferred edits`, async ({ page }, info) => {
       await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
       await page.addInitScript(language => {
@@ -331,7 +382,7 @@ for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja']) {
           routeTableId: 'existing', privateEndpoints: [{ id: 'pe', name: 'Existing service', ipAddress: '10.0.1.10', serviceName: 'service.example.test' }],
         } : {}) }] }]
       if (configured) topology.udrTables = [{ id: 'existing', name: 'Existing table', disableBgpRoutePropagation: true, routes: [] }]
-      await openVnetConfiguration(page, mode, topology)
+      await openVnetConfiguration(page, mode, topology, 'subnet')
       const row = page.getByTestId('aznet-subnet-row-app')
       const section = row.locator('.presentation-inspector-section')
       const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
