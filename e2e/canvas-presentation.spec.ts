@@ -4,6 +4,7 @@ import { sampleHybridVwanAndHubSpoke, sampleArsSdwanNvaCoexistence } from '../sr
 import AxeBuilder from '@axe-core/playwright'
 import { denseVisualizationTopology } from '../tests/fixtures/dense-visualization'
 import { loadLanguage, translate } from '../src/messages'
+import '../src/route-map-messages-ja'
 
 const styleKey = 'aznet-canvas-style:v1'
 
@@ -50,10 +51,10 @@ for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja'] as
     const marker = svg.locator('.policy-marker[data-router-id="ars-0"][data-direction="inbound"]').first()
     await marker.focus()
     await page.keyboard.press('Enter')
-    const policy = page.getByRole('dialog', { name: 'Route maps · Route Server 1', exact: true })
+    const policy = page.getByRole('dialog', { name: text('Route maps · {0}', 'Route Server 1'), exact: true })
     await expect(policy).toBeVisible()
-    await expect(policy.getByRole('combobox', { name: 'Route map connection', exact: true })).toHaveValue('nva:nva-0-0')
-    await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toBeFocused()
+    await expect(policy.getByRole('combobox', { name: text('Route map connection'), exact: true })).toHaveValue('nva:nva-0-0')
+    await expect(policy.getByRole('combobox', { name: text('Inbound route map'), exact: true })).toBeFocused()
     await page.keyboard.press('Escape')
     await expect(policy).toHaveCount(0)
     if (mode === 'hub-spoke' && language === 'en') {

@@ -200,7 +200,9 @@ test.describe('subnet and gateway menu disclosure', () => {
       await open()
       await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
       const settings = page.getByTestId('vpn-gateway-settings-vpn')
-      await expect(settings.getByRole('combobox')).toHaveValue('active-standby')
+      await expect(settings.getByRole('combobox', {
+        name: language === 'ja' ? 'スタンドアロン VPN ゲートウェイのモード' : 'Standalone VPN gateway mode', exact: true,
+      })).toHaveValue('active-standby')
       await expect(settings).toContainText(language === 'ja' ? 'モデル化しません' : 'does not model instance failure')
       await page.keyboard.press('Escape')
       await page.getByTestId('ui-preview-toggle').click()
@@ -360,7 +362,9 @@ for (const mode of ['hub-spoke', 'full']) {
       for (const summary of await card.locator('.presentation-inspector-section > summary').all()) await summary.click()
       await expect(card.locator('.presentation-inspector-section[open]')).toHaveCount(0)
       const vpn = page.getByTestId('vpn-gateway-settings-vpn')
-      await expect(vpn.getByRole('combobox')).toBeVisible()
+      await expect(vpn.getByRole('combobox', {
+        name: language === 'ja' ? 'スタンドアロン VPN ゲートウェイのモード' : 'Standalone VPN gateway mode', exact: true,
+      })).toBeVisible()
       await expect(vpn).toContainText(language === 'ja' ? 'アクティブ/アクティブ' : 'ARS route exchange requires')
       await expect(card.getByRole('combobox', { name: 'ARS Hub Routing Preference', exact: true })).toHaveValue('ASPath')
       expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
