@@ -2,10 +2,10 @@ import { checkpointAssessments, previewCourse } from './course-profile'
 import type { CourseBundle } from './course-contract'
 import { beltProgress, type ProgressLedger } from './progress-ledger'
 
-export const scenarioLessonOrder = ['private-link', 'inspection-bypass', 'colocated-chain', 'dedicated-chain', 'branch-advertisement', 'wan-isolation', 'tiered-incident', 'ha-return-path', 'hybrid-preference', 'multihub-labels']
+export const scenarioLessonOrder = ['private-link', 'inspection-bypass', 'colocated-chain', 'dedicated-chain', 'branch-advertisement', 'wan-isolation', 'tiered-incident', 'ha-return-path', 'hybrid-preference', 'multihub-labels', 'routing-handover']
 export const scenarioAssessments = scenarioLessonOrder.map((id) => ({ taskId: `${id}.explain`, assessmentVersion: 1, checkId: `${id}.quiz` }))
 export const scenarioCourse: CourseBundle['course'] = {
-  id: 'azure-routing-scenarios', contentVersion: 6, publication: 'complete',
+  id: 'azure-routing-scenarios', contentVersion: 7, publication: 'complete',
   title: previewCourse.title, lessonOrder: scenarioLessonOrder,
   belts: previewCourse.belts.map((belt, index) => ({
     ...belt, pointsRequired: [0, 100, 225, 425, 675, 1075, 1575][index],

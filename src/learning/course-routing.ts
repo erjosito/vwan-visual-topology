@@ -142,7 +142,7 @@ export const routingChecks: CourseBundle['checks'] = [
       choices: [
         { id: 'route-type-first', text: { en: 'The /8 UDR is preferred by source before matching the /16 prefix.', ja: '/16 の一致を調べる前に、生成元によって /8 の UDR が優先されます。' },
           feedback: { en: 'This repeats the equal-prefix rule outside its scope. Here /16 is a longer match than /8.', ja: '同じプレフィックスの規則を適用範囲外に使っています。ここでは /16 が /8 より長く一致します。' } },
-        { id: 'longer-peering', text: { en: 'The available /16 peering route is a longer match than the /8 UDR.', ja: '利用可能な /16 ピアリング ルートが /8 UDR より長く一致するためです。' },
+        { id: 'longer-peering', text: { en: 'The available /16 peering route matches more specifically than /8.', ja: '利用可能な /16 ピアリング ルートが、/8 より具体的に一致するためです。' },
           feedback: { en: 'Correct. Compare prefix lengths first in this scenario; equal-prefix preference explains the earlier /16-versus-/16 incident.', ja: '正解です。このシナリオではまず長さを比較します。同じプレフィックスの優先順位は、前の /16 同士の障害を説明します。' } },
         { id: 'same-region', text: { en: 'The shared region provides a VNet-local route to the remote address.', ja: '共通のリージョンが、リモート アドレスへの VNet ローカル ルートを提供します。' },
           feedback: { en: 'The region is not the reason. The actual connecting path and selected route are required.', ja: 'リージョンは理由ではありません。実際の接続経路と選択されたルートが必要です。' } },
@@ -168,10 +168,10 @@ export const routingChecks: CourseBundle['checks'] = [
       question: { en: 'A new spoke has ordinary hub peering but no remote-gateway use. What should you conclude?', ja: '新しいスポークには通常のハブ ピアリングがありますが、リモート ゲートウェイは使用しません。何が言えますか。' },
       correctChoiceId: 'transit-and-evidence',
       choices: [
+        { id: 'transit-and-evidence', text: { en: 'Configure gateway sharing, then verify learned routes and both directions.', ja: 'ゲートウェイ共有を構成し、学習ルートと双方向を検証します。' },
+          feedback: { en: 'Correct. Hub gateway transit and spoke remote-gateway use enable sharing; effective routes and both paths still need checking.', ja: '正解です。ハブのゲートウェイ転送とスポークのリモート ゲートウェイ使用で共有でき、有効なルートと双方向の経路も確認が必要です。' } },
         { id: 'automatic-transit', text: { en: 'The hub peering supplies gateway sharing; verify the workload route afterward.', ja: 'ハブ ピアリングがゲートウェイを共有するので、その後にワークロードのルートを確認します。' },
           feedback: { en: 'Ordinary peering is not automatic transit. Sharing a gateway needs the corresponding supported transit configuration.', ja: '通常のピアリングは自動転送ではありません。ゲートウェイの共有には対応する転送構成が必要です。' } },
-        { id: 'transit-and-evidence', text: { en: 'Configure supported gateway sharing, then verify route propagation and both forwarding directions.', ja: 'サポートされるゲートウェイ共有を構成し、ルート伝達と双方向の転送を検証します。' },
-          feedback: { en: 'Correct. Hub gateway transit and spoke remote-gateway use enable sharing; effective routes and both paths still need checking.', ja: '正解です。ハブのゲートウェイ転送とスポークのリモート ゲートウェイ使用で共有でき、有効なルートと双方向の経路も確認が必要です。' } },
         { id: 'live-proof', text: { en: 'Verify the hub route; that result also establishes the new spoke return path.', ja: 'ハブのルートを確認すれば、その結果で新しいスポークの復路も確立されます。' },
           feedback: { en: 'A hub route does not establish the new spoke lookup or the independent return decision. Check both owned scopes.', ja: 'ハブのルートは、新しいスポークの検索や独立した復路を証明しません。両方の所有範囲を確認してください。' } },
       ],

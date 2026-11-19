@@ -10,6 +10,10 @@ import { simulateAzNet } from '../azure-net/engine'
 import { multihubLessonRequirements, multihubLessonTopology } from './multihub-scenario'
 import { prepareCourseScenario } from './course-transition'
 import type { PracticeWorkspace } from './practice-workspace'
+import { transferLessonRequirements, transferLessonTopology } from './transfer-scenario'
+import { createCourseRunner, orderedTasks, type LearningWorkspace } from './runner'
+import { beltProgress, recordCompletion, type ProgressLedger } from './progress-ledger'
+import { scenarioAssessments } from './editions'
 
 const check = (id: string) => scenarioBundle.checks.find((entry) => entry.id === `${id}.repair-check`)! as Extract<CourseCheck, { kind: 'requirements.satisfied' }>
 const document = (id: string) => ({ mode: 'full' as const, topology: structuredClone(scenarioTopologies[id]) })
@@ -43,6 +47,124 @@ function repaired(id: string) {
 }
 
 describe('scenario edition routing qualification', () => {
+  it('grounds the new private-default and two-destination predictions in native route selection', () => {
+    const starter = simulateAzNet(document('private-link').topology)
+    expect(starter.subnetTables['a-work'].routes).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prefix: '10.0.0.0/8', source: 'System', nextHopType: 'None', active: true }),
+      expect.objectContaining({ prefix: '0.0.0.0/0', nextHopType: 'Internet', active: true }),
+    ]))
+    expect(assess('private-link').assessments[0]).toMatchObject({
+      outcome: 'violated', evidence: { forward: { status: 'dropped-blackhole', hops: expect.arrayContaining([
+        expect.objectContaining({ matchedRoute: expect.objectContaining({ prefix: '10.0.0.0/8', nextHopType: 'None' }) }),
+      ]) } },
+    })
+    const input = repaired('inspection-bypass')
+    input.topology.udrTables[0].routes = [
+      { id: 'summary', name: 'Summary', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
+    ]
+    input.topology.udrTables[1].routes = []
+    const requirements = [
+      ...check('private-link').params.requirements.slice(0, 2),
+      { ...check('private-link').params.requirements[0], id: 'batch', target: { kind: 'subnet' as const, vnetId: 'b', subnetId: 'b-batch' }, destinationAddress: '10.22.2.4' },
+    ]
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate', document: input, requirements })
+    const before = evaluate()
+    expect(before.assessments.map((entry) => entry.outcome)).toEqual(['satisfied', 'satisfied', 'satisfied'])
+    expect(before.assessments[0].evidence).toMatchObject({ forward: { hops: expect.arrayContaining([
+      expect.objectContaining({ matchedRoute: expect.objectContaining({ prefix: '10.22.0.0/16', nextHopType: 'VNetPeering' }) }),
+    ]) } })
+    input.topology.udrTables[0].routes.push({ id: 'subnet-discard', name: 'Later policy', prefix: '10.22.1.0/24', nextHopType: 'None', enabled: true })
+    expect(evaluate().assessments.map((entry) => entry.outcome)).toEqual(['violated', 'satisfied', 'satisfied'])
+  })
+
+  it.each(['inspection-bypass.forward', 'tiered-incident.entry'])('awards staged %s without claiming the still-unmet full repair', async (taskId) => {
+    const tasks = orderedTasks(scenarioBundle), position = tasks.findIndex(({ task }) => task.id === taskId)
+    let ledger: ProgressLedger = { version: 1, policyVersion: 1, completions: tasks.slice(0, position).map(({ lesson, task }, revision) => ({
+      courseId: scenarioBundle.course.id, contentVersion: scenarioBundle.course.contentVersion, lessonId: lesson.id,
+      taskId: task.id, assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'prior-tasks', revision, scope: 1, engineVersion: 'prior',
+      completedAt: '2026-11-19T10:00:00.000Z',
+    })) }
+    const { lesson, task } = tasks[position], input = document(lesson.scenarioId)
+    if (lesson.id === 'inspection-bypass') {
+      input.topology.vnetPeerings.push(...document('colocated-chain').topology.vnetPeerings)
+      for (const table of input.topology.udrTables) table.routes.push({
+        id: `summary-${table.id}`, name: 'Summary', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true,
+      })
+    }
+    const live: LearningWorkspace = { scope: 1, revision: 1, practice: { version: 1, active: true,
+      courseId: scenarioBundle.course.id, scenarioId: lesson.scenarioId, returnProvider: 'azure-net', document: input } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, completions: ledger.completions, changed: () => {},
+      evaluate: async (request) => executePlatform(request), completed: (completion) => { ledger = recordCompletion(ledger, completion) } })
+    expect(runner.getSnapshot().taskId).toBe(taskId)
+    await runner.assess()
+    expect(runner.getSnapshot().feedback).toBe('requirements')
+    if (lesson.id === 'inspection-bypass') input.topology.udrTables[0].routes.push({
+      id: 'specific', name: 'Specific', prefix: '10.22.0.0/16', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true,
+    })
+    else input.topology.udrTables.find((table) => table.id === 'indirect-egress')!.routes[0].enabled = true
+    live.revision++; runner.workspaceChanged()
+    await runner.assess()
+    expect(runner.getSnapshot().feedback).toBe('passed')
+    expect(assess(lesson.id, input).assessments[0].outcome).toBe('violated')
+    expect(runner.advance()).toBe(true)
+    expect(ledger.completions.at(-1)?.awardId).toBe(task.awardId)
+    expect(runner.getSnapshot().taskId).toBe(`${lesson.id}.repair`)
+  })
+
+  it.each(['disable-rule', 'remove-rule', 'remove-association'])('qualifies the changed-prefix return diagnosis and %s alternative', (repair) => {
+    const topology = transferLessonTopology()
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: transferLessonRequirements })
+    const starter = evaluate()
+    expect(starter).toMatchObject({ status: 'complete', errors: [] })
+    expect(starter.assessments.map((entry) => entry.outcome)).toEqual(['violated', 'satisfied', 'satisfied', 'satisfied', 'satisfied'])
+    expect(starter.assessments[0].evidence).toMatchObject({
+      forward: { status: 'delivered' }, reverse: { status: 'dropped-blackhole', hops: expect.arrayContaining([
+        expect.objectContaining({ matchedRoute: expect.objectContaining({ prefix: '10.141.3.0/24', nextHopType: 'None' }) }),
+      ]) },
+    })
+    if (repair === 'disable-rule') topology.udrTables[1].routes[0].enabled = false
+    if (repair === 'remove-rule') topology.udrTables[1].routes = []
+    if (repair === 'remove-association') delete topology.vnets[1].subnets[0].routeTableId
+    expect(evaluate().assessments.map((entry) => entry.outcome)).toEqual(transferLessonRequirements.map(() => 'satisfied'))
+  })
+
+  it.each(['wrong-source', 'broken-operations', 'tenant-leak', 'changed-owner'])('rejects the handover %s non-fix', (change) => {
+    const topology = transferLessonTopology()
+    if (change !== 'wrong-source') topology.udrTables[1].routes[0].enabled = false
+    if (change === 'wrong-source') delete topology.vnets[0].subnets[0].routeTableId
+    if (change === 'broken-operations') topology.udrTables[0].routes.push({
+      id: 'ops-drop', name: 'Broken witness', prefix: '10.141.4.0/24', nextHopType: 'None', enabled: true,
+    })
+    if (change === 'tenant-leak') topology.vnetPeerings.push({ ...structuredClone(topology.vnetPeerings[0]),
+      id: 'bad-tenant-link', name: 'Tenant leak', vnetBId: 'tenant' })
+    if (change === 'changed-owner') topology.vnets[1].subnets[0].prefix = '10.142.8.0/24'
+    const result = executePlatform({ contractVersion: 1, operation: 'evaluate', document: { mode: 'full', topology }, requirements: transferLessonRequirements })
+    expect(result.errors).toEqual([])
+    expect(result.assessments.some((entry) => entry.outcome !== 'satisfied')).toBe(true)
+    if (change === 'changed-owner') expect(result.assessments[0].outcome).toBe('not assessed')
+  })
+
+  it('retains the historical scenario black belt and first-earned XP without inventing credit for inserted tasks', () => {
+    const inserted = new Set(['private-link.address-range', 'private-link.default-route', 'private-link.predict-default',
+      'inspection-bypass.predict', 'inspection-bypass.predict-subnet', 'inspection-bypass.forward', 'tiered-incident.entry'])
+    const completions = orderedTasks(scenarioBundle).filter(({ lesson, task }) => lesson.id !== 'routing-handover' && !inserted.has(task.id))
+      .map(({ lesson, task }, revision) => ({
+        courseId: scenarioBundle.course.id, contentVersion: 6, lessonId: lesson.id, taskId: task.id,
+        assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+        title: task.title, sessionId: 'historical-journey', revision, scope: 1, engineVersion: 'historical',
+        completedAt: '2026-11-19T10:00:00.000Z',
+      }))
+    const ledger: ProgressLedger = { version: 1, policyVersion: 1, completions }
+    expect(beltProgress(ledger, scenarioBundle.course, scenarioAssessments)).toMatchObject({ belt: { id: 'black' }, points: 2120 })
+    const before = structuredClone(ledger)
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => undefined, completions,
+      changed: () => {}, evaluate: async (request) => executePlatform(request), completed: () => { throw new Error('No automatic credit') } })
+    expect(runner.getSnapshot().taskId).toBe('private-link.address-range')
+    expect(ledger).toEqual(before)
+  })
+
   it('extends the learner network into the hub exercise without replacing edits or creating its peerings and UDRs', () => {
     const previous: PracticeWorkspace = { version: 1, active: true, returnProvider: 'azure-net', courseId: scenarioBundle.course.id,
       scenarioId: 'private-link', document: repaired('private-link') }
