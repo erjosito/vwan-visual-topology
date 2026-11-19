@@ -80,6 +80,32 @@ for (const mode of ['hub-spoke', 'full']) {
   })
 }
 
+test('preserves queued resource creations while allocation tools load', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  topology.vnets[0].appliances = []
+  let release!: () => void
+  let requested = false
+  const loading = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/src/azure-net/subnet-allocation.ts*', async (route) => {
+    requested = true
+    await loading
+    await route.continue()
+  })
+  await loadTopology(page, topology)
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+  for (let index = 0; index < 2; index++) {
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Add / Remove VNet Elements', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Add Azure Firewall/i }).click()
+    await expect.poll(() => requested).toBe(true)
+  }
+  expect((await saved()).vnets[0].appliances).toHaveLength(0)
+  release()
+  await expect.poll(async () => (await saved()).vnets[0].appliances.map((app) => app.privateIp)).toEqual(['10.0.1.4', '10.0.1.5'])
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances.map((app) => app.privateIp)).toEqual(['10.0.1.4'])
+})
+
 test('validates deferred CIDR drafts and renumbers modeled inventory on commit', async ({ page }) => {
   const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
   const vnet = topology.vnets[0], app = vnet.appliances[0]

@@ -1,5 +1,6 @@
 import { cidr, contains, ipv4 } from '../validation'
-import { allocateAddress, usableSubnetAddress, vnetAddresses } from './addressing'
+import { usableSubnetAddress } from './addressing'
+import { allocateAddress, vnetAddresses } from './subnet-allocation'
 import type { AzNetTopology, AzVNet } from './model'
 
 function subnetResources(topology: AzNetTopology, vnet: AzVNet, subnetId: string) {

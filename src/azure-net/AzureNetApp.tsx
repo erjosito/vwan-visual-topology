@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
@@ -6,7 +7,6 @@ import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
-import { availableSubnetPrefix, nextSubnetAddress } from './addressing'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
@@ -155,6 +155,21 @@ const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
 const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.VnetPrefixEditor })))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
+
+function useSubnetAddressEditing(commit: (updater: (draft: AzNetTopology) => void) => boolean, onError: (message: string) => void) {
+  const commitRef = useRef(commit)
+  useLayoutEffect(() => { commitRef.current = commit })
+  return async (updater: (draft: AzNetTopology, tools: typeof import('./subnet-allocation')) => void) => {
+    try {
+      const tools = await import('./subnet-allocation')
+      // Apply against the latest workspace, including another action queued while tools loaded.
+      return flushSync(() => commitRef.current((draft) => updater(draft, tools)))
+    } catch (error) {
+      onError(workspaceError(error))
+      return false
+    }
+  }
+}
 
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const language = useLanguage()
@@ -335,6 +350,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setTopology(next)
     return true
   }
+
+  const editSubnetAddresses = useSubnetAddressEditing(commitTopology, setWorkspaceNotice)
 
   const handleUndo = () => {
     if (!history.length) return
@@ -1133,9 +1150,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           (p.vnetBId === vnetId && p.bToA.useRemoteGateways)),
     )
 
-  const addSubnetToVnet = (vnetId: string) => {
+  const addSubnetToVnet = async (vnetId: string) => {
     let createdId = ''
-    commitTopology((draft) => {
+    const committed = await editSubnetAddresses((draft, { availableSubnetPrefix }) => {
       const v = draft.vnets.find((x) => x.id === vnetId)
       if (!v) return
       let idx = v.subnets.length + 1
@@ -1152,7 +1169,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         prefix,
       })
     })
-    if (createdId) {
+    if (committed && createdId) {
       setSelected({ kind: 'subnet', vnetId, subnetId: createdId })
     }
   }
@@ -1192,7 +1209,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const addFirewallToVnet = (vnetId: string, kind: 'azure-firewall' | 'nva-vm' = 'azure-firewall') => {
-    commitTopology((draft) => {
+    void editSubnetAddresses((draft, { availableSubnetPrefix, nextSubnetAddress }) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target) return
       const subnetName = kind === 'azure-firewall' ? 'AzureFirewallSubnet' : 'snet-nva'
@@ -1248,7 +1265,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const addGatewayToVnet = (vnetId: string, kind: 'ExpressRoute' | 'Vpn') => {
-    commitTopology((draft) => {
+    void editSubnetAddresses((draft, { availableSubnetPrefix }) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target) return
       if (vnetUsesRemoteGateways(vnetId, draft)) return
@@ -1287,7 +1304,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const addRouteServerToVnet = (vnetId: string) => {
-    commitTopology((draft) => {
+    void editSubnetAddresses((draft, { availableSubnetPrefix }) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target || target.routeServer) return
       if (vnetUsesRemoteGateways(vnetId, draft)) return
