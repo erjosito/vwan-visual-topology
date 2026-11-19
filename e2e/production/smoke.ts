@@ -498,7 +498,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey)
     expect(mode === 'vwan' ? saved : saved.topology).toEqual(JSON.parse(native.toString()))
     await page.getByTestId('learning-open').click()
-    await expect(practice).toContainText('Navigation help never costs points and never changes configuration or answers questions.')
+    await expect(practice.getByRole('button', { name: 'Pause learning', exact: true })).toBeVisible()
     await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
     expect(external).toEqual([])
     await context.setOffline(false)

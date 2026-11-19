@@ -2,6 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { exercises } from '../src/learning/exercises'
 import { practiceWorkspaceKey, type PracticeWorkspace } from '../src/learning/practice-workspace'
 import { progressKey } from '../src/learning/progress'
+import { learningOptions } from './learning-helpers'
 
 const normalKeys = ['vwan-visual-topology:v1', 'aznet-visual-topology:v1']
 const stored = (page: Page) => page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), normalKeys)
@@ -76,6 +77,7 @@ for (const vwan of [true, false]) {
     const edited = (await practice(page)).document
     await page.getByTestId('learning-open').click()
     const reopened = page.getByTestId('learning-sidebar')
+    await learningOptions(page)
     await reopened.getByText('Learning path and completed-task review', { exact: true }).click()
     await reopened.getByRole('button', { name: 'Pause learning', exact: true }).click()
     expect((await practice(page)).document).toEqual(edited)
@@ -179,7 +181,7 @@ test('corrupt practice requires scoped discard and cannot erase independent draf
   await dialog.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
   await expect(dialog.getByRole('alert')).toContainText('Saved practice could not be read')
   const progress = await page.evaluate((key) => localStorage.getItem(key), progressKey)
-  await page.keyboard.press('Escape')
+  await dialog.getByRole('button', { name: 'Pause learning', exact: true }).click()
   await bar(page).getByRole('button', { name: 'Discard practice workspace', exact: true }).click()
   await page.keyboard.press('Escape')
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe('damaged practice original')
