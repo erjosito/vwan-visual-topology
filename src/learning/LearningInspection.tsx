@@ -24,8 +24,12 @@ export function LearningInspection({ observation, prefixPresent, onObserve }: {
     const timer = setInterval(() => {
       const visible = document.visibilityState === 'visible' && key && registeredGuidanceAnchors().some((element) => {
         if (element.getAttribute('data-learning-anchor') !== key) return false
-        const box = visibleGuidanceBox(element)
-        return box && box.width >= 80 && box.height >= 18
+        const evidence = prefixPresent ? Array.from(element.querySelectorAll('code'))
+          .find((candidate) => candidate.textContent === observation.prefix) : element
+        if (!evidence) return false
+        const box = visibleGuidanceBox(evidence), bounds = evidence.getBoundingClientRect()
+        return box && (prefixPresent ? box.width + 1 >= bounds.width && box.height + 1 >= bounds.height
+          : box.width >= 80 && box.height >= 18)
       })
       if (!visible) { visibleSince = undefined; return }
       visibleSince ??= performance.now()

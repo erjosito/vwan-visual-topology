@@ -208,8 +208,22 @@ test('default mobile table guidance preserves practice and requires each exact m
   await completeLearningTasks(page, 1)
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'multihub-labels.compare')
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'multihub-labels.compare')
+  await learningOptions(page)
   await show(page, 'multihub-labels.compare', 'multihub-labels.return-guide', 'en')
   await expect(learningAnchor(page, 'hub-effective-table', 'east-hub', 'east-services')).toBeVisible()
+  const routes = page.getByRole('region', { name: 'Requested router BGP table', exact: true })
+  const prefix = learningAnchor(page, 'hub-effective-prefix', 'east-hub', 'east-services', '10.101.0.0/16').locator('code').first()
+  await prefix.evaluate((element) => {
+    const scroll = element.closest('.table-scroll')!
+    scroll.scrollLeft += element.getBoundingClientRect().right - scroll.getBoundingClientRect().left + 8
+  })
+  await expect(prefix).not.toBeInViewport()
+  await learningSidebar(page).getByText('Progress, review & options', { exact: true }).click()
+  await page.waitForTimeout(3500)
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'multihub-labels.compare')
+  await expect(learningSidebar(page).getByTestId('learning-feedback')).toHaveCount(0)
+  await routes.evaluate((element) => { element.scrollLeft = 0 })
+  await expect(prefix).toBeInViewport()
   await expect(learningSidebar(page).locator('[data-task-id="multihub-labels.compare"]')).toHaveCount(0)
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
 })

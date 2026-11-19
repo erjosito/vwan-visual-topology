@@ -82,8 +82,9 @@ stop automatic work and invalidate its proof. Unknown results do not retry in a
 loop; retry is offered only for assessment or recording failures.
 
 **Show me where** navigates without itself reporting evidence. A native route
-inspector reports only after its exact requested prefix row (or the exact table
+inspector reports only after its entire requested prefix text (or the exact table
 when the prefix is genuinely absent) is visibly readable for a stable interval.
+A visible adjacent cell in a horizontally scrolled row is not inspection.
 Closed, filtered-out, off-screen, occluded, loading, wrong-scope and inactive views
 cannot report. Hub-table coverage must still be complete. Its short-lived token
 is task/session/revision-specific; repeated use of the same check definition in
