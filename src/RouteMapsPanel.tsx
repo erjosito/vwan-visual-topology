@@ -1,29 +1,40 @@
 import { t, localizeDiagnostic } from './i18n'
-import { useState } from 'react'
-import type { FormEvent } from 'react'
+import { Suspense, useState } from 'react'
+import type { FormEvent, SetStateAction } from 'react'
 import type { RouteMap, RouteMapRule, RouterSelection, Topology, Transport } from './model'
 import type { Simulation } from './routing'
 import { parseAsPath, parseHubPrependAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 import { AdvancedRouteMapFields } from './AdvancedRouteMapFields'
+import { ConfigurationEditStatus, InspectorSection } from './WorkspacePresentation'
+import { useWorkspaceSession } from './workspace-context'
+import './route-map-messages-ja'
 
 const prefixes = (text: string) => text.trim() === '*' ? [] : text.split(/[,\s]+/).filter(Boolean)
 
 export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asPathMatching = false, siteLocalPreference = false }: {
   map: RouteMap; onSave: (map: RouteMap) => void; parsePrepend?: (value: string) => number[]; advanced?: boolean; asPathMatching?: boolean; siteLocalPreference?: boolean
 }) {
-  const [rules, setRules] = useState(() => advanced || asPathMatching ? map.rules.map((rule) => ({
+  const preview = useWorkspaceSession()?.presentationPreview
+  const [rules, setRules] = useState<RouteMapRule[]>(() => advanced || asPathMatching ? map.rules.map((rule) => ({
     ...rule,
     ...(rule.matchConditions ? { matchConditions: rule.matchConditions.map((condition) => ({ ...condition, id: condition.id ?? crypto.randomUUID() })) } : {}),
     ...(rule.modifications ? { modifications: rule.modifications.map((modification) => ({ ...modification, id: modification.id ?? crypto.randomUUID() })) } : {}),
   })) : map.rules)
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [values, setValues] = useState<Record<string, string>>({})
+  const value = (rule: RouteMapRule, field: string, fallback: string) => values[`${rule.id}-${field}`] ?? fallback
+  const compact = (items: string[], separator = ', ') => items.slice(0, 3).join(separator) + (items.length > 3 ? t(' (+{0} more)', items.length - 3) : '')
+  const change = (name: string, text: string) => setValues((current) => ({ ...current, [name]: text }))
+  const updateRules = (next: SetStateAction<RouteMapRule[]>) => { setDirty(true); setRules(next) }
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     try {
       const data = new FormData(event.currentTarget)
       const text = (name: string) => String(data.get(name) ?? '').trim()
-      onSave({
+      const saved: RouteMap = {
         ...map, name: text('mapName'),
         rules: rules.map((r) => ({
           id: r.id, prefixes: prefixes(text(`${r.id}-prefixes`)), match: text(`${r.id}-match`) as RouteMapRule['match'],
@@ -34,28 +45,69 @@ export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asP
           ...((advanced || asPathMatching) && r.matchConditions?.length ? { matchConditions: r.matchConditions.map((condition, index) => ({ ...condition, values: text(`${r.id}-condition-${index}`).split(/[,\s]+/).filter(Boolean) })) } : {}),
           ...(advanced && r.action !== 'drop' && r.modifications?.length ? { modifications: r.modifications.map((modification, index) => ({ ...modification, values: text(`${r.id}-modification-${index}`).split(/[,\s]+/).filter(Boolean) })) } : {}),
         })),
-      })
+      }
+      onSave(saved)
+      setRules(saved.rules)
+      setValues({})
+      setDirty(false)
       setError('')
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid route map.') }
   }
-  return <form className="map-definition" onSubmit={save}>
+  return <form className="map-definition" data-configuration-scope data-configuration-tracked data-configuration-pending={dirty}
+    onChange={() => setDirty(true)} onSubmit={save} onInvalidCapture={(event) => {
+      for (let parent = (event.target as HTMLElement).parentElement; parent && parent !== event.currentTarget; parent = parent.parentElement) {
+        if (parent instanceof HTMLDetailsElement) parent.open = true
+      }
+      setError(t('Check the highlighted rule fields before saving.'))
+    }}>
+    <p className="muted">{t('Save route map applies this definition to every existing assignment. It does not assign a new map to a connection.')}</p>
+    <Suspense fallback={null}><ConfigurationEditStatus form /></Suspense>
     <label className="field"><span>{t("Route map name")}</span><input aria-label={t("Route map name")} name="mapName" required maxLength={120} defaultValue={map.name} /></label>
-    {rules.map((r, index) => <fieldset className="map-rule" key={r.id}><legend>{t("Rule")} {index + 1}</legend>
-      <label className="field"><span>{t("Match prefixes (* = all)")}</span><textarea rows={2} aria-label={t("Rule {0} prefixes", index + 1)} name={`${r.id}-prefixes`} defaultValue={r.prefixes.join('\n') || '*'} /></label>
-      <div className="form-grid"><label className="field"><span>{t("Match mode")}</span><select aria-label={t("Rule {0} match", index + 1)} name={`${r.id}-match`} defaultValue={r.match}><option value="equals">{t("Equals")}</option><option value="contains">{t("Contains")}</option></select></label>
-        <label className="field"><span>{t("Action")}</span><select aria-label={t("Rule {0} action", index + 1)} value={r.action} onChange={(e) => setRules(rules.map((rule) => rule.id === r.id ? { ...rule, action: e.target.value as RouteMapRule['action'] } : rule))}>        <option value="permit">{t(advanced ? 'Permit / modify' : 'Permit unchanged')}</option><option value="drop">{t("Block / drop")}</option><option value="summarize">{t("Summarize")}</option><option value="prepend">{t("Prepend ASNs")}</option></select></label></div>
-      {r.action === 'summarize' && <label className="field"><span>{t("Summary prefixes")}</span><textarea aria-label={t("Rule {0} summary prefixes", index + 1)} name={`${r.id}-summary`} rows={2} defaultValue={r.summaryPrefixes.join('\n')} placeholder="10.0.0.0/8" /></label>}
-      {r.action === 'prepend' && <><label className="field"><span>{t("Prepend ASNs")}</span><input aria-label={t("Rule {0} prepend ASNs", index + 1)} aria-describedby={map.hubId ? `${r.id}-asn-help` : undefined} name={`${r.id}-prepend`} required={!!map.hubId} defaultValue={r.prepend.join(' ')} placeholder={map.hubId ? t('Your public ASN, repeated as needed') : '65001 65001'} /></label>
-        {map.hubId && <p id={`${r.id}-asn-help`} className="muted">{t('Use your own public 2-byte ASN in production. Private ASNs (64512-65534), Azure-reserved 8074, 8075 and 12076, 65535 and 4-byte ASNs are not allowed. The app also excludes AS_TRANS 23456. Documentation ASNs (64496-64511) are accepted for lab simulation; Microsoft does not explicitly ban that range in its route-map documentation, and Azure acceptance has not been verified. Repeating a valid ASN is allowed.')}
+    {rules.map((r, index) => {
+      const prefixText = value(r, 'prefixes', r.prefixes.join('\n') || '*')
+      const matched = prefixes(prefixText)
+      const match = value(r, 'match', r.match)
+      const next = value(r, 'next', r.nextStep)
+      const localPreference = value(r, 'local-preference', String(r.localPreference ?? ''))
+      const hasLocalPreference = siteLocalPreference && map.siteId && r.action !== 'drop' && localPreference !== ''
+      const actions = { permit: advanced ? 'Permit / modify' : 'Permit unchanged', drop: 'Block / drop', summarize: 'Summarize', prepend: 'Prepend ASNs' }
+      const attributes = t('{0} additional conditions; {1} attribute modifications', r.matchConditions?.length ?? 0, r.action === 'drop' ? 0 : r.modifications?.length ?? 0)
+      return <details key={r.id} className="map-rule-disclosure" data-grouped={!!preview} data-rule-id={r.id}
+        open={!preview || !!expanded[r.id]} onToggle={(event) => {
+          if (preview) { const open = event.currentTarget.open; setExpanded((current) => current[r.id] === open ? current : { ...current, [r.id]: open }) }
+        }}>
+      <summary hidden={!preview}><strong>{t("Rule")} {index + 1}</strong>
+        <span>{t(match === 'contains' ? 'Contains' : 'Equals')}: {compact(matched) || t('All prefixes')}</span>
+        <span>{t(actions[r.action])}{r.action === 'prepend' && `: ${compact(value(r, 'prepend', r.prepend.join(' ')).split(/\s+/).filter(Boolean), ' ') || t('Not set')}`}
+          {r.action === 'summarize' && `: ${compact(prefixes(value(r, 'summary', r.summaryPrefixes.join(', ')))) || t('Not set')}`}
+          {' · '}{t(next === 'continue' ? 'Continue to next rule' : 'Terminate')}</span>
+        {!!(r.matchConditions?.length || r.action !== 'drop' && r.modifications?.length || hasLocalPreference) && <span>{attributes}
+          {hasLocalPreference && ` · ${t('Local preference {0}', localPreference)}`}</span>}
+      </summary>
+      <fieldset className="map-rule"><legend>{t("Rule")} {index + 1}</legend>
+      <label className="field"><span>{t("Match prefixes (* = all)")}</span><textarea rows={2} aria-label={t("Rule {0} prefixes", index + 1)} name={`${r.id}-prefixes`} value={prefixText} onChange={(event) => change(event.target.name, event.target.value)} /></label>
+      <div className="form-grid"><label className="field"><span>{t("Match mode")}</span><select aria-label={t("Rule {0} match", index + 1)} name={`${r.id}-match`} value={match} onChange={(event) => change(event.target.name, event.target.value)}><option value="equals">{t("Equals")}</option><option value="contains">{t("Contains")}</option></select></label>
+        <label className="field"><span>{t("Action")}</span><select aria-label={t("Rule {0} action", index + 1)} value={r.action} onChange={(e) => updateRules(rules.map((rule) => rule.id === r.id ? { ...rule, action: e.target.value as RouteMapRule['action'] } : rule))}>        <option value="permit">{t(advanced ? 'Permit / modify' : 'Permit unchanged')}</option><option value="drop">{t("Block / drop")}</option><option value="summarize">{t("Summarize")}</option><option value="prepend">{t("Prepend ASNs")}</option></select></label></div>
+      {r.action === 'summarize' && <label className="field"><span>{t("Summary prefixes")}</span><textarea aria-label={t("Rule {0} summary prefixes", index + 1)} name={`${r.id}-summary`} rows={2} value={value(r, 'summary', r.summaryPrefixes.join('\n'))} onChange={(event) => change(event.target.name, event.target.value)} placeholder="10.0.0.0/8" /></label>}
+      {r.action === 'prepend' && <><label className="field"><span>{t("Prepend ASNs")}</span><input aria-label={t("Rule {0} prepend ASNs", index + 1)} aria-describedby={map.hubId ? `${r.id}-asn-help` : undefined} name={`${r.id}-prepend`} required={!!map.hubId} value={value(r, 'prepend', r.prepend.join(' '))} onChange={(event) => change(event.target.name, event.target.value)} placeholder={map.hubId ? t('Your public ASN, repeated as needed') : '65001 65001'} /></label>
+        {map.hubId && <details open={!preview}><summary>{t('Hub ASN restrictions and references')}</summary><p id={`${r.id}-asn-help`} className="muted">{t('Use your own public 2-byte ASN in production. Private ASNs (64512-65534), Azure-reserved 8074, 8075 and 12076, 65535 and 4-byte ASNs are not allowed. The app also excludes AS_TRANS 23456. Documentation ASNs (64496-64511) are accepted for lab simulation; Microsoft does not explicitly ban that range in its route-map documentation, and Azure acceptance has not been verified. Repeating a valid ASN is allowed.')}
           {' '}<a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about#considerations-and-limitations" target="_blank" rel="noreferrer">{t('Microsoft hub route-map ASN restrictions')}</a>
-          {' '}<a href="https://www.iana.org/assignments/iana-as-numbers-special-registry/" target="_blank" rel="noreferrer">{t('IANA special-purpose ASN registry')}</a></p>}
+          {' '}<a href="https://www.iana.org/assignments/iana-as-numbers-special-registry/" target="_blank" rel="noreferrer">{t('IANA special-purpose ASN registry')}</a></p></details>}
       </>}
-      {(advanced || asPathMatching) && <AdvancedRouteMapFields rule={r} index={index + 1} asPathOnly={!advanced} onChange={(next) => setRules((rules) => rules.map((rule) => rule.id === r.id ? next : rule))} />}
-      {siteLocalPreference && map.siteId && r.action !== 'drop' && <label className="field"><span>{t("Inbound local preference (default 100)")}</span><input type="number" min={0} max={4294967295} step={1} aria-label={t("Rule {0} local preference", index + 1)} name={`${r.id}-local-preference`} defaultValue={r.localPreference ?? ''} /></label>}
-      <label className="field"><span>{t("After a match")}</span><select aria-label={t("Rule {0} next step", index + 1)} name={`${r.id}-next`} defaultValue={r.nextStep}><option value="terminate">{t("Terminate")}</option><option value="continue">{t("Continue to next rule")}</option></select></label>
-      <div className="row"><button type="button" disabled={index === 0} onClick={() => setRules((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next })}>{t("Move rule")} {index + 1}  {t("up")}</button><button type="button" className="danger" onClick={() => setRules(rules.filter((rule) => rule.id !== r.id))}>{t("Remove rule")} {index + 1}</button></div>
-    </fieldset>)}
-    <div className="row"><button type="button" disabled={rules.length >= 20} onClick={() => setRules([...rules, { id: crypto.randomUUID(), prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }])}>{t("Add rule")}</button><button className="primary">{t("Save route map")}</button></div>
+      <label className="field"><span>{t("After a match")}</span><select aria-label={t("Rule {0} next step", index + 1)} name={`${r.id}-next`} value={next} onChange={(event) => change(event.target.name, event.target.value)}><option value="terminate">{t("Terminate")}</option><option value="continue">{t("Continue to next rule")}</option></select></label>
+      {(advanced || asPathMatching || siteLocalPreference && map.siteId && r.action !== 'drop') && <InspectorSection title={t('Advanced attributes')}
+        summary={attributes + (r.localPreference !== undefined ? ` · ${t('Local preference {0}', r.localPreference)}` : '')}
+        initialOpen={!!(r.matchConditions?.length || r.modifications?.length || r.localPreference !== undefined)}>
+        {(advanced || asPathMatching) && <AdvancedRouteMapFields rule={r} index={index + 1} asPathOnly={!advanced} onChange={(next) => updateRules((rules) => rules.map((rule) => rule.id === r.id ? next : rule))} />}
+        {siteLocalPreference && map.siteId && r.action !== 'drop' && <label className="field"><span>{t("Inbound local preference (default 100)")}</span><input type="number" min={0} max={4294967295} step={1} aria-label={t("Rule {0} local preference", index + 1)} name={`${r.id}-local-preference`} value={value(r, 'local-preference', String(r.localPreference ?? ''))} onChange={(event) => change(event.target.name, event.target.value)} /></label>}
+      </InspectorSection>}
+      <div className="row"><button type="button" disabled={index === 0} onClick={() => updateRules((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next })}>{t("Move rule")} {index + 1}  {t("up")}</button><button type="button" className="danger" onClick={() => updateRules(rules.filter((rule) => rule.id !== r.id))}>{t("Remove rule")} {index + 1}</button></div>
+    </fieldset></details>})}
+    <div className="row"><button type="button" disabled={rules.length >= 20} onClick={() => {
+      const id = crypto.randomUUID()
+      updateRules([...rules, { id, prefixes: [], match: 'equals', action: 'permit', summaryPrefixes: [], prepend: [], nextStep: 'terminate' }])
+      setExpanded((current) => ({ ...current, [id]: true }))
+    }}>{t("Add rule")}</button><button className="primary">{t("Save route map")}</button></div>
     {error && <p role="alert" className="notice error">{localizeDiagnostic(error)}</p>}
   </form>
 }
@@ -63,6 +115,7 @@ export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asP
 export function RouteMapsPanel({ topology, simulation, router, connectionId, onRouter, onSave, onClose }: {
   topology: Topology; simulation: Simulation; router?: RouterSelection; connectionId?: string; onRouter: (router: RouterSelection) => void; onSave: (topology: Topology) => void; onClose: () => void
 }) {
+  const preview = useWorkspaceSession()?.presentationPreview
   const owner: RouterSelection = router ?? (topology.hubs[0] ? { kind: 'hub', id: topology.hubs[0].id } : { kind: 'site', id: topology.sites[0]?.id ?? '' })
   const routerKey = owner.id ? `${owner.kind}:${owner.id}` : ''
   const node = (owner.kind === 'hub' ? topology.hubs : topology.sites).find((n) => n.id === owner.id)
@@ -109,6 +162,7 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
       <optgroup label={t("Virtual hubs")}>{topology.hubs.map((h) => <option key={h.id} value={`hub:${h.id}`}>{h.name}</option>)}</optgroup><optgroup label={t("On-premises sites")}>{topology.sites.map((s) => <option key={s.id} value={`site:${s.id}`}>{s.name}</option>)}</optgroup>
     </select></label><button disabled={!node} onClick={() => { setDraft({ id: crypto.randomUUID(), name: 'New route map', [owner.kind === 'hub' ? 'hubId' : 'siteId']: owner.id, rules: [] }); setMapId(''); setConfirmDelete(false) }}>{t("Create route map")}</button></div>
     {link && <section className="assignment-panel"><h3>{t("Router connection policies")}</h3>
+      <p className="muted">{t('Connection assignments apply immediately to this workspace. Saving a definition is a separate action.')}</p>
       <label className="field"><span>{t("Connection")}</span><select aria-label={t("Route map connection")} value={link.id} onChange={(e) => { setLinkId(e.target.value); setError('') }}>{links.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}</select></label>
       <div className="form-grid">{(['inboundMapId', 'outboundMapId'] as const).map((direction) => <label className="field" key={direction}><span>{direction === 'inboundMapId' ? t("Inbound to {0}", node?.name) : t("Outbound from {0}", node?.name)}</span><select aria-label={direction === 'inboundMapId' ? t("Inbound route map") : t("Outbound route map")} disabled={owner.kind === 'hub' && link.transport === 'SDWAN'} value={binding?.[direction] ?? ''} onChange={(e) => assign(direction, e.target.value)}><option value="">{t("None")}</option>{topology.routeMaps?.filter(owned).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>)}</div>
       {owner.kind === 'hub' && link.transport === 'SDWAN' && <p className="notice">{t("Azure route maps are unsupported on integrated SD-WAN NVA connections. Site-side policies are separate.")}</p>}
@@ -144,6 +198,7 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
     </>}
     {!map && <p className="empty">{t("Select a route map or create a reusable policy.")}</p>}
     {error && <p role="alert" className="notice error">{localizeDiagnostic(error)}</p>}
-    <p className="muted">{owner.kind === 'hub' ? t("Hub prepend rules use non-private 2-byte ASNs, excluding Azure-reserved ASNs and AS_TRANS. Documentation ASNs are available for simulation, not production ASN guidance. VNet connection policies include spoke NVA advertisements; inter-hub policies are not simulated.") : t("Site policies accept private and 32-bit ASNs, and apply to hub connections and on-premises links. They are independent of Azure-side policies.")}  {t("Summaries retain known forwarding destinations; aggregate holes are not treated as reachable. Static VPN entries bypass BGP policies.")}</p>
+    <p className="muted">{t('Policies change route advertisements, not packet ACLs. Summaries do not make aggregate holes reachable.')}</p>
+    <details open={!preview}><summary>{t('Route-map behavior and limits')}</summary><p className="muted">{owner.kind === 'hub' ? t("Hub prepend rules use non-private 2-byte ASNs, excluding Azure-reserved ASNs and AS_TRANS. Documentation ASNs are available for simulation, not production ASN guidance. VNet connection policies include spoke NVA advertisements; inter-hub policies are not simulated.") : t("Site policies accept private and 32-bit ASNs, and apply to hub connections and on-premises links. They are independent of Azure-side policies.")}  {t("Summaries retain known forwarding destinations; aggregate holes are not treated as reachable. Static VPN entries bypass BGP policies.")}</p></details>
   </CanvasOverlay>
 }

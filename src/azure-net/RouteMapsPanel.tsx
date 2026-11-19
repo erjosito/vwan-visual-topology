@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { t } from '../i18n'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { MapDefinition } from '../RouteMapsPanel'
 import type { RouteMap, RouteMapDirection } from '../model'
@@ -12,8 +13,8 @@ import type { AzBgpRibEntry } from './engine'
 export function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave: (attributes: AzAppliance['advertisedRouteAttributes']) => void }) {
   const [error, setError] = useState('')
   if (!app.advertisedPrefixes?.length) return null
-  return <details><summary>Advertised route attributes · {app.name}</summary>
-    <p className="muted">AS-path suffixes follow the peer ASN. These are source advertisements, before inbound ARS policies.</p>
+  return <details><summary>{t('Advertised route attributes · {0}', app.name)}</summary>
+    <p className="muted">{t('AS-path suffixes follow the peer ASN. These are source advertisements, before inbound ARS policies.')}</p>
     <form onSubmit={(event) => {
       event.preventDefault()
       try {
@@ -28,11 +29,11 @@ export function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave:
       {app.advertisedPrefixes.map((prefix, index) => {
         const attributes = app.advertisedRouteAttributes?.find((attributes) => attributes.prefix === prefix)
         return <fieldset key={prefix}><legend>{prefix}</legend>
-          <label className="field"><span>AS-path suffix</span><input name={`path-${index}`} aria-label={`${app.name} ${prefix} AS-path suffix`} defaultValue={attributes?.asPath?.join(' ') ?? ''} /></label>
-          <label className="field"><span>Communities</span><input name={`communities-${index}`} aria-label={`${app.name} ${prefix} communities`} defaultValue={attributes?.communities?.join(' ') ?? ''} /></label>
+          <label className="field"><span>{t('AS-path suffix')}</span><input name={`path-${index}`} aria-label={`${app.name} ${prefix} ${t('AS-path suffix')}`} defaultValue={attributes?.asPath?.join(' ') ?? ''} /></label>
+          <label className="field"><span>{t('Communities')}</span><input name={`communities-${index}`} aria-label={`${app.name} ${prefix} ${t('Communities').toLowerCase()}`} defaultValue={attributes?.communities?.join(' ') ?? ''} /></label>
         </fieldset>
       })}
-      <button>Save peer route attributes</button>
+      <button>{t('Save peer route attributes')}</button>
       {error && <p role="alert" className="notice error">{error}</p>}
     </form>
   </details>
@@ -42,7 +43,7 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
   topology: AzNetTopology; siteId?: string; hubId?: string; routeServerId?: string;
   inbound?: Record<string, AzBgpRibEntry[]>; outbound?: Record<string, AzBgpRibEntry[]>;
   initialConnectionId?: string; initialDirection?: RouteMapDirection;
-  onSave: (topology: AzNetTopology) => void; onClose: () => void
+  onSave: (topology: AzNetTopology) => boolean | void; onClose: () => void
 }) {
   const arsVnet = topology.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)
   const ars = routeServerId ? arsVnet?.routeServer : undefined
@@ -64,7 +65,7 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
   const commit = (next: AzNetTopology) => {
     if (ars) validateAzArsRouteMaps(next)
     else validateAzSiteRouteMaps(next)
-    onSave(next)
+    if (onSave(next) === false) throw new Error(t('Route map changes were not applied. Review the workspace notice.'))
     setError('')
   }
   const assign = (direction: 'inboundMapId' | 'outboundMapId', id: string) => {
@@ -81,12 +82,12 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
       commit(next)
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid assignment.') }
   }
-  return <CanvasOverlay title={`Route maps · ${site.name}`} className="route-map-panel" onClose={onClose}>
-    <p className="muted">Policies belong to this {ars ? 'Azure Route Server' : hub ? 'Virtual WAN hub' : 'site'}, with independent assignments on each connection. Inbound means learned by {site.name}; outbound means advertised by it. Unmatched routes are allowed.</p>
-    {ars && arsVnet && <details><summary>BGP peers (local or directly peered VNets)</summary>
-      <p className="muted">BGP peering requires VNet access, not gateway transit. Injecting routes into spokes still requires gateway-transit settings. Remote policy assignments remain limited to eligible spoke virtual network connections. Enabling a BGP peer here does not create VNet peering or packet connectivity.</p>
+  return <CanvasOverlay title={t('Route maps · {0}', site.name)} className="route-map-panel" onClose={onClose}>
+    <p className="muted">{t('Policies belong to this {0}, with independent assignments on each connection. Inbound means learned by {1}; outbound means advertised by it. Unmatched routes are allowed.', t(ars ? 'Azure Route Server' : hub ? 'Virtual WAN hub' : 'site'), site.name)}</p>
+    {ars && arsVnet && <details><summary>{t('BGP peers (local or directly peered VNets)')}</summary>
+      <p className="muted">{t('BGP peering requires VNet access, not gateway transit. Injecting routes into spokes still requires gateway-transit settings. Remote policy assignments remain limited to eligible spoke virtual network connections. Enabling a BGP peer here does not create VNet peering or packet connectivity.')}</p>
       {azArsPeerHosts(arsVnet, topology).flatMap((host) => host.appliances.filter((app) => app.bgpEnabled).map((app) => <div key={app.id}><label className="aznet-hover-toggle">
-        <input type="checkbox" aria-label={`BGP peer ${host.name} / ${app.name}`}
+        <input type="checkbox" aria-label={t('BGP peer {0} / {1}', host.name, app.name)}
           checked={ars.peerApplianceIds.includes(app.id)} disabled={!ars.peerApplianceIds.includes(app.id) && ars.peerApplianceIds.length >= ARS_MAX_BGP_PEERS}
           onChange={(event) => {
             try {
@@ -103,31 +104,32 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
       }} /></div>))}
     </details>}
     <button onClick={() => {
-      setDraft({ id: crypto.randomUUID(), name: 'New route map', ...(ars ? {} : hub ? { hubId } : { siteId }), rules: [] })
+      setDraft({ id: crypto.randomUUID(), name: t('New route map'), ...(ars ? {} : hub ? { hubId } : { siteId }), rules: [] })
       setMapId(''); setConfirmDelete(false)
-    }}>Create route map</button>
+    }}>{t('Create route map')}</button>
     {link && <section className="assignment-panel">
-      <h3>Router connection policies</h3>
-      <label className="field"><span>Connection</span><select aria-label="Route map connection" value={link.id} onChange={(event) => setConnectionId(event.target.value)}>
+      <h3>{t('Router connection policies')}</h3>
+      <p className="muted">{t('Connection assignments apply immediately to this workspace. Saving a definition is a separate action.')}</p>
+      <label className="field"><span>{t('Connection')}</span><select aria-label={t('Route map connection')} value={link.id} onChange={(event) => setConnectionId(event.target.value)}>
         {links.map((link) => <option key={link.id} value={link.id}>{link.name}</option>)}
       </select></label>
       <div className="form-grid">{(['inboundMapId', 'outboundMapId'] as const).map((direction) => <label className="field" key={direction}>
-        <span>{direction === 'inboundMapId' ? `Inbound to ${site.name}` : `Outbound from ${site.name}`}</span>
-        <select aria-label={direction === 'inboundMapId' ? 'Inbound route map' : 'Outbound route map'} autoFocus={direction === `${initialDirection}MapId`} value={binding?.[direction] ?? ''} disabled={!link.bgp} onChange={(event) => assign(direction, event.target.value)}>
-          <option value="">None</option>{maps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}
+        <span>{t(direction === 'inboundMapId' ? 'Inbound to {0}' : 'Outbound from {0}', site.name)}</span>
+        <select aria-label={t(direction === 'inboundMapId' ? 'Inbound route map' : 'Outbound route map')} autoFocus={direction === `${initialDirection}MapId`} value={binding?.[direction] ?? ''} disabled={!link.bgp} onChange={(event) => assign(direction, event.target.value)}>
+          <option value="">{t('None')}</option>{maps.map((map) => <option key={map.id} value={map.id}>{map.name}</option>)}
         </select>
       </label>)}</div>
-      {!link.bgp && <p className="notice">{ars ? 'Enable BGP on this peer or gateway to exchange BGP routes.' : hub ? 'Hub route maps are unsupported on integrated SD-WAN and static VPN connections.' : 'Static VPN routes bypass BGP route maps. Enable BGP on the connection and gateway to apply policies.'}</p>}
+      {!link.bgp && <p className="notice">{t(ars ? 'Enable BGP on this peer or gateway to exchange BGP routes.' : hub ? 'Hub route maps are unsupported on integrated SD-WAN and static VPN connections.' : 'Static VPN routes bypass BGP route maps. Enable BGP on the connection and gateway to apply policies.')}</p>}
     </section>}
-    {!links.length && <p className="notice">{ars ? 'Add a local NVA BGP peer or gateway to assign ARS policies.' : 'Connect this site to a gateway, ExpressRoute location, NVA or another site to assign policies.'}</p>}
+    {!links.length && <p className="notice">{t(ars ? 'Add a local NVA BGP peer or gateway to assign ARS policies.' : 'Connect this site to a gateway, ExpressRoute location, NVA or another site to assign policies.')}</p>}
     <div className="resource-list">{maps.map((map) => <button key={map.id} aria-pressed={!draft && map.id === mapId} onClick={() => { setMapId(map.id); setDraft(undefined); setConfirmDelete(false) }}>
-      {map.name}<small>{map.rules.length} rules · {site.routeMapAssignments?.filter((assignment) => assignment.inboundMapId === map.id || assignment.outboundMapId === map.id).length ?? 0} connections</small>
+      {map.name}<small>{t('{0} rules · {1} connections', map.rules.length, site.routeMapAssignments?.filter((assignment) => assignment.inboundMapId === map.id || assignment.outboundMapId === map.id).length ?? 0)}</small>
     </button>)}</div>
     {map && <>
-      {!draft && <p className="muted" data-route-map-attachments>Applied to: {site.routeMapAssignments?.flatMap((assignment) => {
-        const directions = [assignment.inboundMapId === map.id ? 'Inbound' : '', assignment.outboundMapId === map.id ? 'Outbound' : ''].filter(Boolean)
+      {!draft && <p className="muted" data-route-map-attachments>{t('Applied to:')}{' '}{site.routeMapAssignments?.flatMap((assignment) => {
+        const directions = [assignment.inboundMapId === map.id ? t('Inbound') : '', assignment.outboundMapId === map.id ? t('Outbound') : ''].filter(Boolean)
         return directions.length ? [`${links.find((link) => link.id === assignment.connectionId)?.name ?? assignment.connectionId} (${directions.join(', ')})`] : []
-      }).join(' · ') || 'No connections'}</p>}
+      }).join(' · ') || t('No connections')}</p>}
       <MapDefinition key={map.id} map={map} advanced={!!ars} asPathMatching={!ars} siteLocalPreference={!ars && !hub} parsePrepend={ars ? parseArsPrependAsPath : undefined} onSave={(value) => {
         const next = structuredClone(topology)
         if (ars) {
@@ -137,8 +139,8 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
         commit(next); setDraft(undefined); setMapId(value.id)
       }} />
       {!draft && <div className="delete-resource">{confirmDelete ? <>
-        <p>Delete route map {map.name} and remove all of its connection assignments?</p>
-        <button onClick={() => setConfirmDelete(false)}>Cancel deletion</button>
+        <p>{t('Delete route map {0} and remove all of its connection assignments?', map.name)}</p>
+        <button onClick={() => setConfirmDelete(false)}>{t('Cancel deletion')}</button>
         <button className="danger" onClick={() => {
           const next = structuredClone(topology)
           if (ars) {
@@ -148,20 +150,22 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
           pruneAzSiteRouteMaps(next)
           pruneAzArsRouteMaps(next)
           commit(next); setMapId(''); setConfirmDelete(false)
-        }}>Confirm route map deletion</button>
-      </> : <button className="danger" onClick={() => setConfirmDelete(true)}>Delete route map</button>}</div>}
+        }}>{t('Confirm route map deletion')}</button>
+      </> : <button className="danger" onClick={() => setConfirmDelete(true)}>{t('Delete route map')}</button>}</div>}
     </>}
     {error && <p role="alert" className="notice error">{error}</p>}
-    {ars && link && inbound && <details data-testid="aznet-policy-inbound"><summary>Inbound routes after route maps</summary>
+    {ars && link && inbound && <details data-testid="aznet-policy-inbound"><summary>{t('Inbound routes after route maps')}</summary>
       <BgpRouteTable key={link.id} entries={inbound[link.id] ?? []} available={ars.enabled} />
     </details>}
-    {ars && link && outbound && <details open data-testid="aznet-policy-outbound"><summary>Outbound advertisements after route maps</summary>
+    {ars && link && outbound && <details open data-testid="aznet-policy-outbound"><summary>{t('Outbound advertisements after route maps')}</summary>
       <BgpRouteTable key={link.id} entries={outbound[link.id] ?? []} available={ars.enabled} />
     </details>}
-    <p className="muted">{ars
+    <p className="muted">{t('Policies change route advertisements, not packet ACLs. Summaries do not make aggregate holes reachable.')}</p>
+    <details><summary>{t('Route-map behavior and limits')}</summary><p className="muted">{t(ars
       ? 'ARS maps support prefix, AS-path and community conditions combined with AND; AS-path add/replace/clear; community add/replace/remove/clear; and summarization with attribute stripping. Only 2-byte ASNs are supported; modifications exclude Azure-reserved ASNs and preserve Azure-reserved communities. Inbound policies precede ARS selection. Outbound policies change advertisements only. Peered-spoke policies require allowGatewayTransit/useRemoteGateways and no local gateway/ARS in the spoke. Local On-link routes remain even when propagation is filtered. ARS own-VNet advertisements stay protected. Private ASNs are stripped over ExpressRoute. Policies are not packet ACLs and do not fill aggregate holes.'
-      : 'Uses the same ordered prefix matching, permit, drop, summarize and AS-path prepend rules as VWAN site policies. Site policies accept private and 32-bit ASNs. Summaries do not create reachability in aggregate holes.'}
-      {ars && <> <a href="https://learn.microsoft.com/azure/route-server/route-maps-about" target="_blank" rel="noreferrer">Microsoft ARS route-map capabilities and limits</a></>}
-    </p>
+      : hub ? 'Hub prepend rules use non-private 2-byte ASNs, excluding Azure-reserved ASNs and AS_TRANS. Documentation ASNs are available for simulation, not production ASN guidance. VNet connection policies include spoke NVA advertisements; inter-hub policies are not simulated.'
+      : 'Uses the same ordered prefix matching, permit, drop, summarize and AS-path prepend rules as VWAN site policies. Site policies accept private and 32-bit ASNs. Summaries do not create reachability in aggregate holes.')}
+      {ars && <> <a href="https://learn.microsoft.com/azure/route-server/route-maps-about" target="_blank" rel="noreferrer">{t('Microsoft ARS route-map capabilities and limits')}</a></>}
+    </p></details>
   </CanvasOverlay>
 }

@@ -7,7 +7,7 @@ export function hasPendingConfiguration(root: Element | null): boolean {
       .some(input => input.value !== input.dataset.configurationSaved)
     || [...root?.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>('form input, form textarea, form select') ?? []]
       .some(input => {
-        if (input.hasAttribute('data-configuration-pending')) return false
+        if (input.hasAttribute('data-configuration-pending') || input.closest('form[data-configuration-tracked]')) return false
         if (input instanceof HTMLSelectElement) {
           const defaults = [...input.options].filter(option => option.defaultSelected)
           return defaults.length > 0 && [...input.selectedOptions].map(option => option.value).join('\0') !== defaults.map(option => option.value).join('\0')
