@@ -7,7 +7,7 @@ import { VpnNatConnectionEditor } from '../VpnNatEditor'
 import { saveManagedVnra, vnraSubnetName } from './vnra-authoring'
 import { guidanceAnchor } from '../learning/guidance'
 
-type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => void }
+type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => boolean | void }
 const prefixes = (text: string) => {
   const values = text.split(/[,\s]+/).filter(Boolean)
   if (values.some((prefix) => !cidr(prefix))) throw new Error(t('Enter valid IPv4 CIDR prefixes.'))
@@ -27,7 +27,7 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
     data-learning-anchor={guidanceAnchor('connection-editor', vpn ? 'vpn-connection' : 'er-link', connectionId)}>
     <h3>{t('Hybrid connection routing')}</h3>
     <p className="muted">{connection.id}</p>
-    <form onSubmit={(event) => {
+    <form data-configuration-pending={transport !== (vpn?.transport ?? 'VPN') || bgp !== (vpn?.bgpEnabled ?? true)} onSubmit={(event) => {
       event.preventDefault()
       try {
         const data = new FormData(event.currentTarget)
@@ -143,7 +143,8 @@ export function ManagedVnraEditor({ topology, vnetId, applianceId, commit, onSav
     <h3>{t(app ? 'Configure Managed VNRA' : 'Add Managed VNRA')}</h3>
     <p>{t('Original VNet')}: {vnet.name} (<code>{vnet.id}</code>){app && <> · <code>{app.id}</code></>}</p>
     <p>{t('Use a dedicated VirtualNetworkApplianceSubnet and UDRs targeting the VNRA private IP. Configure peering access, forwarded traffic and return routes separately; this action does not change peerings or routes.')}</p>
-    <form key={app ? JSON.stringify([app.name, app.privateIp, app.subnetId]) : vnet.id} onSubmit={(event) => {
+    <form key={app ? JSON.stringify([app.name, app.privateIp, app.subnetId]) : vnet.id}
+      data-configuration-pending={subnetId !== (app?.subnetId ?? vnet.subnets.find(entry => entry.name === vnraSubnetName)?.id ?? '')} onSubmit={(event) => {
       event.preventDefault()
       try {
         const data = new FormData(event.currentTarget)
@@ -153,7 +154,7 @@ export function ManagedVnraEditor({ topology, vnetId, applianceId, commit, onSav
           newSubnetPrefix: subnetId ? undefined : String(data.get('prefix')),
         }
         saveManagedVnra(structuredClone(topology), vnet.id, input)
-        commit((draft) => saveManagedVnra(draft, vnet.id, input))
+        if (commit((draft) => saveManagedVnra(draft, vnet.id, input)) === false) return
         setError('')
         onSaved?.(input.id)
       } catch (error) { setError(t(error instanceof Error ? error.message : 'Inventory edit failed.')) }

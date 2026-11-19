@@ -24,6 +24,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   topology: Topology; request: EditorRequest; onSave: (next: Topology, selection: ObjectSelection) => void; onClose: () => void; onRouteMaps: (router: RouterSelection) => void; onStaticRouting: (router: RouterSelection) => void; onAddNva: (spokeId: string) => void; onOpenErLocationInfo?: (peeringLocation?: string, sku?: ErCircuitSku, hubRegion?: string, erLocationId?: string) => void
 }) {
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
   const hub = topology.hubs.find((h) => h.id === request.id)
   const [hubStatic, setHubStatic] = useState(() => ({ id: hub?.id ?? crypto.randomUUID(), firewall: hub?.firewall, routeTables: hub?.routeTables }))
@@ -232,7 +233,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const removedPeers = topology.siteLinks.filter((l) => l.a === request.id || l.b === request.id).length
 
   return <CanvasOverlay title={title} className="object-editor" onClose={onClose}>
-    <form onSubmit={save}>
+    <form onSubmit={save} data-configuration-pending={dirty} onChange={() => setDirty(true)}>
       {request.deleting ? <>
         <p>{t("Delete")} <strong>{item?.name}</strong>{t("? This cannot be undone. Export JSON first if you need a backup.")}</p>
         {request.kind === 'hub' && <p>{t('This also removes {0} attached spoke{1} and {2} connection{3}. On-premises sites are kept.', removedSpokes, removedSpokes === 1 ? '' : 's', removedConnections, removedConnections === 1 ? '' : 's')}</p>}
@@ -334,7 +335,10 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <Field title={t("Additional private traffic prefixes")}><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
-          <Suspense fallback={null}><HubStaticRoutesEditor hub={hubStatic} focusFirewall={request.focusFirewall} onChange={(owner) => setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })} /></Suspense>
+          <Suspense fallback={null}><HubStaticRoutesEditor hub={hubStatic} focusFirewall={request.focusFirewall} onChange={(owner) => {
+            setDirty(true)
+            setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })
+          }} /></Suspense>
         </>}
         {request.kind === 'spoke' && <Field title={t("Hub")}><select name="hub" value={selectedSpokeHubId} onChange={(e) => setSelectedSpokeHubId(e.target.value)}>{hubOptions}<option value="">{t("None (standalone / behind spoke NVA)")}</option></select></Field>}
         {request.kind === 'connection' && transportValue !== 'SpokeNVA' && <Field title={t("Hub")}><select name="hub" required defaultValue={connection?.hubId ?? request.hubId ?? topology.hubs[0]?.id}>{hubOptions}</select></Field>}
