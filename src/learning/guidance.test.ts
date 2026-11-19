@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { exampleCourse } from './course-examples'
-import { guidanceAnchor, resolveGuidance, selectPrimaryGuidance } from './guidance'
+import { guidanceAnchor, resolveGuidance } from './guidance'
+import { selectPrimaryGuidance } from './task-guidance'
 import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
 

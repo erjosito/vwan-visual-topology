@@ -111,6 +111,8 @@ travel: no snapshot restoration or silent undo occurs during review.
 Order each task's `guidanceIds` deliberately: the first is its one primary
 **Show me where** action. Staged peering/UDR configuration follows the next
 unfinished native scope automatically; this chooses navigation, never credit.
+Keep this task selector in the optional sidebar's `task-guidance.ts`, not the
+shared `guidance.ts` imported by native workspace controls, to preserve startup budgets.
 Other targets are named with their localized guidance
 instruction under **Progress, review & options > Navigation help**. Choosing
 a secondary target closes options so automatic checking can resume. The primary
