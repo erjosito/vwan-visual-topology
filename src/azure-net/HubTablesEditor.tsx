@@ -51,7 +51,7 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
           commit((draft) => { draft.vwanHubs.find((entry) => entry.id === hub.id)!.routeTables!.find((entry) => entry.id === table.id)!.name = value })
         }} /></label>
       <label>{t('Labels')}<input key={JSON.stringify(table.labels)} className="aznet-input"
-        aria-label={`${t('Table labels')} ${table.id}`} defaultValue={table.labels.join(', ')}
+        aria-label={`${t('Table labels')} ${table.id}`} defaultValue={table.labels.join(', ')} data-configuration-saved={table.labels.join(', ')}
         disabled={table.id === DEFAULT_HUB_TABLE || table.id === NONE_HUB_TABLE}
         onBlur={(event) => {
           const labels = words(event.target.value)
@@ -92,7 +92,7 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
           })} />{table.name}
         </label>)}</div>
         <label>{t('Propagation labels')}<input key={JSON.stringify(config.labels)} className="aznet-input"
-          defaultValue={config.labels.join(', ')} onBlur={(event) => {
+          defaultValue={config.labels.join(', ')} data-configuration-saved={config.labels.join(', ')} onBlur={(event) => {
             const labels = words(event.target.value)
             if (JSON.stringify(labels) !== JSON.stringify(config.labels)) change({ labels })
           }} /></label>

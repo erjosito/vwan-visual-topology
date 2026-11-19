@@ -4,6 +4,7 @@ import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
   ...workspaceCapabilitiesJa,
+  'Discard unsaved configuration changes and switch resources? Save your changes first to keep them.': '未保存の構成変更を破棄して別のリソースに切り替えますか。変更を保持するには、先に保存してください。',
   'Clone VNet...': 'VNet を複製...',
   'Clone VNet': 'VNet の複製',
   'Create VNet clone': 'VNet の複製を作成',

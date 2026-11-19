@@ -18,6 +18,7 @@ function PrefixInput({ value, deferred, onCommit, validate, ...props }: Omit<Inp
   const errorId = useId()
   const error = validate(deferred ? draft : value)
   return <><input {...props} value={deferred ? draft : value}
+    data-configuration-pending={deferred && draft !== value}
     aria-invalid={!!error}
     aria-describedby={error ? [props['aria-describedby'], errorId].filter(Boolean).join(' ') : props['aria-describedby']}
     style={{ ...props.style, color: error ? 'var(--error)' : props.style?.color, borderColor: error ? 'var(--error)' : props.style?.borderColor }}

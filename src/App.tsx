@@ -3,6 +3,7 @@ import { LearningTools } from './learning/LearningTools'
 import { WorkspaceAccountStatus, WorkspaceMenu } from './WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
 import { previewVnetActions } from './context-actions'
+import { confirmConfigurationSwitch } from './configuration-selection'
 import { useWorkspaceSession } from './workspace-context'
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
@@ -86,7 +87,13 @@ function App() {
   const [inventorySelection, setInventorySelection] = useState<string>()
   const [routerState, setRouter] = useState<ObjectSelection>()
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
-  const [editorRequest, setEditorRequest] = useState<EditorRequest>()
+  const [editorRequest, setEditorRequestState] = useState<EditorRequest>()
+  const setEditorRequest = (request?: EditorRequest) => {
+    if (editorRequest && request && (editorRequest.kind !== request.kind || editorRequest.id !== request.id || !!editorRequest.deleting !== !!request.deleting)
+      && !confirmConfigurationSwitch('.app.mode-vwan .object-editor')) return false
+    setEditorRequestState(request)
+    return true
+  }
   const [snatHubId, setSnatHubId] = useState<string>()
   const [clearRequested, setClearRequested] = useState(false)
   const [cloneVnetId, setCloneVnetId] = useState<string>()
@@ -359,7 +366,11 @@ function App() {
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
   const openStaticRouting = (value: RouterSelection) => { setMapRouter(value); setEditorRequest(undefined); setPanel('static') }
   const selectObject = (value: ObjectSelection) => {
+    if (editorRequest && !editorRequest.deleting && (editorRequest.kind !== value.kind || editorRequest.id !== value.id)) {
+      if (!setEditorRequest(value)) return false
+    }
     setSelection(value)
+    return true
   }
   useDeleteShortcut(selection && !scenario.affected[selection.id] && topologyObject(topology, selection) && !editorRequest &&
     !clearRequested && !capabilitiesHubId && !erLocationModal.open ? () => {

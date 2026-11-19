@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
@@ -22,7 +22,8 @@ import { useWorkspaceSession } from '../workspace-context'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
-import { azWorkspaceIdentity, azWorkspaceObjects } from '../workspace-objects'
+import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
+import { confirmConfigurationSwitch } from '../configuration-selection'
 import { CanvasOverlay } from '../CanvasOverlay'
 import VnetCommunityEditor from '../VnetCommunityEditor'
 import { azHubGatewayConnections } from '../hub-gateways'
@@ -249,14 +250,24 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [nvaBgpInspection, setNvaBgpInspection] = useState<{ vnetId: string; applianceId: string }>()
   const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
+    if (activeTab === 'editor' && workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))
+      && !confirmConfigurationSwitch('.aznet-app .aznet-inspector-window')) return false
+    if (workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))) setVnraCreationVnetId(undefined)
     setInspectedEntity(entity)
     setCanvasSelection(entity)
+    return true
+  }
+  const selectCanvasObject = (entity: AzSelectedEntity) => {
+    if (activeTab === 'editor' && entity.kind !== 'site-link' && entity.kind !== 'er-global-reach-link') return setSelected(entity)
+    setCanvasSelection(entity)
+    return true
   }
   const inspectRoutes = (entity: AzSelectedEntity) => {
     setGuidanceNavigation(false)
-    setSelected(entity)
+    if (!setSelected(entity)) return false
     setRouteInspection(entity)
     setActiveTab('routes')
+    return true
   }
   const selectedExists = (() => {
     if ('vnetId' in selected) {
@@ -1245,8 +1256,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const openVnraCreation = (vnetId: string) => {
+    if (!setSelected({ kind: 'vnet', vnetId })) return
     setVnraCreationVnetId(vnetId)
-    setSelected({ kind: 'vnet', vnetId })
     setActiveTab('editor')
   }
 
@@ -2748,7 +2759,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         selectedTargetId={canvasSelection && ('subnetId' in canvasSelection ? canvasSelection.subnetId
           : 'applianceId' in canvasSelection ? canvasSelection.applianceId : 'gatewayId' in canvasSelection ? canvasSelection.gatewayId
             : 'routeServerId' in canvasSelection ? canvasSelection.routeServerId : entityId(canvasSelection))}
-        onSelectTarget={(target) => setCanvasSelection(detailEntity(target))}
+        onSelectTarget={(target) => selectCanvasObject(detailEntity(target))}
         getContextActions={(target) => {
           const entity = detailEntity(target)
           return (getContextMenuSpec(entity, true)?.actions ?? []).map(function wrap(action): ContextAction {
@@ -2823,34 +2834,33 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           }} inventory={{
             getObjects: () => azWorkspaceObjects(topology),
             selected: canvasSelection ? azWorkspaceIdentity(canvasSelection) : undefined,
-            onSelect: setCanvasSelection,
+            onSelect: selectCanvasObject,
           }} />
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
             onGuide={(cue) => {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
               setContextMenu(null)
-              setGuidanceRevision((revision) => revision + 1)
               if (cue.action === 'connection.configure') {
-                setSelected(cue.params.kind === 'er-link' ? { kind: 'er-link', linkId: cue.params.connectionId }
-                  : { kind: 'vpn-connection', connectionId: cue.params.connectionId })
+                if (!setSelected(cue.params.kind === 'er-link' ? { kind: 'er-link', linkId: cue.params.connectionId }
+                  : { kind: 'vpn-connection', connectionId: cue.params.connectionId })) return
                 setActiveTab('editor')
               } else if (cue.action === 'site-routes.open') {
-                inspectRoutes({ kind: 'site', siteId: cue.params.siteId })
+                if (!inspectRoutes({ kind: 'site', siteId: cue.params.siteId })) return
               } else if (cue.action === 'packet-probe.open') {
                 openDetail(cue.params.vnetId)
               } else if (cue.action === 'hub.configure') {
-                setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })
+                if (!setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })) return
                 setActiveTab('editor')
               } else if (cue.action === 'hub-routes.open') {
-                inspectRoutes({ kind: 'vwan-hub', hubId: cue.params.hubId })
+                if (!inspectRoutes({ kind: 'vwan-hub', hubId: cue.params.hubId })) return
                 setHubTableInspection({ ...cue.params })
               } else if (cue.action === 'network.configure') {
-                setSelected({ kind: 'vnet', vnetId: cue.params.vnetId })
+                if (!setSelected({ kind: 'vnet', vnetId: cue.params.vnetId })) return
                 setActiveTab('editor')
                 setFrameRequest({ vnetId: cue.params.vnetId, revision: guidanceRevision + 1 })
               } else if (cue.action === 'peering.command') {
                 const entity = { kind: 'vnet' as const, vnetId: cue.params.vnetAId }
-                setSelected(entity)
+                if (!setSelected(entity)) return
                 setActiveTab(null)
                 setContextReturnFocus(null)
                 const bounds = guidanceRoot.current?.querySelector('[data-learning-canvas]')?.getBoundingClientRect()
@@ -2858,10 +2868,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 setFrameRequest({ vnetId: cue.params.vnetAId, revision: guidanceRevision + 1 })
               } else {
                 const entity = { kind: 'subnet' as const, vnetId: cue.params.vnetId, subnetId: cue.params.subnetId }
-                if (cue.action === 'routes.open') inspectRoutes(entity)
-                else { setSelected(entity); setActiveTab('editor') }
+                if (cue.action === 'routes.open') { if (!inspectRoutes(entity)) return }
+                else { if (!setSelected(entity)) return; setActiveTab('editor') }
                 setFrameRequest({ vnetId: cue.params.vnetId, revision: guidanceRevision + 1 })
               }
+              setGuidanceRevision((revision) => revision + 1)
               setGuidanceNavigation(true)
             }} />
           <PresentationGroup label={t('Explore')}>
@@ -3131,9 +3142,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             risks={risks}
             onRisk={setResilienceEndpoint}
             selected={canvasSelection}
-            onSelect={(entity) => {
-              setCanvasSelection(entity)
-            }}
+            onSelect={selectCanvasObject}
             onClearSelection={() => setCanvasSelection(undefined)}
             onMoveNode={(nodeKind, nodeId, x, y) => {
               commitTopology((next) => {
@@ -4111,6 +4120,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       `On-Premises Site ${topology.sites.find((s) => s.id === selected.siteId)?.name ?? selected.siteId}`}
                     {selected.kind === 'vwan-hub' &&
                       `Virtual WAN Hub ${topology.vwanHubs.find((h) => h.id === selected.hubId)?.name ?? selected.hubId}`}
+                    {selected.kind === 'er-link' &&
+                      `ExpressRoute connection ${topology.erLinks.find(link => link.id === selected.linkId)?.name ?? selected.linkId}`}
+                    {selected.kind === 'vpn-connection' &&
+                      `VPN/SD-WAN connection ${topology.vpnConnections.find(connection => connection.id === selected.connectionId)?.name ?? selected.connectionId}`}
                   </div>
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                     Click any node or connection on the diagram to configure it
@@ -4126,7 +4139,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {vnraCreationVnetId && selectedVnetId === vnraCreationVnetId && <ManagedVnraEditor key={`create-${vnraCreationVnetId}`}
                   topology={topology} vnetId={vnraCreationVnetId} commit={commitTopology}
                   onCancel={() => setVnraCreationVnetId(undefined)} onSaved={(applianceId) => {
-                    setSelected({ kind: 'appliance', vnetId: vnraCreationVnetId, applianceId })
+                    const entity = { kind: 'appliance' as const, vnetId: vnraCreationVnetId, applianceId }
+                    setInspectedEntity(entity)
+                    setCanvasSelection(entity)
                     setVnraCreationVnetId(undefined)
                   }} />}
                 </Suspense>
@@ -4557,6 +4572,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             aria-label={`Advertised gateway prefixes ${vnet.name}`}
                             aria-describedby={`aznet-gateway-prefix-help-${vnet.id}`}
                             defaultValue={vnet.summarizedGatewayPrefixes?.join(', ') ?? ''}
+                            data-configuration-saved={vnet.summarizedGatewayPrefixes?.join(', ') ?? ''}
                             placeholder="Default: advertise individual hub and eligible spoke address spaces"
                             onBlur={(e) => {
                               const value = e.target.value
@@ -5490,7 +5506,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </InspectorSection>
               )
               return (
-              <>
+              <Fragment key={workspaceIdentityKey(azWorkspaceIdentity(selected))}>
                 {context}
                 {vnetEditor}
                 {subnetEditor}
@@ -5897,7 +5913,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           if (prefixes.some((prefix) => !cidr(prefix))) { setWorkspaceNotice(t('Enter valid IPv4 CIDR prefixes.')); return }
                           commitTopology((draft) => { draft.vwanHubs.find((target) => target.id === hub.id)!.routingIntent.privatePrefixes = prefixes })
                         }}>
-                          <label className="field"><span>{t('Private routing intent prefixes')}</span><input name="prefixes" defaultValue={hub.routingIntent.privatePrefixes?.join(', ') ?? ''} /></label>
+                          <label className="field"><span>{t('Private routing intent prefixes')}</span><input name="prefixes" defaultValue={hub.routingIntent.privatePrefixes?.join(', ') ?? ''}
+                            data-configuration-saved={hub.routingIntent.privatePrefixes?.join(', ') ?? ''} /></label>
                           <button type="submit">{t('Save private routing prefixes')}</button>
                         </form>
                         <label className="aznet-hover-toggle"><input type="checkbox" checked={topology.allowBranchToBranchTraffic !== false} onChange={(event) => {
@@ -5972,7 +5989,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   ))}
                 </div>
                 </InspectorSection>
-              </>
+              </Fragment>
               )
             })()}
 

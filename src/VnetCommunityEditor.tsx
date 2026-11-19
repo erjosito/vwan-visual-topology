@@ -22,6 +22,7 @@ export default function VnetCommunityEditor({ value, onChange, formField = false
   return <fieldset className="aznet-field">
     <legend>{t('VNet BGP community')}</legend>
     <input aria-label={t('VNet BGP community')} aria-describedby={`${id}-help${invalid ? ` ${id}-error` : ''}`}
+      data-configuration-pending={draft !== saved}
       aria-invalid={invalid} name={formField ? 'virtualNetworkCommunity' : undefined}
       className="aznet-input" placeholder="12076:20001" maxLength={11} value={draft}
       ref={(element) => { element?.setCustomValidity(invalid ? t(vnetCommunityError) : '') }}
