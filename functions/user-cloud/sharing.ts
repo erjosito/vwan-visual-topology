@@ -32,7 +32,7 @@ export function createSharingHandler(store: CloudStore, now = Date.now) {
         if (!index || index.raw !== saved.raw) throw unavailable()
         const source = await store.get(`users/${record.owner}/topologies/${record.topologyId}.json`)
         if (!source || !source.generation || source.generation !== record.generation) throw unavailable()
-        return { status: 200, headers, jsonBody: { document: parseCloudTopology(JSON.parse(source.raw)), expiresAt: record.expiresAt } }
+        return { status: 200, headers, jsonBody: { document: parseCloudTopology(JSON.parse(source.raw)), expiresAt: record.expiresAt, sourceVersion: source.etag } }
       } finally { active-- }
     },
     async manage(request: HttpRequest, headers: Record<string, string>, owner: string): Promise<HttpResponseInit> {

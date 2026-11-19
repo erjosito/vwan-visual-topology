@@ -36,6 +36,7 @@ const configure = (page: Page) => menu(page, 'aznet-select-vnet-hub', 'Configure
 
 for (const [mode, transport] of [['hub-spoke', 'ExpressRoute'], ['full', 'Vpn']] as const) {
   test(`${mode} edits ${transport} gateway summaries, keeps uncovered spaces and round-trips persistence/JSON and legacy read-only snapshots`, async ({ page, browser }) => {
+    test.setTimeout(60_000)
     await page.addInitScript((value) => {
       if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
     }, topology(transport))

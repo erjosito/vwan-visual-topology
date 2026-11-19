@@ -43,7 +43,7 @@ describe('explicit latest-saved, revocable sharing', () => {
     expect((await cloud.request('/api/cloud/shares', { headers: headers('bob') })).jsonBody).toEqual({ entries: [] })
     const publicResponse = await resolve(cloud, share.token)
     expect(publicResponse.status).toBe(200)
-    expect(publicResponse.jsonBody).toMatchObject({ document: value })
+    expect(publicResponse.jsonBody).toMatchObject({ document: value, sourceVersion: input.sourceEtag })
     expect(publicResponse.headers).toMatchObject({ 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' })
     expect((await cloud.request(path)).status).toBe(401)
     expect((await cloud.request('/api/cloud/shared', { method: 'PUT', headers: headers(), body: '{}' })).status).toBe(405)

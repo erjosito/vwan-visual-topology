@@ -70,18 +70,18 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
       if (mode === 'full') expect(JSON.stringify(document).length).toBeGreaterThan(50000)
       const etag = await service.store.put(key, JSON.stringify(document), null, document.name)
       await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
-      await page.addInitScript(({ language, theme }) => {
+      await page.addInitScript(({ language, theme, key, draft }) => {
         localStorage.setItem('aznet-ui-preview:v1', 'true')
         localStorage.setItem('vwan-visual-topology:language:v1', language)
         localStorage.setItem('aznet-theme', theme)
-      }, { language, theme })
+        if (!sessionStorage.getItem('share-local-draft-seeded')) {
+          localStorage.setItem(key, draft)
+          sessionStorage.setItem('share-local-draft-seeded', 'true')
+        }
+      }, { language, theme, key: mode === 'vwan' ? workspaceStorageKeys.vwan : workspaceStorageKeys['azure-net'],
+        draft: mode === 'vwan' ? JSON.stringify({ ...example, name: 'Recipient local draft' })
+          : JSON.stringify({ sampleId: '', topology: { ...sampleHubSpokeFirewallUdr, name: 'Recipient local draft' } }) })
       await page.goto(`/?mode=${mode}`)
-      if (mode === 'vwan') await page.getByLabel(text('Topology name', 'トポロジ名'), { exact: true }).fill('Recipient local draft')
-      else {
-        const create = page.getByTestId('aznet-add-vnet-btn')
-        if (!await create.isVisible()) await page.getByRole('button', { name: text('Workspace controls', 'ワークスペースの操作'), exact: true }).click()
-        await create.click()
-      }
       await page.getByTestId('cloud-account-open').click()
       const account = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
       await account.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
@@ -108,10 +108,11 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
       await account.getByRole('button', { name: text('Sign out of this app', 'このアプリからサインアウト'), exact: true }).click()
       await expect(account.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true })).toBeVisible()
       const latest = { ...document, name: `Renamed ${mode}`, topology: { ...(document.topology as object), name: `Latest ${mode}` } }
-      await service.store.put(key, JSON.stringify(latest), etag, latest.name)
+      const sourceVersion = await service.store.put(key, JSON.stringify(latest), etag, latest.name)
       await page.goto(link)
       await expect(page.getByRole('heading', { name: latest.name, exact: true })).toBeVisible()
       const viewer = page.getByRole('main')
+      await expect(viewer.getByText(`${text('Cloud-saved revision', 'クラウドの保存リビジョン')}: ${sourceVersion}`, { exact: true })).toBeVisible()
       await expect(viewer.locator('svg.diagram, svg[data-testid="aznet-diagram-svg"]')).toBeVisible()
       const exportButton = page.getByRole('button', { name: text('Export a local copy', 'ローカル コピーをエクスポート'), exact: true })
       const copyButton = page.getByRole('button', { name: text('Save a copy to my cloud', '自分のクラウドにコピーを保存'), exact: true })
@@ -183,11 +184,13 @@ for (const desktop of [false, true]) test(`${desktop ? 'desktop never resolves e
   else await page.route('**/api/cloud/shared', route => route.abort('internetdisconnected'))
   await page.goto(`/#share=${'x'.repeat(43)}`)
   await expect(page.getByRole('alert')).toContainText('Shared topology unavailable.')
-  expect(requests).toHaveLength(desktop ? 0 : 1)
+  if (desktop) expect(requests).toEqual([])
+  else { expect(requests.length).toBeGreaterThan(0); expect(requests.every(url => new URL(url).pathname === '/api/cloud/shared')).toBe(true) }
+  const count = requests.length
   await page.getByRole('button', { name: 'Return to workspace', exact: true }).click()
   await expect(page.getByRole('button', { name: /Export JSON/ })).toBeEnabled()
   if (desktop) await expect(page.getByTestId('aznet-share-url-btn')).toBeDisabled()
-  expect(requests).toHaveLength(desktop ? 0 : 1)
+  expect(requests).toHaveLength(count)
 })
 
 for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {

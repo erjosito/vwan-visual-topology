@@ -1,4 +1,4 @@
-import { createCloudClient, type CloudClient } from './client'
+import type { CloudClient } from './client'
 import type { CloudAccount, MicrosoftClient } from './microsoft'
 import type { CloudConfiguration } from './configuration'
 
@@ -39,6 +39,8 @@ export function createCloudSession(config: CloudConfiguration | undefined, optio
         try { options.storage().removeItem(cloudSessionKey) } catch {}
         publish({ status: 'signed-out' }); return
       }
+      const { createCloudClient } = await import('./client')
+      if (ticket !== generation) return
       const current = client, signal = abort.signal
       const api = createCloudClient(config.base, async () => {
         if (ticket !== generation) throw new Error('Account changed.')

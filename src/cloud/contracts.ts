@@ -11,7 +11,7 @@ export interface CloudValue<T> { value: T; etag: string }
 export interface CloudShare {
   id: string; topologyId: string; token: string; expiresAt: string; etag: string
 }
-export interface SharedTopology { document: CloudTopology; expiresAt: string }
+export interface SharedTopology { document: CloudTopology; expiresAt: string; sourceVersion?: string }
 
 export function parseCloudTopology(input: unknown): CloudTopology {
   if (!input || typeof input !== 'object') throw new Error('A named topology is required.')

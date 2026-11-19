@@ -41,8 +41,9 @@ saves. A stale library ETag prevents issuance; refresh cloud topologies first.
 The approved policy is **anyone with the link**, **latest cloud-saved version**,
 **read only**, with **30-day expiry** and owner revocation. Later saves and
 renames appear when the recipient refreshes the view. The heading identifies
-this as the latest saved version at the last refresh, not a live editor or a
-pinned snapshot. Native topology IDs, fields and manual coordinates are retained;
+this as the latest saved version at the last refresh, with its exact cloud
+revision (ETag), not a live editor or a pinned snapshot. Native topology IDs,
+fields and manual coordinates are retained;
 both native network formats (classic VWAN and mixed/H&S/Full) use their existing
 diagram renderers without editor, import or owner-write handlers.
 

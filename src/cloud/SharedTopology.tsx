@@ -50,8 +50,9 @@ export default function SharedTopology({ hash, modal, onReturn }: { hash: string
       const raw = await response.text()
       if (raw.length > cloudLimits.bytes + 4096) throw new Error('Unavailable')
       const value = JSON.parse(raw) as SharedDocument
-      if (!value.expiresAt || !Number.isFinite(Date.parse(value.expiresAt)) || Date.parse(value.expiresAt) <= Date.now()) throw new Error('Unavailable')
-      return { document: parseCloudTopology(value.document), expiresAt: value.expiresAt }
+      if (!value.expiresAt || !Number.isFinite(Date.parse(value.expiresAt)) || Date.parse(value.expiresAt) <= Date.now()
+        || typeof value.sourceVersion !== 'string' || !/^"[\x21\x23-\x7e]{1,160}"$/.test(value.sourceVersion)) throw new Error('Unavailable')
+      return { document: parseCloudTopology(value.document), expiresAt: value.expiresAt, sourceVersion: value.sourceVersion }
     }
     void load().then(value => {
       if (!controller.signal.aborted) { setShared(value); setStatus('ready') }
@@ -104,6 +105,7 @@ export default function SharedTopology({ hash, modal, onReturn }: { hash: string
     {shared && <>
       <h2>{shared.document.name}</h2>
       {!legacy && <p>{text('Latest saved version at last refresh. Later saves and renames appear after refreshing. Access expires', '最終更新時の最新の保存です。以後の保存や名前変更は更新後に表示します。有効期限')}: <time dateTime={shared.expiresAt}>{new Date(shared.expiresAt).toLocaleString(ja ? 'ja' : 'en')}</time></p>}
+      {!legacy && <p>{text('Cloud-saved revision', 'クラウドの保存リビジョン')}: <code>{shared.sourceVersion}</code></p>}
       <Suspense fallback={<p role="status">{text('Loading diagram…', '図を読み込み中…')}</p>}><SharedDiagram topology={shared.document.topology} /></Suspense>
     </>}
   </main>
