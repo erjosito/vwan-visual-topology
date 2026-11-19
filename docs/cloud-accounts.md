@@ -1,4 +1,4 @@
-# Optional personal Microsoft accounts and private cloud storage
+# Optional personal Microsoft accounts, private cloud storage and sharing
 
 This feature is optional and disabled until configured. Anonymous simulation,
 local files and the Electron application continue to work without signing in.
@@ -29,6 +29,77 @@ Do not upload credentials or confidential network configuration without approval
 Topology inventory, addresses, names and retained native JSON fields are included.
 The API does not store account email or display name. It derives a storage owner
 from the validated token issuer and subject, not a browser-supplied user ID.
+
+## Read-only sharing
+
+**Cloud account > Share saved version** selects an existing owned save;
+**Enable a 30-day link** requires separate confirmation. Saving privately does
+not enable sharing. Unsaved workspace edits are never uploaded by sharing.
+**Manage shared links** lists and revokes links, including links for deleted
+saves. A stale library ETag prevents issuance; refresh cloud topologies first.
+
+The approved policy is **anyone with the link**, **latest cloud-saved version**,
+**read only**, with **30-day expiry** and owner revocation. Later saves and
+renames appear when the recipient refreshes the view. The heading identifies
+this as the latest saved version at the last refresh, with its exact cloud
+revision (ETag), not a live editor or a pinned snapshot. Native topology IDs,
+fields and manual coordinates are retained;
+both native network formats (classic VWAN and mixed/H&S/Full) use their existing
+diagram renderers without editor, import or owner-write handlers.
+
+Opening a share never loads it into the recipient's design or practice session.
+An already open workspace remains mounted but hidden, so returning preserves
+drafts/history. A fresh share tab does not mount a workspace until Return is
+selected. Signed-in recipients may explicitly export JSON or save a new record
+in **their own** cloud library, never the owner's record. Anonymous import/export
+of ordinary local designs is unchanged. Anyone who can view the document can
+technically extract its data; this login-gated copy UI is not DRM.
+
+Revocation, expiry, a missing source or deletion of its stored owner data prevents
+future resolution. Conditional overwrites preserve a server-controlled blob
+incarnation; deletion/recreation gets a new incarnation, so an old link cannot
+resurrect even when an owner reuses the topology UUID. Pre-sharing blobs acquire
+incarnation metadata conditionally on first issuance without changing their JSON
+(their ETag/last-modified time advances; refresh the library). Signing out does
+not revoke shares. Deleting a Microsoft account does not notify this independent
+store: revoke links **before** account deletion, or have the operator erase that
+owner's stored data; otherwise existing links can remain usable until expiry.
+Already downloaded data and copies cannot be recalled.
+
+Links contain a random 256-bit capability in the URL fragment, not a topology,
+owner ID, storage path, bearer token or SAS. The anonymous resolver is exclusively
+`POST /cloud/shared` with a small JSON body, not a token-bearing request URL.
+`GET/PUT/DELETE /cloud/shares` remain bearer-authenticated and owner-scoped;
+ordinary progress/topology APIs remain private. Public resolution also requires
+the owner's private index record, valid expiry and the original incarnation.
+Public/private responses use `no-store`, `nosniff`, `no-referrer` and no-index
+headers; the app already applies a global no-referrer policy. Do not log request
+bodies, fragments, authorization headers or share records in API/proxy/analytics
+instrumentation. Hashes of capabilities, not capabilities, name resolver blobs.
+
+The application bounds resolver bodies to 1 KiB, issuance to 2 KiB, documents to
+4 MiB, a best-effort threshold of 50 share records per owner (including expired
+records until revoked), resolver work to 8 concurrent
+requests and 120 requests/minute per Function instance, and issuance to 6/minute
+per owner per instance. The record threshold is not an atomic storage quota;
+simultaneous issuances may exceed it. Throttling returns 429/Retry-After. Instance quotas reset
+on restart and are **not a distributed or per-IP abuse control**. A public
+production deployment should additionally configure its gateway/WAF's aggregate
+rate, concurrency and cost limits appropriate to replica count and anticipated
+traffic. Do not trust caller-supplied forwarded IP headers for authorization.
+
+The legacy `#s=...` reader remains as a deprecated **read-only embedded snapshot**,
+not the latest saved version. Its UI warns that old links cannot expire or be
+revoked; it never replaces the workspace or auto-uploads. New full-payload URL
+generation has been removed. Cloud-link creation/resolution needs configured web
+cloud support and connectivity; unavailable, expired and revoked views preserve
+the local design. Electron does not issue/resolve cloud links or launch an
+external integration. Local JSON files remain its sharing alternative; legacy
+snapshots can still be viewed locally without uploading.
+
+These are source changes, not deployment instructions being executed. Deploy
+matching frontend **and** backend versions deliberately before qualifying real
+sharing. Older APIs report sharing unavailable; there is no embedded-URL fallback.
 
 ## Register the applications
 
@@ -122,7 +193,8 @@ Those are separate from the private user-data container. Do not reuse the
 statistics dashboard's tenant-specific authentication settings or credentials.
 
 The HTTP trigger intentionally has platform `authLevel: anonymous`: the handler
-authenticates every data request itself with a bearer access token. Do not put an
+authenticates private data requests itself with a bearer access token. Only the
+capability-based shared resolver is deliberately public. Do not put an
 interactive Easy Auth redirect in front of this API. Do not expose storage keys,
 SAS URLs, raw bearer tokens or document bodies in request logs.
 
@@ -131,6 +203,8 @@ Storage layout:
 ```text
 users/<SHA256-of-issuer-and-subject>/progress.json
 users/<same-owner>/topologies/<UUID>.json
+users/<same-owner>/shares/<management-UUID>.json
+shared/<SHA256-of-capability>.json
 ```
 
 Each write is conditional: create uses `If-None-Match: *`, replacement/deletion

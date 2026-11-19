@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useLanguage } from '../i18n'
 import { useWorkspaceSession } from '../workspace-context'
 import { useCloudSession } from './useCloudSession'
@@ -9,6 +9,17 @@ export function CloudMenu({ status = false }: { status?: boolean }) {
   const cloud = useCloudSession(), session = useWorkspaceSession(), language = useLanguage()
   const [open, setOpen] = useState(false)
   const trigger = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const changed = () => { if (/(?:#|&)(?:share|s)=/.test(location.hash)) setOpen(false) }
+    window.addEventListener('hashchange', changed)
+    return () => window.removeEventListener('hashchange', changed)
+  }, [])
+  useEffect(() => {
+    if (!cloud?.configured) return
+    const openSharing = () => { trigger.current = document.activeElement as HTMLElement; setOpen(true) }
+    window.addEventListener('aznet-open-cloud-sharing', openSharing)
+    return () => window.removeEventListener('aznet-open-cloud-sharing', openSharing)
+  }, [cloud?.configured])
   const identity = cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')
   const label = language === 'ja' ? 'クラウド アカウント' : 'Cloud account'
   if (!cloud?.configured) return status ? <span className="account-status-unavailable" title={language === 'ja'

@@ -40,21 +40,23 @@ test('cross-provider captures retain native review and partial comparison behavi
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(original)
 })
 
-test('live shared snapshots cross native providers once and malformed snapshots keep the active design', async ({ page }) => {
+test('live legacy shares are read only across providers and keep the active design', async ({ page }) => {
   await page.goto('/?mode=vwan')
   await expect(page.getByTestId('vwan-app')).toBeVisible()
   await page.getByLabel('Topology name', { exact: true }).fill('Preserved native design')
+  const original = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
   await page.evaluate(() => { location.hash = 's=not-valid-json' })
-  await expect(page.getByRole('alert')).toContainText('Shared snapshot rejected')
-  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Preserved native design')
+  await expect(page.getByRole('alert')).toContainText('Shared topology unavailable')
   const snapshot = Buffer.from(JSON.stringify(sampleHybridVwanAndHubSpoke)).toString('base64url')
   await page.evaluate((snapshot) => { location.hash = `retained&s=${snapshot}` }, snapshot)
-  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Shared topology — read only' })).toBeVisible()
   await expect(page.getByTestId(`aznet-vwanhub-${sampleHybridVwanAndHubSpoke.vwanHubs[0].id}`)).toBeVisible()
-  await expect.poll(() => new URL(page.url()).hash).toBe('#retained')
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!).name)).toBe('Preserved native design')
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(original)
   await page.reload()
   await expect(page.getByTestId(`aznet-vwanhub-${sampleHybridVwanAndHubSpoke.vwanHubs[0].id}`)).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(original)
+  await page.getByRole('button', { name: 'Return to workspace', exact: true }).click()
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Preserved native design')
 })
 
 test('damaged selection requires recovery and storage failure never replaces a saved design', async ({ page }) => {

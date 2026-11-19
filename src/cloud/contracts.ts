@@ -8,6 +8,10 @@ export const cloudLimits = { bytes: 4 * 1024 * 1024, name: 120, records: 50 }
 export interface CloudTopology { version: 1; name: string; topology: unknown }
 export interface CloudEntry { id: string; name: string; etag: string; updatedAt: string }
 export interface CloudValue<T> { value: T; etag: string }
+export interface CloudShare {
+  id: string; topologyId: string; token: string; expiresAt: string; etag: string
+}
+export interface SharedTopology { document: CloudTopology; expiresAt: string; sourceVersion?: string }
 
 export function parseCloudTopology(input: unknown): CloudTopology {
   if (!input || typeof input !== 'object') throw new Error('A named topology is required.')

@@ -208,20 +208,15 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     expect((await download).suggestedFilename()).toMatch(/\.json$/)
   })
 
-  test('consumes shared snapshots once and reloads newer edits without uploading a topology', async ({ page }) => {
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  test('deprecates embedded snapshot generation and preserves the workspace without uploading', async ({ page }) => {
     await page.goto('/?mode=hub-spoke&sample=hub-spoke-firewall-udr')
     const uploads: string[] = []
     page.on('request', (request) => { if (!['GET', 'HEAD'].includes(request.method())) uploads.push(request.url()) })
     await page.getByTestId('aznet-share-url-btn').click()
-    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('✓ Link Copied')
-    await expect(page.getByTestId('aznet-share-url-btn')).toHaveAttribute('title', /full design.*Not encrypted or redacted/)
-    const link = await page.evaluate(() => navigator.clipboard.readText())
-    expect(link).toContain('#s=')
+    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('Share cloud save')
+    await expect(page.getByTestId('aznet-share-url-btn')).toHaveAttribute('title', /revocable 30-day link/)
+    await expect(page.getByTestId('aznet-workspace-notice')).toContainText('Unsaved edits are not shared')
     expect(new URL(page.url()).hash).toBe('')
-    await page.goto(link)
-    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
-    await expect.poll(() => new URL(page.url()).hash).toBe('')
     await page.getByTestId('aznet-add-vnet-btn').click()
     const added = page.locator('[data-testid^="aznet-vnet-vnet-custom-"]')
     await expect(added).toHaveCount(1)
@@ -640,11 +635,9 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await page.getByTestId('aznet-subnet-selector').selectOption('sub-app-web')
     await expect(page.getByTestId('aznet-route-trace-badge-fwd').first()).toBeVisible()
 
-    // Sharing copies a snapshot without installing a stale override in this workspace's URL.
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    // Sharing now requires an explicit confirmed cloud save, never an embedded snapshot.
     await page.getByTestId('aznet-share-url-btn').click()
-    await expect(page.getByTestId('aznet-share-url-btn')).toHaveText('✓ Link Copied')
-    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain('#s=')
+    await expect(page.getByTestId('aznet-workspace-notice')).toContainText('Unsaved edits are not shared')
     expect(new URL(page.url()).hash).not.toContain('s=')
 
     // 5. Optional diagram node labels in AzNet Configure tab & vWAN mode (#47 scoped to selected node)

@@ -87,16 +87,6 @@ import {
 
 type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor' | 'azure'
 
-function encodeTopologyToUrlHash(topology: AzNetTopology): string {
-  const json = JSON.stringify(topology)
-  const bytes = new TextEncoder().encode(json)
-  let binary = ''
-  for (const b of bytes) {
-    binary += String.fromCharCode(b)
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
 function resolveInitialUrlSample() {
   if (typeof window === 'undefined') return null
   const requested = resolveSampleIdAlias(new URLSearchParams(window.location.search).get('sample') ?? '')
@@ -200,7 +190,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [topology, setTopology] = useState<AzNetTopology>(initialResolved.topology)
   const [history, setHistory] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.past : [])
   const [future, setFuture] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.future : [])
-  const [recoveryEntries, setRecoveryEntries] = useState(initialResolved.recovery)
+  const [recoveryEntries] = useState(initialResolved.recovery)
   const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(() =>
     cachedHistory?.provider === 'azure-net' ? cachedHistory.recoveryAcknowledged : initialResolved.recovery.length === 0)
   const [saveError, setSaveError] = useState('')
@@ -411,30 +401,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     mounted.current = true
     return () => { mounted.current = false }
   }, [])
-  const [shareCopied, setShareCopied] = useState<boolean>(false)
   const [contextMenu, setContextMenu] = useState<AzContextMenuTarget | null>(null)
 
   const handleShareUrl = () => {
-    try {
-      parseAzNetTopology(topology)
-      const encoded = encodeTopologyToUrlHash(topology)
-      const url = new URL(window.location.href)
-      url.hash = `s=${encoded}`
-      // Do not install a snapshot in the active address: reload must restore newer local edits.
-      if (navigator.clipboard?.writeText) {
-        void navigator.clipboard.writeText(url.toString()).then(() => {
-          setShareCopied(true)
-          setWorkspaceNotice('Share link copied: it contains the full design, without encryption or redaction. Anyone with the link can read it. No topology was uploaded. Reload restores local edits; opening the copied link imports that snapshot once.')
-        }).catch((error) => {
-          setWorkspaceNotice(`Could not copy share link: ${workspaceError(error)}. Export JSON instead.`)
-        })
-      } else {
-        setWorkspaceNotice('Clipboard is unavailable. Export JSON to share this design.')
-      }
-      window.setTimeout(() => setShareCopied(false), 2500)
-    } catch (error) {
-      setWorkspaceNotice(`Could not share topology: ${workspaceError(error)}`)
-    }
+    if (window.desktopSimulator) return
+    window.dispatchEvent(new Event('aznet-open-cloud-sharing'))
+    setWorkspaceNotice(language === 'ja'
+      ? '共有リンクはクラウドの保存から作成します。クラウド アカウントでサインインし、保存したバージョンを共有してください。この環境でサインインを利用できない場合は JSON をエクスポートしてください。'
+      : 'Create shared links from a cloud save: sign in through Cloud account, then Share saved version. If sign-in is unavailable in this build, export JSON instead. Unsaved edits are not shared.')
   }
 
   const rawSourceOpt =
@@ -630,25 +604,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     // oxlint-disable-next-line react/set-state-in-effect
     if (workspaceSession?.capture) importSessionCapture()
   }, [workspaceSession?.capture])
-
-  const importLiveSnapshot = useEffectEvent(() => {
-    if (workspaceSession?.practice) return
-    if (!/(?:#|&)s=/.test(window.location.hash)) return
-    const loaded = loadAzWorkspace({ getItem: () => null }, window.location.hash)
-    if (loaded.recovery.length) {
-      setRecoveryEntries((entries) => [...entries, ...loaded.recovery].slice(-8))
-      setRecoveryAcknowledged(false)
-      setWorkspaceNotice('Shared snapshot rejected; the active design is unchanged. Export the original URL snapshot from recovery.')
-      return
-    }
-    applyLoadedTopology('shared-topology', loaded.topology)
-    setWorkspaceNotice('Shared snapshot imported once. It contains full design data without encryption or redaction; subsequent reloads restore saved local edits.')
-  })
-  useEffect(() => {
-    const onHashChange = () => importLiveSnapshot()
-    window.addEventListener('hashchange', onHashChange)
-    return () => window.removeEventListener('hashchange', onHashChange)
-  }, [])
 
   const loadSample = async (id: string, signal?: AbortSignal) => {
     id = resolveSampleIdAlias(id)
@@ -3017,9 +2972,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             data-testid="aznet-share-url-btn"
             disabled={!!window.desktopSimulator}
             onClick={handleShareUrl}
-            title="Copies a snapshot containing the full design. Not encrypted or redacted. Anyone with the link can read it. No topology is uploaded."
+            title={language === 'ja' ? 'クラウドの保存から取り消し可能な 30 日間のリンクを作成します。' : 'Create a revocable 30-day link from a cloud save. Unsaved edits are not shared.'}
           >
-            {shareCopied ? '✓ Link Copied' : '🔗 Share Link'}
+            {language === 'ja' ? 'クラウドの保存を共有' : 'Share cloud save'}
           </button>
 
           <button type="button" className="aznet-btn" onClick={handleExportJson}>

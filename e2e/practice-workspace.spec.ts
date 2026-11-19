@@ -238,25 +238,23 @@ test('a known other-tab update is not overwritten by edits, return, resume or di
   expect(await stored(page)).toEqual(originals)
 })
 
-test('live shared snapshots use normal admission without importing into saved practice', async ({ page }) => {
+test('live legacy shares use read-only admission without replacing or leaving practice', async ({ page }) => {
   await seed(page, false)
   await confirmStart(page, 'vwan-connect')
   const original = (await practice(page)).document
+  const originals = await stored(page)
   await page.evaluate(() => { location.hash = 's=not-valid-json' })
-  await expect(page.getByRole('alert').filter({ hasText: 'Shared snapshot rejected' })).toBeVisible()
-  await expect(bar(page)).toContainText('your normal design is kept separately')
+  await expect(page.getByRole('alert').filter({ hasText: 'Shared topology unavailable' })).toBeVisible()
   const incoming = structuredClone(exercises[1].starter.topology)
   incoming.name = 'Explicit incoming snapshot'
   const snapshot = Buffer.from(JSON.stringify(incoming)).toString('base64url')
   await page.evaluate((snapshot) => { location.hash = `retained&s=${snapshot}` }, snapshot)
-  await expect(page.getByTestId('aznet-app')).toBeVisible()
-  await expect(bar(page).getByRole('button', { name: 'Resume practice', exact: true })).toBeVisible()
-  await expect.poll(() => new URL(page.url()).hash).toBe('#retained')
-  expect(JSON.parse((await stored(page))[1]!).topology.name).toBe(incoming.name)
+  await expect(page.getByRole('heading', { name: incoming.name, exact: true })).toBeVisible()
+  expect(await stored(page)).toEqual(originals)
   expect((await practice(page)).document).toEqual(original)
-  expect((await practice(page)).active).toBe(false)
-  await page.reload()
-  await expect(bar(page).getByRole('button', { name: 'Resume practice', exact: true })).toBeVisible()
+  expect((await practice(page)).active).toBe(true)
+  await page.getByRole('button', { name: 'Return to workspace', exact: true }).click()
+  await expect(bar(page)).toContainText('your normal design is kept separately')
 })
 
 test('cross-provider file imports while practising remain in practice, not normal saves', async ({ page }) => {

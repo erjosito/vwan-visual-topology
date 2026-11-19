@@ -19,6 +19,7 @@ const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) =
 const WorkspaceLibrary = lazy(() => import('./WorkspaceLibrary').then((module) => ({ default: module.WorkspaceLibrary })))
 const DesktopTools = lazy(() => import('./DesktopTools').then((module) => ({ default: module.DesktopTools })))
 const PracticeWorkspaceBar = lazy(() => import('./learning/PracticeWorkspaceBar').then((module) => ({ default: module.PracticeWorkspaceBar })))
+const SharedTopology = lazy(() => import('./cloud/SharedTopology'))
 const selectionFailure = 'Workspace could not be selected or preserved. Originals have not been intentionally replaced. Export your design before freeing browser storage.'
 
 class WorkspaceBoundary extends Component<{ children: ReactNode; onRecover: () => void }, { failed: boolean }> {
@@ -35,7 +36,25 @@ class WorkspaceBoundary extends Component<{ children: ReactNode; onRecover: () =
 }
 
 export function UnifiedSimulatorRoot() {
-  return <CloudProvider><Workspace /></CloudProvider>
+  const sharedHash = () => /(?:#|&)(?:share|s)=/.test(location.hash) ? location.hash : ''
+  const [sharing, setSharing] = useState(sharedHash)
+  const [workspaceStarted, setWorkspaceStarted] = useState(() => !sharedHash())
+  useEffect(() => {
+    const changed = () => { const hash = sharedHash(); setSharing(hash); if (!hash) setWorkspaceStarted(true) }
+    window.addEventListener('hashchange', changed)
+    return () => window.removeEventListener('hashchange', changed)
+  }, [])
+  return <CloudProvider>
+    {workspaceStarted && <div hidden={!!sharing}><Workspace /></div>}
+    {sharing && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}>
+      <SharedTopology key={sharing} hash={sharing} modal={workspaceStarted} onReturn={() => {
+        const url = new URL(location.href)
+        url.hash = ''; url.searchParams.delete('sample'); url.searchParams.delete('mode')
+        history.replaceState(null, '', url)
+        setSharing(''); setWorkspaceStarted(true)
+      }} />
+    </Suspense>}
+  </CloudProvider>
 }
 
 const noSubscribe = () => () => {}
@@ -328,32 +347,6 @@ function Workspace() {
       if (ticket === request.current) open('azure-net', JSON.stringify({ sampleId: '', topology: createEmptyAzNetTopology() }))
     } catch { if (ticket === request.current) setNotice('Workspace could not load. Your saved design has not been replaced.') }
   }
-  const importSharedSnapshot = useEffectEvent(async () => {
-    if (practiceRef.current?.current?.active && /(?:#|&)s=/.test(location.hash)) {
-      const ticket = ++request.current
-      try {
-        const { loadAzWorkspace } = await import('./azure-net/workspace')
-        const loaded = loadAzWorkspace({ getItem: () => null }, location.hash)
-        if (loaded.recovery.length) throw new Error('Shared snapshot rejected; the active design is unchanged.')
-        if (ticket === request.current && open('azure-net')) leavePractice()
-      } catch (error) { if (ticket === request.current) setNotice(error instanceof Error ? error.message : 'Shared snapshot rejected.') }
-      return
-    }
-    if (active?.provider !== 'vwan' || !/(?:#|&)s=/.test(location.hash)) return
-    const ticket = ++request.current
-    const hash = location.hash
-    try {
-      const { loadAzWorkspace } = await import('./azure-net/workspace')
-      const loaded = loadAzWorkspace({ getItem: () => null }, hash)
-      if (loaded.recovery.length) throw new Error('Shared snapshot rejected; the active design is unchanged.')
-      if (ticket === request.current) open('azure-net')
-    } catch (error) { if (ticket === request.current) setNotice(error instanceof Error ? error.message : 'Shared snapshot rejected.') }
-  })
-  useEffect(() => {
-    const changed = () => { void importSharedSnapshot() }
-    window.addEventListener('hashchange', changed)
-    return () => window.removeEventListener('hashchange', changed)
-  }, [])
   const practicing = practice?.active === true
   const provider = practicing ? practice.document.mode === 'vwan' ? 'vwan' : 'azure-net' : active?.provider
   const editorKey = practicing ? `practice:${practiceEpoch}:${provider}` : `design:${active?.provider}:${active?.revision}`

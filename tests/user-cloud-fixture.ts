@@ -1,7 +1,7 @@
 import { CloudError, createCloudHandler, type CloudStore, type StoredValue } from '../functions/user-cloud/handler'
 
 export const testOwner = (user: string) => (user === 'alice' ? 'a' : 'b').repeat(64)
-export function cloudFixture(origins = ['https://app.test']) {
+export function cloudFixture(origins = ['https://app.test'], now?: () => number) {
   const data = new Map<string, StoredValue & { name?: string }>()
   let version = 0
   const store: CloudStore = {
@@ -9,7 +9,7 @@ export function cloudFixture(origins = ['https://app.test']) {
     async put(key, raw, expected, name) {
       if (expected === null ? data.has(key) : data.get(key)?.etag !== expected) throw new CloudError(412, 'Changed cloud version.')
       const etag = `"${++version}"`
-      data.set(key, { raw, etag, name })
+      data.set(key, { raw, etag, name, generation: data.get(key)?.generation ?? crypto.randomUUID() })
       return etag
     },
     async delete(key, etag) {
@@ -24,7 +24,7 @@ export function cloudFixture(origins = ['https://app.test']) {
       }))
     },
   }
-  const handler = createCloudHandler({ store, origins,
+  const handler = createCloudHandler({ store, origins, now,
     authenticate: async authorization => {
       const user = authorization?.replace('Bearer ', '')
       if (!['alice', 'bob'].includes(user ?? '')) throw new Error('Rejected token')
