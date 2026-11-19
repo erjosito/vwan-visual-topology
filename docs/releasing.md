@@ -2,15 +2,16 @@
 
 Merging is not releasing. `CI` validates pull requests and main pushes and
 produces development candidates without Azure credentials or publication.
-Manual CI is also validation-only. Existing `validate` and `desktop` job names
+Manual CI builds the selected target without publishing. Existing `validate` and `desktop` job names
 are unchanged. Root Markdown/license-only changes retain the existing CI
 exclusions; use an earlier eligible main-push candidate when no build is needed.
 
 | Event | Validation / candidates | Production effects |
 | --- | --- | --- |
 | Pull request | Existing web/platform/Windows gates | None; cannot be promoted |
-| Main push | Same gates and candidate artifacts | None |
-| Manual CI | Same gates and candidate artifacts | None; cannot be promoted |
+| Main push | All target gates and candidate artifacts | None |
+| Manual CI on main | Selected target gates and candidate artifact | None; explicitly promotable |
+| Manual CI on another ref | Target jobs skipped | None; cannot be promoted |
 | Tag push / CI completion | No release trigger | None |
 | Manual Release, preflight only (default) | Verify selected main run/attempt, files and release history | None |
 | Manual Release, preflight disabled | Repeat checks after environment approval | One explicitly selected target |
@@ -19,9 +20,18 @@ exclusions; use an earlier eligible main-push candidate when no build is needed.
 not the candidate's code. Candidate packages are data, never executed by the
 privileged release job. It accepts a numeric CI run ID and explicit attempt,
 not a moving branch/tag, arbitrary SHA, pull-request run or a "latest" artifact.
-Both `validate` and `desktop` must have completed successfully in that attempt,
-even for a web-only or Function-only promotion. This deliberately tightens the
-old web deployment's accidental independence from Windows validation.
+The selected target's job must have completed successfully in that attempt:
+`validate` for web/statistics/user-cloud, `desktop` for Windows, or `mcp` for
+the local MCP package. Other targets may be skipped, running or failed without
+blocking that target. Cancelled/unavailable runs are rejected.
+
+Push and PR integration CI still runs every target. For a faster release build,
+dispatch CI on **main** with `target=web`, `target=desktop`, or `target=mcp`
+(`all` is the default). This avoids unrelated runners, builds and target gates;
+it does not weaken the selected target's tests. Web retains its full browser,
+production, accessibility, engine and collector coverage. MCP runs shared
+engine/platform tests and the actual extracted stdio/worker/rendering package
+outside the checkout. Windows retains native and packaged offline smoke tests.
 
 Browser gates use the matching Playwright image for its preinstalled browsers,
 but mount the `actions/setup-node` runtime read-only and put it first on `PATH`.
@@ -36,7 +46,7 @@ server crash by relaxing assertions, retries or test timeouts.
 Before the first actual promotion:
 
 1. Configure environments **web-production**, **github-statistics**,
-   **user-cloud-production** and **desktop-release** with deployment branches
+   **user-cloud-production**, **desktop-release** and **mcp-release** with deployment branches
    restricted to `main`.
    Add required reviewers if supported by the repository's plan and desired
    approval policy. A workflow referencing a new environment does **not**
@@ -73,20 +83,24 @@ deployments.
 
 ## Select, preflight, then promote
 
-Select a completed successful **push to main** run in Actions. Check its source
-SHA and attempt. Use **Re-run all jobs** if a new attempt is necessary: a rerun
-of only failed jobs is not an eligible complete candidate attempt.
+Select a main-push or explicit main-dispatch CI run in Actions. Check its source
+SHA and attempt. The selected target job and artifact must both belong to that
+exact attempt; a rerun of an unrelated job cannot qualify an older artifact.
+An all-target run need not finish its other targets before a successful target
+can be preflighted. PR runs remain unreleasable.
 
 ```powershell
 gh run list --workflow ci.yml --branch main --event push --status success --limit 10
+gh workflow run ci.yml --ref main -f target=web
+# Obtain that dispatch's exact run ID/attempt after validate passes.
 gh workflow run release.yml --ref main -f candidate_run_id=123456789 -f candidate_attempt=1 -f target=web -f preflight_only=true -f rollback=false
 ```
 
 Inspect the Release run's preflight summary. The default is **no deployment,
 release record, tag, installer publication or Azure login**. It verifies:
 
-- Repository, expected CI workflow, main-push provenance, successful exact
-  attempt and both required jobs; the selected SHA must still be on main.
+- Repository, expected CI workflow, main push/dispatch provenance and the selected
+  target's successful exact-attempt job; the selected SHA must still be on main.
 - Unique target artifact, GitHub archive SHA256 and every payload file's SHA256,
   manifest/source/run/attempt identity, required entries and desktop version/
   installer evidence.
@@ -98,12 +112,23 @@ Then dispatch with the **same run/attempt/target**, explicitly disabling preflig
 gh workflow run release.yml --ref main -f candidate_run_id=123456789 -f candidate_attempt=1 -f target=web -f preflight_only=false -f rollback=false
 ```
 
-Targets are **web**, **statistics**, **user-cloud**, or **desktop**, one per dispatch. Web and
+Targets are **web**, **statistics**, **user-cloud**, **desktop**, or **mcp**, one per dispatch. Web and
 Function deployments reuse exact CI bytes without installing dependencies or
 rebuilding. Desktop publication reuses the tested unsigned installer and names
 it `v<version>` (for example `v0.1.0`); it does not sign it or add an updater (#146).
 There is no cross-target atomic release: one target succeeding says nothing
 about the others. Release them independently and inspect each run's result.
+
+MCP publication uses `mcp-v<version>` and a portable
+`Azure-Network-Simulator-MCP-<version>.zip` download, not Azure hosting or npm
+registry publication. It never replaces the latest Windows installer release.
+The zip contains the Node bundles, workers, application/dependency licenses and
+a locked portable native-renderer dependency manifest. With Node 22+ installed,
+extract it into a new directory and run `npm ci --omit=dev --ignore-scripts`.
+Configure the MCP client to launch `node` with the absolute path to `mcp.cjs`,
+then restart that client/server. Do not mix files from different versions.
+Existing local MCP sessions are not automatically updated. MCP rollback, like
+Windows rollback, is a deliberate reinstall of a retained download.
 
 ## Application semantic versions
 
@@ -124,6 +149,7 @@ ProductVersion are `0.1.0.0`. CI verifies the actual packaged runtime/resources.
 Web HTML also records `application-version` metadata, verified against its
 candidate manifest. Source SHA, CI run/attempt and archive hashes remain the
 exact build identities; CI no longer queries daily history or edits versions.
+Targets share this source version but publish independently and may skip versions.
 
 A version bump is required **before building** different bytes for a version
 already published to that target. Unreleased changes may share a pending version.
@@ -143,10 +169,11 @@ one. Desktop downgrade/rollback remains a deliberate manual reinstall.
 ## Retention and durable release records
 
 CI keeps `static-site-<attempt>`, `statistics-function-<attempt>`,
-`user-cloud-function-<attempt>` and
-`unsigned-windows-development-build-<attempt>` for **30 days**. Their root
+`user-cloud-function-<attempt>`,
+`unsigned-windows-development-build-<attempt>` and `local-mcp-<attempt>` for **30 days**. Their root
 `manifest.json` binds the `payload` to the source SHA, run and attempt.
-PR/manual candidates are useful for testing but are intentionally unreleasable.
+PR candidates are useful for testing but are intentionally unreleasable.
+Main-dispatch candidates use the same provenance/checksum rules as main pushes.
 Preflight handoff artifacts last one day. Each preflight attempt creates a new
 artifact ID, passed explicitly to promotion; rerunning only a failed promotion
 reuses the successful preflight's handoff, while rerunning all jobs regenerates
@@ -212,7 +239,7 @@ gh workflow run release.yml --ref main -f candidate_run_id=123456000 -f candidat
 Rollback requires a matching published archive digest and creates a new
 rollback receipt without changing source history or version identity.
 Expired never-released candidates fail closed; merge a new change to obtain
-a new eligible main-push candidate rather than rebuilding under an old identity.
+a new eligible main candidate rather than rebuilding under an old identity.
 Deleted CI run metadata or deleted release archives require manual recovery.
 Function code rollback does not roll back collected data, infrastructure,
 Entra policy or rotated credentials. Desktop rollback is a deliberate reinstall
@@ -226,7 +253,7 @@ check both workflow files with `actionlint`. The focused suite covers candidate
 byte preservation/tampering, source/run/attempt mismatches, missing payloads,
 link/path rejection, actual installer evidence, invalid/failed/skipped CI gates,
 stale promotion, retry and rollback rules. CI also packages and verifies all
-four targets on its real Linux/Windows runners.
+all targets on its real Linux/Windows runners.
 
 A valid hosted preflight requires these workflows to have landed and a new
 successful main-push candidate. Neither local tests nor a PR run can prove a

@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import { artifacts, candidateVersion, createCandidate, guard, preflight, promotionDecision, record, validateArchivePaths, validateRun, verifyCandidate } from './release-candidate.mjs'
 import { checkUserCloud } from './check-user-cloud.mjs'
+import { packageMcp } from './package-mcp.mjs'
 
 const sourceSha = 'a'.repeat(40)
 const env = { GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: sourceSha, GITHUB_RUN_ID: '123', GITHUB_RUN_ATTEMPT: '1' }
@@ -189,26 +190,35 @@ function runFixture() {
     run: { id: 123, repository: { full_name: 'owner/repo' }, head_repository: { full_name: 'owner/repo' },
       workflow_id: 7, path: '.github/workflows/ci.yml', event: 'push', head_branch: 'main',
       status: 'completed', conclusion: 'success', head_sha: sourceSha },
-    jobs: ['validate', 'desktop'].map((name) => ({ name, conclusion: 'success', status: 'completed' })),
+    jobs: ['validate', 'desktop', 'mcp'].map((name) => ({ name, conclusion: 'success', status: 'completed' })),
   }
 }
 
-test('promotion accepts only a successful exact-main CI run with both required jobs', () => {
+test('promotion requires only the selected target gates from trusted main CI', () => {
   const { run, jobs } = runFixture()
-  validateRun(run, jobs, 7, 'owner/repo')
+  for (const [target, job] of [['web', jobs[0]], ['statistics', jobs[0]], ['user-cloud', jobs[0]], ['desktop', jobs[1]], ['mcp', jobs[2]]]) {
+    validateRun(run, [job], 7, 'owner/repo', target)
+    validateRun({ ...run, event: 'workflow_dispatch' }, [job], 7, 'owner/repo', target)
+    validateRun({ ...run, status: 'in_progress', conclusion: null }, [job], 7, 'owner/repo', target)
+    validateRun({ ...run, conclusion: 'failure' }, [job, { name: 'unrelated', conclusion: 'failure', status: 'completed' }], 7, 'owner/repo', target)
+    for (const conclusion of ['skipped', 'failure', 'cancelled', null]) {
+      assert.throws(() => validateRun(run, [{ ...job, conclusion }], 7, 'owner/repo', target), /Required CI job/)
+    }
+    assert.throws(() => validateRun(run, [], 7, 'owner/repo', target), /Required CI job/)
+    assert.throws(() => validateRun(run, [job, job], 7, 'owner/repo', target), /Required CI job/)
+    assert.throws(() => validateRun(run, [{ ...job, status: 'in_progress' }], 7, 'owner/repo', target), /Required CI job/)
+    assert.throws(() => validateRun(run, [{ name: 'unrelated', conclusion: 'success', status: 'completed' }], 7, 'owner/repo', target), /Required CI job/)
+  }
   for (const change of [
-    { event: 'pull_request' }, { event: 'workflow_dispatch' }, { head_branch: 'feature' },
-    { workflow_id: 99 }, { path: '.github/workflows/other.yml' }, { conclusion: 'failure' },
-    { conclusion: 'cancelled' }, { status: 'in_progress' }, { head_sha: 'main' },
+    { event: 'pull_request' }, { event: 'pull_request_target' }, { head_branch: 'feature' },
+    { workflow_id: 99 }, { path: '.github/workflows/other.yml' },
+    { conclusion: 'cancelled' }, { status: 'queued' }, { head_sha: 'main' },
     { repository: { full_name: 'other/repo' } }, { head_repository: { full_name: 'fork/repo' } },
   ]) {
-    assert.throws(() => validateRun({ ...run, ...change }, jobs, 7, 'owner/repo'))
+    assert.throws(() => validateRun({ ...run, ...change }, jobs, 7, 'owner/repo', 'web'))
   }
-  for (const conclusion of ['skipped', 'failure', 'cancelled', null]) {
-    assert.throws(() => validateRun(run, [jobs[0], { ...jobs[1], conclusion }], 7, 'owner/repo'), /Required CI job/)
-  }
-  assert.throws(() => validateRun(run, [jobs[0]], 7, 'owner/repo'), /Required CI job/)
-  assert.throws(() => validateRun(run, [...jobs, jobs[0]], 7, 'owner/repo'), /Required CI job/)
+  assert.throws(() => validateRun({ ...run, event: 'workflow_dispatch', head_branch: 'feature' }, jobs, 7, 'owner/repo', 'web'))
+  assert.throws(() => validateRun(run, jobs, 7, 'owner/repo', 'unknown'), /Unknown release target/)
 })
 
 test('artifact extraction rejects absolute, traversal and Windows-special paths', () => {
@@ -242,7 +252,7 @@ test('rollback requires the exact previously released run, attempt and archive',
 })
 
 test('semantic releases cannot reuse a version for different bytes or move backwards, except explicit web rollback', () => {
-  for (const target of ['web', 'desktop']) {
+  for (const target of ['web', 'desktop', 'mcp']) {
     const previous = { target, version: '0.1.9', runId: '122', runAttempt: 1, archiveSha256: 'b'.repeat(64) }
     const candidate = { ...previous, version: '0.1.10', runId: '123', archiveSha256: 'a'.repeat(64) }
     assert.equal(promotionDecision(candidate, [previous], false, 'ahead'), false)
@@ -392,7 +402,7 @@ function releaseStore() {
       release.assets.push({ name, digest: `sha256:${hash(readFileSync(path))}` })
     } else if (command === 'edit') {
       assert.ok(args.includes('--draft=false'))
-      assert.ok(args.includes(tag.startsWith('promotion-') ? '--prerelease' : '--latest'))
+      assert.ok(args.includes(tag.startsWith('promotion-') ? '--prerelease' : tag.startsWith('mcp-v') ? '--latest=false' : '--latest'))
       release.draft = false
       release.published_at = '2026-11-17T15:00:00Z'
     } else assert.fail(`Unexpected release command: ${command}`)
@@ -441,6 +451,60 @@ test('desktop publication uses semantic tags, preserves legacy tags, and never o
       await assert.rejects(record(ready, false), /Release identity already exists/)
     })
   }
+})
+
+test('MCP staging carries portable workers, locked native dependencies and bundled licenses without Electron', async (t) => {
+  const { root } = await fixture(t)
+  await mkdir(resolve(root, 'platform-dist'))
+  await mkdir(resolve(root, 'node_modules', 'example'), { recursive: true })
+  await writeFile(resolve(root, 'LICENSE'), 'Application license')
+  await writeFile(resolve(root, 'node_modules', 'example', 'LICENSE'), 'Bundled dependency license')
+  await writeFile(resolve(root, 'package.json'), JSON.stringify({ version: '0.3.0', dependencies: { '@resvg/resvg-js': '2.6.2' } }))
+  const native = { version: '2.6.2', optionalDependencies: { '@resvg/resvg-js-win32-x64-msvc': '2.6.2' } }
+  await writeFile(resolve(root, 'package-lock.json'), JSON.stringify({ packages: {
+    'node_modules/@resvg/resvg-js': native,
+    'node_modules/@resvg/resvg-js-win32-x64-msvc': { version: '2.6.2', optional: true },
+    'node_modules/electron': { version: '42.0.0', dev: true },
+  } }))
+  for (const entry of ['mcp', 'worker', 'render-worker']) {
+    await writeFile(resolve(root, 'platform-dist', `${entry}.cjs`), `built ${entry}`)
+    await writeFile(resolve(root, 'platform-dist', `${entry}.inputs.json`), '["node_modules/example/index.js"]')
+  }
+  const staged = resolve(root, 'mcp')
+  await packageMcp(staged, root)
+  assert.equal(await readFile(resolve(staged, 'render-worker.cjs'), 'utf8'), 'built render-worker')
+  const lock = JSON.parse(await readFile(resolve(staged, 'package-lock.json'), 'utf8'))
+  assert.deepEqual(lock.packages['node_modules/@resvg/resvg-js'], native)
+  assert.ok(lock.packages['node_modules/@resvg/resvg-js-win32-x64-msvc'])
+  assert.ok(!lock.packages['node_modules/electron'])
+  assert.match(await readFile(resolve(staged, 'THIRD_PARTY_NOTICES.txt'), 'utf8'), /Bundled dependency license/)
+})
+
+test('MCP download uses a separate immutable version tag without replacing the latest Windows installer', async (t) => {
+  const { root } = await fixture(t)
+  const name = 'Azure-Network-Simulator-MCP-0.3.0.zip'
+  await writeFile(resolve(root, name), 'exact tested portable MCP bytes')
+  const directory = resolve(root, 'mcp-candidate')
+  await createCandidate('mcp', directory, [[resolve(root, name), name]], {
+    ...env, CANDIDATE_VERSION: '0.3.0', CANDIDATE_PACKAGE_VERSION: '0.3.0',
+  })
+  await assert.rejects(createCandidate('mcp', resolve(root, 'wrong-version'), [[resolve(root, name), name]], {
+    ...env, CANDIDATE_VERSION: '0.3.1', CANDIDATE_PACKAGE_VERSION: '0.3.1',
+  }), /Missing versioned MCP package/)
+  const store = releaseStore()
+  const { calls } = fakeGitHub(t, directory, store)
+  const ready = resolve(root, 'ready')
+  await preflight('mcp', '123', ready, '1')
+  await guard(ready, false)
+  await record(ready, false)
+  const published = store.releases.find((release) => release.tag_name === 'mcp-v0.3.0')
+  assert.equal(published.draft, false)
+  assert.deepEqual(published.assets.map((asset) => asset.name), [name, 'record.json'])
+  assert.ok(calls.some((call) => call.includes('--latest=false')))
+  assert.equal((await guard(ready, false)).noOp, true)
+  published.body = JSON.stringify({ ...JSON.parse(published.body), archiveSha256: '0'.repeat(64) })
+  await assert.rejects(guard(ready, false), /MCP version is already published/)
+  await assert.rejects(record(ready, false), /Release identity already exists/)
 })
 
 test('unreadable or conflicting creation responses preserve the draft and fail before asset writes', async (t) => {

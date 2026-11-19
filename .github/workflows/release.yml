@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       candidate_run_id:
-        description: Successful main-push CI run ID (not a SHA or PR run)
+        description: Main CI run ID with successful selected-target checks (not a SHA or PR run)
         required: true
         type: string
       candidate_attempt:
-        description: Exact CI attempt (use rerun-all-jobs, not only failed jobs)
+        description: Exact CI attempt containing the selected target job and artifact
         required: true
         type: string
         default: '1'
@@ -16,7 +16,7 @@ on:
         description: Promote one independently released target
         required: true
         type: choice
-        options: [web, statistics, user-cloud, desktop]
+        options: [web, statistics, user-cloud, desktop, mcp]
       preflight_only:
         description: Validate candidate without deploying or publishing
         type: boolean
@@ -78,7 +78,7 @@ jobs:
     if: ${{ !inputs.preflight_only && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    environment: ${{ inputs.target == 'statistics' && 'github-statistics' || inputs.target == 'user-cloud' && 'user-cloud-production' || inputs.target == 'web' && 'web-production' || 'desktop-release' }}
+    environment: ${{ inputs.target == 'statistics' && 'github-statistics' || inputs.target == 'user-cloud' && 'user-cloud-production' || inputs.target == 'web' && 'web-production' || inputs.target == 'mcp' && 'mcp-release' || 'desktop-release' }}
     permissions:
       contents: write
       actions: read

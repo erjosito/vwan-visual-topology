@@ -10,6 +10,13 @@ on:
       - '*.md'
       - 'LICENSE'
   workflow_dispatch:
+    inputs:
+      target:
+        description: Build and validate only the selected release target
+        type: choice
+        options: [all, web, mcp, desktop]
+        default: all
+        required: true
 
 permissions:
   contents: read
@@ -17,6 +24,7 @@ permissions:
 
 jobs:
   validate:
+    if: github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && (inputs.target == 'all' || inputs.target == 'web'))
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,6 +168,7 @@ jobs:
           retention-days: 7
 
   desktop:
+    if: github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && (inputs.target == 'all' || inputs.target == 'desktop'))
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -210,6 +219,45 @@ jobs:
         with:
           name: unsigned-windows-development-build-${{ github.run_attempt }}
           path: test-artifacts/candidates/desktop/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 30
+
+  mcp:
+    if: github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && (inputs.target == 'all' || inputs.target == 'mcp'))
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix functions/user-cloud
+      - run: npm run build:user-cloud
+      - run: node --test scripts/release-candidate.test.mjs
+      - run: npm run build:platform
+      - name: Validate shared engine and Node platform
+        run: npx vitest run src platform
+      - name: Package portable local MCP download
+        run: |
+          node scripts/package-mcp.mjs "$RUNNER_TEMP/mcp-package"
+          version=$(node -p "require('./package.json').version")
+          mkdir -p test-artifacts
+          (cd "$RUNNER_TEMP/mcp-package" && zip -q "$GITHUB_WORKSPACE/test-artifacts/Azure-Network-Simulator-MCP-${version}.zip" ./*)
+          unzip -q "test-artifacts/Azure-Network-Simulator-MCP-${version}.zip" -d "$RUNNER_TEMP/mcp-verified"
+          npm ci --omit=dev --ignore-scripts --prefix "$RUNNER_TEMP/mcp-verified"
+      - name: Exercise exact packaged stdio engine, workers and rendering outside the checkout
+        env:
+          MCP_PACKAGE_DIR: ${{ runner.temp }}/mcp-verified
+        run: npx vitest run platform/mcp.test.ts
+      - run: node scripts/release-candidate.mjs create mcp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: local-mcp-${{ github.run_attempt }}
+          path: test-artifacts/candidates/mcp/
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
