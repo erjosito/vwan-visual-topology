@@ -13,9 +13,11 @@ import { haBackend, haPacket, haPortsTopology } from '../tests/fixtures/ha-ports
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
 import { readFileSync } from 'node:fs'
 
+const serverPath = resolve(process.env.MCP_PACKAGE_DIR ?? 'platform-dist', 'mcp.cjs')
+
 it('qualifies subnet-peering route visibility separately from forwarding through the actual stdio engine', async () => {
   const client = new Client({ name: 'subnet-peering-contract-test', version: '1' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
     if (response.isError) throw new Error(JSON.stringify(response.content))
@@ -60,7 +62,7 @@ it('qualifies subnet-peering route visibility separately from forwarding through
 
 it('exposes original per-NVA received-route evidence through the freshly built stdio engine without implying subnet injection', async () => {
   const client = new Client({ name: 'nva-bgp-contract-test', version: '1' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
     if (response.isError) throw new Error(JSON.stringify(response.content))
@@ -114,7 +116,7 @@ it('exposes original per-NVA received-route evidence through the freshly built s
 
 it('qualifies owned HA-port forwarding and fail-closed alternatives through the actual stdio engine', async () => {
   const client = new Client({ name: 'ha-ports-contract-test', version: '1' })
-  await client.connect(new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' }))
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
     if (response.isError) throw new Error(JSON.stringify(response.content))
@@ -158,7 +160,7 @@ it('qualifies owned HA-port forwarding and fail-closed alternatives through the 
 
 it('serves actual stdio discovery, validation, grading, bounded evidence and cancellation without privileged tools', async () => {
   const client = new Client({ name: 'platform-contract-test', version: '1' })
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' })
   let stderr = ''
   transport.stderr?.on('data', (chunk) => { stderr += chunk })
   await client.connect(transport)
@@ -287,7 +289,7 @@ it('serves actual stdio discovery, validation, grading, bounded evidence and can
 
 it('exports real custom-routing bypass and inspected GIF artifacts through bounded MCP chunks', async () => {
   const client = new Client({ name: 'flow-export-test', version: '1' })
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' })
   await client.connect(transport)
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })
@@ -365,7 +367,7 @@ it('exports real custom-routing bypass and inspected GIF artifacts through bound
 
 it('assesses static hub Firewall required/bypassed legs through actual stdio with the same evidence as the local API', async () => {
   const client = new Client({ name: 'static-hub-firewall-test', version: '1' })
-  const transport = new StdioClientTransport({ command: process.execPath, args: [resolve('platform-dist', 'mcp.cjs')], stderr: 'pipe' })
+  const transport = new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' })
   await client.connect(transport)
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     const response = await client.callTool({ name, arguments: args })

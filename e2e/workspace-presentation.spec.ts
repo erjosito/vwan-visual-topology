@@ -2,6 +2,9 @@ import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
 import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
+import { readFileSync } from 'node:fs'
+
+const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -622,6 +625,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.keyboard.press('Escape')
       await help.locator('summary').click()
       await expect(settings).not.toHaveAttribute('open')
+      await expect(help.getByTestId('app-version')).toHaveText(`AzNetSim ${version}`)
       expect((await new AxeBuilder({ page }).include('.presentation-group[open]').analyze()).violations).toEqual([])
       const pending = context.waitForEvent('page')
       await help.getByRole('button', { name: language === 'ja' ? 'ドキュメント' : 'Docs', exact: true }).click()
@@ -638,6 +642,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.keyboard.press('Escape')
       expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(before)
       await page.getByTestId('ui-preview-toggle').click()
+      await expect(page.getByTestId('app-version')).toHaveText(`AzNetSim ${version}`)
       await expect(page.getByRole('combobox', { name: language === 'ja' ? 'キャンバスのスタイル' : 'Canvas style', exact: true })).toHaveValue('dots')
       await expect(page.getByRole('combobox', { name: language === 'ja' ? '接続線のスタイル' : 'Connection style', exact: true })).toHaveValue('straight')
     })

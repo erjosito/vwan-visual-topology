@@ -9,6 +9,7 @@ export const artifacts = {
   statistics: 'statistics-function',
   'user-cloud': 'user-cloud-function',
   desktop: 'unsigned-windows-development-build',
+  mcp: 'local-mcp',
 }
 const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const requireValue = (condition, message) => { if (!condition) throw new Error(message) }
@@ -21,6 +22,7 @@ const digest = (value) => /^[a-f0-9]{64}$/.test(value ?? '')
 const semanticVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const legacyDesktopVersion = /^\d{4}\.\d{2}\.\d{2}\.[1-9]\d*$/
 const desktopReleaseTag = (version) => legacyDesktopVersion.test(version) ? `desktop-dev-${version}` : `v${version}`
+const downloadTag = (target, version) => target === 'mcp' ? `mcp-v${version}` : desktopReleaseTag(version)
 
 export function candidateVersion(version) {
   requireValue(typeof version === 'string' && version === version.trim() && semanticVersion.test(version), 'Release version must be MAJOR.MINOR.PATCH without prerelease/build suffixes')
@@ -48,7 +50,7 @@ async function filesIn(root, prefix = '') {
 export async function createCandidate(target, root, inputs, env = process.env) {
   requireValue(Object.hasOwn(artifacts, target), 'Unknown release target')
   requireValue(sourceSha(env.GITHUB_SHA) && numericId(env.GITHUB_RUN_ID) && numericId(env.GITHUB_RUN_ATTEMPT), 'Missing CI provenance')
-  const versioned = target === 'desktop' || (target === 'web' && env.CANDIDATE_VERSION != null)
+  const versioned = target === 'desktop' || target === 'mcp' || (target === 'web' && env.CANDIDATE_VERSION != null)
   if (versioned) {
     requireValue(candidateVersion(env.CANDIDATE_VERSION).package === env.CANDIDATE_PACKAGE_VERSION, 'Candidate package version mismatch')
   }
@@ -92,6 +94,9 @@ export async function verifyCandidate(root, expected) {
     }
   } else if (manifest.target === 'statistics' || manifest.target === 'user-cloud') {
     requireValue(Object.keys(actual).length === 1 && Object.hasOwn(actual, 'function.zip'), 'Unexpected Function package')
+  } else if (manifest.target === 'mcp') {
+    requireValue(candidateVersion(manifest.version).package === manifest.packageVersion, 'Candidate package version mismatch')
+    requireValue(Object.keys(actual).length === 1 && Object.hasOwn(actual, `Azure-Network-Simulator-MCP-${manifest.version}.zip`), 'Missing versioned MCP package')
   } else {
     let fileVersion
     if (legacyDesktopVersion.test(manifest.version ?? '')) {
@@ -115,13 +120,15 @@ export async function verifyCandidate(root, expected) {
   return manifest
 }
 
-export function validateRun(run, jobs, workflowId, repository) {
+export function validateRun(run, jobs, workflowId, repository, target) {
+  requireValue(Object.hasOwn(artifacts, target), 'Unknown release target')
   requireValue(run.repository?.full_name === repository && run.head_repository?.full_name === repository, 'Foreign repository candidate')
   requireValue(run.workflow_id === workflowId && run.path === '.github/workflows/ci.yml', 'Unexpected candidate workflow')
-  requireValue(run.event === 'push' && run.head_branch === 'main', 'Only main-push CI candidates can be released')
-  requireValue(run.status === 'completed' && run.conclusion === 'success', 'Candidate CI did not complete successfully')
+  requireValue(['push', 'workflow_dispatch'].includes(run.event) && run.head_branch === 'main', 'Only main CI candidates can be released')
+  requireValue(['in_progress', 'completed'].includes(run.status)
+    && [null, 'success', 'failure'].includes(run.conclusion), 'Candidate CI is cancelled or unavailable')
   requireValue(sourceSha(run.head_sha), 'Invalid candidate source SHA')
-  for (const name of ['validate', 'desktop']) {
+  for (const name of [target === 'desktop' || target === 'mcp' ? target : 'validate']) {
     const matches = jobs.filter((job) => job.name === name)
     requireValue(matches.length === 1 && matches[0].conclusion === 'success' && matches[0].status === 'completed', `Required CI job did not pass: ${name}`)
   }
@@ -138,7 +145,7 @@ export function validateArchivePaths(names) {
 export function promotionDecision(candidate, records, rollback, relation) {
   const current = records[0]
   if (rollback) {
-    requireValue(candidate.target !== 'desktop', 'Desktop rollback is an explicit reinstall, not a deployment')
+    requireValue(!['desktop', 'mcp'].includes(candidate.target), 'Download rollback is an explicit reinstall, not a deployment')
     requireValue(records.some((record) => record.archiveSha256 === candidate.archiveSha256
       && record.runId === candidate.runId && record.runAttempt === candidate.runAttempt), 'Rollback requires a previously released exact candidate')
   } else if (current) {
@@ -146,14 +153,14 @@ export function promotionDecision(candidate, records, rollback, relation) {
     if (relation === 'identical') {
       requireValue(current.archiveSha256 === candidate.archiveSha256, 'Same source has different bytes; select the already released candidate')
     }
-    if ((candidate.target === 'web' || candidate.target === 'desktop') && semanticVersion.test(current.version ?? '')) {
+    if (['web', 'desktop', 'mcp'].includes(candidate.target) && semanticVersion.test(current.version ?? '')) {
       candidateVersion(candidate.version)
       const previous = current.version.split('.').map(Number)
       const difference = candidate.version.split('.').map((part, index) => Number(part) - previous[index]).find((value) => value !== 0) ?? 0
       requireValue(difference >= 0, 'Semantic release version must not go backwards')
     }
   }
-  if (!rollback && (candidate.target === 'web' || candidate.target === 'desktop') && semanticVersion.test(candidate.version ?? '')) {
+  if (!rollback && ['web', 'desktop', 'mcp'].includes(candidate.target) && semanticVersion.test(candidate.version ?? '')) {
     requireValue(records.every((record) => record.version !== candidate.version || record.archiveSha256 === candidate.archiveSha256),
       'Semantic version is already published with different bytes; bump package.json before CI')
   }
@@ -185,12 +192,13 @@ async function output(values) {
   }
 }
 
-async function checkRun(repository, runId, attempt) {
+async function checkRun(repository, runId, attempt, target) {
   requireValue(numericId(runId) && numericId(attempt), 'A numeric CI run ID and attempt are required')
   const run = api(`repos/${repository}/actions/runs/${runId}/attempts/${attempt}`)
+  requireValue(String(run.run_attempt) === String(attempt), 'Candidate CI attempt mismatch')
   const workflow = api(`repos/${repository}/actions/workflows/ci.yml`)
   const jobs = pages(`repos/${repository}/actions/runs/${runId}/attempts/${run.run_attempt}/jobs?per_page=100`).flatMap((page) => page.jobs)
-  validateRun(run, jobs, workflow.id, repository)
+  validateRun(run, jobs, workflow.id, repository, target)
   const ancestry = api(`repos/${repository}/compare/${run.head_sha}...main`)
   requireValue(['ahead', 'identical'].includes(ancestry.status), 'Candidate SHA is not on main')
   return run
@@ -205,7 +213,7 @@ async function unpack(archive, directory) {
 export async function preflight(target, runId, directory, attempt) {
   requireValue(Object.hasOwn(artifacts, target), 'Unknown release target')
   const repository = process.env.GITHUB_REPOSITORY
-  const run = await checkRun(repository, runId, attempt)
+  const run = await checkRun(repository, runId, attempt, target)
   const expected = { target, repository, sourceSha: run.head_sha, runId: String(run.id), runAttempt: run.run_attempt }
   const available = pages(`repos/${repository}/actions/runs/${runId}/artifacts?per_page=100`).flatMap((page) => page.artifacts)
     .filter((artifact) => artifact.name === `${artifacts[target]}-${attempt}` && !artifact.expired)
@@ -236,7 +244,7 @@ export async function preflight(target, runId, directory, attempt) {
 
 export async function guard(directory, rollback) {
   const receipt = await json(resolve(directory, 'receipt.json'))
-  const run = await checkRun(process.env.GITHUB_REPOSITORY, receipt.runId, receipt.runAttempt)
+  const run = await checkRun(process.env.GITHUB_REPOSITORY, receipt.runId, receipt.runAttempt, receipt.target)
   requireValue(receipt.repository === process.env.GITHUB_REPOSITORY && receipt.sourceSha === run.head_sha
     && receipt.runAttempt === run.run_attempt, 'Preflight receipt no longer matches the successful CI attempt')
   requireValue(sha256(await readFile(resolve(directory, 'candidate.zip'))) === receipt.archiveSha256, 'Preflight archive checksum mismatch')
@@ -252,11 +260,11 @@ export async function guard(directory, rollback) {
       && JSON.parse(pending.body).archiveSha256 === receipt.archiveSha256,
     'Unresolved promotion draft exists; rerun that release or reconcile it before another promotion')
   }
-  if (receipt.target === 'desktop') {
-    const existing = releases(receipt.repository).find((release) => release.tag_name === desktopReleaseTag(receipt.version))
+  if (receipt.target === 'desktop' || receipt.target === 'mcp') {
+    const existing = releases(receipt.repository).find((release) => release.tag_name === downloadTag(receipt.target, receipt.version))
     if (existing) {
       const identity = JSON.parse(existing.body)
-      requireValue(identity.archiveSha256 === receipt.archiveSha256 && identity.sourceSha === receipt.sourceSha, 'Desktop version is already published with different bytes')
+      requireValue(identity.archiveSha256 === receipt.archiveSha256 && identity.sourceSha === receipt.sourceSha, `${receipt.target === 'desktop' ? 'Desktop' : 'MCP'} version is already published with different bytes`)
     }
   }
   await output({ no_op: noOp, source_sha: receipt.sourceSha, version: receipt.version ?? '' })
@@ -271,7 +279,9 @@ export async function record(directory, rollback, reserve = false) {
     ...receipt, rollback, promotionRunId: promotionId,
     ciUrl: `https://github.com/${receipt.repository}/actions/runs/${receipt.runId}`,
     promotionUrl: `https://github.com/${receipt.repository}/actions/runs/${promotionId}`,
-    notice: receipt.target === 'desktop' ? 'Unsigned Windows development build; not a signed production installer.' : 'Explicit deployment record; not an application download release.',
+    notice: receipt.target === 'desktop' ? 'Unsigned Windows development build; not a signed production installer.'
+      : receipt.target === 'mcp' ? 'Local Node 22+ stdio server. Extract, run npm ci --omit=dev --ignore-scripts, then node mcp.cjs. Does not update or restart existing MCP processes.'
+      : 'Explicit deployment record; not an application download release.',
   }
   const notes = resolve(directory, 'record.json')
   await save(notes, body)
@@ -304,11 +314,15 @@ export async function record(directory, rollback, reserve = false) {
       }
     }
     if (draftOnly || !found.draft) return
-    gh(['release', 'edit', name, '--repo', receipt.repository, '--draft=false', prerelease ? '--prerelease' : '--latest'])
+    gh(['release', 'edit', name, '--repo', receipt.repository, '--draft=false', prerelease ? '--prerelease' : receipt.target === 'mcp' ? '--latest=false' : '--latest'])
   }
   if (!reserve && receipt.target === 'desktop') {
     await publish(desktopReleaseTag(receipt.version), `Windows development build ${receipt.version} (unsigned)`,
       [resolve(directory, 'candidate', 'payload', `Azure-Network-Simulator-${receipt.version}-x64.exe`), notes], false)
+  }
+  if (!reserve && receipt.target === 'mcp') {
+    await publish(downloadTag('mcp', receipt.version), `Local MCP server ${receipt.version}`,
+      [resolve(directory, 'candidate', 'payload', `Azure-Network-Simulator-MCP-${receipt.version}.zip`), notes], false)
   }
   await publish(tag, `${rollback ? 'Rollback' : 'Promotion'}: ${receipt.target} ${receipt.sourceSha.slice(0, 12)}`,
     [resolve(directory, 'candidate.zip'), notes], true, reserve)
@@ -327,12 +341,14 @@ async function main() {
     await output({ CANDIDATE_VERSION: version.build, CANDIDATE_PACKAGE_VERSION: version.package, CANDIDATE_FILE_VERSION: version.file })
   } else if (command === 'create') {
     const root = resolve('test-artifacts', 'candidates', target)
-    const inputs = target === 'web' ? [['dist', '']] : target === 'statistics' || target === 'user-cloud'
+    const version = candidateVersion((await json('package.json')).version)
+    const inputs = target === 'web' ? [['dist', '']] : target === 'mcp'
+      ? [[`test-artifacts/Azure-Network-Simulator-MCP-${version.build}.zip`, `Azure-Network-Simulator-MCP-${version.build}.zip`]]
+      : target === 'statistics' || target === 'user-cloud'
       ? [[`test-artifacts/${target === 'statistics' ? 'github-statistics' : 'user-cloud'}-function.zip`, 'function.zip']]
       : (await readdir('release')).filter((name) => name.endsWith('-x64.exe')).map((name) => [resolve('release', name), name])
         .concat((await readdir('test-artifacts/desktop')).filter((name) => name.endsWith('checks.json') || name.endsWith('sha256.json'))
           .map((name) => [resolve('test-artifacts/desktop', name), name]))
-    const version = candidateVersion((await json('package.json')).version)
     await createCandidate(target, root, inputs, { ...process.env, CANDIDATE_VERSION: version.build, CANDIDATE_PACKAGE_VERSION: version.package })
   } else if (command === 'preflight') await preflight(target, argument, resolve(directory), attempt)
   else if (command === 'guard') await guard(resolve(target), argument === 'true')

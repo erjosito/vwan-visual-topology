@@ -19,12 +19,13 @@ export function WorkspaceMenu() {
     <PresentationGroup label={t(session?.presentationPreview ? 'Settings' : 'Settings & help')}>
     <ThemeSelector />
     <LanguageSelector />
-    {session?.presentationPreview ? <CanvasStyleSettings /> : <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>}
+    {session?.presentationPreview && <CanvasStyleSettings />}
     </PresentationGroup>
-    {session?.presentationPreview && <PresentationGroup label={t('Help & feedback')}>
-      <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>
+    <PresentationGroup label={t('Help & feedback')}>
+      {session?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>}
       <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
-    </PresentationGroup>}
+      <small className="muted" data-testid="app-version">AzNetSim {import.meta.env.VITE_APP_VERSION}</small>
+    </PresentationGroup>
     {!session?.presentationPreview && <LearningStatus />}
     {!session?.presentationPreview && <CloudMenu />}
     {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}
