@@ -1,5 +1,9 @@
 # Guided course authoring contract
 
+For curriculum readiness criteria and learner-experience guidelines, including
+requested changes that may not yet be implemented, see
+[Curriculum readiness](../../docs/curriculum-readiness.md).
+
 The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
 and evidence-gated runner (#180) activate sequential assessed missions.
