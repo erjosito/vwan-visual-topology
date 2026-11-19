@@ -2,6 +2,32 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type 
 import { t } from './i18n'
 import type { DetailEntity } from './network-detail-projection'
 import type { Workload } from './inventory'
+import virtualMachine from './assets/azure/virtual-machine.svg'
+import networkInterface from './assets/azure/network-interface.svg'
+import firewall from './assets/azure/firewall.svg'
+import gateway from './assets/azure/virtual-network-gateway.svg'
+import routeServer from './assets/azure/route-server.svg'
+import natGateway from './assets/azure/nat-gateway.svg'
+import loadBalancer from './assets/azure/load-balancer.svg'
+import privateEndpoint from './assets/azure/private-endpoint.svg'
+import applicationGateway from './assets/azure/application-gateway.svg'
+import frontDoor from './assets/azure/front-door.svg'
+import trafficManager from './assets/azure/traffic-manager.svg'
+import vnetAppliance from './assets/azure/vnet-appliance.svg'
+
+function resourceIcon(entity: DetailEntity) {
+  const kind = 'kind' in entity.original ? entity.original.kind : undefined
+  switch (entity.kind) {
+    case 'nic': return entity.workloadIds.length ? virtualMachine : networkInterface
+    case 'appliance': return kind === 'azure-firewall' ? firewall : kind === 'vnra' ? vnetAppliance : virtualMachine
+    case 'gateway': return gateway
+    case 'route-server': return routeServer
+    case 'nat': return natGateway
+    case 'load-balancer': return loadBalancer
+    case 'private-endpoint': return privateEndpoint
+    case 'application': return kind === 'front-door' ? frontDoor : kind === 'traffic-manager' ? trafficManager : applicationGateway
+  }
+}
 
 export function NetworkDetailAttachments({ entities, workloads, selectedId, selectedTargetId, subnetId, focusRequest, onRevealOriginal, onRevealSubnet, subnetNames, onSelect, onActions }: {
   entities: DetailEntity[]
@@ -51,11 +77,11 @@ export function NetworkDetailAttachments({ entities, workloads, selectedId, sele
     if (!element || !subnetId) return
     const measure = () => {
       const bounds = element.getBoundingClientRect()
-      const anchor = element.querySelector<HTMLElement>('.detail-attachment-label')!.getBoundingClientRect()
-      const start = anchor.bottom - bounds.top
+      const start = element.closest('.detail-subnet')!.querySelector('.detail-subnet-target')!.getBoundingClientRect().bottom - bounds.top
       setEdges([...element.querySelectorAll<HTMLElement>('[data-entity-id]')].map((node) => {
-        const target = node.getBoundingClientRect(), end = target.top - bounds.top + Math.min(32, target.height / 2)
-        return { key: `${node.dataset.entityKind}:${node.dataset.entityId}`, path: `M 10 ${start} V ${end} H ${target.left - bounds.left}` }
+        const target = node.querySelector('.detail-resource-icon')!.getBoundingClientRect()
+        const end = target.top - bounds.top, x = target.left - bounds.left + target.width / 2
+        return { key: `${node.dataset.entityKind}:${node.dataset.entityId}`, path: `M 40 ${start} V ${end - 16} H ${x} V ${end}` }
       }))
     }
     const observer = new ResizeObserver(measure)
@@ -75,7 +101,6 @@ export function NetworkDetailAttachments({ entities, workloads, selectedId, sele
   }
   return <div className="detail-attachments" ref={graph} data-attachment-graph={subnetId}>
     {subnetId && <>
-      <p className="detail-attachment-label">{t('Declared attachments')} ↓</p>
       <svg className="detail-attachment-edges" aria-hidden="true">
         {edges.map((edge) => <path key={edge.key} d={edge.path} data-attachment-edge={edge.key} />)}
       </svg>
@@ -91,7 +116,8 @@ export function NetworkDetailAttachments({ entities, workloads, selectedId, sele
         onContextMenu={(event) => menu(event, entity)}
         onKeyDown={(event) => { if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) menu(event, entity) }}
         data-selected={entity.workloadIds.includes(selectedId ?? '') || !!entity.target && entity.target.id === selectedTargetId} data-testid="detail-device">
-        <button type="button" className="detail-device-target" aria-label={`${t(entity.label)}: ${entity.name}`} title={entity.name}
+        <button type="button" className="detail-device-target" aria-label={`${t(entity.label)}: ${entity.name}`} title={`${entity.name} · ${entity.id}`}
+          aria-description={[entity.id, ...(entity.subnetIds.length > 1 ? [t('Original entity; {0} declared subnet associations', entity.subnetIds.length)] : [])].join(' · ')}
           aria-pressed={entity.target ? entity.target.id === selectedTargetId : undefined}
           onClick={(event) => {
             if (entity.kind === 'nic' && entity.workloadIds[0]) onSelect(entity.workloadIds[0])
@@ -99,26 +125,27 @@ export function NetworkDetailAttachments({ entities, workloads, selectedId, sele
           }}
           onContextMenu={(event) => menu(event, entity)}
           onKeyDown={(event) => { if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) menu(event, entity) }}>
-          <span className={`detail-device-symbol detail-device-symbol-${entity.kind}`} aria-hidden="true">{entity.kind === 'nic' ? '▣' : entity.kind === 'appliance' ? '⬡' : '◇'}</span>
+          <img className="detail-resource-icon" src={resourceIcon(entity)} alt="" />
           <span><small>{t(entity.label)}:</small><strong>{entity.name}</strong></span>
         </button>
-        <code>{entity.id}</code>
         {(subnetId && entity.subnetAddresses ? entity.subnetAddresses.filter((entry) => entry.subnetId === subnetId).map((entry) => entry.address) : entity.addresses)
-          .map((address, index) => <code key={index}>{address}</code>)}
+          .map((address, index) => <code className="detail-device-address" key={index}>{address}</code>)}
         {entity.subnetIds.length > 1 && <>
-          <small>{t('Original entity; {0} declared subnet associations', entity.subnetIds.length)}</small>
-          {reference ? <button type="button" className="detail-original-link" onClick={() => onRevealOriginal?.(entity)}>
+          {reference ? <button type="button" className="detail-original-link" title={t('Attachment reference → original entity')}
+            aria-label={t('Attachment reference → original entity')} onClick={() => onRevealOriginal?.(entity)}>
             {t('Attachment reference → original entity')}
           </button> : <div className="detail-subnet-references" aria-label={t('Declared attachments')}>
-            {entity.subnetIds.map((id) => <button key={id} type="button" onClick={() => onRevealSubnet?.(id)}>
-              {t('Subnet')}: {subnetNames?.get(id) ?? id} · <code>{id}</code>
+            {entity.subnetIds.map((id) => <button key={id} type="button"
+              aria-label={`${t('Subnet')}: ${subnetNames?.get(id) ?? id} · ${id}`} onClick={() => onRevealSubnet?.(id)}>
+              {subnetNames?.get(id) ?? id}
             </button>)}
           </div>}
         </>}
         {workloads.filter((workload) => entity.workloadIds.includes(workload.id)).map((workload) => <button key={workload.id}
-          type="button" className="detail-workload-reference" title={`${workload.name} · ${workload.id}`} aria-pressed={selectedId === workload.id} onClick={() => onSelect(workload.id)}>
-          {t('Workload')}: {workload.name} · <code>{workload.id}</code>
-          {selectedId === workload.id && <span> · {t('Selected workload')}</span>}
+          type="button" className="detail-workload-reference" title={`${t('Workload')}: ${workload.name} · ${workload.id}`}
+          aria-label={`${t('Workload')}: ${workload.name} · ${workload.id}`}
+          aria-pressed={selectedId === workload.id} onClick={() => onSelect(workload.id)}>
+          {workload.name}
         </button>)}
       </div>})}
     </div>

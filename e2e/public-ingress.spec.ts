@@ -46,6 +46,7 @@ for (const kind of ['direct', 'azure-firewall', 'nva-vm'] as const) {
     const dialog = page.getByTestId('network-detail-dialog'), packet = dialog.getByTestId('packet-flow-panel')
     if (kind !== 'direct') {
       const editor = dialog.getByTestId('router-dnat-editor')
+      await dialog.locator('[data-subnet-id="router-subnet"] .detail-subnet-policies > summary').click()
       await editor.locator('summary').first().click()
       await editor.getByLabel('DNAT public IPv4 frontends (comma-separated; ? means unknown)', { exact: true }).fill('20.40.50.60')
       if (kind === 'nva-vm') await editor.getByLabel('Guest DNAT source translation', { exact: true }).selectOption('interface')
@@ -86,6 +87,7 @@ for (const kind of ['direct', 'azure-firewall', 'nva-vm'] as const) {
     await page.getByRole('button', { name: 'VNet の詳細', exact: true }).click()
     await expect(packet.getByLabel('パケット宛先', { exact: true })).toBeVisible()
     if (kind !== 'direct') {
+      await dialog.locator('[data-subnet-id="router-subnet"] .detail-subnet-policies > summary').click()
       await dialog.getByTestId('router-dnat-editor').locator('summary').first().click()
       await expect(dialog.getByRole('button', { name: 'DNAT ルールを保存', exact: true })).toBeVisible()
     }
