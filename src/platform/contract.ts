@@ -10,10 +10,11 @@ import { workspaceCapabilities, workspaceCapabilityLimits } from '../workspace-c
 import { flowExportLimits } from '../flow-export-options'
 import { applicationCapabilities } from '../application-inventory'
 import type { ApplicationRequest, ApplicationResult } from '../application'
+import type { BgpInspection } from '../bgp-neighbors'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
-export const engineVersion = '2026.11.18.2'
+export const engineVersion = '2026.11.19.1'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -75,6 +76,7 @@ export type PlatformResult = {
   status: 'complete' | 'invalid' | 'not assessed'
   document?: PlatformDocument
   simulation?: unknown
+  bgpNeighbors?: BgpInspection
   assessments: Assessment[]
   errors: { code: string; message: string }[]
   limitations: string[]
@@ -99,6 +101,13 @@ export const capabilities = {
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
   operations: ['validate', 'simulate', 'evaluate', 'application'],
   application: applicationCapabilities,
+  bgpNeighbors: {
+    evidence: 'bgpNeighbors', version: 1, provenance: 'simulation',
+    scope: 'Stable original resource, modeled speaker, relationship and directional session identities. Select exactly one local resource/instance before reading neighbors.',
+    routes: 'Logical relationship candidates and distinct-prefix counts, not measured per-instance advertisements/counters. Received post-policy, advertised candidates and peer-received post-policy scopes remain distinct.',
+    supported: ['both documented ARS speakers per configured NVA', 'explicit standalone VPN active/active or single-active perspective', 'logical site relationships'],
+    unknown: ['managed ER/VWAN and gateway/ARS internal endpoint/session mappings', 'unspecified legacy VPN speaker multiplicity', 'physical Azure instance IDs', 'actual BGP establishment/FSM/uptime/counters', 'per-instance route divergence and failures'],
+  },
   rendering: {
     formats: ['gif', 'svg', 'png'], durationsMs: [1500, 2000], ...flowExportLimits,
     source: 'Existing flow assessment handle and exact assessmentId; independent per-leg trace evidence and topology revision.',
@@ -124,7 +133,7 @@ export const capabilities = {
     selection: 'selectedByArs is the exporting ARS selection, not an NVA best path. Distinct same-prefix candidates from different peers are retained.',
     gatewaySummaries: 'When the exporting VNet configures summarizedGatewayPrefixes, each peer carries gatewaySummaryAssessment.status=not-assessed with original configuration/prerequisite identities. Received candidates cannot establish presence or absence of those summaries. Gateway-to-on-premises documentation does not qualify ARS-to-NVA behavior.',
     excluded: ['NVA best-path selection or forwarding from received candidates', 'unmodeled gateway summaries', 'ARS neighbor IPs',
-      'per-instance sessions', 'live adjacency', 'vendor-specific per-neighbor configuration'],
+      'native per-instance sessions and counters', 'live adjacency', 'vendor-specific per-neighbor configuration'],
   },
   orderedApplianceChains: {
     modes: ['hub-spoke', 'full'], field: 'applianceChain', expectation: 'allow',

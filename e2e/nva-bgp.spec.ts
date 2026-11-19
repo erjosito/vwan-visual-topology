@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
+import { bgpNeighborTopology, bgpNeighborVwanTopology } from '../tests/fixtures/bgp-neighbors'
+import { bgpResourceKey } from '../src/bgp-neighbors'
 import AxeBuilder from '@axe-core/playwright'
 import { resolve } from 'node:path'
 
@@ -23,6 +25,95 @@ async function saved(page: Page) {
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} simulated BGP neighbors retain local-instance scope, duplicate peers and read-only route provenance`, async ({ page }) => {
+    const topology = bgpNeighborTopology()
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await load(page, mode, topology)
+    await open(page, 'reader', 'BGP neighbors')
+    const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+    const rows = dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr')
+    await expect(rows).toHaveCount(4)
+    await expect(dialog.getByLabel('Local BGP instance')).toContainText('Logical router')
+    await rows.getByRole('button', { name: /west Route Server.*ARS speaker 1/ }).click()
+    const details = dialog.getByTestId('bgp-neighbor-details')
+    await expect(details.getByTestId('bgp-neighbor-received').locator('[data-prefix="198.18.0.0/24"]')).toHaveCount(1)
+    await expect(details).toContainText('logical relationship')
+    await details.getByRole('button', { name: 'Inspect from peer', exact: true }).click()
+    await expect(dialog.getByLabel('Local BGP resource')).toHaveValue(bgpResourceKey({ kind: 'route-server', id: 'west-ars' }))
+    await expect(rows).toHaveCount(2)
+    const first = await rows.first().getAttribute('data-local-instance-id')
+    await dialog.getByLabel('Local BGP instance').focus()
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(rows.first()).not.toHaveAttribute('data-local-instance-id', first!)
+    await expect(rows).toHaveCount(2)
+    await dialog.getByRole('searchbox', { name: 'Filter neighbors' }).fill('reader')
+    await expect(rows).toHaveCount(1)
+    await rows.getByRole('button').click()
+    await details.getByRole('searchbox', { name: 'Filter BGP prefixes' }).fill('192.0.2')
+    await expect(details.getByTestId('bgp-neighbor-received').locator('tbody tr')).toHaveCount(1)
+    await open(page, 'reader', 'BGP neighbors')
+    await expect(dialog.getByLabel('Local BGP resource')).toHaveValue(bgpResourceKey({ kind: 'appliance', id: 'reader' }))
+    await expect(rows).toHaveCount(4)
+    await page.setViewportSize({ width: 390, height: 844 })
+    const region = dialog.getByRole('region', { name: 'BGP neighbor summary', exact: true })
+    await region.focus()
+    await expect(region).toBeFocused()
+    expect((await new AxeBuilder({ page }).include('.bgp-neighbors-panel').analyze()).violations).toEqual([])
+    await page.locator('header [data-language-selector]').selectOption('ja')
+    const translated = page.getByRole('dialog', { name: 'BGP ネイバー', exact: true })
+    await expect(translated.getByRole('combobox', { name: 'ローカル BGP インスタンス' })).toBeVisible()
+    await expect(translated.getByTestId('bgp-neighbor-rows')).toContainText('受信（論理）')
+    expect(await saved(page)).toEqual(topology)
+    expect(errors).toEqual([])
+  })
+
+  test(`${mode} simulated BGP neighbors separate AA, AS and unmapped ER relationships and never substitute a deleted resource`, async ({ page }) => {
+    const topology = bgpNeighborTopology()
+    await load(page, mode, topology)
+    await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+    const resource = dialog.getByLabel('Local BGP resource')
+    const rows = dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr')
+    await resource.selectOption(bgpResourceKey({ kind: 'gateway', id: 'vpn-aa' }))
+    await expect(dialog.getByLabel('Local BGP instance').locator('option')).toHaveCount(2)
+    await expect(rows).toHaveCount(1)
+    await resource.selectOption(bgpResourceKey({ kind: 'gateway', id: 'vpn-as' }))
+    await expect(dialog.getByLabel('Local BGP instance').locator('option')).toHaveCount(1)
+    await expect(rows).toHaveCount(1)
+    await expect(dialog).toContainText('standby physical instance exists')
+    await resource.selectOption(bgpResourceKey({ kind: 'er-location', id: 'edge-location' }))
+    await expect(dialog.getByLabel('Local BGP instance')).toHaveCount(0)
+    await expect(dialog.getByTestId('bgp-managed-relationships').locator('details')).toHaveCount(2)
+    await expect(dialog).toContainText('primary and secondary')
+    await resource.selectOption(bgpResourceKey({ kind: 'route-server', id: 'east-ars' }))
+    await open(page, 'east-ars', 'Remove Azure Route Server')
+    await expect(dialog).toContainText('The requested BGP resource is unavailable. No other resource is substituted.')
+    await expect(resource).toHaveValue(bgpResourceKey({ kind: 'route-server', id: 'east-ars' }))
+    await expect(dialog.getByTestId('bgp-neighbor-rows')).toHaveCount(0)
+  })
+
+  test(`${mode} simulated BGP neighbors distinguish zero advertised prefixes from an unavailable peer`, async ({ page }) => {
+    const topology = bgpNeighborTopology()
+    topology.vnets[2].appliances[0].advertisedPrefixes = []
+    topology.vnets[1].routeServer!.enabled = false
+    await load(page, mode, topology)
+    await open(page, 'reader', 'BGP neighbors')
+    const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+    const rows = dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr')
+    await expect(rows).toHaveCount(4)
+    const west = rows.filter({ hasText: 'west Route Server' })
+    await expect(west.first().locator('td').nth(4)).toHaveText('0')
+    await expect(west.first()).toContainText('Modeled relationship available')
+    const east = rows.filter({ hasText: 'east Route Server' })
+    await expect(east.first().locator('td').nth(4)).toHaveText('Not assessed')
+    await expect(east.first()).toContainText('Modeled relationship unavailable')
+    await west.first().getByRole('button').click()
+    await expect(dialog.getByTestId('bgp-neighbor-details')).toContainText('Zero modeled prefixes')
+    expect(await saved(page)).toEqual(topology)
+  })
+
   test(`${mode} keeps independent canvas inspectors interactive when focus changes`, async ({ page }) => {
     const topology = nvaBgpTopology()
     await load(page, mode, topology)
@@ -186,6 +277,19 @@ for (const mode of ['hub-spoke', 'full']) {
     expect((await saved(page)).vnets[0].routeServer.routeMapAssignments).toEqual([{ connectionId: 'vnet:shared', outboundMapId: 'export' }])
   })
 }
+
+test('VWAN managed BGP relationships do not invent gateway speakers or standalone VPN mode controls', async ({ page }) => {
+  const topology = bgpNeighborVwanTopology()
+  await page.addInitScript((value) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(value)), topology)
+  await page.goto('/?mode=vwan')
+  await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+  await dialog.getByLabel('Local BGP resource').selectOption(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
+  await expect(dialog.getByLabel('Local BGP instance')).toHaveCount(0)
+  await expect(dialog.getByTestId('bgp-managed-relationships')).toContainText('managed-vpn')
+  await expect(dialog).toContainText('Standalone VPN active/standby controls do not apply')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))).toEqual(topology)
+})
 
 test('localizes the NVA inspector on a narrow dark workspace and enforces the ARS peer limit', async ({ page }) => {
   const topology = nvaBgpTopology()
