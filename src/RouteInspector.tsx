@@ -18,7 +18,7 @@ import { azureRoutesAtSites } from './paths'
 import { erExportHasMixedAsPath, erLocationBgpTable, neighborRoutes } from './route-views'
 import type { RouteMode, RouteStage } from './route-views'
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubRoutingCoverageMessage } from './hub-routing'
-import { CompactBgpTable } from './CompactBgpTable'
+import { CompactBgpTable, modeledBgpLegend } from './CompactBgpTable'
 
 interface Row { key: string; asPath: number[]; localPreference?: number; preferred: boolean; nextHop?: string; via?: string; source: string; erExportUncertain?: boolean; evidence?: unknown }
 interface Group { prefix: string; candidates: Row[]; explanation: string[] }
@@ -171,16 +171,18 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
     {location && mode === 'bgp' && <p className="muted inspector-note">{t("Candidates learned from enabled attachments after neighbor outbound maps. Shortest AS paths are preferred; equal-cost paths are retained. Click a prefix to highlight its preferred next hops.")}</p>}
     {location && <p className="muted inspector-note">{t("Circuit export rules still apply. Global Reach and shared-circuit hub reflection are not modeled.")}{mode !== 'bgp' && t(" Routes are shown from the ER location's perspective; it has no configurable route maps.")}</p>}
     {compact ? <CompactBgpTable label={title}
-      legend={t(mode === 'bgp' ? '* Preferred; - alternative. Selection is not a validity or live-session check.' : '? Selection not assessed in this received/advertised scope.')}
+      legend={t(mode === 'bgp' ? modeledBgpLegend : '? Selection not assessed in this received/advertised scope.')}
       neighborLabel={mode !== 'bgp' ? t('Neighbor') : undefined}
       rows={[...groups].sort((a, b) => (cidr(a.prefix)?.network ?? 0) - (cidr(b.prefix)?.network ?? 0)
         || (cidr(a.prefix)?.length ?? 0) - (cidr(b.prefix)?.length ?? 0))
-        .flatMap((d) => [...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.key.localeCompare(b.key))
+        .flatMap((d) => {
+          const tied = d.candidates.filter((route) => route.preferred).length > 1
+          return [...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.key.localeCompare(b.key))
           .map((r, index) => ({
             id: r.key, prefix: d.prefix, asPath: r.asPath,
             preferred: mode === 'bgp' ? r.preferred : undefined,
-            status: mode !== 'bgp' ? '?' as const : r.preferred ? '*' as const : '-' as const,
-            statusLabel: mode !== 'bgp' ? t('Not assessed') : t(r.preferred ? 'Preferred' : 'Alternative'),
+            status: mode !== 'bgp' ? '?' as const : r.preferred ? tied ? '=' as const : '*' as const : '-' as const,
+            statusLabel: mode !== 'bgp' ? t('Not assessed') : t(r.preferred ? tied ? 'Model tie' : 'Preferred' : 'Alternative'),
             nextHop: mode === 'bgp' ? r.nextHop ?? '—' : t('Not assessed'),
             neighbor: mode !== 'bgp' ? r.nextHop : undefined,
             network: mode === 'bgp' && index === 0 ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : undefined,
@@ -197,7 +199,8 @@ export function RouteInspector({ topology, simulation, comparisonSession, router
               <p>{router.id} · {tableId} · {r.key}</p>
               <details><summary>{t('Azure provenance and selection evidence')}</summary><pre>{JSON.stringify(r.evidence, null, 2)}</pre></details>
             </div>,
-          })))} /> : <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th>{showLocalPreference && <th>{t("Local preference")}</th>}</tr></thead>
+          }))
+        })} /> : <div className="table-scroll"><table><thead><tr>{mode === 'bgp' && <th className="route-state" aria-label={t("Preferred route")}>*</th>}<th>{mode === 'bgp' ? t("Next hop / source") : t("Neighbor / source")}</th><th>{t("AS path")}</th>{showLocalPreference && <th>{t("Local preference")}</th>}</tr></thead>
       {groups.map((d) => <tbody key={d.prefix}>
         <tr data-reason-prefix={d.prefix}><th scope="rowgroup" colSpan={(mode === 'bgp' ? 3 : 2) + (showLocalPreference ? 1 : 0)} className="route-prefix-heading">{mode === 'bgp' ? <button className="prefix-button" disabled={!contextKnown} onClick={() => onPrefix(d.prefix, tableId)}>{d.prefix}</button> : d.prefix}<span className="selection-reason">{d.explanation.map((explanation) => localizeDiagnostic(explanation)).join(' ')}</span><Explain concept={contextKnown ? 'selection' : 'coverage'} evidence={contextKnown ? d.explanation : []} /></th></tr>
         {[...d.candidates].sort((a, b) => Number(b.preferred) - Number(a.preferred)).map((r) => <tr key={r.key} data-prefix={d.prefix} data-preferred={mode === 'bgp' ? r.preferred : undefined} className={mode === 'bgp' ? r.preferred ? 'preferred-route' : 'alternative-route' : undefined}>

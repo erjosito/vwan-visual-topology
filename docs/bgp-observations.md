@@ -95,3 +95,17 @@ not qualification of unsupported combinations. Per-instance failure, failover
 timing and physical alias/session mappings remain unassessed.
 
 Reference: [ARS support for ExpressRoute and VPN](https://learn.microsoft.com/en-us/azure/route-server/expressroute-vpn-support).
+
+## Modeled route-table status
+
+Compact modeled BGP tables use `*` for a unique preferred candidate, `=` for
+multiple equally ranked candidates, and `-` for an alternative. These are app
+selection markers, not IOS validity flags. Equal-length ER and VPN paths can
+tie under the modeled site criteria; this does not confirm real-router ECMP
+or a unique BGP best path. Router-specific tie-breakers and multipath policy
+are not fully modeled. No default on-premises ER-over-VPN preference is inferred.
+
+The distinction is preserved in accessible status labels and copyable text.
+It does not change the routing engine, candidate retention or flow selection.
+Received/advertised views still use `?` for unassessed selection, and NVA views
+retain their separate ARS-selection scope, not an inferred NVA best path.

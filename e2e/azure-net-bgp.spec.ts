@@ -518,6 +518,33 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(bgp.locator('.as-path')).toBeInViewport()
   })
 
+  test(`${mode} distinguishes equal-ranked ER and VPN site routes from a unique preference`, async ({ page }) => {
+    const topology = bgpTopology()
+    topology.vnets[0].gateways.push({
+      id: 'er-gw', name: 'ER gateway', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true,
+    })
+    topology.erLinks.push({
+      id: 'azure-circuit', name: 'Azure circuit', locationId: 'er', targetKind: 'vnet-gateway', targetId: 'er-gw', enabled: true,
+    })
+    await load(page, mode, topology)
+    await inspectSite(page, 'a')
+    const rib = page.getByTestId('aznet-control-rib-card')
+    const routes = rib.locator('[data-prefix="10.0.0.0/16"]')
+    await expect(routes.locator('.route-state')).toHaveText(['=', '=', '-'])
+    await expect(routes.getByRole('cell', { name: 'Model tie', exact: true })).toHaveCount(2)
+    await expect(routes.locator('.as-path')).toHaveText(['12076', '65515', '65010 65515'])
+    await expect(rib.locator('[data-prefix="172.16.0.0/24"] .route-state')).toHaveText('*')
+    await expect(rib).toContainText('Ties do not confirm a unique BGP best path or real-router ECMP.')
+    await rib.getByRole('searchbox', { name: 'Filter BGP prefixes' }).fill('10.0')
+    await expect(rib.locator('tbody tr')).toHaveCount(3)
+    await rib.getByText('Copyable route text', { exact: true }).click()
+    const copy = rib.getByRole('textbox', { name: 'Select route text to copy' })
+    await expect(copy).toHaveValue(/^=\t10\.0\.0\.0\/16\t.*Circuit A.*\t12076\t/m)
+    await expect(copy).toHaveValue(/^=\t10\.0\.0\.0\/16\t.*Primary VPN.*\t65515\t/m)
+    await expect(copy).toHaveValue(/^-\t10\.0\.0\.0\/16\t.*Backup VPN/m)
+    await expect(copy).not.toHaveValue(/172\.16\.0\.0/)
+  })
+
   test(`${mode} groups only the requested site's BGP candidates and preserves explicit scope`, async ({ page }) => {
     await load(page, mode)
     await page.getByTestId('aznet-subnet-gateway').focus()
@@ -539,9 +566,11 @@ for (const mode of ['hub-spoke', 'full']) {
     const preferred = rib.locator('[data-prefix="10.0.0.0/16"][data-preferred="true"]')
     const alternative = rib.locator('[data-prefix="10.0.0.0/16"][data-preferred="false"]')
     await expect(preferred).toHaveCount(1)
+    await expect(preferred.getByRole('cell', { name: 'Preferred', exact: true })).toHaveText('*')
     await expect(preferred).toContainText('Primary VPN')
     await expect(preferred.locator('.as-path')).toHaveText('65515')
     await expect(alternative).toHaveCount(1)
+    await expect(alternative.getByRole('cell', { name: 'Alternative', exact: true })).toHaveText('-')
     await expect(alternative).toContainText('Backup VPN')
     await expect(alternative.locator('.as-path')).toHaveText('65010 65515')
     const evidence = preferred.locator('td > details')
