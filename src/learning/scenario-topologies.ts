@@ -17,6 +17,7 @@ function base() {
   const topology = createEmptyAzNetTopology()
   topology.vnets = [network('a', 21), network('b', 22), network('c', 23)]
   topology.vnets[0].subnets.push({ id: 'a-ops', name: 'Operations', prefix: '10.21.2.0/24' })
+  topology.vnets[1].subnets.push({ id: 'b-batch', name: 'Batch', prefix: '10.22.2.0/24' })
   return topology
 }
 function table(topology: AzNetTopology, vnetId: string, subnetId: string, id: string, routes: ReturnType<typeof route>[]) {

@@ -35,11 +35,11 @@ export function appendHybridLesson(bundle: CourseBundle) {
     { id: `${id}.diagnosis-check`, kind: 'quiz.answered', params: {
       question: l('With both links enabled, .10.10 uses VPN while .20.10 uses ER. What explains this difference?', '両接続が有効なとき、.10.10 は VPN、.20.10 は ER を使います。この違いの理由は何ですか。'),
       correctChoiceId: 'different-prefixes', choices: [
-        { id: 'shorter-as', text: l('The VPN AS path overrides prefix length for both services.', 'VPN の AS パスが両サービスのプレフィックス長より優先されます。'),
+        { id: 'shorter-as', text: l('The shorter VPN AS path takes priority over prefix length for .10.', '.10 では、短い VPN AS パスがプレフィックス長より優先されます。'),
           feedback: l('Prefix length is compared before choosing between matching routes of equal length.', '一致するルートは、同じ長さの候補を比較する前にプレフィックス長で選択します。') },
-        { id: 'different-prefixes', text: l('The VPN /24 beats the ER /16; ER wins the equal /24 comparison.', 'VPN の /24 は ER の /16 に優先し、同じ /24 同士では ER が優先されます。'),
+        { id: 'different-prefixes', text: l('VPN’s /24 wins for .10; equal-prefix preference selects ER for .20.', '.10 は VPN の /24、同じ /24 同士の .20 は ER です。'),
           feedback: l('The actual active workload routes establish both comparisons. An aggregate does not make unowned holes reachable.', '有効なワークロード ルートで両方を確認できます。集約広告は、所有されない空き範囲の到達性を作りません。') },
-        { id: 'shared-return', text: l('The branch return route selects one outbound gateway for each service.', '拠点の復路が、各サービスの往路ゲートウェイを選択します。'),
+        { id: 'shared-return', text: l('The branch’s reply policy selects the outbound Azure gateway for each service.', '拠点の応答ポリシーが、各サービスの Azure 側の往路ゲートウェイを選びます。'),
           feedback: l('Each direction has an independent lookup. A return route does not select the workload’s outbound route.', '各方向で独立して検索します。復路はワークロードの往路を選択しません。') },
       ],
     } },
@@ -53,11 +53,11 @@ export function appendHybridLesson(bundle: CourseBundle) {
     { id: `${id}.quiz`, kind: 'quiz.answered', params: {
       question: l('After the declared ER withdrawal, what does the successful paired assessment establish?', 'ER を無効にした宣言状態で、双方向の評価成功は何を証明しますか。'),
       correctChoiceId: 'snapshot', choices: [
-        { id: 'sessions', text: l('Existing sessions survived the real gateway transition.', '実際のゲートウェイ切り替えでも既存セッションが継続しました。'),
+        { id: 'sessions', text: l('Existing service sessions continued without interruption during the real ER withdrawal.', '実際の ER 停止中も、既存のサービス セッションは中断なく継続しました。'),
           feedback: l('No elapsed transition, live traffic or session state is simulated.', '経過時間を伴う切り替え、実通信、セッション状態はシミュレートしていません。') },
-        { id: 'all-prefixes', text: l('Every address in the advertised summary has a backup path.', '広告した集約範囲の全アドレスにバックアップ経路があります。'),
+        { id: 'all-prefixes', text: l('Every advertised summary address acquired a tested route through the backup.', '広告した集約範囲の全アドレスに、検証済みのバックアップ経路ができました。'),
           feedback: l('The checks bind two original branch services, Operations and isolation, not every address in an aggregate.', '評価は元の 2 サービス、Operations、分離を対象とし、集約範囲の全アドレスを対象にはしません。') },
-        { id: 'snapshot', text: l('Both original services and their independent replies route in this snapshot.', 'このスナップショットで、元の両サービスと独立した復路がルーティングされます。'),
+        { id: 'snapshot', text: l('Both declared service conversations have usable routes in this snapshot.', 'この宣言状態では、元の両サービスに使用可能な往復経路があります。'),
           feedback: l('Production qualification still needs timed withdrawal/recovery and independently configured on-premises return preference. This is not a measured failover or SLA.', '本番の検証には、時間を計測した切り替えと復旧、およびオンプレミスの独立した復路優先設定が必要です。これはフェールオーバー時間や SLA の測定ではありません。') },
       ],
     } },

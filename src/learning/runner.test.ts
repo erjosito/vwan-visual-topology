@@ -58,6 +58,22 @@ function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
 }
 
 describe('evidence-gated course runner', () => {
+  it.each([false, true])('grades stable quiz IDs and feedback after authored choice reversal: %s', async (reverse) => {
+    const h = harness({ completions: beforeTask(exampleCourse, 'override.explain') })
+    const check = h.bundle.checks.find((entry) => entry.id === 'explain-udr')!
+    if (check.kind !== 'quiz.answered') throw new Error('Quiz required')
+    if (reverse) check.params.choices.reverse()
+    h.load(1)
+    const wrong = check.params.choices.find((choice) => choice.id !== check.params.correctChoiceId)!
+    await h.runner.assess(wrong.id)
+    expect(h.state().feedback).toBe('incorrect')
+    expect(h.state().explanation).toEqual(wrong.feedback)
+    expect(h.completed).not.toHaveBeenCalled()
+    await h.pass(check.params.correctChoiceId)
+    expect(h.completed).toHaveBeenCalledOnce()
+    expect(h.completed).toHaveBeenCalledWith(expect.objectContaining({ awardId: 'override.explain', assessmentVersion: 1, points: 25 }))
+  })
+
   it('requires both hub peerings and enabled access, not just the first connection', async () => {
     const h = harness({ completions: beforeTask(scenarioBundle, 'inspection-bypass.connect') }, scenarioBundle)
     h.load(1)

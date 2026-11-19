@@ -8,9 +8,10 @@ The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
 and evidence-gated runner (#180) activate sequential assessed missions.
 The original edition has 40 tasks across six missions and 1,325 points; the
-scenario edition has 62 tasks across ten missions and 2,120 available points.
+scenario edition has 75 tasks across eleven missions and 2,355 available points.
 Its first eight missions retain the 1,575-point black-belt threshold and
-mastery checkpoints; the hybrid and multi-hub extensions add practice without demotion.
+mastery checkpoints; hybrid/multi-hub specialist practice and the final handover
+challenge complete the journey without introducing a higher belt or demotion.
 The root owns the runner across editor switches and pause/resume. A bounded
 browser-local ledger (#183) restores compatible completions after reload and
 derives first-earned points, checkpoint-gated belts and the header status.
@@ -22,8 +23,9 @@ engine payload is shown; legacy storage stays untouched.
 The playable track is displayed as **Routing foundations**. Its historical
 `azure-networking-preview` course ID, award/check identities,
 40 tasks, 1,325 points and stored practice/progress formats remain unchanged.
-Both editions publish presentation version 6 for contextual teaching and learner-paced progression;
-assessment versions and first-earned awards remain compatible.
+The original edition publishes presentation version 6; scenario version 7 adds
+foundational practice, staged repairs and a changed-address completion challenge.
+Existing assessment versions and first-earned awards remain compatible.
 Renaming the presentation is not a migration or a grading revision.
 `tracks.ts` is a small declarative catalog; **DNS and name resolution** and
 **Application delivery** are **Planned** informational entries, with no course
@@ -38,8 +40,10 @@ highest belt. Planned tracks and unknown course completions do not count.
 The tooltip/accessibility label explains the track count; status details
 retain the selected edition's separate belt and points.
 
-Belts describe completion of a track's published curriculum, not all Azure
-networking or professional certification. Available-course denominators and
+Belts describe checkpoint-qualified core progress, not completion of every
+specialist task, all Azure networking or professional certification.
+The full-journey task counter and final completion screen remain separate from
+the scenario edition's eight-mission core black belt. Available-course denominators and
 XP exclude planned tracks; future tracks must use their own course identity.
 Existing first awards and recorded content/assessment versions remain intact.
 Future additions need an explicit compatibility review: expose compatible new
@@ -57,7 +61,7 @@ Normal saved designs remain protected. This is an explicit beta exception to the
 published-threshold policy above, not a general migration policy.
 
 `editions.ts` is the lightweight edition catalog. Fresh learners start
-`azure-routing-scenarios` version 6. Historical original-course completions
+`azure-routing-scenarios` version 7. Historical original-course completions
 retain the original edition unless the learner explicitly opts in through
 **Progress, review & options** or header status details. A retained original practice
 canvas also retains its edition when no enrollment/history selects otherwise.
@@ -125,6 +129,67 @@ repair scopes rather than enumerating every VNet and table. Conceptual `hints`
 are separate from navigation: nested disclosures reveal one level at a time,
 starting with a reasoning prompt before a more concrete suggestion. Neither
 kind of help costs XP or changes the network.
+
+## Version 7 concept and assessment map
+
+`scenario-foundations.ts` inserts content-only prerequisites into the existing
+practice networks. Its staged tasks use the same native configuration checks as
+other lessons; the runner has no lesson-specific grading branches.
+The seven inserted tasks and six-task `routing-handover` mission use new award
+IDs. The prior 62 award IDs, first-earned points, assessment versions and belt
+thresholds/checkpoints are retained. Earlier completions do not manufacture
+credit for inserted work; historical black belts are not retracted.
+
+| Concept | Introduction | Practice and interpretation | Later application |
+| --- | --- | --- | --- |
+| Address owner, VNet and subnet range | First route debrief | `private-link.address-range` | Different owners and /24 ranges in `routing-handover` |
+| Missing exact route, private discard, /0 default | `private-link.default-route` | `private-link.predict-default` | Selected None route in the handover |
+| /8, /16, /24 and two destination lookups | Private-default debrief and hub briefing | `inspection-bypass.predict`, `.predict-subnet`, `.inspect` | Handover repair and final explanation |
+| Equal-prefix UDR preference and separate reply | Hub policy introduction | `.forward` prepares the request; `.repair` requires both directions | Appliance-chain and handover outcomes |
+| Whole-VNet scope, non-overlap and route versus permission | Private repair debrief | `.subnet-scope`, `.access-setting` | Handover's working Operations comparison |
+| Peering forwarded-traffic permission versus NIC forwarding | `dedicated-chain.load` | Dedicated-chain repair and explanation | Tiered-chain outcome checks |
+| Gateway sharing, BGP learning and subnet propagation | `branch-advertisement.load` | Branch repair, GatewaySubnet return inspection and explanation | ER/VPN specialist practice |
+| Ordinary hub VNet versus managed Virtual WAN | Hub introduction and `wan-isolation.load` | Source association, service propagation and isolation checks | Multi-hub destination labels |
+| New tier versus existing conversation | `tiered-incident.load` | `.entry` prepares departure; `.repair` diagnoses remaining transit | Final handover drops the prescribed repair |
+| Routing snapshot versus session/failover evidence | HA introduction and packet diagnosis | Original tuple, independent backend and reply checks | Hybrid withdrawal explanation |
+
+Routing intent has a scoped introduction and official reference in the default
+WAN debrief, not a new secured-hub configuration assessment. The original
+edition retains its dedicated routing-intent practice. Internet/NAT/security
+policy, DNS and application-delivery competence are not implied by this course.
+Replacing a snapshot now explains the architectural change and preconfigured
+pieces; only the initial private-to-hub transition extends learner objects.
+
+### Handover qualification rubric
+
+The final small network changes owners, addresses, subnet boundaries and the
+fault's location from earlier guided repairs. Its learner-facing setup states
+the failed app/service conversation and protected outcomes, not the faulty rule.
+Free navigation opens both endpoint tables/policies without targeting the bad
+UDR. Optional conceptual hints and retries remain available.
+
+The authored qualification is explicit:
+
+- The starter's request reaches Supplier; its independent reply selects a
+  more-specific /24 discard. The /16 peer candidate remains visible.
+- Local Orders-to-Operations and Supplier-to-Operations conversations work.
+  Orders and the tenant cannot initiate to each other.
+- Disabling/removing the obsolete rule or removing its subnet association are
+  qualified alternatives. No single edit is required by the outcome check.
+- Editing the unrelated source policy is a non-fix. Breaking Operations,
+  opening a tenant peering or changing endpoint address ownership cannot pass;
+  unassessed ownership never earns success.
+- A new post-repair observation and explanation compare the /24 app destination
+  with the unaffected Operations subnet. Completion is not an exam endorsement.
+
+Engine fixtures and EN/JA native-control journeys qualify runnable practice,
+not independent human review. The author reviewed the wording in each language
+and varied original-edition option order while preserving choice IDs, feedback
+and grading. Answer-blind technical/style and native-language reviews remain
+open under #219; transfer, retention and novice observations remain under #160
+and #205. A fixed replayable challenge with free hints is not evidence that a
+learner can diagnose a novel incident unassisted. Studies must record assistance
+separately rather than interpreting route inspection or XP as comprehension.
 
 ## Scenario context and teaching
 

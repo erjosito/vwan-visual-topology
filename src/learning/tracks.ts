@@ -11,8 +11,8 @@ export const learningTracks: readonly LearningTrack[] = [
   {
     id: 'routing-foundations', title: previewCourse.title, status: 'available', courseId: previewCourse.id,
     summary: {
-      en: 'Address ownership, peering, appliance chains and hybrid/Virtual WAN troubleshooting. Original and scenario editions retain separate progress and achievements.',
-      ja: 'アドレスの所有関係、ピアリング、装置チェーン、ハイブリッドと Virtual WAN の問題解決。従来版とシナリオ版は、別々の進捗と達成を保持します。',
+      en: 'Address ownership, route selection and hybrid/Virtual WAN troubleshooting. In the scenario edition, black belt marks the eight core mission checkpoints; specialist practice and a different-address completion challenge finish the journey. Editions retain separate progress.',
+      ja: 'アドレスの所有関係、ルート選択、ハイブリッドと Virtual WAN の問題解決。シナリオ版の黒帯は基礎 8 ミッションのチェックポイントを示し、専門演習と異なるアドレスでの修了課題が全課程を完成させます。各版の進捗は別に保持します。',
     },
   },
   {
