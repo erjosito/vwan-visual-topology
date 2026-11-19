@@ -4,7 +4,6 @@ import type { AzBgpRibEntry } from './engine'
 import { Explain } from '../learning/Explain'
 import { t, localizeDiagnostic } from '../i18n'
 import '../vpn-nat-messages-ja'
-import '../vnet-community-messages-ja'
 import { CompactBgpTable, modeledBgpLegend } from '../CompactBgpTable'
 import { guidanceAnchor } from '../learning/guidance'
 

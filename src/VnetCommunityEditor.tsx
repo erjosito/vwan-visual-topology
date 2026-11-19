@@ -1,7 +1,6 @@
 import { useId, useState } from 'react'
 import { t } from './i18n'
 import { isVnetCommunity, vnetCommunityError, vnetCommunityHelp, type VnetBgpCommunities } from './vnet-communities'
-import './vnet-community-messages-ja'
 
 export default function VnetCommunityEditor({ value, onChange, formField = false }: {
   value?: VnetBgpCommunities
