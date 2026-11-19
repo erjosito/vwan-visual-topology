@@ -7,6 +7,7 @@ import { LearningStatus } from './learning/LearningStatus'
 import { CloudMenu } from './cloud/CloudMenu'
 import { PresentationGroup } from './WorkspacePresentation'
 import { CanvasStyleSettings } from './CanvasPresentation'
+import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
 
 const FeedbackDialog = lazy(() => import('./FeedbackDialog').then((module) => ({ default: module.FeedbackDialog })))
 
@@ -16,6 +17,7 @@ export function WorkspaceMenu() {
   const [feedbackOpen, setFeedbackOpen] = useState(() => !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1')
   return <>
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
+    <DocumentSaveStatus />
     <PresentationGroup label={t(session?.presentationPreview ? 'Settings' : 'Settings & help')}>
     <ThemeSelector />
     <LanguageSelector />

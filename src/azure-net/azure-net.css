@@ -48,8 +48,10 @@
 .aznet-brand-icon {
   display: grid;
   place-items: center;
-  width: 34px;
+  min-width: 34px;
   height: 34px;
+  padding: 0 8px;
+  box-sizing: border-box;
   background: var(--surface-muted);
   color: var(--on-accent);
   border-radius: 9px;

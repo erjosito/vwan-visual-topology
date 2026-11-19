@@ -8,6 +8,22 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
+for (const mode of ['vwan', 'hub-spoke', 'full']) {
+  test(`${mode}: AzNetSim brand fits wide and narrow headers`, async ({ page }) => {
+    await page.goto(`/?mode=${mode}`)
+    const mark = page.locator('.brand-icon, .aznet-brand-icon')
+    await expect(mark).toHaveText('AzNetSim')
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 1000 })
+      expect(await mark.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      const bounds = (await mark.boundingBox())!
+      expect(bounds.x).toBeGreaterThanOrEqual(0)
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width)
+    }
+  })
+}
+
 test.describe('subnet and gateway menu disclosure', () => {
   test.use({ hasTouch: true })
   test('preview keeps unknown-region warnings and unavailable subnet destinations at the root', async ({ page }) => {
