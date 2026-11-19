@@ -1136,7 +1136,7 @@ test('ECMP alternatives remain visible and connection failure withdraws only the
   await page.goto('/'); await importTopology(page, t); await showRoutes(page)
   const rows = page.locator('.effective-routes tr[data-prefix="10.20.0.0/16"]')
   await expect(rows).toHaveCount(3)
-  await expect(rows.locator('.route-state')).toHaveText(['*', '*', '-'])
+  await expect(rows.locator('.route-state')).toHaveText(['=', '=', '-'])
   await action(page, 'Edit connection VPN 1', 'Disable connection')
   await expect(rows).toHaveCount(2)
   await expect(rows.locator('.route-state')).toHaveText(['*', '-'])
