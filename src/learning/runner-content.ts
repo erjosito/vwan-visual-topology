@@ -2,7 +2,12 @@ import type { Localized } from './content'
 import type { Requirement } from '../platform/contract'
 
 export const runnerLabels = {
-  automatic: { en: 'Tasks check automatically as you inspect routes and edit the practice network. Quiz answers are submitted deliberately. Pause learning to stop; progress and account sync status are in the header.', ja: 'ルートの確認や練習ネットワークの編集に応じて、自動でタスクを確認します。クイズの回答は送信して確定します。停止するには学習を一時停止してください。進み具合とアカウントの同期状態はヘッダーに表示されます。' },
+  automatic: { en: 'Tasks check automatically as you inspect routes and edit the practice network. After success, read the explanation and choose Next when ready. Quiz answers are submitted deliberately.', ja: 'ルートの確認や練習ネットワークの編集に応じて、自動でタスクを確認します。成功後に解説を読み、準備ができたら「次へ」を選びます。クイズの回答は送信して確定します。' },
+  next: { en: 'Next', ja: '次へ' },
+  back: { en: 'Back', ja: '戻る' },
+  transitionConflict: { en: 'Your practice changes conflict with the next exercise’s additions. Your draft was kept. Load a fresh practice network only if you want to restart.', ja: '練習中の変更が、次の演習で追加する構成と競合しています。下書きは保持しました。最初からやり直す場合だけ、新しい練習ネットワークを読み込んでください。' },
+  learned: { en: 'What you learned', ja: '学んだこと' },
+  newTab: { en: 'Microsoft Learn, opens in a new tab', ja: 'Microsoft Learn、新しいタブで開きます' },
   submit: { en: 'Submit answer', ja: '回答を送信' },
   success: { en: 'Well done!', ja: 'よくできました！' },
   why: { en: 'Why this works', ja: 'この回答の解説' },
@@ -15,7 +20,7 @@ export const runnerLabels = {
   checking: { en: 'Checking current canvas...', ja: '現在のキャンバスを確認中...' },
   continue: { en: 'Complete task & continue', ja: 'タスクを完了して続ける' },
   cancel: { en: 'Cancel check', ja: '確認をキャンセル' },
-  passed: { en: 'Nice work! Moving to the next task…', ja: 'よくできました！次のタスクに進みます…' },
+  passed: { en: 'Task verified. Recording your progress…', ja: 'タスクを確認しました。進捗を記録しています…' },
   scope: { en: 'Open this lesson’s protected practice canvas first. Normal designs and other scenarios cannot satisfy this task.', ja: '先にこのレッスンの保護された練習キャンバスを開いてください。通常の設計や別のシナリオでは達成できません。' },
   inspect: { en: 'Open the requested route table and view the specified prefix, or its absence. Inspection is detected when the exact view is visible.', ja: '指定されたルート テーブルを開き、対象のプレフィックスまたはその不在を確認してください。正確な画面が表示されると、自動で確認を検出します。' },
   observed: { en: 'Requested routes are visible. Verifying this inspection…', ja: '指定されたルートが表示されています。確認内容を検証しています…' },
@@ -26,7 +31,7 @@ export const runnerLabels = {
   unassessed: { en: 'This check could not be fully assessed. Nothing was completed. Check the current canvas, retry, or explicitly reload the starter. Unsupported or incomplete results never pass.', ja: 'この確認を完全に評価できませんでした。完了は記録されていません。キャンバスを確認し、再試行するか初期構成を明示的に再読み込みしてください。未対応や不完全な結果では合格しません。' },
   stale: { en: 'The canvas or practice session changed. Check again; previous evidence is no longer current.', ja: 'キャンバスまたは練習セッションが変わりました。以前の根拠は現在のものではないため、再確認してください。' },
   cancelled: { en: 'Check paused. No pending result can complete this task. Check again when ready.', ja: '確認を一時停止しました。保留中の結果ではこのタスクを完了できません。準備ができたら再確認してください。' },
-  review: { en: 'Reviewing historical completion. This does not certify the current canvas or earn points again.', ja: '過去の完了を復習しています。現在のキャンバスの検証やポイントの再獲得ではありません。' },
+  review: { en: 'Reviewing a completed step. Your current practice canvas is unchanged.', ja: '完了したステップを復習しています。現在の練習キャンバスは変更されません。' },
   return: { en: 'Return to current task', ja: '現在のタスクに戻る' },
   replay: { en: 'Replay this lesson', ja: 'このレッスンを再練習' },
   replayNotice: { en: 'Replay starts at the first task without deleting past completion. Loading the starter still needs confirmation. No repeat credit is awarded.', ja: '過去の完了を削除せず、最初のタスクから再練習します。初期構成の読み込みには引き続き確認が必要です。重複したポイントは付与しません。' },

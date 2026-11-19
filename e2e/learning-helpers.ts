@@ -11,6 +11,11 @@ export const learningSidebar = (page: Page) => page.getByTestId('learning-sideba
 export const learningAnchor = (page: Page, ...scope: string[]) =>
   page.locator(`[data-learning-anchor=${JSON.stringify(guidanceAnchor(...scope))}]`)
 
+export async function advanceLearningTask(page: Page, language: 'en' | 'ja' = 'en') {
+  await expect(learningSidebar(page).getByTestId('learning-debrief')).toBeVisible()
+  await learningSidebar(page).getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
+}
+
 export async function learningOptions(page: Page, language: 'en' | 'ja' = 'en') {
   const summary = learningSidebar(page).getByText(sidebarLabels.options[language], { exact: true })
   if (!await summary.evaluate((element) => (element.parentElement as HTMLDetailsElement).open)) await summary.click()
@@ -49,9 +54,15 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
     const lesson = bundle.lessons.find((item) => item.tasks.some((task) => task.id === taskId))!
     const task = lesson.tasks.find((item) => item.id === taskId)!
     const check = bundle.checks.find((item) => item.id === task.checkId)!
+    if (await sidebar.getByTestId('learning-next').count()) {
+      await advanceLearningTask(page, language)
+      await expect(sidebar.locator(`[data-task-id="${taskId}"]`)).toHaveCount(0)
+      continue
+    }
     if (check.kind === 'scenario.loaded') {
       const current = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null'), practiceWorkspaceKey)
-      if (!current?.active || current.scenarioId !== lesson.scenarioId) await loadLearningNetwork(page, language)
+      if (!current?.active || current.courseId !== bundle.course.id) await loadLearningNetwork(page, language)
+      else await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null')?.scenarioId, practiceWorkspaceKey)).toBe(lesson.scenarioId)
     }
     if (check.kind === 'quiz.answered') {
       const choice = check.params.choices.find((item) => item.id === check.params.correctChoiceId)!
@@ -74,6 +85,7 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
       const { vnetId, subnetId, routeTableId, routeId } = repair.params
       await learningAnchor(page, 'udr-route', vnetId, subnetId, routeTableId, routeId!).locator('input[type="checkbox"]').uncheck()
     }
+    await advanceLearningTask(page, language)
     await expect(sidebar.locator(`[data-task-id="${taskId}"]`)).toHaveCount(0)
   }
 }

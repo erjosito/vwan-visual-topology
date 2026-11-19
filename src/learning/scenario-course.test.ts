@@ -8,6 +8,8 @@ import { hubFirewallTopology } from '../../tests/fixtures/hub-firewall'
 import { hybridLessonRequirements, hybridLessonTopology } from './hybrid-scenario'
 import { simulateAzNet } from '../azure-net/engine'
 import { multihubLessonRequirements, multihubLessonTopology } from './multihub-scenario'
+import { prepareCourseScenario } from './course-transition'
+import type { PracticeWorkspace } from './practice-workspace'
 
 const check = (id: string) => scenarioBundle.checks.find((entry) => entry.id === `${id}.repair-check`)! as Extract<CourseCheck, { kind: 'requirements.satisfied' }>
 const document = (id: string) => ({ mode: 'full' as const, topology: structuredClone(scenarioTopologies[id]) })
@@ -21,6 +23,8 @@ function repaired(id: string) {
     bToA: { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false },
   })
   if (id === 'inspection-bypass') {
+    const connected = document('colocated-chain').topology.vnetPeerings
+    topology.vnetPeerings.push(...connected)
     for (const [index, prefix] of ['10.22.0.0/16', '10.21.0.0/16'].entries()) {
       topology.udrTables[index].routes.push({ id: `learner-specific-${index}`, name: 'Partner inspection',
         prefix, nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true })
@@ -39,6 +43,32 @@ function repaired(id: string) {
 }
 
 describe('scenario edition routing qualification', () => {
+  it('extends the learner network into the hub exercise without replacing edits or creating its peerings and UDRs', () => {
+    const previous: PracticeWorkspace = { version: 1, active: true, returnProvider: 'azure-net', courseId: scenarioBundle.course.id,
+      scenarioId: 'private-link', document: repaired('private-link') }
+    if (previous.document.mode === 'vwan') throw new Error('Mixed fixture required')
+    previous.document.topology.vnets[0].name = 'Learner application'
+    const before = structuredClone(previous)
+    const next = prepareCourseScenario(scenarioBundle, 'inspection-bypass', previous)
+    if (next.mode === 'vwan') throw new Error('Mixed fixture required')
+    expect(next.topology.vnets[0].name).toBe('Learner application')
+    expect(next.topology.vnetPeerings).toEqual(previous.document.topology.vnetPeerings)
+    expect(next.topology.vnets).toHaveLength(4)
+    expect(next.topology.vnets[3].appliances[0].id).toBe('fw')
+    expect(next.topology.udrTables.map((table) => table.routes)).toEqual([[], []])
+    expect(previous).toEqual(before)
+    previous.document.topology.vnets.push(structuredClone(next.topology.vnets[3]))
+    expect(() => prepareCourseScenario(scenarioBundle, 'inspection-bypass', previous)).toThrow('conflicts')
+  })
+
+  it('does not extend a normal design, another course or an unrelated scenario', () => {
+    const previous: PracticeWorkspace = { version: 1, active: true, returnProvider: 'azure-net', courseId: scenarioBundle.course.id,
+      scenarioId: 'private-link', document: repaired('private-link') }
+    for (const change of [{ active: false }, { courseId: 'another-course' }, { scenarioId: 'another-scenario' }]) {
+      expect(prepareCourseScenario(scenarioBundle, 'inspection-bypass', { ...previous, ...change })).toEqual(document('inspection-bypass'))
+    }
+  })
+
   it('qualifies multi-hub destination labels, independent return tables and two native repair alternatives', () => {
     const topology = multihubLessonTopology()
     const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',

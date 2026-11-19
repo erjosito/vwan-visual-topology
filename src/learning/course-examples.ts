@@ -3,6 +3,7 @@ import { courseScenarios } from './course-scenarios'
 import { peeringCheckpoint, previewCourse } from './course-profile'
 import { routingChecks, routingGuidance, routingLessons } from './course-routing'
 import { wanChecks, wanGuidance, wanLessons } from './course-wan'
+import { teachCourse } from './course-teaching'
 
 // Historical export name retained while the curriculum grows in content-only batches.
 export const exampleCourse: CourseBundle = {
@@ -195,3 +196,4 @@ for (const check of exampleCourse.checks) {
   const order = quizOrder[check.params.correctChoiceId]
   check.params.choices = order.map((id) => check.params.choices.find((choice) => choice.id === id)!)
 }
+teachCourse(exampleCourse)
