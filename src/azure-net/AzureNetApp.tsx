@@ -142,6 +142,7 @@ const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) 
 const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
 const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
+const CloneVnetDialog = lazy(() => import('../CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
 const TopologyContextMenu = lazy(() => import('../TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
@@ -229,6 +230,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [inventorySelection, setInventorySelection] = useState<string>()
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const [clearRequested, setClearRequested] = useState(false)
+  const [cloneVnetId, setCloneVnetId] = useState<string>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [firewallEditorHubId, setFirewallEditorHubId] = useState<string>()
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
@@ -333,11 +335,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })
     } catch (error) {
       setWorkspaceNotice(error instanceof Error ? error.message : 'Inventory edit rejected.')
-      return
+      return false
     }
     setHistory((prev) => [...prev.slice(-24), cloneAzNetTopology(topology)])
     setFuture([])
     setTopology(next)
+    return true
   }
 
   const handleUndo = () => {
@@ -1532,6 +1535,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         title: `VNet · ${vnet.name} (${vnet.region})`,
         actions: [
           { label: t('Open VNet detail'), previewPrimary: true, onSelect: () => openDetail(vnet.id) },
+          { label: t('Clone VNet...'), previewPrimary: true, onSelect: () => setCloneVnetId(vnet.id) },
           ...(vnet.vwanHubAttachment ? [{
             label: t('Configure virtual hub connection'),
             previewPrimary: true,
@@ -6181,6 +6185,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           </div>
         </CanvasOverlay>}
       </div>
+
+      {cloneVnetId && <Suspense fallback={null}><CloneVnetDialog key={cloneVnetId} topology={topology} sourceId={cloneVnetId}
+        onClose={() => setCloneVnetId(undefined)} onClone={copy => {
+          if (!('gateways' in copy)) return false
+          const errors = validateAzNetTopology({ ...topology, vnets: [...topology.vnets, copy] })
+          if (errors.length) throw new Error(errors.join(' '))
+          const committed = commitTopology(draft => { draft.vnets.push(copy) })
+          if (committed) setSelected({ kind: 'vnet', vnetId: copy.id })
+          return committed
+        }} /></Suspense>}
 
       {sampleGalleryOpen && <Suspense fallback={null}><SampleGallery entries={visibleCatalogEntries} currentId={sampleId} testIdPrefix="aznet"
         hasWorkspace={topology.name !== 'Empty Topology' || !!(topology.vnets.length || topology.vwanHubs.length || topology.sites.length || topology.erLocations.length || topology.udrTables.length || topology.routeMaps?.length || topology.vnetPeerings.length || topology.erLinks.length || topology.vpnConnections.length || topology.siteLinks.length)}
