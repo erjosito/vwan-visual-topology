@@ -38,6 +38,10 @@ try {
       return saved.topology ?? saved
     }, mode)
     const before = await read()
+    await expect(detail.locator(':scope > header + [data-testid="vnet-detail-diagram"]')).toBeVisible()
+    await expect.poll(() => detail.getByTestId('vnet-detail-diagram').locator('img').evaluateAll((images) =>
+      images.length > 0 && images.every((image) => image.complete && image.naturalWidth > 0))).toBe(true)
+    await expect(detail.locator('.detail-subnet-policies[open]')).toHaveCount(0)
     await expect(first.getByTestId('detail-device')).toHaveCount(12)
     await expect(first.locator('[data-attachment-edge="nic:original-nic"]')).toHaveCount(1)
     await first.locator('[data-attachment-reference="nic:original-nic"]').getByRole('button', { name: 'Attachment reference → original entity', exact: true }).click()
@@ -71,7 +75,7 @@ try {
     expected.inventory.workloads[0].name = 'Edited desktop original'
     expect(await read()).toEqual(expected)
     await page.keyboard.press('Escape')
-    results.push({ mode, preview: true, attachments: 145, originalIdentity: true, editUndoRedo: true, keyboardFocus: true })
+    results.push({ mode, preview: true, diagramFirst: true, azureIcons: true, attachments: 145, originalIdentity: true, editUndoRedo: true, keyboardFocus: true })
   }
   expect(errors).toEqual([])
   await writeFile(join(artifacts, 'results.json'), `${JSON.stringify({ flavor, results, errors }, null, 2)}\n`)

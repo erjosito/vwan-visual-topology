@@ -1,6 +1,9 @@
 import { registerJapaneseMessages } from './messages'
 
 registerJapaneseMessages({
+  'Subnet configuration': 'サブネットの構成',
+  'Configuration and workload inventory': '構成とワークロードの一覧',
+  'Subnet pipes and branches show declared attachments, not forwarding links. Right-click or press Shift+F10 on a resource for actions.': 'サブネットのパイプと枝は定義済みの接続を示し、転送リンクではありません。リソースを右クリックするか Shift+F10 で操作を開きます。',
   'Attached devices and policies': '接続されたデバイスとポリシー',
   'Shared original entities': '共有される元のエンティティ',
   'Attachment reference → original entity': '接続の参照 → 元のエンティティ',
