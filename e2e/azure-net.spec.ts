@@ -22,6 +22,32 @@ async function loadTopology(page: Page, topology: AzNetTopology) {
   await page.goto('/?mode=hub-spoke')
 }
 
+for (const mode of ['hub-spoke', 'full']) {
+  test(`hides internal VNet role labels while preserving imported roles in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type=file]').first().setInputFiles({
+      name: 'vnet-roles.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const diagram = page.getByTestId('aznet-diagram-svg')
+    for (const vnet of topology.vnets) {
+      const node = diagram.getByTestId(`aznet-select-vnet-${vnet.id}`)
+      await expect(node).toContainText(vnet.name)
+      await expect(node).toContainText(`${vnet.prefixes.join(', ')} · ${vnet.region}`)
+      await expect(node.getByText(new RegExp(`^${vnet.role}$`, 'i'))).toHaveCount(0)
+    }
+
+    const download = page.waitForEvent('download')
+    await page.getByRole('button', { name: /Export JSON/ }).click()
+    const exported = JSON.parse(readFileSync((await (await download).path())!, 'utf8')) as AzNetTopology
+    expect(exported.vnets.map(({ id, role }) => ({ id, role }))).toEqual(
+      topology.vnets.map(({ id, role }) => ({ id, role })),
+    )
+  })
+}
+
 test('authors Managed VNRA transit with original ownership, scoped inspection, history and JSON round trips', async ({ page }) => {
   test.slow()
   const topology = structuredClone(sampleDualHubVnraGlobalPeering)
