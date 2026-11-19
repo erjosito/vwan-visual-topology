@@ -23,6 +23,7 @@ export const statusLabels = {
   legacy: { en: 'Previous independent drafts, attempts and badges are preserved separately. They grant no guided-course credit.', ja: '以前の独立した下書き、試行、バッジは別に保持されています。ガイド付きコースの達成とはみなしません。' },
   backupLegacy: { en: 'Download previous practice backup', ja: '以前の練習のバックアップをダウンロード' },
   retry: { en: 'Retry saving progress', ja: '進捗の保存を再試行' },
+  refreshCloud: { en: 'Refresh cloud progress', ja: 'クラウドの進捗を再取得' },
   reload: { en: 'Reload saved progress', ja: '保存済みの進捗を再読み込み' },
   reset: { en: 'Reset guided learning progress', ja: 'ガイド付き学習の進捗をリセット' },
   confirm: { en: 'Delete only guided completion history and points? Normal designs, the practice canvas and previous independent drafts/badges are kept. This cannot be undone.', ja: 'ガイド付きの完了履歴とポイントだけを削除しますか。通常の設計、練習キャンバス、以前の独立した下書きやバッジは保持します。この操作は元に戻せません。' },

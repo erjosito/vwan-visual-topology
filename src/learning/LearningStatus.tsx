@@ -6,6 +6,7 @@ import { beltProgress } from './progress-ledger'
 import type { LearningStatusDetails } from './LearningStatusDetails'
 import './learning-status.css'
 import { useCloudSession } from '../cloud/useCloudSession'
+import { progressStatusLabel } from '../cloud/progress-status'
 
 export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean }) {
   const cloud = useCloudSession()
@@ -24,12 +25,13 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
   const highest = state?.ledger ? highestTrackBelt(state.ledger) : undefined
   const unknown = language === 'ja' ? '学習の進捗を利用不可' : 'Learning progress unavailable'
   const identity = cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')
-  const description = `${identity} · ${t('Highest belt across tracks')}: ${highest ? `${highest.belt.name[language]} · ${t('Tracks at this belt: {0}', highest.trackCount)}` : unknown} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points}` : unknown}`
+  const syncStatus = session?.cloudProgress && progressStatusLabel(session.cloudProgress.status, language, true)
+  const description = `${identity} · ${t('Highest belt across tracks')}: ${highest ? `${highest.belt.name[language]} · ${t('Tracks at this belt: {0}', highest.trackCount)}` : unknown} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points}` : unknown}${syncStatus ? ` · ${syncStatus}` : ''}`
   return <>
     <button ref={trigger} type="button" className="learning-status-trigger" data-testid="learning-status"
       title={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
       aria-label={!showIdentity ? `${t('Learning status')}: ${highest?.belt.name[language] ?? unknown}` : undefined}
-      aria-description={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
+      aria-description={session?.presentationPreview ? `${t('Learning status')}: ${description}` : syncStatus}
       onKeyDown={(event) => { if (open && event.key === 'Escape') { event.stopPropagation(); setOpen(false) } }}
       aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
       {session?.presentationPreview ? <>
@@ -45,6 +47,7 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
         </>}
         {state?.status !== 'saved' && <> · {state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown}</>}
       </> : !session?.presentationPreview && unknown}
+      {syncStatus && <span data-testid="learning-sync-summary"> · {syncStatus}</span>}
     </button>
     {open && Panel && <Panel onClose={() => { setOpen(false); trigger.current?.focus({ preventScroll: true }) }} />}
     {open && !Panel && <span role="status">{failed
