@@ -238,8 +238,9 @@ test('nested peering cues name A-to-B, follow the submenu and never execute its 
   await expect(sidebar(page).getByRole('heading', { name: 'Verify the forward and return paths', exact: true })).toBeVisible()
 })
 
-test('route-table guidance scopes prefix candidates and exact route, preserves typing, and recovers from missing association', async ({ page }) => {
+for (const preview of [false, true]) test(`${preview ? 'new' : 'legacy'} UI route-table guidance scopes prefix candidates and exact route, preserves typing, and recovers from missing association`, async ({ page }) => {
   test.setTimeout(90_000)
+  await page.addInitScript(preview => localStorage.setItem('aznet-ui-preview:v1', String(preview)), preview)
   let delayEditor = false
   let releaseEditor!: () => void
   const editorReady = new Promise<void>((resolve) => { releaseEditor = resolve })
@@ -264,7 +265,7 @@ test('route-table guidance scopes prefix candidates and exact route, preserves t
   const name = route.locator('input').nth(1)
   await name.fill('Learner drop route')
   releaseEditor()
-  await expect(page.getByRole('textbox', { name: 'VNet BGP community', exact: true })).toBeAttached()
+  await expect(page.getByRole('textbox', { name: 'VNet BGP community', exact: true, includeHidden: true })).toBeAttached()
   await expect(name).toBeFocused()
   await expect(name).toBeInViewport()
   await expect(cue(page)).toHaveCount(1)
