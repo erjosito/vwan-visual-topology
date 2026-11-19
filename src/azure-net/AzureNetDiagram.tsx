@@ -17,6 +17,7 @@ import { azHubPolicyLinks, azSitePolicyLinks } from './route-maps'
 import { azInterHubLinks } from './hub-routing'
 import { inventoryCounts } from '../inventory'
 import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
+import { subnetAddressError, vnetAddressError } from './addressing'
 import type { AzFlowTrace } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
 
@@ -1317,7 +1318,8 @@ export function AzureNetDiagram({
           if (!box) return null
           const isVnetSelected = selected?.kind === 'vnet' && selected.vnetId === vnet.id
           const vnetFindings = findingsForNode('vnet', vnet.id)
-          const hasError = vnetFindings.some((f) => f.severity === 'error')
+          const addressError = vnetAddressError(vnet)
+          const hasError = !!addressError || vnetFindings.some((f) => f.severity === 'error')
           const hasWarning = vnetFindings.some((f) => f.severity === 'warning')
 
           const chips = deviceChips(vnet, box.width)
@@ -1408,7 +1410,9 @@ export function AzureNetDiagram({
               />
               <NetworkNodeIcon kind="spoke" x={box.x + 23} y={box.y + 17} size={22} />
               <DiagramNodeText text={vnet.name} x={box.x + 40} y={box.y + 18} width={box.width - 52} weight={700} />
-              <DiagramNodeText text={`${vnet.prefixes.join(', ')} · ${vnet.region}`} x={box.x + 12} y={box.y + 34} width={box.width - 24} fontSize={10.5} weight={400} />
+              <DiagramNodeText className="aznet-vnet-prefix" fill={addressError ? 'var(--error)' : undefined}
+                text={`${vnet.prefixes.join(', ')} · ${vnet.region}`} title={addressError ? t(addressError) : undefined}
+                x={box.x + 12} y={box.y + 34} width={box.width - 24} fontSize={10.5} weight={400} />
             </DiagramButton>
 
               {/* Control Plane / Appliances Strip */}
@@ -1464,6 +1468,7 @@ export function AzureNetDiagram({
 
               {/* Clickable Subnet Rows */}
               {vnet.subnets.map((subnet, sIdx) => {
+                const addressError = subnetAddressError(vnet.prefixes, subnet.prefix)
                 const rowY = subnetStartY + sIdx * 28
                 const isSubSelected =
                   selected?.kind === 'subnet' && selected.subnetId === subnet.id
@@ -1508,6 +1513,7 @@ export function AzureNetDiagram({
                     key={subnet.id}
                     aria-pressed={isSubSelected}
                     data-testid={`aznet-subnet-${subnet.id}`}
+                    data-address-invalid={!!addressError}
                     tabIndex={0}
                     role="button"
                     aria-label={readOnly ? `${visibleSubnetLabel} · Subnet ${vnet.name} (${subnet.prefix})` : `Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}${inventory.loadBalancers ? ` · LB ${inventory.loadBalancers}` : ''}`}
@@ -1550,7 +1556,7 @@ export function AzureNetDiagram({
                       height={24}
                       rx={6}
                       fill={rowFill}
-                      stroke={rowStroke}
+                      stroke={addressError ? 'var(--error)' : rowStroke}
                       strokeWidth={isSubSelected || inFwd || inRev ? 1.8 : 1}
                     />
                     <defs><clipPath id={labelClipId}><rect x={box.x + 15} y={rowY} width={Math.max(0, badgeX - box.x - 22)} height={24} /></clipPath></defs>
@@ -1560,7 +1566,7 @@ export function AzureNetDiagram({
                       y={rowY + 15}
                       fontSize={10.5}
                       fontWeight={isSubSelected ? 700 : 600}
-                      fill="var(--text)"
+                      fill={addressError ? 'var(--error)' : 'var(--text)'}
                     >
                       {subnet.name}
                     </text>
@@ -2043,10 +2049,12 @@ export function AzureNetDiagram({
       {hoverPopover?.kind === 'subnet' && (() => {
         const vnet = topology.vnets.find((entry) => entry.id === hoverPopover.vnetId)
         const subnet = vnet?.subnets.find((entry) => entry.id === hoverPopover.subnetId)
-        if (!subnet) return null
+        if (!vnet || !subnet) return null
+        const addressError = subnetAddressError(vnet.prefixes, subnet.prefix)
         return <div id={tooltipId} role="tooltip" className="aznet-hover-popover aznet-subnet-tooltip"
           data-testid="aznet-subnet-hover-card" style={{ left: hoverPopover.x, top: hoverPopover.y }}>
-          <strong>{subnet.name}</strong><p><code>{subnet.prefix}</code></p>
+          <strong>{subnet.name}</strong><p><code style={{ color: addressError ? 'var(--error)' : undefined }}>{subnet.prefix}</code></p>
+          {addressError && <p style={{ color: 'var(--error)' }}>{t(addressError)}</p>}
         </div>
       })()}
 

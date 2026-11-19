@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { InputHTMLAttributes } from 'react'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
@@ -7,6 +7,7 @@ import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
+import { availableSubnetPrefix, nextSubnetAddress, resizeAzSubnet, subnetAddressError, subnetNeedsReaddressing, vnetAddressError } from './addressing'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
@@ -154,13 +155,19 @@ const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel')
 const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
 
-function PrefixInput({ value, deferred, onCommit, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
-  value: string; deferred: boolean; onCommit: (value: string) => void
+function PrefixInput({ value, deferred, onCommit, validate, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
+  value: string; deferred: boolean; onCommit: (value: string) => void; validate: (value: string) => string | undefined
 }) {
   const [draft, setDraft] = useState(value)
-  return <input {...props} value={deferred ? draft : value}
+  const errorId = useId()
+  const error = validate(deferred ? draft : value)
+  return <><input {...props} value={deferred ? draft : value}
+    aria-invalid={!!error}
+    aria-describedby={error ? [props['aria-describedby'], errorId].filter(Boolean).join(' ') : props['aria-describedby']}
+    style={{ ...props.style, color: error ? 'var(--error)' : props.style?.color, borderColor: error ? 'var(--error)' : props.style?.borderColor }}
     onChange={(event) => deferred ? setDraft(event.target.value) : onCommit(event.target.value)}
     onBlur={() => { if (deferred && draft !== value) onCommit(draft) }} />
+    {error && <span id={errorId} role="alert" style={{ color: 'var(--error)', fontSize: 11, maxWidth: 250 }}>{t(error)}</span>}</>
 }
 
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
@@ -1151,13 +1158,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         idx += 1
         candidateId = `snet-${v.id}-${idx}`
       }
+      const prefix = availableSubnetPrefix(v)
       createdId = candidateId
-      const baseMatch = (v.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.99'
       v.subnets.push({
         id: createdId,
         name: `snet-tier-${idx}`,
-        prefix: `${prefixBase}.${10 + idx}.0/24`,
+        prefix,
       })
     })
     if (createdId) {
@@ -1203,27 +1209,24 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     commitTopology((draft) => {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target) return
-      const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.0'
       const subnetName = kind === 'azure-firewall' ? 'AzureFirewallSubnet' : 'snet-nva'
       let appSubnet = target.subnets.find((s) => s.name === subnetName)
       if (!appSubnet) {
         appSubnet = {
           id: `${target.id}-${subnetName.toLowerCase()}-${target.subnets.length + 1}`,
           name: subnetName,
-          prefix: `${prefixBase}.${200 + target.subnets.length}.0/24`,
+          prefix: availableSubnetPrefix(target),
         }
         target.subnets.push(appSubnet)
       }
       const idx = target.appliances.length + 1
-      const appOctet = 200 + target.subnets.length - 1
       const appId = `${target.id}-${kind === 'azure-firewall' ? 'azfw' : 'nva'}-${idx}`
       target.appliances.push({
         id: appId,
         name: kind === 'azure-firewall' ? `${target.name}-azfw-${idx}` : `${target.name}-nva-${idx}`,
         kind,
         subnetId: appSubnet.id,
-        privateIp: `${prefixBase}.${appOctet}.${3 + idx}`,
+        privateIp: nextSubnetAddress(draft, target, appSubnet.prefix),
         asn: kind === 'nva-vm' ? 65010 + idx : undefined,
         bgpEnabled: kind === 'nva-vm',
         enableIpForwarding: true,
@@ -1264,13 +1267,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       if (!target) return
       if (vnetUsesRemoteGateways(vnetId, draft)) return
       if (target.gateways.some((g) => g.kind === kind)) return
-      const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.0'
       if (!target.subnets.some((s) => s.name === 'GatewaySubnet')) {
         target.subnets.push({
           id: `${target.id}-gw-snet`,
           name: 'GatewaySubnet',
-          prefix: `${prefixBase}.250.0/24`,
+          prefix: availableSubnetPrefix(target),
         })
       }
       target.gateways.push({
@@ -1304,14 +1305,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       const target = draft.vnets.find((v) => v.id === vnetId)
       if (!target || target.routeServer) return
       if (vnetUsesRemoteGateways(vnetId, draft)) return
-      const baseMatch = (target.prefixes[0] ?? '10.0.0.0/16').match(/^(\d+\.\d+)\./)
-      const prefixBase = baseMatch ? baseMatch[1] : '10.0'
       let rsSubnet = target.subnets.find((s) => s.name === 'RouteServerSubnet')
       if (!rsSubnet) {
         rsSubnet = {
           id: `${target.id}-rs-snet`,
           name: 'RouteServerSubnet',
-          prefix: `${prefixBase}.251.0/24`,
+          prefix: availableSubnetPrefix(target),
         }
         target.subnets.push(rsSubnet)
       }
@@ -4504,7 +4503,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               className="aznet-input"
                               value={vnet.prefixes.join(', ')}
                               deferred={topology.inventory !== undefined}
+                              aria-label={t('VNet CIDR prefixes {0}', vnet.name)}
                               title="VNet CIDR prefixes (comma-separated)"
+                              validate={(raw) => vnetAddressError({ ...vnet, prefixes: raw.split(',').map((prefix) => prefix.trim()).filter(Boolean) })}
                               onCommit={(raw) => {
                                 commitTopology((draft) => {
                                   const v = draft.vnets.find((x) => x.id === vnet.id)
@@ -4513,7 +4514,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                       .split(',')
                                       .map((p) => p.trim())
                                       .filter(Boolean)
-                                    if (parsed.length > 0) v.prefixes = parsed
+                                    v.prefixes = parsed
                                   }
                                 })
                               }}
@@ -5305,16 +5306,20 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 aria-label={t('Subnet prefix {0}', subnet.name)}
                                 value={subnet.prefix}
                                 deferred={topology.inventory !== undefined}
+                                validate={(prefix) => subnetAddressError(vnet.prefixes, prefix)}
                                 onCommit={(val) => {
                                   commitTopology((draft) => {
-                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                    const targetS = targetV?.subnets.find((s) => s.id === subnet.id)
-                                    if (targetS) targetS.prefix = val
+                                    resizeAzSubnet(draft, vnet.id, subnet.id, val)
                                   })
                                 }}
                                 style={{ width: 120, fontFamily: 'monospace', fontSize: 11.5 }}
                               />
                               </label>
+                              {subnetNeedsReaddressing(topology, vnet, subnet.id) && <button type="button" className="aznet-btn"
+                                title={t('Reassign stored resource IPs into this subnet and update matching next hops.')}
+                                onClick={() => commitTopology((draft) => resizeAzSubnet(draft, vnet.id, subnet.id, subnet.prefix))}>
+                                {t('Update resource addresses')}
+                              </button>}
                               <label
                                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
                               >

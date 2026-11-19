@@ -5,6 +5,7 @@ import { cidr, contains, ipv4 } from '../validation'
 import { validateAzSiteRouteMaps } from './route-maps'
 import { validateAzArsRouteMaps } from './ars-route-maps'
 import { parseAzNetTopology } from './admission'
+import { subnetAddressError, usableSubnetAddress } from './addressing'
 import type { ClassicVpnNatGateway, VpnNat, VwanVpnNatGateway } from '../vpn-nat'
 import { parseVnetBgpCommunities, type VnetBgpCommunities } from '../vnet-communities'
 import { indirectFirewallTopology } from './indirect-firewall-sample'
@@ -1283,16 +1284,25 @@ export function validateAzNetTopology(input: unknown): string[] {
     for (const subnet of vnet.subnets ?? []) {
       if (!cidr(subnet.prefix)) {
         errors.push(`Subnet "${subnet.name}" in "${vnet.name}" has invalid CIDR "${subnet.prefix}".`)
+      } else if (subnetAddressError(vnet.prefixes, subnet.prefix)) {
+        errors.push(`Subnet "${subnet.name}" prefix "${subnet.prefix}" is outside VNet "${vnet.name}" address spaces.`)
       }
       for (const pe of subnet.privateEndpoints ?? []) {
         if (ipv4(pe.ipAddress) === undefined) {
           errors.push(`Private Endpoint "${pe.name}" has invalid IPv4 address "${pe.ipAddress}".`)
+        } else if (cidr(subnet.prefix) && !usableSubnetAddress(subnet.prefix, pe.ipAddress)) {
+          errors.push(`Private Endpoint "${pe.name}" must use an available non-reserved address in subnet "${subnet.name}".`)
         }
       }
     }
     for (const app of vnet.appliances ?? []) {
       if (ipv4(app.privateIp) === undefined) {
         errors.push(`Appliance "${app.name}" in "${vnet.name}" has invalid IPv4 address "${app.privateIp}".`)
+      } else {
+        const subnet = vnet.subnets.find((subnet) => subnet.id === app.subnetId)
+        if (subnet && cidr(subnet.prefix) && !usableSubnetAddress(subnet.prefix, app.privateIp)) {
+          errors.push(`Appliance "${app.name}" IP "${app.privateIp}" must be in subnet "${subnet.name}", excluding reserved addresses.`)
+        }
       }
     }
   }

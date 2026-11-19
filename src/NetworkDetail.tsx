@@ -12,6 +12,7 @@ import type { AzSimulationResult } from './azure-net/engine'
 import './network-detail.css'
 import './network-detail-messages-ja'
 import { contains, ipv4 } from './validation'
+import { subnetAddressError, vnetAddressError } from './azure-net/addressing'
 import { ApplicationFlowPanel } from './ApplicationFlowPanel'
 import { applicationProjection, validateApplicationInventory, type ApplicationResult } from './application'
 import { revisionOf } from './platform/service'
@@ -64,6 +65,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
   const applicationResult = applicationEvidence?.topology === topology ? applicationEvidence.result : undefined
   const applicationSelection = applicationProjection(topology, owner, applicationResult)
   const network = inventoryOwners(topology).find((entry) => sameInventoryOwner(entry, owner))
+  const addressError = network ? vnetAddressError(network) : undefined
   const nics = (topology.inventory?.nics ?? []).filter((nic) => sameInventoryOwner(nic.owner, owner))
   const workloads = (topology.inventory?.workloads ?? []).filter((workload) => workload.nicIds.some((id) => nics.some((nic) => nic.id === id)))
   const matchingWorkloads = workloads.filter((workload) => [workload.name, workload.id,
@@ -195,7 +197,8 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
       <div className="network-detail-graph" data-testid="vnet-detail-diagram">
       <div className="detail-network-heading">
         <img src={virtualNetworkIcon} alt="" />
-        <div><h3>{network.name}</h3><code>{network.prefixes.join(', ')}</code></div>
+        <div><h3>{network.name}</h3><code style={{ color: addressError ? 'var(--error)' : undefined }}
+          title={addressError ? t(addressError) : undefined}>{network.prefixes.join(', ')}</code></div>
       <button type="button" onClick={(event) => {
         const bounds = event.currentTarget.getBoundingClientRect()
         onSelectTarget?.({ kind: 'network', id: owner.id })
@@ -206,6 +209,7 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
           <label className="detail-subnet-search">{t('Search subnets')}<input type="search" value={subnetQuery} onChange={(event) => { setSubnetQuery(event.target.value); setSubnetPage(0) }} /></label>
           {!network.subnets.length && <p>{t('No detailed subnets have been declared. No workload addressing is inferred from VNet prefixes.')}</p>}
           {matchingSubnets.slice(currentSubnetPage * 100, (currentSubnetPage + 1) * 100).map((subnet) => {
+            const addressError = subnetAddressError(network.prefixes, subnet.prefix)
             const attached = nics.filter((nic) => nic.ipConfigurations.some((config) => config.subnetId === subnet.id))
             const directions = [...new Set(boundaries.filter((boundary) => boundary.subnetIds.includes(subnet.id)
               || (ipv4(boundary.destination) !== undefined && contains(subnet.prefix, ipv4(boundary.destination)!))).map((boundary) => boundary.direction))]
@@ -221,7 +225,9 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
                 onKeyDown={(event) => { if (event.key === 'ContextMenu' || event.key === 'F10' && event.shiftKey) {
                   event.preventDefault(); const bounds = event.currentTarget.getBoundingClientRect()
                   openActions(subnet.name, subnetActions(), event.currentTarget, bounds.left, bounds.bottom)
-                } }}><img src={subnetIcon} alt="" /><span>{subnet.name}</span>{' '}<code>{subnet.prefix}</code></button></h4>
+                } }}><img src={subnetIcon} alt="" /><span>{subnet.name}</span>{' '}<code
+                  style={{ color: addressError ? 'var(--error)' : undefined }}
+                  title={addressError ? t(addressError) : undefined}>{subnet.prefix}</code></button></h4>
               {applicationSelection.subnetIds.has(subnet.id) && <p data-testid="application-subnet-reference"><strong>{t('Selected application reference')}</strong>: <code>{subnet.id}</code></p>}
               {directions.map((direction) => <p key={direction}><strong>{t(direction === 'forward' ? 'Forward routing' : 'Reply routing')}</strong></p>)}
               <p className="detail-subnet-count">{t('{0} NIC attachments', attached.length)}</p>

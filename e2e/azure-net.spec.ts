@@ -15,12 +15,105 @@ async function inspectSubnet(page: Page, subnetId: string) {
   await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
 }
 
-async function loadTopology(page: Page, topology: AzNetTopology) {
+async function loadTopology(page: Page, topology: AzNetTopology, mode = 'hub-spoke') {
   await page.addInitScript((value) => {
     localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
   }, topology)
-  await page.goto('/?mode=hub-spoke')
+  await page.goto(`/?mode=${mode}`)
 }
+
+for (const mode of ['hub-spoke', 'full']) {
+  test(`highlights invalid and out-of-VNet CIDRs in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    await loadTopology(page, topology, mode)
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    const prefixes = page.getByTitle('VNet CIDR prefixes (comma-separated)', { exact: true })
+    const subnet = page.getByTestId('aznet-subnet-prefix-sub-hub-fw')
+    await prefixes.fill('10.30.0.0/24')
+    await expect(prefixes).toHaveAttribute('aria-invalid', 'true')
+    await expect(subnet).toHaveAttribute('aria-invalid', 'true')
+    const errorColor = await prefixes.evaluate((element) => getComputedStyle(element).color)
+    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu').locator('.aznet-vnet-prefix')).toHaveCSS('fill', errorColor)
+    await subnet.fill('not-a-cidr')
+    await expect(subnet).toHaveAttribute('aria-invalid', 'true')
+    await expect(subnet).toHaveCSS('color', errorColor)
+    await expect(page.getByTestId('aznet-subnet-sub-hub-fw')).toHaveAttribute('data-address-invalid', 'true')
+    await prefixes.fill('10.0.0.7/22')
+    await expect(prefixes).toHaveAttribute('aria-invalid', 'true')
+    await prefixes.fill('10.0.0.0/22')
+    await subnet.fill('10.0.1.0/26')
+    await expect(prefixes).toHaveAttribute('aria-invalid', 'false')
+    await expect(subnet).toHaveAttribute('aria-invalid', 'false')
+  })
+
+  test(`keeps subnet resource addresses and next hops consistent through edits and history in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    const vnet = topology.vnets[0]
+    vnet.prefixes = ['10.30.0.0/24']
+    vnet.subnets.forEach((subnet, index) => { subnet.prefix = `10.30.0.${index * 64}/26` })
+    vnet.appliances = []
+    for (const route of topology.udrTables.flatMap((table) => table.routes)) {
+      if (route.nextHopIp === '10.0.1.4') route.nextHopIp = '10.30.0.68'
+    }
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type=file]').first().setInputFiles({
+      name: 'subnet-addresses.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Add / Remove VNet Elements', exact: true }).click()
+    await page.getByRole('menuitem', { name: /Add Azure Firewall/i }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0]?.privateIp).toBe('10.30.0.68')
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    await page.getByTestId('aznet-subnet-prefix-sub-hub-fw').fill('10.30.0.192/26')
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
+    expect((await saved()).udrTables.flatMap((table) => table.routes).filter((route) => route.nextHopType === 'VirtualAppliance')
+      .every((route) => route.nextHopIp === '10.30.0.196')).toBe(true)
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.68')
+    await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
+    await page.reload()
+    await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
+  })
+}
+
+test('validates deferred CIDR drafts and renumbers modeled inventory on commit', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  const vnet = topology.vnets[0], app = vnet.appliances[0]
+  topology.inventory = {
+    workloads: [{ id: 'router-vm', name: 'Router', nicIds: ['router-nic'], backingDeviceId: app.id }],
+    nics: [{ id: 'router-nic', name: 'Router NIC', owner: { kind: 'vnet', id: vnet.id },
+      ipConfigurations: [{ id: 'primary', name: 'Primary', subnetId: app.subnetId, privateIp: app.privateIp }] }],
+    publicIps: [],
+  }
+  await loadTopology(page, topology)
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+  await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+  const subnet = page.getByTestId(`aznet-subnet-prefix-${app.subnetId}`)
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+  await subnet.fill('invalid-draft')
+  await expect(subnet).toHaveAttribute('aria-invalid', 'true')
+  expect((await saved()).vnets[0].appliances[0].privateIp).toBe(app.privateIp)
+  await subnet.fill('10.0.3.64/26')
+  await expect(subnet).toHaveAttribute('aria-invalid', 'false')
+  await subnet.blur()
+  await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.0.3.68')
+  expect((await saved()).inventory!.nics[0].ipConfigurations[0].privateIp).toBe('10.0.3.68')
+})
+
+test('offers explicit repair for stale imported subnet resource addresses', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  topology.vnets[0].appliances[0].privateIp = '10.0.202.4'
+  await loadTopology(page, topology)
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+  await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+  await page.getByRole('button', { name: 'Update resource addresses', exact: true }).click()
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances[0].privateIp)).toBe('10.0.1.4')
+  await expect(page.getByRole('button', { name: 'Update resource addresses', exact: true })).toHaveCount(0)
+})
 
 for (const mode of ['hub-spoke', 'full']) {
   test(`hides internal VNet role labels while preserving imported roles in ${mode}`, async ({ page }) => {
