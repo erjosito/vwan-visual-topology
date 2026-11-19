@@ -174,6 +174,17 @@ const definitions = [
   },
 ]
 
+const repairScopes: Record<string, Array<[string, string?]>> = {
+  'private-link': [],
+  'inspection-bypass': [['a', 'a-work'], ['b', 'b-work']],
+  'colocated-chain': [['hub', 'hub-work'], ['hub', 'transport-work']],
+  'dedicated-chain': [['transport']],
+  'branch-advertisement': [['a', 'a-work']],
+  'wan-isolation': [],
+  'tiered-incident': [['leaf', 'leaf-work'], ['hub', 'hub-work']],
+  'ha-return-path': [['remote', 'remote-work']],
+}
+
 export const scenarioBundle: CourseBundle = { schemaVersion: 1, course: scenarioCourse, lessons: [], scenarios: [], checks: [], guidance: [] }
 for (const [index, definition] of definitions.entries()) {
   const { id, before, after } = definition
@@ -181,21 +192,22 @@ for (const [index, definition] of definitions.entries()) {
     const vnet = scenarioTopologies[id].vnets.find((vnet) => vnet.id === scope.vnetId)!
     return `${vnet.name} / ${vnet.subnets.find((subnet) => subnet.id === scope.subnetId)!.name}`
   }
-  const repairGuidance: CourseGuidance[] = definition.guidance ?? []
-  for (const vnet of scenarioTopologies[id].vnets) {
-    if (vnet.id === 'c') continue
-    repairGuidance.push({ id: `${id}.configure-${vnet.id}`, action: 'network.configure', params: { vnetId: vnet.id },
-      instruction: l(`Locate the native configuration for ${vnet.name}; inspect its controls without changing the assessed design automatically.`, `${vnet.name} の標準設定画面を開きます。設計は自動で変更されません。`) })
-    for (const subnet of vnet.subnets.filter((subnet) => subnet.routeTableId)) {
+  const repairGuidance: CourseGuidance[] = []
+  for (const [vnetId, subnetId] of repairScopes[id]) {
+    const vnet = scenarioTopologies[id].vnets.find((entry) => entry.id === vnetId)!
+    if (subnetId) {
+      const subnet = vnet.subnets.find((entry) => entry.id === subnetId)!
       repairGuidance.push({ id: `${id}.table-${subnet.id}`, action: 'route-table.configure',
         params: { vnetId: vnet.id, subnetId: subnet.id, routeTableId: subnet.routeTableId! },
-        instruction: l(`Locate the routing policy for ${vnet.name} / ${subnet.name}. Choose the diagnosis and repair yourself.`, `${vnet.name} / ${subnet.name} のルーティング ポリシーを開きます。診断と修復は自分で判断します。`) })
-    }
+        instruction: l(`Open ${vnet.name} / ${subnet.name} routing policy.`, `${vnet.name} / ${subnet.name} のルーティング ポリシーを開く。`) })
+    } else repairGuidance.push({ id: `${id}.configure-${vnet.id}`, action: 'network.configure', params: { vnetId: vnet.id },
+      instruction: l(`Open ${vnet.name} appliance settings.`, `${vnet.name} の装置設定を開く。`) })
   }
-  if (id === 'wan-isolation') repairGuidance.push({ id: `${id}.hub`, action: 'hub-routes.open', params: { hubId: 'wan', tableId: 'defaultRouteTable' },
-    instruction: l('Inspect this hub’s exact Default table. This is not a union of the hub tables.', 'このハブの正確な Default テーブルを調べます。複数テーブルの集合ではありません。') },
-    { id: `${id}.hub-config`, action: 'hub.configure', params: { hubId: 'wan' },
-      instruction: l('Locate the hub connection routing controls; choose the appropriate association and propagation yourself.', 'ハブ接続のルーティング設定を開きます。関連付けと伝達は自分で判断します。') })
+  repairGuidance.push(...definition.guidance ?? [])
+  if (id === 'wan-isolation') repairGuidance.push({ id: `${id}.hub-config`, action: 'hub.configure', params: { hubId: 'wan' },
+    instruction: l('Open Regional WAN connection routing settings.', 'Regional WAN の接続ルーティング設定を開く。') },
+    { id: `${id}.hub`, action: 'hub-routes.open', params: { hubId: 'wan', tableId: 'defaultRouteTable' },
+      instruction: l('Open Regional WAN / Default effective routes.', 'Regional WAN / Default の有効なルートを開く。') })
   scenarioBundle.scenarios.push({ id, ...(id === 'inspection-bypass' ? { extendsScenarioId: 'private-link' } : {}),
     document: { mode: 'full', topology: scenarioTopologies[id] } })
   scenarioBundle.guidance.push(...repairGuidance,

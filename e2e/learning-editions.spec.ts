@@ -13,8 +13,15 @@ import { advanceLearningTask, completeLearningTasks, createLessonPeering, learni
 
 async function show(page: Page, taskId: string, guidanceId: string, language: 'en' | 'ja') {
   const task = scenarioBundle.lessons.flatMap((lesson) => lesson.tasks).find((task) => task.id === taskId)!
-  await learningSidebar(page).getByRole('button', { name: sidebarLabels.show[language], exact: true })
-    .nth(task.guidanceIds.indexOf(guidanceId)).click()
+  expect(task.guidanceIds).toContain(guidanceId)
+  const panel = learningSidebar(page)
+  const button = panel.getByTestId(`learning-guide-${guidanceId}`)
+  if (!await button.isVisible()) {
+    await learningOptions(page, language)
+    const navigation = panel.getByText(sidebarLabels.navigationHelp[language], { exact: true })
+    if (!await navigation.evaluate((element) => (element.parentElement as HTMLDetailsElement).open)) await navigation.click()
+  }
+  await button.click()
 }
 async function openTable(page: Page, taskId: string, tableId: string, language: 'en' | 'ja') {
   const cue = scenarioBundle.guidance.find((entry) => entry.id.startsWith(taskId.split('.')[0])
@@ -128,10 +135,10 @@ for (const language of ['en', 'ja'] as const) {
     await expect(panel.getByTestId('learning-task')).not.toContainText('Record the inspection')
     await show(page, 'private-link.inspect', 'private-link.before-guide', language)
     const debrief = panel.getByTestId('learning-debrief')
-    await expect(debrief).toContainText('BGP')
-    await expect(debrief).toContainText('UDR')
-    await expect(debrief).toContainText('VirtualAppliance')
-    await expect(debrief).toContainText('None')
+    await expect(debrief).toContainText('System')
+    await expect(debrief).toContainText('VNetPeering')
+    await expect(debrief).toContainText('10.22.1.4')
+    await expect(debrief).not.toContainText('BGP')
     await expect(panel.getByTestId('learning-celebration')).toContainText('+5')
     const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
     expect(JSON.parse(awards!).completions).toHaveLength(2)
@@ -158,7 +165,7 @@ for (const language of ['en', 'ja'] as const) {
     const practice = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
     await panel.getByRole('button', { name: runnerLabels.back[language], exact: true }).click()
     await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.inspect')
-    await expect(debrief).toContainText('BGP')
+    await expect(debrief).toContainText('VNetPeering')
     await expect(panel.locator('#learning-debrief-title')).toBeFocused()
     await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
     await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.repair')
@@ -179,6 +186,75 @@ for (const language of ['en', 'ja'] as const) {
     await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
     await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'inspection-bypass.load')
     expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).document.topology, practiceWorkspaceKey)).toEqual(extended)
+    await advanceLearningTask(page, language)
+    for (const vnetId of ['a', 'b']) {
+      await expect(panel.getByTestId(`learning-guide-inspection-bypass.peer-${vnetId}`)).toBeVisible()
+      await expect(panel.getByRole('button', { name: sidebarLabels.show[language], exact: true })).toHaveCount(1)
+      await show(page, 'inspection-bypass.connect', `inspection-bypass.peer-${vnetId}`, language)
+      await learningAnchor(page, 'peer-menu', vnetId).click()
+      await learningAnchor(page, 'peer-target', vnetId, 'hub').click()
+    }
+    await advanceLearningTask(page, language)
+    const applicationPolicy = await openTable(page, 'inspection-bypass.summary', 'application-policy', language)
+    await applicationPolicy.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
+    const inputs = applicationPolicy.locator('tbody tr').last().locator('input[type="text"]')
+    await inputs.nth(1).fill('10.0.0.0/8')
+    await inputs.nth(2).fill('10.20.1.4')
+    await inputs.nth(2).press('Tab')
+    await expect(panel.getByTestId('learning-guide-inspection-bypass.table-b-work')).toBeVisible()
+    await expect(panel.getByTestId('learning-guide-inspection-bypass.table-a-work')).toBeHidden()
+    await expect(panel.getByTestId('learning-debrief')).toHaveCount(0)
+  })
+
+  test(`${language}: repair has one primary guide, progressive hints and named secondary help without changing the network`, async ({ page }) => {
+    test.setTimeout(60_000)
+    const tasks = orderedTasks(scenarioBundle)
+    const completions = tasks.slice(0, tasks.findIndex(({ task }) => task.id === 'tiered-incident.load'))
+      .map(({ lesson, task }, revision) => ({
+        courseId: scenarioBundle.course.id, contentVersion: scenarioBundle.course.contentVersion, lessonId: lesson.id, taskId: task.id,
+        assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+        title: task.title, sessionId: 'earlier-missions', revision, scope: 1, engineVersion: 'earlier',
+        completedAt: '2026-11-19T10:00:00.000Z',
+      }))
+    await page.addInitScript(({ key, completions }) => {
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }, { key: guidedProgressKey, completions })
+    await page.goto('/?mode=full')
+    await page.locator('header [data-language-selector]').selectOption(language)
+    await page.getByTestId('learning-open').click()
+    await completeLearningTasks(page, 2, language)
+    const panel = learningSidebar(page)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'tiered-incident.repair')
+    await expect(panel.getByRole('button', { name: sidebarLabels.show[language], exact: true })).toHaveCount(1)
+    const secondary = panel.getByTestId('learning-guide-tiered-incident.table-hub-work')
+    await expect(secondary).toBeHidden()
+    const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+    const practice = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+    const first = panel.getByTestId('learning-hint-1'), second = panel.getByTestId('learning-hint-2')
+    await expect(first.locator('p').first()).toBeHidden()
+    await expect(second.locator('summary')).toBeHidden()
+    await first.locator('summary').first().focus()
+    await page.keyboard.press('Enter')
+    await expect(first.locator('p').first()).toBeVisible()
+    await second.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    await expect(second.locator('p')).toBeVisible()
+    await show(page, 'tiered-incident.repair', 'tiered-incident.table-leaf-work', language)
+    await expect(learningAnchor(page, 'udr-route', 'leaf', 'leaf-work', 'indirect-egress', 'partner-service')).toBeVisible()
+    await learningOptions(page, language)
+    await panel.getByText(sidebarLabels.navigationHelp[language], { exact: true }).click()
+    await expect(secondary).toHaveText(language === 'en'
+      ? 'Open Inspection hub / Workload routing policy.' : 'Inspection hub / Workload のルーティング ポリシーを開く。')
+    await secondary.focus()
+    await page.keyboard.press('Enter')
+    await expect(learningAnchor(page, 'udr-route', 'hub', 'hub-work', 'inspection-onward', 'indirect-return')).toBeVisible()
+    await expect(panel.getByText(sidebarLabels.options[language], { exact: true }).locator('..')).not.toHaveAttribute('open', '')
+    expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+    await repair(page, 'tiered-incident', language)
+    await expect(panel.getByTestId('learning-debrief')).toBeVisible()
+    const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
+    expect(saved.completions).toHaveLength(JSON.parse(awards!).completions.length + 1)
   })
 
   test(`${language}: complete the scenario edition through real native controls and preserve the design`, async ({ page }) => {

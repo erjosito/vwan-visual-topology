@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '../i18n'
 import type { PlatformDocument } from '../platform/contract'
@@ -9,7 +9,7 @@ import type { CourseGuidance } from './course-contract'
 import { Explain } from './Explain'
 import { GuidanceHighlight } from './GuidanceHighlight'
 import { focusGuidanceTarget } from './guidance-anchors'
-import { resolveGuidance } from './guidance'
+import { resolveGuidance, selectPrimaryGuidance } from './guidance'
 import { sidebarLabels as labels } from './sidebar-content'
 import { learningLabels, practiceLabels } from './practice-content'
 import { practiceConflict, practiceReadFailure, practiceSaveFailure } from './practice-workspace'
@@ -46,6 +46,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
     .find(({ task }) => taskCompleted(bundle, state.completions, task))
   const following = instructions[index + 1]
   const check = bundle.checks.find((item) => item.id === task.checkId)!
+  const primaryGuide = selectPrimaryGuidance(workspace, check, task.guidanceIds.map((id) => bundle.guidance.find((entry) => entry.id === id)!))
   const requirements = 'requirements' in check.params ? check.params.requirements : []
   const [answerId, setAnswerId] = useState<string>()
   const [replayConfirm, setReplayConfirm] = useState(false)
@@ -61,6 +62,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const focusedGuide = useRef<{ request: number; target: HTMLElement } | undefined>(undefined)
   const job = useRef<AbortController | undefined>(undefined)
   const panel = useRef<HTMLElement>(null)
+  const options = useRef<HTMLDetailsElement>(null)
   const inPractice = session?.practice?.courseId === bundle.course.id && session.practice.scenarioId === lesson.scenarioId
   const plan = useMemo(() => cue && inPractice ? resolveGuidance(workspace, cue) : undefined, [workspace, cue, inPractice])
   const anchorKey = JSON.stringify(plan?.anchors)
@@ -129,6 +131,26 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       return () => { clearTimeout(timer); controller?.abort() }
     }
   }, [foreground, done, reviewing, state.awaitingNext, inPractice, check.kind, session?.practice?.active, session?.practice?.courseId, bundle.course.id])
+  const guideButton = (id: string, primary = false) => {
+    const guidance = bundle.guidance.find((item) => item.id === id)!
+    return <span className="learning-guide" key={id}
+      onMouseEnter={() => setHelpId(id)} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) setHelpId(undefined) }}>
+      <button type="button" data-testid={`learning-guide-${id}`} aria-describedby={`${id}-help`}
+        onFocus={() => setHelpId(id)} onBlur={() => setHelpId(undefined)}
+        onKeyDown={(event) => { if (event.key === 'Escape' && helpId === id) { event.stopPropagation(); setHelpId(undefined) } }}
+        onClick={() => {
+          if (!primary) {
+            if (options.current) options.current.open = false
+            setOptionsOpen(false)
+          }
+          setHelpId(undefined)
+          setCue(guidance)
+          setGuideRequest((request) => request + 1)
+          if (!resolveGuidance(workspace, guidance).reason) onGuide?.(guidance)
+        }}>{text(primary ? labels.show : guidance.instruction, language)}</button>
+      <span id={`${id}-help`} role="tooltip" hidden={helpId !== id}>{text(guidance.instruction, language)} {text(labels.navigation, language)}</span>
+    </span>
+  }
   return createPortal(<>
     <aside ref={panel} id="learning-sidebar" className="learning-sidebar" aria-labelledby="learning-title" data-testid="learning-sidebar" onKeyDown={(event) => {
       if (event.key === 'Escape') { event.stopPropagation(); onPause() }
@@ -179,24 +201,10 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
         {check.kind === 'quiz.answered' && !reviewing && inPractice && !state.canContinue
           && !['unassessed', 'progress'].includes(state.feedback ?? '') && <button type="button"
           disabled={!answerId || running || state.running} onClick={() => { void runner.assess(answerId) }}>{text(runnerText.submit, language)}</button>}
-        {!reviewing && inPractice && task.guidanceIds.map((id) => {
-          const guidance = bundle.guidance.find((item) => item.id === id)!
-          return <span className="learning-guide" key={id}
-            onMouseEnter={() => setHelpId(id)} onMouseLeave={(event) => { if (!event.currentTarget.contains(document.activeElement)) setHelpId(undefined) }}>
-            <button type="button" aria-describedby={`${id}-help`}
-              onFocus={() => setHelpId(id)} onBlur={() => setHelpId(undefined)}
-              onKeyDown={(event) => { if (event.key === 'Escape' && helpId === id) { event.stopPropagation(); setHelpId(undefined) } }}
-              onClick={() => {
-                setHelpId(undefined)
-                setCue(guidance)
-                setGuideRequest((request) => request + 1)
-                if (!resolveGuidance(workspace, guidance).reason) onGuide?.(guidance)
-              }}>{text(labels.show, language)}</button>
-            <span id={`${id}-help`} role="tooltip" hidden={helpId !== id}>{text(guidance.instruction, language)} {text(labels.navigation, language)}</span>
-          </span>
-        })}
+        {!reviewing && inPractice && primaryGuide && guideButton(primaryGuide.id, true)}
         {cue && plan?.reason && <p role="status">{text(labels[plan.reason], language)}</p>}
-        {task.hints.map((hint, hintIndex) => <details key={hintIndex}><summary>{text(learningLabels.hint, language)} {hintIndex + 1}</summary><p>{text(hint, language)}</p></details>)}
+        {task.hints.reduceRight<ReactNode>((next, hint, index) =>
+          <details data-testid={`learning-hint-${index + 1}`}><summary>{text(learningLabels.hint, language)} {index + 1}</summary><p>{text(hint, language)}</p>{next}</details>, null)}
         {showFeedback && <div role="status" data-testid="learning-feedback">
           <p>{text(runnerText[state.feedback!], language)}</p>
           {state.explanation && state.feedback !== 'passed' && <p>{text(state.explanation, language)}</p>}
@@ -217,12 +225,13 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
         }}>{text(runnerText.next, language)}</button>
           : state.awaitingNext && <button type="button" data-testid="learning-next" onClick={() => runner.advance()}>{text(runnerText.next, language)}</button>}
       </nav>
-      <details onToggle={(event) => setOptionsOpen(event.currentTarget.open)}><summary>{text(labels.options, language)}</summary>
+      <details ref={options} onToggle={(event) => setOptionsOpen(event.currentTarget.open)}><summary>{text(labels.options, language)}</summary>
       <p>{text(runnerText.automatic, language)}</p>
       <p>{text(lesson.objective, language)}</p>
       {!!task.guidanceIds.length && <details><summary>{text(labels.navigationHelp, language)}</summary>
         <p>{text(labels.navigation, language)}</p>
-        {task.guidanceIds.map((id) => <p key={id}>{text(bundle.guidance.find((entry) => entry.id === id)!.instruction, language)}</p>)}
+        {task.guidanceIds.map((id) => id === primaryGuide?.id || !inPractice || reviewing || done || state.awaitingNext
+          ? <p key={id}>{text(bundle.guidance.find((entry) => entry.id === id)!.instruction, language)}</p> : guideButton(id))}
       </details>}
       <button type="button" onClick={() => session?.setLearningDetailsOpen?.(true)}>{language === 'ja' ? 'カリキュラムの版と学習データ' : 'Curriculum editions & learning data'}</button>
       <TrackOverview />

@@ -108,6 +108,18 @@ Visible **Back/Next** controls review completed explanations without replacing t
 live practice canvas or emitting awards. They are not per-step topology time
 travel: no snapshot restoration or silent undo occurs during review.
 
+Order each task's `guidanceIds` deliberately: the first is its one primary
+**Show me where** action. Staged peering/UDR configuration follows the next
+unfinished native scope automatically; this chooses navigation, never credit.
+Other targets are named with their localized guidance
+instruction under **Progress, review & options > Navigation help**. Choosing
+a secondary target closes options so automatic checking can resume. The primary
+action preserves an explicitly opened options pause. Author only relevant
+repair scopes rather than enumerating every VNet and table. Conceptual `hints`
+are separate from navigation: nested disclosures reveal one level at a time,
+starting with a reasoning prompt before a more concrete suggestion. Neither
+kind of help costs XP or changes the network.
+
 ## Scenario context and teaching
 
 Every published lesson needs a bilingual `context`: a short fictional situation
@@ -121,7 +133,11 @@ paragraphs, nonofficial URLs and links without a topic fragment.
 `course-teaching.ts` assembles shared topic explanations and per-lesson stories
 for both editions. It generates unambiguous inspection instructions from each
 native check's actual VNet/subnet, hub/table or branch scope. The first subnet
-inspection teaches effective routes, Source and Next hop; later debriefs explain
+inspection teaches effective routes, prefix membership and the local/peering
+next hops; policy and gateway concepts are introduced later. Hybrid and multi-hub
+steps have distinct observation, repair and return explanations. Outcome-graded
+repairs must not assert that a learner used an unrequired canonical action:
+label an illustrative configuration as a worked example. Later debriefs explain
 the mission's routing principle rather than claiming unobserved live results.
 Authors can supply a lesson's context or a task's debrief directly to override the
 shared defaults. New missions need a story/topic entry (or explicit teaching),
