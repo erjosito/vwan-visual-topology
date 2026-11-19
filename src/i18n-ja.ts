@@ -7,7 +7,7 @@ export const ja: Record<string, string> = {
   'Check configuration input.': '構成の入力内容を確認してください。',
   'Unsaved configuration changes.': '未保存の構成変更があります。',
   'No pending configuration edits.': '未保存の構成編集はありません。',
-  'Use Save changes to apply this form to the workspace. Cloud saving is separate.': '「変更を保存」でこのフォームをワークスペースに適用します。クラウドへの保存は別の操作です。',
+  'Use the Save button to apply this form to the workspace. Cloud saving is separate.': '保存ボタンでこのフォームをワークスペースに適用します。クラウドへの保存は別の操作です。',
   'Fields update this workspace as you edit, unless marked Save on blur or applied with a Save/Apply button. Cloud saving is separate.': '各項目は編集時にワークスペースへ反映されます。ただし「フォーカスを外すと保存」と表示された項目や、保存・適用ボタンのある項目はその操作が必要です。クラウドへの保存は別の操作です。',
   'Save on blur': 'フォーカスを外すと保存',
   'Discard unsaved configuration changes and switch resources? Save your changes first to keep them.': '未保存の構成変更を破棄して別のリソースに切り替えますか。変更を保持するには、先に保存してください。',

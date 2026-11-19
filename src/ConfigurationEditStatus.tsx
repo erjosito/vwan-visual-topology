@@ -31,7 +31,7 @@ export default function ConfigurationEditStatus({ section = false, form = false 
     {invalid && <strong>{t('Check configuration input.')}{' '}</strong>}
     {pending ? t('Unsaved configuration changes.') : !section && t('No pending configuration edits.')}
     {!section && <span className="configuration-save-hint">{t(form
-      ? 'Use Save changes to apply this form to the workspace. Cloud saving is separate.'
+      ? 'Use the Save button to apply this form to the workspace. Cloud saving is separate.'
       : 'Fields update this workspace as you edit, unless marked Save on blur or applied with a Save/Apply button. Cloud saving is separate.')}</span>}
   </span>
 }
