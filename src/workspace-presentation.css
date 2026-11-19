@@ -44,14 +44,18 @@
 .workspace-account-status .account-status-unavailable { display: grid; align-content: center; gap: 4px; font-size: 12px; }
 .account-status-name { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
 .account-status-unavailable small { font-size: 11px; color: var(--text-muted); }
+.document-save-state { display: grid; gap: 3px; max-width: 260px; min-height: 44px; align-content: center; padding: 6px 9px; box-sizing: border-box; text-align: left; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
+.document-save-state small { font-size: 10px; color: var(--text-muted); }
+.document-save-detail { overflow-wrap: anywhere; }
+.document-save-detail small { display: block; }
 .learning-status-identity { width: 100%; overflow-wrap: anywhere; }
 .learning-status-belt { display: inline-flex; align-items: center; gap: 4px; }
 .simulator-shell[data-ui-preview] [data-testid="ui-preview-toggle"] { border-color: var(--accent); color: var(--accent); }
 @media (max-width: 760px) {
   .simulator-shell[data-ui-preview] .unified-topbar-left { display: flex; min-width: 0; }
   .simulator-shell[data-ui-preview] :is(.aznet-topbar-controls, .unified-topbar-controls) { display: flex; min-width: 0; }
-  .simulator-shell[data-ui-preview] .unified-brand { width: auto; margin-right: 0; }
-  .simulator-shell[data-ui-preview] .unified-brand h1 { font-size: 14px; white-space: normal; }
+  .simulator-shell[data-ui-preview] .unified-brand { width: auto; margin-right: 0; min-width: 0; flex-shrink: 1; }
+  .simulator-shell[data-ui-preview] .unified-brand h1 { font-size: 14px; white-space: normal; min-width: 0; }
   .presentation-group { position: static; }
   .presentation-group-content { position: fixed; top: 16px; right: 16px; max-height: calc(100dvh - 32px); }
 }

@@ -3,7 +3,6 @@ import type { InputHTMLAttributes } from 'react'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
-import { FlowExportControls } from '../FlowExportControls'
 import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
@@ -133,6 +132,7 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls })))
 const VpnNatGatewayEditor = lazy(() => import('../VpnNatEditor').then((module) => ({ default: module.VpnNatGatewayEditor })))
 const BgpRouteTable = lazy(() => import('./BgpRouteTable').then((module) => ({ default: module.BgpRouteTable })))
 const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ default: module.SampleGallery })))
@@ -280,7 +280,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }>({ open: false })
 
   const persistCurrentWorkspace = useEffectEvent(() => {
-    if (!recoveryAcknowledged || pendingUrlSample) return
+    if (!recoveryAcknowledged || pendingUrlSample) {
+      workspaceSession?.documentSave?.local(topology, 'unavailable')
+      return
+    }
     try {
       parseAzNetTopology(topology)
       if (workspaceSession?.practice && workspaceSession.savePractice) {
@@ -292,8 +295,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         ))
       }
       setSaveError('')
+      workspaceSession?.documentSave?.local(topology, 'saved')
       if (!workspaceSession?.practice) consumeAzSnapshotUrl()
     } catch (error) {
+      workspaceSession?.documentSave?.local(topology, 'unavailable')
       setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Export JSON to preserve this design; saved originals and URL snapshots have not been overwritten.`)
     }
   })
@@ -564,6 +569,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
     nextTopology = parseAzNetTopology(nextTopology)
+    workspaceSession?.documentSave?.reset()
     setCaptureObservations(null)
     sampleRequest.current++
     setSampleId(id)
@@ -644,6 +650,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     }
   }, [])
 
+  const applyUrlSample = useEffectEvent((requested: string, loaded: AzNetTopology) => {
+    applyLoadedTopology(requested, loaded)
+  })
   useEffect(() => {
     if (urlSampleLoaded.current) return
     const requested = pendingUrlSample
@@ -652,31 +661,20 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (AZURE_NET_SAMPLES.some((s) => s.id === requested)) {
       return
     }
-    void fetch(`/docs/samples/azure-net/${requested}.json`)
+    const controller = new AbortController()
+    void fetch(`/docs/samples/azure-net/${requested}.json`, { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) throw new Error(`Sample "${requested}" not found.`)
         return parseAzNetJson(await res.text())
       })
       .then((loaded) => {
-        loaded = parseAzNetTopology(loaded)
-        setSampleId(requested)
-        setCaptureObservations(null)
-        setTopology(loaded)
-        setHistory([])
-        setFuture([])
-        const defaultVnet = loaded.vnets[1] ?? loaded.vnets[0]
-        if (defaultVnet && defaultVnet.subnets[0]) {
-          setSelected({
-            kind: 'subnet',
-            vnetId: defaultVnet.id,
-            subnetId: defaultVnet.subnets[0].id,
-          })
-        }
+        if (!controller.signal.aborted) applyUrlSample(requested, loaded)
       })
       .catch((err) => {
-        setWorkspaceNotice(`Sample rejected: ${workspaceError(err)}`)
+        if (!controller.signal.aborted) setWorkspaceNotice(`Sample rejected: ${workspaceError(err)}`)
       })
-      .finally(() => setPendingUrlSample(''))
+      .finally(() => { if (!controller.signal.aborted) setPendingUrlSample('') })
+    return () => { controller.abort(); urlSampleLoaded.current = false }
   }, [pendingUrlSample])
 
   // One-click Auto-Remediation for diagnostic findings
@@ -2793,7 +2791,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         <div className="unified-topbar-left">
           <div className="aznet-brand unified-brand">
             <div className="aznet-brand-icon" aria-hidden="true">
-              Az
+              AzNetSim
             </div>
             <h1>Azure Network Simulator</h1>
           </div>
@@ -3720,10 +3718,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {(!resolvedSourceOpt || !resolvedDestOpt) && <p>Choose existing source and destination endpoints. A previously selected endpoint may have been removed.</p>}
                 {singleFlowForCustomIp && <p>Custom IP is outside the selected destination prefix. Only the forward route is known; select the owning endpoint to analyze the return path.</p>}
                 {pairAnalysis && !singleFlowForCustomIp && resolvedSourceOpt && resolvedDestOpt
-                  && ['subnet', 'site'].includes(resolvedSourceOpt.ref.kind) && ['subnet', 'site'].includes(resolvedDestOpt.ref.kind) && <FlowExportControls
+                  && ['subnet', 'site'].includes(resolvedSourceOpt.ref.kind) && ['subnet', 'site'].includes(resolvedDestOpt.ref.kind) && <Suspense fallback={null}><FlowExportControls
                   document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology: azDisplayResult(activeTopology, displayNames) }}
                   flow={{ id: 'selected-flow', kind: 'flow', source: resolvedSourceOpt.ref, target: resolvedDestOpt.ref,
-                    sourceAddress: resolvedSourceOpt.defaultIp, destinationAddress: customDestIp.trim() || resolvedDestOpt.defaultIp, expectation: 'allow' }} />}
+                    sourceAddress: resolvedSourceOpt.defaultIp, destinationAddress: customDestIp.trim() || resolvedDestOpt.defaultIp, expectation: 'allow' }} /></Suspense>}
 
                 {pairAnalysis && resolvedSourceOpt && (
                   <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>

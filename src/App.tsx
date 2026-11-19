@@ -48,10 +48,10 @@ import './App.css'
 import { projectVwanFailures, regionKey, failureKey, failureLabel, type FailureDomain } from './failures'
 import { analyzeVwanResilience, resilienceMarkers, type ResilienceReport } from './failure-analysis'
 import { FailurePanel } from './FailurePanel'
-import { FlowExportControls } from './FlowExportControls'
 import { pruneDeletedInventory } from './inventory'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const FlowExportControls = lazy(() => import('./FlowExportControls').then(module => ({ default: module.FlowExportControls })))
 const SampleGallery = lazy(() => import('./SampleGallery').then((module) => ({ default: module.VwanSampleGallery })))
 const HubCapabilitiesDialog = lazy(() => import('./HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('./ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
@@ -298,6 +298,7 @@ function App() {
     } catch (error) { setError(message(error)) }
   }
   const reset = (next: Topology) => {
+    workspaceSession?.documentSave?.reset()
     importRequest.current++
     cancelRoutingCheck()
     setPendingAzureImport(undefined)
@@ -637,7 +638,7 @@ function App() {
     <header className="topbar unified-topbar unified-topbar-vwan" data-testid="unified-topbar">
       <div className="unified-topbar-left">
         <div className="brand unified-brand">
-          <div className="brand-icon unified-brand-icon" aria-hidden="true">Az</div>
+          <div className="brand-icon unified-brand-icon" aria-hidden="true">AzNetSim</div>
           <h1>Azure Network Simulator</h1>
         </div>
         <WorkspaceMenu />
@@ -764,10 +765,10 @@ function App() {
               {!destinationPrefix && <label className="field"><span>{t("Destination IPv4")}</span><input aria-label={t("Destination IPv4")} value={destination} onChange={(e) => { setDestination(e.target.value); setTracing(false) }} required /></label>}<p className="muted">{t("A prefix selection traces its network address. Choose Custom IPv4 address to test a more-specific destination within that range.")}</p><button className="primary" disabled={!sourceNode || !targetNode || ipv4(destination) === undefined || !simulation.converged}>{t("Show preferred path")}</button>
             </form>
             <p className="muted">{t("Routes may terminate at another advertiser of the same prefix. Reverse paths are calculated independently; symmetry, firewall permissions and host reachability are not assumed. Site ingress uses advertised AS paths.")}</p>
-            {tracing && !groupTrace && sourceNode && targetNode && sourceNode.kind !== 'hub' && targetNode.kind !== 'hub' && nodePrefixes(activeTopology, sourceNode)[0] && <FlowExportControls
+            {tracing && !groupTrace && sourceNode && targetNode && sourceNode.kind !== 'hub' && targetNode.kind !== 'hub' && nodePrefixes(activeTopology, sourceNode)[0] && <Suspense fallback={null}><FlowExportControls
               document={{ mode: 'vwan', topology: activeTopology }}
               flow={{ id: 'selected-flow', kind: 'flow', source: parseNode(source), target: parseNode(target),
-                sourceAddress: nodePrefixes(activeTopology, sourceNode)[0].split('/')[0], destinationAddress: destination, expectation: 'allow' }} />}
+                sourceAddress: nodePrefixes(activeTopology, sourceNode)[0].split('/')[0], destinationAddress: destination, expectation: 'allow' }} /></Suspense>}
             {tracing && <div className="flow-results" aria-live="polite">{paths.map((path, i) => <article key={i} className={`flow-result ${path.status}`}><strong>{'destinationPrefix' in path && `${path.sourceName} → ${path.destinationName} · ${path.destinationPrefix} · `}{path.status === 'unknown' ? t("Not assessed") : path.status === 'delivered' ? t("Reachable") : path.status === 'loop' ? t("Forwarding loop") : t("No route")}{paths.length > 1 ? t(" · path {0}", i + 1) : ''}</strong><p>{pathTitle(path)}</p><details><summary>{t("Why this path?")}</summary><ol>{path.steps.map((step, index) => <li key={index}>{localizeDiagnostic(step)}</li>)}</ol></details></article>)}{!paths.length && <p className="empty">{groupTrace ? t("No matching sources or destination prefixes configured.") : t("No trace available for this source or provisional routing state.")}</p>}</div>}
           </CanvasOverlay>}
           {panel === 'notes' && <CanvasOverlay title={t("Model notes and warnings")} className="model-notes" onClose={closePanel}>

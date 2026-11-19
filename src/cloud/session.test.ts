@@ -3,6 +3,7 @@ import { cloudConfiguration } from './configuration'
 import { cloudSessionKey, createCloudSession } from './session'
 import type { MicrosoftClient } from './microsoft'
 import { CloudHttpError, createCloudClient } from './client'
+import { cloudDocumentKey, createDocumentSaveState } from './document-state'
 
 const config = { clientId: '11111111-1111-4111-8111-111111111111',
   scope: 'api://22222222-2222-4222-8222-222222222222/Cloud.Access', base: 'https://app.test/api/cloud' }
@@ -15,6 +16,118 @@ const microsoft = (): MicrosoftClient => ({
   restore: () => ({ id: 'alice', name: 'Test Alice' }),
   signIn: async () => ({ id: 'alice', name: 'Test Alice' }), signOut: async () => {},
   token: async () => 'test-access-token',
+})
+
+describe('document save provenance', () => {
+  const source = { accountId: 'alice', id: '11111111-1111-4111-8111-111111111111', name: 'Cloud design', etag: '"original"' }
+  const design = { name: 'Local design', nested: { first: 1, second: 2 } }
+  const linked = async () => {
+    const cache = storage(), state = createDocumentSaveState(() => cache)
+    state.setAccount('alice'); state.observe(design, 'azure-net'); state.local(design, 'saved')
+    await state.confirmed(state.begin(source.id, 'alice')!, source, design, 'azure-net')
+    await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('matches'))
+    return { cache, state }
+  }
+  it('reports only acknowledged local writes, including a write reported before the editor commits', () => {
+    const state = createDocumentSaveState(storage)
+    state.observe(design, 'vwan')
+    expect(state.getSnapshot().local).toBe('draft')
+    state.local(design, 'saved')
+    const next = { ...design, name: 'Edit' }
+    state.observe(next, 'vwan')
+    expect(state.getSnapshot().local).toBe('draft')
+    state.local(next, 'unavailable')
+    expect(state.getSnapshot().local).toBe('unavailable')
+    state.local(design, 'saved'); state.observe(design, 'vwan')
+    expect(state.getSnapshot().local).toBe('saved')
+    state.invalidateLocal()
+    expect(state.getSnapshot().local).toBe('unavailable')
+  })
+  it('binds the acknowledged snapshot, leaves subsequent edits dirty and recognizes an equivalent undo', async () => {
+    const { state } = await linked()
+    const ticket = state.begin(source.id, 'alice')!
+    const changed = { ...design, name: 'Edited while uploading' }
+    const acknowledging = state.confirmed(ticket, { ...source, etag: '"next"' }, design, 'azure-net')
+    state.observe(changed, 'azure-net')
+    await acknowledging
+    await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('modified'))
+    state.observe({ nested: { second: 2, first: 1 }, name: design.name }, 'azure-net')
+    await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('matches'))
+  })
+  it('retains only bounded metadata and a fingerprint for same-tab reload, scoped to the account', async () => {
+    const { cache } = await linked()
+    const saved = JSON.parse(cache.getItem(cloudDocumentKey)!)
+    expect(Object.keys(saved).sort()).toEqual(['accountId', 'digest', 'etag', 'id', 'name', 'provider', 'version'])
+    expect(saved).not.toHaveProperty('topology')
+    const restored = createDocumentSaveState(() => cache)
+    restored.observe(design, 'azure-net')
+    expect(restored.getSnapshot().cloud).toBeUndefined()
+    restored.setAccount('alice')
+    await vi.waitFor(() => expect(restored.getSnapshot().cloud?.state).toBe('matches'))
+    restored.setAccount('bob')
+    expect(restored.getSnapshot().cloud).toBeUndefined()
+    expect(cache.getItem(cloudDocumentKey)).toBeNull()
+    restored.setAccount('alice')
+    expect(restored.getSnapshot().cloud).toBeUndefined()
+  })
+  it('never promotes a refreshed ETag and ignores stale account/list responses', async () => {
+    const { state } = await linked()
+    const oldScope = state.scope('alice')
+    state.listed([{ ...source, etag: '"remote"', updatedAt: '' }], oldScope)
+    expect(state.getSnapshot().cloud).toMatchObject({ state: 'changed', etag: source.etag })
+    state.listed([{ ...source, updatedAt: '' }], oldScope)
+    state.listUnavailable(oldScope)
+    expect(state.getSnapshot().cloud?.state).toBe('changed')
+    state.listed([], oldScope)
+    expect(state.getSnapshot().cloud?.state).toBe('missing')
+    state.listUnavailable(oldScope)
+    expect(state.getSnapshot().cloud?.state).toBe('missing')
+    state.setAccount('bob')
+    const bob = { ...source, accountId: 'bob', name: 'Bob save' }
+    await state.confirmed(state.begin(bob.id, 'bob')!, bob, design, 'azure-net')
+    await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('matches'))
+    state.listed([], oldScope); state.listUnavailable(oldScope)
+    expect(state.getSnapshot().cloud).toMatchObject({ accountId: 'bob', state: 'matches' })
+    expect(state.begin(source.id, 'alice')).toBeUndefined()
+  })
+  it('invalidates pending confirmations on document, account and practice boundaries', async () => {
+    const { state } = await linked()
+    for (const change of [() => { state.reset(); state.observe(design, 'azure-net') },
+      () => { state.setAccount('bob'); state.setAccount('alice') },
+      () => { state.setActive(false); state.setActive(true) }]) {
+      const ticket = state.begin(source.id, 'alice')!
+      const acknowledging = state.confirmed(ticket, source, design, 'azure-net')
+      change()
+      expect(await acknowledging).toBe(false)
+      expect(state.getSnapshot().operation).toBe('idle')
+    }
+  })
+  it('does not turn a failed upload into saved state or reuse an earlier list during a new upload', async () => {
+    const { state } = await linked()
+    const oldList = state.scope('alice'), ticket = state.begin(source.id, 'alice')!
+    state.listed([], oldList)
+    expect(state.getSnapshot().cloud?.state).toBe('matches')
+    state.failed(ticket, true)
+    expect(state.getSnapshot()).toMatchObject({ operation: 'failed', cloud: { state: 'changed', etag: source.etag } })
+    state.reset(); state.observe(design, 'azure-net')
+    const fresh = state.begin(source.id, 'alice')!
+    state.failed(fresh, false)
+    expect(state.getSnapshot()).toMatchObject({ operation: 'failed', cloud: undefined })
+  })
+  it('keeps cloud acknowledgement separate from unavailable metadata storage or comparison', async () => {
+    const cache = storage(), state = createDocumentSaveState(() => ({
+      ...cache, setItem: () => { throw new Error('Storage unavailable') },
+    }))
+    state.setAccount('alice'); state.observe(design, 'azure-net')
+    await state.confirmed(state.begin(source.id, 'alice')!, source, design, 'azure-net')
+    await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('matches'))
+    expect(state.getSnapshot().retained).toBe(false)
+    const unavailable = createDocumentSaveState(() => cache, async () => { throw new Error('Digest unavailable') })
+    unavailable.setAccount('alice'); unavailable.observe(design, 'azure-net')
+    await unavailable.confirmed(unavailable.begin(source.id, 'alice')!, source, design, 'azure-net')
+    await vi.waitFor(() => expect(unavailable.getSnapshot().cloud?.state).toBe('unknown'))
+    expect(unavailable.getSnapshot().operation).toBe('idle')
+  })
 })
 
 describe('optional personal-account sessions', () => {

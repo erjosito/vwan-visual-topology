@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react'
+import { createContext, useContext, useSyncExternalStore } from 'react'
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 import type { PlatformDocument } from './platform/contract'
@@ -6,6 +6,7 @@ import type { PracticeRequest, PracticeWorkspace } from './learning/practice-wor
 import type { CourseRunner, LearningObservation, RunnerState } from './learning/runner'
 import type { LedgerState } from './learning/progress-ledger'
 import type { SyncStatus } from './cloud/progress-sync'
+import type { CloudDocumentSource, DocumentSaveState } from './cloud/document-state'
 
 export type WorkspaceEditorHistory =
   | { provider: 'vwan'; topology: Topology; past: Topology[]; future: Topology[]; error: string; saveError: string; backup: string }
@@ -16,7 +17,8 @@ export const WorkspaceSessionContext = createContext<{
   openLibrary: () => void
   presentationPreview?: boolean
   setPresentationPreview?: (preview: boolean) => void
-  openDocument: (input: unknown) => Promise<void>
+  openDocument: (input: unknown, source?: CloudDocumentSource) => Promise<void>
+  documentSave?: DocumentSaveState
   getRequestVersion: () => number
   capture?: unknown
   openPractice?: (request: PracticeRequest, signal?: AbortSignal) => Promise<void>
@@ -46,3 +48,10 @@ export const WorkspaceSessionContext = createContext<{
 } | undefined>(undefined)
 
 export const useWorkspaceSession = () => useContext(WorkspaceSessionContext)
+
+const noSubscribe = () => () => {}
+const noSnapshot = () => undefined
+export function useDocumentSaveState() {
+  const state = useWorkspaceSession()?.documentSave
+  return useSyncExternalStore(state?.subscribe ?? noSubscribe, state?.getSnapshot ?? noSnapshot)
+}
