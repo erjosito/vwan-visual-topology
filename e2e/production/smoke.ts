@@ -146,7 +146,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:japanese-catalog|vnet-community-messages-ja)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:practice-session|PracticeWorkspaceBar)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/flow-gif-codec-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/(?:BgpNeighborsPanel|bgp-neighbors)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:BgpNeighborsPanel|bgp-neighbors|ResilienceResults)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:progress-sync|FlowExportControls|CloneVnetDialog|AddressPrefixEditors|subnet-allocation)-/.test(path))).toBe(false)
     if (mode !== 'vwan') expect(graph.files.some(({ path }: { path: string }) => /\/VnetCommunityEditor-/.test(path))).toBe(false)
