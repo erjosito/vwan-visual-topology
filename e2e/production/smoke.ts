@@ -143,7 +143,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.localGzipBytes).toBeLessThanOrEqual(300_000)
     expect(graph.rawBytes).toBeLessThanOrEqual(1_200_000)
     expect(graph.files.some(({ path }: { path: string }) => /\/packet-flow-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/japanese-catalog-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:japanese-catalog|vnet-community-messages-ja)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:practice-session|PracticeWorkspaceBar)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/flow-gif-codec-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel)-/.test(path))).toBe(false)
