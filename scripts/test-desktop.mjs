@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import { build } from 'esbuild'
 
 const artifacts = resolve('test-artifacts', 'desktop')
+const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8'))
 await mkdir(artifacts, { recursive: true })
 await build({ entryPoints: [resolve('tests', 'fixtures', 'hub-firewall.ts')], bundle: true, platform: 'node',
   format: 'cjs', outfile: join(artifacts, 'hub-firewall-fixture.cjs') })
@@ -17,7 +18,6 @@ let brandedWindowsResources = false
 if (executablePath) {
   const { NtExecutable, NtExecutableResource } = await import('resedit')
   const icon = await readFile(resolve('public', 'desktop-icon.png'))
-  const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8'))
   for (const file of [executablePath, resolve('release', `Azure-Network-Simulator-${version}-x64.exe`)]) {
     const resources = NtExecutableResource.from(NtExecutable.from(await readFile(file))).entries
     expect(resources.some((entry) => entry.type === 3 && Buffer.from(entry.bin).equals(icon))).toBe(true)
@@ -62,6 +62,7 @@ try {
   await page.keyboard.press('Escape')
   const previewSettings = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: 'Help & feedback' }) })
   await previewSettings.locator('summary').click()
+  await expect(previewSettings.getByTestId('app-version')).toHaveText(`AzNetSim ${version}`)
   await expect(previewSettings.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('aznet-add-vnet-btn')).toBeEnabled()

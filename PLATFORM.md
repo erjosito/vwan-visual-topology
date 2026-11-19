@@ -759,6 +759,13 @@ stdio server. `.github/mcp.json` declares the repository-local server, launched
 from this repository root after building. Review/enable it through your client's
 trust flow; the configuration does not grant blanket permissions.
 
+The [independent release pipeline](docs/releasing.md) can also publish a portable
+`mcp-v<version>` download without building the web app or Windows installer.
+Extract into a new directory, run `npm ci --omit=dev --ignore-scripts`, and
+configure the client to launch `node` with the absolute path to `mcp.cjs`.
+Restart the client/server to use the new package; web and Windows releases do
+not replace an already-running MCP process.
+
 The simulation tools are `get_capabilities`, `get_schema`, `start_simulation`,
 `get_job`, `get_evidence`, `cancel_job`. They provide native examples,
 bounded JSON evidence chunks (up to 16,000 characters), explicit job status
