@@ -3,9 +3,9 @@ import { cloneAzNetTopology, sampleHubSpokeFirewallUdr, validateAzNetTopology } 
 import { parseAzNetTopology } from './admission'
 import { validateInventory } from '../inventory'
 import {
-  availableSubnetPrefix, nextSubnetAddress, resizeAzSubnet, subnetAddressError,
-  subnetNeedsReaddressing, usableSubnetAddress, vnetAddressError,
+  availableSubnetPrefix, nextSubnetAddress, subnetAddressError, usableSubnetAddress, vnetAddressError,
 } from './addressing'
+import { resizeAzSubnet, subnetNeedsReaddressing } from './subnet-address-editing'
 
 describe('VNet and subnet address consistency', () => {
   it('distinguishes malformed CIDRs, containment failures and valid secondary address spaces', () => {

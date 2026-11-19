@@ -1,5 +1,4 @@
-import { lazy, Suspense, useEffect, useEffectEvent, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { InputHTMLAttributes } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
 import { FailurePanel } from '../FailurePanel'
@@ -7,7 +6,7 @@ import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
-import { availableSubnetPrefix, nextSubnetAddress, resizeAzSubnet, subnetAddressError, subnetNeedsReaddressing, vnetAddressError } from './addressing'
+import { availableSubnetPrefix, nextSubnetAddress } from './addressing'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
@@ -154,21 +153,8 @@ const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
 const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
-
-function PrefixInput({ value, deferred, onCommit, validate, ...props }: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'defaultValue' | 'onChange' | 'onBlur'> & {
-  value: string; deferred: boolean; onCommit: (value: string) => void; validate: (value: string) => string | undefined
-}) {
-  const [draft, setDraft] = useState(value)
-  const errorId = useId()
-  const error = validate(deferred ? draft : value)
-  return <><input {...props} value={deferred ? draft : value}
-    aria-invalid={!!error}
-    aria-describedby={error ? [props['aria-describedby'], errorId].filter(Boolean).join(' ') : props['aria-describedby']}
-    style={{ ...props.style, color: error ? 'var(--error)' : props.style?.color, borderColor: error ? 'var(--error)' : props.style?.borderColor }}
-    onChange={(event) => deferred ? setDraft(event.target.value) : onCommit(event.target.value)}
-    onBlur={() => { if (deferred && draft !== value) onCommit(draft) }} />
-    {error && <span id={errorId} role="alert" style={{ color: 'var(--error)', fontSize: 11, maxWidth: 250 }}>{t(error)}</span>}</>
-}
+const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.VnetPrefixEditor })))
+const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
 
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const language = useLanguage()
@@ -4496,31 +4482,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 <option key={reg} value={reg} />
                               ))}
                             </datalist>
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Address spaces')}</span>
-                            <PrefixInput
-                              key={topology.inventory ? vnet.prefixes.join(', ') : undefined}
-                              type="text"
-                              className="aznet-input"
-                              value={vnet.prefixes.join(', ')}
-                              deferred={topology.inventory !== undefined}
-                              aria-label={t('VNet CIDR prefixes {0}', vnet.name)}
-                              title="VNet CIDR prefixes (comma-separated)"
-                              validate={(raw) => vnetAddressError({ ...vnet, prefixes: raw.split(',').map((prefix) => prefix.trim()).filter(Boolean) })}
-                              onCommit={(raw) => {
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) {
-                                    const parsed = raw
-                                      .split(',')
-                                      .map((p) => p.trim())
-                                      .filter(Boolean)
-                                    v.prefixes = parsed
-                                  }
-                                })
-                              }}
-                              style={{ width: 130, fontSize: 11.5 }}
-                            />
-                            </label>
+                            <Suspense fallback={null}><VnetPrefixEditor topology={topology} vnet={vnet}
+                              preview={workspaceSession?.presentationPreview} onChange={commitTopology} /></Suspense>
                             <VnetCommunityEditor
                               key={vnet.id}
                               value={vnet.bgpCommunities}
@@ -5297,29 +5260,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 style={{ fontWeight: 700, width: 145 }}
                               />
                               </label>
-                              <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Subnet prefix')}</span>
-                              <PrefixInput
-                                key={topology.inventory ? subnet.prefix : undefined}
-                                type="text"
-                                className="aznet-input"
-                                data-testid={`aznet-subnet-prefix-${subnet.id}`}
-                                aria-label={t('Subnet prefix {0}', subnet.name)}
-                                value={subnet.prefix}
-                                deferred={topology.inventory !== undefined}
-                                validate={(prefix) => subnetAddressError(vnet.prefixes, prefix)}
-                                onCommit={(val) => {
-                                  commitTopology((draft) => {
-                                    resizeAzSubnet(draft, vnet.id, subnet.id, val)
-                                  })
-                                }}
-                                style={{ width: 120, fontFamily: 'monospace', fontSize: 11.5 }}
-                              />
-                              </label>
-                              {subnetNeedsReaddressing(topology, vnet, subnet.id) && <button type="button" className="aznet-btn"
-                                title={t('Reassign stored resource IPs into this subnet and update matching next hops.')}
-                                onClick={() => commitTopology((draft) => resizeAzSubnet(draft, vnet.id, subnet.id, subnet.prefix))}>
-                                {t('Update resource addresses')}
-                              </button>}
+                              <Suspense fallback={null}><SubnetPrefixEditor topology={topology} vnet={vnet} subnet={subnet}
+                                preview={workspaceSession?.presentationPreview} onChange={commitTopology} /></Suspense>
                               <label
                                 style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11.5 }}
                               >
