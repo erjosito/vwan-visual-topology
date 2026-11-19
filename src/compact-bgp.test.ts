@@ -16,14 +16,23 @@ it('renders compact rows in numeric prefix/selection/ID order without discarding
     natOriginalPrefix: '192.168.0.0/16', natRuleId: 'original-nat', routeMapTrace: ['Original policy trace.'],
   }
   const entries = [
-    base, { ...base, id: 'selected-b', preferred: true }, { ...base, id: 'selected-a', preferred: true },
+    base, { ...base, id: 'selected-b', asPath: [65515], preferred: true },
+    { ...base, id: 'selected-a', asPath: [12076], preferred: true },
+    { ...base, id: 'unique-prefix', prefix: '10.3.0.0/16', preferred: true },
     { ...base, id: 'earlier-prefix', prefix: '10.2.0.0/16' },
   ]
   const before = structuredClone(entries)
   const html = renderToStaticMarkup(createElement(BgpRouteTable, { entries, available: true }))
   const ids = [...html.matchAll(/data-route-id="([^"]+)"/g)].map((match) => match[1])
-  expect(ids).toEqual(['earlier-prefix', 'selected-a', 'selected-b', 'alternate'])
-  expect(html.match(/data-preferred="true"/g)).toHaveLength(2)
+  expect(ids).toEqual(['earlier-prefix', 'unique-prefix', 'selected-a', 'selected-b', 'alternate'])
+  expect(html.match(/data-preferred="true"/g)).toHaveLength(3)
+  expect(html.match(/aria-label="Model tie"/g)).toHaveLength(2)
+  expect(html.match(/aria-label="Preferred"/g)).toHaveLength(1)
+  expect(html.match(/aria-label="Alternative"/g)).toHaveLength(2)
+  expect(html).toContain('=\t10.20.0.0/16\tForwarding NVA (10.0.0.4)\t12076')
+  expect(html).toContain('=\t10.20.0.0/16\tForwarding NVA (10.0.0.4)\t65515')
+  expect(html).toContain('*\t10.3.0.0/16\t')
+  expect(html).toContain('Ties do not confirm a unique BGP best path or real-router ECMP.')
   expect(html).toContain('<th scope="col">Network</th>')
   expect(html).not.toContain('route-prefix-heading')
   expect(html).toContain('Forwarding NVA (10.0.0.4)')

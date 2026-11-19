@@ -3,6 +3,8 @@ import { t } from './i18n'
 import { registerJapaneseMessages } from './messages'
 import './compact-bgp.css'
 
+export const modeledBgpLegend = '* Preferred; = model tie; - alternative. Ties do not confirm a unique BGP best path or real-router ECMP. Selection is not a validity or live-session check.'
+
 registerJapaneseMessages({
   'Network': 'ネットワーク',
   'Evidence': '証跡',
@@ -12,7 +14,8 @@ registerJapaneseMessages({
   'Route details': 'ルートの詳細',
   'Copyable route text': 'コピー用ルートテキスト',
   'Select route text to copy': 'コピーするルートテキストを選択',
-  '* Preferred; - alternative. Selection is not a validity or live-session check.': '* 優先、- 代替。選択状態は有効性や実際のセッションの確認ではありません。',
+  [modeledBgpLegend]: '* 優先、= モデル上の同順位、- 代替。同順位は一意の BGP 最適パスや実機の ECMP を確認するものではありません。選択状態は有効性や実際のセッションの確認ではありません。',
+  'Model tie': 'モデル上の同順位',
   '* Selected by ARS; ? ARS selection not indicated. NVA best-path selection is not modeled.': '* ARS が選択、? ARS の選択情報なし。NVA の最適パス選択はモデル化されていません。',
   '? Selection not assessed in this received/advertised scope.': '? この受信/広告スコープでは選択は評価されません。',
   'Azure provenance and selection evidence': 'Azure の出所と選択の証跡',
@@ -21,7 +24,7 @@ registerJapaneseMessages({
 export interface CompactBgpRow {
   id: string
   prefix: string
-  status: '*' | '-' | '?'
+  status: '*' | '=' | '-' | '?'
   statusLabel: string
   nextHop: string
   asPath: number[]
