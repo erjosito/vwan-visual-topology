@@ -203,9 +203,10 @@ route-map causation. The first-map comparison was again confounded.
 ### Map-only recovery, without deleting the healthy ARS
 
 The failed map alone was deleted and its absence verified while preserving
-the healthy ARS and VPN lab. One recreation was acknowledged at 09:06:06 UTC
-and reached native Succeeded at 09:40:46 UTC. The ARS also remained Succeeded
-and there were positively zero map assignments. This follows the documented
+the healthy ARS and VPN lab. One recreation was acknowledged at 09:06:06 UTC.
+Native Activity Log records success at 09:38:42 UTC; a direct resource read
+confirmed Succeeded at 09:40:46 UTC. The ARS also remained Succeeded and there
+were positively zero map assignments. This follows the documented
 [failed-map delete/recreate guidance](https://learn.microsoft.com/en-us/azure/route-server/route-maps-how-to).
 It is a recovery control, not a pristine first-map upgrade or an explanation
 of either initial failure.
