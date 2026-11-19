@@ -18,7 +18,7 @@ import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
 import { InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
-import { previewVnetActions } from '../context-actions'
+import { previewSubnetActions, previewVnetActions } from '../context-actions'
 import { useWorkspaceSession } from '../workspace-context'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
@@ -1718,10 +1718,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `Subnet · ${vnet.name} / ${subnet.name}`,
         actions: [
-          { label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) },
-          ...pathContextActions(endpointOptions.filter((e) => e.key === `subnet:${vnet.id}:${subnet.id}`)),
+          { label: t('Open VNet detail'), previewPrimary: true, onSelect: () => openDetail(vnet.id) },
+          ...pathContextActions(endpointOptions.filter((e) => e.key === `subnet:${vnet.id}:${subnet.id}`)).map((action) => ({ ...action, previewPrimary: true })),
           {
             label: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...',
+            previewPrimary: true,
             onSelect: () => {
               setSelected({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
               setActiveTab('editor')
@@ -1729,6 +1730,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           },
           {
             label: 'Inspect Subnet Effective Routes',
+            previewPrimary: true,
             onSelect: () => {
               inspectRoutes({ kind: 'subnet', vnetId: vnet.id, subnetId: subnet.id })
             },
@@ -1836,6 +1838,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       return {
         title: `Gateway · ${gw.name} (${gw.kind.toUpperCase()})`,
         actions: [
+          ...(workspaceSession?.presentationPreview ? [{ label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) }] : []),
           {
             label: 'Inspect Gateway BGP RIB',
             onSelect: () => {
@@ -2685,8 +2688,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       label: `Restore ${failureLabel(fault)}`, onSelect: () => restoreFault(fault),
     })) }
     const ordinary = getOrdinaryContextMenuSpec(target)
-    const presented = ordinary && workspaceSession?.presentationPreview && !fullActions && target.kind === 'vnet'
-      ? previewVnetActions(ordinary.actions, () => setToolsOpenRequest((request) => request + 1)) : ordinary?.actions ?? []
+    let presented = ordinary?.actions ?? []
+    if (ordinary && workspaceSession?.presentationPreview && !fullActions) {
+      if (target.kind === 'vnet') presented = previewVnetActions(ordinary.actions, () => setToolsOpenRequest((request) => request + 1))
+      if (target.kind === 'subnet') presented = previewSubnetActions(ordinary.actions)
+    }
     const domain = failureDomains.find((f) =>
       (f.kind === 'site' && target.kind === 'site' || f.kind === 'er-location' && target.kind === 'er-location') && f.id === id ||
       f.kind === 'region' && ['vnet', 'subnet', 'gateway', 'route-server', 'appliance', 'vwan-hub'].includes(target.kind) &&

@@ -5,6 +5,209 @@ import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
+test.describe('subnet and gateway menu disclosure', () => {
+  test.use({ hasTouch: true })
+  test('preview keeps unknown-region warnings and unavailable subnet destinations at the root', async ({ page }) => {
+    const topology = vpnGatewayModeTopology()
+    topology.vnets[0].region = ''
+    topology.vnets[0].subnets = [topology.vnets[0].subnets[0]]
+    delete topology.vnets[0].routeServer
+    topology.sites = []
+    topology.vpnConnections = []
+    await page.addInitScript((topology) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    }, topology)
+    await page.goto('/?mode=full')
+    for (const node of [page.getByTestId('aznet-subnet-gateway'), page.getByTestId('aznet-chip-vpn')]) {
+      await node.focus()
+      await page.keyboard.press('Shift+F10')
+      await expect(page.getByRole('menuitem', { name: 'Azure region failure unassessed — set an explicit recognized region', exact: true })).toBeDisabled()
+      if (await node.getAttribute('data-testid') === 'aznet-subnet-gateway') {
+        await expect(page.getByRole('menuitem', { name: 'Open path explorer', exact: true })).toBeEnabled()
+        await page.getByRole('menuitem', { name: 'Show path to', exact: true }).click()
+        await expect(page.getByRole('menuitem', { name: 'All on-premises sites', exact: true })).toBeDisabled()
+        await page.keyboard.press('Escape')
+      }
+      await page.keyboard.press('Escape')
+      await expect(node).toBeFocused()
+    }
+  })
+  for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja']) {
+    test(`${mode}: ${language} preview subnet menu keeps direct inspection and shallow original policy actions`, async ({ page }, info) => {
+      await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+      const topology = vpnGatewayModeTopology()
+      topology.vnets[0].subnets[2] = { ...topology.vnets[0].subnets[2], routeTableId: 'imported',
+        defaultOutboundAccess: false, internetEgressStatus: 'unknown', privateEndpointNetworkPolicies: 'Enabled',
+        privateEndpoints: [{ id: 'pe', name: 'Imported endpoint', ipAddress: '10.0.1.10', serviceName: 'service.example.test' }] }
+      topology.udrTables = [{ id: 'imported', name: 'Imported table', disableBgpRoutePropagation: true,
+        disablePeeringRoutePropagation: true, routes: [] }]
+      await page.addInitScript(({ topology, language }) => {
+        localStorage.setItem('aznet-ui-preview:v1', 'true')
+        localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+        localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+      }, { topology, language })
+      await page.goto(`/?mode=${mode}`)
+      const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+      const before = await read()
+      const subnet = page.getByTestId('aznet-subnet-app')
+      const open = async () => { await subnet.focus(); await page.keyboard.press('Shift+F10') }
+      const groupName = language === 'ja' ? 'サブネット ポリシー' : 'Subnet policies'
+      await open()
+      const root = page.getByRole('menu').first()
+      await expect(root.getByRole('menuitem', { name: 'Simulate failure of Azure region West Europe', exact: true })).toBeEnabled()
+      await expect(root.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true })).toBeVisible()
+      await expect(root.getByRole('menuitem', { name: 'Open path explorer', exact: true })).toBeEnabled()
+      await expect(root.getByRole('menuitem', { name: 'Show path to', exact: true })).toBeEnabled()
+      await expect(root.getByRole('menuitem', { name: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...', exact: true })).toBeVisible()
+      await expect(root.getByRole('menuitem', { name: 'Route Table (Imported table)', exact: true })).toBeVisible()
+      await expect(root.getByRole('menuitem', { name: 'Delete Subnet', exact: true })).toHaveClass(/danger/)
+      const previewCount = await root.getByRole('menuitem').count()
+      const group = root.getByRole('menuitem', { name: groupName, exact: true })
+      await group.focus()
+      await page.keyboard.press('ArrowRight')
+      const policies = page.getByRole('menu', { name: groupName, exact: true })
+      await expect(policies.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true })).toBeFocused()
+      await expect(policies.locator('[aria-haspopup="menu"]')).toHaveCount(0)
+      expect((await new AxeBuilder({ page }).include('.context-menu-tree').analyze()).violations).toEqual([])
+      await page.keyboard.press('Escape')
+      await expect(group).toBeFocused()
+      await page.keyboard.press('Escape')
+      await expect(subnet).toBeFocused()
+      // Touch opens the same shallow group; its handler must edit the imported table, not a copy.
+      await open()
+      await group.tap()
+      await policies.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true }).tap()
+      await expect.poll(async () => (await read()).udrTables[0].disableBgpRoutePropagation).toBe(false)
+      await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+      expect(await read()).toEqual(before)
+      await open()
+      await root.getByRole('menuitem', { name: 'Route Table (Imported table)', exact: true }).click()
+      const association = page.getByRole('menu', { name: 'Route Table (Imported table)', exact: true })
+      await expect(association.getByRole('menuitem', { name: 'Imported table (Associated)', exact: true })).toBeVisible()
+      await expect(association.locator('[aria-haspopup="menu"]')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+      await info.attach('preview-subnet-menu', { body: await page.screenshot({ path: info.outputPath('preview-subnet-menu.png') }), contentType: 'image/png' })
+      for (const menu of await page.getByRole('menu').all()) {
+        const bounds = (await menu.boundingBox())!
+        expect(bounds.x).toBeGreaterThanOrEqual(0)
+        expect(bounds.x + bounds.width).toBeLessThanOrEqual(language === 'ja' ? 390 : 1440)
+      }
+      await page.keyboard.press('Escape')
+      await open()
+      await page.getByRole('menuitem', { name: language === 'ja' ? 'VNet の詳細を開く' : 'Open VNet detail', exact: true }).click()
+      const detail = page.getByTestId('network-detail-dialog')
+      await detail.locator('[data-subnet-id="app"] .detail-subnet-target').focus()
+      await page.keyboard.press('ContextMenu')
+      await expect(detail.getByRole('menuitem', { name: groupName, exact: true })).toHaveCount(0)
+      await detail.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true }).click()
+      await expect(detail).toHaveCount(0)
+      await expect.poll(async () => (await read()).udrTables[0].disableBgpRoutePropagation).toBe(false)
+      await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+      expect(await read()).toEqual(before)
+      await page.getByTestId('ui-preview-toggle').click()
+      await open()
+      await expect(page.getByRole('menuitem', { name: groupName, exact: true })).toHaveCount(0)
+      await expect(page.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true })).toBeVisible()
+      const legacyCount = await root.getByRole('menuitem').count()
+      expect(legacyCount).toBeGreaterThan(previewCount)
+      await info.attach('subnet-menu-root-counts', { body: JSON.stringify({ mode, language, previewCount, legacyCount }), contentType: 'application/json' })
+      await info.attach('legacy-subnet-menu', { body: await page.screenshot({ path: info.outputPath('legacy-subnet-menu.png') }), contentType: 'image/png' })
+      await page.keyboard.press('Escape')
+      await page.getByTestId('ui-preview-toggle').click()
+      await open()
+      await page.getByRole('menuitem', { name: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...', exact: true }).click()
+      const row = page.getByTestId('aznet-subnet-row-app')
+      await expect(row.getByTestId('aznet-subnet-rt-select-app')).toHaveValue('imported')
+      await expect(row.getByTestId('aznet-subnet-pe-policy-app')).toHaveValue('Enabled')
+      await row.locator('summary').click()
+      await expect(row.getByRole('status')).toContainText(language === 'ja' ? '評価されていません' : 'Internet access is not assessed')
+      expect(await read()).toEqual(before)
+      await page.keyboard.press('Escape')
+      // Visible Workspace controls still use the full, ungrouped source catalog.
+      await subnet.click()
+      await page.getByRole('button', { name: language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', exact: true }).click()
+      const tools = page.getByRole('complementary')
+      await tools.getByRole('searchbox').fill('Enable GWroutes')
+      await expect(tools.getByRole('button', { name: 'Enable GWroutes Propagation on Route Table', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await open()
+      await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
+      await expect(page.getByTestId('aznet-effective-route-table')).toBeVisible()
+      await page.keyboard.press('Escape')
+      await open()
+      await page.getByRole('menuitem', { name: 'Open path explorer', exact: true }).click()
+      await expect(page.getByTestId('aznet-path-tracer-panel')).toBeVisible()
+      expect(await read()).toEqual(before)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    })
+
+    test(`${mode}: ${language} preview gateway stays minimal with owner detail, inactive identity and restore-only faults`, async ({ page }) => {
+      await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+      const topology = vpnGatewayModeTopology()
+      topology.vnets[0].gateways[0].enabled = false
+      topology.vnets[0].gateways[0].activeActive = false
+      await page.addInitScript(({ topology, language }) => {
+        localStorage.setItem('aznet-ui-preview:v1', 'true')
+        localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+        localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+      }, { topology, language })
+      await page.goto(`/?mode=${mode}`)
+      const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+      const gateway = page.getByTestId('aznet-chip-vpn')
+      const open = async () => { await gateway.focus(); await page.keyboard.press('ContextMenu') }
+      await expect(gateway).toHaveAttribute('data-disabled', 'true')
+      await expect(gateway).toHaveAccessibleName(/OFF.*Standalone VPN.*Disabled/)
+      await open()
+      await expect(page.getByRole('menuitem', { name: 'Inspect Gateway BGP RIB', exact: true })).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true })).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: 'Remove Vpn Gateway', exact: true })).toHaveClass(/danger/)
+      await expect(page.getByRole('menu').locator('[aria-haspopup="menu"]')).toHaveCount(0)
+      await page.getByRole('menuitem', { name: 'Inspect Gateway BGP RIB', exact: true }).click()
+      await expect(page.getByRole('table', { name: language === 'ja' ? '指定ルーターの BGP テーブル' : 'Requested router BGP table', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await open()
+      const detailLabel = language === 'ja' ? 'VNet の詳細を開く' : 'Open VNet detail'
+      await page.getByRole('menuitem', { name: detailLabel, exact: true }).tap()
+      const detail = page.getByTestId('network-detail-dialog')
+      await expect(detail).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(gateway).toBeFocused()
+      await open()
+      await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
+      const settings = page.getByTestId('vpn-gateway-settings-vpn')
+      await expect(settings.getByRole('combobox')).toHaveValue('active-standby')
+      await expect(settings).toContainText(language === 'ja' ? 'モデル化しません' : 'does not model instance failure')
+      await page.keyboard.press('Escape')
+      await page.getByTestId('ui-preview-toggle').click()
+      await open()
+      await expect(page.getByRole('menuitem', { name: detailLabel, exact: true })).toHaveCount(0)
+      await expect(page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await page.getByTestId('ui-preview-toggle').click()
+      await page.getByTestId('aznet-vnet-hub').locator(':scope > .network-node').focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'Simulate failure of Azure region West Europe', exact: true }).click()
+      for (const child of [gateway, page.getByTestId('aznet-subnet-app')]) {
+        await child.focus()
+        await page.keyboard.press('Shift+F10')
+        await expect(page.getByRole('menuitem')).toHaveCount(1)
+        await expect(page.getByRole('menuitem')).toHaveText('Restore Azure region West Europe')
+        await page.keyboard.press('Escape')
+        await expect(child).toBeFocused()
+      }
+      await open()
+      await page.getByRole('menuitem', { name: 'Restore Azure region West Europe', exact: true }).click()
+      expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+    })
+  }
+})
+
 async function openVnetConfiguration(page: Page, mode: string, topology: AzNetTopology) {
   await page.goto(`/?mode=${mode}`)
   await page.locator('input[data-desktop-import]').setInputFiles({
