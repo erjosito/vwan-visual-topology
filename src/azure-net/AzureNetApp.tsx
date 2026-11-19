@@ -4416,7 +4416,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               const vnetEditor = showVnetEditor && (
                 <InspectorSection key={`vnet-${selectedVnetId}`} title={t('VNet configuration')}
                   summary={filteredVnets.map(vnet => `${vnet.name} · ${vnet.prefixes.join(', ')}`).join('; ')}
-                  initialOpen={guidanceNavigation && selected.kind === 'vnet'}>
+                  initialOpen={guidanceNavigation && selected.kind === 'vnet' || selected.kind === 'gateway' || selected.kind === 'route-server'}>
                 <div className="aznet-card" data-testid="aznet-vnet-elements-editor">
                   <h3 hidden={workspaceSession?.presentationPreview}>VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)</h3>
                   {filteredVnets.map((vnet) => {
@@ -4879,7 +4879,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               )
               const routeTableEditor = showVnetEditor && (
                 <InspectorSection key={`routes-${selectedVnetId}`} title={t('Route tables')}
-                  summary={t('{0} route tables', topology.udrTables.length)}
+                  summary={t('{0} route tables', filteredUdrTables.length || topology.udrTables.length)}
                   initialOpen={guidanceNavigation && selected.kind === 'subnet'}>
                 <div className="aznet-card" data-testid="aznet-udr-editor">
                   <div
@@ -5198,7 +5198,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               )
               const subnetEditor = showVnetEditor && (
                 <InspectorSection key={`subnets-${selectedVnetId}`} title={t('Subnet configuration')}
-                  summary={t('{0} subnets', filteredVnets.reduce((count, vnet) => count + vnet.subnets.length, 0))} initialOpen={false}>
+                  summary={t('{0} subnets', selected.kind === 'subnet' ? 1 : filteredVnets.reduce((count, vnet) => count + vnet.subnets.length, 0))}
+                  initialOpen={!guidanceNavigation && selected.kind === 'subnet'}>
                 <div className="aznet-card" data-testid="aznet-subnet-security-editor">
                   <h3 hidden={workspaceSession?.presentationPreview}>Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies</h3>
                   <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('These settings do not prove Internet or private-service reachability.')}</p>
