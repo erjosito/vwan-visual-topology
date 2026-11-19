@@ -9,7 +9,7 @@ import { runnerLabels } from '../src/learning/runner-content'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
-import { completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { advanceLearningTask, completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
 
 async function show(page: Page, taskId: string, guidanceId: string, language: 'en' | 'ja') {
   const task = scenarioBundle.lessons.flatMap((lesson) => lesson.tasks).find((task) => task.id === taskId)!
@@ -59,6 +59,7 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
       const card = await openTable(page, taskId, tableId, language)
       await card.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
       await card.locator('tbody tr').last().locator('input[type="text"]').nth(1).fill(prefix)
+      await card.locator('tbody tr').last().locator('input[type="text"]').nth(2).fill('10.20.1.4')
     }
   }
   if (id === 'colocated-chain') {
@@ -110,6 +111,76 @@ async function configureHybrid(page: Page, taskId: string, language: 'en' | 'ja'
 }
 
 for (const language of ['en', 'ja'] as const) {
+  test(`${language}: contextual first exercise awards automatically but keeps teaching and documentation until Next`, async ({ page }) => {
+    test.setTimeout(90_000)
+    await page.goto('/?mode=full')
+    await page.locator('header [data-language-selector]').selectOption(language)
+    await page.getByTestId('learning-open').click()
+    const panel = learningSidebar(page)
+    await expect(panel.getByTestId('learning-scenario-context')).toHaveText(scenarioBundle.lessons[0].context![language])
+    await loadLearningNetwork(page, language)
+    await expect(panel.getByTestId('learning-debrief')).toBeVisible()
+    await page.waitForTimeout(2200)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.load')
+    await advanceLearningTask(page, language)
+    await expect(panel.getByTestId('learning-task')).toContainText(language === 'en' ? 'Effective routes' : '有効なルート')
+    await expect(panel.getByTestId('learning-task')).toContainText('10.22.0.0/16')
+    await expect(panel.getByTestId('learning-task')).not.toContainText('Record the inspection')
+    await show(page, 'private-link.inspect', 'private-link.before-guide', language)
+    const debrief = panel.getByTestId('learning-debrief')
+    await expect(debrief).toContainText('BGP')
+    await expect(debrief).toContainText('UDR')
+    await expect(debrief).toContainText('VirtualAppliance')
+    await expect(debrief).toContainText('None')
+    await expect(panel.getByTestId('learning-celebration')).toContainText('+5')
+    const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
+    expect(JSON.parse(awards!).completions).toHaveLength(2)
+    await page.context().route('https://learn.microsoft.com/**', (route) => route.fulfill({ contentType: 'text/html', body: '<title>Microsoft Learn reference fixture</title>' }))
+    const reference = debrief.getByRole('link').first()
+    await expect(reference).toHaveAttribute('target', '_blank')
+    await expect(reference).toHaveAttribute('rel', 'noopener noreferrer')
+    const [documentation] = await Promise.all([page.waitForEvent('popup'), reference.click()])
+    await expect(documentation).toHaveURL(scenarioBundle.lessons[0].tasks[1].debrief!.references[0].url)
+    expect(await documentation.evaluate(() => window.opener)).toBeNull()
+    await documentation.close()
+    await page.bringToFront()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.inspect')
+    await expect(debrief).toBeVisible()
+    await panel.getByRole('button', { name: sidebarLabels.pause[language], exact: true }).click()
+    await page.getByTestId('learning-open').click()
+    await expect(debrief).toBeVisible()
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+    await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.repair')
+    await expect(panel.locator('#learning-task')).toBeFocused()
+    expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+    const practice = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+    await panel.getByRole('button', { name: runnerLabels.back[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.inspect')
+    await expect(debrief).toContainText('BGP')
+    await expect(panel.locator('#learning-debrief-title')).toBeFocused()
+    await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.repair')
+    expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+    await completeLearningTasks(page, 4, language)
+    const connected = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).document.topology.vnetPeerings, practiceWorkspaceKey)
+    await completeLearningTasks(page, 1, language)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'inspection-bypass.load')
+    await expect(debrief).toContainText(language === 'en' ? 'hub VNet' : 'ハブ VNet')
+    await page.waitForTimeout(2200)
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'inspection-bypass.load')
+    const extended = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).document.topology, practiceWorkspaceKey)
+    expect(extended.vnetPeerings).toEqual(connected)
+    expect(extended.vnets.map((vnet: { id: string }) => vnet.id)).toEqual(['a', 'b', 'c', 'hub'])
+    expect(extended.udrTables.map((table: { routes: unknown[] }) => table.routes)).toEqual([[], []])
+    await panel.getByRole('button', { name: runnerLabels.back[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.explain')
+    await panel.getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
+    await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'inspection-bypass.load')
+    expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).document.topology, practiceWorkspaceKey)).toEqual(extended)
+  })
+
   test(`${language}: complete the scenario edition through real native controls and preserve the design`, async ({ page }) => {
     test.setTimeout(360_000)
     await page.goto('/?mode=full')
@@ -120,7 +191,27 @@ for (const language of ['en', 'ja'] as const) {
     for (const { lesson, task } of orderedTasks(scenarioBundle)) {
       await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', task.id)
       const check = scenarioBundle.checks.find((entry) => entry.id === task.checkId)!
-      if (check.kind === 'scenario.loaded') await loadLearningNetwork(page, language)
+      if (check.kind === 'scenario.loaded') {
+        if (lesson.id === scenarioBundle.course.lessonOrder[0]) await loadLearningNetwork(page, language)
+        else await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null')?.scenarioId, practiceWorkspaceKey)).toBe(lesson.scenarioId)
+      }
+      if (task.id === 'inspection-bypass.connect') {
+        for (const vnetId of ['a', 'b']) {
+          await show(page, task.id, `inspection-bypass.peer-${vnetId}`, language)
+          await learningAnchor(page, 'peer-menu', vnetId).click()
+          await learningAnchor(page, 'peer-target', vnetId, 'hub').click()
+        }
+      }
+      if (task.id === 'inspection-bypass.summary') {
+        for (const tableId of ['application-policy', 'partner-policy']) {
+          const card = await openTable(page, task.id, tableId, language)
+          await card.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
+          const inputs = card.locator('tbody tr').last().locator('input[type="text"]')
+          await inputs.nth(1).fill('10.0.0.0/8')
+          await inputs.nth(2).fill('10.20.1.4')
+          await inputs.nth(2).press('Tab')
+        }
+      }
       if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') {
         if (task.id === 'ha-return-path.verify') await probeHa(page, task.id, language, 'symmetric')
         await panel.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
@@ -128,7 +219,7 @@ for (const language of ['en', 'ja'] as const) {
       if (check.kind === 'connections.configured') {
         await configureHybrid(page, task.id, language)
       }
-      if (check.kind === 'requirements.satisfied' || check.kind === 'hub-associations.configured') {
+      if ((check.kind === 'requirements.satisfied' || check.kind === 'hub-associations.configured') && !task.id.endsWith('.connect')) {
         await repair(page, lesson.id, language)
       }
       if (check.kind === 'quiz.answered') {
@@ -137,6 +228,8 @@ for (const language of ['en', 'ja'] as const) {
         await panel.getByRole('radio', { name: answer.text[language], exact: true }).check()
         await panel.getByRole('button', { name: runnerLabels.submit[language], exact: true }).click()
       }
+      await expect(panel.getByTestId('learning-debrief')).toContainText(task.debrief!.paragraphs[0][language])
+      await advanceLearningTask(page, language)
       await expect(panel.locator(`[data-task-id="${task.id}"]`)).toHaveCount(0)
     }
     await expect(panel.getByRole('heading', { name: runnerLabels.done[language], exact: true })).toBeVisible()
@@ -192,7 +285,7 @@ test('default mobile table guidance preserves practice and requires each exact m
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
-  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1825$/)
+  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', new RegExp(`Scenario edition · Black belt · ${completions.reduce((sum, task) => sum + task.points, 0)}$`))
   await page.getByTestId('learning-open').click()
   await completeLearningTasks(page, 1)
   const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
@@ -224,6 +317,7 @@ test('default mobile table guidance preserves practice and requires each exact m
   await expect(learningSidebar(page).getByTestId('learning-feedback')).toHaveCount(0)
   await routes.evaluate((element) => { element.scrollLeft = 0 })
   await expect(prefix).toBeInViewport()
+  await advanceLearningTask(page)
   await expect(learningSidebar(page).locator('[data-task-id="multihub-labels.compare"]')).toHaveCount(0)
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
 })
@@ -243,7 +337,7 @@ test('default mobile connection guidance never configures the assessed hybrid ba
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
-  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1575$/)
+  await expect(page.getByTestId('learning-status')).toHaveAttribute('title', new RegExp(`Scenario edition · Black belt · ${completions.reduce((sum, task) => sum + task.points, 0)}$`))
   await page.getByTestId('learning-open').click()
   await completeLearningTasks(page, 2)
   const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)

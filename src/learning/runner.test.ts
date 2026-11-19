@@ -58,7 +58,51 @@ function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
 }
 
 describe('evidence-gated course runner', () => {
-  it('automatically verifies and awards once, but requires deliberate quiz commitment and fresh exact inspections', async () => {
+  it('requires both hub peerings and enabled access, not just the first connection', async () => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'inspection-bypass.connect') }, scenarioBundle)
+    h.load(1)
+    const connect = (vnetAId: string) => h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      document.topology.vnetPeerings.push({ ...structuredClone(document.topology.vnetPeerings[0]), id: `learner-${vnetAId}`, vnetAId, vnetBId: 'hub' })
+    })
+    connect('a')
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    connect('b')
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('passed')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      document.topology.vnetPeerings[2].bToA.allowVirtualNetworkAccess = false
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+  })
+
+  it('requires enabled appliance UDRs on each owned subnet association before completing the introductory policy task', async () => {
+    const h = harness({ completions: beforeTask(scenarioBundle, 'inspection-bypass.summary') }, scenarioBundle)
+    h.load(1)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      for (const table of document.topology.udrTables) table.routes.push({
+        id: 'learner-summary', name: 'Private inspection', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true,
+      })
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('passed')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed fixture required')
+      delete document.topology.vnets[1].subnets[0].routeTableId
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+  })
+
+  it('automatically verifies and awards once, then waits for Next after each task including committed quizzes and exact inspections', async () => {
     vi.useFakeTimers()
     const h = harness()
     try {
@@ -70,6 +114,11 @@ describe('evidence-gated course runner', () => {
       await vi.advanceTimersByTimeAsync(2000)
       expect(h.completed).toHaveBeenCalledTimes(1)
       expect(h.state().celebration?.points).toBe(h.bundle.lessons[0].tasks[0].points)
+      expect(h.state().awaitingNext).toBe(true)
+      expect(h.state().taskId).toBe('peering.load')
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(h.state().taskId).toBe('peering.load')
+      expect(h.runner.advance()).toBe(true)
       const quiz = h.state().taskId
       await vi.advanceTimersByTimeAsync(5000)
       expect(h.state().taskId).toBe(quiz)
@@ -77,6 +126,8 @@ describe('evidence-gated course runner', () => {
       await vi.advanceTimersByTimeAsync(2000)
       expect(h.completed).toHaveBeenCalledTimes(2)
       expect(h.state().celebration?.explanation).toBeTruthy()
+      expect(h.state().taskId).toBe(quiz)
+      expect(h.runner.advance()).toBe(true)
       const observation = h.state().observation!
       h.runner.observe({ ...observation, subnetId: 'work-b' })
       await vi.advanceTimersByTimeAsync(3000)
@@ -84,8 +135,56 @@ describe('evidence-gated course runner', () => {
       h.runner.observe(observation)
       await vi.advanceTimersByTimeAsync(3000)
       expect(h.completed).toHaveBeenCalledTimes(3)
+      expect(h.state().taskId).toBe('peering.inspect-before')
+      expect(h.state().awaitingNext).toBe(true)
       await vi.advanceTimersByTimeAsync(5000)
       expect(h.completed).toHaveBeenCalledTimes(3)
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('keeps an awarded teaching step across documentation-tab pauses, edits and historical review without reusing proof or awarding again', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    try {
+      h.load(); h.runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(2600)
+      const celebration = h.state().celebration
+      h.runner.setAutomatic(false)
+      h.edit(() => {})
+      h.runner.review('peering.load')
+      expect(h.runner.advance()).toBe(false)
+      h.runner.review()
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(h.state().celebration).toBe(celebration)
+      expect(h.state().taskId).toBe('peering.load')
+      expect(h.state().awaitingNext).toBe(true)
+      expect(h.state().observation).toBeUndefined()
+      expect(h.completed).toHaveBeenCalledTimes(1)
+      expect(h.runner.advance()).toBe(true)
+      expect(h.state().taskId).toBe('peering.predict')
+      expect(h.state().awaitingNext).toBe(false)
+      expect(h.state().canContinue).toBe(false)
+      expect(h.completed).toHaveBeenCalledTimes(1)
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('retains the final task explanation until Next before showing course completion', async () => {
+    vi.useFakeTimers()
+    const last = orderedTasks(exampleCourse).at(-1)!
+    const h = harness({ completions: beforeTask(exampleCourse, last.task.id) })
+    try {
+      h.load(exampleCourse.scenarios.findIndex((entry) => entry.id === last.lesson.scenarioId))
+      h.runner.setAutomatic(true)
+      const check = exampleCourse.checks.find((entry) => entry.id === last.task.checkId)!
+      if (check.kind !== 'quiz.answered') throw new Error('Final quiz expected')
+      await h.runner.assess(check.params.correctChoiceId)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(h.state().completions).toHaveLength(40)
+      expect(h.state().taskId).toBe(last.task.id)
+      expect(h.state().awaitingNext).toBe(true)
+      expect(h.runner.advance()).toBe(true)
+      expect(h.state().taskId).toBeUndefined()
+      expect(h.completed).toHaveBeenCalledTimes(1)
     } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
   })
 

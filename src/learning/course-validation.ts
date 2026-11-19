@@ -39,6 +39,15 @@ function checkScope(
         && document.topology.vwanHubs.some((hub) => hub.id === scope.hubId
           && hubRouteTables(hub).some((table) => table.id === scope.tableId))),
     `${definition.id} needs distinct original VNet attachments and owned hub/table associations`)
+  } else if ('peerings' in params) {
+    requireContent(document.mode !== 'vwan' && params.peerings.every((pair) => pair.vnetAId !== pair.vnetBId
+      && [pair.vnetAId, pair.vnetBId].every((id) => document.topology.vnets.some((vnet) => vnet.id === id))),
+    `${definition.id} needs distinct owned peering endpoints`)
+  } else if ('routes' in params) {
+    requireContent(document.mode !== 'vwan' && params.routes.every((scope) => !!cidr(scope.prefix) && !!cidr(`${scope.nextHopIp}/32`)
+      && document.topology.vnets.some((vnet) => vnet.id === scope.vnetId && vnet.subnets.some((subnet) => subnet.id === scope.subnetId))
+      && document.topology.vnets.some((vnet) => vnet.appliances.some((appliance) => appliance.privateIp === scope.nextHopIp))),
+    `${definition.id} needs owned subnet routing scopes and appliance next hops`)
   } else if ('connections' in params) {
     requireContent(document.mode !== 'vwan'
       && new Set(params.connections.map((state) => `${state.kind}:${state.connectionId}`)).size === params.connections.length
@@ -103,6 +112,11 @@ export function validateCourse(input: unknown): CourseBundle {
   order(bundle.course.lessonOrder, lessons, 'lesson')
 
   for (const scenario of scenarios.values()) {
+    if (scenario.extendsScenarioId) {
+      const source = scenarios.get(scenario.extendsScenarioId)
+      requireContent(source && source !== scenario && source.document.mode === scenario.document.mode && source.document.mode !== 'vwan',
+        `invalid scenario extension for ${scenario.id}`)
+    }
     const result = executePlatform({ contractVersion: 1, operation: 'validate', document: scenario.document })
     requireContent(result.status === 'complete', `invalid scenario ${scenario.id}: ${result.errors.map((error) => error.message).join('; ')}`)
   }
@@ -123,6 +137,10 @@ export function validateCourse(input: unknown): CourseBundle {
     const lesson = lessons.get(lessonId)!
     const scenario = scenarios.get(lesson.scenarioId)
     requireContent(scenario, `unknown scenario for ${lesson.id}`)
+    if (scenario.extendsScenarioId) requireContent(lessonIndex > 0
+      && lessons.get(bundle.course.lessonOrder[lessonIndex - 1])?.scenarioId === scenario.extendsScenarioId,
+    `${lesson.id} must extend the preceding scenario`)
+    requireContent(lesson.context, `missing scenario context for ${lesson.id}`)
     requireContent(new Set(lesson.prerequisites).size === lesson.prerequisites.length, `duplicate prerequisite for ${lesson.id}`)
     for (const prerequisite of lesson.prerequisites) {
       const position = bundle.course.lessonOrder.indexOf(prerequisite)
@@ -136,6 +154,7 @@ export function validateCourse(input: unknown): CourseBundle {
       const task = localTasks.get(taskId)!
       const check = checks.get(task.checkId)
       requireContent(check, `unknown check for ${task.id}`)
+      requireContent(task.debrief, `missing teaching debrief for ${task.id}`)
       requireContent(!awards.has(task.awardId), `duplicate award ${task.awardId}`)
       awards.add(task.awardId)
       totalPoints += task.points

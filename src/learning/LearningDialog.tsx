@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from '../i18n'
 import type { PlatformDocument } from '../platform/contract'
@@ -18,6 +18,7 @@ import { orderedTasks, taskCompleted } from './runner'
 import { requirementDescription, runnerLabels as runnerText } from './runner-content'
 import { TrackOverview } from './TrackOverview'
 import { editions } from './editions'
+import { prepareCourseScenario, scenarioTransitionConflict } from './course-transition'
 import './learning.css'
 
 type PanelProps = {
@@ -41,6 +42,9 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const reviewing = !!state.reviewId
   const index = done ? instructions.length - 1 : Math.max(0, instructions.findIndex((item) => item.task.id === (state.reviewId ?? state.taskId)))
   const { lesson, task } = instructions[index]
+  const previous = instructions.slice(0, done ? instructions.length : index).reverse()
+    .find(({ task }) => taskCompleted(bundle, state.completions, task))
+  const following = instructions[index + 1]
   const check = bundle.checks.find((item) => item.id === task.checkId)!
   const requirements = 'requirements' in check.params ? check.params.requirements : []
   const [answerId, setAnswerId] = useState<string>()
@@ -51,7 +55,6 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const [cue, setCue] = useState<CourseGuidance>()
   const [helpId, setHelpId] = useState<string>()
   const [optionsOpen, setOptionsOpen] = useState(false)
-  const [explanationOpen, setExplanationOpen] = useState(false)
   const [foreground, setForeground] = useState(document.visibilityState === 'visible')
   const [initialTopology] = useState(() => workspace.topology)
   const [guideRequest, setGuideRequest] = useState(0)
@@ -72,9 +75,9 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const showFeedback = !reviewing && state.feedback && (['passed', 'incorrect', 'unassessed', 'progress'].includes(state.feedback)
     || workspace.topology !== initialTopology && ['requirements', 'peering'].includes(state.feedback))
   useEffect(() => {
-    runner.setAutomatic(foreground && !reviewing && !running && !confirm && !replayConfirm && !optionsOpen && !explanationOpen)
+    runner.setAutomatic(foreground && !reviewing && !state.awaitingNext && !running && !confirm && !replayConfirm && !optionsOpen)
     return () => runner.setAutomatic(false)
-  }, [runner, foreground, reviewing, running, confirm, replayConfirm, optionsOpen, explanationOpen])
+  }, [runner, foreground, reviewing, state.awaitingNext, running, confirm, replayConfirm, optionsOpen])
   useEffect(() => {
     const visibilityChanged = () => {
       if (document.visibilityState !== 'visible') runner.setAutomatic(false)
@@ -90,27 +93,42 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   useEffect(() => {
     if (state.celebration && document.activeElement === document.body) document.getElementById('learning-task')?.focus({ preventScroll: true })
   }, [state.celebration])
-  const load = async () => {
+  useEffect(() => {
+    if ((state.awaitingNext || reviewing) && (document.activeElement === document.body || panel.current?.contains(document.activeElement))) {
+      document.getElementById('learning-debrief-title')?.focus({ preventScroll: true })
+    }
+  }, [state.awaitingNext, reviewing])
+  const load = async (extend = false) => {
     const controller = new AbortController()
     job.current?.abort(); job.current = controller
     setRunning(true); setError(''); setCue(undefined)
     try {
       if (!session?.openPractice) throw new Error('unavailable')
-      const scenario = bundle.scenarios.find((item) => item.id === lesson.scenarioId)!
       const { runBrowserSimulation } = await import('../platform/browser')
       if (controller.signal.aborted) return
-      const admitted = await runBrowserSimulation({ contractVersion, engineVersion, operation: 'validate', document: structuredClone(scenario.document) }, controller.signal)
+      const prepared = prepareCourseScenario(bundle, lesson.scenarioId, extend ? session.practice : undefined)
+      const admitted = await runBrowserSimulation({ contractVersion, engineVersion, operation: 'validate', document: prepared }, controller.signal)
       if (controller.signal.aborted) return
       if (admitted.status !== 'complete' || !admitted.document) throw new Error('Invalid scenario')
-      await session.openPractice({ courseId: bundle.course.id, scenarioId: scenario.id, document: admitted.document }, controller.signal)
+      await session.openPractice({ courseId: bundle.course.id, scenarioId: lesson.scenarioId, document: admitted.document }, controller.signal)
       if (!controller.signal.aborted) setConfirm(false)
     } catch (error) {
       if (!controller.signal.aborted) setError(text(error instanceof Error && error.message === practiceReadFailure ? practiceLabels.practiceReadFailure
         : error instanceof Error && error.message === practiceConflict ? practiceLabels.practiceConflict
         : error instanceof Error && error.message === practiceOwnershipFailure ? practiceLabels.practiceOwnership
-        : error instanceof Error && error.message === practiceSaveFailure ? practiceLabels.practiceStartFailure : labels.unavailable, language))
+        : error instanceof Error && error.message === practiceSaveFailure ? practiceLabels.practiceStartFailure
+        : error instanceof Error && error.message === scenarioTransitionConflict ? runnerText.transitionConflict : labels.unavailable, language))
     } finally { if (!controller.signal.aborted) setRunning(false) }
   }
+  const loadAutomatically = useEffectEvent(() => { void load(true) })
+  useEffect(() => {
+    if (foreground && !done && !reviewing && !state.awaitingNext && !inPractice
+      && check.kind === 'scenario.loaded' && session?.practice?.active && session.practice.courseId === bundle.course.id) {
+      let controller: AbortController | undefined
+      const timer = setTimeout(() => { loadAutomatically(); controller = job.current }, 0)
+      return () => { clearTimeout(timer); controller?.abort() }
+    }
+  }, [foreground, done, reviewing, state.awaitingNext, inPractice, check.kind, session?.practice?.active, session?.practice?.courseId, bundle.course.id])
   return createPortal(<>
     <aside ref={panel} id="learning-sidebar" className="learning-sidebar" aria-labelledby="learning-title" data-testid="learning-sidebar" onKeyDown={(event) => {
       if (event.key === 'Escape') { event.stopPropagation(); onPause() }
@@ -118,21 +136,31 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       <header><h2 id="learning-title">{text(learningLabels.learn, language)}</h2><button type="button" onClick={onPause}>{text(labels.pause, language)}</button></header>
       <p data-testid="learning-active-track"><strong>{text(bundle.course.title, language)}</strong> · {text(editions.find((entry) => entry.course.id === bundle.course.id)!.name, language)}</p>
       <p data-testid="learning-completion-count">{instructions.filter(({ task }) => taskCompleted(bundle, state.completions, task)).length} / {instructions.length} {text(runnerText.completed, language)}</p>
-      {!reviewing && state.celebration && <div className="learning-success" role="status" data-testid="learning-celebration" title={text(state.celebration.title, language)}>
-        <strong>{text(runnerText.success, language)}{state.celebration.points > 0 && ` +${state.celebration.points} ${text(runnerText.points, language)}`}</strong>
-        {state.celebration.explanation && <details onToggle={(event) => setExplanationOpen(event.currentTarget.open)}>
-          <summary>{text(runnerText.why, language)}</summary><p>{text(state.celebration.explanation, language)}</p>
-        </details>}
-      </div>}
       {state.replayLessonId && <p>{text(runnerText.replaying, language)}</p>}
       {reviewing && <div className="learning-notice"><p>{text(runnerText.review, language)}</p>
         <button type="button" onClick={() => runner.review()}>{text(runnerText.return, language)}</button></div>}
       {done ? <section><h3 id="learning-task" tabIndex={-1}>{text(runnerText.done, language)}</h3><p>{text(runnerText.doneDetail, language)}</p></section> : <>
       <h3>{text(lesson.title, language)}</h3>
-      {check.kind === 'scenario.loaded' && <p>{text(lesson.objective, language)}</p>}
+      {(!state.awaitingNext || reviewing) && lesson.context && <p data-testid="learning-scenario-context">{text(lesson.context, language)}</p>}
       <section aria-labelledby="learning-task" data-testid="learning-task" data-task-id={task.id} aria-busy={state.running || running}>
         <h4 id="learning-task" tabIndex={-1} aria-live="polite">{text(task.title, language)}</h4>
-        <p>{text(task.instruction, language)}</p>
+        {(state.awaitingNext || reviewing) && task.debrief ? <div className="learning-debrief" data-testid="learning-debrief">
+          {!reviewing && state.celebration && <p className="learning-success" role="status" data-testid="learning-celebration">
+            <strong>{text(runnerText.success, language)}{state.celebration.points > 0 && ` +${state.celebration.points} ${text(runnerText.points, language)}`}</strong>
+          </p>}
+          <h5 id="learning-debrief-title" tabIndex={-1}>{text(runnerText.learned, language)}</h5>
+          {reviewing && <p>{text(task.instruction, language)}</p>}
+          {!reviewing && state.celebration?.explanation && !task.debrief.paragraphs.some((paragraph) =>
+            text(paragraph, language) === text(state.celebration!.explanation!, language))
+            && <p>{text(state.celebration.explanation, language)}</p>}
+          {task.debrief.paragraphs.map((paragraph, index) => <p key={index}>{text(paragraph, language)}</p>)}
+          <ul className="learning-references">{task.debrief.references.map((reference) => <li key={reference.url}>
+            <a href={reference.url} target="_blank" rel="noopener noreferrer"
+              aria-label={`${text(reference.title, language)} — ${text(runnerText.newTab, language)}`}>{text(reference.title, language)}</a>
+          </li>)}</ul>
+        </div> : <>
+        {(check.kind !== 'quiz.answered' || text(task.instruction, language) !== text(check.params.question, language))
+          && <p>{text(task.instruction, language)}</p>}
         <p>{task.points} {text(runnerText.points, language)}</p>
         {!reviewing && !inPractice && !confirm && <button type="button" disabled={running} onClick={() => { runner.cancel(); setConfirm(true); setError('') }}>{text(labels.load, language)}</button>}
         {confirm && <div className="learning-notice" data-learning-confirm>
@@ -179,8 +207,16 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
           {['unassessed', 'progress'].includes(state.feedback!) && <button type="button" disabled={state.running || running}
             onClick={() => { void runner.assess(answerId) }}>{text(runnerText.retry, language)}</button>}
         </div>}
+        </>}
       </section>
       </>}
+      <nav className="learning-actions" aria-label={language === 'ja' ? '学習ステップ' : 'Learning steps'}>
+        <button type="button" disabled={!previous} onClick={() => { if (previous) runner.review(previous.task.id) }}>{text(runnerText.back, language)}</button>
+        {reviewing ? <button type="button" onClick={() => {
+          runner.review(following && following.task.id !== state.taskId && taskCompleted(bundle, state.completions, following.task) ? following.task.id : undefined)
+        }}>{text(runnerText.next, language)}</button>
+          : state.awaitingNext && <button type="button" data-testid="learning-next" onClick={() => runner.advance()}>{text(runnerText.next, language)}</button>}
+      </nav>
       <details onToggle={(event) => setOptionsOpen(event.currentTarget.open)}><summary>{text(labels.options, language)}</summary>
       <p>{text(runnerText.automatic, language)}</p>
       <p>{text(lesson.objective, language)}</p>
@@ -215,6 +251,6 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
       <details><summary>{text(labels.help, language)}</summary>{(Object.keys(concepts) as ConceptId[]).map((id) => <Explain key={id} concept={id} />)}</details>
       </details>
     </aside>
-    {plan?.anchors && <GuidanceHighlight key={guideRequest} anchors={plan.anchors} onVisibility={revealGuidance} />}
+    {!state.awaitingNext && plan?.anchors && <GuidanceHighlight key={guideRequest} anchors={plan.anchors} onVisibility={revealGuidance} />}
   </>, document.body)
 }

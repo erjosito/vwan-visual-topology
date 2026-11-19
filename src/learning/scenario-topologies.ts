@@ -101,8 +101,12 @@ tiered.udrTables.find((entry) => entry.id === 'inspection-onward')!.routes.push(
 tiered.udrTables.find((entry) => entry.id === 'partner-policy')!.routes.push(route('indirect-partner-return', '10.25.0.0/16', '10.24.1.4'))
 tiered.udrTables.find((entry) => entry.id === 'transport-return')!.routes.push(route('indirect-transport-return', '10.25.0.0/16', '10.20.1.4'))
 
+const hubIntroduction = structuredClone(bypass)
+hubIntroduction.vnetPeerings = [peer('a', 'b')]
+for (const policy of hubIntroduction.udrTables) policy.routes = []
+
 export const scenarioTopologies: Record<string, AzNetTopology> = {
-  'private-link': privateLink, 'inspection-bypass': bypass, 'colocated-chain': colocated, 'dedicated-chain': dedicated,
+  'private-link': privateLink, 'inspection-bypass': hubIntroduction, 'colocated-chain': colocated, 'dedicated-chain': dedicated,
   'branch-advertisement': branch, 'wan-isolation': isolation, 'tiered-incident': tiered,
   'ha-return-path': haLessonTopology(),
 }
