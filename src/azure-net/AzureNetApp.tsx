@@ -10,7 +10,6 @@ import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
-import { LearningInspection } from '../learning/LearningInspection'
 import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
@@ -156,6 +155,7 @@ const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
 const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.VnetPrefixEditor })))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
 const VnetCommunityEditor = lazy(() => import('../VnetCommunityEditor'))
+const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
 
 function useSubnetAddressEditing(commit: (updater: (draft: AzNetTopology) => void) => boolean, onError: (message: string) => void) {
   const commitRef = useRef(commit)
@@ -3528,9 +3528,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         && routeSelection.vnetId === workspaceSession.learningState.observation.vnetId
                         && routeSelection.subnetId === workspaceSession.learningState.observation.subnetId
                         && inspectedSubnetTable.subnetId === workspaceSession.learningState.observation.subnetId
-                        && <LearningInspection observation={workspaceSession.learningState.observation}
+                        && <Suspense fallback={null}><LearningInspection observation={workspaceSession.learningState.observation}
                           prefixPresent={inspectedSubnetTable.routes.some((route) => route.prefix === workspaceSession.learningState!.observation!.prefix)}
-                          onObserve={workspaceSession.reportLearningObservation} />}
+                          onObserve={workspaceSession.reportLearningObservation} /></Suspense>}
 
                       {inspectedSubnetTable.suppressedBgpRoutes.length > 0 && (
                         <div

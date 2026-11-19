@@ -6,6 +6,7 @@ import { beltProgress } from './progress-ledger'
 import type { LearningStatusDetails } from './LearningStatusDetails'
 import './learning-status.css'
 import { useCloudSession } from '../cloud/useCloudSession'
+import { progressStatusLabel } from '../cloud/progress-status'
 
 export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean }) {
   const cloud = useCloudSession()
@@ -24,27 +25,32 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
   const highest = state?.ledger ? highestTrackBelt(state.ledger) : undefined
   const unknown = language === 'ja' ? '学習の進捗を利用不可' : 'Learning progress unavailable'
   const identity = cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')
-  const description = `${identity} · ${t('Highest belt across tracks')}: ${highest ? `${highest.belt.name[language]} · ${t('Tracks at this belt: {0}', highest.trackCount)}` : unknown} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points}` : unknown}`
+  const syncStatus = session?.cloudProgress && progressStatusLabel(session.cloudProgress.status, language, true)
+  const beltLabel = highest ? `${highest.belt.name[language]}${highest.trackCount > 1 ? ` x${highest.trackCount}` : ''}` : unknown
+  const localWarning = progress && state?.status !== 'saved'
+    ? state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown : undefined
+  const description = `${identity} · ${t('Highest belt across tracks')}: ${highest ? `${highest.belt.name[language]} · ${t('Tracks at this belt: {0}', highest.trackCount)}` : unknown} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points}` : unknown}${syncStatus ? ` · ${syncStatus}` : ''}`
   return <>
     <button ref={trigger} type="button" className="learning-status-trigger" data-testid="learning-status"
       title={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
-      aria-label={!showIdentity ? `${t('Learning status')}: ${highest?.belt.name[language] ?? unknown}` : undefined}
-      aria-description={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
+      aria-label={!showIdentity ? `${t('Learning status')}: ${beltLabel}${localWarning ? ` · ${localWarning}` : ''}${syncStatus ? ` · ${syncStatus}` : ''}` : undefined}
+      aria-description={session?.presentationPreview ? `${t('Learning status')}: ${description}` : syncStatus}
       onKeyDown={(event) => { if (open && event.key === 'Escape') { event.stopPropagation(); setOpen(false) } }}
       aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
       {session?.presentationPreview ? <>
         {showIdentity && <span className="learning-status-identity">{identity}</span>}
         {highest ? <span className="learning-status-belt">
           <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={highest.belt.color} stroke="currentColor" /></svg>
-          {highest.belt.name[language]}{highest.trackCount > 1 && <> x{highest.trackCount}</>}
+          {beltLabel}
         </span> : unknown}
       </> : <>{identity} · {course.title[language]} · {name[language]} - </>}{progress ? <>
         {!session?.presentationPreview && <>
         <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={progress.belt.color} stroke="currentColor" /></svg>
         {progress.belt.name[language]} · {progress.points} {language === 'ja' ? 'ポイント' : 'points'}
         </>}
-        {state?.status !== 'saved' && <> · {state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown}</>}
+        {localWarning && <> · {localWarning}</>}
       </> : !session?.presentationPreview && unknown}
+      {syncStatus && <span data-testid="learning-sync-summary"> · {syncStatus}</span>}
     </button>
     {open && Panel && <Panel onClose={() => { setOpen(false); trigger.current?.focus({ preventScroll: true }) }} />}
     {open && !Panel && <span role="status">{failed

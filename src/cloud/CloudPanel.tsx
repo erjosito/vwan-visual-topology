@@ -7,6 +7,7 @@ import { useCloudSession } from './useCloudSession'
 import './cloud-panel.css'
 import { CloudSharing } from './CloudSharing'
 import { DocumentSaveStatus } from './DocumentSaveStatus'
+import { progressStatusLabel } from './progress-status'
 
 export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; returnFocus?: RefObject<HTMLElement | null> }) {
   const cloud = useCloudSession()!, session = useWorkspaceSession(), language = useLanguage()
@@ -166,10 +167,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
       <section><h3>{text('Learning progress', '学習の進捗')}</h3>
         <p>{text('Your account uses its own local cache and automatically synchronizes curriculum history while signed in. Awards remain self-reported, not verified certification. Sign-out does not erase this device cache.',
           'アカウント別のローカル キャッシュを使用し、サインイン中は学習履歴を自動で同期します。達成記録は自己申告であり認定ではありません。サインアウトしても端末のキャッシュは削除されません。')}</p>
-        <p role="status" data-testid="cloud-progress-status">{text('Cloud progress', 'クラウドの進捗')}: {status === 'synced'
-          ? text('Synced', '同期済み') : status === 'saving' ? text('Saving', '保存中') : status === 'conflict'
-            ? text('Conflict: no cloud overwrite was made', '競合: クラウドは上書きしていません') : status === 'offline'
-              ? text('Not synced: keep a local backup and retry', '未同期: バックアップして再試行してください') : text('Loading', '読み込み中')}</p>
+        <p role="status" data-testid="cloud-progress-status">{progressStatusLabel(status, language)}</p>
         <button type="button" disabled={busy || status === 'loading' || status === 'saving'} onClick={() => { void run(async () => { await progress?.refresh() }) }}>
           {text('Refresh cloud progress', 'クラウドの進捗を再取得')}
         </button>

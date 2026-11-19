@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useLanguage } from '../i18n'
+import { t, useLanguage } from '../i18n'
 import { useWorkspaceSession } from '../workspace-context'
 import { editions, selectedEdition } from './editions'
 import { beltProgress, type LedgerState } from './progress-ledger'
 import { statusLabels as labels } from './status-content'
 import { TrackOverview } from './TrackOverview'
 import './learning-status-details.css'
+import { progressStatusLabel } from '../cloud/progress-status'
 
 export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
   const session = useWorkspaceSession(), language = useLanguage()
   const state = session?.learningProgress
+  const cloud = session?.cloudProgress
   const [confirm, setConfirm] = useState<LedgerState>()
   const [failed, setFailed] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -37,10 +39,12 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
       link.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
     } catch { setFailed(true) }
   }
-  return createPortal(<section id="local-learning-status" className="learning-status-panel" aria-label={label(labels.details)}
+  const title = cloud ? t('Learning status') : label(labels.details)
+  return createPortal(<section id="local-learning-status" className="learning-status-panel" aria-label={title}
       data-testid="learning-status-details" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }}>
-      <header><h2>{label(labels.details)}</h2><button type="button" onClick={onClose}>{label(labels.close)}</button></header>
-      <p role="status">{label(state ? labels[state.status] : labels.unavailable)}</p>
+      <header><h2>{title}</h2><button type="button" onClick={onClose}>{label(labels.close)}</button></header>
+      {(!cloud || state?.status !== 'saved') && <p role="status">{label(state ? labels[state.status] : labels.unavailable)}</p>}
+      {cloud && <p role="status" data-testid="learning-cloud-status">{progressStatusLabel(cloud.status, language)}</p>}
       {progress && <>
         <p>{label(course.title)} · {label(name)} - {label(progress.belt.name)} · {progress.points} {label(labels.points)}</p>
         {progress.next ? <>
@@ -74,11 +78,13 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
       </section>
       <TrackOverview />
       <p>{session?.cloudProgress
-        ? language === 'ja' ? 'アカウント別のキャッシュです。クラウドの同期状態はクラウド アカウント画面で確認してください。認定ではありません。'
-          : 'Account-specific device cache. See Cloud account for sync status. Cloud history is not verified certification.'
+        ? language === 'ja' ? 'アカウント別の端末キャッシュです。クラウドの履歴は自己申告であり認定ではありません。'
+          : 'Account-specific device cache. Cloud history is self-reported, not verified certification.'
         : label(labels.local)}</p><p>{label(labels.writer)}</p><p>{label(labels.policy)}</p>
       <div className="learning-status-actions">
         <button type="button" onClick={() => backup(false)}>{label(labels.backup)}</button>
+        {cloud && <button type="button" disabled={busy || !cloud.status || cloud.status === 'loading' || cloud.status === 'saving'}
+          onClick={() => { void cloud.refresh() }}>{label(labels.refreshCloud)}</button>}
         {state?.status === 'session' && <button type="button" disabled={busy} onClick={() => { void operate(false) }}>{label(labels.retry)}</button>}
         {state?.status === 'conflict' && <button type="button" onClick={() => location.reload()}>{label(labels.reload)}</button>}
       </div>

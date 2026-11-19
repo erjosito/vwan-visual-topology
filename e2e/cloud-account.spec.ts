@@ -53,6 +53,98 @@ async function signIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
 }
 
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: learning status follows actual pending, failed, synced and conflicting cloud progress`, async ({ page }) => {
+    const service = await setup(page)
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.addInitScript(language => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+    }, language)
+    let releaseRead!: () => void, releaseWrite!: () => void
+    const reading = new Promise<void>(resolve => { releaseRead = resolve })
+    const writing = new Promise<void>(resolve => { releaseWrite = resolve })
+    let writeError: number | undefined = 503
+    await page.route('**/api/cloud/progress', async route => {
+      if (route.request().method() === 'GET') await reading
+      else if (route.request().method() === 'PUT') {
+        await writing
+        if (writeError) { await route.fulfill({ status: writeError, body: '{}' }); return }
+      }
+      await route.fallback()
+    })
+    await page.goto('/?mode=full')
+    const learning = page.getByTestId('learning-status-details')
+    const summary = page.getByTestId('learning-sync-summary')
+    const sync = page.getByTestId('learning-cloud-status')
+    const closeLearning = () => learning.getByRole('button', { name: text('Close learning status', '学習状態を閉じる'), exact: true }).click()
+    const account = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
+    const closeAccount = () => account.getByRole('button', { name: text('Close', '閉じる'), exact: true }).click()
+    const edition = async (original: boolean) => {
+      await learning.getByRole('button', { name: original
+        ? text('Switch to Original edition', '従来版に切り替える') : text('Switch to Scenario edition', 'シナリオ版に切り替える'), exact: true }).click()
+      await learning.getByRole('button', { name: text('Confirm edition switch', '版の切り替えを確認'), exact: true }).click()
+    }
+    await page.getByTestId('learning-status').click()
+    await expect(learning.getByRole('status')).toHaveText(text('Saved locally', 'ローカルに保存済み'))
+    await expect(summary).toHaveCount(0)
+    await closeLearning()
+    await page.getByTestId('cloud-account-open').click()
+    await account.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
+    await expect(page.getByTestId('cloud-progress-status')).toContainText(text('Loading', '読み込み中'))
+    await closeAccount()
+    await page.getByTestId('learning-status').click()
+    await expect(sync).toHaveText(text('Cloud progress: Loading', 'クラウドの進捗: 読み込み中'))
+    await expect(learning.getByText(text('Saved locally', 'ローカルに保存済み'), { exact: true })).toHaveCount(0)
+    const refresh = learning.getByRole('button', { name: text('Refresh cloud progress', 'クラウドの進捗を再取得'), exact: true })
+    await expect(refresh).toBeDisabled()
+    releaseRead()
+    await expect(sync).toHaveText(text('Cloud progress: Synced', 'クラウドの進捗: 同期済み'))
+    await edition(true)
+    await expect(sync).toContainText(text('Saving', '保存中'))
+    await expect(summary).toContainText(text('Saving', '保存中'))
+    expect(await page.evaluate(key => JSON.parse(localStorage.getItem(`${key}:account:alice`)!).enrollment, guidedProgressKey)).toBe(exampleCourse.course.id)
+    releaseWrite()
+    await expect(sync).toContainText(text('Not synced', '未同期'))
+    await expect(summary).toContainText(text('Not synced', '未同期'))
+    expect(service.data.has(`users/${testOwner('alice')}/progress.json`)).toBe(false)
+    writeError = undefined
+    await refresh.click()
+    await expect(sync).toHaveText(text('Cloud progress: Synced', 'クラウドの進捗: 同期済み'))
+    await expect(summary).toContainText(text('Synced', '同期済み'))
+    const cloudKey = `users/${testOwner('alice')}/progress.json`
+    expect(JSON.parse(service.data.get(cloudKey)!.raw).enrollment).toBe(exampleCourse.course.id)
+    writeError = 412
+    await edition(false)
+    await expect(sync).toContainText(text('Conflict: no cloud overwrite was made', '競合: クラウドは上書きしていません'))
+    await expect(summary).toContainText(text('Conflict', '競合'))
+    expect(JSON.parse(service.data.get(cloudKey)!.raw).enrollment).toBe(exampleCourse.course.id)
+    expect((await new AxeBuilder({ page }).include('.learning-status-panel').analyze()).violations).toEqual([])
+    expect(await learning.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await closeLearning()
+    await page.getByTestId('cloud-account-open').click()
+    await expect(page.getByTestId('cloud-progress-status')).toContainText(text('Conflict', '競合'))
+    await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'bob'))
+    await account.getByRole('button', { name: text('Sign in again / switch account', '再サインイン / アカウントの切り替え'), exact: true }).click()
+    await expect(account).toContainText('Test Bob')
+    await expect(page.getByTestId('cloud-progress-status')).toContainText(text('Synced', '同期済み'))
+    await closeAccount()
+    await page.getByTestId('learning-status').click()
+    await expect(sync).toHaveText(text('Cloud progress: Synced', 'クラウドの進捗: 同期済み'))
+    await expect(learning).toContainText(text('0 points', '0 ポイント'))
+    await closeLearning()
+    await page.getByTestId('cloud-account-open').click()
+    await account.getByRole('button', { name: text('Sign out of this app', 'このアプリからサインアウト'), exact: true }).click()
+    await closeAccount()
+    await page.getByTestId('learning-status').click()
+    await expect(learning.getByRole('status')).toHaveText(text('Saved locally', 'ローカルに保存済み'))
+    await expect(sync).toHaveCount(0)
+    await expect(summary).toHaveCount(0)
+  })
+}
+
 for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeFirewallUdr], ['full', sampleHybridVwanAndHubSpoke]] as const) {
   for (const language of ['en', 'ja']) {
     test(`${mode} ${language}: save status distinguishes linked updates, new copies and same-tab reload`, async ({ page }, info) => {
@@ -579,8 +671,9 @@ test('switching accounts preserves session-only history when both local and clou
   await page.goto('/?mode=full')
   await signIn(page)
   await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
+  let offline = true
   await page.route('**/api/cloud/progress', async route => {
-    if (route.request().method() === 'PUT') await route.abort()
+    if (route.request().method() === 'PUT' && offline) await route.abort()
     else await route.fallback()
   })
   await page.evaluate(() => {
@@ -596,6 +689,18 @@ test('switching accounts preserves session-only history when both local and clou
   await page.getByTestId('practice-workspace-bar').getByRole('button', { name: 'Return to my design', exact: true }).click()
   await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
   await expect(page.getByTestId('cloud-progress-status')).toContainText('Not synced')
+  await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByTestId('learning-status').click()
+  const details = page.getByTestId('learning-status-details')
+  await expect(details.getByRole('status').first()).toContainText('Session only')
+  await expect(page.getByTestId('learning-cloud-status')).toContainText('Not synced')
+  offline = false
+  await details.getByRole('button', { name: 'Refresh cloud progress', exact: true }).click()
+  await expect(page.getByTestId('learning-cloud-status')).toContainText('Synced')
+  await expect(details.getByRole('status').first()).toContainText('Session only')
+  await expect(details.getByRole('button', { name: 'Retry saving progress', exact: true })).toBeVisible()
+  await details.getByRole('button', { name: 'Close learning status', exact: true }).click()
+  await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
   await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'bob'))
   await page.getByRole('button', { name: 'Sign in again / switch account', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('Test Bob')
