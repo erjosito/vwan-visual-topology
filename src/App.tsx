@@ -55,6 +55,7 @@ const FlowExportControls = lazy(() => import('./FlowExportControls').then(module
 const SampleGallery = lazy(() => import('./SampleGallery').then((module) => ({ default: module.VwanSampleGallery })))
 const HubCapabilitiesDialog = lazy(() => import('./HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('./ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
+const CloneVnetDialog = lazy(() => import('./CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
 const TopologyContextMenu = lazy(() => import('./TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const AzureFilesPanel = lazy(() => import('./AzureFilesPanel').then((module) => ({ default: module.AzureFilesPanel })))
 const RouterSnatDialog = lazy(() => import('./RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
@@ -88,6 +89,7 @@ function App() {
   const [editorRequest, setEditorRequest] = useState<EditorRequest>()
   const [snatHubId, setSnatHubId] = useState<string>()
   const [clearRequested, setClearRequested] = useState(false)
+  const [cloneVnetId, setCloneVnetId] = useState<string>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [erLocationModal, setErLocationModal] = useState<{ open: boolean; peeringLocation?: string; sku?: ErCircuitSku; targetAzureRegion?: string; erLocationId?: string }>({ open: false })
   const [panel, setPanel] = useState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>()
@@ -495,6 +497,7 @@ function App() {
         { label: t("Connect to ER location"), disabled: !topology.erLocations?.length, run: () => setEditorRequest({ kind: 'erLink', siteId: contextSelection.id }) },
       ] : []),
       ...(contextSelection.kind === 'spoke' ? [
+        { label: t('Clone VNet...'), previewPrimary: true, run: () => setCloneVnetId(contextSelection.id) },
         ...(spokeObj?.hubId || spokeObj?.nvaSpokeIds?.length ? [{
           label: t('Configure virtual hub connection'), previewPrimary: true, run: () => setEditorRequest(contextSelection),
         }] : [{
@@ -792,6 +795,12 @@ function App() {
             workspace="vwan"
             onClose={() => setClearRequested(false)}
             onConfirm={() => { reset(validateTopology({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })); setZoom(1) }} /></Suspense>}
+          {cloneVnetId && <Suspense fallback={null}><CloneVnetDialog key={cloneVnetId} topology={topology} sourceId={cloneVnetId}
+            onClose={() => setCloneVnetId(undefined)} onClone={copy => {
+              if ('gateways' in copy) return false
+              save(validateTopology({ ...topology, spokes: [...topology.spokes, copy] }))
+              setSelection({ kind: 'spoke', id: copy.id })
+            }} /></Suspense>}
         </div>
         <div className="legend"><span><i className="legend-line er" />ExpressRoute</span><span><i className="legend-line vpn" />VPN</span><span><i className="legend-line sdwan" />SD-WAN</span><span><i className="legend-line preferred" />{t("Preferred / flow path")}</span><span><b className="policy-tag inbound">{t("IN")}</b><b className="policy-tag outbound">{t("OUT")}</b>{t("Per-connection maps · near owning router · click for rules")}</span><span className="live-dot">{simulation.converged ? t("Routes calculated") : t("Provisional routes")}</span></div>
       </section>
