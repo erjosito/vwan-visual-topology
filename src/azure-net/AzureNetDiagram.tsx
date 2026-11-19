@@ -1322,7 +1322,6 @@ export function AzureNetDiagram({
 
           const chips = deviceChips(vnet, box.width)
           const controlStripH = chips.length ? chips[chips.length - 1].y + 30 : 0
-          const roleWidth = Math.min(104, Math.max(58, vnet.role.length * 6 + 12))
           const arsLinks = mappedArsLinks(vnet, topology)
           const subnetStartY = box.y + 44 + controlStripH + arsLinks.length * 44 + 6
 
@@ -1408,9 +1407,8 @@ export function AzureNetDiagram({
                 }
               />
               <NetworkNodeIcon kind="spoke" x={box.x + 23} y={box.y + 17} size={22} />
-              <DiagramNodeText text={vnet.name} x={box.x + 40} y={box.y + 18} width={box.width - roleWidth - 60} weight={700} />
+              <DiagramNodeText text={vnet.name} x={box.x + 40} y={box.y + 18} width={box.width - 52} weight={700} />
               <DiagramNodeText text={`${vnet.prefixes.join(', ')} · ${vnet.region}`} x={box.x + 12} y={box.y + 34} width={box.width - 24} fontSize={10.5} weight={400} />
-              <DiagramNodeBadge label={vnet.role.toUpperCase()} x={box.x + box.width - roleWidth - 10} y={box.y + 6} width={roleWidth} tone={isHubVnetRole(vnet.role) ? 'info' : 'muted'} />
             </DiagramButton>
 
               {/* Control Plane / Appliances Strip */}
