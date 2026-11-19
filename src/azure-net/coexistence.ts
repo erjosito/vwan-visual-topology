@@ -1,13 +1,12 @@
 import type { AzDiagnosticFinding } from './diagnostics'
-import type { AzNetTopology } from './model'
-import { coexistenceChecks } from './coexistence-validation'
+import { coexistenceChecks, type AzNetTopology } from './model'
 
 export function coexistenceFindings(topology: AzNetTopology): AzDiagnosticFinding[] {
   const remediation = {
-    gateway: 'Use a supported non-Basic gateway SKU and RouteBased VPN. Policy-based traffic selectors on a connection do not make a RouteBased gateway PolicyBased. Changing the simulator does not reconfigure Azure.',
-    generation: 'VpnGw1/AZ requires Generation1; VpnGw4/5/AZ requires Generation2. VpnGw2/3/AZ supports either generation.',
-    subnet: 'Provide GatewaySubnet with an IPv4 /27 or shorter prefix; /28 and longer cannot accommodate coexistence.',
-    udr: 'Remove the GatewaySubnet-range/default UDR. For a more-specific overlapping UDR, verify native gateway BGP endpoint reachability; endpoint sessions are not assessed.',
+    gateway: 'Use supported non-Basic SKUs and RouteBased VPN. Connection traffic selectors are separate; changing this model does not reconfigure Azure.',
+    generation: 'Use Generation1 for VpnGw1/AZ, Generation2 for VpnGw4/5/AZ; either for VpnGw2/3/AZ.',
+    subnet: 'Use IPv4 GatewaySubnet /27 or shorter.',
+    udr: 'Remove gateway-range/default UDRs; verify native BGP endpoints for more-specific overlaps. Sessions are not assessed.',
   }
   const errors = coexistenceChecks(topology).map(({ code, ...finding }): AzDiagnosticFinding => ({
     ...finding, category: 'gateway-coexistence', title: `ER/VPN coexistence in ${topology.vnets.find((vnet) => vnet.id === finding.vnetId)!.name}`,
@@ -25,18 +24,18 @@ export function coexistenceFindings(topology: AzNetTopology): AzDiagnosticFindin
       })
     for (const gateway of gateways) {
       if (!gateway.sku?.trim()) add(`sku:${gateway.id}`, 'warning',
-        `Gateway "${gateway.name}" has an unspecified SKU. Coexistence compatibility is not established by simulated routes.`,
-        'Record the actual gateway SKU. Basic is unsupported; verify other SKUs against current product documentation.')
+        `Gateway "${gateway.name}" SKU is unknown; coexistence compatibility is not established.`,
+        'Record the actual SKU; verify current product support. Basic is unsupported.')
       else if (gateway.sku.trim().toLowerCase() !== 'basic' && !(gateway.kind === 'Vpn' ? /^(VpnGw[1-5](AZ)?|Standard|HighPerformance)$/ : /^(ErGw[1-3]AZ|ErGwScale|Standard|HighPerformance|UltraPerformance)$/i).test(gateway.sku))
-        add(`sku:${gateway.id}`, 'warning', `Gateway "${gateway.name}" declares SKU "${gateway.sku}" whose coexistence support is not assessed.`,
-          'Check current gateway product documentation. The model preserves unfamiliar SKUs rather than treating every non-Basic name as supported.')
+        add(`sku:${gateway.id}`, 'warning', `Gateway "${gateway.name}" SKU "${gateway.sku}" has unassessed coexistence support.`,
+          'Verify current product support; unfamiliar non-Basic SKUs are not certified.')
       if (gateway.kind === 'Vpn' && gateway.vpnType === undefined) add(`type:${gateway.id}`, 'warning',
-        `VPN gateway "${gateway.name}" has ${gateway.vpnType ?? 'unspecified'} routing type. Coexistence requires RouteBased.`,
-        'Record or configure RouteBased. Policy-based traffic selectors on an individual connection do not make a RouteBased gateway PolicyBased.')
+        `VPN gateway "${gateway.name}" routing type is unknown; coexistence requires RouteBased.`,
+        'Record RouteBased; connection traffic selectors are a separate setting.')
     }
     add('scope', 'info',
-      'Equal-prefix Azure outbound routes prefer ER; longest-prefix match still permits more-specific VPN routes. This does not configure on-premises return preference or prove symmetry.',
-      'Explicitly prefer ER on the site router, for example with inbound local preference. VPN backup covers ER private peering, not Microsoft-peering services. Keep the VPN public-IP underlay Internet-reachable independently of ER; this underlay is not modeled. ER-only and VPN-only sites are not transit-connected by coexistence alone: use same-VNet ARS with branch-to-branch and supported active/active VPN ASN 65515. ARS does not provide ER circuit-to-circuit transit; use Global Reach.')
+      'Equal-prefix Azure routes prefer ER; more-specific VPN routes still win. Return-path symmetry is not inferred.',
+      'Configure site ER local preference explicitly. VPN backup covers private, not Microsoft, peering; its Internet underlay must be independent of ER (not assessed). ER-to-VPN transit requires same-VNet ARS branch-to-branch, active/active VPN ASN 65515. ARS does not provide ER-to-ER transit; use Global Reach.')
     return findings
   })]
 }

@@ -75,7 +75,6 @@ import {
   cloneAzNetTopology,
   createEmptyAzNetTopology,
   validateAzNetTopology,
-  validateAdvertisedGatewayPrefixes,
   type AzErCircuitSku,
   type AzNetTopology,
   type AzPeeringDirectionFlags,
@@ -152,10 +151,8 @@ const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
 const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
-const GatewayRoutingSettings = lazy(() => import('./VpnGatewaySettings'))
-const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.VnetPrefixEditor })))
+const VnetRoutingSettings = lazy(() => import('./VnetRoutingSettings'))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
-const VnetCommunityEditor = lazy(() => import('../VnetCommunityEditor'))
 const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
 
 function useSubnetAddressEditing(commit: (updater: (draft: AzNetTopology) => void) => boolean, onError: (message: string) => void) {
@@ -4464,8 +4461,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 <div className="aznet-card" data-testid="aznet-vnet-elements-editor">
                   <h3 hidden={workspaceSession?.presentationPreview}>VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)</h3>
                   {filteredVnets.map((vnet) => {
-                    const hasErGw = vnet.gateways.some((g) => g.kind === 'ExpressRoute')
-                    const hasVpnGw = vnet.gateways.some((g) => g.kind === 'Vpn')
                     const usesRemoteGw = vnetUsesRemoteGateways(vnet.id)
                     return (
                       <div
@@ -4480,374 +4475,22 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           border: '1px solid var(--border)',
                         }}
                       >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginBottom: 8,
-                          }}
-                        >
-                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('VNet name')}</span>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              value={vnet.name}
-                              aria-label={t('VNet name {0}', vnet.name)}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) v.name = val
-                                })
-                              }}
-                              style={{ fontWeight: 700, width: 145 }}
-                            />
-                            </label>
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('VNet region')}</span>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              list={`aznet-region-datalist-${vnet.id}`}
-                              data-testid={`aznet-vnet-region-${vnet.id}`}
-                              aria-label={t('VNet region {0}', vnet.name)}
-                              title="Azure Region / Location (e.g. westeurope, eastus)"
-                              value={vnet.region}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) {
-                                    if (v.region !== val && v.bgpCommunities?.regionalCommunity) {
-                                      if (v.bgpCommunities.virtualNetworkCommunity) v.bgpCommunities = { virtualNetworkCommunity: v.bgpCommunities.virtualNetworkCommunity }
-                                      else delete v.bgpCommunities
-                                    }
-                                    v.region = val
-                                  }
-                                })
-                              }}
-                              style={{ width: 130, fontSize: 11.5 }}
-                            />
-                            </label>
-                            <datalist id={`aznet-region-datalist-${vnet.id}`}>
-                              {ALL_KNOWN_AZURE_REGIONS.map((reg) => (
-                                <option key={reg} value={reg} />
-                              ))}
-                            </datalist>
-                            <Suspense fallback={null}><VnetPrefixEditor topology={topology} vnet={vnet}
-                              preview={workspaceSession?.presentationPreview} onChange={commitTopology} /></Suspense>
-                            <Suspense fallback={null}><VnetCommunityEditor
-                              key={vnet.id}
-                              value={vnet.bgpCommunities}
-                              onChange={(value) => commitTopology((draft) => {
-                                const target = draft.vnets.find((entry) => entry.id === vnet.id)
-                                if (target) {
-                                  if (value) target.bgpCommunities = value
-                                  else delete target.bgpCommunities
-                                }
-                              })} /></Suspense>
-                            <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Canvas layout role')}</span>
-                            <select
-                              className="aznet-select"
-                              value={vnet.role}
-                              title="Simulator topology role (controls canvas column layout & default gateway transit heuristics)"
-                              onChange={(e) => {
-                                const role = e.target.value as 'hub' | 'spoke'
-                                commitTopology((draft) => {
-                                  const v = draft.vnets.find((x) => x.id === vnet.id)
-                                  if (v) v.role = role
-                                })
-                              }}
-                            >
-                              <option value="hub">Hub Layout Role</option>
-                              <option value="spoke">Spoke Layout Role</option>
-                            </select>
-                            </label>
-                          </div>
-                          <button
-                            type="button"
-                            className="aznet-btn"
-                            data-testid={`aznet-delete-vnet-${vnet.id}`}
-                            style={{
-                              padding: '2px 8px',
-                              fontSize: 11,
-                              color: 'var(--error)',
-                              borderColor: 'var(--border)',
-                            }}
-                            onClick={() => deleteVnetById(vnet.id)}
-                          >
-                            Delete VNet
-                          </button>
-                        </div>
-
-                        <InspectorSection title={t('Gateway route advertisements')}
-                          summary={vnet.summarizedGatewayPrefixes?.length ? t('{0} configured prefixes', vnet.summarizedGatewayPrefixes.length) : t('Automatic advertisements')}
-                          initialOpen={!!vnet.summarizedGatewayPrefixes?.length}>
-                        <label style={{ display: 'grid', gap: 4, marginBottom: 8, fontSize: 11.5 }}>
-                          Advertised gateway prefixes (IPv4, comma-separated)
-                          <input
-                            key={`${vnet.id}:${vnet.summarizedGatewayPrefixes?.join(',') ?? ''}`}
-                            type="text"
-                            className="aznet-input"
-                            aria-label={`Advertised gateway prefixes ${vnet.name}`}
-                            aria-describedby={`aznet-gateway-prefix-help-${vnet.id}`}
-                            defaultValue={vnet.summarizedGatewayPrefixes?.join(', ') ?? ''}
-                            data-configuration-saved={vnet.summarizedGatewayPrefixes?.join(', ') ?? ''}
-                            placeholder="Default: advertise individual hub and eligible spoke address spaces"
-                            onBlur={(e) => {
-                              const value = e.target.value
-                              if (value === (vnet.summarizedGatewayPrefixes ?? []).join(', ')) return
-                              commitTopology((draft) => {
-                                const target = draft.vnets.find((v) => v.id === vnet.id)
-                                if (target) target.summarizedGatewayPrefixes = value.split(',').map((prefix) => prefix.trim()).filter(Boolean)
-                              })
-                            }}
-                            onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                          />
-                          <small className="configuration-save-hint">{t('Save on blur')}</small>
-                          <span id={`aznet-gateway-prefix-help-${vnet.id}`} className="aznet-muted">
-                            Read only by this VNet's ER/VPN gateway when GatewaySubnet exists; stored beforehand, ignored by a remote hub.
-                            Include this gateway VNet's address spaces (recommended). Covered hub/spoke spaces are summarized; uncovered spaces remain advertised.
-                            Independent of local address spaces; no overlapping entries or IPv6. No Route Server required.
-                          </span>
-                        </label>
-                        </InspectorSection>
-                        <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('Advertisements do not create forwarding routes.')}</p>
-                        {validateAdvertisedGatewayPrefixes(vnet.summarizedGatewayPrefixes).map((error) => (
-                          <strong role="alert" key={error}>VNet "{vnet.name}" {error}</strong>
-                        ))}
-
-                        {usesRemoteGw && (
-                          <div
-                            data-testid={`aznet-vnet-remote-gw-notice-${vnet.id}`}
-                            style={{
-                              marginBottom: 8,
-                              padding: '5px 8px',
-                              background: 'var(--surface-muted)',
-                              border: '1px solid var(--warning)',
-                              borderRadius: 6,
-                              fontSize: 11,
-                              color: 'var(--warning)',
-                            }}
-                          >
-                            ⚠️ This VNet has <strong>Use Remote Gateways</strong> enabled on a peering. Local VNet Gateways and Route Server cannot be deployed unless <code>useRemoteGateways</code> is disabled first.
-                          </div>
-                        )}
-
-                        {/* Quick Add/Remove VNet Elements (#39, #48) */}
-                        <InspectorSection title={t('Add or remove routing devices')}
-                          summary={t('Gateways: {0}; appliances: {1}; Route Server: {2}', vnet.gateways.length, vnet.appliances.length, vnet.routeServer ? 1 : 0)}
-                          initialOpen={!!(vnet.gateways.length || vnet.appliances.length || vnet.routeServer)}>
-                        <div
-                          style={{
-                            display: 'flex',
-                            gap: 6,
-                            flexWrap: 'wrap',
-                            marginBottom: 8,
-                            padding: '6px 8px',
-                            background: 'var(--surface)',
-                            borderRadius: 6,
-                            border: '1px solid var(--border)',
-                          }}
-                        >
-                          <button
-                            type="button"
-                            className="aznet-btn"
-                            data-testid={`aznet-add-fw-${vnet.id}`}
-                            style={{ fontSize: 11, padding: '3px 8px' }}
-                            onClick={() => addFirewallToVnet(vnet.id)}
-                          >
-                            + Firewall / NVA
-                          </button>
-                          <button type="button" className="aznet-btn" onClick={() => openVnraCreation(vnet.id)}>
-                            {t('Add Managed VNRA')}
-                          </button>
-                          {!hasErGw ? (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-add-ergw-${vnet.id}`}
-                              disabled={usesRemoteGw}
-                              title={
-                                usesRemoteGw
-                                  ? 'Cannot add ER Gateway while Use Remote Gateways is enabled on a peering'
-                                  : 'Add ExpressRoute Gateway'
-                              }
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                opacity: usesRemoteGw ? 0.5 : 1,
-                              }}
-                              onClick={() => addGatewayToVnet(vnet.id, 'ExpressRoute')}
-                            >
-                              + ER Gateway
-                            </button>
-                          ) : (
-                            vnet.gateways
-                              .filter((g) => g.kind === 'ExpressRoute')
-                              .map((gw) => (
-                                <button
-                                  key={gw.id}
-                                  type="button"
-                                  className="aznet-btn"
-                                  data-testid={`aznet-remove-gw-${gw.id}`}
-                                  style={{
-                                    fontSize: 11,
-                                    padding: '3px 8px',
-                                    color: 'var(--error)',
-                                    borderColor: 'var(--border)',
-                                  }}
-                                  onClick={() => removeGatewayFromVnet(vnet.id, gw.id)}
-                                >
-                                  ✕ ER GW ({gw.name})
-                                </button>
-                              ))
-                          )}
-                          {!hasVpnGw ? (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-add-vpngw-${vnet.id}`}
-                              disabled={usesRemoteGw}
-                              title={
-                                usesRemoteGw
-                                  ? 'Cannot add VPN Gateway while Use Remote Gateways is enabled on a peering'
-                                  : 'Add VPN Gateway'
-                              }
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                opacity: usesRemoteGw ? 0.5 : 1,
-                              }}
-                              onClick={() => addGatewayToVnet(vnet.id, 'Vpn')}
-                            >
-                              + VPN Gateway
-                            </button>
-                          ) : (
-                            vnet.gateways
-                              .filter((g) => g.kind === 'Vpn')
-                              .map((gw) => (
-                                <button
-                                  key={gw.id}
-                                  type="button"
-                                  className="aznet-btn"
-                                  data-testid={`aznet-remove-gw-${gw.id}`}
-                                  style={{
-                                    fontSize: 11,
-                                    padding: '3px 8px',
-                                    color: 'var(--error)',
-                                    borderColor: 'var(--border)',
-                                  }}
-                                  onClick={() => removeGatewayFromVnet(vnet.id, gw.id)}
-                                >
-                                  ✕ VPN GW ({gw.name})
-                                </button>
-                              ))
-                          )}
-                          {!vnet.routeServer ? (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-add-ars-${vnet.id}`}
-                              disabled={usesRemoteGw}
-                              title={
-                                usesRemoteGw
-                                  ? 'Cannot add Route Server while Use Remote Gateways is enabled on a peering'
-                                  : 'Add Azure Route Server'
-                              }
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                opacity: usesRemoteGw ? 0.5 : 1,
-                              }}
-                              onClick={() => addRouteServerToVnet(vnet.id)}
-                            >
-                              + Route Server (ARS)
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-remove-ars-${vnet.id}`}
-                              style={{
-                                fontSize: 11,
-                                padding: '3px 8px',
-                                color: 'var(--error)',
-                                borderColor: 'var(--border)',
-                              }}
-                              onClick={() => removeRouteServerFromVnet(vnet.id)}
-                            >
-                              ✕ Remove ARS ({vnet.routeServer.name})
-                            </button>
-                          )}
-                        </div>
-
-                        </InspectorSection>
                         <Suspense fallback={null}>
-                          <GatewayRoutingSettings vnet={vnet} onChange={(update) => commitTopology((draft) => {
-                            const target = draft.vnets.find((candidate) => candidate.id === vnet.id)
-                            if (target) update(target)
-                          })} />
-                        </Suspense>
-
-                        {/* Appliances list */}
-                        {vnet.appliances.map((app) => (
-                          <div
-                            key={app.id}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              flexWrap: 'wrap',
-                              gap: 8,
-                              marginTop: 6,
-                              fontSize: 12,
+                          <VnetRoutingSettings topology={topology} vnet={vnet} preview={workspaceSession?.presentationPreview}
+                            usesRemoteGateways={usesRemoteGw} onTopologyChange={commitTopology}
+                            onDeleteVnet={() => deleteVnetById(vnet.id)}
+                            onAddGateway={(kind) => addGatewayToVnet(vnet.id, kind)}
+                            onRemoveGateway={(id) => removeGatewayFromVnet(vnet.id, id)}
+                            onAddRouteServer={() => addRouteServerToVnet(vnet.id)}
+                            onRemoveRouteServer={() => removeRouteServerFromVnet(vnet.id)}
+                            onAddAppliance={() => addFirewallToVnet(vnet.id)}
+                            onAddVnra={() => openVnraCreation(vnet.id)}
+                            onConfigureVnra={(id) => {
+                              setSelected({ kind: 'appliance', vnetId: vnet.id, applianceId: id })
+                              setActiveTab('editor')
                             }}
-                          >
-                            <span>
-                              {app.kind === 'vnra' ? t('Managed VNRA') : '🔥'} {app.name} (<code>{app.privateIp}</code>)
-                            </span>
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                              {app.kind === 'vnra' ? <button type="button" className="aznet-btn" onClick={() => {
-                                setSelected({ kind: 'appliance', vnetId: vnet.id, applianceId: app.id })
-                                setActiveTab('editor')
-                              }}>{t('Configure Managed VNRA')}</button> : <label className="aznet-checkbox-row">
-                                <input
-                                  type="checkbox"
-                                  checked={app.enableIpForwarding}
-                                  onChange={(e) => {
-                                    const checked = e.target.checked
-                                    commitTopology((draft) => {
-                                      const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                      const targetA = targetV?.appliances.find(
-                                        (a) => a.id === app.id,
-                                      )
-                                      if (targetA) targetA.enableIpForwarding = checked
-                                    })
-                                  }}
-                                />
-                                <span>NIC IP Forwarding</span>
-                              </label>}
-                              <button
-                                type="button"
-                                className="aznet-btn"
-                                data-testid={`aznet-remove-app-${app.id}`}
-                                style={{
-                                  fontSize: 11,
-                                  padding: '2px 6px',
-                                  color: 'var(--error)',
-                                  borderColor: 'var(--border)',
-                                }}
-                                onClick={() => removeApplianceFromVnet(vnet.id, app.id)}
-                              >
-                                ✕ Remove
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                            onRemoveAppliance={(id) => removeApplianceFromVnet(vnet.id, id)} />
+                        </Suspense>
                       </div>
                     )
                   })}
