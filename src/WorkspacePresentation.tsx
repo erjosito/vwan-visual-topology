@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from 'react'
 import { t } from './i18n'
 import { useWorkspaceSession } from './workspace-context'
+
+export const ConfigurationEditStatus = lazy(() => import('./ConfigurationEditStatus'))
 
 export function PresentationToggle() {
   const session = useWorkspaceSession()
@@ -16,7 +18,7 @@ export function InspectorSection({ title, summary, initialOpen, children }: {
   const [expanded, setExpanded] = useState(initialOpen)
   return <details className="presentation-inspector-section" data-grouped={!!preview}
     open={!preview || expanded} onToggle={event => { if (preview) setExpanded(event.currentTarget.open) }}>
-    <summary hidden={!preview}>{title}<span>{summary}</span></summary>
+    <summary hidden={!preview}>{title}<span>{summary}</span><Suspense fallback={null}><ConfigurationEditStatus section /></Suspense></summary>
     {children}
   </details>
 }

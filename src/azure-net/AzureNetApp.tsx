@@ -1,4 +1,4 @@
-import { Fragment, lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { projectAzFailures, regionKey, failureKey, failureLabel, type FailureDomain } from '../failures'
 import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '../failure-analysis'
@@ -15,7 +15,7 @@ import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
-import { InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
+import { ConfigurationEditStatus, InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
 import { previewSubnetActions, previewVnetActions } from '../context-actions'
 import { useWorkspaceSession } from '../workspace-context'
 import type { ContextAction } from '../TopologyContextMenu'
@@ -4606,6 +4606,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             }}
                             onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                           />
+                          <small className="configuration-save-hint">{t('Save on blur')}</small>
                           <span id={`aznet-gateway-prefix-help-${vnet.id}`} className="aznet-muted">
                             Read only by this VNet's ER/VPN gateway when GatewaySubnet exists; stored beforehand, ignored by a remote hub.
                             Include this gateway VNet's address spaces (recommended). Covered hub/spoke spaces are summarized; uncovered spaces remain advertised.
@@ -5528,7 +5529,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </InspectorSection>
               )
               return (
-              <Fragment key={workspaceIdentityKey(azWorkspaceIdentity(selected))}>
+              <div key={workspaceIdentityKey(azWorkspaceIdentity(selected))} data-configuration-scope>
+                <Suspense fallback={null}><ConfigurationEditStatus /></Suspense>
                 {context}
                 {vnetEditor}
                 {subnetEditor}
@@ -6011,7 +6013,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   ))}
                 </div>
                 </InspectorSection>
-              </Fragment>
+              </div>
               )
             })()}
 
