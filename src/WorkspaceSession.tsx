@@ -13,17 +13,20 @@ const FeedbackDialog = lazy(() => import('./FeedbackDialog').then((module) => ({
 export function WorkspaceMenu() {
   const session = useWorkspaceSession()
   const language = useLanguage()
+  const version = document.querySelector<HTMLMetaElement>('meta[name="application-version"]')?.content
+  const versionInfo = version && <span className="muted" data-testid="app-version">{language === 'ja' ? 'バージョン' : 'Version'} {version}</span>
   const [feedbackOpen, setFeedbackOpen] = useState(() => !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1')
   return <>
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
     <PresentationGroup label={t(session?.presentationPreview ? 'Settings' : 'Settings & help')}>
     <ThemeSelector />
     <LanguageSelector />
-    {session?.presentationPreview ? <CanvasStyleSettings /> : <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>}
+    {session?.presentationPreview ? <CanvasStyleSettings /> : <><button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>{versionInfo}</>}
     </PresentationGroup>
     {session?.presentationPreview && <PresentationGroup label={t('Help & feedback')}>
       <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>
       <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
+      {versionInfo}
     </PresentationGroup>}
     {!session?.presentationPreview && <LearningStatus />}
     {!session?.presentationPreview && <CloudMenu />}
