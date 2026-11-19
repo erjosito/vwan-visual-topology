@@ -27,6 +27,6 @@ export function focusGuidanceTarget(anchors: string[]) {
       target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true })
     }
     target.focus({ preventScroll: true })
-    return
+    return target
   }
 }

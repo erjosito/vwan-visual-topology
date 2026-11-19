@@ -58,6 +58,110 @@ function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
 }
 
 describe('evidence-gated course runner', () => {
+  it('automatically verifies and awards once, but requires deliberate quiz commitment and fresh exact inspections', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    try {
+      h.load()
+      h.runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(500)
+      expect(h.state().canContinue).toBe(true)
+      expect(h.completed).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(h.completed).toHaveBeenCalledTimes(1)
+      expect(h.state().celebration?.points).toBe(h.bundle.lessons[0].tasks[0].points)
+      const quiz = h.state().taskId
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(h.state().taskId).toBe(quiz)
+      await h.runner.assess('no-connection')
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(h.completed).toHaveBeenCalledTimes(2)
+      expect(h.state().celebration?.explanation).toBeTruthy()
+      const observation = h.state().observation!
+      h.runner.observe({ ...observation, subnetId: 'work-b' })
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(h.completed).toHaveBeenCalledTimes(2)
+      h.runner.observe(observation)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(h.completed).toHaveBeenCalledTimes(3)
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(h.completed).toHaveBeenCalledTimes(3)
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('debounces native edits and rejects an automatic pass after undo, pause, or review', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    try {
+      await h.toPeering()
+      h.runner.setAutomatic(true)
+      h.peer()
+      await vi.advanceTimersByTimeAsync(200)
+      h.edit(() => {})
+      await vi.advanceTimersByTimeAsync(300)
+      expect(h.state().canContinue).toBe(false)
+      await vi.advanceTimersByTimeAsync(200)
+      expect(h.state().canContinue).toBe(true)
+      const awards = h.completed.mock.calls.length
+      h.edit((document) => { if (document.mode !== 'vwan') document.topology.vnetPeerings = [] })
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(h.completed).toHaveBeenCalledTimes(awards)
+      h.peer()
+      await vi.advanceTimersByTimeAsync(500)
+      h.runner.setAutomatic(false)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(h.completed).toHaveBeenCalledTimes(awards)
+      h.runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(500)
+      h.runner.review(h.bundle.lessons[0].tasks[0].id)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(h.completed).toHaveBeenCalledTimes(awards)
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('does not spin on unassessed results or unlock when the award cannot be recorded', async () => {
+    vi.useFakeTimers()
+    const completed = vi.fn(() => false)
+    const h = harness({ completed })
+    try {
+      h.load()
+      h.evaluate.mockImplementation(async (request) => ({ ...executePlatform(request), status: 'not assessed' }))
+      h.runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(8000)
+      expect(h.evaluate).toHaveBeenCalledTimes(1)
+      expect(completed).not.toHaveBeenCalled()
+      h.evaluate.mockImplementation(async (request) => executePlatform(request))
+      h.edit(() => {})
+      await vi.advanceTimersByTimeAsync(8000)
+      expect(h.state().feedback).toBe('progress')
+      expect(completed).toHaveBeenCalledTimes(1)
+      expect(h.state().completions).toHaveLength(0)
+      expect(h.state().celebration).toBeUndefined()
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('aborts pending automatic work on pause and ignores a late result on resume', async () => {
+    vi.useFakeTimers()
+    const h = harness()
+    let finish!: (result: PlatformResult) => void
+    try {
+      h.load()
+      h.evaluate.mockImplementationOnce(() => new Promise<PlatformResult>((resolve) => { finish = resolve }))
+      h.runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(500)
+      expect(h.state().running).toBe(true)
+      const request = h.evaluate.mock.calls[0][0]
+      h.runner.setAutomatic(false)
+      finish(executePlatform(request))
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(h.completed).not.toHaveBeenCalled()
+      expect(h.state().canContinue).toBe(false)
+      h.runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(h.completed).toHaveBeenCalledTimes(1)
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
   it.each(['disabled', 'different-hub', 'different-table', 'unknown', 'removed'])('retains the original multi-hub tenant attachment and association: %s', async (change) => {
     const h = harness({ completions: beforeTask(scenarioBundle, 'multihub-labels.repair') }, scenarioBundle)
     h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === 'multihub-labels'))

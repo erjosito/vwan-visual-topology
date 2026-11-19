@@ -23,7 +23,10 @@ export function GuidanceHighlight({ anchors, onVisibility }: { anchors: string[]
         for (const element of candidates) {
           if (!scrolled.has(element)) {
             scrolled.add(element)
-            if (element instanceof HTMLElement) element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' })
+            const target = element.matches('tr') ? element.querySelector('td > code, th > code') ?? element : element
+            if (target instanceof HTMLElement) target.scrollIntoView({
+              block: matchMedia('(max-width: 999px)').matches ? 'center' : 'nearest', inline: 'nearest', behavior: 'instant',
+            })
           }
         }
         next = candidates.map(visibleGuidanceBox).filter(Boolean)

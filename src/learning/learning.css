@@ -31,6 +31,24 @@
 .learning-sidebar h3 { font-size: 17px; }
 .learning-sidebar h4 { font-size: 16px; }
 .learning-sidebar p { line-height: 1.5; }
+.learning-success { border-left: 3px solid var(--accent, #1857b6); padding: 8px 12px; }
+.learning-success p { margin-block: 6px; }
+.learning-guide { position: relative; display: inline-block; margin-block: 8px; }
+.learning-guide [role="tooltip"] {
+  position: absolute;
+  bottom: 100%;
+  inset-inline-start: 0;
+  width: min(280px, 70vw);
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--border, #b8c7d8);
+  border-radius: 6px;
+  background: var(--surface, #fff);
+  color: var(--text, #172b4d);
+  box-shadow: 0 2px 8px #0003;
+  font-size: 13px;
+  z-index: 1;
+}
 .learning-choice { display: flex; gap: 8px; align-items: baseline; margin-block: 12px; }
 .learning-sidebar-open :is(.aznet-topbar, .unified-topbar) { flex-wrap: wrap; max-height: 180px; overflow: auto; }
 .learning-sidebar-open .unified-topbar-controls { flex-basis: 100%; justify-content: flex-start; }

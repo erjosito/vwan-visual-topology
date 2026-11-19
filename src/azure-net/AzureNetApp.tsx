@@ -11,6 +11,7 @@ import { azDisplayResult, azRoutingInput } from './routing-input'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
+import { LearningInspection } from '../learning/LearningInspection'
 import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
 import { Explain } from '../learning/Explain'
@@ -3547,16 +3548,15 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         </tbody>
                       </table></div>
 
-                      {workspaceSession?.learningView?.open && !workspaceSession.learningState?.reviewId
+                      {workspaceSession?.learningView?.open && workspaceSession.learningState?.automatic && !workspaceSession.learningState.reviewId
                         && workspaceSession.learningState?.observation
                         && routeSelection.kind === 'subnet'
                         && routeSelection.vnetId === workspaceSession.learningState.observation.vnetId
                         && routeSelection.subnetId === workspaceSession.learningState.observation.subnetId
                         && inspectedSubnetTable.subnetId === workspaceSession.learningState.observation.subnetId
-                        && <p><button type="button" data-testid="learning-record-inspection"
-                          onClick={() => workspaceSession.reportLearningObservation?.(workspaceSession.learningState!.observation!)}>
-                          {language === 'ja' ? '確認を記録' : 'Record inspection'}: {workspaceSession.learningState.observation.prefix}
-                        </button></p>}
+                        && <LearningInspection observation={workspaceSession.learningState.observation}
+                          prefixPresent={inspectedSubnetTable.routes.some((route) => route.prefix === workspaceSession.learningState!.observation!.prefix)}
+                          onObserve={workspaceSession.reportLearningObservation} />}
 
                       {inspectedSubnetTable.suppressedBgpRoutes.length > 0 && (
                         <div
@@ -3638,8 +3638,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         hubId: routeSelection.hubId,
                         tableId: hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE,
                         prefix: hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.prefix : undefined,
-                      } : undefined} /></Suspense>
-                    {workspaceSession?.learningView?.open && !workspaceSession.learningState?.reviewId
+                      } : routeSelection.kind === 'site' ? {
+                        siteId: routeSelection.siteId,
+                        prefix: workspaceSession?.learningState?.observation?.siteId === routeSelection.siteId
+                          ? workspaceSession.learningState.observation.prefix : undefined,
+                      } : undefined} />
+                    {workspaceSession?.learningView?.open && workspaceSession.learningState?.automatic && !workspaceSession.learningState.reviewId
                       && workspaceSession.learningState?.observation && inspectedControlRib.available
                       && ((routeSelection.kind === 'site' && routeSelection.siteId === workspaceSession.learningState.observation.siteId)
                         || (routeSelection.kind === 'vwan-hub' && routeSelection.hubId === workspaceSession.learningState.observation.hubId
@@ -3647,10 +3651,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           && (hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
                             === workspaceSession.learningState.observation.tableId
                           && simulation.vwanHubTableCoverage[routeSelection.hubId]?.[workspaceSession.learningState.observation.tableId!]?.complete))
-                      && <p><button type="button" data-testid="learning-record-inspection"
-                        onClick={() => workspaceSession.reportLearningObservation?.(workspaceSession.learningState!.observation!)}>
-                        {language === 'ja' ? '確認を記録' : 'Record inspection'}: {workspaceSession.learningState.observation.prefix}
-                      </button></p>}
+                      && <LearningInspection observation={workspaceSession.learningState.observation}
+                        prefixPresent={inspectedControlRib.entries.some((route) => route.prefix === workspaceSession.learningState!.observation!.prefix)}
+                        onObserve={workspaceSession.reportLearningObservation} />}</Suspense>
                   </div>
                 )}
               </>

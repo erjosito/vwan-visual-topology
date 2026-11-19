@@ -10,7 +10,7 @@ import { guidanceAnchor } from '../learning/guidance'
 
 export function BgpRouteTable({ entries, available, learningScope }: {
   entries: AzBgpRibEntry[]; available: boolean
-  learningScope?: { hubId: string; tableId: string; prefix?: string }
+  learningScope?: ({ hubId: string; tableId: string } | { siteId: string }) & { prefix?: string }
 }) {
   const [filter, setFilter] = useState('')
   const groups = useMemo(() => {
@@ -35,7 +35,9 @@ export function BgpRouteTable({ entries, available, learningScope }: {
         .sort((a, b) => Number(b.preferred) - Number(a.preferred) || a.id.localeCompare(b.id))
         .map((entry) => ({
           id: entry.id, prefix, preferred: entry.preferred,
-          learningAnchor: learningScope ? guidanceAnchor('hub-effective-prefix', learningScope.hubId, learningScope.tableId, prefix) : undefined,
+          learningAnchor: learningScope ? 'siteId' in learningScope
+            ? guidanceAnchor('site-effective-prefix', learningScope.siteId, prefix)
+            : guidanceAnchor('hub-effective-prefix', learningScope.hubId, learningScope.tableId, prefix) : undefined,
           status: entry.preferred ? '*' as const : '-' as const,
           statusLabel: t(entry.preferred ? 'Preferred' : 'Alternative'),
           nextHop: entry.nextHopIp && !entry.nextHopName.includes(entry.nextHopIp) ? `${entry.nextHopName} (${entry.nextHopIp})` : entry.nextHopName,
