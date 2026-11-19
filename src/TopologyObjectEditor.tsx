@@ -10,6 +10,7 @@ import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topolog
 import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
+import { ConfigurationEditStatus } from './WorkspacePresentation'
 const HubStaticRoutesEditor = lazy(() => import('./HubStaticRoutesEditor').then((module) => ({ default: module.HubStaticRoutesEditor })))
 
 export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean; focusFirewall?: boolean }
@@ -233,7 +234,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const removedPeers = topology.siteLinks.filter((l) => l.a === request.id || l.b === request.id).length
 
   return <CanvasOverlay title={title} className="object-editor" onClose={onClose}>
-    <form onSubmit={save} data-configuration-pending={dirty} onChange={() => setDirty(true)}>
+    <form onSubmit={save} data-configuration-scope data-configuration-pending={dirty} onChange={() => setDirty(true)}>
+      {!request.deleting && <Suspense fallback={null}><ConfigurationEditStatus form /></Suspense>}
       {request.deleting ? <>
         <p>{t("Delete")} <strong>{item?.name}</strong>{t("? This cannot be undone. Export JSON first if you need a backup.")}</p>
         {request.kind === 'hub' && <p>{t('This also removes {0} attached spoke{1} and {2} connection{3}. On-premises sites are kept.', removedSpokes, removedSpokes === 1 ? '' : 's', removedConnections, removedConnections === 1 ? '' : 's')}</p>}

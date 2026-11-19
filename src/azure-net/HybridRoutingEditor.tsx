@@ -70,7 +70,8 @@ export function HybridConnectionEditor({ topology, connectionId, commit }: Props
           setTransport(event.target.value as 'VPN' | 'SDWAN')
           if (event.target.value === 'SDWAN') setBgp(true)
         }}><option value="VPN">VPN</option><option value="SDWAN">SD-WAN</option></select></label>}
-        <label><input type="checkbox" name="bgp" disabled={transport === 'SDWAN'} checked={bgp} onChange={(event) => setBgp(event.target.checked)} />{t('BGP enabled (required for SD-WAN)')}</label>
+        <label><input type="checkbox" name="bgp" disabled={transport === 'SDWAN'} checked={bgp}
+          data-configuration-pending={bgp !== (vpn?.bgpEnabled ?? true)} onChange={(event) => setBgp(event.target.checked)} />{t('BGP enabled (required for SD-WAN)')}</label>
         <label className="field"><span>{t('Static VPN prefixes (BGP disabled)')}</span><textarea name="prefixes" defaultValue={vpn.staticPrefixes?.join('\n') ?? ''} /></label>
       </>}
       <label className="field"><span>{t('Inbound AS-path prepend')}</span><input name="inbound" defaultValue={(vpn?.inboundPrepend ?? er?.prepend)?.join(' ') ?? ''} /></label>
