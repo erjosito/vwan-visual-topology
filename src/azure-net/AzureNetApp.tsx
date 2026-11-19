@@ -76,7 +76,6 @@ import {
   createEmptyAzNetTopology,
   validateAzNetTopology,
   validateAdvertisedGatewayPrefixes,
-  type AzArsPreference,
   type AzErCircuitSku,
   type AzNetTopology,
   type AzPeeringDirectionFlags,
@@ -131,7 +130,8 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
-const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls })))
+const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls }))
+  .catch(() => ({ default: () => <p role="status">{t('Flow export controls unavailable. Reconnect and reload to retry; routing results remain available.')}</p> })))
 const VpnNatGatewayEditor = lazy(() => import('../VpnNatEditor').then((module) => ({ default: module.VpnNatGatewayEditor })))
 const BgpRouteTable = lazy(() => import('./BgpRouteTable').then((module) => ({ default: module.BgpRouteTable })))
 const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ default: module.SampleGallery })))
@@ -152,7 +152,7 @@ const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
 const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
-const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
+const GatewayRoutingSettings = lazy(() => import('./VpnGatewaySettings'))
 const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.VnetPrefixEditor })))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
 const VnetCommunityEditor = lazy(() => import('../VnetCommunityEditor'))
@@ -1297,7 +1297,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         asn: 65515,
         bgpEnabled: true,
         enabled: true,
-        ...(kind === 'Vpn' ? { activeActive: false } : {}),
+        sku: kind === 'Vpn' ? 'VpnGw1AZ' : 'ErGw1AZ',
+        ...(kind === 'Vpn' ? { activeActive: false, vpnType: 'RouteBased', vpnGatewayGeneration: 'Generation1' } : {}),
       })
     })
   }
@@ -4784,60 +4785,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         </div>
 
                         </InspectorSection>
-                        {vnet.gateways.filter((gateway) => gateway.kind === 'Vpn').map((gateway) =>
-                          <Suspense key={gateway.id} fallback={null}>
-                            <VpnGatewaySettings gateway={gateway}
-                              routeExchange={!!(gateway.enabled && vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic)}
-                              onMode={(mode) => commitTopology((draft) => {
-                                const target = draft.vnets.find((candidate) => candidate.id === vnet.id)?.gateways.find((candidate) => candidate.id === gateway.id)
-                                if (target) {
-                                  if (mode === undefined) delete target.activeActive
-                                  else target.activeActive = mode
-                                }
-                              })} />
-                          </Suspense>)}
-
-                        {/* ARS settings if present */}
-                        {vnet.routeServer && (
-                          <div style={{ marginTop: 6, marginBottom: 6 }} className="aznet-field-grid">
-                            <label className="aznet-checkbox-row">
-                              <input
-                                type="checkbox"
-                                checked={vnet.routeServer.branchToBranchTraffic}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  commitTopology((draft) => {
-                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                    if (targetV?.routeServer) {
-                                      targetV.routeServer.branchToBranchTraffic = checked
-                                    }
-                                  })
-                                }}
-                              />
-                              <span>ARS Branch-to-Branch (ER/VPN ↔ NVA)</span>
-                            </label>
-                            <label className="aznet-field">
-                              <span>ARS Hub Routing Preference</span>
-                              <select
-                                className="aznet-select"
-                                value={vnet.routeServer.hubRoutingPreference}
-                                onChange={(e) => {
-                                  const pref = e.target.value as AzArsPreference
-                                  commitTopology((draft) => {
-                                    const targetV = draft.vnets.find((v) => v.id === vnet.id)
-                                    if (targetV?.routeServer) {
-                                      targetV.routeServer.hubRoutingPreference = pref
-                                    }
-                                  })
-                                }}
-                              >
-                                <option value="ExpressRoute">ExpressRoute (Default)</option>
-                                <option value="VpnGateway">VpnGateway</option>
-                                <option value="ASPath">ASPath</option>
-                              </select>
-                            </label>
-                          </div>
-                        )}
+                        <Suspense fallback={null}>
+                          <GatewayRoutingSettings vnet={vnet} onChange={(update) => commitTopology((draft) => {
+                            const target = draft.vnets.find((candidate) => candidate.id === vnet.id)
+                            if (target) update(target)
+                          })} />
+                        </Suspense>
 
                         {/* Appliances list */}
                         {vnet.appliances.map((app) => (

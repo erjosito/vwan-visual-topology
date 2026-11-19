@@ -132,6 +132,8 @@ if ($command -eq 'network nic show-effective-route-table') {
     ConvertTo-Json -InputObject @($result) -Depth 10 -Compress
 } elseif ($command -eq 'network vnet-gateway list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors')) {
     $gateway = @{ id = "$prefix/virtualNetworkGateways/vpn"; name = 'vpn'; gatewayType = 'Vpn'; enableBgp = $true
+        vpnType = 'RouteBased'; activeActive = $true; vpnGatewayGeneration = 'Generation2'
+        sku = @{ name = 'VpnGw4AZ'; tier = 'VpnGw4AZ'; secret = 'must-not-be-exported' }
         bgpSettings = @{ asn = 65515; bgpPeeringAddress = '10.82.253.4' }
         ipConfigurations = @(@{ id = "$prefix/virtualNetworkGateways/vpn/ipConfigurations/default"
             subnet = @{ id = "$prefix/virtualNetworks/vnet-first/subnets/GatewaySubnet" } })

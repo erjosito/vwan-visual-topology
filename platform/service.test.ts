@@ -14,6 +14,7 @@ import { resolve } from 'node:path'
 import { largeVwanCapture } from '../tests/large-vwan-fixture'
 import { importAzureCapture } from '../src/azure-import'
 import { bgpNeighborTopology } from '../tests/fixtures/bgp-neighbors'
+import { coexistenceTopology } from '../tests/fixtures/coexistence'
 
 const require = createRequire(import.meta.url)
 const compiled = require('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
@@ -24,6 +25,25 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it.each(['hub-spoke', 'full'] as const)('preserves coexistence configuration and supported static-VPN ARS exchange in compiled %s execution', (mode) => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].gateways[0].bgpEnabled = false
+    topology.vpnConnections[0].bgpEnabled = false
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    expect(result.document?.topology).toEqual(topology)
+    expect((result.simulation as ReturnType<typeof simulateAzNet>).siteRibs['er-site']).toEqual(expect.arrayContaining([
+      expect.objectContaining({ prefix: '192.0.2.0/24', preferred: true }),
+    ]))
+    topology.vnets[0].gateways[0].activeActive = false
+    expect(executePlatform(input).status).toBe('not assessed')
+    topology.vnets[0].gateways[0].sku = 'Basic'
+    expect(executePlatform({ ...input, operation: 'validate' })).toMatchObject({
+      status: 'invalid', errors: [{ message: expect.stringContaining('does not support ER/VPN coexistence') }],
+    })
+  })
   it.each(['hub-spoke', 'full'] as const)('exports serializable BGP speaker/session identities and logical scopes through the compiled %s contract', (mode) => {
     const topology = bgpNeighborTopology()
     const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }

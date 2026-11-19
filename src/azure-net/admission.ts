@@ -63,7 +63,10 @@ const schema = object({
       privateEndpointNetworkPolicies: choice('Disabled', 'Enabled', 'RouteTableEnabled', 'NetworkSecurityGroupEnabled'),
       privateEndpoints: array(object({ ...named, ipAddress: text, serviceName: text })),
     })),
-    gateways: array(object({ ...named, kind: choice('ExpressRoute', 'Vpn'), asn, bgpEnabled: bool, enabled: bool }, { activeActive: bool })),
+    gateways: array(object({ ...named, kind: choice('ExpressRoute', 'Vpn'), asn, bgpEnabled: bool, enabled: bool }, {
+      activeActive: bool, vpnType: choice('RouteBased', 'PolicyBased'), sku: text,
+      vpnGatewayGeneration: choice('Generation1', 'Generation2'),
+    })),
     appliances: array(object({
       ...named, kind: choice('azure-firewall', 'nva-vm', 'vnra'), subnetId: id, privateIp: text, enableIpForwarding: bool,
       staticRoutes: array(object({ id, prefix: text, nextHopKind: choice('subnet', 'gateway', 'appliance', 'internet', 'drop'), enabled: bool }, { nextHopIp: text })),

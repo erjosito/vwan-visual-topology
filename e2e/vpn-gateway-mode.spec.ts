@@ -1,8 +1,46 @@
 import { expect, test } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
+import { coexistenceTopology } from '../tests/fixtures/coexistence'
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} retains unknown coexistence metadata and authors routing type, SKU and generation`, async ({ page }) => {
+    const topology = coexistenceTopology()
+    delete topology.vnets[0].gateways[0].vpnType
+    delete topology.vnets[0].gateways[0].sku
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[data-desktop-import]').setInputFiles({
+      name: 'coexistence.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await page.getByTestId('aznet-chip-vpn').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
+    const settings = page.getByTestId('vpn-gateway-settings-vpn')
+    const type = settings.getByRole('combobox', { name: 'VPN gateway routing type', exact: true })
+    const sku = settings.getByRole('textbox', { name: 'Gateway SKU', exact: true })
+    await expect(type).toHaveValue('')
+    await expect(sku).toHaveValue('')
+    await expect(settings).toContainText('Missing settings do not prove compatibility')
+    await expect(settings).toContainText('selectors are not a PolicyBased gateway')
+    await expect(settings).toContainText('not Microsoft peering')
+    await type.selectOption('PolicyBased')
+    await sku.fill('Basic')
+    await expect(type).toHaveAttribute('aria-invalid', 'true')
+    await expect(sku).toHaveAttribute('aria-invalid', 'true')
+    await type.selectOption('RouteBased')
+    await sku.fill('VpnGw5AZ')
+    await settings.getByRole('combobox', { name: 'VPN gateway generation', exact: true }).selectOption('Generation2')
+    await expect(type).toHaveAttribute('aria-invalid', 'false')
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    await expect.poll(async () => (await saved()).vnets[0].gateways[0]).toMatchObject({
+      sku: 'VpnGw5AZ', vpnType: 'RouteBased', vpnGatewayGeneration: 'Generation2',
+    })
+    expect((await saved()).vnets[0].gateways[1]).toEqual(topology.vnets[0].gateways[1])
+    await page.reload()
+    expect((await saved()).vnets[0].gateways[0]).toMatchObject({
+      sku: 'VpnGw5AZ', vpnType: 'RouteBased', vpnGatewayGeneration: 'Generation2',
+    })
+  })
   test(`${mode} authors standalone VPN mode, keeps legacy absence and persists it without changing VWAN`, async ({ page }) => {
     const topology = vpnGatewayModeTopology()
     if (mode === 'full') topology.vwanHubs.push({ id: 'vhub', name: 'Virtual hub', region: 'West Europe',

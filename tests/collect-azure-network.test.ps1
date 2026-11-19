@@ -56,6 +56,7 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
         if ($mode -eq 'nat-unallocated') { Assert (!$capture.publicIpAddresses[0].ipAddress) 'An unknown public address was invented.' }
         Assert ($capture.observationVersion -eq 1 -and $capture.version -eq 2) "$mode lost compatible versioned provenance."
         if ($mode -eq 'bgp-neighbors') {
+            Assert ($capture.vnetGateways[0].vpnType -eq 'RouteBased' -and $capture.vnetGateways[0].sku.name -eq 'VpnGw4AZ' -and $capture.vnetGateways[0].vpnGatewayGeneration -eq 'Generation2') 'Gateway coexistence configuration was lost.'
             $peer = $capture.vngBgpPeerStatus.vpn[0]
             Assert ($peer.localAddress -eq '10.82.253.4' -and $peer.neighbor -eq '192.0.2.9') 'Captured BGP endpoint identities were lost.'
             Assert ($peer.routesReceived -eq 0 -and $peer.messagesSent -eq 12 -and $peer.messagesReceived -eq 11 -and $peer.connectedDuration -eq '00:01:00') 'Captured BGP counters were dropped or invented.'

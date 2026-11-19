@@ -6,6 +6,7 @@ import { natGatewayForSubnet, validateInventory } from '../inventory'
 import { generateConnectivityBicep } from '../connectivity-bicep'
 import { validateSubnetPeeringScopes } from './subnet-peering'
 import { parseVnetBgpCommunities, vnetCommunityHelp } from '../vnet-communities'
+import { coexistenceFindings } from './coexistence'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -46,6 +47,7 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  warnings.push(...coexistenceFindings(topology).map((finding) => `${finding.summary} ${finding.remediation}`))
   for (const vnet of topology.vnets) parseVnetBgpCommunities(vnet.bgpCommunities)
   if (topology.vnets.some((vnet) => vnet.bgpCommunities)) warnings.push(vnetCommunityHelp)
   if (topology.vnets.some((vnet) => vnet.vwanHubAttachment?.staticRoutes?.length)) {
@@ -331,8 +333,9 @@ export function generateAzNetBicep(
         list.push(gwSym)
         gatewaySymbolsByVnet.set(vnet.id, list)
 
-        const skuName = gw.kind === 'ExpressRoute' ? 'ErGw1AZ' : 'VpnGw1AZ'
-        const skuTier = gw.kind === 'ExpressRoute' ? 'ErGw1AZ' : 'VpnGw1AZ'
+        const skuName = gw.sku?.trim() || (gw.kind === 'ExpressRoute' ? 'ErGw1AZ' : 'VpnGw1AZ')
+        const skuTier = skuName
+        if (!gw.sku?.trim()) warnings.push(`Gateway '${gw.name}' has unspecified SKU; this starter defaults to ${skuName}, not an observed Azure SKU.`)
 
         lines.push(`resource ${gwSym} 'Microsoft.Network/virtualNetworkGateways@2024-05-01' = {`)
         lines.push(`  name: '${escapeBicepString(gw.name)}'`)
@@ -340,7 +343,11 @@ export function generateAzNetBicep(
         lines.push(`  properties: {`)
         lines.push(`    gatewayType: '${gw.kind}'`)
         if (gw.kind === 'Vpn') {
-          lines.push(`    vpnType: 'RouteBased'`)
+          lines.push(`    vpnType: '${gw.vpnType ?? 'RouteBased'}'`)
+          if (!gw.vpnType) warnings.push(`VPN gateway '${gw.name}' has unspecified routing type; this starter defaults to RouteBased, not an observed Azure configuration.`)
+          const generation = gw.vpnGatewayGeneration ?? (/^VpnGw[45](AZ)?$/.test(skuName) ? 'Generation2' : 'Generation1')
+          lines.push(`    vpnGatewayGeneration: '${generation}'`)
+          if (!gw.vpnGatewayGeneration) warnings.push(`VPN gateway '${gw.name}' has unspecified generation; this starter defaults to ${generation}, not an observed generation.`)
           lines.push(`    activeActive: ${activeActive ? 'true' : 'false'}`)
           lines.push(`    enableBgp: ${gw.bgpEnabled ? 'true' : 'false'}`)
           if (gw.bgpEnabled) {
@@ -350,8 +357,8 @@ export function generateAzNetBicep(
           }
         }
         lines.push(`    sku: {`)
-        lines.push(`      name: '${skuName}'`)
-        lines.push(`      tier: '${skuTier}'`)
+        lines.push(`      name: '${escapeBicepString(skuName)}'`)
+        lines.push(`      tier: '${escapeBicepString(skuTier)}'`)
         lines.push(`    }`)
         lines.push(`    ipConfigurations: [`)
         lines.push(`      {`)

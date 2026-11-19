@@ -11,10 +11,12 @@ import {
 } from './engine'
 import type { AzNetTopology } from './model'
 import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
+import { coexistenceFindings } from './coexistence'
 
 export type AzDiagnosticSeverity = 'error' | 'warning' | 'info'
 
 export type AzDiagnosticCategory =
+  | 'gateway-coexistence'
   | 'gateway-subnet-missing-udr'
   | 'gateway-subnet-bgp-disabled'
   | 'bgp-routes-suppressed'
@@ -127,7 +129,7 @@ export function runAzNetDiagnostics(
   simulation: AzSimulationResult,
   options: { includePairAnalysis?: boolean } = {},
 ): AzDiagnosticFinding[] {
-  const findings: AzDiagnosticFinding[] = []
+  const findings: AzDiagnosticFinding[] = coexistenceFindings(topology)
 
   // 1. Check GatewaySubnet BGP Propagation Disabled + Missing Spoke UDRs (Asymmetric Firewall Bypass)
   for (const vnet of topology.vnets) {

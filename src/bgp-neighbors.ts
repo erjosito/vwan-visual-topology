@@ -1,5 +1,6 @@
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
+import { gatewayArsExchange } from './azure-net/ars-route-maps'
 import type { AzBgpRibEntry, AzNvaBgpPeer, AzNvaReceivedRoute, AzSimulationResult } from './azure-net/engine'
 
 export type BgpResourceKind = 'appliance' | 'route-server' | 'gateway' | 'site' | 'er-location' | 'vwan-hub'
@@ -133,7 +134,7 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     })
     for (const gw of vnet.gateways) add('gateway', gw.id, gw.name,
       gw.kind !== 'Vpn' || gw.activeActive === undefined ? [] : gw.activeActive ? ['vpn-1', 'vpn-2'] : ['vpn-active'], {
-        asn: gw.asn, enabled: gw.enabled && gw.bgpEnabled, ownerId: vnet.id,
+        asn: gw.asn, enabled: gw.enabled, ownerId: vnet.id,
         limitations: gw.kind === 'ExpressRoute' ? [opaqueMapping] : gw.activeActive === undefined ? [vpnUnknownMode]
           : [gw.activeActive ? 'Two active modeled VPN speakers; endpoint IPs and physical instance mappings are not exposed.'
             : 'One active modeled VPN speaker. A standby physical instance exists; its failure, failover timing and BGP session are not modeled.'],
@@ -172,10 +173,10 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
         local, instance, remote, remote.instances[0], availability, reason, received, exported, peerReceived, sent, limitations)
     }
     for (const gateway of vnet.gateways) {
-      const eligible = gateway.kind !== 'Vpn' || gateway.activeActive === true && gateway.asn === 65515
+      const eligible = gatewayArsExchange(gateway)
       managed(identity('ars-gateway', ars.id, gateway.id), `gateway:${gateway.id}`, local, find('gateway', gateway.id),
-        ars.enabled && ars.branchToBranchTraffic && gateway.enabled && gateway.bgpEnabled && eligible,
-        !eligible ? 'ARS/VPN route exchange requires explicit active/active mode and VPN ASN 65515.'
+        ars.enabled && ars.branchToBranchTraffic && eligible,
+        !eligible ? 'ARS/VPN route exchange requires an enabled supported gateway, explicit active/active mode and VPN ASN 65515; VPN BGP enablement is not required.'
           : !ars.branchToBranchTraffic ? 'Branch-to-branch exchange is disabled. Managed session existence is not inferred from that setting.' : opaqueMapping)
     }
   }
@@ -183,12 +184,14 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     const site = find('site', conn.siteId)
     const target = find(conn.targetKind === 'vnet-gateway' ? 'gateway' : conn.targetKind === 'appliance' ? 'appliance' : 'vwan-hub', conn.targetId)
     if (!site || !target) continue
+    const targetBgpEnabled = conn.targetKind !== 'vnet-gateway' ||
+      topology.vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.id === conn.targetId && gateway.bgpEnabled))
     if (!target.instances.length) {
-      managed(identity('vpn', conn.id), conn.id, target, site, conn.enabled && conn.bgpEnabled,
-        !conn.bgpEnabled ? 'BGP is disabled on this connection; static routes do not establish BGP neighbors.' : opaqueMapping)
+      managed(identity('vpn', conn.id), conn.id, target, site, conn.enabled && conn.bgpEnabled && targetBgpEnabled,
+        !conn.bgpEnabled || !targetBgpEnabled ? 'BGP is disabled on this connection or gateway; static routes do not establish BGP neighbors.' : opaqueMapping)
       continue
     }
-    const availability = conn.enabled && conn.bgpEnabled && site.enabled && target.enabled ? 'available' : 'unavailable'
+    const availability = conn.enabled && conn.bgpEnabled && targetBgpEnabled && site.enabled && target.enabled ? 'available' : 'unavailable'
     const gatewayRoutes = conn.targetKind === 'vnet-gateway' ? simulation?.gatewayRibs[conn.targetId] : undefined
     const siteRoutes = simulation?.siteRibs[conn.siteId]
     for (const instance of target.instances) pair(identity('vpn', conn.id), conn.id, target, instance, site, site.instances[0],

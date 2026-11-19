@@ -9,6 +9,7 @@ import { subnetAddressError, usableSubnetAddress } from './addressing'
 import type { ClassicVpnNatGateway, VpnNat, VwanVpnNatGateway } from '../vpn-nat'
 import { parseVnetBgpCommunities, type VnetBgpCommunities } from '../vnet-communities'
 import { indirectFirewallTopology } from './indirect-firewall-sample'
+import { coexistenceChecks } from './coexistence-validation'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -77,6 +78,9 @@ export interface AzVnetGateway {
   asn: number
   bgpEnabled: boolean
   activeActive?: boolean
+  vpnType?: 'RouteBased' | 'PolicyBased'
+  vpnGatewayGeneration?: 'Generation1' | 'Generation2'
+  sku?: string
   enabled: boolean
 }
 
@@ -470,7 +474,7 @@ export const sampleArsSdwanNvaCoexistence: AzNetTopology = {
       ],
       gateways: [
         { id: 'vng-ars-er', name: 'ER-GW-Transit', kind: 'ExpressRoute', asn: 65515, bgpEnabled: true, enabled: true },
-        { id: 'vng-ars-vpn', name: 'VPN-GW-Transit', kind: 'Vpn', asn: 65515, bgpEnabled: true, enabled: true },
+        { id: 'vng-ars-vpn', name: 'VPN-GW-Transit', kind: 'Vpn', asn: 65515, bgpEnabled: true, activeActive: true, vpnType: 'RouteBased', sku: 'VpnGw1AZ', vpnGatewayGeneration: 'Generation1', enabled: true },
       ],
       routeServer: {
         id: 'ars-hub-neu',
@@ -1252,7 +1256,8 @@ export function validateAzNetTopology(input: unknown): string[] {
   let topology: AzNetTopology
   try { topology = parseAzNetTopology(input) }
   catch (error) { return [error instanceof Error ? error.message : 'Invalid topology.'] }
-  const errors: string[] = []
+  const errors: string[] = coexistenceChecks(topology).filter((finding) => finding.severity === 'error')
+    .map((finding) => finding.summary)
   if (!input || typeof input !== 'object') {
     return ['Topology must be a JSON object.']
   }

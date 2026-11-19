@@ -6,6 +6,7 @@ export const ja: Record<string, string> = {
   ...workspaceCapabilitiesJa,
   'Discard unsaved configuration changes and switch resources? Save your changes first to keep them.': '未保存の構成変更を破棄して別のリソースに切り替えますか。変更を保持するには、先に保存してください。',
   'BGP neighbors': 'BGP ネイバー',
+  'Flow export controls unavailable. Reconnect and reload to retry; routing results remain available.': 'フローのエクスポート操作を読み込めません。再接続して再読み込みしてください。ルーティング結果は引き続き利用できます。',
   'Clone VNet...': 'VNet を複製...',
   'Clone VNet': 'VNet の複製',
   'Create VNet clone': 'VNet の複製を作成',
