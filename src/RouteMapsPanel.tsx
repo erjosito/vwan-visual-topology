@@ -12,8 +12,8 @@ import './route-map-messages-ja'
 
 const prefixes = (text: string) => text.trim() === '*' ? [] : text.split(/[,\s]+/).filter(Boolean)
 
-export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asPathMatching = false, siteLocalPreference = false }: {
-  map: RouteMap; onSave: (map: RouteMap) => void; parsePrepend?: (value: string) => number[]; advanced?: boolean; asPathMatching?: boolean; siteLocalPreference?: boolean
+export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asPathMatching = false, siteLocalPreference = false, isNew = false }: {
+  map: RouteMap; onSave: (map: RouteMap) => void; parsePrepend?: (value: string) => number[]; advanced?: boolean; asPathMatching?: boolean; siteLocalPreference?: boolean; isNew?: boolean
 }) {
   const preview = useWorkspaceSession()?.presentationPreview
   const [rules, setRules] = useState<RouteMapRule[]>(() => advanced || asPathMatching ? map.rules.map((rule) => ({
@@ -53,7 +53,7 @@ export function MapDefinition({ map, onSave, parsePrepend, advanced = false, asP
       setError('')
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid route map.') }
   }
-  return <form className="map-definition" data-configuration-scope data-configuration-tracked data-configuration-pending={dirty}
+  return <form className="map-definition" data-configuration-scope data-configuration-tracked data-configuration-pending={dirty || isNew}
     onChange={() => setDirty(true)} onSubmit={save} onInvalidCapture={(event) => {
       for (let parent = (event.target as HTMLElement).parentElement; parent && parent !== event.currentTarget; parent = parent.parentElement) {
         if (parent instanceof HTMLDetailsElement) parent.open = true
@@ -178,7 +178,7 @@ export function RouteMapsPanel({ topology, simulation, router, connectionId, onR
             : t("Not applied to any connection on this router.")}
         </p>
       )}
-      <MapDefinition key={map.id} map={map} asPathMatching siteLocalPreference onSave={(value) => {
+      <MapDefinition key={map.id} map={map} isNew={!!draft} asPathMatching siteLocalPreference onSave={(value) => {
       const next = structuredClone(topology)
       next.routeMaps ??= []
       const index = next.routeMaps.findIndex((m) => m.id === value.id)

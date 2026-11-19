@@ -112,6 +112,14 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const ja of [false, true]
     expect(await policy.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     expect((await new AxeBuilder({ page }).include('.route-map-panel').analyze()).violations).toEqual([])
+    await policy.getByRole('button', { name: ja ? 'ルート マップを作成' : 'Create route map', exact: true }).click()
+    await expect(status).toContainText(ja ? '未保存の構成変更があります。' : 'Unsaved configuration changes.')
+    await policy.getByRole('button', { name: ja ? '規則を追加' : 'Add rule', exact: true }).click()
+    await expect(policy.locator('[data-rule-id]')).toHaveAttribute('open')
+    await policy.getByRole('button', { name: ja ? 'ルート マップを保存' : 'Save route map', exact: true }).click()
+    await expect(status).toContainText(ja ? '未保存の構成編集はありません。' : 'No pending configuration edits.')
+    expect((await read()).routeMaps).toHaveLength(2)
+    expect((await read()).sites[0].routeMapAssignments).toEqual([{ connectionId: 'vpn', inboundMapId: 'policy' }])
   })
 }
 
