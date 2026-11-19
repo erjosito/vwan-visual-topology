@@ -150,7 +150,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.files.some(({ path }: { path: string }) => /\/ConfigurationEditStatus-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/RouteMapsPanel-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel)-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/(?:progress-sync|FlowExportControls|CloneVnetDialog|AddressPrefixEditors|subnet-allocation)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:progress-sync|FlowExportControls|CloneVnetDialog|AddressPrefixEditors|subnet-allocation|VnetRoutingSettings)-/.test(path))).toBe(false)
     if (mode !== 'vwan') expect(graph.files.some(({ path }: { path: string }) => /\/(?:VnetCommunityEditor|LearningInspection)-/.test(path))).toBe(false)
     if (!await page.getByTestId('document-cloud-state').count()) {
       expect(graph.files.some(({ path }: { path: string }) => /\/CloudDocumentSaveStatus-/.test(path))).toBe(false)

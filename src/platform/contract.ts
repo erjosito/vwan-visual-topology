@@ -14,7 +14,7 @@ import type { BgpInspection } from '../bgp-neighbors'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
-export const engineVersion = '2026.11.19.1'
+export const engineVersion = '2026.11.19.2'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
@@ -118,6 +118,14 @@ export const capabilities = {
   mixedRouting: ['native hub tables/association/propagation', 'shared VWAN HRP selection', 'hub-owned and site-owned route maps',
     'integrated SD-WAN and original spoke NVA BGP peers', 'static VPN and converged mixed ER exports',
     'site inbound local preference', 'WAN branch export/default/learning controls'],
+  gatewayCoexistence: {
+    modes: ['hub-spoke', 'full'], scope: 'Standalone ER/private-peering and S2S VPN gateways in one VNet; not Virtual WAN managed gateway controls.',
+    configuration: 'Optional gateway sku, vpnType (RouteBased/PolicyBased) and vpnGatewayGeneration (Generation1/Generation2); omitted capture/legacy fields remain unknown. Basic, PolicyBased and GatewaySubnet /28 or longer are unsupported for coexistence.',
+    routing: 'No-ARS equal-prefix ER preference, longest-prefix match and steady-state withdrawal/restoration. Same-VNet ARS branch-to-branch exchanges NVA/gateway and opposite-kind ER/VPN gateway routes; VPN requires explicit active/active and ASN 65515, but does not require VPN BGP enablement. Static VPN site prefixes can be exchanged.',
+    unknown: ['live establishment/convergence/failover timing', 'Microsoft-peering failover', 'VPN Internet underlay reachability',
+      'SKU regional availability/capacity and deployment readiness', 'IPsec traffic-selector enforcement', 'unknown gateway prerequisites'],
+    boundaries: 'Azure outbound ER preference does not set site return policy. Configure site inbound local preference explicitly. ARS does not provide ER circuit-to-circuit transit; use Global Reach.',
+  },
   subnetPeering: {
     modes: ['hub-spoke', 'full'], topologyVersion: 2,
     field: 'vnetPeerings[].scope: {type:whole-vnet} or {type:subnets,subnetAIds:originalIds[],subnetBIds:originalIds[]}; omitted scope preserves legacy whole-VNet peering.',

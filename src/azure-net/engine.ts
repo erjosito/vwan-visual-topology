@@ -7,7 +7,7 @@ import { chooseVwanHubRoutes, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
 import { peeringPrefixes, peeringSubnetIds, subnetPeeringLimitations, validateSubnetPeeringScopes } from './subnet-peering'
-import { ARS_MAX_BGP_PEERS, applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes } from './ars-route-maps'
+import { ARS_MAX_BGP_PEERS, applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes, gatewayArsExchange } from './ars-route-maps'
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, propagatesLocally, propagatesRemotely } from '../hub-routing'
 import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
 import { connectionStaticRoutes } from './vnet-connection-routes'
@@ -389,8 +389,11 @@ function hubAdvertisements(
 export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
   validateVpnNat(topology)
   let result = simulateAzNetPass(topology)
-  if (!topology.vwanHubs.length && !topology.routeMaps?.some((map) => map.siteId && map.rules.some((rule) => rule.localPreference !== undefined))) return result
-  const signature = (value: AzSimulationResult) => JSON.stringify([value.vwanHubTables, value.erLocationRibs, value.siteRibs])
+  const gatewayExchange = topology.vnets.some((vnet) => vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic &&
+    vnet.gateways.some((gateway) => gateway.kind === 'Vpn' && gatewayArsExchange(gateway)) &&
+    vnet.gateways.some((gateway) => gateway.kind === 'ExpressRoute' && gatewayArsExchange(gateway)))
+  if (!gatewayExchange && !topology.vwanHubs.length && !topology.routeMaps?.some((map) => map.siteId && map.rules.some((rule) => rule.localPreference !== undefined))) return result
+  const signature = (value: AzSimulationResult) => JSON.stringify([value.vwanHubTables, value.erLocationRibs, value.siteRibs, value.routeServerOutbound])
   const seen = new Set([signature(result)])
   for (let round = 0; round < 64; round++) {
     const next = simulateAzNetPass(topology, result)
@@ -410,7 +413,12 @@ export function simulateAzNet(topology: AzNetTopology): AzSimulationResult {
 
 function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResult): AzSimulationResult {
   const peeringLimitations = [...validateSubnetPeeringScopes(topology), ...subnetPeeringLimitations(topology)]
-  const warnings: string[] = [...peeringLimitations]
+  const gatewayLimitations = topology.vnets.flatMap((vnet) =>
+    vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic
+      ? vnet.gateways.filter((gateway) => gateway.enabled && !gatewayArsExchange(gateway)).map((gateway) =>
+        `ARS gateway exchange for "${gateway.name}" in "${vnet.name}" is not assessed: VPN integration requires explicit active/active, ASN 65515 and a supported RouteBased non-Basic gateway. VPN BGP enablement is not required.`)
+      : [])
+  const warnings: string[] = [...peeringLimitations, ...gatewayLimitations]
   if (topology.vnets.some((vnet) => vnet.bgpCommunities)) {
     warnings.push(vnetCommunityHelp)
     if (topology.vnets.some((vnet) => vnet.summarizedGatewayPrefixes?.length)) {
@@ -553,7 +561,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     return groups
   }
   type VnetAdvertisement = {
-    prefix: string; asPath: number[]; communities?: string[]; sourceName: string; sourceVnetId?: string; forwardingRoutes?: AzBgpRibEntry[]; advertisedSummaryFrom?: string; protectedVnet?: boolean; routeMapTrace?: string[]; nvaRoute?: boolean
+    prefix: string; asPath: number[]; communities?: string[]; sourceName: string; sourceVnetId?: string; forwardingRoutes?: AzBgpRibEntry[]; advertisedSummaryFrom?: string; protectedVnet?: boolean; routeMapTrace?: string[]; arsRoute?: boolean
   }
   const connectedVnetPrefixes = (vnet: AzVNet, processSpokes = true): VnetAdvertisement[] => {
     const result: VnetAdvertisement[] = vnet.prefixes.map((prefix) => ({
@@ -623,14 +631,21 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     }
     // Summaries replace VNet address-space advertisements, not NVA routes learned through ARS.
     // If ARS is present with branchToBranchTraffic, include NVA-advertised BGP prefixes
-    if (vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic) {
+    const targetGateway = vnet.gateways.find((gateway) => connectionId === `gateway:${gateway.id}`)
+    if (vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic && (!targetGateway || gatewayArsExchange(targetGateway))) {
       const received = chooseBgpWinners(Object.values(receivedPeerRoutes(vnet)).flat().filter((route) => route.originProtocol === 'BGP-NVA'), vnet.routeServer.hubRoutingPreference)
       result.push(...received.filter((route) => route.preferred).map((route) => ({
-        ...route, nvaRoute: true, sourceName: `${route.nextHopName} (via ARS Branch-to-Branch)`,
+        ...route, arsRoute: true, sourceName: `${route.nextHopName} (via ARS Branch-to-Branch)`,
       })))
+      if (targetGateway) {
+        const exchanged = routeServerRibs[vnet.routeServer.id] ?? previous?.routeServerRibs[vnet.routeServer.id] ?? []
+        result.push(...exchanged.filter((route) => route.preferred && route.nextHopKind === 'vnet-gateway' &&
+          vnet.gateways.some((source) => source.id === route.nextHopId && source.kind !== targetGateway.kind && gatewayArsExchange(source)))
+          .map((route) => ({ ...route, arsRoute: true, sourceName: `${route.nextHopName} (via ARS Branch-to-Branch)` })))
+      }
     }
     const advertised = vnet.routeServer?.enabled ? applyAzArsRouteMap(vnet.routeServer, connectionId, 'outbound', result) : result
-    return advertised.map((route) => route.nvaRoute ? { ...route, asPath: [65515, ...route.asPath] } : route)
+    return advertised.map((route) => route.arsRoute ? { ...route, asPath: [65515, ...route.asPath] } : route)
   }
 
   // 2. Populate ExpressRoute Locations (MSEE) from connected Sites, VNet ER Gateways, and vWAN Hubs
@@ -673,7 +688,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         }
         for (const adv of advertisedVnetPrefixes(ownerVnet, `gateway:${gw.id}`)) {
           // VNet resource communities are attached at classic ER export, not at peering/ARS/VWAN ingress.
-          const origin = !adv.nvaRoute && !adv.advertisedSummaryFrom && !adv.forwardingRoutes
+          const origin = !adv.arsRoute && !adv.advertisedSummaryFrom && !adv.forwardingRoutes
             ? topology.vnets.find((vnet) => vnet.id === adv.sourceVnetId) : undefined
           const configured = origin?.bgpCommunities
           entries.push({
@@ -920,7 +935,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     }
 
     if (ars.branchToBranchTraffic) {
-      for (const gw of vnet.gateways.filter((g) => g.enabled && g.bgpEnabled)) {
+      for (const gw of vnet.gateways.filter(gatewayArsExchange)) {
         const received = applyAzArsRouteMap(ars, `gateway:${gw.id}`, 'inbound',
           (gatewayRibs[gw.id] ?? []).filter((r) => r.preferred).map((gRoute): AzBgpRibEntry => ({
             ...gRoute,
@@ -968,18 +983,20 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       const isGateway = link.id.startsWith('gateway:')
       const isSpoke = link.id.startsWith('vnet:')
       const peer = azArsPeers(vnet, topology).find(({ peer }) => peer.id === link.targetId)?.peer
-      if (isGateway && (!ars.branchToBranchTraffic || !vnet.gateways.some((gateway) => gateway.id === link.targetId && gateway.enabled && gateway.bgpEnabled))) continue
+      const targetGateway = isGateway ? vnet.gateways.find((gateway) => gateway.id === link.targetId && gatewayArsExchange(gateway)) : undefined
+      if (isGateway && (!ars.branchToBranchTraffic || !targetGateway)) continue
       if (isSpoke ? !link.bgp : !isGateway && (!peer?.bgpEnabled || !peer.enableIpForwarding || peer.asn === 65515 || peer.asn === 12076)) continue
       const candidates = routeServerRibs[ars.id].filter((route) => route.preferred && route.originProtocol !== 'VNet' && route.nextHopId !== link.targetId && (!isSpoke || route.sourceVnetId !== link.targetId) &&
-        (!isGateway || ars.branchToBranchTraffic && route.nextHopKind === 'appliance'))
+        (!isGateway || route.nextHopKind === 'appliance' || route.nextHopKind === 'vnet-gateway' &&
+          vnet.gateways.some((source) => source.id === route.nextHopId && source.kind !== targetGateway!.kind && gatewayArsExchange(source))))
       const advertised = applyAzArsRouteMap(ars, link.id, 'outbound', [...connected.filter((route) => !isSpoke || !topology.vnets.find((spoke) => spoke.id === link.targetId)?.prefixes.includes(route.prefix)), ...candidates])
         .filter((route) => !peer?.asn || !route.asPath.includes(peer.asn))
       routeServerOutbound[ars.id][link.id] = advertised
       if (isGateway && ars.branchToBranchTraffic) {
-        const gw = vnet.gateways.find((gateway) => gateway.id === link.targetId && gateway.enabled && gateway.bgpEnabled)
+        const gw = targetGateway
         if (!gw) continue
         const gwEntries = [...(gatewayRibs[gw.id] ?? [])]
-        for (const nvaRoute of advertised.filter((route) => route.nextHopKind === 'appliance')) {
+        for (const nvaRoute of advertised.filter((route) => route.nextHopKind === 'appliance' || route.nextHopKind === 'vnet-gateway')) {
           gwEntries.push({
             ...nvaRoute,
             id: `gw:${gw.id}:ars:${ars.id}:${nvaRoute.id}`,
@@ -987,9 +1004,9 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
             asPath: nvaRoute.asPath,
             nextHopName: `${ars.name} → ${nvaRoute.nextHopName}`,
             nextHopIp: nvaRoute.nextHopIp,
-            nextHopKind: 'appliance',
+            nextHopKind: nvaRoute.nextHopKind,
             nextHopId: nvaRoute.nextHopId,
-            originProtocol: 'BGP-NVA',
+            originProtocol: nvaRoute.originProtocol,
             preferred: true,
             explanation: `Learned from ${ars.name} via ARS Branch-to-Branch`,
           })
@@ -1303,7 +1320,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   }
 
   return {
-    controlPlaneComplete: peeringLimitations.length === 0,
+    controlPlaneComplete: peeringLimitations.length === 0 && gatewayLimitations.length === 0,
     subnetTables,
     gatewayRibs,
     routeServerRibs,

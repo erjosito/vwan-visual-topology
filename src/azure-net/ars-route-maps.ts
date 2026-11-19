@@ -1,9 +1,14 @@
 import { applyRouteMapRules, azureReservedCommunities, type RouteMapAdvertisement } from '../bgp'
 import type { RouteMapDirection } from '../model'
 import { cidr, parseAsPath, validateTopology } from '../validation'
-import type { AzNetTopology, AzRouteServer, AzVNet } from './model'
+import type { AzNetTopology, AzRouteServer, AzVNet, AzVnetGateway } from './model'
 
 export const ARS_MAX_BGP_PEERS = 16
+
+export function gatewayArsExchange(gateway: AzVnetGateway): boolean {
+  return gateway.enabled && gateway.sku?.trim().toLowerCase() !== 'basic' &&
+    (gateway.kind === 'ExpressRoute' || gateway.activeActive === true && gateway.asn === 65515 && gateway.vpnType !== 'PolicyBased')
+}
 
 const reservedArsAsns = new Set([8074, 8075, 12076, 65515, 65517, 65518, 65519, 65520])
 

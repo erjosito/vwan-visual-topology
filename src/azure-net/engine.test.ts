@@ -292,6 +292,8 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     result = simulateAzNet(topology)
     expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('vpn-gw')
     topology.erLinks.find((link) => link.id === 'er-gw')!.enabled = true
+    result = simulateAzNet(topology)
+    expect(lookupSubnetEffectiveRoute(result.subnetTables.firewall, '172.16.10.4')?.nextHopResourceId).toBe('gw')
     topology.udrTables = [{
       id: 'override', name: 'Explicit override', disableBgpRoutePropagation: false,
       routes: [{ id: 'drop', name: 'Drop site', prefix: '172.16.10.0/24', nextHopType: 'None', enabled: true }],
@@ -303,6 +305,7 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
 
   it('retains explicit ARS preference and restores ER coexistence preference when ARS is disabled', () => {
     const topology = coexistenceTopology()
+    topology.vnets[0].gateways[0].activeActive = true
     topology.vnets[0].routeServer = {
       id: 'ars', name: 'ARS', enabled: true, branchToBranchTraffic: true, hubRoutingPreference: 'ASPath', peerApplianceIds: [],
     }
@@ -379,6 +382,7 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
   function arsTopology(transport: 'ExpressRoute' | 'Vpn' = 'Vpn') {
     const topology = transitTopology(transport)
     const hub = topology.vnets[0]
+    if (transport === 'Vpn') hub.gateways[0].activeActive = true
     hub.subnets.push({ id: 'nvas', name: 'NVAs', prefix: '10.0.2.0/24' })
     hub.appliances = ['one', 'two'].map((id, index) => ({
       id, name: `NVA ${id}`, kind: 'nva-vm', subnetId: 'nvas', privateIp: `10.0.2.${4 + index}`,

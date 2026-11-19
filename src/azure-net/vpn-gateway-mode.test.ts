@@ -6,8 +6,9 @@ import { generateAzNetBicep } from './bicep-export'
 import { runAzNetDiagnostics } from './diagnostics'
 import { simulateAzNet } from './engine'
 
-it('preserves explicit modes and absent legacy mode without changing resource-level route results', () => {
+it('preserves explicit modes and absent legacy mode without changing standalone route results', () => {
   const topology = vpnGatewayModeTopology()
+  delete topology.vnets[0].routeServer
   const before = simulateAzNet(topology)
   for (const mode of [undefined, false, true]) {
     if (mode === undefined) delete topology.vnets[0].gateways[0].activeActive

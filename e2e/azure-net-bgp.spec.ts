@@ -354,6 +354,7 @@ for (const mode of ['hub-spoke', 'full']) {
     page.on('console', (message) => { if (message.type() === 'error' && message.text().includes('same key')) errors.push(message.text()) })
     const topology = bgpTopology()
     const hub = topology.vnets[0]
+    hub.gateways[0].activeActive = true
     hub.subnets.push({ id: 'nvas', name: 'NVAs', prefix: '10.0.2.0/24' })
     hub.appliances = ['one', 'two'].map((id, index) => ({
       id, name: `NVA ${id}`, kind: 'nva-vm', subnetId: 'nvas', privateIp: `10.0.2.${4 + index}`,

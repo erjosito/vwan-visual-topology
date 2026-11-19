@@ -370,6 +370,14 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     const bgpEnabled = Boolean(props.enableBgp ?? gw.enableBgp ?? true)
     const activeActive = props.activeActive ?? gw.activeActive
     if (activeActive !== undefined && typeof activeActive !== 'boolean') throw new Error('Invalid VPN gateway activeActive mode.')
+    const vpnType = props.vpnType ?? gw.vpnType
+    if (vpnType !== undefined && vpnType !== 'RouteBased' && vpnType !== 'PolicyBased') throw new Error('Invalid VPN gateway vpnType.')
+    const skuObject = props.sku ?? gw.sku
+    if (skuObject !== undefined && (Array.isArray(skuObject) || skuObject === null || !['object', 'string'].includes(typeof skuObject))) throw new Error('Invalid gateway SKU.')
+    const sku = typeof skuObject === 'object' && skuObject !== null ? (skuObject as Record<string, unknown>).name : skuObject
+    if (sku !== undefined && typeof sku !== 'string') throw new Error('Invalid gateway SKU.')
+    const generation = props.vpnGatewayGeneration ?? gw.vpnGatewayGeneration
+    if (generation !== undefined && (typeof generation !== 'string' || !['None', 'Generation1', 'Generation2'].includes(generation))) throw new Error('Invalid VPN gateway generation.')
 
     // Determine parent VNet from ipConfigurations[0].subnet.id
     let vnetName = asString(gw.vnetName)
@@ -397,6 +405,9 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       asn,
       bgpEnabled,
       ...(activeActive !== undefined ? { activeActive } : {}),
+      ...(vpnType !== undefined ? { vpnType } : {}),
+      ...(sku !== undefined ? { sku } : {}),
+      ...(generation === 'Generation1' || generation === 'Generation2' ? { vpnGatewayGeneration: generation } : {}),
       enabled: true,
     })
     gatewaysByVnetName.set(vnetName.toLowerCase(), list)
