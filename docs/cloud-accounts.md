@@ -19,11 +19,30 @@ automatically. **Cloud account > Import anonymous progress** requires confirmati
 and keeps the anonymous original. Import only history that belongs to you.
 Awards and belts remain self-reported learning records, not verified certification.
 
-Topologies upload only through an explicit **Save to cloud** action and a
-confirmation. The library supports named saves, loading, replacing and deletion.
+Topologies upload only through an explicit **Save as new cloud copy**,
+**Update linked cloud save** or **Overwrite cloud save** action and confirmation.
+The library supports named saves, loading, replacing and deletion.
 Saving preserves the native topology format. Loading replaces the active design
 through normal workspace admission; it does not deploy Azure resources. Export
 any design you want to keep before loading another.
+
+The header separates **Saved locally** (this browser or desktop profile, not a
+JSON backup) from the current design's cloud relationship. **Matches last confirmed
+cloud save** compares the design with the last acknowledged upload or load, not
+continuous cloud synchronization. Later edits remain visibly unuploaded, including
+edits made while an older snapshot uploads. A failed operation does not confirm
+a save. Refreshing the cloud library can report a changed or missing record, but
+never silently advances the linked write revision; review and explicitly select
+the desired record before overwriting it.
+
+**Update linked cloud save** retains that save's ID and conditional revision.
+**Save as new cloud copy** creates another record and links this design to the
+new copy. The account-scoped link survives a reload in the same tab using bounded
+sessionStorage metadata: ID/name, provider, ETag and a content fingerprint, never
+another topology copy. If metadata storage is unavailable, the dialog warns that
+the link cannot be retained. Sign-out/account changes, new designs, accepted
+imports and samples clear the link. Practice and read-only shares do not change
+the normal design's status. There are no background topology uploads or polling.
 
 Do not upload credentials or confidential network configuration without approval.
 Topology inventory, addresses, names and retained native JSON fields are included.

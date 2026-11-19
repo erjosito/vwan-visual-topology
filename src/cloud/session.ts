@@ -6,6 +6,7 @@ export interface CloudSessionState {
   status: 'signed-out' | 'connecting' | 'signed-in' | 'error'
   account?: CloudAccount
   api?: CloudClient
+  progressSync?: typeof import('./progress-sync').createProgressSync
 }
 export const cloudSessionKey = 'network-simulator:cloud-session:v1'
 export function createCloudSession(config: CloudConfiguration | undefined, options: {
@@ -39,7 +40,7 @@ export function createCloudSession(config: CloudConfiguration | undefined, optio
         try { options.storage().removeItem(cloudSessionKey) } catch {}
         publish({ status: 'signed-out' }); return
       }
-      const { createCloudClient } = await import('./client')
+      const [{ createCloudClient }, { createProgressSync }] = await Promise.all([import('./client'), import('./progress-sync')])
       if (ticket !== generation) return
       const current = client, signal = abort.signal
       const api = createCloudClient(config.base, async () => {
@@ -49,7 +50,7 @@ export function createCloudSession(config: CloudConfiguration | undefined, optio
         return token
       }, signal, options.fetcher)
       try { options.storage().setItem(cloudSessionKey, 'active') } catch {}
-      publish({ status: 'signed-in', account, api })
+      publish({ status: 'signed-in', account, api, progressSync: createProgressSync })
     } catch { if (ticket === generation) publish({ status: 'error' }) }
   }
   return {

@@ -198,6 +198,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     })
     await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
     await expect(page.getByTestId('aznet-save-error')).toContainText('Export JSON')
+    await expect(page.getByTestId('document-local-state')).toHaveText('Local save not confirmed')
     const node = page.getByTestId('aznet-vnet-vnet-hub-weu')
     const input = page.locator('input[type=file]').first()
     for (const body of ['null', '{"version":2,"kind":"azure-network-topology","name":"Broken","vnets":[]}']) {

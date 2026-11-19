@@ -1,7 +1,14 @@
 import { sampleCatalogJa } from './sample-catalog-ja'
+import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  ...workspaceCapabilitiesJa,
+  'Practice canvas': '練習用キャンバス',
+  'Saved locally': 'ローカルに保存済み',
+  'Local save not confirmed': 'ローカルの保存を確認できません',
+  'Not saved locally yet': 'ローカルに未保存',
+  'Local means this browser or desktop profile, not a JSON backup.': 'ローカルはブラウザーまたはデスクトップのプロファイルを指し、JSON バックアップではありません。',
   'Selected subnet peering': '選択したサブネットのピアリング',
   'Two VNets connect selected subnets while other subnets remain outside the forwarding scope.': '2 つの VNet で選択したサブネットを接続し、その他のサブネットを転送の対象外にします。',
   'Distinguish preview effective-route visibility from permission to cross a subnet peering.': 'プレビューでの有効ルートの表示とサブネット ピアリングの通過許可を区別します。',

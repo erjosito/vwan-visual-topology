@@ -1,4 +1,4 @@
-import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { t } from './i18n'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
@@ -12,7 +12,7 @@ import { createProgressLedger, guidedProgressKey, legacyProgressKey, recordCompl
 import { editions, selectedEdition } from './learning/editions'
 import { CloudProvider } from './cloud/CloudSession'
 import { useCloudSession } from './cloud/useCloudSession'
-import { createProgressSync } from './cloud/progress-sync'
+import { createDocumentSaveState, type CloudDocumentSource } from './cloud/document-state'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
@@ -66,6 +66,11 @@ function Workspace() {
   })
   const cloud = useCloudSession()
   const accountId = cloud?.account?.id
+  const [documentSave] = useState(() => {
+    const state = createDocumentSaveState(() => sessionStorage)
+    if (new URLSearchParams(location.search).has('sample')) state.reset()
+    return state
+  })
   const [startup] = useState(() => workspaceStartup({ getItem: (key) => localStorage.getItem(key) }, location.search, location.hash))
   const [active, setActive] = useState<{ provider: WorkspaceProvider; revision: number; capture?: unknown }>()
   const [libraryOpen, setLibraryOpen] = useState(!startup.provider)
@@ -186,8 +191,9 @@ function Workspace() {
       return true
     } finally { session.release() }
   }, [loadPractice, progress, loadLearning])
-  const sync = useMemo(() => cloud?.api ? createProgressSync(cloud.api, progress, applyCloudProgress) : undefined,
-    [cloud?.api, progress, applyCloudProgress])
+  const api = cloud?.api, progressSync = cloud?.progressSync
+  const sync = useMemo(() => api && progressSync ? progressSync(api, progress, applyCloudProgress) : undefined,
+    [api, progressSync, progress, applyCloudProgress])
   const cloudProgressStatus = useSyncExternalStore(sync?.subscribe ?? noSubscribe, sync?.getSnapshot ?? noSync)
   useEffect(() => { sync?.start(); return () => sync?.stop() }, [sync])
   useEffect(() => {
@@ -251,6 +257,7 @@ function Workspace() {
     request.current++
     try {
       selectWorkspace(localStorage, provider, replacement)
+      documentSave.reset()
       designHistory.current = undefined
       setActive((current) => ({ provider, revision: (current?.revision ?? 0) + 1, capture }))
       setLibraryOpen(false); setNotice('')
@@ -312,14 +319,17 @@ function Workspace() {
       request.current++
     }
   }, [])
-  const openDocument = async (input: unknown) => {
+  const openDocument = async (input: unknown, source?: CloudDocumentSource) => {
     const ticket = ++request.current
     if (practiceRef.current?.current?.active) {
+      if (source) throw new Error('Return to your design before loading a cloud save.')
       await practiceRef.current.importDocument(input, () => ticket === request.current)
       return
     }
     const commit = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
-      if (ticket === request.current && !open(provider, replacement, capture)) throw new Error(selectionFailure)
+      if (ticket !== request.current) return
+      if (!open(provider, replacement, capture)) throw new Error(selectionFailure)
+      if (source) documentSave.link(source, input, provider)
     }
     if (!input || typeof input !== 'object') throw new Error('Topology object required.')
     if ('kind' in input && input.kind === 'azure-vwan-capture') {
@@ -351,6 +361,18 @@ function Workspace() {
   const provider = practicing ? practice.document.mode === 'vwan' ? 'vwan' : 'azure-net' : active?.provider
   const editorKey = practicing ? `practice:${practiceEpoch}:${provider}` : `design:${active?.provider}:${active?.revision}`
   const editorHistory = practicing ? practiceHistory : designHistory
+  useLayoutEffect(() => {
+    documentSave.setAccount(accountId)
+    documentSave.setActive(!practicing)
+  }, [documentSave, accountId, practicing])
+  useEffect(() => {
+    const changed = (event: StorageEvent) => {
+      const provider = documentSave.getSnapshot().provider
+      if (provider && (event.key === null || event.key === workspaceStorageKeys[provider])) documentSave.invalidateLocal()
+    }
+    window.addEventListener('storage', changed)
+    return () => window.removeEventListener('storage', changed)
+  }, [documentSave])
   return <WorkspaceSessionContext value={{
     presentationPreview, setPresentationPreview: (value) => {
       setPresentationPreview(value)
@@ -358,6 +380,7 @@ function Workspace() {
     },
     openLibrary: () => { leavePractice(); request.current++; setLibraryOpen(true) },
     openDocument, getRequestVersion: () => request.current,
+    documentSave: practicing ? undefined : documentSave,
     capture: practicing ? undefined : active?.capture,
     openPractice, practice: practicing ? practice : undefined,
     savePractice: (document) => practiceRef.current?.save(document, practiceEpoch),
@@ -365,6 +388,7 @@ function Workspace() {
     rememberEditorHistory: (value) => {
       const changed = editorHistory.current?.topology !== value.topology
       editorHistory.current = value
+      if (!practicing) documentSave.observe(value.topology, value.provider)
       if (practicing && changed) { learningRevision.current++; learningRef.current?.workspaceChanged() }
     },
     selectLearningEdition, learningDetailsOpen, setLearningDetailsOpen,

@@ -33,6 +33,7 @@ export function useTopologyHistory({
         topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(initialTopology)),
         error: '',
         backup: '',
+        stored: saved !== null,
       }
     } catch (error) {
       return {
@@ -49,6 +50,10 @@ export function useTopologyHistory({
   const [error, setError] = useState(initial.error)
   const [saveError, setSaveError] = useState(() => cached?.provider === 'vwan' ? cached.saveError : '')
   useLayoutEffect(() => {
+    if (!cached && 'stored' in initial && initial.stored) session?.documentSave?.local(initial.topology, 'saved')
+    else if (!cached && initial.error) session?.documentSave?.local(initial.topology, 'unavailable')
+  }, [cached, initial, session?.documentSave])
+  useLayoutEffect(() => {
     session?.rememberEditorHistory?.({
       provider: 'vwan', topology, past: history.past, future: history.future, error, saveError, backup: initial.backup,
     })
@@ -58,8 +63,10 @@ export function useTopologyHistory({
     try {
       if (session?.practice && session.savePractice) session.savePractice({ mode: 'vwan', topology: next })
       else localStorage.setItem(storageKey, JSON.stringify(next))
+      session?.documentSave?.local(next, 'saved')
       setSaveError('')
     } catch {
+      session?.documentSave?.local(next, 'unavailable')
       setSaveError('Browser storage is unavailable or full. Export JSON to preserve your topology.')
     }
   }
