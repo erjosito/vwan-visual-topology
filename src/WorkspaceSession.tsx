@@ -13,21 +13,19 @@ const FeedbackDialog = lazy(() => import('./FeedbackDialog').then((module) => ({
 export function WorkspaceMenu() {
   const session = useWorkspaceSession()
   const language = useLanguage()
-  const version = document.querySelector<HTMLMetaElement>('meta[name="application-version"]')?.content
-  const versionInfo = version && <span className="muted" data-testid="app-version">{language === 'ja' ? 'バージョン' : 'Version'} {version}</span>
   const [feedbackOpen, setFeedbackOpen] = useState(() => !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1')
   return <>
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
     <PresentationGroup label={t(session?.presentationPreview ? 'Settings' : 'Settings & help')}>
     <ThemeSelector />
     <LanguageSelector />
-    {session?.presentationPreview ? <CanvasStyleSettings /> : <><button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>{versionInfo}</>}
+    {session?.presentationPreview && <CanvasStyleSettings />}
     </PresentationGroup>
-    {session?.presentationPreview && <PresentationGroup label={t('Help & feedback')}>
-      <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>
+    <PresentationGroup label={t('Help & feedback')}>
+      {session?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>}
       <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
-      {versionInfo}
-    </PresentationGroup>}
+      <small className="muted" data-testid="app-version">AzNetSim {import.meta.env.VITE_APP_VERSION}</small>
+    </PresentationGroup>
     {!session?.presentationPreview && <LearningStatus />}
     {!session?.presentationPreview && <CloudMenu />}
     {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}

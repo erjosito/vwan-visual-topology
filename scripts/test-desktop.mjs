@@ -62,7 +62,7 @@ try {
   await page.keyboard.press('Escape')
   const previewSettings = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: 'Help & feedback' }) })
   await previewSettings.locator('summary').click()
-  await expect(previewSettings.getByTestId('app-version')).toHaveText(`Version ${version}`)
+  await expect(previewSettings.getByTestId('app-version')).toHaveText(`AzNetSim ${version}`)
   await expect(previewSettings.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
   await page.keyboard.press('Escape')
   await expect(page.getByTestId('aznet-add-vnet-btn')).toBeEnabled()

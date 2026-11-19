@@ -136,6 +136,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     })
     await page.goto(`/?mode=${mode}`)
     await ready(page, mode)
+    await expect(page.getByTestId('app-version')).toHaveText(`AzNetSim ${await page.locator('meta[name="application-version"]').getAttribute('content')}`)
     const readyMs = await page.evaluate(() => performance.now())
     await page.waitForLoadState('networkidle')
     const graph = await assetGraph([...requests])

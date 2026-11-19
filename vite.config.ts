@@ -8,6 +8,7 @@ const { version } = JSON.parse(readFileSync(new URL('./package.json', import.met
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  define: { 'import.meta.env.VITE_APP_VERSION': JSON.stringify(version) },
   server: { watch: { ignored: ['**/test-artifacts/**', '**/test-results/**', '**/release/**', '**/dist/**'] } },
   plugins: [
     react(),
