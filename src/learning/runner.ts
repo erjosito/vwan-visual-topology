@@ -39,6 +39,7 @@ export type RunnerState = {
   completions: readonly TaskCompletion[]
   running: boolean
   automatic: boolean
+  awaitingNext: boolean
   feedback?: RunnerFeedback
   explanation?: Localized
   unmet: string[]
@@ -89,6 +90,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   let automaticTimer: ReturnType<typeof setTimeout> | undefined
   let automaticAttempt: string | undefined
   let celebration: RunnerState['celebration']
+  let awaitingNext = false
   let state: RunnerState
   const current = () => tasks.find((item) => item.task.id === taskId)
   const binding = () => {
@@ -103,18 +105,18 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   const publish = () => {
     const key = binding()
     const check = bundle.checks.find((item) => item.id === current()?.task.checkId)
-    if ((check?.kind === 'routes.inspected' || check?.kind === 'control-routes.inspected') && key) {
+    if (!awaitingNext && (check?.kind === 'routes.inspected' || check?.kind === 'control-routes.inspected') && key) {
       if (!observation || observationKey !== key) observation = { token: crypto.randomUUID(), ...check.params }
       observationKey = key
     } else { observation = undefined; observationKey = undefined }
     state = { taskId, reviewId, replayLessonId: replay?.lessonId, completions: [...completions],
-      running: !!job, automatic, feedback, explanation, unmet, observation, celebration,
-      canContinue: !reviewId && !!key && proof === key && !job }
+      running: !!job, automatic, awaitingNext, feedback, explanation, unmet, observation, celebration,
+      canContinue: !reviewId && (awaitingNext || !!key && proof === key && !job) }
     options.changed(state)
     clearTimeout(automaticTimer)
     automaticTimer = undefined
-    if (!automatic || reviewId || job || !key || !check) return
-    if (state.canContinue) automaticTimer = setTimeout(() => { if (automatic) advance() }, 1600)
+    if (!automatic || awaitingNext || reviewId || job || !key || !check) return
+    if (state.canContinue) automaticTimer = setTimeout(() => { if (automatic) complete() }, 450)
     else if (check.kind !== 'quiz.answered' && automaticAttempt !== key
       && (!['routes.inspected', 'control-routes.inspected'].includes(check.kind) || observed === key)) {
       automaticTimer = setTimeout(() => {
@@ -131,12 +133,12 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     feedback = reason; explanation = undefined; unmet = []
   }
   const workspaceChanged = () => {
-    celebration = undefined
+    if (!awaitingNext) celebration = undefined
     invalidate(job || proof || observed || feedback === 'stale' ? 'stale' : undefined)
     publish()
   }
   const assess = async (answerId?: string) => {
-    if (reviewId || !taskId) return
+    if (reviewId || awaitingNext || !taskId) return
     job?.abort()
     proof = undefined; feedback = undefined; explanation = undefined; unmet = []
     const key = binding()
@@ -159,11 +161,19 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       else {
         const document = structuredClone(live.practice.document)
         let configured = true
-        if (check.kind === 'vnet.peered') {
-          configured = document.mode !== 'vwan' && document.topology.vnetPeerings.some((peering) =>
+        if (check.kind === 'udrs.configured') {
+          configured = document.mode !== 'vwan' && check.params.routes.every((scope) => {
+            const subnet = document.topology.vnets.find((vnet) => vnet.id === scope.vnetId)?.subnets.find((entry) => entry.id === scope.subnetId)
+            return document.topology.udrTables.find((table) => table.id === subnet?.routeTableId)?.routes.some((route) =>
+              route.enabled && route.prefix === scope.prefix && route.nextHopType === 'VirtualAppliance' && route.nextHopIp === scope.nextHopIp)
+          })
+        }
+        if (check.kind === 'vnet.peered' || check.kind === 'peerings.configured') {
+          const pairs = check.kind === 'vnet.peered' ? [check.params] : check.params.peerings
+          configured = document.mode !== 'vwan' && pairs.every((pair) => document.topology.vnetPeerings.some((peering) =>
             peering.enabled && peering.aToB.allowVirtualNetworkAccess && peering.bToA.allowVirtualNetworkAccess
-            && ((peering.vnetAId === check.params.vnetAId && peering.vnetBId === check.params.vnetBId)
-              || (peering.vnetBId === check.params.vnetAId && peering.vnetAId === check.params.vnetBId)))
+            && ((peering.vnetAId === pair.vnetAId && peering.vnetBId === pair.vnetBId)
+              || (peering.vnetBId === pair.vnetAId && peering.vnetAId === pair.vnetBId))))
         }
         if (check.kind === 'hub-associations.configured') {
           configured = document.mode !== 'vwan' && check.params.associations.every((scope) => {
@@ -223,7 +233,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     if (result === 'passed') proof = key
     publish()
   }
-  const advance = () => {
+  const complete = () => {
     const key = binding()
     if (!key || proof !== key || job || reviewId || !taskId) {
       invalidate('stale'); publish(); return false
@@ -244,6 +254,15 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       completions.push(completion)
     }
     celebration = { title: task.title, points: firstAward ? task.points : 0, explanation }
+    awaitingNext = true
+    invalidate(); publish()
+    return true
+  }
+  const advance = () => {
+    if (reviewId || !taskId) return false
+    if (!awaitingNext && !complete()) return false
+    const { task, lesson } = current()!
+    awaitingNext = false
     if (replay) {
       replay.done.add(task.id)
       taskId = lesson.taskOrder.find((id) => !replay!.done.has(id))
@@ -254,7 +273,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   }
   const review = (id?: string) => {
     if (id && !tasks.some(({ task }) => task.id === id && taskCompleted(bundle, completions, task))) return
-    celebration = undefined
+    if (!awaitingNext) celebration = undefined
     invalidate()
     reviewId = id
     publish()
@@ -265,6 +284,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     const lessonIndex = tasks.findIndex((entry) => entry.lesson.id === lessonId)
     if (!lesson || (firstUnmetIndex >= 0 && lessonIndex > firstUnmetIndex)) return
     celebration = undefined
+    awaitingNext = false
     invalidate(); reviewId = undefined
     replay = { lessonId, done: new Set() }
     taskId = lesson.taskOrder[0]; sessionId = crypto.randomUUID()
@@ -284,17 +304,19 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     },
     replaceProgress: (entries: readonly TaskCompletion[]) => {
       celebration = undefined
+      awaitingNext = false
       invalidate(); completions = [...entries]; reviewId = undefined; replay = undefined
       taskId = nextUncompleted(); sessionId = crypto.randomUUID(); publish()
     },
-    cancel: () => { celebration = undefined; invalidate('cancelled'); automaticAttempt = binding(); publish() },
+    cancel: () => { if (!awaitingNext) celebration = undefined; invalidate('cancelled'); automaticAttempt = binding(); publish() },
     resumeCurrent: () => {
       celebration = undefined
+      awaitingNext = false
       invalidate(); reviewId = undefined; replay = undefined; taskId = nextUncompleted(); publish()
     },
     observe: (event: LearningObservation) => {
       const key = binding()
-      if (!reviewId && key && observationKey === key && observation && Object.entries(observation).every(([name, value]) =>
+      if (!reviewId && !awaitingNext && key && observationKey === key && observation && Object.entries(observation).every(([name, value]) =>
         event[name as keyof LearningObservation] === value)) {
         observed = key; feedback = 'observed'; publish()
       }

@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { guidanceAnchor } from '../src/learning/guidance'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { exampleCourse } from '../src/learning/course-examples'
-import { completeLearningTasks as next, learningOptions, loadLearningNetwork as load } from './learning-helpers'
+import { advanceLearningTask, completeLearningTasks as next, learningOptions, loadLearningNetwork as load } from './learning-helpers'
 import { runnerLabels } from '../src/learning/runner-content'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { orderedTasks } from '../src/learning/runner'
@@ -106,15 +106,16 @@ test('automatic learning requires committed answers and visible fresh inspection
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', taskId!)
   await expect(sidebar(page).getByRole('button', { name: 'Check task', exact: true })).toHaveCount(0)
   await sidebar(page).getByRole('button', { name: runnerLabels.submit.en, exact: true }).click()
-  await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
   await expect(sidebar(page).getByTestId('learning-celebration')).toContainText(runnerLabels.success.en)
+  await expect(sidebar(page).getByTestId('learning-debrief')).toContainText(correct.feedback.en)
+  await advanceLearningTask(page)
+  await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
   const inspectionId = await sidebar(page).getByTestId('learning-task').getAttribute('data-task-id')
-  const why = sidebar(page).getByText(runnerLabels.why.en, { exact: true })
-  await why.click()
+  await learningOptions(page)
   await sidebar(page).getByRole('button', { name: sidebarLabels.show.en, exact: true }).click()
   await page.waitForTimeout(1600)
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', inspectionId!)
-  await why.click()
+  await sidebar(page).getByText(sidebarLabels.options.en, { exact: true }).click()
   await page.getByTestId('aznet-effective-route-table').evaluate((element) => {
     const bounds = element.getBoundingClientRect(), cover = document.createElement('div')
     cover.id = 'inspection-test-cover'
@@ -124,18 +125,19 @@ test('automatic learning requires committed answers and visible fresh inspection
   })
   await page.waitForTimeout(1800)
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', inspectionId!)
-  await page.evaluate(() => document.getElementById('inspection-test-cover')!.remove())
-  await expect(sidebar(page).getByTestId('learning-feedback')).toContainText(runnerLabels.passed.en)
   await page.evaluate(() => {
+    document.getElementById('inspection-test-cover')!.remove()
     Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
     document.dispatchEvent(new Event('visibilitychange'))
   })
   await page.waitForTimeout(2200)
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', inspectionId!)
+  await expect(sidebar(page).getByTestId('learning-debrief')).toHaveCount(0)
   await page.evaluate(() => {
     Reflect.deleteProperty(document, 'visibilityState')
     document.dispatchEvent(new Event('visibilitychange'))
   })
+  await advanceLearningTask(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Peer VNet A with VNet B', exact: true })).toBeVisible()
   expect((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)).completions).toHaveLength(3)
 })
@@ -194,6 +196,7 @@ test('exact subnet routes recover after closure, selection changes, movement and
   await expect.poll(async () => (await cue(page).boundingBox())!.width).toBeGreaterThan(10)
   expect((await saved(page)).document).toEqual(original)
   await sidebar(page).getByText(sidebarLabels.options.en, { exact: true }).click()
+  await advanceLearningTask(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Peer VNet A with VNet B', exact: true })).toBeVisible()
 })
 
@@ -201,6 +204,7 @@ test('nested peering cues name A-to-B, follow the submenu and never execute its 
   test.setTimeout(60_000)
   await open(page); await next(page, 3)
   const taskId = await sidebar(page).getByTestId('learning-task').getAttribute('data-task-id')
+  await learningOptions(page)
   const original = (await saved(page)).document
   const show = sidebar(page).getByRole('button', { name: 'Show me where', exact: true })
   await show.click()
@@ -219,16 +223,18 @@ test('nested peering cues name A-to-B, follow the submenu and never execute its 
   expect((await saved(page)).document.topology.vnetPeerings).toHaveLength(1)
   await show.click()
   await expect(page.getByRole('menu')).toHaveCount(0)
-  await expect(sidebar(page).getByTestId('learning-feedback')).toContainText(runnerLabels.passed.en)
   await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
   await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', taskId!)
   expect((await saved(page)).document.topology.vnetPeerings).toHaveLength(0)
   await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+  await sidebar(page).getByText(sidebarLabels.options.en, { exact: true }).click()
+  await advanceLearningTask(page)
   await expect(sidebar(page).locator(`[data-task-id="${taskId}"]`)).toHaveCount(0)
   await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
   await page.getByTestId('aznet-subnet-selector').selectOption('work-b')
   await expect(page.getByTestId('learning-record-inspection')).toHaveCount(0)
   await page.getByTestId('aznet-subnet-selector').selectOption('work-a')
+  await advanceLearningTask(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Verify the forward and return paths', exact: true })).toBeVisible()
 })
 
@@ -273,7 +279,8 @@ test('route-table guidance scopes prefix candidates and exact route, preserves t
   await expect(sidebar(page).getByTestId('learning-feedback')).toHaveCount(0)
   await next(page, 2)
   await expect(sidebar(page).getByRole('heading', { name: 'Open the partial-outage incident', exact: true })).toBeVisible()
-  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('11 / 40 Completed')
+  await expect(sidebar(page).getByTestId('learning-debrief')).toBeVisible()
+  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('12 / 40 Completed')
   await learningOptions(page)
   await sidebar(page).getByText('Learning path and completed-task review', { exact: true }).click()
   await sidebar(page).getByRole('button', { name: 'Peer VNet A with VNet B — Completed', exact: true }).click()
@@ -281,7 +288,7 @@ test('route-table guidance scopes prefix candidates and exact route, preserves t
   await sidebar(page).getByRole('button', { name: 'Replay this lesson', exact: true }).click()
   await sidebar(page).getByRole('button', { name: 'Start lesson replay', exact: true }).click()
   await expect(sidebar(page).getByRole('heading', { name: 'Load the practice network', exact: true })).toBeVisible()
-  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('11 / 40 Completed')
+  await expect(sidebar(page).getByTestId('learning-completion-count')).toHaveText('12 / 40 Completed')
 })
 
 test('missing-target guidance does not select another entity or award legacy credit', async ({ page }) => {
@@ -388,6 +395,7 @@ for (const language of ['en', 'ja'] as const) {
     const selector = page.locator('header [data-language-selector]')
     await selector.selectOption(language)
     await load(page, language)
+    await advanceLearningTask(page, language)
     const heading = sidebar(page).getByRole('heading', { name: exampleCourse.lessons[0].tasks[1].title[language], exact: true })
     await expect(heading).toBeFocused()
     await expect(heading).toHaveAttribute('tabindex', '-1')

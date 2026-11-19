@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { executePlatform } from '../platform/service'
 import type { CourseBundle, CourseCheck } from './course-contract'
 import { exampleCourse } from './course-examples'
+import { scenarioBundle } from './scenario-course'
+import { teachCourse } from './course-teaching'
 import { courseOutline } from './course-outline'
 import { validateCourse } from './course-validation'
 
@@ -15,6 +17,19 @@ function outcome(bundle: CourseBundle, lessonIndex: number) {
 }
 
 describe('declarative guided course content', () => {
+  it.each([exampleCourse, scenarioBundle])('provides scenario context, native route instructions and bilingual teaching for every published task in $course.id', (bundle) => {
+    expect(() => validateCourse(bundle)).not.toThrow()
+    for (const lesson of bundle.lessons) for (const task of lesson.tasks) {
+      expect(lesson.context?.en).toBeTruthy()
+      expect(lesson.context?.ja).toBeTruthy()
+      expect(task.instruction.en).not.toContain('Record the inspection')
+      const check = bundle.checks.find((entry) => entry.id === task.checkId)!
+      if (check.kind === 'routes.inspected') expect(task.instruction.en).toContain('Effective routes')
+      expect(task.debrief?.paragraphs.every((paragraph) => paragraph.en && paragraph.ja)).toBe(true)
+      expect(task.debrief?.references.every((reference) => new URL(reference.url).hostname === 'learn.microsoft.com' && new URL(reference.url).hash)).toBe(true)
+    }
+  })
+
   it('admits complete representative lessons without grading unsupported starters as valid content', () => {
     expect(validateCourse(exampleCourse)).toEqual(exampleCourse)
     for (const index of [0, 1]) {
@@ -69,6 +84,7 @@ describe('declarative guided course content', () => {
     const quiz = bundle.checks.find((check) => check.kind === 'quiz.answered')!
     if (quiz.kind !== 'quiz.answered') throw new Error('Quiz required')
     quiz.params.question = { en: 'Predict whether a private connecting path exists.', ja: 'プライベート接続経路の有無を予測してください。' }
+    teachCourse(bundle)
     expect(validateCourse(bundle)).toEqual(bundle)
     expect(bundle.lessons[0].tasks[0].awardId).toBe(exampleCourse.lessons[0].tasks[0].awardId)
   })
@@ -80,6 +96,11 @@ describe('declarative guided course content', () => {
   })
 
   const invalidCases: [string, (bundle: CourseBundle) => void][] = [
+    ['missing scenario context', (bundle) => { delete bundle.lessons[0].context }],
+    ['missing teaching explanation', (bundle) => { delete bundle.lessons[0].tasks[0].debrief }],
+    ['untranslated teaching', (bundle) => { bundle.lessons[0].tasks[0].debrief!.paragraphs[0].ja = '' }],
+    ['nonofficial teaching reference', (bundle) => { bundle.lessons[0].tasks[0].debrief!.references[0].url = 'https://example.com/#routing' }],
+    ['reference without a topic section', (bundle) => { bundle.lessons[0].tasks[0].debrief!.references[0].url = 'https://learn.microsoft.com/' }],
     ['missing translation', (bundle) => { bundle.lessons[0].objective.ja = '' }],
     ['unknown lesson reference', (bundle) => { bundle.course.lessonOrder[0] = 'missing' }],
     ['duplicate lesson reference', (bundle) => { bundle.course.lessonOrder.push(bundle.course.lessonOrder[0]) }],

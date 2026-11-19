@@ -44,6 +44,7 @@ export async function auditAccessibility({ baseURL, artifacts }) {
               await sidebar.getByRole('button', { name: 'Load practice network', exact: true }).click()
               if (sample.state === 'learning-prediction') {
                 await sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
+                await sidebar.getByRole('button', { name: 'Next', exact: true }).click()
                 await expect(sidebar.getByRole('heading', { name: 'Predict connectivity', exact: true })).toBeVisible()
                 await expect(page.getByTestId('aznet-subnet-work-a')).toBeVisible()
               } else await expect(sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true })).toBeVisible()

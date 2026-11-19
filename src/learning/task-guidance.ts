@@ -1,0 +1,30 @@
+import type { CourseCheck, CourseGuidance } from './course-contract'
+import type { PlatformDocument } from '../platform/contract'
+
+/** Navigation preference only; completion still requires the runner's full check. */
+export function selectPrimaryGuidance(document: PlatformDocument, check: CourseCheck, cues: CourseGuidance[]) {
+  if (document.mode !== 'vwan') {
+    const topology = document.topology
+    if (check.kind === 'peerings.configured') {
+      const pending = check.params.peerings.find((pair) => !topology.vnetPeerings.some((peering) =>
+        peering.enabled && peering.aToB.allowVirtualNetworkAccess && peering.bToA.allowVirtualNetworkAccess
+        && ((peering.vnetAId === pair.vnetAId && peering.vnetBId === pair.vnetBId)
+          || (peering.vnetBId === pair.vnetAId && peering.vnetAId === pair.vnetBId))))
+      const cue = pending && cues.find((cue) => cue.action === 'peering.command'
+        && ((cue.params.vnetAId === pending.vnetAId && cue.params.vnetBId === pending.vnetBId)
+          || (cue.params.vnetBId === pending.vnetAId && cue.params.vnetAId === pending.vnetBId)))
+      if (cue) return cue
+    }
+    if (check.kind === 'udrs.configured') {
+      const pending = check.params.routes.find((scope) => {
+        const subnet = topology.vnets.find((vnet) => vnet.id === scope.vnetId)?.subnets.find((entry) => entry.id === scope.subnetId)
+        return !topology.udrTables.find((table) => table.id === subnet?.routeTableId)?.routes.some((route) =>
+          route.enabled && route.prefix === scope.prefix && route.nextHopType === 'VirtualAppliance' && route.nextHopIp === scope.nextHopIp)
+      })
+      const cue = pending && cues.find((cue) => cue.action === 'route-table.configure'
+        && cue.params.vnetId === pending.vnetId && cue.params.subnetId === pending.subnetId)
+      if (cue) return cue
+    }
+  }
+  return cues[0]
+}

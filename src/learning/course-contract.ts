@@ -5,6 +5,13 @@ import type { Localized } from './content'
 const id = z.string().regex(/^[a-z][a-z0-9.-]{0,119}$/)
 const version = z.number().int().positive().max(Number.MAX_SAFE_INTEGER)
 const localized = z.strictObject({ en: z.string().trim().min(1), ja: z.string().trim().min(1) })
+const reference = z.strictObject({
+  title: localized,
+  url: z.string().url().refine((value) => {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'learn.microsoft.com' && !url.username && !url.password && !!url.hash
+  }, 'Use an official Microsoft Learn section'),
+})
 const entityId = z.string().min(1).max(120)
 const subnet = z.strictObject({ vnetId: entityId, subnetId: entityId })
 const routeScope = subnet.extend({ prefix: z.string() })
@@ -33,6 +40,17 @@ export const courseCheckSchema = z.discriminatedUnion('kind', [
   }) }),
   z.strictObject({ id, kind: z.literal('vnet.peered'),
     params: peering.extend({ requirements: z.array(z.custom<Requirement>()).min(1).max(64) }) }),
+  z.strictObject({ id, kind: z.literal('peerings.configured'), params: z.strictObject({
+    peerings: z.array(peering).min(1).max(16),
+    requirements: z.array(z.custom<Requirement>()).min(1).max(64),
+  }) }),
+  z.strictObject({
+    id, kind: z.literal('udrs.configured'),
+    params: z.strictObject({
+      routes: z.array(routeScope.extend({ nextHopIp: z.string() })).min(1).max(16),
+      requirements: z.array(z.custom<Requirement>()).min(1).max(64),
+    }),
+  }),
   z.strictObject({
     id, kind: z.literal('requirements.satisfied'),
     params: z.strictObject({ requirements: z.array(z.custom<Requirement>()).min(1).max(64) }),
@@ -72,6 +90,7 @@ export const courseTaskSchema = z.strictObject({
   points: z.number().int().positive().max(10_000),
   title: localized,
   instruction: localized,
+  debrief: z.strictObject({ paragraphs: z.array(localized).min(1).max(3), references: z.array(reference).min(1).max(3) }).optional(),
   hints: z.array(localized),
   checkId: id,
   guidanceIds: z.array(id),
@@ -82,6 +101,7 @@ export const courseLessonSchema = z.strictObject({
   contentVersion: version,
   title: localized,
   objective: localized,
+  context: localized.optional(),
   scenarioId: id,
   prerequisites: z.array(id),
   taskOrder: z.array(id).min(1),
@@ -105,6 +125,7 @@ export const courseBundleSchema = z.strictObject({
   lessons: z.array(courseLessonSchema).min(1),
   scenarios: z.array(z.strictObject({
     id,
+    extendsScenarioId: id.optional(),
     // The existing platform admission validates these native documents and requirements.
     document: z.custom<PlatformDocument>(),
   })).min(1),

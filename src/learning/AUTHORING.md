@@ -8,7 +8,7 @@ The `course-*` files define declarative content (#179); importing them does not
 execute tasks. The protected canvas (#182), non-modal sidebar/guidance (#178)
 and evidence-gated runner (#180) activate sequential assessed missions.
 The original edition has 40 tasks across six missions and 1,325 points; the
-scenario edition has 58 tasks across ten missions and 2,075 available points.
+scenario edition has 62 tasks across ten missions and 2,120 available points.
 Its first eight missions retain the 1,575-point black-belt threshold and
 mastery checkpoints; the hybrid and multi-hub extensions add practice without demotion.
 The root owns the runner across editor switches and pause/resume. A bounded
@@ -22,7 +22,7 @@ engine payload is shown; legacy storage stays untouched.
 The playable track is displayed as **Routing foundations**. Its historical
 `azure-networking-preview` course ID, award/check identities,
 40 tasks, 1,325 points and stored practice/progress formats remain unchanged.
-Both editions publish presentation version 5 for the automatic guided flow (#302);
+Both editions publish presentation version 6 for contextual teaching and learner-paced progression;
 assessment versions and first-earned awards remain compatible.
 Renaming the presentation is not a migration or a grading revision.
 `tracks.ts` is a small declarative catalog; **DNS and name resolution** and
@@ -57,7 +57,7 @@ Normal saved designs remain protected. This is an explicit beta exception to the
 published-threshold policy above, not a general migration policy.
 
 `editions.ts` is the lightweight edition catalog. Fresh learners start
-`azure-routing-scenarios` version 5. Historical original-course completions
+`azure-routing-scenarios` version 6. Historical original-course completions
 retain the original edition unless the learner explicitly opts in through
 **Progress, review & options** or header status details. A retained original practice
 canvas also retains its edition when no enrollment/history selects otherwise.
@@ -71,18 +71,27 @@ editions' progress; it is not an edition-switch mechanism.
 `runner.ts` is the single progression authority. Supported check kinds dispatch
 to reusable checks, never lesson-ID branches. A passing candidate is bound to
 course/content/task/assessment identity, runtime session, practice scope and a
-monotonic live-editor revision. Automatic continuation rechecks that binding,
-records one scoped completion event and unlocks the next unmet task. Edits
+monotonic live-editor revision. Automatic completion rechecks that binding,
+records one scoped completion event and holds the completed task for its debrief.
+Only **Next** opens the next unmet task. Edits
 (including edit/undo), replacement, provider/active-practice changes, cancellation,
 review and replay cannot reuse pending or previous evidence. Shared-worker
 requirements must have an exact, complete assessment set; unknown, unsupported,
 failed or cancelled evaluation never passes.
 
 The visible, active sidebar debounces committed network edits before checking
-them and briefly congratulates a successful check before recording and advancing.
-It never loads/reloads a starter, makes a repair or commits a quiz answer.
+them, records a successful check once and shows its explanation with the awarded XP.
+It never makes a repair or commits a quiz answer. Initial entry, explicit restarts,
+and returning from a normal design still require loading confirmation. After
+**Next**, a new mission loads automatically only into an active same-course
+practice workspace. Its introduction/debrief remains visible until another
+**Next**; loading must never skip that teaching step.
 Pause, hidden tabs, review, recovery confirmations and expanded secondary options
-stop automatic work and invalidate its proof. Unknown results do not retry in a
+stop automatic work and invalidate unrecorded proof. An already awarded debrief
+survives pause, documentation-tab visits and later canvas edits: **Next** is a
+reading acknowledgement, not new grading or credit. Reload restores awarded
+history and resumes the first unmet task; completed explanations remain reviewable.
+Unknown results do not retry in a
 loop; retry is offered only for assessment or recording failures.
 
 **Show me where** navigates without itself reporting evidence. A native route
@@ -94,11 +103,72 @@ cannot report. Hub-table coverage must still be complete. Its short-lived token
 is task/session/revision-specific; repeated use of the same check definition in
 another task requires a new observation. There is no Record inspection button.
 Quizzes separately check interpretation after deliberate **Submit answer**,
-with answer-specific feedback and free retries. Correct-answer explanations remain
-available after automatic progression; expanding them pauses the following task.
+with answer-specific feedback and free retries. Correct-answer explanations stay
+visible until **Next**, including on the final task before the completion screen.
 Past completion does not certify the current canvas. Completed tasks can be
 reviewed, future tasks remain locked, and explicit lesson replay rechecks each
 step without deleting history or emitting repeat completion credit.
+Visible **Back/Next** controls review completed explanations without replacing the
+live practice canvas or emitting awards. They are not per-step topology time
+travel: no snapshot restoration or silent undo occurs during review.
+
+Order each task's `guidanceIds` deliberately: the first is its one primary
+**Show me where** action. Staged peering/UDR configuration follows the next
+unfinished native scope automatically; this chooses navigation, never credit.
+Keep this task selector in the optional sidebar's `task-guidance.ts`, not the
+shared `guidance.ts` imported by native workspace controls, to preserve startup budgets.
+Other targets are named with their localized guidance
+instruction under **Progress, review & options > Navigation help**. Choosing
+a secondary target closes options so automatic checking can resume. The primary
+action preserves an explicitly opened options pause. Author only relevant
+repair scopes rather than enumerating every VNet and table. Conceptual `hints`
+are separate from navigation: nested disclosures reveal one level at a time,
+starting with a reasoning prompt before a more concrete suggestion. Neither
+kind of help costs XP or changes the network.
+
+## Scenario context and teaching
+
+Every published lesson needs a bilingual `context`: a short fictional situation
+and a meaningful networking goal, visible alongside the active assignment.
+Every task needs a `debrief` containing one to three localized teaching paragraphs
+and one to three titled HTTPS Microsoft Learn section references. References open
+only when selected, in a new tab with `noopener noreferrer`. They never load
+automatically. Author-time validation rejects missing teaching, untranslated
+paragraphs, nonofficial URLs and links without a topic fragment.
+
+`course-teaching.ts` assembles shared topic explanations and per-lesson stories
+for both editions. It generates unambiguous inspection instructions from each
+native check's actual VNet/subnet, hub/table or branch scope. The first subnet
+inspection teaches effective routes, prefix membership and the local/peering
+next hops; policy and gateway concepts are introduced later. Hybrid and multi-hub
+steps have distinct observation, repair and return explanations. Outcome-graded
+repairs must not assert that a learner used an unrequired canonical action:
+label an illustrative configuration as a worked example. Later debriefs explain
+the mission's routing principle rather than claiming unobserved live results.
+Authors can supply a lesson's context or a task's debrief directly to override the
+shared defaults. New missions need a story/topic entry (or explicit teaching),
+not a runner branch. Keep grading, assessment IDs and historical awards separate
+from presentation changes. The runner must never choose theory by lesson ID.
+
+`scenarios[].extendsScenarioId` can extend the immediately preceding mixed-network
+scenario. `course-transition.ts` preserves the learner's current network and
+connections, adding the next template's new VNets, new route tables and their
+subnet associations. It does not import template peerings, UDR entries from other
+tables, or replacement versions of existing objects. Colliding IDs/custom subnet
+policies fail without replacing the saved draft; an explicit confirmed restart
+can load the standalone template instead. Normal designs, another course and
+unrelated practice scenarios are never used as an extension source.
+
+The peering mission now tests whole-VNet subnet scope and access permission
+separately, after teaching both. The first hub mission adds an unconnected hub
+with a firewall and empty workload route tables to the existing network.
+`peerings.configured` checks the two native connections before
+`udrs.configured` checks enabled VirtualAppliance UDRs on the actual associated
+subnets. Both retain shared-engine witness/isolation checks. Learners build the
+broad policy before inspecting longest-prefix selection and repairing the
+inspection path. The four added tasks have new IDs/awards (+45 available XP);
+existing IDs, first-earned point amounts and belt thresholds/checkpoints do not
+change. Beta sessions may reset, but historical awards are never repriced.
 
 The root's `openPractice({ courseId, scenarioId, document }, signal)` session API
 accepts a copied native scenario after explicit confirmation; it does not look

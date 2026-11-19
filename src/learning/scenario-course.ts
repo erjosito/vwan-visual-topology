@@ -6,6 +6,7 @@ import { scenarioTopologies } from './scenario-topologies'
 import { haLessonRequirements } from './ha-scenario'
 import { appendHybridLesson } from './hybrid-course'
 import { appendMultihubLesson } from './multihub-course'
+import { teachCourse } from './course-teaching'
 
 const l = (en: string, ja: string): Localized => ({ en, ja })
 const subnet = (vnetId: string, subnetId = `${vnetId}-work`) => ({ kind: 'subnet' as const, vnetId, subnetId })
@@ -33,6 +34,22 @@ const definitions = [
       [l('The common region adds a private route with a lower preference.', '共通のリージョンが、優先度の低いプライベート ルートを追加します。'), l('A common region does not establish a private connection to the tenant.', '共通のリージョンであることは、テナントへのプライベート接続を確立しません。')],
       [l('The Operations subnet exports a route on behalf of the tenant.', 'Operations サブネットがテナントを代理してルートを伝達します。'), l('Local Operations reachability is a witness, not a transit or advertisement service.', 'ローカル Operations の到達性は比較用の条件であり、転送や広告のサービスではありません。')],
     ], correct: 0,
+    fundamentals: [
+      { id: 'subnet-scope', title: l('Understand the peering scope', 'ピアリングの範囲を理解する'),
+        question: l('With ordinary whole-VNet peering, which subnets in Application and Partner receive routes to the other VNet?', '通常の VNet 全体のピアリングでは、Application と Partner のどのサブネットに相手の VNet へのルートが追加されますか。'),
+        answers: [
+          [l('Only the two Workload subnets used in the test.', 'テストした 2 つの Workload サブネットのみ。'), l('A test selects example endpoints; it does not limit the scope of whole-VNet peering.', 'テストのエンドポイントは例であり、VNet 全体のピアリングの範囲を制限しません。')],
+          [l('All subnets in both VNets, including Application / Operations.', 'Application / Operations を含む、両方の VNet のすべてのサブネット。'), l('Whole-VNet peering adds routes throughout both VNets, not just between the tested subnets. Actual traffic still depends on access settings, selected routes and security rules. Subnet peering is a separate, narrower option.', 'VNet 全体のピアリングは、テストしたサブネットだけでなく両方の VNet 全体にルートを追加します。実際の通信はアクセス設定、選択ルート、セキュリティ規則にも依存します。サブネット ピアリングは、範囲を絞る別の選択肢です。')],
+          [l('Only the two IP addresses used in the test.', 'テストした 2 つの IP アドレスのみ。'), l('Peering exchanges address-space routes; it is not an individual-IP allow list.', 'ピアリングはアドレス空間のルートを追加する仕組みであり、個別 IP の許可リストではありません。')],
+        ], correct: 1 },
+      { id: 'access-setting', title: l('Distinguish a route from permission', 'ルートと通信許可を区別する'),
+        question: l('What happens if Allow VNet access is cleared on a connected peering?', '接続済みのピアリングで Allow VNet access をオフにすると、どうなりますか。'),
+        answers: [
+          [l('The peering is deleted along with its routes.', 'ピアリングとそのルートが削除されます。'), l('Disabling network access is different from deleting the peering.', 'ネットワーク アクセスの無効化と、ピアリングの削除は別の操作です。')],
+          [l('Only the Operations subnet loses access.', 'Operations サブネットだけがアクセスできなくなります。'), l('This is a peering access setting, not a subnet selection.', 'これはピアリングのアクセス設定であり、サブネットの選択ではありません。')],
+          [l('Affected traffic is blocked, even though the peering and its routes can remain.', 'ピアリングとルートが残っていても、対象の通信はブロックされます。'), l('A route describes where traffic would go; it does not grant permission to cross a peering. Check Allow VNet access as well as effective routes. Turning access off does not itself delete the peering or withdraw its address-space routes.', 'ルートは転送先を示すものであり、ピアリングを通過する許可ではありません。有効なルートと Allow VNet access の両方を確認します。アクセスを無効にしても、それ自体でピアリングやアドレス空間のルートが削除されるわけではありません。')],
+        ], correct: 2 },
+    ],
   },
   {
     id: 'inspection-bypass', points: 125,
@@ -157,6 +174,17 @@ const definitions = [
   },
 ]
 
+const repairScopes: Record<string, Array<[string, string?]>> = {
+  'private-link': [],
+  'inspection-bypass': [['a', 'a-work'], ['b', 'b-work']],
+  'colocated-chain': [['hub', 'hub-work'], ['hub', 'transport-work']],
+  'dedicated-chain': [['transport']],
+  'branch-advertisement': [['a', 'a-work']],
+  'wan-isolation': [],
+  'tiered-incident': [['leaf', 'leaf-work'], ['hub', 'hub-work']],
+  'ha-return-path': [['remote', 'remote-work']],
+}
+
 export const scenarioBundle: CourseBundle = { schemaVersion: 1, course: scenarioCourse, lessons: [], scenarios: [], checks: [], guidance: [] }
 for (const [index, definition] of definitions.entries()) {
   const { id, before, after } = definition
@@ -164,22 +192,24 @@ for (const [index, definition] of definitions.entries()) {
     const vnet = scenarioTopologies[id].vnets.find((vnet) => vnet.id === scope.vnetId)!
     return `${vnet.name} / ${vnet.subnets.find((subnet) => subnet.id === scope.subnetId)!.name}`
   }
-  const repairGuidance: CourseGuidance[] = definition.guidance ?? []
-  for (const vnet of scenarioTopologies[id].vnets) {
-    if (vnet.id === 'c') continue
-    repairGuidance.push({ id: `${id}.configure-${vnet.id}`, action: 'network.configure', params: { vnetId: vnet.id },
-      instruction: l(`Locate the native configuration for ${vnet.name}; inspect its controls without changing the assessed design automatically.`, `${vnet.name} の標準設定画面を開きます。設計は自動で変更されません。`) })
-    for (const subnet of vnet.subnets.filter((subnet) => subnet.routeTableId)) {
+  const repairGuidance: CourseGuidance[] = []
+  for (const [vnetId, subnetId] of repairScopes[id]) {
+    const vnet = scenarioTopologies[id].vnets.find((entry) => entry.id === vnetId)!
+    if (subnetId) {
+      const subnet = vnet.subnets.find((entry) => entry.id === subnetId)!
       repairGuidance.push({ id: `${id}.table-${subnet.id}`, action: 'route-table.configure',
         params: { vnetId: vnet.id, subnetId: subnet.id, routeTableId: subnet.routeTableId! },
-        instruction: l(`Locate the routing policy for ${vnet.name} / ${subnet.name}. Choose the diagnosis and repair yourself.`, `${vnet.name} / ${subnet.name} のルーティング ポリシーを開きます。診断と修復は自分で判断します。`) })
-    }
+        instruction: l(`Open ${vnet.name} / ${subnet.name} routing policy.`, `${vnet.name} / ${subnet.name} のルーティング ポリシーを開く。`) })
+    } else repairGuidance.push({ id: `${id}.configure-${vnet.id}`, action: 'network.configure', params: { vnetId: vnet.id },
+      instruction: l(`Open ${vnet.name} appliance settings.`, `${vnet.name} の装置設定を開く。`) })
   }
-  if (id === 'wan-isolation') repairGuidance.push({ id: `${id}.hub`, action: 'hub-routes.open', params: { hubId: 'wan', tableId: 'defaultRouteTable' },
-    instruction: l('Inspect this hub’s exact Default table. This is not a union of the hub tables.', 'このハブの正確な Default テーブルを調べます。複数テーブルの集合ではありません。') },
-    { id: `${id}.hub-config`, action: 'hub.configure', params: { hubId: 'wan' },
-      instruction: l('Locate the hub connection routing controls; choose the appropriate association and propagation yourself.', 'ハブ接続のルーティング設定を開きます。関連付けと伝達は自分で判断します。') })
-  scenarioBundle.scenarios.push({ id, document: { mode: 'full', topology: scenarioTopologies[id] } })
+  repairGuidance.push(...definition.guidance ?? [])
+  if (id === 'wan-isolation') repairGuidance.push({ id: `${id}.hub-config`, action: 'hub.configure', params: { hubId: 'wan' },
+    instruction: l('Open Regional WAN connection routing settings.', 'Regional WAN の接続ルーティング設定を開く。') },
+    { id: `${id}.hub`, action: 'hub-routes.open', params: { hubId: 'wan', tableId: 'defaultRouteTable' },
+      instruction: l('Open Regional WAN / Default effective routes.', 'Regional WAN / Default の有効なルートを開く。') })
+  scenarioBundle.scenarios.push({ id, ...(id === 'inspection-bypass' ? { extendsScenarioId: 'private-link' } : {}),
+    document: { mode: 'full', topology: scenarioTopologies[id] } })
   scenarioBundle.guidance.push(...repairGuidance,
     { id: `${id}.before-guide`, action: 'routes.open', params: before, instruction: l('Locate the requested source table and prefix, including its absence.', '指定された送信元テーブルとプレフィックスの有無を調べます。') },
     { id: `${id}.after-guide`, action: 'routes.open', params: after, instruction: l('Locate the independently scoped return table and compare its next hop.', '独立した復路のテーブルを開き、ネクストホップを比較します。') })
@@ -196,13 +226,19 @@ for (const [index, definition] of definitions.entries()) {
       choices: definition.diagnosis.answers.map(([text, feedback], choice) => ({ id: `choice-${choice}`, text, feedback })),
     },
   })
+  for (const quiz of definition.fundamentals ?? []) scenarioBundle.checks.push({
+    id: `${id}.${quiz.id}-check`, kind: 'quiz.answered', params: {
+      question: quiz.question, correctChoiceId: `choice-${quiz.correct}`,
+      choices: quiz.answers.map(([text, feedback], choice) => ({ id: `choice-${choice}`, text, feedback })),
+    },
+  })
   const tasks = [
     { suffix: 'load', points: 5, title: l('Open this scenario', 'このシナリオを開く'),
       instruction: l('Confirm loading this original practice network. Your normal design stays protected; no Azure resources are deployed.', '初期練習ネットワークの読み込みを確認します。通常の設計は保護され、Azure リソースはデプロイされません。'),
       checkId: `${id}.load-check`, guidanceIds: [] },
     { suffix: 'inspect', points: 5, title: l('Read the source routing evidence', '送信元のルートの根拠を読む'),
-      instruction: l(`Inspect ${scopeName(before)} for ${before.prefix}. Note the source and next hop, or the absence of an exact route. Record the inspection there.`,
-        `${scopeName(before)} で ${before.prefix} を調べます。生成元とネクストホップ、または完全一致ルートがないことを確認し、その画面で記録してください。`),
+      instruction: l(`Open Effective routes for ${scopeName(before)}. Find ${before.prefix} and compare its source and next hop, or note the absence of an exact route.`,
+        `${scopeName(before)} の有効なルートを開き、${before.prefix} の生成元とネクストホップ、または完全一致ルートがないことを確認してください。`),
       checkId: `${id}.before`, guidanceIds: [`${id}.before-guide`] },
     ...(definition.diagnosis ? [{ suffix: 'diagnose', points: 25, title: l('Diagnose the packet evidence', 'パケットの根拠から診断する'),
       instruction: l('Run the unchanged starter packet probe using Show me where. Compare the original tuple and the independent reply before choosing an explanation.', '「場所を表示」で初期構成のパケット プローブを実行します。元のタプルと独立した復路を比較してから、理由を選んでください。'),
@@ -213,12 +249,41 @@ for (const [index, definition] of definitions.entries()) {
       instruction: l(`Inspect ${scopeName(after)} for ${after.prefix}. Compare this scope with the source.`,
         `${scopeName(after)} で ${after.prefix} を調べ、送信元とこの範囲を比較します。`),
       checkId: `${id}.after`, guidanceIds: [`${id}.after-guide`] },
+    ...(definition.fundamentals ?? []).map((quiz) => ({ suffix: quiz.id, points: 10, title: quiz.title,
+      instruction: quiz.question, checkId: `${id}.${quiz.id}-check`, guidanceIds: [] })),
     { suffix: 'explain', points: 20, title: l('Explain the architectural consequence', '設計上の意味を説明する'),
-      instruction: l('Use the declared scenario and the evidence you inspected, not the location of a simulator control.', 'シミュレーターの操作場所ではなく、シナリオと確認した根拠に基づいて回答してください。'),
+      instruction: definition.question,
       checkId: `${id}.quiz`, guidanceIds: [] },
   ].map(({ suffix, ...task }) => ({ ...task, id: `${id}.${suffix}`, assessmentVersion: 1, awardId: `${id}.${suffix}`, hints: [] }))
+  if (id === 'inspection-bypass') {
+    scenarioBundle.guidance.push(...['a', 'b'].map((vnetId) => ({
+      id: `${id}.peer-${vnetId}`, action: 'peering.command' as const, params: { vnetAId: vnetId, vnetBId: 'hub' },
+      instruction: l(`Connect ${vnetId === 'a' ? 'Application' : 'Partner'} to Inspection hub. Keep the existing Application–Partner link for the route comparison.`,
+        `${vnetId === 'a' ? 'Application' : 'Partner'} を Inspection hub に接続します。ルートの比較用に既存の Application–Partner 接続は残します。`),
+    })))
+    scenarioBundle.checks.push(
+      { id: `${id}.connect-check`, kind: 'peerings.configured', params: {
+        peerings: ['a', 'b'].map((vnetAId) => ({ vnetAId, vnetBId: 'hub' })), requirements: [witness, isolation],
+      } },
+      { id: `${id}.summary-check`, kind: 'udrs.configured', params: {
+        routes: ['a', 'b'].map((vnetId) => ({ vnetId, subnetId: `${vnetId}-work`, prefix: '10.0.0.0/8', nextHopIp: '10.20.1.4' })),
+        requirements: [witness, isolation],
+      } })
+    tasks.splice(1, 0,
+      { id: `${id}.connect`, assessmentVersion: 1, awardId: `${id}.connect`, points: 10,
+        title: l('Connect the spokes to the inspection hub', 'スポークを検査ハブに接続する'),
+        instruction: l('Create Application–Inspection hub and Partner–Inspection hub peerings. Leave the existing Application–Partner peering in place for now. Connecting spokes to a hub does not make the hub forward between them.',
+          'Application–Inspection hub と Partner–Inspection hub のピアリングを作ります。比較のため、既存の Application–Partner ピアリングは残します。スポークをハブに接続するだけでは、ハブ経由の転送は始まりません。'),
+        checkId: `${id}.connect-check`, guidanceIds: [`${id}.peer-a`, `${id}.peer-b`], hints: [] },
+      { id: `${id}.summary`, assessmentVersion: 1, awardId: `${id}.summary`, points: 15,
+        title: l('Add the first routing policies', '最初のルーティング ポリシーを追加する'),
+        instruction: l('A route table groups rules for traffic leaving its associated subnet. Add one enabled UDR to each empty Workload policy table: destination 10.0.0.0/8, next hop VirtualAppliance, IP 10.20.1.4 (Inspection firewall). Do not add a /16 yet: the next step compares these overlapping routes.',
+          'ルート テーブルは、関連付いたサブネットから出る通信の規則をまとめます。各 Workload の空のポリシー テーブルに、有効な UDR を 1 つ追加します。宛先 10.0.0.0/8、ネクストホップ VirtualAppliance、IP 10.20.1.4 (Inspection firewall) です。まだ /16 は追加しません。次のステップで重複するルートを比較します。'),
+        checkId: `${id}.summary-check`, guidanceIds: [`${id}.table-a-work`, `${id}.table-b-work`], hints: [] })
+  }
   scenarioBundle.lessons.push({ id, contentVersion: 1, scenarioId: id, title: definition.title, objective: definition.objective,
     prerequisites: index ? [definitions[index - 1].id] : [], taskOrder: tasks.map((task) => task.id), tasks })
 }
 appendHybridLesson(scenarioBundle)
 appendMultihubLesson(scenarioBundle)
+teachCourse(scenarioBundle)

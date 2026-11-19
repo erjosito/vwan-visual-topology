@@ -1,10 +1,47 @@
 import { describe, expect, it } from 'vitest'
 import { exampleCourse } from './course-examples'
 import { guidanceAnchor, resolveGuidance } from './guidance'
+import { selectPrimaryGuidance } from './task-guidance'
 import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
 
 describe('semantic guidance admission', () => {
+  it('moves staged peering guidance to the next unfinished pair without editing or granting evidence', () => {
+    const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'inspection-bypass')!.document)
+    if (input.mode === 'vwan') throw new Error('Mixed topology required')
+    const check = scenarioBundle.checks.find((entry) => entry.id === 'inspection-bypass.connect-check')!
+    const cues = ['a', 'b'].map((side) => scenarioBundle.guidance.find((cue) => cue.id === `inspection-bypass.peer-${side}`)!)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    input.topology.vnetPeerings.push({ id: 'learner', name: 'Learner', vnetAId: 'hub', vnetBId: 'a', enabled: true, aToB: { ...flags }, bToA: { ...flags } })
+    const before = structuredClone(input)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[1])
+    expect(input).toEqual(before)
+    input.topology.vnetPeerings.at(-1)!.bToA.allowVirtualNetworkAccess = false
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+  })
+  it('moves staged UDR guidance only for an enabled matching rule on the actual subnet table', () => {
+    const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'inspection-bypass')!.document)
+    if (input.mode === 'vwan') throw new Error('Mixed topology required')
+    const check = scenarioBundle.checks.find((entry) => entry.id === 'inspection-bypass.summary-check')!
+    const cues = ['a', 'b'].map((side) => scenarioBundle.guidance.find((cue) => cue.id === `inspection-bypass.table-${side}-work`)!)
+    const rule = { id: 'learner', name: 'Learner', enabled: false, prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance' as const, nextHopIp: '10.20.1.4' }
+    input.topology.udrTables[0].routes.push(rule)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+    rule.enabled = true
+    const before = structuredClone(input)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[1])
+    expect(input).toEqual(before)
+    input.topology.vnets[0].subnets[0].routeTableId = 'unrelated'
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+  })
+  it('retains authored guidance order for outcome-based repairs instead of choosing a solution', () => {
+    const input = scenarioBundle.scenarios.find((scenario) => scenario.id === 'tiered-incident')!.document
+    const check = scenarioBundle.checks.find((entry) => entry.id === 'tiered-incident.repair-check')!
+    const cues = scenarioBundle.guidance.filter((cue) => cue.id.startsWith('tiered-incident.table-'))
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+    expect(selectPrimaryGuidance(input, check, [])).toBeUndefined()
+  })
   it('scopes every hub prefix candidate before its exact table, and rejects missing or uncaptured tables', () => {
     const input = structuredClone(exampleCourse.scenarios.find((scenario) => scenario.id === 'secured-wan')!.document)
     if (input.mode === 'vwan') throw new Error('Mixed topology required')

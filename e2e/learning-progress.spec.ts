@@ -197,7 +197,7 @@ test('actual competing tabs cannot write practice or farm points, and recover th
     await expect(bar).toContainText('your normal design is kept separately')
     expect(JSON.parse((await saved(other, practiceWorkspaceKey))!).document).toEqual(JSON.parse(latest!).document)
     await completeLearningTasks(other)
-    await expect(status(other)).toContainText('100 points')
+    await expect(status(other)).toContainText('90 points')
     expect(JSON.parse((await saved(other, guidedProgressKey))!).completions).toHaveLength(5)
   } finally { await other.close() }
 })
