@@ -18,8 +18,11 @@ qualification**. A local address is not proof of a physical instance identity:
 an instance can have IP aliases. The view does not guess alias mappings, invent
 instance IPs, duplicate resource-level relationships or infer a second active
 speaker for an active/standby VPN gateway. Configured gateways without captured
-observations have no inferred neighbor table. ARS neighbors, MSEE and simulator-generated
-instance/session inspection remain separate follow-up work.
+observations have no inferred captured neighbor table. The separate
+[simulated BGP neighbor inspector](bgp-neighbors.md) exposes modeled
+resource/local-role relationships without treating these historical captures
+as current state. Captured ARS neighbors and physical MSEE/session mappings
+remain separate follow-up work.
 
 The collector retains reported prefix counts, connected duration and message
 counters when present. Legacy captures without them show **Not captured**, not

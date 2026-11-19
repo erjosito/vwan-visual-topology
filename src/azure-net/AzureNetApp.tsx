@@ -149,6 +149,7 @@ const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module)
 const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
+const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
 const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
 const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
@@ -248,6 +249,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [routeMapHubId, setRouteMapHubId] = useState<string>()
   const [routeMapInspection, setRouteMapInspection] = useState<AzRouteMapSelection>()
   const [nvaBgpInspection, setNvaBgpInspection] = useState<{ vnetId: string; applianceId: string }>()
+  const [bgpInspection, setBgpInspection] = useState<{ resource?: import('../bgp-neighbors').BgpResourceRef; revision: number }>()
   const routeSelection = routeInspection ?? selected
   const setSelected = (entity: AzSelectedEntity) => {
     if (activeTab === 'editor' && workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))
@@ -2695,6 +2697,19 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     : 'siteId' in target ? target.siteId : 'hubId' in target ? target.hubId
       : 'locationId' in target ? target.locationId : 'linkId' in target ? target.linkId
         : 'peeringId' in target ? target.peeringId : 'connectionId' in target ? target.connectionId : target.siteLinkId
+  const bgpResourceFor = (target?: AzSelectedEntity): import('../bgp-neighbors').BgpResourceRef | undefined =>
+    target?.kind === 'gateway' ? { kind: 'gateway', id: target.gatewayId }
+      : target?.kind === 'route-server' ? { kind: 'route-server', id: target.routeServerId }
+        : target?.kind === 'site' ? { kind: 'site', id: target.siteId }
+          : target?.kind === 'er-location' ? { kind: 'er-location', id: target.locationId }
+            : target?.kind === 'vwan-hub' ? { kind: 'vwan-hub', id: target.hubId }
+              : target?.kind === 'appliance' && topology.vnets.find((vnet) => vnet.id === target.vnetId)?.appliances.some((app) => app.id === target.applianceId && app.kind === 'nva-vm')
+                ? { kind: 'appliance', id: target.applianceId } : undefined
+  const openBgpNeighbors = (target?: AzSelectedEntity) => {
+    setActiveTab(null)
+    setToolsDismissRequest((request) => request + 1)
+    setBgpInspection((previous) => ({ resource: bgpResourceFor(target), revision: (previous?.revision ?? 0) + 1 }))
+  }
   const getContextMenuSpec = (target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number }, fullActions = false): { title: string; actions: ContextAction[] } | null => {
     if (target.kind === 'canvas') return getOrdinaryContextMenuSpec(target)
     const id = entityId(target)
@@ -2703,7 +2718,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       label: `Restore ${failureLabel(fault)}`, onSelect: () => restoreFault(fault),
     })) }
     const ordinary = getOrdinaryContextMenuSpec(target)
-    let presented = ordinary?.actions ?? []
+    let presented = ordinary ? [
+      ...(bgpResourceFor(target) ? [{ label: t('BGP neighbors'), onSelect: () => openBgpNeighbors(target) }] : []),
+      ...ordinary.actions,
+    ] : []
     if (ordinary && workspaceSession?.presentationPreview && !fullActions) {
       if (target.kind === 'vnet') presented = previewVnetActions(ordinary.actions, () => setToolsOpenRequest((request) => request + 1))
       if (target.kind === 'subnet') presented = previewSubnetActions(ordinary.actions)
@@ -2836,6 +2854,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             selected: canvasSelection ? azWorkspaceIdentity(canvasSelection) : undefined,
             onSelect: selectCanvasObject,
           }} />
+          <button type="button" className="aznet-btn" onClick={() => openBgpNeighbors(canvasSelection)}>{t('BGP neighbors')}</button>
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
             onGuide={(cue) => {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
@@ -3267,6 +3286,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           )}
         </section>
 
+        {bgpInspection && <Suspense fallback={null}><BgpNeighborsPanel key={bgpInspection.revision}
+          topology={topology} simulation={simulation} initialResource={bgpInspection.resource}
+          unavailableIds={Object.keys(scenario.affected)} onClose={() => setBgpInspection(undefined)} /></Suspense>}
         {nvaBgpInspection && <Suspense fallback={null}><NvaBgpPanel key={`${nvaBgpInspection.vnetId}:${nvaBgpInspection.applianceId}`}
           topology={topology} simulation={simulation} {...nvaBgpInspection}
           onPeerChange={(routeServerId, checked) => commitTopology((draft) => {

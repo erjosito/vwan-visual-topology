@@ -136,6 +136,7 @@ export interface AzSimulationResult {
   gatewayRibs: Record<string, AzBgpRibEntry[]>
   routeServerRibs: Record<string, AzBgpRibEntry[]>
   routeServerInbound?: Record<string, Record<string, AzBgpRibEntry[]>>
+  routeServerInboundPrePolicy?: Record<string, Record<string, AzBgpRibEntry[]>>
   routeServerOutbound?: Record<string, Record<string, AzBgpRibEntry[]>>
   nvaBgpPeers?: Record<string, AzNvaBgpPeer[]>
   vwanHubRibs: Record<string, AzBgpRibEntry[]>
@@ -421,6 +422,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   const gatewayRibs: Record<string, AzBgpRibEntry[]> = {}
   const routeServerRibs: Record<string, AzBgpRibEntry[]> = {}
   const routeServerInbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
+  const routeServerInboundPrePolicy: Record<string, Record<string, AzBgpRibEntry[]>> = {}
   const routeServerOutbound: Record<string, Record<string, AzBgpRibEntry[]>> = {}
   const nvaBgpPeers: Record<string, AzNvaBgpPeer[]> = {}
   const vwanHubRibs: Record<string, AzBgpRibEntry[]> = {}
@@ -545,6 +547,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         }
       }
     }
+    routeServerInboundPrePolicy[ars.id] = { ...groups }
     for (const [id, routes] of Object.entries(groups)) groups[id] = applyAzArsRouteMap(ars, id, 'inbound', routes)
     peerInputs.set(ars.id, groups)
     return groups
@@ -1305,6 +1308,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     gatewayRibs,
     routeServerRibs,
     routeServerInbound,
+    routeServerInboundPrePolicy,
     routeServerOutbound,
     nvaBgpPeers,
     vwanHubRibs,

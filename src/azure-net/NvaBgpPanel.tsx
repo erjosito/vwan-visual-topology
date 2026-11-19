@@ -12,7 +12,7 @@ registerJapaneseMessages({
   'NVA learned BGP routes': 'NVA が学習した BGP ルート',
   'ARS to NVA received candidates only. NVA advertisements and hosting-subnet effective routes are separate views.': 'ARS から NVA が受信する候補のみを表示します。NVA の広告とホストサブネットの有効ルートは別のビューです。',
   'ARS selects before export. NVA best-path selection and forwarding from these candidates are not modeled.': 'ARS はエクスポート前にルートを選択します。NVA の最適パス選択と、これらの候補による転送はモデル化されていません。',
-  'ARS neighbor IPs, per-instance sessions, live adjacency and vendor-specific neighbor configuration are not modeled.': 'ARS のネイバー IP、インスタンス別セッション、実際の隣接関係、ベンダー固有のネイバー設定はモデル化されていません。',
+  'BGP neighbors shows modeled speaker relationships separately. Physical ARS instance mappings, endpoint IPs and live adjacency are not inferred.': 'BGP ネイバーでモデルのスピーカー関係を別に表示します。ARS の物理インスタンス対応、エンドポイント IP、実際の隣接関係は推測しません。',
   'NVA no longer exists. No received-route evidence is available.': 'NVA は存在しません。受信ルートの証跡はありません。',
   'ARS peers': 'ARS ピア',
   'Edit ARS peers': 'ARS ピアを編集',
@@ -87,7 +87,7 @@ export default function NvaBgpPanel({ topology, simulation, vnetId, applianceId,
     {!app ? <p role="status">{t('NVA no longer exists. No received-route evidence is available.')}</p> : <>
       <p>{t('ARS to NVA received candidates only. NVA advertisements and hosting-subnet effective routes are separate views.')}</p>
       <p className="muted">{t('ARS selects before export. NVA best-path selection and forwarding from these candidates are not modeled.')}</p>
-      <p className="muted">{t('ARS neighbor IPs, per-instance sessions, live adjacency and vendor-specific neighbor configuration are not modeled.')}</p>
+      <p className="muted">{t('BGP neighbors shows modeled speaker relationships separately. Physical ARS instance mappings, endpoint IPs and live adjacency are not inferred.')}</p>
       <h3>{t('ARS peers')}</h3>
       <button onClick={() => setEditing(!editing)}>{t(editing ? 'Finish editing peers' : 'Edit ARS peers')}</button>
       {editing && <p>{t('Changing membership affects only that ARS. BGP peering does not enable gateway transit, subnet route injection or packet forwarding.')}</p>}

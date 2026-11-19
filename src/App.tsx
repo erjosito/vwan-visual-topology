@@ -52,6 +52,7 @@ import { FailurePanel } from './FailurePanel'
 import { pruneDeletedInventory } from './inventory'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const BgpNeighborsPanel = lazy(() => import('./BgpNeighborsPanel'))
 const FlowExportControls = lazy(() => import('./FlowExportControls').then(module => ({ default: module.FlowExportControls })))
 const SampleGallery = lazy(() => import('./SampleGallery').then((module) => ({ default: module.VwanSampleGallery })))
 const HubCapabilitiesDialog = lazy(() => import('./HubCapabilitiesDialog'))
@@ -95,6 +96,7 @@ function App() {
     return true
   }
   const [snatHubId, setSnatHubId] = useState<string>()
+  const [bgpInspection, setBgpInspection] = useState<{ resource?: import('./bgp-neighbors').BgpResourceRef; revision: number }>()
   const [clearRequested, setClearRequested] = useState(false)
   const [cloneVnetId, setCloneVnetId] = useState<string>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
@@ -436,6 +438,13 @@ function App() {
     { label: t("Check routing"), run: checkRouting },
     { label: t("Model notes and warnings"), run: () => setPanel('notes') },
   ]
+  const bgpResourceFor = (target?: ObjectSelection): import('./bgp-neighbors').BgpResourceRef | undefined =>
+    target?.kind === 'hub' ? { kind: 'vwan-hub', id: target.id }
+      : target?.kind === 'site' ? { kind: 'site', id: target.id }
+        : target?.kind === 'erLocation' ? { kind: 'er-location', id: target.id } : undefined
+  const openBgpNeighbors = (target?: ObjectSelection) => setBgpInspection((previous) => ({
+    resource: bgpResourceFor(target), revision: (previous?.revision ?? 0) + 1,
+  }))
   const getContextActions = (contextSelection?: ObjectSelection, routeMap?: DiagramContextMenu['routeMap'], fullActions = false): ContextAction[] => {
     const contextConnection = contextSelection?.kind === 'connection' ? topology.connections.find((connection) => connection.id === contextSelection.id) : undefined
     const vpnActions: ContextAction[] = contextConnection?.transport === 'VPN'
@@ -464,6 +473,7 @@ function App() {
       { label: t("Edit configuration"), previewPrimary: true, run: () => setEditorRequest(contextSelection) },
       ...(contextSelection.kind === 'spoke' ? [{ label: t('Open VNet detail'), previewPrimary: true, run: () => setDetailOwner(contextSelection.id) }] : []),
       ...(['hub', 'site', 'erLocation'].includes(contextSelection.kind) ? [
+        { label: t('BGP neighbors'), run: () => openBgpNeighbors(contextSelection) },
         { label: t("BGP table"), run: () => showRoutes(contextSelection) },
         { label: t("Learned routes"), run: () => showRoutes(contextSelection, false, 'learned') },
         { label: t("Advertised routes"), run: () => showRoutes(contextSelection, false, 'advertised') },
@@ -671,6 +681,7 @@ function App() {
           selected: selection ? vwanWorkspaceIdentity(selection) : undefined,
           onSelect: selectObject,
         }} />
+        <button type="button" onClick={() => openBgpNeighbors(selection)}>{t('BGP neighbors')}</button>
         <LearningTools document={{ mode: 'vwan', topology }} />
         {selection?.kind === 'spoke' && <button type="button" onClick={() => setDetailOwner(selection.id)}>{t('VNet detail')}</button>}
         {selection?.kind === 'hub' && <button type="button" onClick={() => setSnatHubId(selection.id)}>{t('Firewall SNAT')}</button>}
@@ -752,6 +763,9 @@ function App() {
           {!workspaceSession?.presentationPreview && <button onClick={openDiagnostics}>{t('Advanced checks')}</button>}
         </div>}
         <div className="canvas-stage">
+          {bgpInspection && <Suspense fallback={null}><BgpNeighborsPanel key={bgpInspection.revision} topology={topology}
+            initialResource={bgpInspection.resource} unavailableIds={Object.keys(scenario.affected)}
+            onClose={() => setBgpInspection(undefined)} /></Suspense>}
           {panel === 'diagnostics' && <DiagnosticsPanel topology={activeTopology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
           {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}

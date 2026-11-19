@@ -12,6 +12,7 @@ import { tracePacket, validatePacketRequest } from '../packet-flow'
 import { traceVpnNatPacket, validateVpnNatPacketRequest } from '../vpn-nat-packet'
 import { assessPacket } from './packet-assessment'
 import { evaluateApplication, validateApplicationRequest } from '../application'
+import { inspectAzBgp, inspectVwanBgp } from '../bgp-neighbors'
 
 export function admitJson(input: unknown): string {
   let items = 0
@@ -210,6 +211,7 @@ export function executePlatform(input: unknown): PlatformResult {
     if (document.mode === 'vwan') {
       const simulation = simulate(document.topology)
       result.simulation = simulation
+      result.bgpNeighbors = inspectVwanBgp(document.topology)
       if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)
       result.limitations = simulation.warnings
       if (!simulation.converged) result.status = 'not assessed'
@@ -230,6 +232,7 @@ export function executePlatform(input: unknown): PlatformResult {
     } else {
       const simulation = simulateAzNet(document.topology)
       result.simulation = simulation
+      result.bgpNeighbors = inspectAzBgp(document.topology, simulation)
       if (request.vpnPacket) result.vpnPacket = traceVpnNatPacket(document.topology, request.vpnPacket, simulation)
       if (simulation.controlPlaneComplete === false) result.status = 'not assessed'
       if (request.packet) result.packet = tracePacket(document.topology, request.packet, simulation)

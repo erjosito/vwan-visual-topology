@@ -92,6 +92,17 @@ it('exposes original per-NVA received-route evidence through the freshly built s
       { id: 'bgp-reception-does-not-inject-host-subnet', kind: 'route' as const, table: 'reader-subnet', prefix: '198.18.0.0/24', expectation: 'absent' as const },
     ] }
     const handle = await run(request)
+    const neighborChunks: string[] = []
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle, section: 'bgpNeighbors', offset, limit: 16000 })
+      neighborChunks.push(chunk.jsonText)
+      if (chunk.complete) break
+      expect(chunk.jsonText.length).toBeGreaterThan(0)
+      offset += chunk.jsonText.length
+    }
+    const neighbors = JSON.parse(neighborChunks.join(''))
+    expect(neighbors).toEqual(executePlatform(request).bgpNeighbors)
+    expect(neighbors.neighbors.filter((neighbor: any) => neighbor.localResourceKey === JSON.stringify(['appliance', 'reader']))).toHaveLength(4)
     const chunks: string[] = []
     for (let offset = 0; offset < 1_000_000;) {
       const chunk = await call('get_evidence', { handle, section: 'simulation', offset, limit: 2000 })

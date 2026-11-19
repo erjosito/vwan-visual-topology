@@ -123,14 +123,14 @@ server.registerTool('get_job', {
       contractVersion: result.contractVersion, engineVersion: result.engineVersion, revision: result.revision,
       resultStatus: result.status, errors: result.errors, limitations: result.limitations.slice(0, 20),
       assessments: result.assessments.map(({ id, outcome, reasons }) => ({ id, outcome, reasons })),
-      sections: ['document', 'simulation', 'assessments', 'packet', 'vpnPacket', 'application'],
+      sections: ['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'application'],
     } : {}),
   })
 })
 
 server.registerTool('get_evidence', {
   description: 'Retrieve bounded JSON-text chunks of a completed job section. Concatenate all chunks in offset order before parsing; a partial chunk is not complete evidence.',
-  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'assessments', 'packet', 'vpnPacket', 'application']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
+  inputSchema: { handle: z.string().uuid(), section: z.enum(['document', 'simulation', 'bgpNeighbors', 'assessments', 'packet', 'vpnPacket', 'application']), offset: z.number().int().min(0).default(0), limit: z.number().int().min(1).max(16000).default(8000) }, annotations,
 }, async ({ handle, section, offset, limit }) => {
   const { result } = jobs.get(handle)
   if (!result) throw new Error('Job is still running.')

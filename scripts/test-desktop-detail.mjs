@@ -12,6 +12,9 @@ await mkdir(artifacts, { recursive: true })
 const fixture = join(artifacts, 'network-detail.cjs')
 await build({ entryPoints: [resolve('tests', 'fixtures', 'network-detail.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: fixture })
 const { graphicalDetailTopology } = createRequire(import.meta.url)(fixture)
+const bgpFixture = join(artifacts, 'bgp-neighbors.cjs')
+await build({ entryPoints: [resolve('tests', 'fixtures', 'bgp-neighbors.ts')], bundle: true, platform: 'node', format: 'cjs', outfile: bgpFixture })
+const { bgpNeighborTopology, bgpNeighborVwanTopology } = createRequire(import.meta.url)(bgpFixture)
 const application = await electron.launch({
   ...(executablePath ? { executablePath } : {}),
   args: [...(executablePath ? [] : [resolve('platform-dist', 'electron', 'main.cjs')]), `--user-data-dir=${join(artifacts, 'profile')}`],
@@ -76,6 +79,49 @@ try {
     expect(await read()).toEqual(expected)
     await page.keyboard.press('Escape')
     results.push({ mode, preview: true, diagramFirst: true, azureIcons: true, attachments: 145, originalIdentity: true, editUndoRedo: true, keyboardFocus: true })
+  }
+  for (const mode of ['hub-spoke', 'full', 'vwan']) {
+    const topology = mode === 'vwan' ? bgpNeighborVwanTopology() : bgpNeighborTopology()
+    await page.goto(`app://simulator/?mode=${mode}`)
+    await page.evaluate(({ mode, topology }) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'false')
+      localStorage.setItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1',
+        JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology }))
+    }, { mode, topology })
+    await page.reload()
+    await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+    const resource = dialog.getByLabel('Local BGP resource')
+    if (mode === 'vwan') {
+      await resource.selectOption(JSON.stringify(['vwan-hub', 'managed-hub']))
+      await expect(dialog.getByLabel('Local BGP instance')).toHaveCount(0)
+      await expect(dialog.getByTestId('bgp-managed-relationships')).toContainText('managed-vpn')
+    } else {
+      await resource.selectOption(JSON.stringify(['appliance', 'reader']))
+      await expect(dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr')).toHaveCount(4)
+      await resource.selectOption(JSON.stringify(['route-server', 'west-ars']))
+      const instances = dialog.getByLabel('Local BGP instance')
+      const choices = await instances.locator('option').evaluateAll((options) => options.map((option) => option.value))
+      expect(choices).toHaveLength(2)
+      await instances.selectOption(choices[1])
+      await expect(dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr')).toHaveCount(2)
+      await expect(dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr').first()).toHaveAttribute('data-local-instance-id', choices[1])
+      await dialog.getByTestId('bgp-neighbor-rows').getByRole('button').first().click()
+      await expect(dialog.getByTestId('bgp-neighbor-details')).toBeVisible()
+      const contract = await page.evaluate((request) => window.desktopSimulator.simulate(request), {
+        contractVersion: 1, operation: 'simulate', document: { mode, topology },
+      })
+      expect(contract.ok).toBe(true)
+      expect(contract.value.bgpNeighbors.neighbors.filter((neighbor) => neighbor.localResourceKey === JSON.stringify(['appliance', 'reader']))).toHaveLength(4)
+    }
+    const saved = await page.evaluate((mode) => {
+      const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'))
+      return value.topology ?? value
+    }, mode)
+    expect(saved).toEqual(topology)
+    await page.keyboard.press('Escape')
+    await expect(dialog).toHaveCount(0)
+    results.push({ mode, simulatedBgpNeighbors: true, originalIdentity: true, readOnly: true, managedUnknowns: true })
   }
   expect(errors).toEqual([])
   await writeFile(join(artifacts, 'results.json'), `${JSON.stringify({ flavor, results, errors }, null, 2)}\n`)

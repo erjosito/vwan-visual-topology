@@ -13,6 +13,7 @@ import { engineVersion } from '../src/platform/contract'
 import { resolve } from 'node:path'
 import { largeVwanCapture } from '../tests/large-vwan-fixture'
 import { importAzureCapture } from '../src/azure-import'
+import { bgpNeighborTopology } from '../tests/fixtures/bgp-neighbors'
 
 const require = createRequire(import.meta.url)
 const compiled = require('../platform-dist/service.cjs') as { executePlatform: typeof executePlatform }
@@ -23,6 +24,21 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it.each(['hub-spoke', 'full'] as const)('exports serializable BGP speaker/session identities and logical scopes through the compiled %s contract', (mode) => {
+    const topology = bgpNeighborTopology()
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology } }
+    const result = executePlatform(input)
+    expect(compiled.executePlatform(input)).toEqual(result)
+    const inspection = result.bgpNeighbors!
+    const reader = inspection.neighbors.filter((neighbor) => neighbor.localResourceKey === JSON.stringify(['appliance', 'reader']))
+    expect(reader).toHaveLength(4)
+    expect(new Set(reader.map((neighbor) => neighbor.remoteInstanceId)).size).toBe(4)
+    expect(reader.every((neighbor) => neighbor.received?.scope === 'received-post-policy')).toBe(true)
+    expect(inspection.resources.find((resource) => resource.id === 'vpn-as')!.instances).toHaveLength(1)
+    expect(inspection.resources.find((resource) => resource.id === 'edge-location')!.instances).toHaveLength(0)
+    expect(JSON.parse(JSON.stringify(inspection))).toEqual(inspection)
+    expect(result.document?.topology).toEqual(topology)
+  })
   it.each(['hub-spoke', 'full'] as const)('preserves VNet community advertisements and provenance in %s compiled headless execution', (mode) => {
     const topology = parseAzNetTopology(sample('azure-net/uc9-expressroute-hairpin-two-vnets.json'))
     topology.vnets[1].bgpCommunities = { virtualNetworkCommunity: '12076:20001', regionalCommunity: '12076:50004' }
