@@ -38,10 +38,12 @@ export type RunnerState = {
   replayLessonId?: string
   completions: readonly TaskCompletion[]
   running: boolean
+  automatic: boolean
   feedback?: RunnerFeedback
   explanation?: Localized
   unmet: string[]
   observation?: LearningObservation
+  celebration?: { title: Localized; points: number; explanation?: Localized }
   canContinue: boolean
 }
 export type CourseRunner = ReturnType<typeof createCourseRunner>
@@ -65,7 +67,7 @@ export function taskCompleted(bundle: CourseBundle, completions: readonly TaskCo
     && entry.assessmentVersion === task.assessmentVersion && entry.checkId === task.checkId)
 }
 
-/** One progression authority. A passing check is only committed by Continue on the same live revision. */
+/** One progression authority; recording always rechecks the passing live-revision binding. */
 export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions) {
   const tasks = orderedTasks(bundle)
   let completions = [...(options.completions ?? [])]
@@ -83,6 +85,10 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   let feedback: RunnerFeedback | undefined
   let explanation: Localized | undefined
   let unmet: string[] = []
+  let automatic = false
+  let automaticTimer: ReturnType<typeof setTimeout> | undefined
+  let automaticAttempt: string | undefined
+  let celebration: RunnerState['celebration']
   let state: RunnerState
   const current = () => tasks.find((item) => item.task.id === taskId)
   const binding = () => {
@@ -102,9 +108,21 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       observationKey = key
     } else { observation = undefined; observationKey = undefined }
     state = { taskId, reviewId, replayLessonId: replay?.lessonId, completions: [...completions],
-      running: !!job, feedback, explanation, unmet, observation,
+      running: !!job, automatic, feedback, explanation, unmet, observation, celebration,
       canContinue: !reviewId && !!key && proof === key && !job }
     options.changed(state)
+    clearTimeout(automaticTimer)
+    automaticTimer = undefined
+    if (!automatic || reviewId || job || !key || !check) return
+    if (state.canContinue) automaticTimer = setTimeout(() => { if (automatic) advance() }, 1600)
+    else if (check.kind !== 'quiz.answered' && automaticAttempt !== key
+      && (!['routes.inspected', 'control-routes.inspected'].includes(check.kind) || observed === key)) {
+      automaticTimer = setTimeout(() => {
+        if (!automatic || key !== binding()) return
+        automaticAttempt = key
+        void assess()
+      }, 450)
+    }
   }
   const invalidate = (reason?: RunnerFeedback) => {
     generation++
@@ -113,6 +131,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     feedback = reason; explanation = undefined; unmet = []
   }
   const workspaceChanged = () => {
+    celebration = undefined
     invalidate(job || proof || observed || feedback === 'stale' ? 'stale' : undefined)
     publish()
   }
@@ -210,7 +229,8 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       invalidate('stale'); publish(); return false
     }
     const { task, lesson } = current()!
-    if (!taskCompleted(bundle, completions, task)) {
+    const firstAward = !taskCompleted(bundle, completions, task)
+    if (firstAward) {
       const live = options.workspace()!
       const completion: TaskCompletion = {
         courseId: bundle.course.id, contentVersion: bundle.course.contentVersion, lessonId: lesson.id,
@@ -223,6 +243,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       } catch { proof = undefined; feedback = 'progress'; publish(); return false }
       completions.push(completion)
     }
+    celebration = { title: task.title, points: firstAward ? task.points : 0, explanation }
     if (replay) {
       replay.done.add(task.id)
       taskId = lesson.taskOrder.find((id) => !replay!.done.has(id))
@@ -233,6 +254,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   }
   const review = (id?: string) => {
     if (id && !tasks.some(({ task }) => task.id === id && taskCompleted(bundle, completions, task))) return
+    celebration = undefined
     invalidate()
     reviewId = id
     publish()
@@ -242,6 +264,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     const firstUnmetIndex = tasks.findIndex((entry) => entry.task.id === nextUncompleted())
     const lessonIndex = tasks.findIndex((entry) => entry.lesson.id === lessonId)
     if (!lesson || (firstUnmetIndex >= 0 && lessonIndex > firstUnmetIndex)) return
+    celebration = undefined
     invalidate(); reviewId = undefined
     replay = { lessonId, done: new Set() }
     taskId = lesson.taskOrder[0]; sessionId = crypto.randomUUID()
@@ -252,12 +275,21 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     bundle,
     getSnapshot: () => state,
     assess, advance, review, replayLesson, workspaceChanged,
+    setAutomatic: (enabled: boolean) => {
+      if (automatic === enabled) return
+      automatic = enabled
+      automaticAttempt = undefined
+      if (!enabled) invalidate()
+      publish()
+    },
     replaceProgress: (entries: readonly TaskCompletion[]) => {
+      celebration = undefined
       invalidate(); completions = [...entries]; reviewId = undefined; replay = undefined
       taskId = nextUncompleted(); sessionId = crypto.randomUUID(); publish()
     },
-    cancel: () => { invalidate('cancelled'); publish() },
+    cancel: () => { celebration = undefined; invalidate('cancelled'); automaticAttempt = binding(); publish() },
     resumeCurrent: () => {
+      celebration = undefined
       invalidate(); reviewId = undefined; replay = undefined; taskId = nextUncompleted(); publish()
     },
     observe: (event: LearningObservation) => {

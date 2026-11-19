@@ -1,6 +1,9 @@
 import type { Localized } from './content'
 
 export const sidebarLabels = {
+  options: { en: 'Progress, review & options', ja: '進み具合・復習・設定' },
+  navigationHelp: { en: 'Navigation help', ja: '操作場所の案内について' },
+  restart: { en: 'Restart practice network', ja: '練習ネットワークを最初からやり直す' },
   preview: { en: 'Instruction preview — task verification, unlocks and points are not enabled yet. Next previews wording; it does not complete a task.', ja: '手順のプレビューです。タスクの検証、ロック解除、ポイントはまだ有効ではありません。「次へ」は次の手順を表示するだけで、タスクを完了しません。' },
   instructions: { en: 'Instruction preview', ja: '手順のプレビュー' },
   pause: { en: 'Pause learning', ja: '学習を一時停止' },

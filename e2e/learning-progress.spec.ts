@@ -3,9 +3,10 @@ import AxeBuilder from '@axe-core/playwright'
 import { readFile } from 'node:fs/promises'
 import { guidedProgressKey, legacyProgressKey } from '../src/learning/progress-ledger'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
+import { practiceLockName } from '../src/learning/practice-ownership'
 import { scenarioBundle } from '../src/learning/scenario-course'
 import { orderedTasks } from '../src/learning/runner'
-import { completeLearningTasks, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { completeLearningTasks, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
 
 const status = (page: Page) => page.getByTestId('learning-status')
 const details = (page: Page) => page.getByTestId('learning-status-details')
@@ -55,6 +56,7 @@ for (const language of ['en', 'ja'] as const) {
     await expect(panel.getByTestId('learning-active-track')).toContainText(name)
     await expect(panel.getByTestId('learning-completion-count')).toHaveText(`0 / ${orderedTasks(scenarioBundle).length} ${language === 'en' ? 'Completed' : '完了'}`)
     const overview = panel.getByTestId('learning-tracks')
+    await learningOptions(page, language)
     await overview.locator('summary').focus()
     await page.keyboard.press('Enter')
     const plannedInSidebar = overview.getByRole('region', { name: plannedName, exact: true })
@@ -75,6 +77,7 @@ for (const unavailable of [false, true]) {
     page.on('request', (request) => { if (request.url().includes('concept-bodies')) requests.push(request.url()) })
     if (unavailable) await page.route('**/concept-bodies*', (route) => route.abort())
     await open(page)
+    await learningOptions(page)
     await learningSidebar(page).getByText('Networking reference', { exact: true }).click()
     expect(requests).toEqual([])
     const concept = learningSidebar(page).locator('[data-concept="selection"]')
@@ -87,7 +90,7 @@ for (const unavailable of [false, true]) {
 
 test('first-earned points, checkpoint gap and linear position survive reload and replay without farming', async ({ page }) => {
   test.setTimeout(60_000)
-  await open(page); await loadLearningNetwork(page); await completeLearningTasks(page, 2)
+  await open(page); await completeLearningTasks(page, 2)
   await expect(status(page)).toContainText('Not signed in')
   await expect(status(page)).toContainText('White belt · 10 points')
   await status(page).click()
@@ -103,6 +106,7 @@ test('first-earned points, checkpoint gap and linear position survive reload and
   await completeLearningTasks(page)
   await expect(status(page)).toContainText('75 points')
   const ledger = await saved(page, guidedProgressKey)
+  await learningOptions(page)
   await learningSidebar(page).getByRole('button', { name: 'Replay this lesson', exact: true }).click()
   await learningSidebar(page).getByRole('button', { name: 'Start lesson replay', exact: true }).click()
   await completeLearningTasks(page, 3)
@@ -123,7 +127,7 @@ test('quota-failed points are explicitly session-only, can be saved later, and s
     }
     if (!localStorage.getItem(legacy)) localStorage.setItem(legacy, 'unchanged previous practice bytes')
   }, { guided: guidedProgressKey, legacy: legacyProgressKey })
-  await open(page); await loadLearningNetwork(page); await completeLearningTasks(page)
+  await open(page); await completeLearningTasks(page)
   await expect(status(page)).toContainText('5 points · Session only')
   expect(await saved(page, guidedProgressKey)).toBeNull()
   await status(page).click()
@@ -154,8 +158,6 @@ test('damaged guided data is not zero credit, cannot be overwritten by completio
   await open(page)
   await expect(status(page)).toContainText('Learning progress unavailable')
   await loadLearningNetwork(page)
-  await learningSidebar(page).getByRole('button', { name: 'Check task', exact: true }).click()
-  await learningSidebar(page).getByRole('button', { name: 'Complete task & continue', exact: true }).click()
   await expect(learningSidebar(page).getByTestId('learning-feedback')).toContainText('Completion could not be recorded')
   expect(await saved(page, guidedProgressKey)).toBe('damaged guided original')
   await status(page).click()
@@ -169,7 +171,7 @@ test('damaged guided data is not zero credit, cannot be overwritten by completio
 
 test('actual competing tabs cannot write practice or farm points, and recover the latest canvas after the owner closes', async ({ page, context }) => {
   test.setTimeout(90_000)
-  await open(page); await loadLearningNetwork(page); await completeLearningTasks(page, 2)
+  await open(page); await completeLearningTasks(page, 2)
   const other = await context.newPage()
   try {
     await other.goto('/')
@@ -178,8 +180,8 @@ test('actual competing tabs cannot write practice or farm points, and recover th
     await expect(bar.getByRole('alert')).toContainText('Another tab owns practice')
     await expect(bar.getByRole('button', { name: 'Resume practice', exact: true })).toBeVisible()
     await other.getByTestId('learning-open').click()
-    await learningSidebar(other).getByRole('button', { name: 'Check task', exact: true }).click()
-    await expect(learningSidebar(other).getByTestId('learning-feedback')).toContainText('protected practice canvas first')
+    await expect(learningSidebar(other).getByRole('button', { name: 'Load practice network', exact: true })).toBeVisible()
+    await expect(learningSidebar(other).getByRole('button', { name: 'Check task', exact: true })).toHaveCount(0)
     await learningSidebar(other).getByRole('button', { name: 'Load practice network', exact: true }).click()
     await learningSidebar(other).getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
     await expect(learningSidebar(other).getByRole('alert')).toContainText('Another tab owns practice')
@@ -189,7 +191,8 @@ test('actual competing tabs cannot write practice or farm points, and recover th
     const latest = await saved(page, practiceWorkspaceKey)
     expect(latest).not.toBe(unchanged)
     await page.close()
-    await expect.poll(async () => (await other.evaluate(() => navigator.locks.query())).held.length).toBe(0)
+    await expect.poll(async () => other.evaluate(async (name) =>
+      (await navigator.locks.query()).held.filter((lock) => lock.name === name), practiceLockName)).toEqual([])
     await bar.getByRole('button', { name: 'Resume practice', exact: true }).click()
     await expect(bar).toContainText('your normal design is kept separately')
     expect(JSON.parse((await saved(other, practiceWorkspaceKey))!).document).toEqual(JSON.parse(latest!).document)
@@ -210,7 +213,7 @@ test('missing exclusive locking fails closed without persisting or opening a pra
 })
 
 test('reset refuses a record changed after confirmation instead of deleting the newer saved bytes', async ({ page, context }) => {
-  await open(page); await loadLearningNetwork(page); await completeLearningTasks(page)
+  await open(page); await completeLearningTasks(page)
   await status(page).click()
   await details(page).getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
   const other = await context.newPage()

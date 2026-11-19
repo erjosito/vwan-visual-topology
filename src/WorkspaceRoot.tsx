@@ -100,7 +100,7 @@ function Workspace() {
       const runner = createLearningSession({
         changed: setLearningState,
         completions: progress.getSnapshot().ledger?.completions,
-        completed: (completion) => progress.record(completion, practiceRef.current?.owns === true),
+        completed: (completion) => learningIdentity.current === progress && progress.record(completion, practiceRef.current?.owns === true),
         workspace: () => {
           const current = practiceRef.current?.current
           if (!current?.active) return undefined

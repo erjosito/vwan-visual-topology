@@ -9,7 +9,7 @@ import { runnerLabels } from '../src/learning/runner-content'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
-import { completeLearningTasks, createLessonPeering, learningAnchor, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
 
 async function show(page: Page, taskId: string, guidanceId: string, language: 'en' | 'ja') {
   const task = scenarioBundle.lessons.flatMap((lesson) => lesson.tasks).find((task) => task.id === taskId)!
@@ -86,8 +86,7 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
   if (id === 'tiered-incident') {
     await openTable(page, taskId, 'indirect-egress', language)
     await learningAnchor(page, 'udr-route', 'leaf', 'leaf-work', 'indirect-egress', 'partner-service').getByRole('checkbox').check()
-    await learningSidebar(page).getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
-    await expect(learningSidebar(page).getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
+    await expect(learningSidebar(page).getByTestId('learning-feedback')).toContainText(runnerLabels.requirements[language])
     await openTable(page, taskId, 'inspection-onward', language)
     await learningAnchor(page, 'udr-route', 'hub', 'hub-work', 'inspection-onward', 'indirect-return')
       .locator('input[type="text"]').nth(2).fill('10.21.3.4')
@@ -95,16 +94,6 @@ async function repair(page: Page, id: string, language: 'en' | 'ja') {
   if (id === 'ha-return-path') {
     const card = await openTable(page, taskId, 'remote-steering', language)
     await card.locator('tbody tr').first().locator('input[type="text"]').nth(2).fill('10.80.3.10')
-    await probeHa(page, taskId, language, 'symmetric')
-    const sidebar = learningSidebar(page)
-    await sidebar.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
-    await expect(sidebar.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeEnabled()
-    const returnTable = await openTable(page, taskId, 'remote-steering', language)
-    const nextHop = returnTable.locator('tbody tr').first().locator('input[type="text"]').nth(2)
-    await nextHop.fill('10.80.2.4')
-    await expect(sidebar.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
-    await nextHop.fill('10.80.3.10')
-    await expect(sidebar.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
   }
 }
 
@@ -122,7 +111,7 @@ async function configureHybrid(page: Page, taskId: string, language: 'en' | 'ja'
 
 for (const language of ['en', 'ja'] as const) {
   test(`${language}: complete the scenario edition through real native controls and preserve the design`, async ({ page }) => {
-    test.setTimeout(240_000)
+    test.setTimeout(360_000)
     await page.goto('/?mode=full')
     await page.locator('header [data-language-selector]').selectOption(language)
     const original = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
@@ -133,27 +122,22 @@ for (const language of ['en', 'ja'] as const) {
       const check = scenarioBundle.checks.find((entry) => entry.id === task.checkId)!
       if (check.kind === 'scenario.loaded') await loadLearningNetwork(page, language)
       if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') {
+        if (task.id === 'ha-return-path.verify') await probeHa(page, task.id, language, 'symmetric')
         await panel.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
-        await page.getByTestId('learning-record-inspection').click()
       }
       if (check.kind === 'connections.configured') {
-        await panel.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
-        await expect(panel.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
         await configureHybrid(page, task.id, language)
       }
       if (check.kind === 'requirements.satisfied' || check.kind === 'hub-associations.configured') {
-        await panel.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
-        await expect(panel.getByRole('button', { name: runnerLabels.continue[language], exact: true })).toBeDisabled()
         await repair(page, lesson.id, language)
       }
       if (check.kind === 'quiz.answered') {
         if (task.id === 'ha-return-path.diagnose') await probeHa(page, task.id, language, 'asymmetric')
         const answer = check.params.choices.find((choice) => choice.id === check.params.correctChoiceId)!
         await panel.getByRole('radio', { name: answer.text[language], exact: true }).check()
+        await panel.getByRole('button', { name: runnerLabels.submit[language], exact: true }).click()
       }
-      await panel.getByRole('button', { name: runnerLabels.check[language], exact: true }).click()
-      await expect(panel.getByTestId('learning-feedback')).toContainText(runnerLabels.passed[language])
-      await panel.getByRole('button', { name: runnerLabels.continue[language], exact: true }).click()
+      await expect(panel.locator(`[data-task-id="${task.id}"]`)).toHaveCount(0)
     }
     await expect(panel.getByRole('heading', { name: runnerLabels.done[language], exact: true })).toBeVisible()
     const tasks = orderedTasks(scenarioBundle)
@@ -186,7 +170,6 @@ test('default mobile workspace reveals the scoped HA packet form without changin
   await page.goto('/?mode=full')
   await page.getByTestId('learning-open').click()
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'ha-return-path.load')
-  await loadLearningNetwork(page)
   await completeLearningTasks(page, 2)
   const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
   await probeHa(page, 'ha-return-path.diagnose', 'en', 'asymmetric')
@@ -211,24 +194,23 @@ test('default mobile table guidance preserves practice and requires each exact m
   await page.goto('/?mode=full')
   await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1825$/)
   await page.getByTestId('learning-open').click()
-  await loadLearningNetwork(page)
   await completeLearningTasks(page, 1)
   const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
   const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
   await show(page, 'multihub-labels.inspect', 'multihub-labels.source-guide', 'en')
   await expect(learningAnchor(page, 'hub-effective-table', 'west-hub', 'west-workloads')).toBeVisible()
-  await expect(page.getByTestId('learning-record-inspection')).toBeVisible()
+  await expect(page.getByTestId('learning-record-inspection')).toHaveCount(0)
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
   await page.getByRole('combobox', { name: 'Hub routing table', exact: true }).selectOption('defaultRouteTable')
   await expect(page.getByTestId('learning-record-inspection')).toHaveCount(0)
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'multihub-labels.inspect')
   await completeLearningTasks(page, 1)
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'multihub-labels.compare')
-  await learningSidebar(page).getByRole('button', { name: runnerLabels.check.en, exact: true }).click()
-  await expect(learningSidebar(page).getByRole('button', { name: runnerLabels.continue.en, exact: true })).toBeDisabled()
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'multihub-labels.compare')
   await show(page, 'multihub-labels.compare', 'multihub-labels.return-guide', 'en')
   await expect(learningAnchor(page, 'hub-effective-table', 'east-hub', 'east-services')).toBeVisible()
-  await expect(page.getByTestId('learning-record-inspection')).toBeVisible()
+  await expect(learningSidebar(page).locator('[data-task-id="multihub-labels.compare"]')).toHaveCount(0)
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
 })
 
@@ -249,7 +231,6 @@ test('default mobile connection guidance never configures the assessed hybrid ba
   await page.goto('/?mode=full')
   await expect(page.getByTestId('learning-status')).toHaveAttribute('title', /Scenario edition · Black belt · 1575$/)
   await page.getByTestId('learning-open').click()
-  await loadLearningNetwork(page)
   await completeLearningTasks(page, 2)
   const before = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
   const awards = await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)
@@ -297,7 +278,8 @@ test('sidebar edition switching preserves an active practice canvas and separate
   await page.getByTestId('learning-open').click()
   await completeLearningTasks(page, 2)
   const current = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
-  await learningSidebar(page).getByRole('button', { name: 'Curriculum editions', exact: true }).click()
+  await learningOptions(page)
+  await learningSidebar(page).getByRole('button', { name: 'Curriculum editions & learning data', exact: true }).click()
   let details = page.getByTestId('learning-status-details')
   await details.getByRole('button', { name: 'Switch to Original edition', exact: true }).click()
   await details.getByRole('button', { name: 'Confirm edition switch', exact: true }).click()
@@ -305,7 +287,8 @@ test('sidebar edition switching preserves an active practice canvas and separate
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', orderedTasks(exampleCourse)[0].task.id)
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(current)
   await details.getByRole('button', { name: 'Close learning status', exact: true }).click()
-  await learningSidebar(page).getByRole('button', { name: 'Curriculum editions', exact: true }).click()
+  await learningOptions(page)
+  await learningSidebar(page).getByRole('button', { name: 'Curriculum editions & learning data', exact: true }).click()
   details = page.getByTestId('learning-status-details')
   await details.getByRole('button', { name: 'Switch to Scenario edition', exact: true }).click()
   await details.getByRole('button', { name: 'Confirm edition switch', exact: true }).click()
@@ -317,9 +300,10 @@ test('sidebar edition switching preserves an active practice canvas and separate
 test('header and sidebar share a single accessible learning-status panel', async ({ page }) => {
   await page.goto('/?mode=full')
   await page.getByTestId('learning-open').click()
+  await learningOptions(page)
   await page.getByTestId('learning-status').click()
   await expect(page.getByTestId('learning-status-details')).toHaveCount(1)
-  await learningSidebar(page).getByRole('button', { name: 'Curriculum editions', exact: true }).focus()
+  await learningSidebar(page).getByRole('button', { name: 'Curriculum editions & learning data', exact: true }).focus()
   await page.keyboard.press('Enter')
   await expect(page.getByTestId('learning-status-details')).toHaveCount(1)
   await expect(page.getByTestId('learning-status')).toHaveAttribute('aria-expanded', 'true')

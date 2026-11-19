@@ -3,7 +3,7 @@ import { cloudFixture, testOwner } from '../tests/user-cloud-fixture'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { exampleCourse } from '../src/learning/course-examples'
 import { orderedTasks } from '../src/learning/runner'
-import { completeLearningTasks, loadLearningNetwork } from './learning-helpers'
+import { completeLearningTasks, learningSidebar } from './learning-helpers'
 import { sampleHubSpokeFirewallUdr } from '../src/azure-net/model'
 import { example } from '../src/model'
 import AxeBuilder from '@axe-core/playwright'
@@ -308,7 +308,6 @@ test('switching accounts preserves session-only history when both local and clou
     }
   })
   await page.getByTestId('learning-open').click()
-  await loadLearningNetwork(page)
   await completeLearningTasks(page, 2)
   await expect(page.getByTestId('learning-status')).toContainText('10 points')
   await page.getByTestId('practice-workspace-bar').getByRole('button', { name: 'Return to my design', exact: true }).click()
@@ -331,7 +330,8 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   await signIn(page)
   await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByTestId('learning-open').click()
-  await loadLearningNetwork(page)
+  await expect(learningSidebar(page)).not.toContainText('No account, upload')
+  await expect(learningSidebar(page)).not.toContainText('not encrypted or synchronized')
   await completeLearningTasks(page, 2)
   const key = `users/${testOwner('alice')}/progress.json`
   await expect.poll(() => JSON.parse(service.data.get(key)?.raw ?? '{}').completions?.length).toBe(2)

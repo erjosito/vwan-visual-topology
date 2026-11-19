@@ -16,8 +16,10 @@ engine payload is shown; legacy storage stays untouched.
 ## Track scope and compatibility
 
 The playable track is displayed as **Routing foundations**. Its historical
-`azure-networking-preview` course ID, content version 4, award/check identities,
+`azure-networking-preview` course ID, award/check identities,
 40 tasks, 1,325 points and stored practice/progress formats remain unchanged.
+Both editions publish presentation version 5 for the automatic guided flow (#302);
+assessment versions and first-earned awards remain compatible.
 Renaming the presentation is not a migration or a grading revision.
 `tracks.ts` is a small declarative catalog; **DNS and name resolution** and
 **Application delivery** are **Planned** informational entries, with no course
@@ -51,9 +53,9 @@ Normal saved designs remain protected. This is an explicit beta exception to the
 published-threshold policy above, not a general migration policy.
 
 `editions.ts` is the lightweight edition catalog. Fresh learners start
-`azure-routing-scenarios` version 4. Historical original-course completions
+`azure-routing-scenarios` version 5. Historical original-course completions
 retain the original edition unless the learner explicitly opts in through
-**Curriculum editions** or header status details. A retained original practice
+**Progress, review & options** or header status details. A retained original practice
 canvas also retains its edition when no enrollment/history selects otherwise.
 The optional `enrollment` field extends the existing v1 ledger; old backups
 remain readable. Enrollment uses the same exclusive writer/CAS protection as
@@ -65,18 +67,30 @@ editions' progress; it is not an edition-switch mechanism.
 `runner.ts` is the single progression authority. Supported check kinds dispatch
 to reusable checks, never lesson-ID branches. A passing candidate is bound to
 course/content/task/assessment identity, runtime session, practice scope and a
-monotonic live-editor revision. **Complete task & continue** rechecks that binding,
+monotonic live-editor revision. Automatic continuation rechecks that binding,
 records one scoped completion event and unlocks the next unmet task. Edits
 (including edit/undo), replacement, provider/active-practice changes, cancellation,
 review and replay cannot reuse pending or previous evidence. Shared-worker
 requirements must have an exact, complete assessment set; unknown, unsupported,
 failed or cancelled evaluation never passes.
 
-**Show me where** is not observation evidence. The exact native subnet inspector
-offers **Record inspection: prefix** only for the current scoped observation
-request. Its short-lived token is task/session/revision-specific; repeated use of
-the same check definition in another task requires a new observation. Quizzes
-separately check interpretation with answer-specific feedback and free retries.
+The visible, active sidebar debounces committed network edits before checking
+them and briefly congratulates a successful check before recording and advancing.
+It never loads/reloads a starter, makes a repair or commits a quiz answer.
+Pause, hidden tabs, review, recovery confirmations and expanded secondary options
+stop automatic work and invalidate its proof. Unknown results do not retry in a
+loop; retry is offered only for assessment or recording failures.
+
+**Show me where** navigates without itself reporting evidence. A native route
+inspector reports only after its exact requested prefix row (or the exact table
+when the prefix is genuinely absent) is visibly readable for a stable interval.
+Closed, filtered-out, off-screen, occluded, loading, wrong-scope and inactive views
+cannot report. Hub-table coverage must still be complete. Its short-lived token
+is task/session/revision-specific; repeated use of the same check definition in
+another task requires a new observation. There is no Record inspection button.
+Quizzes separately check interpretation after deliberate **Submit answer**,
+with answer-specific feedback and free retries. Correct-answer explanations remain
+available after automatic progression; expanding them pauses the following task.
 Past completion does not certify the current canvas. Completed tasks can be
 reviewed, future tasks remain locked, and explicit lesson replay rechecks each
 step without deleting history or emitting repeat completion credit.
@@ -477,7 +491,7 @@ repair 115 and combined verification 110 bring its actual total to the reviewed
 450-point budget. No previously published awards were repriced.
 
 `exampleCourse` and `previewCourse` retain their historical source export names
-and course ID. Their current content version is 4 and publication is `complete`.
+and course ID. Their current content version is 5 and publication is `complete`.
 The original eleven tasks still award exactly 175 points; fresh and returning
 learners can reach 1,325 without repricing or repeated credit. The first 24 tasks
 retain their 550 points and assessment identities. Gateway and WAN chapters
