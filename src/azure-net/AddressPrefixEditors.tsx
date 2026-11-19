@@ -24,6 +24,7 @@ function PrefixInput({ value, deferred, onCommit, validate, ...props }: Omit<Inp
     style={{ ...props.style, color: error ? 'var(--error)' : props.style?.color, borderColor: error ? 'var(--error)' : props.style?.borderColor }}
     onChange={(event) => deferred ? setDraft(event.target.value) : onCommit(event.target.value)}
     onBlur={() => { if (deferred && draft !== value) onCommit(draft) }} />
+    {deferred && <small className="configuration-save-hint">{t('Save on blur')}</small>}
     {error && <span id={errorId} role="alert" style={{ color: 'var(--error)', fontSize: 11, maxWidth: 250 }}>{t(error)}</span>}</>
 }
 

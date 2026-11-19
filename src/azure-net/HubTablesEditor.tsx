@@ -57,7 +57,7 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
           const labels = words(event.target.value)
           if (JSON.stringify(labels) === JSON.stringify(table.labels)) return
           commit((draft) => { draft.vwanHubs.find((entry) => entry.id === hub.id)!.routeTables!.find((entry) => entry.id === table.id)!.labels = labels })
-        }} /></label>
+        }} /><small className="configuration-save-hint">{t('Save on blur')}</small></label>
     </div>)}
     <button type="button" className="aznet-btn" onClick={() => commit((draft) => {
       const owner = draft.vwanHubs.find((entry) => entry.id === hub.id)!
@@ -95,7 +95,7 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
           defaultValue={config.labels.join(', ')} data-configuration-saved={config.labels.join(', ')} onBlur={(event) => {
             const labels = words(event.target.value)
             if (JSON.stringify(labels) !== JSON.stringify(config.labels)) change({ labels })
-          }} /></label>
+          }} /><small className="configuration-save-hint">{t('Save on blur')}</small></label>
         <p>{t('Configuration status')}: {config.status}</p>
         {!attachment.branch && <ConnectionStaticRoutesEditor
           vnet={topology.vnets.find((vnet) => vnet.id === attachment.id)!} topology={topology} commit={commit} />}
