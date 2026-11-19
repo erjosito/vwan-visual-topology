@@ -4053,7 +4053,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       })
                     : topology.udrTables
 
-              return (
+              const context = (
               <>
                 <div
                   className="aznet-card"
@@ -4126,9 +4126,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     setVnraCreationVnetId(undefined)
                   }} />}
                 </Suspense>
-
-                {/* VNet Peerings & Connections Editor (#38, #42, #47, #48) */}
-                {showPeeringEditor && (
+              </>
+              )
+              const peeringEditor = showPeeringEditor && (
+                <InspectorSection key="peerings" title={t('VNet peerings')}
+                  summary={t('{0} peerings', filteredPeerings.length)} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-peering-editor">
                   <div
                     style={{
@@ -4140,7 +4142,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       marginBottom: 8,
                     }}
                   >
-                    <h3 style={{ margin: 0 }}>VNet Peerings & Hybrid Connections</h3>
+                    <h3 hidden={workspaceSession?.presentationPreview} style={{ margin: 0 }}>VNet Peerings & Hybrid Connections</h3>
                     {topology.vnets.length >= 2 && (
                       <button
                         type="button"
@@ -4411,12 +4413,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </>
                   )}
                 </div>
-                )}
-
-                {/* VNets & VNet Elements Editor (#39, #42, #46, #47, #48, #49) */}
-                {showVnetEditor && (
+                </InspectorSection>
+              )
+              const vnetEditor = showVnetEditor && (
+                <InspectorSection key={`vnet-${selectedVnetId}`} title={t('VNet configuration')}
+                  summary={filteredVnets.map(vnet => `${vnet.name} · ${vnet.prefixes.join(', ')}`).join('; ')} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-vnet-elements-editor">
-                  <h3>{workspaceSession?.presentationPreview ? t('VNet configuration') : 'VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)'}</h3>
+                  <h3 hidden={workspaceSession?.presentationPreview}>VNets & VNet Elements (Region, Gateways, ARS, Firewall/NVA, Subnets)</h3>
                   {filteredVnets.map((vnet) => {
                     const hasErGw = vnet.gateways.some((g) => g.kind === 'ExpressRoute')
                     const hasVpnGw = vnet.gateways.some((g) => g.kind === 'Vpn')
@@ -4873,10 +4876,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     )
                   })}
                 </div>
-                )}
-
-                {/* Independent Route Tables Editor (#40, #41, #47) */}
-                {showVnetEditor && (
+                </InspectorSection>
+              )
+              const routeTableEditor = showVnetEditor && (
+                <InspectorSection key={`routes-${selectedVnetId}`} title={t('Route tables')}
+                  summary={t('{0} route tables', topology.udrTables.length)} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-udr-editor">
                   <div
                     style={{
@@ -4888,7 +4892,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       marginBottom: 8,
                     }}
                   >
-                    <h3 style={{ margin: 0 }}>Independent Route Tables (UDRs)</h3>
+                    <h3 hidden={workspaceSession?.presentationPreview} style={{ margin: 0 }}>Independent Route Tables (UDRs)</h3>
                     <button
                       type="button"
                       className="aznet-btn aznet-btn-primary"
@@ -5190,12 +5194,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     )
                   })}
                 </div>
-                )}
-
-                {/* Subnet CRUD, Route Table Associations & Policies (#41, #49) */}
-                {showVnetEditor && (
+                </InspectorSection>
+              )
+              const subnetEditor = showVnetEditor && (
+                <InspectorSection key={`subnets-${selectedVnetId}`} title={t('Subnet configuration')}
+                  summary={t('{0} subnets', filteredVnets.reduce((count, vnet) => count + vnet.subnets.length, 0))} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-subnet-security-editor">
-                  <h3>{workspaceSession?.presentationPreview ? t('Subnet configuration') : 'Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies'}</h3>
+                  <h3 hidden={workspaceSession?.presentationPreview}>Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies</h3>
                   <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('These settings do not prove Internet or private-service reachability.')}</p>
                   {filteredVnets.map((vnet) => {
                     const subnetsToShow =
@@ -5513,10 +5518,19 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </div>
                   )})}
                 </div>
-                )}
-
-                {/* On-Premises Sites & ExpressRoute MSEE Locations Editor (#37, #42, #43, #44, #45, #47) */}
+                </InspectorSection>
+              )
+              return (
+              <>
+                {context}
+                {vnetEditor}
+                {subnetEditor}
+                {peeringEditor}
+                {routeTableEditor}
                 {(showSiteEditor || showErEditor) && (
+                <InspectorSection key={selected.kind} title={t(showSiteEditor ? 'On-premises site configuration' : 'ExpressRoute location configuration')}
+                  summary={selected.kind === 'site' ? topology.sites.find(site => site.id === selected.siteId)?.name ?? ''
+                    : selected.kind === 'er-location' ? topology.erLocations.find(location => location.id === selected.locationId)?.name ?? '' : ''} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-sites-er-editor">
                   <div
                     style={{
@@ -5528,7 +5542,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       marginBottom: 8,
                     }}
                   >
-                    <h3 style={{ margin: 0 }}>
+                    <h3 hidden={workspaceSession?.presentationPreview} style={{ margin: 0 }}>
                       {showSiteEditor
                         ? 'On-Premises Site Configuration'
                         : 'ExpressRoute Peering Location Configuration'}
@@ -5838,14 +5852,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         </div>
                       ))}
                 </div>
+                </InspectorSection>
                 )}
 
                 {showVwanHubEditor &&
                   topology.vwanHubs
                     .filter((h) => selected.kind !== 'vwan-hub' || h.id === selected.hubId)
                     .map((hub) => (
-                      <div key={hub.id} className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`} data-learning-anchor={guidanceAnchor('hub-editor', hub.id)}>
-                        <h3>Virtual WAN Hub: {hub.name}</h3>
+                      <InspectorSection key={hub.id} title={t('Virtual WAN hub configuration')} summary={`${hub.name} · ${hub.prefix}`} initialOpen={false}>
+                      <div className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`} data-learning-anchor={guidanceAnchor('hub-editor', hub.id)}>
+                        <h3 hidden={workspaceSession?.presentationPreview}>Virtual WAN Hub: {hub.name}</h3>
                         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                           <input
                             type="text"
@@ -5924,11 +5940,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id)
                         }}>{t('Edit Hub Route Maps')}</button>
                       </div>
+                      </InspectorSection>
                     ))}
 
                 {/* Node Labels & Annotations (scoped to selected node #47) */}
+                <InspectorSection title={t('Node labels and annotations')} summary={t('Optional diagram labels')} initialOpen={false}>
                 <div className="aznet-card" data-testid="aznet-node-labels-editor">
-                  <h3>Node Label & Annotation</h3>
+                  <h3 hidden={workspaceSession?.presentationPreview}>Node Label & Annotation</h3>
                   <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>
                     Optional text label displayed as an annotation badge below the selected node.
                   </p>
@@ -5984,6 +6002,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </div>
                   ))}
                 </div>
+                </InspectorSection>
               </>
               )
             })()}
