@@ -103,6 +103,83 @@ This is not a global basic/advanced mode, a routing/schema change or a completed
 human usability study. Native VWAN and other dialog hierarchies remain outside
 this slice; human participants are still zero.
 
+### Subnet and gateway context-menu follow-up
+
+The approved next slice evaluates the existing **hub-spoke/full subnet and
+standalone VNet gateway menus**, not a new action catalog or a configuration
+redesign. Inspection of the current menu builders found:
+
+- A subnet with an associated route table has 12 ordinary root entries:
+  owner detail, three path entries, configuration, effective routes, the existing
+  route-table destination picker, two propagation toggles, outbound access,
+  a second configuration shortcut and deletion. The inherited failure action
+  or unassessed notice adds one more root. These mix immediate inspection with
+  maintenance of imported policies.
+- A gateway has only three ordinary entries: BGP RIB, configuration and removal.
+  It has no modeled workload-subnet path endpoint. It also lacks the direct
+  owner-detail entry already available from a subnet.
+
+| Bounded alternative | Decision and tradeoff |
+| --- | --- |
+| Leave both menus flat | Lowest change cost and no additional disclosure, but leaves subnet policy maintenance mixed with core inspection. Retain the flat gateway structure because three actions do not justify another navigation step. |
+| Wrap subnet connect/association/policies in a general advanced menu | Reject: the existing route-table and path destination pickers would acquire a second submenu level, particularly awkward for narrow screens and keyboard/touch use. |
+| Replace secondary subnet actions with an All actions link | Reuses the existing VNet strategy, but unnecessarily moves the current table and propagation tasks away from their context. The searchable Workspace controls already provide the full catalog. |
+| Keep direct inspection and destination pickers; group only flat policy maintenance | Selected. One **Subnet policies** submenu contains the original propagation/outbound handlers and original policy-configuration shortcut. Owner detail, path actions, configuration, effective routes, current-table association and deletion remain direct. The associated table name stays visible. |
+
+For the configured fixture the root changes from **13 to 10 entries**, including
+the unchanged failure entry. This is a menu count, not a usability or task-time
+claim. A gateway deliberately remains flat; the new presentation adds only
+**Open VNet detail**, reusing the existing owner-detail handler. Its three
+original actions and destructive treatment remain unchanged. No gateway path
+action is invented. Legacy retains its original subnet/gateway presentation.
+The native VWAN menus are outside this subnet/gateway slice.
+
+Only presentation over the original action objects changes. The full catalog
+used by visible/searchable Workspace controls and graphical VNet detail stays
+ungrouped, with original IDs, handlers, imported settings and undo history.
+Fault/restore-only handling still runs outside presentation grouping; inactive
+gateway identity, deletion styling, incomplete-capture warnings and modeling
+boundaries remain intact. No topology, routing, schema, sharing or cloud code
+changes are included.
+
+Nine explicit-preview browser cases in the existing presentation test file
+cover hub-spoke/full, EN/light/desktop and JA/dark/390 px. They compare flat and
+grouped screenshots/counts, keyboard submenu focus and Escape return, touch
+activation, root destination pickers, imported-policy edit/undo, detail-context
+original handlers, Workspace search equivalents, routes/path availability,
+advanced configuration/unknown warnings, gateway owner detail and inactive
+identity, and inherited restore-only menus. Scoped axe checks cover the new
+submenu; the extra unknown-region case checks disabled root warnings and
+unavailable on-premises destinations. They explicitly seed
+`aznet-ui-preview:v1=true`; legacy coverage is
+obtained by switching presentation over the same saved design. Existing detail
+and desktop checks retain native VWAN/three-mode coverage.
+
+Reproduce the focused cases with an owned Vite server on port 4183:
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL='http://127.0.0.1:4183'
+npx playwright test workspace-presentation.spec.ts -g "subnet and gateway menu disclosure" --workers=2
+```
+
+Validation: the final focused menu run passes **9/9**; **85 existing browser
+regressions** also pass across the presentation, graphical-detail, subnet-peering,
+VPN-mode, Workspace controls and failure suites. The combined development run
+initially exposed an incorrect new test assumption about available destinations;
+the final focused run checks the actual disabled on-premises destination instead.
+Build, platform build, lint and **16 action/localization unit tests** pass.
+Lint retains the pre-existing `ErLocationInfoModal` warning. The existing chained
+Electron smoke passes, including offline/native integration and graphical-detail
+original IDs, edit/undo/redo and keyboard focus in all three modes. The
+unchanged-source 28-state accessibility gate is recorded against the committed
+revision in the PR rather than changing this report during that audit.
+
+Human participants remain **zero**; discoverability, task efficiency, manual
+screen-reader assessment and touch-device usability remain unverified. Existing
+untranslated legacy action labels are not relabeled by this slice; the new
+group and reused owner-detail entry have EN/JA text. Production startup and
+packaged-release validation remain separate gates, not inferred from dev tests.
+
 ## Initial preview decision and scope (historical)
 
 For #228, choose contextual progressive disclosure plus shallow, task-oriented

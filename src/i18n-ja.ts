@@ -53,6 +53,7 @@ export const ja: Record<string, string> = {
   'File': 'ファイル',
   'Explore': '探索',
   'All VNet actions': 'VNet のすべての操作',
+  'Subnet policies': 'サブネット ポリシー',
   'Learning status': '学習の状況',
   'Highest belt across tracks': '全トラックで獲得した最高の帯',
   'Tracks at this belt: {0}': 'この帯を獲得したトラック数: {0}',
