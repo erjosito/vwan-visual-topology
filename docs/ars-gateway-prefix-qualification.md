@@ -21,9 +21,12 @@ a software upgrade triggered by creating the first route map. A user reported
 VPN prefix loss after this creation even without any connection associations
 (#298). The cause and ER behavior are not established. The snapshot model does
 not track that upgrade history; an empty map/assignment list or map deletion does
-not prove legacy software state or restore it. Unassigned-map advertisements
-must not be treated as live-qualified against this report. The fresh attempt
+not prove legacy software state or restore it. The fresh first-map attempts
 below failed and also encountered independently recorded VNet configuration drift.
+A separate sole-VPN recovery control subsequently observed AGP taking effect
+after a successful unassigned-map recreation and fresh AGP reapplication. This
+does not qualify the original first-map transition or arbitrary unassigned-map
+topologies.
 
 **Automatic ARS-to-NVA summary projection remains unassessed.** The bounded live
 observations below do not qualify every gateway/peer combination. Do not interpret the displayed
@@ -165,20 +168,101 @@ healthy, complete receiver tables; missing or incomplete output is **unknown**,
 not proof that a prefix was withdrawn. Both local NVA neighbors remained
 established with original and outside-on-premises routes in that bounded capture.
 
-No map was resubmitted. A separately authorized post-success AGP reapplication
-control was not run because its success precondition never occurred. Failure,
-map deletion or cleanup does not establish a software downgrade.
+No map was resubmitted during that attempt. A separately authorized
+post-success AGP reapplication control was not run because its success
+precondition never occurred. Failure, map deletion or cleanup does not
+establish a software downgrade.
 
 #298 remains open. This attempt does not reproduce a completed first-map upgrade
 ignoring still-configured AGP, establish global AGP disablement, qualify ER
 behavior or justify a simulator rule based on mere map existence.
+
+## Regional retry and sole-VPN recovery control (2026-11-19 UTC)
+
+A supported map retry against the original lab returned
+`ReferencedResourceNotProvisioned`: the parent ARS remained Failed after an
+unsuccessful deletion. This explains that retry's blocker, not the original
+map operation's internal error. The retained-resource cleanup failure is
+tracked separately in #310.
+
+A newly created West Europe lab repeated the sole-VPN design: active/active
+VPN with ASN 65515, no P2S configuration, a local BGP NVA, an independent
+IPsec/BGP receiver, and covered/uncovered gateway-transit spokes. No ER
+gateway or provider circuit was present. Pristine no-AGP and AGP controls
+preceded the first empty-rules, unassigned map request.
+
+The first request was accepted at 08:13:02 UTC and failed natively at
+08:58:26 UTC with the same generic
+`ResourceOperationFailure` / `InternalServerError` and no deeper explanation.
+The ARS root remained Succeeded. A separate VNet PUT at
+08:17:18-08:17:26 UTC used API `2022-07-01`; resource-change evidence again
+correlated removal of both AGPs with addition of a subnet NSG reference.
+This is configuration drift, not an attribution of the writer or proof of
+route-map causation. The first-map comparison was again confounded.
+
+### Map-only recovery, without deleting the healthy ARS
+
+The failed map alone was deleted and its absence verified while preserving
+the healthy ARS and VPN lab. One recreation was acknowledged at 09:06:06 UTC.
+Native Activity Log records success at 09:38:42 UTC; a direct resource read
+confirmed Succeeded at 09:40:46 UTC. The ARS also remained Succeeded and there
+were positively zero map assignments. This follows the documented
+[failed-map delete/recreate guidance](https://learn.microsoft.com/en-us/azure/route-server/route-maps-how-to).
+It is a recovery control, not a pristine first-map upgrade or an explanation
+of either initial failure.
+
+The two existing guest IKE profiles were reinitiated without changing their
+configuration or PSKs. Both actual VPN receiver neighbors and both local
+NVA/ARS neighbors subsequently established. However, the native gateway
+peer-status API continued to report the previously observed internal
+gateway/ARS rows Connecting with zero received prefixes under both
+`2026-03-01` and `2026-05-01`.
+
+A bounded withdrawal of one existing on-premises emulator origin removed
+that control prefix from both actual NVA pre-import-filter tables; restoring
+the origin restored receipt at both. VPN receiver sessions remained
+established. The exact BIRD configuration and administrative state were
+restored. No gateway reset, replacement resources or security changes were
+used. This demonstrates fresh exchange at the actual receivers, not the
+identity, physical multiplicity or health of every opaque internal adjacency.
+The original strict health check and execution history were not changed:
+the internal-native and full-matrix result remains **unknown**.
+
+### Separate receiver-only AGP set/clear comparison
+
+With the recovered, successful map still unassigned, a separately labeled
+receiver-only control reapplied the original covering and independent AGPs.
+Fresh full-native VNet reads, conditional ETags and property diffs verified
+that the set/clear writes changed only `summarizedGatewayPrefixes`. Unknown
+NSG attachments and other native properties were preserved.
+
+| Recovered phase | VPN receiver, both neighbors | Local NVA, both ARS neighbors |
+|---|---|---|
+| No AGP, successful map present and unassigned | Original hub, covered spoke, uncovered spoke and outside-NVA prefixes | Original hub, covered spoke, uncovered spoke and outside-on-premises prefixes |
+| AGPs reapplied, still zero map assignments | Covering aggregate and independent AGP present; covered hub/spoke originals suppressed; uncovered and outside-NVA routes retained | Original hub/spoke and outside-on-premises routes retained; neither configured AGP received |
+| AGPs cleared, map still unassigned | Original hub/spoke and outside-NVA routes restored; configured AGPs absent | Original hub/spoke and outside-on-premises routes retained; configured AGPs absent |
+
+Both the AGP-set and final cleared results were confirmed in two complete,
+current per-neighbor receipt frames. The bounded receiver experiment ended
+without errors and with its configuration restored before ownership-audited
+cleanup. Cleanup completion and any retained Azure resources are separate
+operational checks; successful map recovery does not resolve #310.
+
+**Scoped conclusion:** configured AGP still took effect at both actual VPN
+receivers after this successful, unassigned-map recovery and fresh
+reapplication. This does not support a blanket rule that map existence
+disables AGP. It does not reproduce the user's pristine first-map transition,
+establish why older-API VNet writes removed AGP, qualify ER or mapped-connection
+behavior, or turn the original strict-matrix unknown into a pass. Neither
+this route exchange nor aggregate receipt proves packet delivery.
 
 ## Simulator boundary and follow-up
 
 The coexisting-gateway result rules out blanket replacement of the original
 ARS-native VNet prefix by gateway summaries: the local NVA can receive both.
 The fresh sole-VPN result also rules out unconditional additive summaries to
-local NVAs. Neither justifies generic synthesis for arbitrary gateways, remote
+local NVAs; the regional recovery control retained this distinction.
+These observations do not justify generic synthesis for arbitrary gateways, remote
 peers or gatewayless designs. The engine therefore retains explicit
 `gatewaySummaryAssessment.status: "not-assessed"` rather than inventing missing
 ownership or forwarding evidence. Historical captures can be inspected with the
