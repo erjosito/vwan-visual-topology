@@ -25,7 +25,7 @@
 .detail-workload[data-selected="true"] { border: 2px solid var(--accent); }
 .detail-workload > code { display: block; font-size: 11px; }
 .detail-association { border-inline-start: 2px solid var(--border); padding-inline-start: 8px; }
-.network-detail > form { border-top: 1px solid var(--border); padding: 12px 0; }
+.detail-configuration > form { border-top: 1px solid var(--border); padding: 12px 0; }
 .detail-subnet { --subnet-color: #0876bd; border: 0; padding: 0; margin-block: 24px; }
 .detail-subnet-tone-1 { --subnet-color: #18866b; }
 .detail-subnet-tone-2 { --subnet-color: #8865bd; }

@@ -75,9 +75,10 @@ export function NetworkDetailAttachments({ entities, workloads, selectedId, sele
   useLayoutEffect(() => {
     const element = graph.current
     if (!element || !subnetId) return
+    const subnet = element.closest('.detail-subnet')!
     const measure = () => {
       const bounds = element.getBoundingClientRect()
-      const start = element.closest('.detail-subnet')!.querySelector('.detail-subnet-target')!.getBoundingClientRect().bottom - bounds.top
+      const start = subnet.querySelector('.detail-subnet-target')!.getBoundingClientRect().bottom - bounds.top
       setEdges([...element.querySelectorAll<HTMLElement>('[data-entity-id]')].map((node) => {
         const target = node.querySelector('.detail-resource-icon')!.getBoundingClientRect()
         const end = target.top - bounds.top, x = target.left - bounds.left + target.width / 2
@@ -86,6 +87,7 @@ export function NetworkDetailAttachments({ entities, workloads, selectedId, sele
     }
     const observer = new ResizeObserver(measure)
     observer.observe(element)
+    observer.observe(subnet)
     for (const node of element.querySelectorAll<HTMLElement>('[data-entity-id]')) observer.observe(node)
     measure()
     return () => observer.disconnect()
