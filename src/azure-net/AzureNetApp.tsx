@@ -25,7 +25,6 @@ import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
 import { confirmConfigurationSwitch } from '../configuration-selection'
 import { CanvasOverlay } from '../CanvasOverlay'
-import VnetCommunityEditor from '../VnetCommunityEditor'
 import { azHubGatewayConnections } from '../hub-gateways'
 import { useDeleteShortcut } from '../useDeleteShortcut'
 import {
@@ -156,6 +155,7 @@ const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VpnGatewaySettings = lazy(() => import('./VpnGatewaySettings'))
 const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.VnetPrefixEditor })))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
+const VnetCommunityEditor = lazy(() => import('../VnetCommunityEditor'))
 
 function useSubnetAddressEditing(commit: (updater: (draft: AzNetTopology) => void) => boolean, onError: (message: string) => void) {
   const commitRef = useRef(commit)
@@ -4516,7 +4516,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             </datalist>
                             <Suspense fallback={null}><VnetPrefixEditor topology={topology} vnet={vnet}
                               preview={workspaceSession?.presentationPreview} onChange={commitTopology} /></Suspense>
-                            <VnetCommunityEditor
+                            <Suspense fallback={null}><VnetCommunityEditor
                               key={vnet.id}
                               value={vnet.bgpCommunities}
                               onChange={(value) => commitTopology((draft) => {
@@ -4525,7 +4525,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                   if (value) target.bgpCommunities = value
                                   else delete target.bgpCommunities
                                 }
-                              })} />
+                              })} /></Suspense>
                             <label className="presentation-vnet-field"><span hidden={!workspaceSession?.presentationPreview}>{t('Canvas layout role')}</span>
                             <select
                               className="aznet-select"
