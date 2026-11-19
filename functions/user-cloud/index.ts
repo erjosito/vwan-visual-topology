@@ -1,4 +1,5 @@
 import { app } from '@azure/functions'
+import { randomUUID } from 'node:crypto'
 import { ManagedIdentityCredential } from '@azure/identity'
 import { BlobServiceClient, type ContainerClient } from '@azure/storage-blob'
 import { cloudLimits } from '../../src/cloud/contracts'
@@ -26,15 +27,17 @@ export function blobStore(container: ContainerClient): CloudStore {
           if (length > cloudLimits.bytes) { result.readableStreamBody?.destroy(); throw new CloudError(413, 'Cloud document exceeds the supported size.') }
           chunks.push(Buffer.from(chunk))
         }
-        return { raw: Buffer.concat(chunks).toString('utf8'), etag: result.etag }
+        return { raw: Buffer.concat(chunks).toString('utf8'), etag: result.etag, generation: result.metadata?.generation }
       } catch (error) { if ((error as { statusCode?: number }).statusCode === 404) return undefined; return storageError(error) }
     },
     async put(key, raw, etag, name) {
       try {
-        const result = await container.getBlockBlobClient(key).uploadData(Buffer.from(raw), {
+        const blob = container.getBlockBlobClient(key)
+        const previous = etag === null ? undefined : await blob.getProperties({ conditions: { ifMatch: etag } })
+        const result = await blob.uploadData(Buffer.from(raw), {
           conditions: etag === null ? { ifNoneMatch: '*' } : { ifMatch: etag },
           blobHTTPHeaders: { blobContentType: 'application/json; charset=utf-8', blobCacheControl: 'no-store' },
-          metadata: name ? { name: encodeURIComponent(name) } : undefined,
+          metadata: { ...(name ? { name: encodeURIComponent(name) } : {}), generation: previous?.metadata?.generation ?? randomUUID() },
         })
         if (!result.etag) throw new Error('Cloud version unavailable.')
         return result.etag
@@ -59,7 +62,7 @@ export function blobStore(container: ContainerClient): CloudStore {
 
 let handler: ReturnType<typeof createCloudHandler> | undefined
 app.http('userCloud', {
-  methods: ['GET', 'PUT', 'DELETE', 'OPTIONS'], authLevel: 'anonymous', route: 'cloud/{resource}/{id?}',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], authLevel: 'anonymous', route: 'cloud/{resource}/{id?}',
   handler: async request => {
     try {
       if (!handler) {

@@ -4,7 +4,11 @@ import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { exampleCourse } from '../src/learning/course-examples'
 import { orderedTasks } from '../src/learning/runner'
 import { completeLearningTasks, learningSidebar } from './learning-helpers'
-import { sampleHubSpokeFirewallUdr } from '../src/azure-net/model'
+import { sampleHubSpokeFirewallUdr, sampleHybridVwanAndHubSpoke } from '../src/azure-net/model'
+import { readFileSync } from 'node:fs'
+import { workspaceStorageKeys, workspaceSessionKey } from '../src/workspace-session'
+import { parseCloudTopology } from '../src/cloud/contracts'
+import { graphicalDetailTopology } from '../tests/fixtures/network-detail'
 import { example } from '../src/model'
 import AxeBuilder from '@axe-core/playwright'
 import { languageStorageKey } from '../src/i18n'
@@ -47,6 +51,144 @@ async function signIn(page: Page) {
   await expect(page.getByTestId('cloud-progress-status')).toContainText('Synced')
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
 }
+
+function largeSharedTopology() {
+  const detail = graphicalDetailTopology('full', 190)
+  if (!('vnets' in detail)) throw new Error('Native network fixture required.')
+  return { ...structuredClone(sampleHybridVwanAndHubSpoke),
+    vnets: [...structuredClone(sampleHybridVwanAndHubSpoke.vnets), ...detail.vnets],
+    inventory: detail.inventory, application: detail.application }
+}
+
+for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeFirewallUdr], ['full', sampleHybridVwanAndHubSpoke]] as const) {
+  for (const [language, theme] of [['en', 'light'], ['ja', 'dark']] as const) {
+    test(`${mode} ${language} ${theme}: latest saved sharing is short, read only and recipient-isolated`, async ({ page }, info) => {
+      const text = (en: string, ja: string) => language === 'ja' ? ja : en
+      const service = await setup(page)
+      const id = crypto.randomUUID(), key = `users/${testOwner('alice')}/topologies/${id}.json`
+      const document = parseCloudTopology({ version: 1, name: `Saved ${mode}`, topology: mode === 'full' ? largeSharedTopology() : structuredClone(topology) })
+      if (mode === 'full') expect(JSON.stringify(document).length).toBeGreaterThan(50000)
+      const etag = await service.store.put(key, JSON.stringify(document), null, document.name)
+      await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+      await page.addInitScript(({ language, theme }) => {
+        localStorage.setItem('aznet-ui-preview:v1', 'true')
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        localStorage.setItem('aznet-theme', theme)
+      }, { language, theme })
+      await page.goto(`/?mode=${mode}`)
+      if (mode === 'vwan') await page.getByLabel(text('Topology name', 'トポロジ名'), { exact: true }).fill('Recipient local draft')
+      else {
+        const create = page.getByTestId('aznet-add-vnet-btn')
+        if (!await create.isVisible()) await page.getByRole('button', { name: text('Workspace controls', 'ワークスペースの操作'), exact: true }).click()
+        await create.click()
+      }
+      await page.getByTestId('cloud-account-open').click()
+      const account = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
+      await account.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
+      const share = account.getByRole('button', { name: new RegExp(`^${text('Share saved version', '保存したバージョンを共有')} `) })
+      await expect(share).toBeEnabled()
+      const originals = await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [...Object.values(workspaceStorageKeys), workspaceSessionKey])
+      await share.click()
+      const enable = account.getByRole('button', { name: new RegExp(`^${text('Enable a 30-day link', '30 日間のリンクを有効化')}`) })
+      await expect(enable).toBeEnabled()
+      page.removeAllListeners('dialog')
+      page.once('dialog', dialog => { void dialog.dismiss() })
+      await enable.click()
+      expect([...service.data.keys()].filter(key => key.includes('/shares/'))).toHaveLength(0)
+      page.on('dialog', dialog => { void dialog.accept() })
+      await enable.click()
+      const linkInput = account.getByRole('textbox', { name: text('Read-only link', '読み取り専用リンク'), exact: true })
+      await expect(linkInput).toBeVisible()
+      const link = await linkInput.inputValue()
+      expect(link.length).toBeLessThan(160)
+      expect(new URL(link).hash).toMatch(/^#share=[A-Za-z0-9_-]{43}$/)
+      expect(new URL(link).search).toBe('')
+      expect(link).not.toContain(id)
+      expect(service.data.get(key)!.raw).toBe(JSON.stringify(document))
+      await account.getByRole('button', { name: text('Sign out of this app', 'このアプリからサインアウト'), exact: true }).click()
+      await expect(account.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true })).toBeVisible()
+      const latest = { ...document, name: `Renamed ${mode}`, topology: { ...(document.topology as object), name: `Latest ${mode}` } }
+      await service.store.put(key, JSON.stringify(latest), etag, latest.name)
+      await page.goto(link)
+      await expect(page.getByRole('heading', { name: latest.name, exact: true })).toBeVisible()
+      const viewer = page.getByRole('main')
+      await expect(viewer.locator('svg.diagram, svg[data-testid="aznet-diagram-svg"]')).toBeVisible()
+      const exportButton = page.getByRole('button', { name: text('Export a local copy', 'ローカル コピーをエクスポート'), exact: true })
+      const copyButton = page.getByRole('button', { name: text('Save a copy to my cloud', '自分のクラウドにコピーを保存'), exact: true })
+      await expect(exportButton).toBeDisabled()
+      await expect(copyButton).toBeDisabled()
+      await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).not.toBeVisible()
+      await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'bob'))
+      await page.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
+      await expect(copyButton).toBeEnabled()
+      const download = page.waitForEvent('download')
+      await exportButton.click()
+      expect(JSON.parse(readFileSync((await (await download).path())!, 'utf8'))).toEqual(latest.topology)
+      await copyButton.click()
+      await expect(page.getByRole('status')).toContainText(text('Copy saved to your cloud library.', 'コピーを自分のクラウド ライブラリに保存しました。'))
+      const copies = [...service.data].filter(([key]) => key.startsWith(`users/${testOwner('bob')}/topologies/`))
+      expect(copies).toHaveLength(1)
+      expect(JSON.parse(copies[0][1].raw)).toEqual(latest)
+      expect(service.data.get(key)!.raw).toBe(JSON.stringify(latest))
+      expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [...Object.values(workspaceStorageKeys), workspaceSessionKey])).toEqual(originals)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+      await page.screenshot({ path: info.outputPath(`shared-${mode}-${language}-${theme}.png`) })
+      await page.getByRole('button', { name: text('Return to workspace', 'ワークスペースに戻る'), exact: true }).click()
+      await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+      expect(await page.evaluate(keys => keys.map(key => localStorage.getItem(key)), [...Object.values(workspaceStorageKeys), workspaceSessionKey])).toEqual(originals)
+      expect(service.data.get(key)!.raw).toBe(JSON.stringify(latest))
+    })
+  }
+}
+
+test('sharing rejects stale and unavailable creation, then permits explicit owner revocation', async ({ page }) => {
+  const service = await setup(page), id = crypto.randomUUID()
+  const key = `users/${testOwner('alice')}/topologies/${id}.json`
+  const document = parseCloudTopology({ version: 1, name: 'Owner cloud save', topology: sampleHubSpokeFirewallUdr })
+  const etag = await service.store.put(key, JSON.stringify(document), null, document.name)
+  await page.addInitScript(() => localStorage.setItem('aznet-ui-preview:v1', 'true'))
+  await page.goto('/?mode=full')
+  await signIn(page)
+  await page.getByRole('button', { name: /^Share saved version / }).click()
+  const enable = page.getByRole('button', { name: /^Enable a 30-day link/ })
+  await expect(enable).toBeEnabled()
+  await service.store.put(key, JSON.stringify(document), etag, document.name)
+  await enable.click()
+  await expect(page.getByRole('status').filter({ hasText: 'Cloud save changed.' })).toBeVisible()
+  expect([...service.data.keys()].filter(key => key.includes('/shares/'))).toHaveLength(0)
+  await page.getByRole('button', { name: 'Refresh cloud topologies', exact: true }).click()
+  await expect(enable).toBeEnabled()
+  await page.route('**/api/cloud/shares/*', route => route.fulfill({ status: 503, json: { error: 'Unavailable' } }))
+  await enable.click()
+  await expect(page.getByRole('status').filter({ hasText: 'Sharing did not complete.' })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Read-only link', exact: true })).toHaveCount(0)
+  await page.unroute('**/api/cloud/shares/*')
+  await enable.click()
+  const linkInput = page.getByRole('textbox', { name: 'Read-only link', exact: true })
+  await expect(linkInput).toBeVisible()
+  const link = await linkInput.inputValue()
+  await page.getByRole('button', { name: 'Revoke link', exact: true }).click()
+  await expect(linkInput).toHaveCount(0)
+  await page.goto(link)
+  await expect(page.getByRole('alert')).toContainText('Shared topology unavailable.')
+  expect(service.data.get(key)!.raw).toBe(JSON.stringify(document))
+})
+
+for (const desktop of [false, true]) test(`${desktop ? 'desktop never resolves externally' : 'unreachable shared API'} keeps local JSON export available`, async ({ page }) => {
+  await setup(page)
+  const requests: string[] = []
+  page.on('request', request => { if (request.url().includes('/api/cloud/')) requests.push(request.url()) })
+  if (desktop) await page.addInitScript(() => { Object.defineProperty(window, 'desktopSimulator', { value: {} }) })
+  else await page.route('**/api/cloud/shared', route => route.abort('internetdisconnected'))
+  await page.goto(`/#share=${'x'.repeat(43)}`)
+  await expect(page.getByRole('alert')).toContainText('Shared topology unavailable.')
+  expect(requests).toHaveLength(desktop ? 0 : 1)
+  await page.getByRole('button', { name: 'Return to workspace', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Export JSON/ })).toBeEnabled()
+  if (desktop) await expect(page.getByTestId('aznet-share-url-btn')).toBeDisabled()
+  expect(requests).toHaveLength(desktop ? 0 : 1)
+})
 
 for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
   test(`${language} ${theme}: compact cloud library keeps fifty sorted and filtered saves distinct`, async ({ page }, info) => {

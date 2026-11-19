@@ -1,7 +1,8 @@
 import type { HttpRequest, HttpResponseInit } from '@azure/functions'
 import { cloudLimits, parseCloudTopology, parseProgressLedger } from '../../src/cloud/contracts'
+import { createSharingHandler } from './sharing'
 
-export interface StoredValue { raw: string; etag: string }
+export interface StoredValue { raw: string; etag: string; generation?: string }
 export interface CloudStore {
   get(key: string): Promise<StoredValue | undefined>
   put(key: string, raw: string, etag: string | null, name?: string): Promise<string>
@@ -14,7 +15,7 @@ export class CloudError extends Error {
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const validEtag = (value: string | null) => !!value && /^"[\x21\x23-\x7e]{1,160}"$/.test(value)
 
-async function body(request: HttpRequest) {
+export async function body(request: HttpRequest, limit = cloudLimits.bytes) {
   if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) throw new CloudError(415, 'JSON required.')
   const reader = request.body?.getReader()
   if (!reader) throw new CloudError(400, 'JSON required.')
@@ -25,7 +26,7 @@ async function body(request: HttpRequest) {
       const { done, value } = await reader.read()
       if (done) break
       bytes += value.byteLength
-      if (bytes > cloudLimits.bytes) { await reader.cancel(); throw new CloudError(413, 'Cloud document size limit exceeded.') }
+      if (bytes > limit) { await reader.cancel(); throw new CloudError(413, 'Cloud document size limit exceeded.') }
       raw += decoder.decode(value, { stream: true })
     }
     raw += decoder.decode()
@@ -40,23 +41,35 @@ export function createCloudHandler(options: {
   authenticate: (authorization: string | null) => Promise<string>
   store: CloudStore
   origins: string[]
+  now?: () => number
 }) {
+  const sharing = createSharingHandler(options.store, options.now)
+  const failure = (error: unknown, headers: Record<string, string>): HttpResponseInit => ({
+    status: error instanceof CloudError ? error.status : 503,
+    headers: error instanceof CloudError && error.status === 429 ? { ...headers, 'Retry-After': '60' } : headers,
+    jsonBody: { error: error instanceof CloudError ? error.message : 'Cloud storage is unavailable. Keep your local copy and retry.' },
+  })
   return async (request: HttpRequest): Promise<HttpResponseInit> => {
     const origin = request.headers.get('origin')
-    const headers: Record<string, string> = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', Vary: 'Origin' }
+    const headers: Record<string, string> = { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+      'Referrer-Policy': 'no-referrer', 'X-Robots-Tag': 'noindex, nofollow, noarchive', Vary: 'Origin' }
     if (origin && !options.origins.includes(origin)) return { status: 403, headers, jsonBody: { error: 'Origin not allowed.' } }
     if (origin) {
       headers['Access-Control-Allow-Origin'] = origin
       headers['Access-Control-Expose-Headers'] = 'ETag'
     }
     if (request.method === 'OPTIONS') return { status: 204, headers: { ...headers,
-      'Access-Control-Allow-Methods': 'GET,PUT,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type,If-Match,If-None-Match' } }
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type,If-Match,If-None-Match' } }
+    if (request.params.resource === 'shared') {
+      try { return await sharing.resolve(request, headers) } catch (error) { return failure(error, headers) }
+    }
     let owner: string
     try { owner = await options.authenticate(request.headers.get('authorization')) }
     catch { return { status: 401, headers: { ...headers, 'WWW-Authenticate': 'Bearer' }, jsonBody: { error: 'Sign in again to access your cloud data.' } } }
     if (!/^[0-9a-f]{64}$/.test(owner)) return { status: 401, headers }
     try {
       const resource = request.params.resource, id = request.params.id
+      if (resource === 'shares') return await sharing.manage(request, headers, owner)
       if (!['progress', 'topologies'].includes(resource) || (resource === 'progress' ? !!id : id !== undefined && !uuid.test(id))) {
         throw new CloudError(404, 'Cloud item not found.')
       }
@@ -92,8 +105,7 @@ export function createCloudHandler(options: {
       const etag = await options.store.put(key, JSON.stringify(value), create ? null : match!, name)
       return { status: 200, headers: { ...headers, ETag: etag }, jsonBody: { saved: true } }
     } catch (error) {
-      const status = error instanceof CloudError ? error.status : 503
-      return { status, headers, jsonBody: { error: error instanceof CloudError ? error.message : 'Cloud storage is unavailable. Keep your local copy and retry.' } }
+      return failure(error, headers)
     }
   }
 }

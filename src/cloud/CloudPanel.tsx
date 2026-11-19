@@ -5,6 +5,7 @@ import { parseCloudTopology, type CloudEntry } from './contracts'
 import { CloudHttpError } from './client'
 import { useCloudSession } from './useCloudSession'
 import './cloud-panel.css'
+import { CloudSharing } from './CloudSharing'
 
 export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; returnFocus?: RefObject<HTMLElement | null> }) {
   const cloud = useCloudSession()!, session = useWorkspaceSession(), language = useLanguage()
@@ -17,6 +18,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
   const [listed, setListed] = useState(false)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('updated')
+  const [sharing, setSharing] = useState<{ entry?: CloudEntry }>()
   const search = useRef<HTMLInputElement>(null)
   const refreshButton = useRef<HTMLButtonElement>(null)
   const restoreFocus = useRef(false)
@@ -193,6 +195,8 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
                     if (window.confirm(text(`Overwrite cloud save "${entry.name}" (${entry.id}) with the current design? The cloud copy will change; the local workspace is kept.`,
                       `クラウドの保存「${entry.name}」(${entry.id}) を現在のデザインで上書きしますか。クラウドの内容を変更し、ローカルのワークスペースは保持します。`))) void run(() => save(entry))
                   }}>{text('Overwrite cloud save', 'クラウドの保存を上書き')}</button>
+                  <button type="button" aria-label={`${text('Share saved version', '保存したバージョンを共有')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice}
+                    onClick={() => setSharing({ entry })}>{text('Share saved version', '保存したバージョンを共有')}</button>
                   <button type="button" aria-label={`${text('Delete', '削除')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice} onClick={() => {
                     if (window.confirm(text(`Permanently delete cloud save "${entry.name}" (${entry.id})? Your current local design is kept.`,
                       `クラウドの保存「${entry.name}」(${entry.id}) を完全に削除しますか。現在のローカル デザインは保持します。`))) {
@@ -206,6 +210,8 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
           </div>}
         </>}
       </section>
+      <button type="button" disabled={busy || !!session?.practice} onClick={() => setSharing({})}>{text('Manage shared links', '共有リンクを管理')}</button>
+      {sharing && <CloudSharing api={api} entries={entries} entry={sharing.entry && entries.find(value => value.id === sharing.entry!.id)} refreshed={refresh} />}
     </>}
     {notice && <p role="status">{notice}</p>}
   </dialog>

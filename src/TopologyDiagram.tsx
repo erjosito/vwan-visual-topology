@@ -1,4 +1,4 @@
-import { t } from './i18n'
+import { t, useLanguage } from './i18n'
 import { inventoryCounts } from './inventory'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
 import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
@@ -35,6 +35,7 @@ export interface DiagramContextMenu {
   routeMap?: { router: RouterSelection; connectionId: string; direction: RouteMapDirection }
 }
 interface Props {
+  readOnly?: boolean
   faults?: import('./failures').FaultMap
   risks?: Record<string, number>; onRisk?: (id: string) => void
   issues?: DiagnosticsFinding[]; onShowIssues?: (finding: DiagnosticsFinding) => void
@@ -57,7 +58,8 @@ function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
   </g>
 }
 
-export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, onClearSelection, layoutControls, canvasStatus }: Props) {
+export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, onClearSelection, layoutControls, canvasStatus }: Props) {
+  const language = useLanguage()
   const { connectionStyle } = useCanvasPresentation()
   const diagramCurve = (a: NodePosition, b: NodePosition, aSize: NodePosition, bSize: NodePosition, bend = 0, index = 0, count = 1, reversed = false) =>
     baseDiagramCurve(a, b, aSize, bSize, connectionBend(connectionStyle, bend, index, count) * (reversed && connectionStyle !== 'default' ? -1 : 1))
@@ -264,8 +266,18 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     x: Math.round(Math.max(120, Math.min(20000, width - 130, position.x))),
     y: Math.round(Math.max(65, Math.min(20000, height - (kind === 'hub' ? 115 : 65), position.y))),
   })
+  const viewLabel = (kind: ObjectSelection['kind'], id: string) => {
+    let name = topologyObject(topology, { kind, id })?.name ?? id
+    const connection = kind === 'connection' ? topology.connections.find(item => item.id === id) : undefined
+    if (connection) name += ` ${connection.transport === 'ExpressRoute' ? 'ER' : connection.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'}${connection.enabled ? '' : t(' (down)')}`
+    const link = kind === 'erLink' ? topology.erLinks?.find(item => item.id === id) : undefined
+    if (link) name += ` ER${link.enabled ? '' : t(' (down)')}`
+    const nvas = kind === 'spoke' ? topology.connections.filter(item => item.transport === 'SpokeNVA' && item.spokeId === id) : []
+    if (nvas.length) name += ` NVA BGP${nvas.every(item => !item.enabled) ? t(' (down)') : ''}`
+    return `${language === 'ja' ? '閲覧' : 'View'} ${name}`
+  }
   const selectable = (kind: ObjectSelection['kind'], id: string, label: string, activate = () => onObjectClick({ kind, id }), routeMap?: DiagramContextMenu['routeMap']) => ({
-    role: 'button', tabIndex: 0, 'aria-label': faults[id] ? `${label} — Simulated failure: ${faults[id].map((f) => f.name).join(', ')}` : label,
+    role: 'button', tabIndex: 0, 'aria-label': readOnly ? viewLabel(kind, id) : faults[id] ? `${label} — Simulated failure: ${faults[id].map((f) => f.name).join(', ')}` : label,
     'data-simulated-failed': faults[id] ? 'true' : undefined,
     'aria-pressed': selection?.kind === kind && selection.id === id,
     onClick: () => { if (suppressClick.current) { suppressClick.current = false; return }; if (!faults[id]) activate() },
@@ -275,7 +287,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
       onObjectContextMenu({ selection: { kind, id }, x: event.clientX, y: event.clientY, invoker: event.currentTarget, routeMap })
     },
     onKeyDown: (event: KeyboardEvent<SVGGElement>) => {
-      if (event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && positions.has(id)) {
+      if (!readOnly && event.altKey && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && positions.has(id)) {
         event.preventDefault()
         const p = point(id), step = event.shiftKey ? 30 : 10
         onNodeMove(id, bound({ x: p.x + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0), y: p.y + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0) }, kind))
@@ -288,7 +300,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
   })
   const movable = (kind: 'hub' | 'spoke' | 'site' | 'erLocation', id: string) => ({
     onPointerDown: (event: PointerEvent<SVGGElement>) => {
-      if (event.button !== 0 || !event.isPrimary) return
+      if (readOnly || event.button !== 0 || !event.isPrimary) return
       suppressClick.current = false
       drag.current = { id, kind, start: coordinates(event), origin: point(id), moved: false }
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -349,7 +361,7 @@ export function TopologyDiagram({ topology, faults = {}, risks = {}, onRisk, iss
     if (event.type === 'pointerup' && !panDrag.current.moved && Math.hypot(event.clientX - panDrag.current.start.x, event.clientY - panDrag.current.start.y) < 4) onClearSelection()
     panDrag.current = undefined; setPanning(false)
   }
-  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')} onPointerDownCapture={closePreview}
+  return <><div ref={scroll} className={`diagram-scroll ${moving ? 'is-repositioning' : ''} ${panning ? 'is-panning' : ''}`} onScroll={closePreview}><svg ref={svg} className={`diagram layout-${layout}`} viewBox={`${pan.x + (fitted?.x ?? 0)} ${pan.y + (fitted?.y ?? 0)} ${width} ${height}`} style={{ width: (fitted ? viewport.width : pixelWidth) * zoom, height: (fitted ? viewport.height : pixelHeight) * zoom }} role="group" tabIndex={0} aria-label={readOnly ? language === 'ja' ? '読み取り専用の Virtual WAN トポロジ' : 'Read-only Virtual WAN topology' : t("Interactive Virtual WAN topology. Drag blank canvas to pan; drag nodes to arrange; right-click for actions. Home resets the view. Alt+Arrow keys move a focused node.")} aria-description={t('Canvas zoom shortcuts: Ctrl+plus/minus or mouse wheel. Gestures apply only inside the canvas.')} onPointerDownCapture={closePreview}
     onPointerDown={(event) => {
       if (event.pointerType !== 'mouse' || event.button !== 0 || !event.isPrimary
         || (event.target as Element).closest('g[role="button"], .network-link, .edge-badge, .policy-guide, .routing-path-stop')) return

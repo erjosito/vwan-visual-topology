@@ -1,0 +1,10 @@
+.shared-topology { padding: 16px; max-width: 1600px; margin: auto; overflow-wrap: anywhere; }
+.shared-view-dialog { width: 100%; height: 100%; max-width: none; max-height: none; inset: 0; margin: 0; padding: 0; border: 0; background: var(--page); color: var(--text); }
+.shared-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.shared-actions button { min-height: 44px; white-space: normal; }
+.shared-topology .aznet-canvas-shell { height: 65dvh; min-height: 440px; }
+.shared-topology.simulator-shell .canvas-controls-stack { margin: 12px 0; max-width: 100%; }
+.cloud-sharing { margin-top: 16px; }
+.cloud-sharing button { min-height: 36px; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.cloud-share-entry { margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 6px; overflow-wrap: anywhere; }
+.cloud-share-entry input { width: 100%; min-width: 0; box-sizing: border-box; }

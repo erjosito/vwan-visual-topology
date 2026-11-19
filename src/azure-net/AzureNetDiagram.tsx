@@ -48,6 +48,7 @@ export interface AzRouteMapSelection {
 }
 
 interface AzureNetDiagramProps {
+  readOnly?: boolean
   frameRequest?: { vnetId: string; revision: number }
   faults?: import('../failures').FaultMap
   risks?: Record<string, number>
@@ -222,6 +223,7 @@ function computePositions(topology: AzNetTopology): {
 }
 
 export function AzureNetDiagram({
+  readOnly = false,
   topology,
   frameRequest,
   faults = {},
@@ -362,6 +364,7 @@ export function AzureNetDiagram({
       return
     }
     if (event.target === event.currentTarget && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+      if (readOnly) return
       const node = entity.kind === 'vnet' ? { kind: 'vnet' as const, id: entity.vnetId, box: positions.vnets[entity.vnetId] }
         : entity.kind === 'vwan-hub' ? { kind: 'vwan-hub' as const, id: entity.hubId, box: positions.vwanHubs[entity.hubId] }
           : entity.kind === 'er-location' ? { kind: 'er-location' as const, id: entity.locationId, box: positions.erLocations[entity.locationId] }
@@ -738,6 +741,7 @@ export function AzureNetDiagram({
         viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
         onPointerDownCapture={(event) => {
           closePolicyPreview()
+          if (readOnly && event.target !== event.currentTarget) { event.stopPropagation(); return }
           if (event.button !== 0 || dragPointerId.current !== null) {
             if (event.button !== 2) { event.preventDefault(); event.stopPropagation() }
             return
@@ -1474,6 +1478,9 @@ export function AzureNetDiagram({
                 const badgeText = rt ? `RT: ${rt.name.length > 10 ? `${rt.name.slice(0, 9)}…` : rt.name}` : ''
                 const inventory = inventoryCounts(topology, { kind: 'vnet', id: vnet.id }, subnet.id)
                 const hasNat = inventory.natGateways > 0 || subnet.internetEgressStatus === 'unknown'
+                const visibleSubnetLabel = [subnet.name, hasNat ? subnet.internetEgressStatus ? 'NAT?' : 'NAT' : '',
+                  inventory.nsgs ? `NSG ${inventory.nsgs}` : '', inventory.loadBalancers ? `LB ${inventory.loadBalancers}` : '',
+                  inventory.nics ? `VM ${inventory.workloads} · NIC ${inventory.nics}` : '', badgeText, hasPe ? 'PE' : ''].filter(Boolean).join('')
                 const inventoryWidth = (inventory.nics ? 90 : 0) + (hasNat ? 38 : 0) + (inventory.nsgs ? 42 : 0) + (inventory.loadBalancers ? 38 : 0)
                 const badgeW = rt ? Math.min(88, Math.max(42, badgeText.length * 4.8 + 10)) : 0
                 const badgeX = box.x + box.width - (hasPe ? 42 : 12) - badgeW - inventoryWidth
@@ -1505,7 +1512,7 @@ export function AzureNetDiagram({
                     data-testid={`aznet-subnet-${subnet.id}`}
                     tabIndex={0}
                     role="button"
-                    aria-label={`Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}${inventory.loadBalancers ? ` · LB ${inventory.loadBalancers}` : ''}`}
+                    aria-label={readOnly ? `${visibleSubnetLabel} · Subnet ${vnet.name} (${subnet.prefix})` : `Subnet ${vnet.name} / ${subnet.name} (${subnet.prefix})${inventory.nics ? ` · VM ${inventory.workloads} · NIC ${inventory.nics} · Public IP ${inventory.publicIps}` : ''}${inventory.natGateways ? ` · NAT Gateway ${inventory.natGateways}` : ''}${inventory.loadBalancers ? ` · LB ${inventory.loadBalancers}` : ''}`}
                     aria-describedby={hoverPopover?.kind === 'subnet' && hoverPopover.subnetId === subnet.id ? tooltipId : undefined}
                     onMouseEnter={(e) => showSubnet(e.clientX, e.clientY)}
                     onMouseLeave={scheduleClosePopover}
@@ -2071,6 +2078,7 @@ export function AzureNetDiagram({
                 <input
                   type="checkbox"
                   checked={peering.enabled}
+                  disabled={!onTogglePeeringEnabled}
                   onChange={(e) => onTogglePeeringEnabled?.(peering.id, e.target.checked)}
                 />
                 Enabled
@@ -2105,7 +2113,7 @@ export function AzureNetDiagram({
                       <input
                         type="checkbox"
                         checked={peering.aToB[flag]}
-                        disabled={Boolean(disabledReason)}
+                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason)}
                         onChange={(e) =>
                           onUpdatePeeringFlag?.(peering.id, 'aToB', flag, e.target.checked)
                         }
@@ -2143,7 +2151,7 @@ export function AzureNetDiagram({
                       <input
                         type="checkbox"
                         checked={peering.bToA[flag]}
-                        disabled={Boolean(disabledReason)}
+                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason)}
                         onChange={(e) =>
                           onUpdatePeeringFlag?.(peering.id, 'bToA', flag, e.target.checked)
                         }
@@ -2158,6 +2166,7 @@ export function AzureNetDiagram({
               <button
                 type="button"
                 className="aznet-mini-btn"
+                disabled={!onOpenEditorForEntity}
                 onClick={() => {
                   const entity: AzSelectedEntity = { kind: 'peering', peeringId: peering.id }
                   onSelect(entity)
@@ -2204,6 +2213,7 @@ export function AzureNetDiagram({
                 <input
                   type="checkbox"
                   checked={!rt.disableBgpRoutePropagation}
+                  disabled={!onUpdateRouteTable}
                   onChange={(e) =>
                     onUpdateRouteTable?.(rt.id, {
                       disableBgpRoutePropagation: !e.target.checked,
@@ -2216,6 +2226,7 @@ export function AzureNetDiagram({
                 <input
                   type="checkbox"
                   checked={!rt.disablePeeringRoutePropagation}
+                  disabled={!onUpdateRouteTable}
                   onChange={(e) =>
                     onUpdateRouteTable?.(rt.id, {
                       disablePeeringRoutePropagation: !e.target.checked,
@@ -2247,6 +2258,7 @@ export function AzureNetDiagram({
               <button
                 type="button"
                 className="aznet-mini-btn"
+                disabled={!onOpenEditorForEntity}
                 onClick={() => {
                   const entity: AzSelectedEntity = {
                     kind: 'subnet',
@@ -2263,6 +2275,7 @@ export function AzureNetDiagram({
               <button
                 type="button"
                 className="aznet-mini-btn aznet-danger-btn"
+                disabled={!onAssociateSubnetRouteTable}
                 onClick={() => {
                   onAssociateSubnetRouteTable?.(vnet.id, subnet.id, undefined)
                   setHoverPopover(null)
