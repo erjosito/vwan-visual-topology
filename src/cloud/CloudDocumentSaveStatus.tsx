@@ -31,6 +31,6 @@ export function CloudDocumentSaveStatus({ detail, state, local }: {
     <p>{help}</p>
   </div>
   return <button type="button" className="document-save-state" data-testid="document-save-state"
-    title={help} aria-label={`${text('Design save status', 'デザインの保存状態')}: ${local}. ${cloudLabel}`}
+    title={help}
     onClick={() => window.dispatchEvent(new Event('aznet-open-cloud-sharing'))}>{content}</button>
 }
