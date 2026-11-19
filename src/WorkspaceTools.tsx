@@ -6,7 +6,6 @@ import { workspaceIdentityKey } from './workspace-objects'
 import type { WorkspaceIdentity, WorkspaceObject } from './workspace-objects'
 import './workspace-tools.css'
 import { workspaceCapabilities, workspaceCapabilityLimits } from './workspace-capabilities'
-import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 import { useWorkspaceSession } from './workspace-context'
 
 type WorkspaceAction = ContextAction & { testId?: string }
@@ -63,9 +62,9 @@ export function WorkspaceTools<Selection>({ creationActions, getSelection, inven
   }
 }) {
   const id = useId()
-  const language = useLanguage()
+  useLanguage()
   const preview = useWorkspaceSession()?.presentationPreview
-  const capabilityText = (message: string) => language === 'ja' ? workspaceCapabilitiesJa[message] ?? message : message
+  const capabilityText = t
   const [visibility, setVisibility] = useState(() => ({ open: initialOpen(), request: dismissRequest, openRequest }))
   const requested = visibility.openRequest !== openRequest
   const open = requested || visibility.open && visibility.request === dismissRequest

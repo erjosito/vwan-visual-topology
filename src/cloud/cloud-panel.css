@@ -24,3 +24,5 @@
   .cloud-library tr { border-bottom: 1px solid var(--border); }
   .cloud-library-actions button { min-height: 44px; }
 }
+.document-save-detail { overflow-wrap: anywhere; }
+.document-save-detail small { display: block; }

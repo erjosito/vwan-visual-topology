@@ -46,8 +46,6 @@
 .account-status-unavailable small { font-size: 11px; color: var(--text-muted); }
 .document-save-state { display: grid; gap: 3px; max-width: 260px; min-height: 44px; align-content: center; padding: 6px 9px; box-sizing: border-box; text-align: left; font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
 .document-save-state small { font-size: 10px; color: var(--text-muted); }
-.document-save-detail { overflow-wrap: anywhere; }
-.document-save-detail small { display: block; }
 .learning-status-identity { width: 100%; overflow-wrap: anywhere; }
 .learning-status-belt { display: inline-flex; align-items: center; gap: 4px; }
 .simulator-shell[data-ui-preview] [data-testid="ui-preview-toggle"] { border-color: var(--accent); color: var(--accent); }

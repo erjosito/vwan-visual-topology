@@ -1,7 +1,9 @@
 import { sampleCatalogJa } from './sample-catalog-ja'
+import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
+  ...workspaceCapabilitiesJa,
   'Practice canvas': '練習用キャンバス',
   'Saved locally': 'ローカルに保存済み',
   'Local save not confirmed': 'ローカルの保存を確認できません',

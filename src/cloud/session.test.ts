@@ -102,6 +102,19 @@ describe('document save provenance', () => {
       expect(state.getSnapshot().operation).toBe('idle')
     }
   })
+  it('preserves the normal design link through practice without observing practice topology', async () => {
+    const { state, cache } = await linked()
+    const metadata = cache.getItem(cloudDocumentKey)
+    state.setActive(false)
+    state.observe({ name: 'Practice design' }, 'vwan')
+    state.local({ name: 'Practice design' }, 'saved')
+    expect(state.getSnapshot()).toMatchObject({ ready: false, cloud: undefined })
+    expect(state.begin(source.id, 'alice')).toBeUndefined()
+    expect(cache.getItem(cloudDocumentKey)).toBe(metadata)
+    state.setActive(true)
+    await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('matches'))
+    expect(state.getSnapshot()).toMatchObject({ ready: true, provider: 'azure-net', local: 'saved' })
+  })
   it('does not turn a failed upload into saved state or reuse an earlier list during a new upload', async () => {
     const { state } = await linked()
     const oldList = state.scope('alice'), ticket = state.begin(source.id, 'alice')!

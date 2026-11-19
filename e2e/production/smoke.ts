@@ -146,6 +146,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:practice-session|PracticeWorkspaceBar)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/flow-gif-codec-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:CloudDocumentSaveStatus|progress-sync|FlowExportControls)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:LearningDialog|task-guidance|LearningStatusDetails|TrackOverview|tracks|concept-bodies)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => mode === 'vwan' ? /\/AzureNetApp-/.test(path) : /\/App-/.test(path))).toBe(false)
     await page.getByTestId('learning-status').click()
