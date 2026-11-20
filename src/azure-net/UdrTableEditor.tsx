@@ -10,7 +10,7 @@ import './udr-tables.css'
 
 export function UdrTablesEditor({ topology, selected, selectedVnetId, initialOpen, commit, onCreate, onClone, onLibrary, anchor }: {
   topology: AzNetTopology; selected: AzSelectedEntity; selectedVnetId: string | null
-  initialOpen: boolean | null
+  initialOpen: boolean
   commit: (update: (draft: AzNetTopology) => void) => boolean
   onCreate: () => void
   onClone: (id: string) => void
