@@ -1,4 +1,5 @@
 import { expect, test as base, type Page } from '@playwright/test'
+import { openLearning } from '../learning-helpers'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { assetGraph } from '../../scripts/production-assets.mjs'
@@ -375,7 +376,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await ready(page, mode)
     const storageKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
     const original = await page.evaluate((key) => localStorage.getItem(key), storageKey)
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     const practice = page.getByTestId('learning-sidebar')
     await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
     await practice.getByRole('button', { name: 'Load practice network', exact: true }).click()
@@ -511,7 +512,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.locator('input[data-desktop-import]').setInputFiles({ name: 'roundtrip.json', mimeType: 'application/json', buffer: native })
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey)
     expect(mode === 'vwan' ? saved : saved.topology).toEqual(JSON.parse(native.toString()))
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     await expect(practice.getByRole('button', { name: 'Pause learning', exact: true })).toBeVisible()
     await expect(practice.locator('textarea,select,pre')).toHaveCount(0)
     expect(external).toEqual([])

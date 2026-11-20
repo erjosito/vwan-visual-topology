@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test'
 import { guidanceAnchor } from '../src/learning/guidance'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { exampleCourse } from '../src/learning/course-examples'
-import { advanceLearningTask, completeLearningTasks as next, learningOptions, loadLearningNetwork as load } from './learning-helpers'
+import { openLearning, advanceLearningTask, completeLearningTasks as next, learningOptions, loadLearningNetwork as load } from './learning-helpers'
 import { runnerLabels } from '../src/learning/runner-content'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { orderedTasks } from '../src/learning/runner'
@@ -24,7 +24,7 @@ test.beforeEach(async ({ page }) => {
 
 async function open(page: Page) {
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page)).toBeVisible()
 }
 
@@ -52,7 +52,7 @@ for (const language of ['en', 'ja'] as const) for (const taskId of ['wan.verify'
     }, { language, completions, document, scenarioId: lesson.scenarioId, progressKey: guidedProgressKey, practiceKey: practiceWorkspaceKey })
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.goto('/')
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     await expect(sidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', taskId)
     await learningOptions(page, language)
     const before = await saved(page)
@@ -167,7 +167,7 @@ test('sidebar is non-modal, has no JSON or picker, confirms loading and pauses w
   await sidebar(page).getByRole('button', { name: 'Pause learning', exact: true }).click()
   await expect(sidebar(page)).toHaveCount(0)
   await expect(page.getByTestId('learning-open')).toBeFocused()
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Inspect the starting routes', exact: true })).toBeVisible()
 })
 
@@ -301,7 +301,7 @@ test('missing-target guidance does not select another entity or award legacy cre
     localStorage.setItem('aznet-simulator:practice:v1', 'legacy original')
   }, { document, key: practiceWorkspaceKey })
   await page.goto('/')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await next(page, 2)
   const original = await saved(page)
   await sidebar(page).getByRole('button', { name: 'Show me where', exact: true }).click()
@@ -363,7 +363,7 @@ test('all six missions reach black belt through scoped repairs without touching 
   expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('Black belt · 1325 points')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page).getByRole('heading', { name: 'Routing foundations complete', exact: true })).toBeVisible()
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(earned)
   await page.getByRole('button', { name: 'Return to my design', exact: true }).click()
@@ -420,18 +420,18 @@ test('Japanese dark reduced-motion journey reaches black belt using all forty lo
   await expect(page.getByTestId('learning-status')).toContainText('黒帯 · 1325 ポイント')
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('黒帯 · 1325 ポイント')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(completed).toBeVisible()
 })
 
 test('failed optional sidebar loading preserves the canvas and supports explicit reload recovery', async ({ page }) => {
   await page.route('**/src/learning/LearningDialog.tsx*', (route) => route.abort())
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(page.getByRole('status').filter({ hasText: 'Learning tools could not load' })).toBeVisible()
   await expect(sidebar(page)).toHaveCount(0)
   await page.unroute('**/src/learning/LearningDialog.tsx*')
   await page.getByRole('button', { name: 'Reload', exact: true }).click()
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(sidebar(page)).toBeVisible()
 })
