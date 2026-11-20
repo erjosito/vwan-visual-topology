@@ -24,6 +24,7 @@ import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
 import { confirmConfigurationSwitch } from '../configuration-selection'
 import { udrAssociationError, validateUdrRegionEdit } from './udr-regions'
+import type { UdrManagerRequest } from './UdrTableManager'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { azHubGatewayConnections } from '../hub-gateways'
 import { useDeleteShortcut } from '../useDeleteShortcut'
@@ -141,12 +142,13 @@ const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => 
 const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
 const CloneVnetDialog = lazy(() => import('../CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
+const UdrTableManager = lazy(() => import('./UdrTableManager'))
+const UdrTableEditor = lazy(() => import('./UdrTableEditor'))
 const TopologyContextMenu = lazy(() => import('../TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
 const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
 const NvaCreationEditor = lazy(() => import('./VnetRoutingSettings').then((module) => ({ default: module.NvaCreationEditor })))
-const UdrTableEditor = lazy(() => import('./VnetRoutingSettings').then((module) => ({ default: module.UdrTableEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
@@ -241,6 +243,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const [clearRequested, setClearRequested] = useState(false)
   const [cloneVnetId, setCloneVnetId] = useState<string>()
+  const [udrManager, setUdrManager] = useState<UdrManagerRequest>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [firewallEditorHubId, setFirewallEditorHubId] = useState<string>()
   const [routeInspection, setRouteInspection] = useState<AzSelectedEntity | null>(null)
@@ -1335,37 +1338,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const createAndAssociateRouteTable = (vnetId?: string, subnetId?: string) => {
-    commitTopology((draft) => {
-      const idx = draft.udrTables.length + 1
-      const rtId = `rt-custom-${idx}-${Date.now().toString(36).slice(-4)}`
-      const firstApp = draft.vnets.flatMap((v) => v.appliances)[0]
-      draft.udrTables.push({
-        id: rtId,
-        name: `rt-workload-${idx}`,
-        region: draft.vnets.find((vnet) => vnet.id === vnetId)?.region,
-        disableBgpRoutePropagation: false,
-        disablePeeringRoutePropagation: false,
-        routes: firstApp
-          ? [
-              {
-                id: `${rtId}-r1`,
-                name: 'default-to-fw',
-                prefix: '0.0.0.0/0',
-                nextHopType: 'VirtualAppliance',
-                nextHopIp: firstApp.privateIp,
-                enabled: true,
-              },
-            ]
-          : [],
-      })
-      if (vnetId && subnetId) {
-        const vnet = draft.vnets.find((v) => v.id === vnetId)
-        const subnet = vnet?.subnets.find((s) => s.id === subnetId)
-        if (subnet) {
-          subnet.routeTableId = rtId
-        }
-      }
-    })
+    setToolsDismissRequest((request) => request + 1)
+    setContextMenu(null)
+    setUdrManager({ create: true, associate: vnetId && subnetId ? { vnetId, subnetId } : undefined })
   }
 
   const pathContextActions = (anchors: AzEndpointOption[]): ContextAction[] => {
@@ -2824,11 +2799,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         <div className="aznet-topbar-controls">
           {canvasSelection && 'vnetId' in canvasSelection && <button type="button" className="aznet-btn"
             onClick={() => openDetail(canvasSelection.vnetId)}>{t('VNet detail')}</button>}
-          <WorkspaceTools openRequest={toolsOpenRequest} dismissRequest={guidanceRevision + toolsDismissRequest} creationActions={[
+          <WorkspaceTools openRequest={toolsOpenRequest} dismissRequest={guidanceRevision + toolsDismissRequest}
+            resourceActions={[{ label: t('Route-table library'), testId: 'aznet-route-table-library-btn', run: () => {
+              setToolsDismissRequest((request) => request + 1); setUdrManager({})
+            } }]} creationActions={[
             { label: t('+ VNet'), testId: 'aznet-add-vnet-btn', run: addDefaultVnet },
             { label: t('+ Site'), testId: 'aznet-add-site-btn', run: () => addSiteNode() },
             { label: t('+ ER location'), testId: 'aznet-add-erloc-btn', run: () => addErLocationNode() },
-            { label: t('+ Route Table'), testId: 'aznet-add-rt-topbar-btn', run: () => { createAndAssociateRouteTable(); setActiveTab('editor') } },
+            { label: t('+ Route Table'), testId: 'aznet-add-rt-topbar-btn', run: () => createAndAssociateRouteTable() },
             ...(simulatorMode === 'full' ? [{ label: t('+ Virtual WAN hub'), testId: 'aznet-add-vwan-hub-btn', run: () => addVwanHub() }] : []),
           ]} getSelection={() => {
             if (!canvasSelection) return
@@ -4497,20 +4475,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               )
               const routeTableEditor = showVnetEditor && (
                 <InspectorSection key={`routes-${selectedVnetId}`} title={t('Route tables')}
-                  summary={t('{0} route tables', filteredUdrTables.length || topology.udrTables.length)}
+                  summary={t('{0} route tables', filteredUdrTables.length)}
                   initialOpen={guidanceNavigation && selected.kind === 'subnet'}>
                 <div className="aznet-card" data-testid="aznet-udr-editor">
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 8,
-                      flexWrap: 'wrap',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <h3 hidden={workspaceSession?.presentationPreview} style={{ margin: 0 }}>Independent Route Tables (UDRs)</h3>
+                  <div className="row" style={{ flexWrap: 'wrap' }}>
+                    <button type="button" className="aznet-btn" onClick={() => setUdrManager({})}>{t('Route-table library')}</button>
                     <button
                       type="button"
                       className="aznet-btn aznet-btn-primary"
@@ -4527,18 +4496,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
                     {t('Route tables are independent resources. Only subnets in the same region can share a table. Legacy regions are inferred only from unambiguous existing associations; otherwise set an explicit region.')}
                   </p>
-                  {(filteredUdrTables.length > 0 ? filteredUdrTables : topology.udrTables).map((rt) => {
-                    const associatedSubnets = topology.vnets.flatMap((v) =>
-                      v.subnets
-                        .filter((s) => s.routeTableId === rt.id)
-                        .map((s) => `${v.name}/${s.name}`),
-                    )
-                    return (
-                      <Suspense key={rt.id} fallback={null}><UdrTableEditor topology={topology} rt={rt}
-                        associatedSubnets={associatedSubnets} selected={selected} commit={commitTopology}
-                        onRegionSaved={() => setWorkspaceNotice('')} /></Suspense>
-                    )
-                  })}
+                  <Suspense fallback={null}>{filteredUdrTables.map((rt) => <UdrTableEditor key={rt.id} topology={topology} table={rt}
+                    commit={commitTopology} onClone={(cloneId) => setUdrManager({ cloneId })}
+                    onLibrary={(tableId) => setUdrManager({ tableId })}
+                    anchor={selected.kind === 'subnet' ? { vnetId: selected.vnetId, subnetId: selected.subnetId } : undefined} />)}</Suspense>
                 </div>
                 </InspectorSection>
               )
@@ -5513,6 +5474,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         </CanvasOverlay>}
       </div>
 
+      {udrManager && <Suspense fallback={null}><UdrTableManager topology={topology} request={udrManager} commit={commitTopology}
+        onClose={() => setUdrManager(undefined)} /></Suspense>}
       {cloneVnetId && <Suspense fallback={null}><CloneVnetDialog key={cloneVnetId} topology={topology} sourceId={cloneVnetId}
         onClose={() => setCloneVnetId(undefined)} onClone={copy => {
           if (!('gateways' in copy)) return false

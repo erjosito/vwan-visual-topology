@@ -270,7 +270,7 @@ for (const preview of [false, true]) test(`${preview ? 'new' : 'legacy'} UI rout
   await expect(name).toBeInViewport()
   await expect(cue(page)).toHaveCount(1)
   await learningOptions(page)
-  await page.getByTestId('aznet-delete-rt-blocking').click()
+  await page.getByTestId('aznet-rt-card-blocking').getByRole('button', { name: /^Dissociate / }).click()
   await expect(sidebar(page).getByRole('status')).toContainText('no longer associated')
   await expect(cue(page)).toHaveCount(0)
   await load(page)

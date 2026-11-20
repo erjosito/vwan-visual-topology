@@ -1,0 +1,10 @@
+.udr-manager { width: min(1100px, calc(100vw - 32px)); }
+.udr-manager-layout { display: grid; grid-template-columns: minmax(180px, 260px) minmax(0, 1fr); gap: 16px; margin-top: 12px; }
+.udr-manager-layout nav, .udr-manager-layout section { min-width: 0; }
+.udr-library-entry { display: flex; flex-direction: column; align-items: start; width: 100%; text-align: start; gap: 4px; margin-bottom: 8px; overflow-wrap: anywhere; }
+.udr-library-entry[aria-current="true"] { border-color: var(--accent); }
+.udr-table-editor input[type="text"], .udr-table-editor select { max-width: 100%; width: 145px; }
+.udr-table-editor p { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .udr-manager-layout { grid-template-columns: minmax(0, 1fr); }
+}
