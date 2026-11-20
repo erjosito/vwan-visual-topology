@@ -23,6 +23,70 @@ async function loadTopology(page: Page, topology: AzNetTopology, mode = 'hub-spo
 }
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`separates Firewall and NVA creation, subnet selection, HA ownership and history in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    topology.vnets[0].appliances[0].enableIpForwarding = false
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type=file]').first().setInputFiles({
+      name: 'firewall-nva-authoring.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology as AzNetTopology)
+    const configure = async () => {
+      await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+      await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    }
+    await configure()
+    await expect(page.getByTestId('aznet-add-fw-vnet-hub-weu')).toBeDisabled()
+    await expect(page.getByTestId('appliance-availability-azure-firewall')).toContainText('Microsoft-managed HA')
+    await page.getByTestId('aznet-chip-app-hub-azfw').focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('aznet-firewall-availability')).toBeVisible()
+    await expect(page.getByTestId('aznet-hybrid-nva-editor')).toHaveCount(0)
+    await configure()
+    await page.getByTestId('aznet-add-nva-vnet-hub-weu').click()
+    const form = page.getByTestId('aznet-nva-creation')
+    await expect(form).toContainText('User-managed NVA HA')
+    await expect(form).toContainText('Vendor floating-IP reassignment')
+    await expect(form.getByLabel('NVA subnet', { exact: true })).toHaveValue('')
+    await expect(form.getByRole('button', { name: 'Create NVA', exact: true })).toBeDisabled()
+    await expect(form.getByLabel('NVA subnet', { exact: true }).locator('option[value="sub-hub-fw"]')).toHaveCount(0)
+    await expect(form.getByLabel('NVA subnet', { exact: true }).locator('option[value="sub-hub-gw"]')).toHaveCount(0)
+    await form.getByLabel('NVA name', { exact: true }).fill('First NVA')
+    await form.getByLabel('NVA subnet', { exact: true }).selectOption('sub-hub-mgmt')
+    await form.getByRole('button', { name: 'Create NVA', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(2)
+    let current = (await saved()).vnets[0]
+    expect(current.appliances[1]).toMatchObject({ name: 'First NVA', kind: 'nva-vm', subnetId: 'sub-hub-mgmt', privateIp: '10.0.2.4', bgpEnabled: false })
+    expect(current.subnets).toEqual(topology.vnets[0].subnets)
+    expect((await saved()).udrTables).toEqual(topology.udrTables)
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Add / Remove VNet Elements', exact: true }).click()
+    await expect(page.getByRole('menuitem', { name: /Add Azure Firewall/ })).toBeDisabled()
+    await page.getByRole('menuitem', { name: '+ Add NVA', exact: true }).click()
+    await form.getByLabel('NVA subnet', { exact: true }).selectOption('sub-hub-mgmt')
+    await form.getByRole('button', { name: 'Create NVA', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(3)
+    current = (await saved()).vnets[0]
+    expect(current.appliances[2].privateIp).toBe('10.0.2.5')
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances.length).toBe(2)
+    await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+    await expect.poll(async () => (await saved()).vnets[0].appliances).toEqual(current.appliances)
+    await page.reload()
+    expect((await saved()).vnets[0].appliances).toEqual(current.appliances)
+  })
+
+  test(`retains imported duplicate Firewalls and diagnoses the unsupported HA design in ${mode}`, async ({ page }) => {
+    const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+    topology.vnets[0].appliances.push({ ...topology.vnets[0].appliances[0], id: 'extra-fw', privateIp: '10.0.1.5' })
+    await loadTopology(page, topology, mode)
+    await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+    await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    await expect(page.getByTestId('aznet-vnet-config-vnet-hub-weu').getByRole('alert')).toContainText('multiple Azure Firewalls')
+    await expect(page.getByTestId('aznet-add-fw-vnet-hub-weu')).toBeDisabled()
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances)).toEqual(topology.vnets[0].appliances)
+  })
+
   test(`highlights invalid and out-of-VNet CIDRs in ${mode}`, async ({ page }) => {
     const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
     await loadTopology(page, topology, mode)
@@ -80,7 +144,31 @@ for (const mode of ['hub-spoke', 'full']) {
   })
 }
 
-test('preserves queued resource creations while allocation tools load', async ({ page }) => {
+test('retains NVA subnet drafts through Japanese switching and rejects exhausted allocation without mutation', async ({ page }) => {
+  const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
+  topology.vnets[0].subnets.push({ id: 'full-subnet', name: 'Full subnet', prefix: '10.0.3.0/29',
+    privateEndpoints: [4, 5, 6].map((host) => ({ id: `pe-${host}`, name: `PE ${host}`, serviceName: 'service', ipAddress: `10.0.3.${host}` })) })
+  await loadTopology(page, topology)
+  await openNodeMenu(page, 'aznet-vnet-vnet-hub-weu')
+  await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+  await page.getByTestId('aznet-add-nva-vnet-hub-weu').click()
+  const form = page.getByTestId('aznet-nva-creation')
+  await form.getByLabel('NVA name', { exact: true }).fill('日本語 NVA')
+  await form.getByLabel('NVA subnet', { exact: true }).selectOption('full-subnet')
+  await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+  await expect(form.getByLabel('NVA 名', { exact: true })).toHaveValue('日本語 NVA')
+  await expect(form.getByLabel('NVA サブネット', { exact: true })).toHaveValue('full-subnet')
+  await form.getByRole('button', { name: 'NVA を作成', exact: true }).click()
+  await expect(form.getByRole('alert')).toContainText('空き IPv4')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(topology)
+  expect((await new AxeBuilder({ page }).include('[data-testid="aznet-nva-creation"]').analyze()).violations).toEqual([])
+  await form.getByLabel('NVA サブネット', { exact: true }).selectOption('sub-hub-mgmt')
+  await form.getByRole('button', { name: 'NVA を作成', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].appliances[1]?.name)).toBe('日本語 NVA')
+})
+
+test('rejects queued duplicate Firewalls while allocation tools load without losing the first creation', async ({ page }) => {
   const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
   topology.vnets[0].appliances = []
   let release!: () => void
@@ -101,9 +189,9 @@ test('preserves queued resource creations while allocation tools load', async ({
   }
   expect((await saved()).vnets[0].appliances).toHaveLength(0)
   release()
-  await expect.poll(async () => (await saved()).vnets[0].appliances.map((app) => app.privateIp)).toEqual(['10.0.1.4', '10.0.1.5'])
-  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
   await expect.poll(async () => (await saved()).vnets[0].appliances.map((app) => app.privateIp)).toEqual(['10.0.1.4'])
+  await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+  await expect.poll(async () => (await saved()).vnets[0].appliances).toHaveLength(0)
 })
 
 test('validates deferred CIDR drafts and renumbers modeled inventory on commit', async ({ page }) => {

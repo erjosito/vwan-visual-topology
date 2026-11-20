@@ -145,6 +145,7 @@ const TopologyContextMenu = lazy(() => import('../TopologyContextMenu').then((mo
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
 const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
+const NvaCreationEditor = lazy(() => import('./VnetRoutingSettings').then((module) => ({ default: module.NvaCreationEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
@@ -217,6 +218,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [workspaceSession, topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, pendingUrlSample])
   const [activeTab, setActiveTab] = useState<InspectorTab | null>(null)
   const [vnraCreationVnetId, setVnraCreationVnetId] = useState<string>()
+  const [nvaCreationVnetId, setNvaCreationVnetId] = useState<string>()
   const [guidanceNavigation, setGuidanceNavigation] = useState(false)
   const [guidanceRevision, setGuidanceRevision] = useState(0)
   const [frameRequest, setFrameRequest] = useState<{ vnetId: string; revision: number }>()
@@ -251,7 +253,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const setSelected = (entity: AzSelectedEntity) => {
     if (activeTab === 'editor' && workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))
       && !confirmConfigurationSwitch('.aznet-app .aznet-inspector-window')) return false
-    if (workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))) setVnraCreationVnetId(undefined)
+    if (workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))) {
+      setVnraCreationVnetId(undefined)
+      setNvaCreationVnetId(undefined)
+    }
     setInspectedEntity(entity)
     setCanvasSelection(entity)
     return true
@@ -1218,44 +1223,20 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setActiveTab(null)
   }
 
-  const addFirewallToVnet = (vnetId: string, kind: 'azure-firewall' | 'nva-vm' = 'azure-firewall') => {
-    void editSubnetAddresses((draft, { availableSubnetPrefix, nextSubnetAddress }) => {
-      const target = draft.vnets.find((v) => v.id === vnetId)
-      if (!target) return
-      const subnetName = kind === 'azure-firewall' ? 'AzureFirewallSubnet' : 'snet-nva'
-      let appSubnet = target.subnets.find((s) => s.name === subnetName)
-      if (!appSubnet) {
-        appSubnet = {
-          id: `${target.id}-${subnetName.toLowerCase()}-${target.subnets.length + 1}`,
-          name: subnetName,
-          prefix: availableSubnetPrefix(target),
-        }
-        target.subnets.push(appSubnet)
-      }
-      const idx = target.appliances.length + 1
-      const appId = `${target.id}-${kind === 'azure-firewall' ? 'azfw' : 'nva'}-${idx}`
-      target.appliances.push({
-        id: appId,
-        name: kind === 'azure-firewall' ? `${target.name}-azfw-${idx}` : `${target.name}-nva-${idx}`,
-        kind,
-        subnetId: appSubnet.id,
-        privateIp: nextSubnetAddress(draft, target, appSubnet.prefix),
-        asn: kind === 'nva-vm' ? 65010 + idx : undefined,
-        bgpEnabled: kind === 'nva-vm',
-        enableIpForwarding: true,
-        inspectsTraffic: true,
-        staticRoutes: [],
-      })
-      if (kind === 'nva-vm' && target.routeServer) {
-        if (!target.routeServer.peerApplianceIds.includes(appId)) {
-          target.routeServer.peerApplianceIds.push(appId)
-        }
-      }
-    })
+  const addFirewallToVnet = (vnetId: string) => {
+    void editSubnetAddresses((draft, tools) => { tools.addAzureFirewall(draft, vnetId) })
+  }
+
+  const openNvaCreation = (vnetId: string) => {
+    if (!setSelected({ kind: 'vnet', vnetId })) return
+    setVnraCreationVnetId(undefined)
+    setNvaCreationVnetId(vnetId)
+    setActiveTab('editor')
   }
 
   const openVnraCreation = (vnetId: string) => {
     if (!setSelected({ kind: 'vnet', vnetId })) return
+    setNvaCreationVnetId(undefined)
     setVnraCreationVnetId(vnetId)
     setActiveTab('editor')
   }
@@ -1608,11 +1589,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             children: [
               {
                 label: '+ Add Azure Firewall',
-                onSelect: () => addFirewallToVnet(vnet.id, 'azure-firewall'),
+                disabled: vnet.appliances.some((app) => app.kind === 'azure-firewall'),
+                onSelect: () => addFirewallToVnet(vnet.id),
               },
               {
-                label: '+ Add BGP NVA Appliance',
-                onSelect: () => addFirewallToVnet(vnet.id, 'nva-vm'),
+                label: '+ Add NVA',
+                onSelect: () => openNvaCreation(vnet.id),
               },
               {
                 label: 'Add Managed VNRA',
@@ -4156,6 +4138,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
+                {nvaCreationVnetId && selectedVnetId === nvaCreationVnetId && <NvaCreationEditor key={nvaCreationVnetId}
+                  topology={topology} vnetId={nvaCreationVnetId} commit={commitTopology}
+                  onCancel={() => setNvaCreationVnetId(undefined)} onSaved={(applianceId) => {
+                    const entity = { kind: 'appliance' as const, vnetId: nvaCreationVnetId, applianceId }
+                    setInspectedEntity(entity)
+                    setCanvasSelection(entity)
+                    setNvaCreationVnetId(undefined)
+                  }} />}
                 {vnraCreationVnetId && selectedVnetId === vnraCreationVnetId && <ManagedVnraEditor key={`create-${vnraCreationVnetId}`}
                   topology={topology} vnetId={vnraCreationVnetId} commit={commitTopology}
                   onCancel={() => setVnraCreationVnetId(undefined)} onSaved={(applianceId) => {
@@ -4483,7 +4473,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             onRemoveGateway={(id) => removeGatewayFromVnet(vnet.id, id)}
                             onAddRouteServer={() => addRouteServerToVnet(vnet.id)}
                             onRemoveRouteServer={() => removeRouteServerFromVnet(vnet.id)}
-                            onAddAppliance={() => addFirewallToVnet(vnet.id)}
+                            onAddFirewall={() => addFirewallToVnet(vnet.id)}
+                            onAddNva={() => openNvaCreation(vnet.id)}
                             onAddVnra={() => openVnraCreation(vnet.id)}
                             onConfigureVnra={(id) => {
                               setSelected({ kind: 'appliance', vnetId: vnet.id, applianceId: id })

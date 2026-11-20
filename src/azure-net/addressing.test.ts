@@ -6,7 +6,10 @@ import {
   subnetAddressError, usableSubnetAddress, vnetAddressError,
 } from './addressing'
 import { resizeAzSubnet, subnetNeedsReaddressing } from './subnet-address-editing'
-import { availableSubnetPrefix, nextSubnetAddress } from './subnet-allocation'
+import { addAzureFirewall, addNva, availableSubnetPrefix, nextSubnetAddress } from './subnet-allocation'
+import { simulateAzNet } from './engine'
+import { runAzNetDiagnostics } from './diagnostics'
+import { generateAzNetBicep } from './bicep-export'
 
 describe('VNet and subnet address consistency', () => {
   it('distinguishes malformed CIDRs, containment failures and valid secondary address spaces', () => {
@@ -18,6 +21,95 @@ describe('VNet and subnet address consistency', () => {
     expect(subnetAddressError(['10.2.0.0/24'], '10.2.0.65/26')).toContain('valid')
     expect(subnetAddressError(['10.2.0.64/26'], '10.2.0.0/24')).toContain('outside')
     expect(subnetAddressError(['10.1.0.0/24', '10.2.0.0/24'], subnets[0].prefix)).toBeUndefined()
+  })
+
+  describe('Firewall and NVA authoring', () => {
+    it('enforces the Firewall singleton even when its modeled forwarding is disabled', () => {
+      const topology = cloneAzNetTopology(sampleHubSpokeFirewallUdr)
+      const vnet = topology.vnets[0]
+      vnet.appliances[0].enableIpForwarding = false
+      const before = cloneAzNetTopology(topology)
+      expect(() => addAzureFirewall(topology, vnet.id)).toThrow('Only one Azure Firewall')
+      expect(topology).toEqual(before)
+      vnet.appliances = []
+      const id = addAzureFirewall(topology, vnet.id)
+      expect(vnet.appliances).toMatchObject([{ id, kind: 'azure-firewall', privateIp: '10.0.1.4', bgpEnabled: false }])
+      expect(vnet.subnets).toEqual(before.vnets[0].subnets)
+      expect(() => addAzureFirewall(topology, vnet.id)).toThrow('Only one Azure Firewall')
+    })
+
+    it('creates a dedicated Firewall subnet and rejects an unusable existing service subnet atomically', () => {
+      const topology = cloneAzNetTopology(sampleHubSpokeFirewallUdr)
+      const vnet = topology.vnets[1]
+      addAzureFirewall(topology, vnet.id)
+      const subnet = vnet.subnets.find((subnet) => subnet.name === 'AzureFirewallSubnet')!
+      expect(subnet.prefix).toBe('10.1.0.0/26')
+      expect(vnet.appliances[0].privateIp).toBe('10.1.0.4')
+      vnet.appliances = []
+      subnet.prefix = '10.1.0.0/29'
+      const before = cloneAzNetTopology(topology)
+      expect(() => addAzureFirewall(topology, vnet.id)).toThrow('/26 or larger')
+      expect(topology).toEqual(before)
+    })
+
+    it('keeps imported duplicate Firewalls for diagnosis but does not export an invalid Azure deployment', () => {
+      const topology = cloneAzNetTopology(sampleHubSpokeFirewallUdr)
+      const vnet = topology.vnets[0]
+      vnet.appliances.push({ ...vnet.appliances[0], id: 'extra-fw', privateIp: '10.0.1.5', enableIpForwarding: false })
+      expect(parseAzNetTopology(topology)).toEqual(topology)
+      expect(validateAzNetTopology(topology)).toContain(`VNet "${vnet.name}" supports only one Azure Firewall.`)
+      expect(runAzNetDiagnostics(topology, simulateAzNet(topology), { includePairAnalysis: false }))
+        .toContainEqual(expect.objectContaining({ id: `diag:firewall-singleton:${vnet.id}`, severity: 'error', vnetId: vnet.id }))
+      expect(() => generateAzNetBicep(topology)).toThrow('supports only one Azure Firewall')
+      expect(topology.vnets[0].appliances).toHaveLength(2)
+    })
+
+    it('creates multiple NVAs in the chosen subnet without changing BGP, ARS peers, subnets or UDRs', () => {
+      const topology = cloneAzNetTopology(sampleHubSpokeFirewallUdr)
+      const vnet = topology.vnets[0]
+      vnet.subnets.push({ id: 'nva-subnet', name: 'NVAs', prefix: '10.0.3.0/29',
+        privateEndpoints: [{ id: 'used', name: 'Used', serviceName: 'service', ipAddress: '10.0.3.4' }] })
+      vnet.subnets.push({ id: 'ars-subnet', name: 'RouteServerSubnet', prefix: '10.0.3.64/27' })
+      vnet.routeServer = { id: 'ars', name: 'ARS', subnetId: 'ars-subnet', enabled: true,
+        branchToBranchTraffic: true, hubRoutingPreference: 'ExpressRoute', peerApplianceIds: [] }
+      const before = cloneAzNetTopology(topology)
+      addNva(topology, vnet.id, { id: 'nva-a', name: ' First NVA ', subnetId: 'nva-subnet' })
+      addNva(topology, vnet.id, { id: 'nva-b', name: 'Second NVA', subnetId: 'nva-subnet' })
+      expect(vnet.appliances.slice(1)).toMatchObject([
+        { id: 'nva-a', name: 'First NVA', kind: 'nva-vm', subnetId: 'nva-subnet', privateIp: '10.0.3.5', bgpEnabled: false },
+        { id: 'nva-b', kind: 'nva-vm', subnetId: 'nva-subnet', privateIp: '10.0.3.6', bgpEnabled: false },
+      ])
+      expect(vnet.subnets).toEqual(before.vnets[0].subnets)
+      expect(vnet.routeServer).toEqual(before.vnets[0].routeServer)
+      expect(topology.udrTables).toEqual(before.udrTables)
+      const full = cloneAzNetTopology(topology)
+      expect(() => addNva(topology, vnet.id, { id: 'nva-c', name: 'Third', subnetId: 'nva-subnet' })).toThrow('no available')
+      expect(topology).toEqual(full)
+    })
+
+    it('rejects missing, reserved, delegated, malformed, outside and overlapping NVA subnets without mutation', () => {
+      const topology = cloneAzNetTopology(sampleHubSpokeFirewallUdr)
+      const vnet = topology.vnets[0]
+      for (const subnetId of ['', 'missing', 'sub-hub-gw', 'sub-hub-fw']) {
+        const before = cloneAzNetTopology(topology)
+        expect(() => addNva(topology, vnet.id, { id: 'new', name: 'NVA', subnetId })).toThrow()
+        expect(topology).toEqual(before)
+      }
+      for (const subnet of [
+        { name: 'App', prefix: 'not-a-cidr' },
+        { name: 'App', prefix: '192.0.2.0/26' },
+        { name: 'App', prefix: '10.0.2.0/26' },
+        { name: 'App', prefix: '10.0.3.0/26', delegations: ['Microsoft.Web/serverFarms'] },
+        { name: 'RouteServerSubnet', prefix: '10.0.3.0/26' },
+        { name: 'VirtualNetworkApplianceSubnet', prefix: '10.0.3.0/26' },
+      ]) {
+        vnet.subnets.push({ id: 'bad', ...subnet })
+        const before = cloneAzNetTopology(topology)
+        expect(() => addNva(topology, vnet.id, { id: 'new', name: 'NVA', subnetId: 'bad' })).toThrow()
+        expect(topology).toEqual(before)
+        vnet.subnets.pop()
+      }
+    })
   })
 
   it('allocates from the actual non-/24 subnet, excluding occupied and Azure-reserved addresses', () => {

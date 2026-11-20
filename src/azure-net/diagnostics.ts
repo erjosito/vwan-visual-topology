@@ -881,6 +881,13 @@ export function runAzNetDiagnostics(
     v.appliances.filter((a) => a.kind === 'azure-firewall').map((a) => ({ vnet: v, app: a })),
   )
   for (const vnet of topology.vnets) {
+    if (vnet.appliances.filter((app) => app.kind === 'azure-firewall').length > 1) {
+      findings.push({ id: `diag:firewall-singleton:${vnet.id}`, severity: 'error', category: 'scale-limit',
+        title: `Multiple Azure Firewalls in ${vnet.name}`,
+        summary: 'Azure supports only one Azure Firewall resource per VNet. Multiple resources in this imported design are not a supported HA configuration.',
+        remediation: 'Review the imported resources and remove extra Firewalls or place them in separate VNets. Microsoft manages the redundant backend instances of each Firewall service.',
+        vnetId: vnet.id })
+    }
     for (const subnet of vnet.subnets) {
       if (
         subnet.name === 'GatewaySubnet' ||

@@ -1312,6 +1312,9 @@ export function validateAzNetTopology(input: unknown): string[] {
     return errors
   }
   for (const vnet of candidate.vnets) {
+    if (vnet.appliances?.filter((app) => app.kind === 'azure-firewall').length > 1) {
+      errors.push(`VNet "${vnet.name}" supports only one Azure Firewall.`)
+    }
     try { parseVnetBgpCommunities(vnet.bgpCommunities) }
     catch (error) { errors.push(`VNet "${vnet.name}": ${(error as Error).message}`) }
     if (!vnet.id || !vnet.name) errors.push('Every VNet must have an id and name.')

@@ -1,14 +1,41 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { t } from '../i18n'
 import { registerJapaneseMessages } from '../messages'
 import { InspectorSection } from '../WorkspacePresentation'
 import { ALL_KNOWN_AZURE_REGIONS } from '../er-locations-catalog'
 import { validateAdvertisedGatewayPrefixes, type AzArsPreference, type AzNetTopology, type AzVNet, type AzVnetGateway } from './model'
+import { addNva, nvaSubnetError } from './subnet-allocation'
 
 const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.VnetPrefixEditor })))
 const VnetCommunityEditor = lazy(() => import('../VnetCommunityEditor'))
 
 registerJapaneseMessages({
+  'The subnet has no available usable IPv4 addresses.': 'サブネットに使用可能な空き IPv4 アドレスがありません。',
+  'VNet no longer exists.': 'VNet は存在しません。',
+  'Select a non-service, non-delegated subnet for the NVA.': 'NVA 用にサービス専用でも委任済みでもないサブネットを選択してください。',
+  'The appliance subnet overlaps another subnet.': 'アプライアンスのサブネットが別のサブネットと重複しています。',
+  'AzureFirewallSubnet must be non-delegated and /26 or larger.': 'AzureFirewallSubnet は委任されておらず、/26 以上のサイズである必要があります。',
+  'Select an existing subnet for the NVA.': 'NVA 用の既存のサブネットを選択してください。',
+  'Enter an NVA name of 1 to 120 characters.': '1 文字から 120 文字の NVA 名を入力してください。',
+  'NVA identity is missing or already exists.': 'NVA の識別子がないか、すでに存在します。',
+  'Add Azure Firewall': 'Azure Firewall を追加',
+  'Add NVA': 'NVA を追加',
+  'Create NVA': 'NVA を作成',
+  'NVA name': 'NVA 名',
+  'NVA subnet': 'NVA サブネット',
+  'Select an existing subnet': '既存のサブネットを選択',
+  'Add a valid, non-service, non-delegated subnet to this VNet first.': 'まず、この VNet に有効な、サービス専用でも委任済みでもないサブネットを追加してください。',
+  'An available private IP is allocated in the selected subnet. BGP, ARS peers, load balancers and UDRs must be configured separately.': '選択したサブネット内の空きプライベート IP を割り当てます。BGP、ARS ピア、ロード バランサー、UDR は別途構成してください。',
+  'Only one Azure Firewall is supported per VNet. Remove the existing Firewall first.': 'VNet ごとにサポートされる Azure Firewall は 1 つだけです。先に既存の Firewall を削除してください。',
+  'This imported VNet contains multiple Azure Firewalls. Preserve or move the extra resources to separate VNets; this is not a supported HA design.': 'このインポート済み VNet には Azure Firewall が複数あります。追加のリソースを保持するか別の VNet に移動してください。これはサポートされる HA 設計ではありません。',
+  'Microsoft-managed HA': 'Microsoft 管理の HA',
+  'Azure Firewall represents one managed service with redundant backend instances, not one VM per instance. Backend failure timing and SLA are not simulated.': 'Azure Firewall は冗長なバックエンド インスタンスを備えた 1 つのマネージド サービスです。インスタンスごとの VM ではありません。バックエンドの障害時間や SLA はシミュレーションしません。',
+  'User-managed NVA HA': 'ユーザー管理の NVA HA',
+  'For ARS peering, use Inspect NVA Learned BGP Routes in the appliance menu.': 'ARS ピアリングには、アプライアンス メニューの「NVA が学習した BGP ルートを確認」を使用してください。',
+  'Multiple NVAs alone do not configure HA. Design redundant appliances and steering with vendor floating IPs, Azure Load Balancer HA ports, or BGP to Azure Route Server.': 'NVA が複数あるだけでは HA は構成されません。ベンダーのフローティング IP、Azure Load Balancer HA ポート、または Azure Route Server への BGP を使用して、冗長アプライアンスと経路制御を設計してください。',
+  'Configure original NVA/NIC backends, frontend, pool, probe health and floating HA-ports rules in Load Balancers. Configure NVA BGP advertisements and ARS peers separately.': 'ロード バランサーで元の NVA/NIC バックエンド、フロントエンド、プール、プローブの正常性、およびフローティング HA ポート規則を構成してください。NVA の BGP アドバタイズと ARS ピアは別途構成してください。',
+  'Vendor floating-IP reassignment, session replication, live health and failover timing are not assessed. No HA guarantee is inferred from this configuration.': 'ベンダーのフローティング IP 再割り当て、セッション複製、実際の正常性、フェールオーバー時間は評価されません。この構成から HA の保証は推測しません。',
+  'Modeled forwarding': 'モデル化された転送',
   'Standalone VPN gateway mode': 'スタンドアロン VPN ゲートウェイのモード',
   'Unspecified (legacy design)': '未指定（以前の設計）',
   'Active/standby': 'アクティブ/スタンバイ',
@@ -25,6 +52,58 @@ registerJapaneseMessages({
   'RouteBased gateways can use policy-based traffic selectors on a connection. Those selectors are not a PolicyBased gateway and are not simulated as IPsec policy.': 'RouteBased ゲートウェイでも接続でポリシー ベースのトラフィック セレクターを使用できます。これらのセレクターは PolicyBased ゲートウェイとは異なり、IPsec ポリシーとしてシミュレーションされません。',
   'Azure ER preference does not configure on-premises return preference. VPN backup is for private peering, not Microsoft peering; its Internet underlay is not assessed.': 'Azure の ER 優先設定は、オンプレミスの戻り経路の優先設定を構成しません。VPN バックアップはプライベート ピアリングが対象で、Microsoft ピアリングは対象外です。インターネット アンダーレイは評価されません。',
 })
+
+export function ApplianceAvailability({ kind }: { kind: 'azure-firewall' | 'nva-vm' }) {
+  return <div className="aznet-muted" data-testid={`appliance-availability-${kind}`}>
+    <strong>{t(kind === 'azure-firewall' ? 'Microsoft-managed HA' : 'User-managed NVA HA')}</strong>
+    {kind === 'azure-firewall' ? <p>{t('Azure Firewall represents one managed service with redundant backend instances, not one VM per instance. Backend failure timing and SLA are not simulated.')}</p>
+      : <>
+        <p>{t('Multiple NVAs alone do not configure HA. Design redundant appliances and steering with vendor floating IPs, Azure Load Balancer HA ports, or BGP to Azure Route Server.')}</p>
+        <p>{t('Configure original NVA/NIC backends, frontend, pool, probe health and floating HA-ports rules in Load Balancers. Configure NVA BGP advertisements and ARS peers separately.')}</p>
+        <p>{t('For ARS peering, use Inspect NVA Learned BGP Routes in the appliance menu.')}</p>
+        <p>{t('Vendor floating-IP reassignment, session replication, live health and failover timing are not assessed. No HA guarantee is inferred from this configuration.')}</p>
+      </>}
+  </div>
+}
+
+export function NvaCreationEditor({ topology, vnetId, commit, onSaved, onCancel }: {
+  topology: AzNetTopology
+  vnetId: string
+  commit: (update: (draft: AzNetTopology) => void) => boolean
+  onSaved: (id: string) => void
+  onCancel: () => void
+}) {
+  const [subnetId, setSubnetId] = useState('')
+  const [error, setError] = useState('')
+  const vnet = topology.vnets.find((vnet) => vnet.id === vnetId)
+  if (!vnet) return null
+  const eligible = vnet.subnets.filter((subnet) => !nvaSubnetError(vnet, subnet))
+  return <section className="aznet-card" data-testid="aznet-nva-creation">
+    <h3>{t('Add NVA')}</h3>
+    <ApplianceAvailability kind="nva-vm" />
+    <form data-configuration-pending={!!subnetId} onSubmit={(event) => {
+      event.preventDefault()
+      try {
+        const input = { id: `nva-${crypto.randomUUID()}`, name: String(new FormData(event.currentTarget).get('name')), subnetId }
+        addNva(structuredClone(topology), vnetId, input)
+        if (!commit((draft) => addNva(draft, vnetId, input))) return
+        onSaved(input.id)
+      } catch (error) { setError(error instanceof Error ? error.message : 'Inventory edit failed.') }
+    }}>
+      <label className="field"><span>{t('NVA name')}</span><input name="name" required maxLength={120}
+        data-configuration-saved={`${vnet.name}-nva`} defaultValue={`${vnet.name}-nva`} /></label>
+      <label className="field"><span>{t('NVA subnet')}</span><select aria-label={t('NVA subnet')} required value={subnetId} onChange={(event) => { setSubnetId(event.target.value); setError('') }}>
+        <option value="">{t('Select an existing subnet')}</option>
+        {eligible.map((subnet) => <option key={subnet.id} value={subnet.id}>{subnet.name} · {subnet.prefix} · {subnet.id}</option>)}
+      </select></label>
+      {!eligible.length && <p role="status">{t('Add a valid, non-service, non-delegated subnet to this VNet first.')}</p>}
+      <p>{t('An available private IP is allocated in the selected subnet. BGP, ARS peers, load balancers and UDRs must be configured separately.')}</p>
+      <button type="submit" disabled={!eligible.some((subnet) => subnet.id === subnetId)}>{t('Create NVA')}</button>
+      <button type="button" onClick={onCancel}>{t('Cancel')}</button>
+      {error && <p role="alert">{t(error)}</p>}
+    </form>
+  </section>
+}
 
 function VpnGatewaySettings({ gateway, routeExchange, coexisting, onMode, onConfiguration }: {
   gateway: AzVnetGateway
@@ -87,7 +166,7 @@ function VpnGatewaySettings({ gateway, routeExchange, coexisting, onMode, onConf
 }
 
 export default function VnetRoutingSettings({ topology, vnet, preview, usesRemoteGateways, onTopologyChange, onDeleteVnet,
-  onAddGateway, onRemoveGateway, onAddRouteServer, onRemoveRouteServer, onAddAppliance, onAddVnra, onConfigureVnra, onRemoveAppliance }: {
+  onAddGateway, onRemoveGateway, onAddRouteServer, onRemoveRouteServer, onAddFirewall, onAddNva, onAddVnra, onConfigureVnra, onRemoveAppliance }: {
   topology: AzNetTopology
   vnet: AzVNet
   preview?: boolean
@@ -98,7 +177,8 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
   onRemoveGateway: (gatewayId: string) => void
   onAddRouteServer: () => void
   onRemoveRouteServer: () => void
-  onAddAppliance: () => void
+  onAddFirewall: () => void
+  onAddNva: () => void
   onAddVnra: () => void
   onConfigureVnra: (id: string) => void
   onRemoveAppliance: (id: string) => void
@@ -109,6 +189,7 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
   })
   const coexisting = vnet.gateways.some((gateway) => gateway.enabled && gateway.kind === 'Vpn') &&
     vnet.gateways.some((gateway) => gateway.enabled && gateway.kind === 'ExpressRoute')
+  const firewalls = vnet.appliances.filter((appliance) => appliance.kind === 'azure-firewall')
   return <>
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -192,7 +273,10 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
       initialOpen={!!(vnet.gateways.length || vnet.appliances.length || vnet.routeServer)}>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, padding: '6px 8px', background: 'var(--surface)', borderRadius: 6, border: '1px solid var(--border)' }}>
         <button type="button" className="aznet-btn" data-testid={`aznet-add-fw-${vnet.id}`}
-          style={{ fontSize: 11, padding: '3px 8px' }} onClick={onAddAppliance}>+ Firewall / NVA</button>
+          disabled={!!firewalls.length}
+          title={firewalls.length ? t('Only one Azure Firewall is supported per VNet. Remove the existing Firewall first.') : undefined}
+          style={{ fontSize: 11, padding: '3px 8px' }} onClick={onAddFirewall}>{t('Add Azure Firewall')}</button>
+        <button type="button" className="aznet-btn" data-testid={`aznet-add-nva-${vnet.id}`} onClick={onAddNva}>{t('Add NVA')}</button>
         <button type="button" className="aznet-btn" onClick={onAddVnra}>{t('Add Managed VNRA')}</button>
         {(['ExpressRoute', 'Vpn'] as const).map((kind) => {
           const gateways = vnet.gateways.filter((gateway) => gateway.kind === kind)
@@ -217,6 +301,9 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
             onClick={onRemoveRouteServer}>✕ Remove ARS ({vnet.routeServer.name})</button>}
       </div>
     </InspectorSection>
+    {firewalls.length > 1 && <p role="alert">{t('This imported VNet contains multiple Azure Firewalls. Preserve or move the extra resources to separate VNets; this is not a supported HA design.')}</p>}
+    {!!firewalls.length && <ApplianceAvailability kind="azure-firewall" />}
+    {vnet.appliances.some((appliance) => appliance.kind === 'nva-vm') && <ApplianceAvailability kind="nva-vm" />}
     {vnet.gateways.map((gateway) => <VpnGatewaySettings key={gateway.id} gateway={gateway} coexisting={coexisting}
       routeExchange={!!(gateway.enabled && vnet.routeServer?.enabled && vnet.routeServer.branchToBranchTraffic)}
       onConfiguration={(configuration) => onChange((target) => {
@@ -264,7 +351,7 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
                 const current = target.appliances.find((candidate) => candidate.id === appliance.id)
                 if (current) current.enableIpForwarding = checked
               })
-            }} /><span>NIC IP Forwarding</span>
+            }} /><span>{appliance.kind === 'azure-firewall' ? t('Modeled forwarding') : 'NIC IP Forwarding'}</span>
           </label>}
         <button type="button" className="aznet-btn" data-testid={`aznet-remove-app-${appliance.id}`}
           style={{ fontSize: 11, padding: '2px 6px', color: 'var(--error)', borderColor: 'var(--border)' }}
