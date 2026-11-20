@@ -7,7 +7,7 @@ export const gatewayCheckpoint = { taskId: 'gateway.explain', assessmentVersion:
 export const wanCheckpoint = { taskId: 'wan.explain', assessmentVersion: 1, checkId: 'explain-wan' }
 export const capstoneCheckpoint = { taskId: 'capstone.explain', assessmentVersion: 1, checkId: 'explain-capstone' }
 export const previewCourse: CourseBundle['course'] = {
-  id: 'azure-networking-preview', contentVersion: 6, publication: 'complete',
+  id: 'azure-networking-preview', contentVersion: 7, publication: 'complete',
   title: { en: 'Routing foundations', ja: 'ルーティングの基礎' },
   lessonOrder: ['direct-peering', 'route-override', 'prefix-outage', 'gateway-return', 'secured-wan', 'hybrid-incident'],
   belts: [

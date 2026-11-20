@@ -23,8 +23,9 @@ engine payload is shown; legacy storage stays untouched.
 The playable track is displayed as **Routing foundations**. Its historical
 `azure-networking-preview` course ID, award/check identities,
 40 tasks, 1,325 points and stored practice/progress formats remain unchanged.
-The original edition publishes presentation version 6; scenario version 7 adds
-foundational practice, staged repairs and a changed-address completion challenge.
+The original edition publishes presentation version 7; scenario version 8 includes
+foundational practice, staged repairs, a changed-address completion challenge and
+explicit belt-stage introductions.
 Existing assessment versions and first-earned awards remain compatible.
 Renaming the presentation is not a migration or a grading revision.
 `tracks.ts` is a small declarative catalog; **DNS and name resolution** and
@@ -42,6 +43,24 @@ retain the selected edition's separate belt and points.
 
 Belts describe checkpoint-qualified core progress, not completion of every
 specialist task, all Azure networking or professional certification.
+`belt-stages.ts` authors localized stage titles, introductions and recap topics.
+Each stage ends at its existing belt checkpoint; the runner tests check those
+boundaries against the actual ordered tasks. Introductions augment the opening
+debrief, while the sidebar names the current stage and status details provide a
+read-only stage outline. Changing this presentation does not change grading.
+
+Remaining XP belongs to the selected edition, not the highest historical belt.
+Zero remaining XP with an unmet checkpoint says to finish the stage, rather than
+claiming a promotion. The runner emits a belt achievement only after an accepted
+task completion raises its checkpoint-qualified rank. Replay, hydration and
+progress replacement do not emit events. Failed writes that retain an accepted
+session-only award can celebrate; rejected writes cannot. The notification belongs
+to the runner's held debrief; dismissal is session-only state and does not advance
+the task. The native dialog and topic copy stay in the optional learning UI,
+not normal startup. Confetti is decorative, bounded
+and disabled by reduced-motion preferences. Reload retains the award but does not
+replay a dismissed or pending notification.
+
 The full-journey task counter and final completion screen remain separate from
 the scenario edition's eight-mission core black belt. Available-course denominators and
 XP exclude planned tracks; future tracks must use their own course identity.

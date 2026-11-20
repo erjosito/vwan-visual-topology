@@ -7,6 +7,7 @@ import type { LearningStatusDetails } from './LearningStatusDetails'
 import './learning-status.css'
 import { useCloudSession } from '../cloud/useCloudSession'
 import { progressStatusLabel } from '../cloud/progress-status'
+import { nextBeltLabel } from './belt-progress-label'
 
 export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean }) {
   const cloud = useCloudSession()
@@ -29,11 +30,13 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
   const beltLabel = highest ? `${highest.belt.name[language]}${highest.trackCount > 1 ? ` x${highest.trackCount}` : ''}` : unknown
   const localWarning = progress && state?.status !== 'saved'
     ? state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown : undefined
-  const description = `${identity} · ${t('Highest belt across tracks')}: ${highest ? `${highest.belt.name[language]} · ${t('Tracks at this belt: {0}', highest.trackCount)}` : unknown} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points}` : unknown}${syncStatus ? ` · ${syncStatus}` : ''}`
+  const pointsUnit = language === 'ja' ? 'ポイント' : 'points'
+  const progressLabel = progress ? `${highest?.belt.id !== progress.belt.id ? `${name[language]}: ` : ''}${session?.presentationPreview ? `${progress.points} ${pointsUnit} · ` : ''}${nextBeltLabel(progress, language)}` : ''
+  const description = `${identity} · ${t('Highest belt across tracks')}: ${highest ? `${highest.belt.name[language]} · ${t('Tracks at this belt: {0}', highest.trackCount)}` : unknown} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points} ${pointsUnit} · ${nextBeltLabel(progress, language)}` : unknown}${syncStatus ? ` · ${syncStatus}` : ''}`
   return <>
     <button ref={trigger} type="button" className="learning-status-trigger" data-testid="learning-status"
       title={session?.presentationPreview ? `${t('Learning status')}: ${description}` : undefined}
-      aria-label={!showIdentity ? `${t('Learning status')}: ${beltLabel}${localWarning ? ` · ${localWarning}` : ''}${syncStatus ? ` · ${syncStatus}` : ''}` : undefined}
+      aria-label={!showIdentity ? `${t('Learning status')}: ${beltLabel}${localWarning ? ` · ${localWarning}` : ''}${progressLabel ? ` ${progressLabel}` : ''}${syncStatus ? ` · ${syncStatus}` : ''}` : undefined}
       aria-description={session?.presentationPreview ? `${t('Learning status')}: ${description}` : syncStatus}
       onKeyDown={(event) => { if (open && event.key === 'Escape') { event.stopPropagation(); setOpen(false) } }}
       aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
@@ -49,6 +52,7 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
         {progress.belt.name[language]} · {progress.points} {language === 'ja' ? 'ポイント' : 'points'}
         </>}
         {localWarning && <> · {localWarning}</>}
+        {' '}<span className="learning-status-next" data-testid="learning-next-belt">{progressLabel}</span>
       </> : !session?.presentationPreview && unknown}
       {syncStatus && <span data-testid="learning-sync-summary"> · {syncStatus}</span>}
     </button>
