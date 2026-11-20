@@ -12,6 +12,7 @@ import { DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, propagatesLocally
 import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
 import { connectionStaticRoutes } from './vnet-connection-routes'
 import type { RouteMapDirection, Transport } from '../model'
+import { udrAssociationError, udrAssociationFindings } from './udr-regions'
 import type {
   AzAppliance,
   AzArsPreference,
@@ -418,7 +419,8 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       ? vnet.gateways.filter((gateway) => gateway.enabled && !gatewayArsExchange(gateway)).map((gateway) =>
         `ARS gateway exchange for "${gateway.name}" in "${vnet.name}" is not assessed: VPN integration requires explicit active/active, ASN 65515 and a supported RouteBased non-Basic gateway. VPN BGP enablement is not required.`)
       : [])
-  const warnings: string[] = [...peeringLimitations, ...gatewayLimitations]
+  const regionLimitations = udrAssociationFindings(topology).map((finding) => finding.summary)
+  const warnings: string[] = [...peeringLimitations, ...gatewayLimitations, ...regionLimitations]
   if (topology.vnets.some((vnet) => vnet.bgpCommunities)) {
     warnings.push(vnetCommunityHelp)
     if (topology.vnets.some((vnet) => vnet.summarizedGatewayPrefixes?.length)) {
@@ -1320,7 +1322,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
   }
 
   return {
-    controlPlaneComplete: peeringLimitations.length === 0 && gatewayLimitations.length === 0,
+    controlPlaneComplete: peeringLimitations.length === 0 && gatewayLimitations.length === 0 && regionLimitations.length === 0,
     subnetTables,
     gatewayRibs,
     routeServerRibs,
@@ -1347,9 +1349,10 @@ function compileSingleSubnetEffectiveRoutes(
   routeServerOutbound: Record<string, Record<string, AzBgpRibEntry[]>>,
   vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>>,
 ): AzSubnetRouteTableResult {
-  const udrTable = subnet.routeTableId
+  const associatedTable = subnet.routeTableId
     ? topology.udrTables.find((t) => t.id === subnet.routeTableId)
     : undefined
+  const udrTable = associatedTable && !udrAssociationError(topology, vnet, associatedTable) ? associatedTable : undefined
   const bgpPropagationDisabled = Boolean(udrTable?.disableBgpRoutePropagation)
   const peeringPropagationDisabled = Boolean(udrTable?.disablePeeringRoutePropagation)
 

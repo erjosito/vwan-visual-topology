@@ -101,7 +101,7 @@ const schema = object({
   udrTables: array(object({
     ...named, disableBgpRoutePropagation: bool,
     routes: array(object({ ...named, prefix: text, nextHopType: choice('VirtualAppliance', 'VirtualNetworkGateway', 'VnetLocal', 'Internet', 'None'), enabled: bool }, { nextHopIp: text })),
-  }, { disablePeeringRoutePropagation: bool })),
+  }, { region: text, disablePeeringRoutePropagation: bool })),
   vwanHubs: array(object({
     ...named, region: text, preference: choice('ExpressRoute', 'VPN', 'ASPath'), routingIntent: object({ private: bool, internet: bool }, { privatePrefixes: strings }),
   }, { ...positioned, prefix: text, firewall: object({ id: (v, p) => {

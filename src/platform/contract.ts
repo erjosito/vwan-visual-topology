@@ -14,7 +14,7 @@ import type { BgpInspection } from '../bgp-neighbors'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
-export const engineVersion = '2026.11.19.2'
+export const engineVersion = '2026.11.20.1'
 export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }

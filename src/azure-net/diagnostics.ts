@@ -12,10 +12,12 @@ import {
 import type { AzNetTopology } from './model'
 import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
 import { coexistenceFindings } from './coexistence'
+import { udrAssociationFindings } from './udr-regions'
 
 export type AzDiagnosticSeverity = 'error' | 'warning' | 'info'
 
 export type AzDiagnosticCategory =
+  | 'udr-region-association'
   | 'gateway-coexistence'
   | 'gateway-subnet-missing-udr'
   | 'gateway-subnet-bgp-disabled'
@@ -130,6 +132,11 @@ export function runAzNetDiagnostics(
   options: { includePairAnalysis?: boolean } = {},
 ): AzDiagnosticFinding[] {
   const findings: AzDiagnosticFinding[] = coexistenceFindings(topology)
+  findings.push(...udrAssociationFindings(topology).map((finding) => ({
+    ...finding, id: `udr-region:${finding.subnetId}`, severity: 'error' as const,
+    category: 'udr-region-association' as const, title: 'Route-table region association is invalid or unknown',
+    remediation: 'Set explicit matching VNet and route-table regions, or dissociate the subnet. References are preserved; forwarding is not assessed until repaired.',
+  })))
 
   // 1. Check GatewaySubnet BGP Propagation Disabled + Missing Spoke UDRs (Asymmetric Firewall Bypass)
   for (const vnet of topology.vnets) {
