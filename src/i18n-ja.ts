@@ -4,6 +4,12 @@ import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
   ...workspaceCapabilitiesJa,
+  'Route-table region': 'ルート テーブルのリージョン',
+  'Route-table region {0}': 'ルート テーブル {0} のリージョン',
+  'Apply region': 'リージョンを適用',
+  'Inferred legacy region': '既存の関連付けから推定したリージョン',
+  'Unknown region': '不明なリージョン',
+  'Route tables are independent resources. Only subnets in the same region can share a table. Legacy regions are inferred only from unambiguous existing associations; otherwise set an explicit region.': 'ルート テーブルは独立したリソースです。同じリージョンのサブネットだけが共有できます。旧形式のリージョンは既存の関連付けから一意に推定できる場合に限り使用し、それ以外は明示的に設定してください。',
   'Check configuration input.': '構成の入力内容を確認してください。',
   'Unsaved configuration changes.': '未保存の構成変更があります。',
   'No pending configuration edits.': '未保存の構成編集はありません。',

@@ -23,6 +23,7 @@ import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
 import { confirmConfigurationSwitch } from '../configuration-selection'
+import { resolveUdrRegion, udrAssociationError, validateUdrRegionEdit } from './udr-regions'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { azHubGatewayConnections } from '../hub-gateways'
 import { useDeleteShortcut } from '../useDeleteShortcut'
@@ -343,6 +344,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       next = measureAzWork('commit', () => {
         const draft = cloneAzNetTopology(topology)
         updater(draft)
+        validateUdrRegionEdit(topology, draft)
         pruneAzSiteRouteMaps(draft)
         pruneAzArsRouteMaps(draft)
         pruneDeletedInventory(draft, topology)
@@ -717,6 +719,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           rt = {
             id: `rt-gw-${hubVnet.id}`,
             name: `RT-${hubVnet.name}-GatewaySubnet`,
+            region: hubVnet.region,
             disableBgpRoutePropagation: false,
             routes: [],
           }
@@ -830,6 +833,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           rt = {
             id: `rt-nva-egress-${sub.id}`,
             name: `RT-${vnet.name}-${sub.name}`,
+            region: vnet.region,
             disableBgpRoutePropagation: false,
             routes: [],
           }
@@ -941,6 +945,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               rt = {
                 id: `rt-egress-${sub.id}`,
                 name: `RT-${vnet.name}-${sub.name}`,
+                region: vnet.region,
                 disableBgpRoutePropagation: false,
                 routes: [],
               }
@@ -1356,6 +1361,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       draft.udrTables.push({
         id: rtId,
         name: `rt-workload-${idx}`,
+        region: draft.vnets.find((vnet) => vnet.id === vnetId)?.region,
         disableBgpRoutePropagation: false,
         disablePeeringRoutePropagation: false,
         routes: firstApp
@@ -1774,6 +1780,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 : []),
               ...topology.udrTables.map((candidateRt) => ({
                 label: `${candidateRt.name}${candidateRt.id === subnet.routeTableId ? ' (Associated)' : ''}`,
+                disabled: !!udrAssociationError(topology, vnet, candidateRt),
                 onSelect: () => {
                   commitTopology((draft) => {
                     const targetV = draft.vnets.find((v) => v.id === vnet.id)
@@ -4527,9 +4534,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </button>
                   </div>
                   <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
-                    Route tables are independent objects that can be associated with any subnet via
-                    the subnet&apos;s right-click menu, hover badge, or the subnet association
-                    selector below.
+                    {t('Route tables are independent resources. Only subnets in the same region can share a table. Legacy regions are inferred only from unambiguous existing associations; otherwise set an explicit region.')}
                   </p>
                   {(filteredUdrTables.length > 0 ? filteredUdrTables : topology.udrTables).map((rt) => {
                     const associatedSubnets = topology.vnets.flatMap((v) =>
@@ -4575,6 +4580,23 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               }}
                               style={{ fontWeight: 700, width: 175 }}
                             />
+                            <form key={rt.region ?? resolveUdrRegion(topology, rt) ?? ''} onSubmit={(event) => {
+                              event.preventDefault()
+                              const region = String(new FormData(event.currentTarget).get('region')).trim()
+                              const saved = commitTopology((draft) => {
+                                const table = draft.udrTables.find((candidate) => candidate.id === rt.id)
+                                if (table) table.region = region
+                              })
+                              if (saved) setWorkspaceNotice('')
+                            }} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                              <label>{t('Route-table region')}
+                                <input className="aznet-input" name="region" required data-testid={`aznet-rt-region-${rt.id}`}
+                                  aria-label={t('Route-table region {0}', rt.name)}
+                                  defaultValue={rt.region ?? resolveUdrRegion(topology, rt) ?? ''} style={{ width: 130 }} />
+                              </label>
+                              <button className="aznet-btn" type="submit">{t('Apply region')}</button>
+                              {rt.region === undefined && <span>{t(resolveUdrRegion(topology, rt) ? 'Inferred legacy region' : 'Unknown region')}</span>}
+                            </form>
                             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                               {associatedSubnets.length > 0
                                 ? `Associated: ${associatedSubnets.join(', ')}`
@@ -4941,7 +4963,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 >
                                   <option value="">None (No Route Table)</option>
                                   {topology.udrTables.map((rt) => (
-                                    <option key={rt.id} value={rt.id}>
+                                    <option key={rt.id} value={rt.id} disabled={!!udrAssociationError(topology, vnet, rt)}>
                                       {rt.name}
                                     </option>
                                   ))}
