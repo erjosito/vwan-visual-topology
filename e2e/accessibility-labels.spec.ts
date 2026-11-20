@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { openLearning } from './learning-helpers'
 import AxeBuilder from '@axe-core/playwright'
 import { example } from '../src/model'
 
@@ -64,7 +65,7 @@ for (const language of ['en', 'ja']) {
     test(`${language} ${width}px: loaded practice VNets and subnets are independent accessible controls`, async ({ page }) => {
       await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 })
       await page.goto('/?mode=full')
-      await page.getByTestId('learning-open').click()
+      await openLearning(page)
       const sidebar = page.getByTestId('learning-sidebar')
       await sidebar.getByRole('button', { name: 'Load practice network', exact: true }).click()
       await sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()

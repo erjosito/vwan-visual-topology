@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { t, useLanguage } from '../i18n'
 import { useWorkspaceSession } from '../workspace-context'
@@ -21,6 +21,16 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
   const label = (value: { en: string; ja: string }) => value[language]
   const { course, assessments, name } = selectedEdition(state?.ledger, session?.practice?.courseId)
   const progress = state?.ledger ? beltProgress(state.ledger, course, assessments) : undefined
+  const started = session?.learningView?.open || session?.practice?.courseId === course.id || (progress?.points ?? 0) > 0
+  const start = useRef<HTMLButtonElement>(null)
+  const returnFocus = useRef(document.activeElement)
+  useEffect(() => {
+    start.current?.focus({ preventScroll: true })
+    return () => {
+      const target = returnFocus.current
+      if (target instanceof HTMLElement && target.isConnected) target.focus({ preventScroll: true })
+    }
+  }, [])
   const operate = async (reset: boolean) => {
     setBusy(true); setFailed(false)
     try {
@@ -41,9 +51,18 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
     } catch { setFailed(true) }
   }
   const title = cloud ? t('Learning status') : label(labels.details)
-  return createPortal(<section id="local-learning-status" className="learning-status-panel" aria-label={title}
+  return createPortal(<section id="local-learning-status" className="learning-status-panel" role="dialog" aria-labelledby="learning-status-title"
       data-testid="learning-status-details" onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); onClose() } }}>
-      <header><h2>{title}</h2><button type="button" onClick={onClose}>{label(labels.close)}</button></header>
+      <header role="presentation"><h2 id="learning-status-title">{title}</h2><button type="button" onClick={onClose}>{label(labels.close)}</button></header>
+      <div className="learning-status-entry">
+        <p>{label(labels.entry)}</p>
+        <button ref={start} type="button" className="learning-status-start" data-testid="learning-start"
+          disabled={busy || !session?.setLearningView} onClick={() => {
+            returnFocus.current = document.getElementById('learning-title') ?? returnFocus.current
+            onClose()
+            session?.setLearningView?.({ open: true })
+          }}>{label(started ? labels.continueLearning : labels.startLearning)}</button>
+      </div>
       {(!cloud || state?.status !== 'saved') && <p role="status">{label(state ? labels[state.status] : labels.unavailable)}</p>}
       {cloud && <p role="status" data-testid="learning-cloud-status">{progressStatusLabel(cloud.status, language)}</p>}
       {progress && <>
@@ -63,48 +82,51 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
           ? 'ハイブリッド接続、複数ハブ、引き継ぎ課題は、基礎コースの黒帯以降も続く専門トピックです。'
           : 'Hybrid connectivity, multi-hub routing and the handover challenge continue as specialist practice beyond core black belt.'}</p>}
       </details>
-      <section aria-label={language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}>
-        <h3>{language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}</h3>
-        <p>{language === 'ja' ? '版ごとの進捗を保持します。切り替えても過去のポイントや帯は失われません。' : 'Each edition keeps its own progress. Switching preserves historical points and belts.'}</p>
-        {editions.filter((entry) => entry.course.id !== course.id).map((entry) => {
-          const historical = state?.ledger && beltProgress(state.ledger, entry.course, entry.assessments)
-          return <div key={entry.course.id}><p>{label(entry.name)}: {historical
-            ? <>{historical.points} {label(labels.points)} · {label(historical.belt.name)}</>
-            : label(labels.unknown)}</p>
-            <button type="button" disabled={busy || !state?.ledger} onClick={() => setEditionConfirm(entry.course.id)}>
-              {language === 'ja' ? `${label(entry.name)}に切り替える` : `Switch to ${label(entry.name)}`}
-            </button></div>
-        })}
-        {editionConfirm && <div>
-          <p>{language === 'ja' ? 'この版の続きから学習します。現在の練習キャンバスは、次の初期構成の読み込みを確認するまで変わりません。' : 'Continue this edition from its next unmet task? The current practice canvas stays unchanged until you confirm loading a starter.'}</p>
-          <button type="button" disabled={busy} onClick={() => {
-            setBusy(true); setFailed(false)
-            void session?.selectLearningEdition?.(editionConfirm).then((success) => {
-              if (success) setEditionConfirm(undefined)
-              else setFailed(true)
-            }).catch(() => setFailed(true)).finally(() => setBusy(false))
-          }}>{language === 'ja' ? '版の切り替えを確認' : 'Confirm edition switch'}</button>
-          <button type="button" disabled={busy} onClick={() => setEditionConfirm(undefined)}>{label(labels.cancel)}</button>
-        </div>}
-      </section>
       <TrackOverview />
-      <p>{session?.cloudProgress
-        ? language === 'ja' ? 'アカウント別の端末キャッシュです。クラウドの履歴は自己申告であり認定ではありません。'
-          : 'Account-specific device cache. Cloud history is self-reported, not verified certification.'
-        : label(labels.local)}</p><p>{label(labels.writer)}</p><p>{label(labels.policy)}</p>
-      <div className="learning-status-actions">
-        <button type="button" onClick={() => backup(false)}>{label(labels.backup)}</button>
-        {cloud && <button type="button" disabled={busy || !cloud.status || cloud.status === 'loading' || cloud.status === 'saving'}
-          onClick={() => { void cloud.refresh() }}>{label(labels.refreshCloud)}</button>}
-        {state?.status === 'session' && <button type="button" disabled={busy} onClick={() => { void operate(false) }}>{label(labels.retry)}</button>}
-        {state?.status === 'conflict' && <button type="button" onClick={() => location.reload()}>{label(labels.reload)}</button>}
-      </div>
-      {state?.legacy && <div><p>{label(labels.legacy)}</p><button type="button" onClick={() => backup(true)}>{label(labels.backupLegacy)}</button></div>}
-      <button type="button" disabled={busy || !state} onClick={() => { setConfirm(state); setFailed(false) }}>{label(labels.reset)}</button>
-      {confirm && <div><p>{label(labels.confirm)}</p>
-        <button type="button" disabled={busy} onClick={() => setConfirm(undefined)}>{label(labels.cancel)}</button>
-        <button type="button" disabled={busy} onClick={() => { void operate(true) }}>{label(labels.delete)}</button>
-      </div>}
+      <details className="learning-status-advanced" data-testid="learning-advanced">
+        <summary>{label(labels.advanced)}</summary>
+        <section aria-label={language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}>
+          <h3>{language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}</h3>
+          <p>{language === 'ja' ? '版ごとの進捗を保持します。切り替えても過去のポイントや帯は失われません。' : 'Each edition keeps its own progress. Switching preserves historical points and belts.'}</p>
+          {editions.filter((entry) => entry.course.id !== course.id).map((entry) => {
+            const historical = state?.ledger && beltProgress(state.ledger, entry.course, entry.assessments)
+            return <div key={entry.course.id}><p>{label(entry.name)}: {historical
+              ? <>{historical.points} {label(labels.points)} · {label(historical.belt.name)}</>
+              : label(labels.unknown)}</p>
+              <button type="button" disabled={busy || !state?.ledger} onClick={() => setEditionConfirm(entry.course.id)}>
+                {language === 'ja' ? `${label(entry.name)}に切り替える` : `Switch to ${label(entry.name)}`}
+              </button></div>
+          })}
+          {editionConfirm && <div>
+            <p>{language === 'ja' ? 'この版の続きから学習します。現在の練習キャンバスは、次の初期構成の読み込みを確認するまで変わりません。' : 'Continue this edition from its next unmet task? The current practice canvas stays unchanged until you confirm loading a starter.'}</p>
+            <button type="button" disabled={busy} onClick={() => {
+              setBusy(true); setFailed(false)
+              void session?.selectLearningEdition?.(editionConfirm).then((success) => {
+                if (success) setEditionConfirm(undefined)
+                else setFailed(true)
+              }).catch(() => setFailed(true)).finally(() => setBusy(false))
+            }}>{language === 'ja' ? '版の切り替えを確認' : 'Confirm edition switch'}</button>
+            <button type="button" disabled={busy} onClick={() => setEditionConfirm(undefined)}>{label(labels.cancel)}</button>
+          </div>}
+        </section>
+        <p>{session?.cloudProgress
+          ? language === 'ja' ? 'アカウント別の端末キャッシュです。クラウドの履歴は自己申告であり認定ではありません。'
+            : 'Account-specific device cache. Cloud history is self-reported, not verified certification.'
+          : label(labels.local)}</p><p>{label(labels.writer)}</p><p>{label(labels.policy)}</p>
+        <div className="learning-status-actions">
+          <button type="button" onClick={() => backup(false)}>{label(labels.backup)}</button>
+          {cloud && <button type="button" disabled={busy || !cloud.status || cloud.status === 'loading' || cloud.status === 'saving'}
+            onClick={() => { void cloud.refresh() }}>{label(labels.refreshCloud)}</button>}
+          {state?.status === 'session' && <button type="button" disabled={busy} onClick={() => { void operate(false) }}>{label(labels.retry)}</button>}
+          {state?.status === 'conflict' && <button type="button" onClick={() => location.reload()}>{label(labels.reload)}</button>}
+        </div>
+        {state?.legacy && <div><p>{label(labels.legacy)}</p><button type="button" onClick={() => backup(true)}>{label(labels.backupLegacy)}</button></div>}
+        <button type="button" disabled={busy || !state} onClick={() => { setConfirm(state); setFailed(false) }}>{label(labels.reset)}</button>
+        {confirm && <div><p>{label(labels.confirm)}</p>
+          <button type="button" disabled={busy} onClick={() => setConfirm(undefined)}>{label(labels.cancel)}</button>
+          <button type="button" disabled={busy} onClick={() => { void operate(true) }}>{label(labels.delete)}</button>
+        </div>}
+      </details>
       {failed && <p role="alert">{label(labels.failed)}</p>}
     </section>, document.body)
 }

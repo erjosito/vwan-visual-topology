@@ -3,7 +3,7 @@ import { cloudFixture, testOwner } from '../tests/user-cloud-fixture'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { exampleCourse } from '../src/learning/course-examples'
 import { orderedTasks } from '../src/learning/runner'
-import { completeLearningTasks, learningSidebar } from './learning-helpers'
+import { openLearning, learningAdvancedOptions, completeLearningTasks, learningSidebar } from './learning-helpers'
 import { sampleHubSpokeFirewallUdr, sampleHybridVwanAndHubSpoke } from '../src/azure-net/model'
 import { readFileSync } from 'node:fs'
 import { workspaceStorageKeys, workspaceSessionKey } from '../src/workspace-session'
@@ -83,6 +83,7 @@ for (const language of ['en', 'ja'] as const) {
     const account = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
     const closeAccount = () => account.getByRole('button', { name: text('Close', '閉じる'), exact: true }).click()
     const edition = async (original: boolean) => {
+      await learningAdvancedOptions(page)
       await learning.getByRole('button', { name: original
         ? text('Switch to Original edition', '従来版に切り替える') : text('Switch to Scenario edition', 'シナリオ版に切り替える'), exact: true }).click()
       await learning.getByRole('button', { name: text('Confirm edition switch', '版の切り替えを確認'), exact: true }).click()
@@ -98,6 +99,7 @@ for (const language of ['en', 'ja'] as const) {
     await page.getByTestId('learning-status').click()
     await expect(sync).toHaveText(text('Cloud progress: Loading', 'クラウドの進捗: 読み込み中'))
     await expect(learning.getByText(text('Saved locally', 'ローカルに保存済み'), { exact: true })).toHaveCount(0)
+    await learningAdvancedOptions(page)
     const refresh = learning.getByRole('button', { name: text('Refresh cloud progress', 'クラウドの進捗を再取得'), exact: true })
     await expect(refresh).toBeDisabled()
     releaseRead()
@@ -553,6 +555,7 @@ test.describe('new UI account and belt summary', () => {
     await expect(status).toContainText('Black belt')
     await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
     await page.getByTestId('learning-status').click()
+    await learningAdvancedOptions(page)
     await page.getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
     await page.getByRole('button', { name: 'Delete guided history & points', exact: true }).click()
     await expect(status).toContainText('White belt')
@@ -698,7 +701,7 @@ test('cloud-restored belts and account switches never replay milestone celebrati
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('Test Bob')
   await expect(page.getByTestId('learning-status')).toContainText('Yellow belt')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'override.load')
   await expect(popup).toHaveCount(0)
 })
@@ -720,7 +723,7 @@ test('switching accounts preserves session-only history when both local and clou
       original.call(this, key, value)
     }
   })
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await completeLearningTasks(page, 2)
   await expect(page.getByTestId('learning-status')).toContainText('10 points')
   await page.getByTestId('practice-workspace-bar').getByRole('button', { name: 'Return to my design', exact: true }).click()
@@ -731,6 +734,7 @@ test('switching accounts preserves session-only history when both local and clou
   const details = page.getByTestId('learning-status-details')
   await expect(details.getByRole('status').first()).toContainText('Session only')
   await expect(page.getByTestId('learning-cloud-status')).toContainText('Not synced')
+  await learningAdvancedOptions(page)
   offline = false
   await details.getByRole('button', { name: 'Refresh cloud progress', exact: true }).click()
   await expect(page.getByTestId('learning-cloud-status')).toContainText('Synced')
@@ -754,7 +758,7 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   await page.goto('/?mode=full')
   await signIn(page)
   await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(learningSidebar(page)).not.toContainText('No account, upload')
   await expect(learningSidebar(page)).not.toContainText('not encrypted or synchronized')
   await completeLearningTasks(page, 2)
@@ -767,6 +771,7 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   }
   await page.route('**/api/cloud/progress', offline)
   await page.getByTestId('learning-status').click()
+  await learningAdvancedOptions(page)
   await page.getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
   await page.getByRole('button', { name: 'Delete guided history & points', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('0 points')
@@ -780,6 +785,7 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   expect(JSON.parse(service.data.get(key)!.raw).completions).toHaveLength(0)
   await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
   await page.getByTestId('learning-status').click()
+  await learningAdvancedOptions(page)
   await page.getByRole('button', { name: 'Switch to Original edition', exact: true }).click()
   await page.getByRole('button', { name: 'Confirm edition switch', exact: true }).click()
   await expect.poll(() => JSON.parse(service.data.get(key)!.raw).enrollment).toBe(exampleCourse.course.id)

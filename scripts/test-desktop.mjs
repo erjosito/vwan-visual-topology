@@ -296,6 +296,7 @@ try {
       await expect(diagnostics.getByRole('region', { name: 'Diagnostic results' })).toBeVisible({ timeout: 15000 })
     }
     await page.getByTestId('learning-open').click()
+    await page.getByTestId('learning-start').click()
     const learning = page.getByTestId('learning-sidebar')
     await expect(learning.locator('textarea,select,pre')).toHaveCount(0)
     await expect(learning.getByTestId('learning-active-track')).toHaveText('Routing foundations · Scenario edition')
@@ -336,6 +337,7 @@ try {
     await expect(page.getByTestId('practice-workspace-bar')).toContainText('your normal design is kept separately')
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:practice-workspace:v1')).document)).toEqual(practice)
     await page.getByTestId('learning-open').click()
+    await page.getByTestId('learning-start').click()
     await expect(learning.getByText('Navigation help never costs points and never changes configuration or answers questions.', { exact: true })).toBeHidden()
     await expect(page.getByTestId('learning-status')).toContainText('10 points')
     await expect(learning.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.address-range')

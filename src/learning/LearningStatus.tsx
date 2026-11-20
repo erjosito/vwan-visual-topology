@@ -39,7 +39,7 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
       aria-label={!showIdentity ? `${t('Learning status')}: ${beltLabel}${localWarning ? ` · ${localWarning}` : ''}${progressLabel ? ` ${progressLabel}` : ''}${syncStatus ? ` · ${syncStatus}` : ''}` : undefined}
       aria-description={session?.presentationPreview ? `${t('Learning status')}: ${description}` : syncStatus}
       onKeyDown={(event) => { if (open && event.key === 'Escape') { event.stopPropagation(); setOpen(false) } }}
-      aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
+      aria-haspopup="dialog" aria-expanded={open} aria-controls={open && Panel ? 'local-learning-status' : undefined} onClick={() => setOpen(!open)}>
       {session?.presentationPreview ? <>
         {showIdentity && <span className="learning-status-identity">{identity}</span>}
         {highest ? <span className="learning-status-belt">
@@ -56,7 +56,7 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
       </> : !session?.presentationPreview && unknown}
       {syncStatus && <span data-testid="learning-sync-summary"> · {syncStatus}</span>}
     </button>
-    {open && Panel && <Panel onClose={() => { setOpen(false); trigger.current?.focus({ preventScroll: true }) }} />}
+    {open && Panel && <Panel onClose={() => setOpen(false)} />}
     {open && !Panel && <span role="status">{failed
       ? t('Learning status details could not load. Reload to retry.')
       : t('Loading learning status...')}</span>}
