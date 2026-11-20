@@ -58,6 +58,8 @@ it('preserves independent Internet VPN and ER routes when a private overlay fail
   topology.vpnConnections[0].enabled = false
   const result = simulateAzNet(topology)
   expect(result.gatewayRibs['er-gw'].some((route) => route.prefix === '172.16.0.0/24')).toBe(true)
+  delete topology.vpnConnections[0].underlay
+  expect(simulateAzNet(topology).controlPlaneComplete).toBe(true)
 })
 
 it('selects more-specific overlay routes and reports direct ER aggregate fallback when the overlay is withdrawn', () => {

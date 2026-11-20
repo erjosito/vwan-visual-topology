@@ -30,19 +30,20 @@ export function assessVpnEr(topology: AzNetTopology, connection: AzVpnConnection
   const result = (state: VpnErAssessment['state'], reason: string, routes = {}): VpnErAssessment => ({
     ...path, state, reason, ...routes,
   })
+  if (!connection.enabled) return result('unavailable', 'VPN connection is disabled.')
   if (!connection.underlay) return result('not-assessed', 'Captured Use Azure Private IP Address requires explicit ER links and owned private endpoint declarations; no Internet VPN shortcut is inferred.')
   const owner = topology.vnets.find((vnet) => vnet.gateways.some((gateway) => gateway.id === connection.targetId))
   const gateway = owner?.gateways.find((gateway) => gateway.id === connection.targetId)
   if (connection.targetKind !== 'vnet-gateway' || gateway?.kind !== 'Vpn' || connection.transport === 'SDWAN') {
     return result('not-assessed', 'VPN over ER supports classic VPN gateways only, not Virtual WAN, SD-WAN or NVA endpoints.')
   }
+  if (!gateway.enabled) return result('unavailable', 'VPN gateway is disabled.')
   if (gateway.activeActive !== false || gateway.vpnType !== 'RouteBased' || gateway.publicIpSku !== 'Standard') {
     return result('not-assessed', 'Declare active/standby, RouteBased and Standard public-IP capability explicitly. Active/active endpoint ownership is not assessed.')
   }
   if (!connection.bgpEnabled || !gateway.bgpEnabled || connection.nat) {
     return result('not-assessed', 'Static routing and VPN NAT combined with this private-peering overlay are not assessed; BGP is not an Azure prerequisite.')
   }
-  if (!connection.enabled || !gateway.enabled) return result('unavailable', 'VPN connection or gateway is disabled.')
   const subnet = owner!.subnets.find((subnet) => subnet.name.toLowerCase() === 'gatewaysubnet')
   const privateAddress = (address: string) => {
     const ip = ipv4(address)
