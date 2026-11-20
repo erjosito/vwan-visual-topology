@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { executePlatform, validateRequest } from '../platform/service'
 import { scenarioBundle } from './scenario-course'
 import { validateCourse } from './course-validation'
@@ -47,6 +47,38 @@ function repaired(id: string) {
 }
 
 describe('scenario edition routing qualification', () => {
+  it('requires a fresh exact inspection before the first scenario earns its five points', async () => {
+    vi.useFakeTimers()
+    const live: LearningWorkspace = { revision: 1, scope: 1, practice: { version: 1, active: true,
+      returnProvider: 'azure-net', courseId: scenarioBundle.course.id, scenarioId: 'private-link', document: document('private-link') } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, changed: () => {},
+      evaluate: async (request) => executePlatform(request) })
+    try {
+      runner.setAutomatic(true)
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(runner.getSnapshot().completions).toEqual([])
+      expect(runner.getSnapshot().awaitingNext).toBe(false)
+      await runner.assess()
+      expect(runner.getSnapshot().feedback).toBe('inspect')
+      const stale = runner.getSnapshot().observation!
+      live.revision++
+      runner.workspaceChanged()
+      runner.observe(stale)
+      runner.observe({ ...runner.getSnapshot().observation!, prefix: '10.22.0.0/16' })
+      await runner.assess()
+      expect(runner.getSnapshot().completions).toEqual([])
+      expect(runner.getSnapshot().feedback).toBe('inspect')
+      runner.observe(runner.getSnapshot().observation!)
+      await runner.assess()
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(runner.getSnapshot().awaitingNext).toBe(true)
+      expect(runner.getSnapshot().celebration?.points).toBe(5)
+      expect(runner.getSnapshot().completions[0]).toMatchObject({ taskId: 'private-link.load', assessmentVersion: 2, points: 5 })
+    } finally {
+      runner.setAutomatic(false)
+      vi.useRealTimers()
+    }
+  })
   it('grounds the new private-default and two-destination predictions in native route selection', () => {
     const starter = simulateAzNet(document('private-link').topology)
     expect(starter.subnetTables['a-work'].routes).toEqual(expect.arrayContaining([
@@ -73,8 +105,30 @@ describe('scenario edition routing qualification', () => {
     expect(before.assessments[0].evidence).toMatchObject({ forward: { hops: expect.arrayContaining([
       expect.objectContaining({ matchedRoute: expect.objectContaining({ prefix: '10.22.0.0/16', nextHopType: 'VNetPeering' }) }),
     ]) } })
-    input.topology.udrTables[0].routes.push({ id: 'subnet-discard', name: 'Later policy', prefix: '10.22.1.0/24', nextHopType: 'None', enabled: true })
-    expect(evaluate().assessments.map((entry) => entry.outcome)).toEqual(['violated', 'satisfied', 'satisfied'])
+  })
+
+  it('reopens the revised permission quiz without repaying its historical award', async () => {
+    const tasks = orderedTasks(scenarioBundle), taskId = 'inspection-bypass.predict-subnet'
+    const position = tasks.findIndex(({ task }) => task.id === taskId)
+    let ledger: ProgressLedger = { version: 1, policyVersion: 1, completions: tasks.slice(0, position + 1).map(({ lesson, task }, revision) => ({
+      courseId: scenarioBundle.course.id, contentVersion: task.id === taskId ? 8 : scenarioBundle.course.contentVersion, lessonId: lesson.id,
+      taskId: task.id, assessmentVersion: task.id === taskId ? 1 : task.assessmentVersion, checkId: task.checkId,
+      awardId: task.awardId, points: task.points, title: task.title, sessionId: 'prior-quiz', revision, scope: 1,
+      engineVersion: 'prior', completedAt: '2026-11-19T10:00:00.000Z',
+    })) }
+    const before = beltProgress(ledger, scenarioBundle.course, scenarioAssessments)
+    const live: LearningWorkspace = { revision: 1, scope: 1, practice: { version: 1, active: true,
+      returnProvider: 'azure-net', courseId: scenarioBundle.course.id, scenarioId: 'inspection-bypass', document: document('inspection-bypass') } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, completions: ledger.completions, changed: () => {},
+      evaluate: async (request) => executePlatform(request), completed: (completion) => { ledger = recordCompletion(ledger, completion) } })
+    expect(runner.getSnapshot().taskId).toBe(taskId)
+    await runner.assess('workload-only')
+    expect(runner.getSnapshot().feedback).toBe('answer')
+    await runner.assess('policy-separate')
+    expect(runner.advance()).toBe(true)
+    expect(runner.getSnapshot().celebration?.points).toBe(0)
+    expect(ledger.completions.at(-1)).toMatchObject({ taskId, assessmentVersion: 2 })
+    expect(beltProgress(ledger, scenarioBundle.course, scenarioAssessments)).toEqual(before)
   })
 
   it.each(['inspection-bypass.forward', 'tiered-incident.entry'])('awards staged %s without claiming the still-unmet full repair', async (taskId) => {
@@ -146,23 +200,32 @@ describe('scenario edition routing qualification', () => {
     if (change === 'changed-owner') expect(result.assessments[0].outcome).toBe('not assessed')
   })
 
-  it('retains the historical scenario black belt and first-earned XP without inventing credit for inserted tasks', () => {
+  it('retains historical black belts and rechecks revised loading without announcing or awarding duplicate XP', async () => {
     const inserted = new Set(['private-link.address-range', 'private-link.default-route', 'private-link.predict-default',
       'inspection-bypass.predict', 'inspection-bypass.predict-subnet', 'inspection-bypass.forward', 'tiered-incident.entry'])
     const completions = orderedTasks(scenarioBundle).filter(({ lesson, task }) => lesson.id !== 'routing-handover' && !inserted.has(task.id))
       .map(({ lesson, task }, revision) => ({
         courseId: scenarioBundle.course.id, contentVersion: 6, lessonId: lesson.id, taskId: task.id,
-        assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+        assessmentVersion: task.id === 'private-link.load' ? 1 : task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
         title: task.title, sessionId: 'historical-journey', revision, scope: 1, engineVersion: 'historical',
         completedAt: '2026-11-19T10:00:00.000Z',
       }))
-    const ledger: ProgressLedger = { version: 1, policyVersion: 1, completions }
+    let ledger: ProgressLedger = { version: 1, policyVersion: 1, completions }
     expect(beltProgress(ledger, scenarioBundle.course, scenarioAssessments)).toMatchObject({ belt: { id: 'black' }, points: 2120 })
     const before = structuredClone(ledger)
-    const runner = createCourseRunner(scenarioBundle, { workspace: () => undefined, completions,
-      changed: () => {}, evaluate: async (request) => executePlatform(request), completed: () => { throw new Error('No automatic credit') } })
-    expect(runner.getSnapshot().taskId).toBe('private-link.address-range')
+    const live: LearningWorkspace = { revision: 1, scope: 1, practice: { version: 1, active: true,
+      returnProvider: 'azure-net', courseId: scenarioBundle.course.id, scenarioId: 'private-link', document: document('private-link') } }
+    const runner = createCourseRunner(scenarioBundle, { workspace: () => live, completions,
+      changed: () => {}, evaluate: async (request) => executePlatform(request),
+      completed: (completion) => { ledger = recordCompletion(ledger, completion); return true } })
+    expect(runner.getSnapshot().taskId).toBe('private-link.load')
     expect(ledger).toEqual(before)
+    runner.observe(runner.getSnapshot().observation!)
+    await runner.assess()
+    expect(runner.advance()).toBe(true)
+    expect(runner.getSnapshot().celebration?.points).toBe(0)
+    expect(beltProgress(ledger, scenarioBundle.course, scenarioAssessments)).toMatchObject({ belt: { id: 'black' }, points: 2120 })
+    expect(ledger.completions.slice(0, completions.length)).toEqual(before.completions)
   })
 
   it('extends the learner network into the hub exercise without replacing edits or creating its peerings and UDRs', () => {

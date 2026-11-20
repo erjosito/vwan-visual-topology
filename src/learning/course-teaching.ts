@@ -137,15 +137,31 @@ const lessonTeaching: Record<string, { topic: Topic; context: Localized }> = {
 
 const hubPurpose = l('A hub VNet shares network services such as a firewall or gateway across multiple workload (spoke) VNets. This centralizes inspection and avoids duplicating the service in every spoke. A hub is still an ordinary VNet: peering alone does not make it forward traffic between spokes.',
   'ハブ VNet は、ファイアウォールやゲートウェイなどを複数のワークロード (スポーク) VNet で共有します。検査を集約し、スポークごとに同じ装置を配置せずに済みます。ハブも通常の VNet であり、ピアリングだけではスポーク間の転送は始まりません。')
-const routingPrimer = l('A route table groups user-defined routes (UDRs) and is associated with a subnet. Each UDR matches a destination prefix and specifies a next hop for traffic leaving that subnet. VirtualAppliance with IP 10.20.1.4 means send the packet to Inspection firewall; it does not mean the firewall automatically permits or forwards it.',
-  'ルート テーブルはユーザー定義ルート (UDR) をまとめ、サブネットに関連付けます。各 UDR は宛先プレフィックスと、そのサブネットから出る通信のネクストホップを指定します。VirtualAppliance と IP 10.20.1.4 は、Inspection firewall にパケットを送る指定であり、装置による許可や後続転送を自動的に保証しません。')
+const routingPrimer = l('A route table groups user-defined routes (UDRs) and is associated with a subnet. Each UDR matches a destination prefix and specifies a next hop for traffic leaving that subnet. VirtualAppliance with IP 10.20.1.4 means send the packet to Inspection firewall; it does not mean the firewall automatically permits or forwards it. Azure Firewall rules and network security groups (NSGs) provide separate traffic permission checks.',
+  'ルート テーブルはユーザー定義ルート (UDR) をまとめ、サブネットに関連付けます。各 UDR は宛先プレフィックスと、そのサブネットから出る通信のネクストホップを指定します。VirtualAppliance と IP 10.20.1.4 は、Inspection firewall にパケットを送る指定であり、装置による許可や後続転送を自動的に保証しません。Azure Firewall のルールとネットワーク セキュリティ グループ (NSG) による通信の許可は、別に確認します。')
+const firewallRules = reference('https://learn.microsoft.com/en-us/azure/firewall/rule-processing#outbound-connectivity', 'Azure Firewall rule processing', 'Azure Firewall のルール処理')
+const securityRules = reference('https://learn.microsoft.com/en-us/azure/virtual-network/network-security-groups-overview#security-rules', 'NSG security rules', 'NSG のセキュリティ ルール')
 const taskTeaching: Record<string, { paragraphs: Localized[]; references: ReturnType<typeof reference>[] }> = {
+  'private-link.load': { paragraphs: [
+    l('In this starter, Application owns 10.21.0.0/16 and contains both Workload and Operations subnets. Its System route uses VnetLocal: that destination range stays within this VNet, rather than crossing into another network.',
+      'この初期構成では、Application は 10.21.0.0/16 を所有し、Workload と Operations サブネットを含みます。その System ルートの VnetLocal は、この宛先範囲が別のネットワークへ渡らず、この VNet 内に留まることを示します。'),
+    l('Partner owns a separate 10.22.0.0/16 range. Both networks use private addresses, but that does not connect them. Next, look for Partner’s range in the application’s routes before deciding how to connect it.',
+      'Partner は別の 10.22.0.0/16 を所有します。両ネットワークがプライベート アドレスを使っていても、それだけで接続されるわけではありません。次に、接続方法を判断する前に、アプリのルートで Partner の範囲を探します。'),
+  ], references: [routeSources, peerConnectivity] },
   'inspection-bypass.load': { paragraphs: [hubPurpose, l('This mission adds Inspection hub, its firewall and two empty workload policy tables to your existing application–partner network. Your existing nodes and peering are retained. First connect each spoke to the hub; next add the routing rules yourself. Later missions separate inspection from transport services.',
     'このミッションでは、既存のアプリとパートナーのネットワークに Inspection hub、そのファイアウォール、空のワークロード用ポリシー テーブル 2 つを追加します。既存のノードとピアリングは保持します。まず各スポークをハブに接続し、次にルーティング規則を追加します。後のミッションでは、検査と転送サービスを分離します。')],
     references: [serviceChaining] },
   'inspection-bypass.connect': { paragraphs: [l('Both spokes can now reach the hub, but their existing direct peering can still carry application–partner traffic. The hub is a place to share a service, not an automatic transit switch. Next you will tell the workload subnets when to send traffic to the firewall.',
-    '両方のスポークがハブに到達できるようになりましたが、アプリとパートナーの通信は既存の直接ピアリングを通れます。ハブはサービスを共有する場所であり、自動的な中継スイッチではありません。次に、ファイアウォールへ送る条件をワークロードのサブネットに指定します。'), routingPrimer],
-    references: [serviceChaining, customRoutes] },
+    '両方のスポークがハブに到達できるようになりましたが、アプリとパートナーの通信は既存の直接ピアリングを通れます。ハブはサービスを共有する場所であり、自動的な中継スイッチではありません。次に、ファイアウォールへ送る条件をワークロードのサブネットに指定します。'),
+    l('The inspection-routing warning/error indicators can remain: peering is complete, but firewall steering is not. Leave those issues for the upcoming route-table, UDR and path-verification steps. Keep the diagnostics visible; this intermediate network is not ready to deploy, and unrelated addressing or peering errors still need attention.',
+      '検査ルーティングに関する警告やエラーの表示は残ることがあります。ピアリングは完成しましたが、ファイアウォールへ送る経路は未完成です。それらは後続のルート テーブル、UDR、経路検証のステップで扱います。診断表示は残してください。この中間構成はデプロイの準備ができた状態ではなく、別のアドレス設定やピアリングのエラーには引き続き対処が必要です。'), routingPrimer],
+    references: [customRoutes, firewallRules, securityRules] },
+  'inspection-bypass.predict-subnet': { paragraphs: [
+    l('Steering traffic through a firewall and permitting it are different requirements. Azure Firewall rules can deny HTTPS even when the routes are correct. NSGs add separate filtering on their associated subnets or network interfaces.',
+      'ファイアウォール経由にすることと、通信を許可することは別の要件です。ルートが正しくても、Azure Firewall のルールによって HTTPS が拒否される場合があります。NSG は、関連付いたサブネットやネットワーク インターフェイスで別のフィルタリングを行います。'),
+    l('This simulator checks routing and modeled forwarding, not Azure Firewall policy or NSG enforcement. A passing routing check does not prove that those security rules permit a real application connection; verify them separately in Azure.',
+      'このシミュレーターが確認するのはルーティングとモデル化した転送であり、Azure Firewall のポリシーや NSG による制御ではありません。ルーティングの確認に合格しても、実際のアプリ接続がセキュリティ ルールで許可される証明にはなりません。Azure で別に確認してください。'),
+  ], references: [firewallRules, securityRules] },
   'inspection-bypass.summary': { paragraphs: [l('You added a broad /8 policy toward the firewall. Local and peering candidates still exist alongside it. Before editing again, predict which candidate matches each destination most specifically; then compare that prediction with Effective routes.',
     'ファイアウォールへの広い /8 ポリシーを追加しました。ローカルとピアリングの候補も共存しています。次の編集前に、各宛先に最も具体的に一致する候補を予測し、有効なルートと比較します。')],
     references: [selection] },
@@ -396,7 +412,7 @@ export function teachCourse(bundle: CourseBundle) {
       if (!task.hints.length && taskHints[task.id]) task.hints = taskHints[task.id]
       let paragraphs = [check.kind === 'scenario.loaded' ? teaching.topic.introduction : teaching.topic.takeaway]
       let references = teaching.topic.references
-      if (check.kind === 'scenario.loaded') task.instruction = taskTeaching[task.id]?.paragraphs[0] ?? teaching.topic.introduction
+      if (check.kind === 'scenario.loaded' && !check.params.inspection) task.instruction = taskTeaching[task.id]?.paragraphs[0] ?? teaching.topic.introduction
       if (teaching.topic === topics.peering && (check.kind === 'requirements.satisfied' || check.kind === 'vnet.peered')) paragraphs.push(peeringScope, accessPermission)
       if (check.kind === 'quiz.answered') paragraphs = [check.params.choices.find((choice) => choice.id === check.params.correctChoiceId)!.feedback]
       if (check.kind === 'routes.inspected') {

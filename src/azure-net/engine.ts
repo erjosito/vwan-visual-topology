@@ -3,7 +3,7 @@ import { vnetCommunityHelp, vnetCommunityValues } from '../vnet-communities'
 import { mappedVpnAddress, translateVpnRoutes, validateVpnNat } from '../vpn-nat'
 import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
-import { chooseVwanHubRoutes, type Candidate } from '../routing'
+import { chooseVwanHubRoutes, RFC1918_PREFIXES, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
 import { peeringPrefixes, peeringSubnetIds, subnetPeeringLimitations, validateSubnetPeeringScopes } from './subnet-peering'
@@ -375,12 +375,19 @@ function hubAdvertisements(
   const hub = topology.vwanHubs.find((hub) => hub.id === hubId)!
   const selected = routes.filter((route) => route.preferred && (propagateDefault || route.prefix !== '0.0.0.0/0')
     && (!branch || topology.allowBranchToBranchTraffic !== false || route.originProtocol === 'VNet' || route.hubTransport === 'VNet' || route.nextHopKind === 'hub-firewall'))
-  if (propagateDefault && hub.routingIntent.internet) {
-    selected.splice(0, selected.length, ...selected.filter((route) => route.prefix !== '0.0.0.0/0'), {
-      id: `hub-internet:${hubId}:${connectionId}`, prefix: '0.0.0.0/0', asPath: [], nextHopName: hub.name,
+  const privatePolicy = !branch && hub.routingIntent.private
+  const policyPrefixes = privatePolicy
+    ? [...RFC1918_PREFIXES, ...(hub.routingIntent.privatePrefixes ?? [])] : []
+  if (propagateDefault && hub.routingIntent.internet) policyPrefixes.push('0.0.0.0/0')
+  if (policyPrefixes.length) {
+    // Spokes receive policy routes, not the learned routes used after private inspection.
+    selected.splice(0, selected.length, ...selected.filter((route) =>
+      (!privatePolicy || route.prefix === '0.0.0.0/0') && !policyPrefixes.includes(route.prefix)),
+    ...[...new Set(policyPrefixes)].map((prefix): AzBgpRibEntry => ({
+      id: `hub-policy:${hubId}:${connectionId}:${prefix}`, prefix, asPath: [], nextHopName: hub.name,
       nextHopKind: 'local', nextHopId: hubId, originProtocol: 'Static', hubTransport: 'VNet', preferred: true,
-      explanation: 'Internet routing intent default advertisement; not a NAT or delivery assessment',
-    })
+      explanation: 'Routing intent policy',
+    })))
   }
   const er = topology.erLinks.some((link) => link.id === connectionId)
   const before = selected.map((route) => ({ ...route, asPath: er ? route.asPath : [65515, ...route.asPath] }))
@@ -1628,7 +1635,7 @@ function compileSingleSubnetEffectiveRoutes(
   const overridesReservedDefaults = candidates.some((route) =>
     route.prefix === '0.0.0.0/0' && (route.source === 'User' || route.nextHopType === 'VirtualNetworkGateway'))
   if (!overridesReservedDefaults) {
-    for (const prefix of ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', '100.64.0.0/10', '127.0.0.0/8', '198.18.0.0/15']) {
+    for (const prefix of [...RFC1918_PREFIXES, '100.64.0.0/10', '127.0.0.0/8', '198.18.0.0/15']) {
       const reserved = cidr(prefix)!
       if (vnet.prefixes.some((local) => (cidr(local)?.length ?? 33) <= reserved.length && contains(local, reserved.network))) continue
       candidates.push({
@@ -1986,7 +1993,7 @@ function traceAzNetFlowCore(
     }
   }
 
-  let privateDestination = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ipNum))
+  let privateDestination = RFC1918_PREFIXES.some((prefix) => contains(prefix, ipNum))
   let vpnSiteDelivery: { siteId: string; internalPrefixes: string[] } | undefined
   const crossVpn = (connectionId: string, direction: 'ingress' | 'egress'): AzFlowTrace | undefined => {
     const connection = topology.vpnConnections.find((connection) => connection.id === connectionId)!
@@ -2001,7 +2008,7 @@ function traceAzNetFlowCore(
     destinationIp = translated.destinationAddress
     ipNum = ipv4(destinationIp)!
     targetInfo = locateDestinationIp(topology, destinationIp)
-    privateDestination = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'].some((prefix) => contains(prefix, ipNum))
+    privateDestination = RFC1918_PREFIXES.some((prefix) => contains(prefix, ipNum))
     if (direction === 'egress') {
       vpnSiteDelivery = { siteId: connection.siteId,
         internalPrefixes: connection.nat.rules.filter((rule) => rule.mode === 'IngressSNAT').map((rule) => rule.internalMapping) }
