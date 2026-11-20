@@ -26,7 +26,7 @@ const connectionState = z.discriminatedUnion('kind', [
 ])
 
 export const courseCheckSchema = z.discriminatedUnion('kind', [
-  z.strictObject({ id, kind: z.literal('scenario.loaded'), params: z.strictObject({ scenarioId: id }) }),
+  z.strictObject({ id, kind: z.literal('scenario.loaded'), params: z.strictObject({ scenarioId: id, inspection: routeScope.optional() }) }),
   z.strictObject({ id, kind: z.literal('routes.inspected'), params: routeScope }),
   z.strictObject({ id, kind: z.literal('control-routes.inspected'), params: controlRouteScope }),
   z.strictObject({ id, kind: z.literal('hub-associations.configured'), params: z.strictObject({
