@@ -13,6 +13,7 @@ import type { AzNetTopology } from './model'
 import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
 import { coexistenceFindings } from './coexistence'
 import { udrAssociationFindings } from './udr-regions'
+import { inspectionEvidence, type InspectionEvidence } from './inspection-evidence'
 
 export type AzDiagnosticSeverity = 'error' | 'warning' | 'info'
 
@@ -69,6 +70,7 @@ export interface AzDiagnosticFinding {
   causeKey?: string
   causeTitle?: string
   occurrences?: AzDiagnosticFinding[]
+  inspection?: InspectionEvidence
 }
 
 export function groupAzNetFindings(findings: AzDiagnosticFinding[]): AzDiagnosticFinding[] {
@@ -126,10 +128,9 @@ export function azFindingFlows(findings: AzDiagnosticFinding[]): AzDiagnosticFin
     })).values()]
 }
 
-export function runAzNetDiagnostics(
+export function runAzNetStaticDiagnostics(
   topology: AzNetTopology,
   simulation: AzSimulationResult,
-  options: { includePairAnalysis?: boolean } = {},
 ): AzDiagnosticFinding[] {
   const findings: AzDiagnosticFinding[] = coexistenceFindings(topology)
   findings.push(...udrAssociationFindings(topology).map((finding) => ({
@@ -953,6 +954,15 @@ export function runAzNetDiagnostics(
     }
   }
 
+  return findings
+}
+
+export function runAzNetDiagnostics(
+  topology: AzNetTopology,
+  simulation: AzSimulationResult,
+  options: { includePairAnalysis?: boolean } = {},
+): AzDiagnosticFinding[] {
+  const findings = runAzNetStaticDiagnostics(topology, simulation)
   if (options.includePairAnalysis !== false) {
     const analysis = analyzeAzNetConnectivity(topology, simulation, { scope: 'all' })
     findings.push(...analysis.findings.filter((f) =>
@@ -1095,6 +1105,7 @@ export function createAzNetConnectivityAnalysis(
         : causeTable ? `Asymmetric stateful inspection at ${causeTable.vnetName}/${causeTable.subnetName}`
           : `Asymmetric stateful inspection through ${pair.asymmetricBypassApplianceNames.join(', ')}`,
       sampleFlow: { source: a.ref, sourceIp: a.defaultIp, destination: b.ref, destinationIp: b.defaultIp },
+      inspection: !failed ? inspectionEvidence(topology, simulation, pair, a, b) : undefined,
     })
   }
 

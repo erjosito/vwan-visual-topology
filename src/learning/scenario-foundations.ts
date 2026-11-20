@@ -7,6 +7,19 @@ const task = (id: string, points: number, title: Localized, instruction: Localiz
 
 export function addScenarioFoundations(bundle: CourseBundle) {
   const privateLesson = bundle.lessons.find((lesson) => lesson.id === 'private-link')!
+  const localScope = { vnetId: 'a', subnetId: 'a-work', prefix: '10.21.0.0/16' }
+  const openingCheck = bundle.checks.find((check) => check.id === 'private-link.load-check')!
+  if (openingCheck.kind !== 'scenario.loaded') throw new Error('Missing first-scenario loading check')
+  openingCheck.params.inspection = localScope
+  const opening = privateLesson.tasks[0]
+  privateLesson.contentVersion = 2
+  opening.assessmentVersion = 2
+  opening.title = l('Explore Application’s virtual network', 'Application の仮想ネットワークを調べる')
+  opening.instruction = l('A VNet groups subnets within an address space. Application uses 10.21.0.0/16, with Workload and Operations subnets. Open Effective routes for Application / Workload, find 10.21.0.0/16, and read its Source and Next hop.',
+    'VNet は、アドレス空間内のサブネットをまとめます。Application は 10.21.0.0/16 を使い、Workload と Operations サブネットを含みます。Application / Workload の「有効なルート」を開き、10.21.0.0/16 の Source（生成元）と Next hop（ネクストホップ）を確認してください。')
+  opening.guidanceIds = ['private-link.local-guide']
+  bundle.guidance.push({ id: 'private-link.local-guide', action: 'routes.open', params: localScope,
+    instruction: l('Open Application / Workload’s local 10.21.0.0/16 route.', 'Application / Workload のローカルな 10.21.0.0/16 ルートを開く。') })
   const scope = { vnetId: 'a', subnetId: 'a-work', prefix: '10.0.0.0/8' }
   bundle.guidance.push({ id: 'private-link.default-guide', action: 'routes.open', params: scope,
     instruction: l('Open Application / Workload effective routes at the private 10.0.0.0/8 range.', 'Application / Workload の有効なルートで、プライベート範囲 10.0.0.0/8 を開く。') })
@@ -44,7 +57,7 @@ export function addScenarioFoundations(bundle: CourseBundle) {
       l('Choose the matching route before adding peering.', 'ピアリングを追加する前に、一致するルートを選びます。'), 'private-link.predict-default-check'))
 
   const hubLesson = bundle.lessons.find((lesson) => lesson.id === 'inspection-bypass')!
-  const quizzes: Array<{ suffix: string; title: Localized; instruction: Localized; question: Localized; correct: string; choices: Array<[string, Localized, Localized]> }> = [
+  const quizzes: Array<{ suffix: string; assessmentVersion?: number; title: Localized; instruction: Localized; question: Localized; correct: string; choices: Array<[string, Localized, Localized]> }> = [
     { suffix: 'predict', title: l('Predict Partner and Operations paths', 'Partner と Operations への経路を予測する'),
       instruction: l('Choose a path for each destination before comparing your prediction with Effective routes.',
         '有効なルートと照合する前に、両方の宛先の転送先を予測します。'),
@@ -58,18 +71,18 @@ export function addScenarioFoundations(bundle: CourseBundle) {
         ['remote-private', l('Partner via firewall; Operations stays VNet-local.', 'Partner はファイアウォール経由、Operations は VNet 内。'),
           l('The remote address also has a more-specific /16 peering route. “Remote” is not a selection rule that makes the /8 UDR win.', 'リモート アドレスにも、より具体的な /16 のピアリング ルートがあります。「リモート」であることを理由に /8 UDR が優先されるわけではありません。')],
       ] },
-    { suffix: 'predict-subnet', title: l('Predict a subnet-sized discard', 'サブネット範囲の破棄を予測する'),
-      instruction: l('This /24 discard is hypothetical; your current canvas stays unchanged.',
-        'この /24 の破棄は仮定の変更で、現在のキャンバスは変更しません。'),
-      question: l('In a later policy change, Application gets 10.22.1.0/24 → None alongside 10.22.0.0/16 → VNetPeering. Which destination would the /24 discard affect?',
-      '後のポリシー変更で、Application に 10.22.0.0/16 → VNetPeering と 10.22.1.0/24 → None がある場合、/24 の破棄の影響を受ける宛先はどれですか。'),
-      correct: 'workload-only', choices: [
-        ['both', l('Both 10.22.1.4 and 10.22.2.4.', '10.22.1.4 と 10.22.2.4 の両方。'),
-          l('Both belong to the /16, but only 10.22.1.4 is inside 10.22.1.0/24. Match the destination before comparing preference.', '両方とも /16 に含まれますが、10.22.1.0/24 に含まれるのは 10.22.1.4 だけです。優先度の比較前に、宛先の一致を確認します。')],
-        ['neither', l('Neither 10.22.1.4 nor 10.22.2.4.', '10.22.1.4 と 10.22.2.4 のどちらも対象外。'),
-          l('Peering does not override the more-specific /24 discard for 10.22.1.4. The /16 remains the better available match for 10.22.2.4.', 'ピアリングでも、10.22.1.4 に対するより具体的な /24 の破棄には優先しません。10.22.2.4 では、引き続き /16 が適切な一致です。')],
-        ['workload-only', l('10.22.1.4, but not 10.22.2.4.', '10.22.1.4 は対象、10.22.2.4 は対象外。'),
-          l('Correct. A subnet-sized /24 can affect one workload while a different subnet keeps using /16 peering. This is a prediction about the stated later change, not a change applied to your canvas.', '正解です。サブネット相当の /24 が一方に影響しても、別サブネットでは /16 のピアリングを使えます。これは指定した後の変更についての予測であり、キャンバスへの自動変更ではありません。')],
+    { suffix: 'predict-subnet', assessmentVersion: 2, title: l('Separate routing from permission', 'ルーティングと許可を区別する'),
+      instruction: l('Distinguish choosing a next hop from allowing an application connection. This question does not change your canvas.',
+        'ネクストホップの選択と、アプリの接続の許可を区別します。この質問でキャンバスは変更されません。'),
+      question: l('Once a route sends Application’s HTTPS traffic to Inspection firewall, does that selected next hop prove the connection is allowed?',
+        'ルートによって Application の HTTPS 通信を Inspection firewall へ送る場合、そのネクストホップの選択だけで接続が許可されると判断できますか。'),
+      correct: 'policy-separate', choices: [
+        ['automatic-allow', l('Yes. A VirtualAppliance next hop automatically creates an allow rule.', 'はい。VirtualAppliance のネクストホップが許可ルールを自動作成します。'),
+          l('A UDR chooses where traffic is sent; it does not create Azure Firewall or NSG rules.', 'UDR は通信の転送先を選びますが、Azure Firewall や NSG のルールは作成しません。')],
+        ['private-trusted', l('Yes. Peering makes private HTTPS traffic trusted.', 'はい。ピアリングによってプライベート HTTPS 通信が信頼されます。'),
+          l('Private connectivity is not a security-policy exemption. Firewall and NSG rules can still deny the connection.', 'プライベート接続でもセキュリティ ポリシーが免除されるわけではありません。ファイアウォールや NSG のルールによって接続が拒否される場合があります。')],
+        ['policy-separate', l('No. Firewall and NSG permissions must be checked separately.', 'いいえ。ファイアウォールと NSG の許可は別に確認する必要があります。'),
+          l('Correct. Routing chooses the next hop; traffic permission is a separate requirement.', '正解です。ルーティングはネクストホップを選び、通信の許可は別の要件です。')],
       ] },
   ]
   for (const quiz of quizzes) {
@@ -78,7 +91,8 @@ export function addScenarioFoundations(bundle: CourseBundle) {
       choices: quiz.choices.map(([id, text, feedback]) => ({ id, text, feedback })),
     } })
     hubLesson.tasks.splice(hubLesson.tasks.findIndex((entry) => entry.id === 'inspection-bypass.inspect'), 0,
-      task(`inspection-bypass.${quiz.suffix}`, 10, quiz.title, quiz.instruction, `inspection-bypass.${quiz.suffix}-check`))
+      { ...task(`inspection-bypass.${quiz.suffix}`, 10, quiz.title, quiz.instruction, `inspection-bypass.${quiz.suffix}-check`),
+        assessmentVersion: quiz.assessmentVersion ?? 1 })
   }
   const summary = bundle.checks.find((check) => check.id === 'inspection-bypass.summary-check')!
   if (summary.kind !== 'udrs.configured') throw new Error('Summary configuration required')

@@ -1,6 +1,11 @@
 import type { CourseCheck, CourseGuidance } from './course-contract'
 import type { PlatformDocument } from '../platform/contract'
 
+export function inspectionScope(check?: CourseCheck) {
+  if (check?.kind === 'routes.inspected' || check?.kind === 'control-routes.inspected') return check.params
+  if (check?.kind === 'scenario.loaded') return check.params.inspection
+}
+
 /** Navigation preference only; completion still requires the runner's full check. */
 export function selectPrimaryGuidance(document: PlatformDocument, check: CourseCheck, cues: CourseGuidance[]) {
   if (document.mode !== 'vwan') {
