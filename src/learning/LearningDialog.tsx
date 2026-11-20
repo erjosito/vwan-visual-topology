@@ -45,6 +45,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const reviewing = !!state.reviewId
   const index = done ? instructions.length - 1 : Math.max(0, instructions.findIndex((item) => item.task.id === (state.reviewId ?? state.taskId)))
   const { lesson, task } = instructions[index]
+  const scenarioCompleted = lesson.tasks.filter((task) => taskCompleted(bundle, state.completions, task)).length
   const previous = instructions.slice(0, done ? instructions.length : index).reverse()
     .find(({ task }) => taskCompleted(bundle, state.completions, task))
   const following = instructions[index + 1]
@@ -169,9 +170,23 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
         <button type="button" onClick={() => runner.review()}>{text(runnerText.return, language)}</button></div>}
       {done ? <section><h3 id="learning-task" tabIndex={-1}>{text(runnerText.done, language)}</h3><p>{text(runnerText.doneDetail, language)}</p></section> : <>
       <h3>{text(lesson.title, language)}</h3>
-      {(!state.awaitingNext || reviewing) && lesson.context && <p data-testid="learning-scenario-context">{text(lesson.context, language)}</p>}
+      {lesson.context && <details className="learning-scenario-background" open={task.id === lesson.taskOrder[0]}>
+        <summary>{text(runnerText.scenarioBackground, language)}</summary>
+        <p data-testid="learning-scenario-context">{text(lesson.context, language)}</p>
+      </details>}
+      <p className="learning-scenario-progress" data-testid="learning-scenario-progress">
+        {text(runnerText.scenarioProgress, language)}: {scenarioCompleted} / {lesson.tasks.length} {text(runnerText.completed, language)}
+        {' · '}{text(runnerText.remaining, language)}: {lesson.tasks.length - scenarioCompleted}
+      </p>
       <section aria-labelledby="learning-task" data-testid="learning-task" data-task-id={task.id} aria-busy={state.running || running}>
         <h4 id="learning-task" tabIndex={-1} aria-live="polite">{text(task.title, language)}</h4>
+        {(check.kind !== 'quiz.answered' || text(task.instruction, language) !== text(check.params.question, language))
+          && <p data-testid="learning-task-instruction">{text(task.instruction, language)}</p>}
+        {(state.awaitingNext || reviewing) && check.kind === 'quiz.answered' && <div data-testid="learning-completed-answer">
+          <p>{text(check.params.question, language)}</p>
+          <p><strong>{text(runnerText.completedAnswer, language)}: </strong>
+            {text(check.params.choices.find((choice) => choice.id === check.params.correctChoiceId)!.text, language)}</p>
+        </div>}
         {(state.awaitingNext || reviewing) && task.debrief ? <div className="learning-debrief" data-testid="learning-debrief">
           {!reviewing && state.celebration && <p className="learning-success" role="status" data-testid="learning-celebration">
             <strong>{text(runnerText.success, language)}{state.celebration.points > 0 && ` +${state.celebration.points} ${text(runnerText.points, language)}`}</strong>
@@ -180,19 +195,17 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
             {text(bundle.course.belts.find((belt) => belt.id === state.celebration!.belt!.beltId)!.name, language)}
             {language === 'ja' ? 'を獲得！' : ' earned!'}
           </p>}
-          <h5 id="learning-debrief-title" tabIndex={-1}>{text(runnerText.learned, language)}</h5>
-          {reviewing && <p>{text(task.instruction, language)}</p>}
+          <h5 id="learning-debrief-title" tabIndex={-1}>{text(check.kind === 'scenario.loaded' && !check.params.inspection ? runnerText.preparation : runnerText.learned, language)}</h5>
           {!reviewing && state.celebration?.explanation && !task.debrief.paragraphs.some((paragraph) =>
             text(paragraph, language) === text(state.celebration!.explanation!, language))
             && <p>{text(state.celebration.explanation, language)}</p>}
-          {task.debrief.paragraphs.map((paragraph, index) => <p key={index}>{text(paragraph, language)}</p>)}
+          {task.debrief.paragraphs.filter((paragraph) => text(paragraph, language) !== text(task.instruction, language))
+            .map((paragraph, index) => <p key={index}>{text(paragraph, language)}</p>)}
           <ul className="learning-references">{task.debrief.references.map((reference) => <li key={reference.url}>
             <a href={reference.url} target="_blank" rel="noopener noreferrer"
               aria-label={`${text(reference.title, language)} — ${text(runnerText.newTab, language)}`}>{text(reference.title, language)}</a>
           </li>)}</ul>
         </div> : <>
-        {(check.kind !== 'quiz.answered' || text(task.instruction, language) !== text(check.params.question, language))
-          && <p>{text(task.instruction, language)}</p>}
         <p>{task.points} {text(runnerText.points, language)}</p>
         {!reviewing && !inPractice && !confirm && <button type="button" disabled={running} onClick={() => { runner.cancel(); setConfirm(true); setError('') }}>{text(labels.load, language)}</button>}
         {confirm && <div className="learning-notice" data-learning-confirm>
@@ -201,11 +214,11 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
           <button type="button" onClick={() => { job.current?.abort(); setRunning(false); setConfirm(false) }}>{text(labels.cancel, language)}</button>
         </div>}
         {error && <p role="alert">{error}</p>}
-        {check.kind === 'quiz.answered' && <fieldset disabled={reviewing || state.running || state.canContinue || running || !inPractice}>
+        {check.kind === 'quiz.answered' && !state.awaitingNext && !reviewing && <fieldset disabled={state.running || state.canContinue || running || !inPractice}>
           <legend>{text(check.params.question, language)}</legend>
           {check.params.choices.map((choice) => <label className="learning-choice" key={choice.id}>
             <input type="radio" name={`answer-${task.id}`} value={choice.id} checked={answerId === choice.id}
-              onChange={() => { runner.cancel(); setAnswerId(choice.id) }} />{text(choice.text, language)}
+              onChange={() => { runner.cancel(); setAnswerId(choice.id) }} /><span>{text(choice.text, language)}</span>
           </label>)}
         </fieldset>}
         {check.kind === 'quiz.answered' && !reviewing && inPractice && !state.canContinue

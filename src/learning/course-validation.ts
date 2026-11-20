@@ -3,6 +3,7 @@ import { hubRouteTables } from '../hub-routing'
 import { admitJson, executePlatform, validateRequest } from '../platform/service'
 import type { PlatformDocument } from '../platform/contract'
 import { courseBundleSchema, type CourseBundle, type CourseCheck, type CourseGuidance } from './course-contract'
+import { inspectionScope } from './task-guidance'
 
 function requireContent(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(`Course content: ${message}`)
@@ -31,6 +32,7 @@ function checkScope(
   const params = definition.params
   if ('scenarioId' in params) {
     requireContent(params.scenarioId === scenarioId, `${definition.id} loads a different scenario`)
+    if (params.inspection) checkScope({ id: definition.id, kind: 'routes.inspected', params: params.inspection }, document, scenarioId)
   } else if ('associations' in params) {
     requireContent(document.mode !== 'vwan'
       && new Set(params.associations.map((scope) => scope.vnetId)).size === params.associations.length
@@ -160,8 +162,9 @@ export function validateCourse(input: unknown): CourseBundle {
       totalPoints += task.points
       usedChecks.add(check.id)
       checkScope(check, scenario.document, scenario.id)
+      const inspection = inspectionScope(check)
       requireContent(new Set(task.guidanceIds).size === task.guidanceIds.length, `duplicate guidance for ${task.id}`)
-      if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected' || check.kind === 'vnet.peered') {
+      if (inspection || check.kind === 'vnet.peered') {
         requireContent(task.guidanceIds.length > 0, `missing navigation guidance for ${task.id}`)
       }
       for (const targetId of task.guidanceIds) {
@@ -169,11 +172,12 @@ export function validateCourse(input: unknown): CourseBundle {
         requireContent(target, `unknown guidance target for ${task.id}`)
         checkScope(target, scenario.document, scenario.id)
         usedGuidance.add(target.id)
-        if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected' || check.kind === 'vnet.peered') {
-          const action = check.kind === 'routes.inspected' ? 'routes.open' : check.kind === 'vnet.peered' ? 'peering.command'
-            : 'siteId' in check.params ? 'site-routes.open' : 'hub-routes.open'
+        if (inspection || check.kind === 'vnet.peered') {
+          const action = check.kind === 'vnet.peered' ? 'peering.command'
+            : inspection && 'vnetId' in inspection ? 'routes.open'
+            : inspection && 'siteId' in inspection ? 'site-routes.open' : 'hub-routes.open'
           requireContent(target.action === action
-            && Object.entries(check.params).filter(([key]) => key !== 'requirements').every(([key, value]) =>
+            && Object.entries(inspection ?? check.params).filter(([key]) => key !== 'requirements').every(([key, value]) =>
               Object.entries(target.params).some(([targetKey, targetValue]) => targetKey === key && targetValue === value)),
           `mismatched guidance scope for ${task.id}`)
         }

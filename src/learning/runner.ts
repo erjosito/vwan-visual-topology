@@ -1,5 +1,6 @@
 import { contractVersion, engineVersion, type PlatformRequest, type PlatformResult } from '../platform/contract'
 import type { CourseBundle, CourseTask } from './course-contract'
+import { inspectionScope } from './task-guidance'
 import type { Localized } from './content'
 import type { PracticeWorkspace } from './practice-workspace'
 import type { AzSimulationResult } from '../azure-net/engine'
@@ -106,8 +107,9 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
   const publish = () => {
     const key = binding()
     const check = bundle.checks.find((item) => item.id === current()?.task.checkId)
-    if (!awaitingNext && (check?.kind === 'routes.inspected' || check?.kind === 'control-routes.inspected') && key) {
-      if (!observation || observationKey !== key) observation = { token: crypto.randomUUID(), ...check.params }
+    const inspection = inspectionScope(check)
+    if (!awaitingNext && inspection && key) {
+      if (!observation || observationKey !== key) observation = { token: crypto.randomUUID(), ...inspection }
       observationKey = key
     } else { observation = undefined; observationKey = undefined }
     state = { taskId, reviewId, replayLessonId: replay?.lessonId, completions: [...completions],
@@ -119,7 +121,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     if (!automatic || awaitingNext || reviewId || job || !key || !check) return
     if (state.canContinue) automaticTimer = setTimeout(() => { if (automatic) complete() }, 450)
     else if (check.kind !== 'quiz.answered' && automaticAttempt !== key
-      && (!['routes.inspected', 'control-routes.inspected'].includes(check.kind) || observed === key)) {
+      && (!inspection || observed === key)) {
       automaticTimer = setTimeout(() => {
         if (!automatic || key !== binding()) return
         automaticAttempt = key
@@ -158,7 +160,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
         const choice = check.params.choices.find((entry) => entry.id === answerId)
         detail = choice?.feedback
         result = !choice ? 'answer' : choice.id === check.params.correctChoiceId ? 'passed' : 'incorrect'
-      } else if ((check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') && observed !== key) result = 'inspect'
+      } else if (inspectionScope(check) && observed !== key) result = 'inspect'
       else {
         const document = structuredClone(live.practice.document)
         let configured = true
@@ -240,9 +242,10 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       invalidate('stale'); publish(); return false
     }
     const { task, lesson } = current()!
-    const firstAward = !taskCompleted(bundle, completions, task)
+    const firstCompletion = !taskCompleted(bundle, completions, task)
+    const firstAward = !completions.some((entry) => entry.courseId === bundle.course.id && entry.awardId === task.awardId)
     const before = completions
-    if (firstAward) {
+    if (firstCompletion) {
       const live = options.workspace()!
       const completion: TaskCompletion = {
         courseId: bundle.course.id, contentVersion: bundle.course.contentVersion, lessonId: lesson.id,
@@ -255,7 +258,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       } catch { proof = undefined; feedback = 'progress'; publish(); return false }
       completions = [...completions, completion]
     }
-    const belt = firstAward ? newBeltAchievement(bundle, before, completions) : undefined
+    const belt = firstCompletion ? newBeltAchievement(bundle, before, completions) : undefined
     celebration = { title: task.title, points: firstAward ? task.points : 0, explanation, belt }
     awaitingNext = true
     invalidate(); publish()
