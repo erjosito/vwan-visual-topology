@@ -26,6 +26,7 @@ for (const language of ['en', 'ja'] as const) {
     await expect(page.getByTestId('learning-next-belt')).toContainText(text('100 points to Yellow belt', '黄帯まであと 100 ポイント'))
     await expect(panel.getByTestId('learning-belt-progress')).toContainText(text('Private connectivity', 'プライベート接続'))
     await loadLearningNetwork(page, language)
+    await panel.getByTestId('learning-guide-private-link.local-guide').click()
     await expect(panel.getByTestId('learning-debrief')).toContainText(text('Your first stage builds a private path', '最初のステージでは'))
     await completeLearningTasks(page, scenarioBundle.lessons[0].taskOrder.length - 1, language)
     await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.explain')
@@ -213,7 +214,10 @@ test('quota-failed points are explicitly session-only, can be saved later, and s
     }
     if (!localStorage.getItem(legacy)) localStorage.setItem(legacy, 'unchanged previous practice bytes')
   }, { guided: guidedProgressKey, legacy: legacyProgressKey })
-  await open(page); await completeLearningTasks(page)
+  await open(page)
+  await loadLearningNetwork(page)
+  await learningSidebar(page).getByTestId('learning-guide-private-link.local-guide').click()
+  await expect(learningSidebar(page).getByTestId('learning-debrief')).toBeVisible()
   await expect(status(page)).toContainText('5 points · Session only')
   expect(await saved(page, guidedProgressKey)).toBeNull()
   await status(page).click()
@@ -236,7 +240,7 @@ test('quota-failed points are explicitly session-only, can be saved later, and s
   expect(await saved(page, 'aznet-visual-topology:v1')).toBe(normal)
   expect(await saved(page, legacyProgressKey)).toBe('unchanged previous practice bytes')
   await details(page).getByRole('button', { name: 'Close learning status', exact: true }).click()
-  await expect(learningSidebar(page).getByRole('heading', { name: 'Open this scenario', exact: true })).toBeVisible()
+  await expect(learningSidebar(page).getByRole('heading', { name: scenarioBundle.lessons[0].tasks[0].title.en, exact: true })).toBeVisible()
 })
 
 test('damaged guided data is not zero credit, cannot be overwritten by completion, and has an original-byte backup', async ({ page }) => {
@@ -244,6 +248,7 @@ test('damaged guided data is not zero credit, cannot be overwritten by completio
   await open(page)
   await expect(status(page)).toContainText('Learning progress unavailable')
   await loadLearningNetwork(page)
+  await learningSidebar(page).getByTestId('learning-guide-private-link.local-guide').click()
   await expect(learningSidebar(page).getByTestId('learning-feedback')).toContainText('Completion could not be recorded')
   expect(await saved(page, guidedProgressKey)).toBe('damaged guided original')
   await status(page).click()

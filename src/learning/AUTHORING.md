@@ -23,10 +23,28 @@ engine payload is shown; legacy storage stays untouched.
 The playable track is displayed as **Routing foundations**. Its historical
 `azure-networking-preview` course ID, award/check identities,
 40 tasks, 1,325 points and stored practice/progress formats remain unchanged.
-The original edition publishes presentation version 7; scenario version 8 includes
+The original edition publishes presentation version 7; scenario version 9 includes
 foundational practice, staged repairs, a changed-address completion challenge and
 explicit belt-stage introductions.
-Existing assessment versions and first-earned awards remain compatible.
+Checkpoint assessment versions and first-earned awards remain compatible.
+The first scenario's opening task uses assessment version 2: loading prepares
+the workspace, but its existing five-point award requires a fresh inspection of
+Application's local route. Earlier loading awards remain saved and are not
+re-awarded or announced as new XP when this revised assessment is completed.
+Checkpoint versions and belt thresholds are unchanged. Shared scenario background
+is expanded initially and collapsed on later tasks; its local completion counter
+uses the same assessment-qualified task history as the main progression.
+Runtime inspection helpers live in schema-free `task-guidance.ts`; importing
+`course-contract.ts` at runtime would eagerly load Zod and its schema construction.
+Keep original task instructions and completed quiz question/answer visible above
+the debrief, including during review. Hub-peering guidance explains the expected
+unfinished inspection-routing diagnostics without hiding or blanket-dismissing errors.
+The historical `inspection-bypass.predict-subnet` task now teaches routing versus
+security permission instead of repeating a hypothetical /24 discard. Its assessment
+is version 2; its award and price are unchanged. Teach/refer to firewall and NSG
+policy first, while explicitly retaining the simulator's policy-enforcement limitation.
+Give each new practice task a distinct learning purpose. Reinforce familiar
+concepts inside new configurations rather than repeating standalone drills.
 Renaming the presentation is not a migration or a grading revision.
 `tracks.ts` is a small declarative catalog; **DNS and name resolution** and
 **Application delivery** are **Planned** informational entries, with no course
