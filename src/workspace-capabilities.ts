@@ -4,6 +4,7 @@ export const workspaceCapabilities = [
   { feature: 'Classic gateways, Azure Route Server and appliances', vwan: false, classic: true, mixed: true },
   { feature: 'ExpressRoute, locations, SKU scope and Global Reach', vwan: true, classic: true, mixed: true },
   { feature: 'BGP and static VPN connections', vwan: true, classic: true, mixed: true },
+  { feature: 'Classic BGP VPN over ER private peering with explicit underlay', vwan: false, classic: true, mixed: true },
   { feature: 'Bounded classic/VWAN VPN overlap NAT (Azure/Full Hybrid native provider)', vwan: false, classic: true, mixed: true },
   { feature: 'Integrated SD-WAN and spoke NVA BGP peering', vwan: true, classic: false, mixed: true },
   { feature: 'Default, custom and None hub tables; association and propagation', vwan: true, classic: false, mixed: true },
@@ -20,6 +21,7 @@ export const workspaceCapabilities = [
 
 export const workspaceCapabilityLimits = [
   'Supported means within the documented native model, not verified Azure packet delivery.',
+  'VPN over ER requires explicit classic active/standby Standard-IP private endpoints and independent outer ER context; static, active/active, NAT and VWAN/NVA/SD-WAN private overlays remain unassessed.',
   'Static hub Firewall routing requires one hub and a declared local Firewall. Arbitrary next hops, static branch-to-branch inspection and combinations with routing intent remain unassessed.',
   'Hub route maps are unsupported on integrated SD-WAN. Spoke NVA policies use the hosting VNet connection. Static VPN bypasses BGP policies.',
   'Incomplete or non-converged routing cannot certify reachability or isolation. Aggregate advertisements do not fill holes.',

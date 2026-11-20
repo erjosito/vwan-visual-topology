@@ -53,6 +53,16 @@ server.registerTool('get_schema', {
       tuple: { sourceAddress: 'original initiator IPv4', destinationAddress: 'initiator-visible destination IPv4',
         protocol: 'tcp or udp', sourcePort: '1-65535', destinationPort: '1-65535' } },
       result: 'vpnPacket section: original/translated tuples, native forwarding and one bounded conditional reply; no security/application delivery certification' },
+  optionalVpnOverEr: mode === 'vwan' ? { supported: false, reason: 'Use the classic Azure/Full Hybrid native provider, not a Virtual WAN VPN gateway.' } : {
+    gateway: { kind: 'Vpn', activeActive: false, vpnType: 'RouteBased', publicIpSku: 'Standard',
+      enablePrivateIpAddress: true, privateIpAddresses: ['owned GatewaySubnet RFC1918 IPv4'] },
+    connection: { targetKind: 'vnet-gateway', targetId: 'original VPN gateway ID', bgpEnabled: true, useLocalAzureIpAddress: true,
+      advertisedPrefixes: ['exact existing site workload prefix'],
+      underlay: { kind: 'express-route', azureLinkId: 'original Azure ER link ID', siteLinkId: 'original site ER link ID',
+        azureEndpoint: 'owned GatewaySubnet private IPv4', onPremEndpoint: 'site private device IPv4' } },
+    siteErLink: { advertisedPrefixes: ['exact existing site transport prefix; host/subnet/aggregate allowed'] },
+    note: 'An absent advertisedPrefixes selection exports all site routes; [] withdraws all BGP export. Configure the on-prem independent endpoint context and workload inbound local preference explicitly.',
+  },
   packetDestinationShapes: [{ kind: 'public-ip', publicIpId: 'original public-IP ID' },
     { kind: 'load-balancer', loadBalancerId: 'original LB ID', frontendId: 'original frontend ID' }],
   inventoryShapes: {
