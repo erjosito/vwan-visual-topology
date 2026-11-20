@@ -22,6 +22,36 @@ async function loadTopology(page: Page, topology: AzNetTopology, mode = 'hub-spo
   await page.goto(`/?mode=${mode}`)
 }
 
+test('shows routing-intent policy routes, default precedence and withdrawal in the spoke inspector', async ({ page }) => {
+  const topology = createEmptyAzNetTopology()
+  topology.vwanHubs = [{ id: 'wan', name: 'Secured WAN', region: 'westeurope', preference: 'ExpressRoute',
+    routingIntent: { private: true, internet: true } }]
+  topology.vnets = [{ id: 'spoke', name: 'WAN spoke', region: 'westeurope', role: 'spoke-vnet', prefixes: ['10.1.0.0/16'],
+    subnets: [{ id: 'work', name: 'Work', prefix: '10.1.1.0/24' }], gateways: [], appliances: [],
+    vwanHubAttachment: { hubId: 'wan', enabled: true, propagateDefaultRoute: true } }]
+  topology.sites = [{ id: 'branch', name: 'Branch', asn: 65001, prefixes: ['172.16.0.0/24'] }]
+  topology.vpnConnections = [{ id: 'vpn', name: 'Branch VPN', siteId: 'branch', targetKind: 'vwan-hub',
+    targetId: 'wan', enabled: true, bgpEnabled: true }]
+  await loadTopology(page, topology, 'full')
+  await inspectSubnet(page, 'work')
+  const policy = page.getByTestId('aznet-route-row-172.16.0.0/12-VirtualNetworkGateway')
+  await expect(policy).toContainText('Active')
+  await expect(page.getByTestId('aznet-route-row-172.16.0.0/24-VirtualNetworkGateway')).toHaveCount(0)
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-VirtualNetworkGateway')).toContainText('Active')
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-System')).toContainText('Invalid')
+  await page.getByTestId('aznet-lpm-input').fill('172.16.0.4')
+  await expect(policy).toContainText('LPM Winner')
+  await page.getByTestId('aznet-lpm-input').fill('10.1.1.4')
+  await expect(page.getByTestId('aznet-route-row-10.1.0.0/16-System')).toContainText('LPM Winner')
+  topology.vwanHubs[0].routingIntent = { private: false, internet: false }
+  await loadTopology(page, topology, 'full')
+  await inspectSubnet(page, 'work')
+  await expect(policy).toHaveCount(0)
+  await expect(page.getByTestId('aznet-route-row-172.16.0.0/24-VirtualNetworkGateway')).toContainText('Active')
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-VirtualNetworkGateway')).toHaveCount(0)
+  await expect(page.getByTestId('aznet-route-row-0.0.0.0/0-System')).toContainText('Active')
+})
+
 for (const mode of ['hub-spoke', 'full']) {
   test(`separates Firewall and NVA creation, subnet selection, HA ownership and history in ${mode}`, async ({ page }) => {
     const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)

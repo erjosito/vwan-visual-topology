@@ -48,7 +48,11 @@
   font-size: 13px;
   z-index: 1;
 }
-.learning-choice { display: flex; gap: 8px; align-items: baseline; margin-block: 12px; }
+.learning-choice { display: flex; gap: 8px; align-items: center; min-height: 32px; margin-block: 8px; }
+.learning-choice input[type="radio"] { width: auto; flex: none; padding: 0; margin: 0; }
+.learning-choice span { flex: 1; min-width: 0; }
+.learning-scenario-background summary { margin-block: 4px; }
+.learning-scenario-progress { font-size: 12px; color: var(--text-muted); }
 .learning-sidebar-open :is(.aznet-topbar, .unified-topbar) { flex-wrap: wrap; max-height: 180px; overflow: auto; }
 .learning-sidebar-open .unified-topbar-controls { flex-basis: 100%; justify-content: flex-start; }
 .learning-sidebar button { white-space: normal; min-height: 32px; }
