@@ -406,6 +406,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       asn,
       bgpEnabled,
       ...(activeActive !== undefined ? { activeActive } : {}),
+      ...(typeof props.enablePrivateIpAddress === 'boolean' ? { enablePrivateIpAddress: props.enablePrivateIpAddress } : {}),
       ...(vpnType !== undefined ? { vpnType } : {}),
       ...(sku !== undefined ? { sku } : {}),
       ...(generation === 'Generation1' || generation === 'Generation2' ? { vpnGatewayGeneration: generation } : {}),
@@ -882,6 +883,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       targetKind: 'vnet-gateway',
       targetId: vngId,
       bgpEnabled: Boolean(props.enableBgp ?? conn.enableBgp ?? true),
+      ...(props.useLocalAzureIpAddress === true ? { useLocalAzureIpAddress: true } : {}),
       enabled: true,
     })
   }

@@ -5,7 +5,7 @@ import type { HubRoutingConfiguration } from '../model'
 import { validateInventory } from '../inventory'
 import { validateApplicationInventory } from '../application-inventory'
 import { azHubPolicyLinks } from './route-maps'
-import { isVwanNvaAsn } from '../validation'
+import { cidr, ipv4, isVwanNvaAsn } from '../validation'
 import { validateVpnNat } from '../vpn-nat'
 import { validateSubnetPeeringScopes } from './subnet-peering'
 import { parseVnetBgpCommunities } from '../vnet-communities'
@@ -65,6 +65,7 @@ const schema = object({
     })),
     gateways: array(object({ ...named, kind: choice('ExpressRoute', 'Vpn'), asn, bgpEnabled: bool, enabled: bool }, {
       activeActive: bool, vpnType: choice('RouteBased', 'PolicyBased'), sku: text,
+      publicIpSku: choice('Basic', 'Standard'), enablePrivateIpAddress: bool, privateIpAddresses: strings,
       vpnGatewayGeneration: choice('Generation1', 'Generation2'),
     })),
     appliances: array(object({
@@ -109,11 +110,13 @@ const schema = object({
     if (!(v as string).trim() || (v as string).length > 2048) fail(p, 'expected a nonempty local Firewall ID of at most 2048 characters')
   }, name: text }), routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown'), routeMapAssignments: array(assignment) })),
   erLocations: array(object(named, { ...positioned, globalReachEnabled: bool, sku: choice('Local', 'Standard', 'Premium'), peeringLocation: text })),
-  erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { weight: number, prepend: asns, hubRouting, learnSiteRoutes: bool, propagateDefaultRoute: bool })),
+  erLinks: array(object({ ...named, locationId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'site'), targetId: id, enabled: bool }, { advertisedPrefixes: strings, weight: number, prepend: asns, hubRouting, learnSiteRoutes: bool, propagateDefaultRoute: bool })),
   sites: array(object({ ...named, asn, prefixes: strings }, { ...positioned, routeMapAssignments: array(assignment) })),
   vpnConnections: array(object({
     ...named, siteId: id, targetKind: choice('vnet-gateway', 'vwan-hub', 'appliance'), targetId: id, bgpEnabled: bool, enabled: bool,
-  }, { staticPrefixes: strings, inboundPrepend: asns, outboundPrepend: asns, hubRouting, transport: choice('VPN', 'SDWAN'), learnSiteRoutes: bool, propagateDefaultRoute: bool })),
+  }, { advertisedPrefixes: strings, useLocalAzureIpAddress: bool,
+    underlay: object({ kind: choice('express-route'), azureLinkId: id, siteLinkId: id, azureEndpoint: text, onPremEndpoint: text }),
+    staticPrefixes: strings, inboundPrepend: asns, outboundPrepend: asns, hubRouting, transport: choice('VPN', 'SDWAN'), learnSiteRoutes: bool, propagateDefaultRoute: bool })),
   siteLinks: array(object({ ...named, siteAId: id, siteBId: id, enabled: bool })),
 }, {
   subtitle: text, routeMaps: maps, allowBranchToBranchTraffic: bool,
@@ -276,12 +279,20 @@ export function parseAzNetTopology(input: unknown): AzNetTopology {
   const peeringErrors = validateSubnetPeeringScopes(topology)
   if (peeringErrors.length) fail('Subnet peering', peeringErrors.join(' '))
   for (const l of topology.erLinks) {
+    if (l.advertisedPrefixes?.some((prefix) => !cidr(prefix))) fail(l.id, 'Invalid advertised IPv4 prefix')
+    if (l.advertisedPrefixes && l.targetKind !== 'site') fail(l.id, 'ER advertised-prefix selection requires a site link')
     ref(l.locationId, topology.erLocations, 'ER location')
     ref(l.targetId, l.targetKind === 'site' ? topology.sites : l.targetKind === 'vwan-hub' ? topology.vwanHubs : gateways, 'ER target')
     if (l.hubRouting && l.targetKind !== 'vwan-hub') fail(l.id, 'hub routing requires a virtual hub target')
     if (l.targetKind === 'vwan-hub') routingRefs(l.targetId, l.hubRouting)
   }
   for (const l of topology.vpnConnections) {
+    if (l.advertisedPrefixes?.some((prefix) => !cidr(prefix))) fail(l.id, 'Invalid advertised IPv4 prefix')
+    if (l.underlay) {
+      ref(l.underlay.azureLinkId, topology.erLinks, 'VPN underlay Azure link')
+      ref(l.underlay.siteLinkId, topology.erLinks, 'VPN underlay site link')
+      if (ipv4(l.underlay.azureEndpoint) === undefined || ipv4(l.underlay.onPremEndpoint) === undefined) fail(l.id, 'VPN underlay requires IPv4 endpoints')
+    }
     ref(l.siteId, topology.sites, 'VPN site')
     ref(l.targetId, l.targetKind === 'appliance' ? allAppliances : l.targetKind === 'vwan-hub' ? topology.vwanHubs : gateways, 'VPN target')
     if (l.hubRouting && l.targetKind !== 'vwan-hub') fail(l.id, 'hub routing requires a virtual hub target')

@@ -3116,6 +3116,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           <AzureNetDiagram
             frameRequest={frameRequest}
             topology={topology}
+            vpnUnderlays={simulation.vpnUnderlays}
             onResetLayout={() => commitTopology((next) => {
               for (const node of [...next.vnets, ...next.vwanHubs, ...next.erLocations, ...next.sites]) {
                 delete node.x; delete node.y
@@ -4107,7 +4108,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 <Suspense fallback={null}>
                 {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} />}
                 {selected.kind === 'vwan-hub' && <VpnNatGatewayEditor key={selected.hubId} topology={topology} targetKind="vwan-hub" targetId={selected.hubId} commit={commitTopology} />}
-                {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
+                {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} simulation={simulation} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
                 {nvaCreationVnetId && selectedVnetId === nvaCreationVnetId && <NvaCreationEditor key={nvaCreationVnetId}

@@ -18,7 +18,7 @@ import { azInterHubLinks } from './hub-routing'
 import { inventoryCounts } from '../inventory'
 import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
 import { subnetAddressError, vnetAddressError } from './addressing'
-import type { AzFlowTrace } from './engine'
+import type { AzFlowTrace, AzSimulationResult } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
 
 const zoomLimits = { minZoom: 0.65, maxZoom: 1.6, zoomStep: 0.15 }
@@ -55,6 +55,7 @@ interface AzureNetDiagramProps {
   risks?: Record<string, number>
   onRisk?: (id: string) => void
   topology: AzNetTopology
+  vpnUnderlays?: AzSimulationResult['vpnUnderlays']
   selected?: AzSelectedEntity
   onSelect: (entity: AzSelectedEntity) => void
   onClearSelection: () => void
@@ -226,6 +227,7 @@ function computePositions(topology: AzNetTopology): {
 export function AzureNetDiagram({
   readOnly = false,
   topology,
+  vpnUnderlays,
   frameRequest,
   faults = {},
   risks = {},
@@ -519,6 +521,23 @@ export function AzureNetDiagram({
     return [[link.id, { from: link.from, to: link.to, curve: diagramCurve(centerOfBox(a), centerOfBox(b),
       { x: a.width / 2, y: a.height / 2 }, { x: b.width / 2, y: b.height / 2 }, bend) }] as const]
   }))
+  for (const connection of topology.vpnConnections) {
+    const path = connection.underlay
+    const current = connectionCurves.get(connection.id)
+    const er = topology.erLinks.find((link) => link.id === path?.azureLinkId)
+    const location = er && positions.erLocations[er.locationId]
+    const site = positions.sites[connection.siteId]
+    const target = current && motionBoxes.get(current.to)
+    if (!path || !current || !location || !site || !target) continue
+    const waypoint = { x: location.x + location.width + 22, y: location.y + location.height / 2 }
+    const first = diagramCurve(centerOfBox(site), waypoint, { x: site.width / 2, y: site.height / 2 }, { x: 1, y: 1 }, 28)
+    const second = diagramCurve(waypoint, centerOfBox(target), { x: 1, y: 1 }, { x: target.width / 2, y: target.height / 2 }, 28)
+    connectionCurves.set(connection.id, { ...current, curve: {
+      ...first, end: second.end, d: `${first.d} L ${second.start.x} ${second.start.y} ${second.d.replace(/^M [^Q]+/, '')}`,
+      label: { x: waypoint.x + 12, y: waypoint.y },
+      at: (t: number) => t < 0.5 ? first.at(t * 2) : second.at((t - 0.5) * 2),
+    } })
+  }
   const resolveFocus = (entity?: AzSelectedEntity): { name: string; node?: string; connectionId?: string } | undefined => {
     if (!entity) return
     const nodeKey = 'vnetId' in entity ? `vnet:${entity.vnetId}`
@@ -1159,7 +1178,9 @@ export function AzureNetDiagram({
           const inReverse = reverseEdges.has(conn.id)
           const isSelected =
             selected?.kind === 'vpn-connection' && selected.connectionId === conn.id
-          const stroke = !conn.enabled
+          const underlay = vpnUnderlays?.[conn.id]
+          const unavailable = underlay && underlay.state !== 'available'
+          const stroke = !conn.enabled || unavailable
             ? 'var(--link)'
             : inForward
                 ? 'var(--forward)'
@@ -1174,7 +1195,7 @@ export function AzureNetDiagram({
               data-testid={`aznet-vpnconn-${conn.id}`}
               role="button"
               tabIndex={0}
-              aria-label={`Select ${conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} connection ${conn.name}`}
+              aria-label={`Select ${conn.underlay || conn.useLocalAzureIpAddress ? 'VPN over ER' : conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} connection ${conn.name}`}
               aria-pressed={isSelected}
               onKeyDown={(event) => openKeyboardContext(event, { kind: 'vpn-connection', connectionId: conn.id })}
               onClick={(e) => {
@@ -1209,9 +1230,9 @@ export function AzureNetDiagram({
                 strokeDasharray="6 4"
               />
               <rect
-                x={midX - 42}
+                x={midX - (unavailable ? 96 : conn.underlay ? 66 : 42)}
                 y={midY - 9}
-                width={84}
+                width={unavailable ? 192 : conn.underlay ? 132 : 84}
                 height={18}
                 rx={5}
                 fill="var(--surface-muted)"
@@ -1226,8 +1247,9 @@ export function AzureNetDiagram({
                 fontWeight={600}
                 fill="var(--purple)"
               >
-                {conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} · {conn.bgpEnabled ? 'BGP' : 'Static'}
+                {conn.underlay || conn.useLocalAzureIpAddress ? 'VPN over ER' : conn.transport === 'SDWAN' ? 'SD-WAN' : 'VPN'} · {conn.bgpEnabled ? 'BGP' : 'Static'}
                 {!conn.enabled ? ' · OFF' : ''}
+                {conn.enabled && unavailable ? underlay.state === 'not-assessed' ? ' · NOT ASSESSED' : ' · UNDERLAY OFF' : ''}
               </text>
             </DiagramButton>
           )

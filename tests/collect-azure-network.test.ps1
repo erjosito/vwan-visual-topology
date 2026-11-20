@@ -56,6 +56,7 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
         if ($mode -eq 'nat-unallocated') { Assert (!$capture.publicIpAddresses[0].ipAddress) 'An unknown public address was invented.' }
         Assert ($capture.observationVersion -eq 1 -and $capture.version -eq 2) "$mode lost compatible versioned provenance."
         if ($mode -eq 'bgp-neighbors') {
+            Assert ($capture.vnetGateways[0].enablePrivateIpAddress -eq $true -and $capture.vpnConnections[0].useLocalAzureIpAddress -eq $true) 'Private tunnel flags were lost during collection.'
             Assert ($capture.vnetGateways[0].vpnType -eq 'RouteBased' -and $capture.vnetGateways[0].sku.name -eq 'VpnGw4AZ' -and $capture.vnetGateways[0].vpnGatewayGeneration -eq 'Generation2') 'Gateway coexistence configuration was lost.'
             $peer = $capture.vngBgpPeerStatus.vpn[0]
             Assert ($peer.localAddress -eq '10.82.253.4' -and $peer.neighbor -eq '192.0.2.9') 'Captured BGP endpoint identities were lost.'
@@ -65,7 +66,9 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
 const { readFileSync } = require('node:fs');
 const { importAzNetCapture } = require(process.argv[2]);
 const capture = JSON.parse(readFileSync(process.argv[3], 'utf8'));
-const observed = importAzNetCapture(capture).observations;
+const imported = importAzNetCapture(capture);
+const observed = imported.observations;
+require('node:assert/strict').equal(imported.topology.vpnConnections[0].useLocalAzureIpAddress, true);
 require('node:assert/strict').deepEqual(JSON.parse(JSON.stringify(observed.vngBgpPeerStatus)), capture.vngBgpPeerStatus);
 '@ | node - $importer $file
             Assert ($LASTEXITCODE -eq 0) 'Collected BGP neighbors did not survive current capture import.'
