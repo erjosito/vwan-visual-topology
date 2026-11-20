@@ -23,7 +23,6 @@ async function loadTopology(page: Page, topology: AzNetTopology, mode = 'hub-spo
 }
 
 for (const mode of ['hub-spoke', 'full']) {
-
   test(`highlights invalid and out-of-VNet CIDRs in ${mode}`, async ({ page }) => {
     const topology = structuredClone(AZURE_NET_SAMPLES.find((sample) => sample.id === 'hub-spoke-firewall-udr')!.topology)
     await loadTopology(page, topology, mode)
@@ -78,47 +77,6 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
     await page.reload()
     await expect.poll(async () => (await saved()).vnets[0].appliances[0].privateIp).toBe('10.30.0.196')
-  })
-
-  test(`keeps protected peering routes active and BGP conflicts invalid in effective-route and LPM views in ${mode}`, async ({ page }) => {
-    const topology = createEmptyAzNetTopology()
-    topology.vnets = [
-      { id: 'gwc', name: 'VNet-Hub-GWC', role: 'hub', region: 'westeurope', prefixes: ['10.1.0.0/24'],
-        subnets: [{ id: 'gwc-gw', name: 'GatewaySubnet', prefix: '10.1.0.0/27' },
-          { id: 'gwc-fw', name: 'AzureFirewallSubnet', prefix: '10.1.0.64/26' }],
-        gateways: [{ id: 'gwc-er', name: 'GWC ER', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true }], appliances: [] },
-      { id: 'weu', name: 'VNet-Hub-WEU', role: 'hub', region: 'westeurope', prefixes: ['10.2.0.0/24'],
-        subnets: [{ id: 'weu-gw', name: 'GatewaySubnet', prefix: '10.2.0.0/27' },
-          { id: 'weu-work', name: 'Workload', prefix: '10.2.0.64/26' }],
-        gateways: [{ id: 'weu-er', name: 'WEU ER', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true }], appliances: [] },
-    ]
-    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
-    topology.vnetPeerings = [{ id: 'peer', name: 'Direct GWC-WEU', vnetAId: 'gwc', vnetBId: 'weu', enabled: true, aToB: { ...flags }, bToA: { ...flags } }]
-    topology.erLocations = [{ id: 'er', name: 'Amsterdam', peeringLocation: 'Amsterdam', sku: 'Standard' }]
-    topology.erLinks = ['gwc-er', 'weu-er'].map((targetId) => ({ id: `er-${targetId}`, name: targetId,
-      locationId: 'er', targetKind: 'vnet-gateway' as const, targetId, enabled: true }))
-    topology.sites = [{ id: 'site', name: 'BGP conflicts and remote prefixes', asn: 65001,
-      prefixes: ['10.2.0.128/25', '10.2.1.0/24', '10.2.2.0/24'] }]
-    topology.erLinks.push({ id: 'er-site', name: 'Site', locationId: 'er', targetKind: 'site', targetId: 'site', enabled: true })
-    await loadTopology(page, topology, mode)
-    await inspectSubnet(page, 'gwc-fw')
-    const system = page.getByTestId('aznet-route-row-10.2.0.0/24-System')
-    await expect(system).toContainText('Active')
-    await expect(system).not.toHaveClass(/suppressed/)
-    const equal = page.getByTestId('aznet-route-row-10.2.0.0/24-VirtualNetworkGateway')
-    await expect(equal).toContainText('Invalid')
-    await expect(equal).toContainText('12076 12076')
-    await expect(equal).toContainText('protected System VNetPeering route 10.2.0.0/24')
-    const moreSpecific = page.getByTestId('aznet-route-row-10.2.0.128/25-VirtualNetworkGateway')
-    await expect(moreSpecific).toContainText('Invalid')
-    await expect(moreSpecific).toContainText('protected System VNetPeering')
-    await page.getByTestId('aznet-lpm-input').fill('10.2.0.132')
-    await expect(system).toContainText('LPM Winner')
-    await expect(moreSpecific).not.toHaveClass(/lpm-winner/)
-    await page.getByTestId('aznet-lpm-input').fill('10.2.1.4')
-    await expect(page.getByTestId('aznet-route-row-10.2.1.0/24-VirtualNetworkGateway')).toContainText('LPM Winner')
-    await expect(page.getByTestId('aznet-route-row-10.2.2.0/24-VirtualNetworkGateway')).toContainText('Active')
-    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(topology)
   })
 }
 
@@ -1068,3 +1026,45 @@ test.describe('AzNetSim native workspace compatibility', () => {
   })
 })
 
+for (const mode of ['hub-spoke', 'full']) {
+  test(`keeps protected peering routes active and BGP conflicts invalid in effective-route and LPM views in ${mode}`, async ({ page }) => {
+    const topology = createEmptyAzNetTopology()
+    topology.vnets = [
+      { id: 'gwc', name: 'VNet-Hub-GWC', role: 'hub', region: 'westeurope', prefixes: ['10.1.0.0/24'],
+        subnets: [{ id: 'gwc-gw', name: 'GatewaySubnet', prefix: '10.1.0.0/27' },
+          { id: 'gwc-fw', name: 'AzureFirewallSubnet', prefix: '10.1.0.64/26' }],
+        gateways: [{ id: 'gwc-er', name: 'GWC ER', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true }], appliances: [] },
+      { id: 'weu', name: 'VNet-Hub-WEU', role: 'hub', region: 'westeurope', prefixes: ['10.2.0.0/24'],
+        subnets: [{ id: 'weu-gw', name: 'GatewaySubnet', prefix: '10.2.0.0/27' },
+          { id: 'weu-work', name: 'Workload', prefix: '10.2.0.64/26' }],
+        gateways: [{ id: 'weu-er', name: 'WEU ER', kind: 'ExpressRoute', asn: 65515, enabled: true, bgpEnabled: true }], appliances: [] },
+    ]
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    topology.vnetPeerings = [{ id: 'peer', name: 'Direct GWC-WEU', vnetAId: 'gwc', vnetBId: 'weu', enabled: true, aToB: { ...flags }, bToA: { ...flags } }]
+    topology.erLocations = [{ id: 'er', name: 'Amsterdam', peeringLocation: 'Amsterdam', sku: 'Standard' }]
+    topology.erLinks = ['gwc-er', 'weu-er'].map((targetId) => ({ id: `er-${targetId}`, name: targetId,
+      locationId: 'er', targetKind: 'vnet-gateway' as const, targetId, enabled: true }))
+    topology.sites = [{ id: 'site', name: 'BGP conflicts and remote prefixes', asn: 65001,
+      prefixes: ['10.2.0.128/25', '10.2.1.0/24', '10.2.2.0/24'] }]
+    topology.erLinks.push({ id: 'er-site', name: 'Site', locationId: 'er', targetKind: 'site', targetId: 'site', enabled: true })
+    await loadTopology(page, topology, mode)
+    await inspectSubnet(page, 'gwc-fw')
+    const system = page.getByTestId('aznet-route-row-10.2.0.0/24-System')
+    await expect(system).toContainText('Active')
+    await expect(system).not.toHaveClass(/suppressed/)
+    const equal = page.getByTestId('aznet-route-row-10.2.0.0/24-VirtualNetworkGateway')
+    await expect(equal).toContainText('Invalid')
+    await expect(equal).toContainText('12076 12076')
+    await expect(equal).toContainText('protected System VNetPeering route 10.2.0.0/24')
+    const moreSpecific = page.getByTestId('aznet-route-row-10.2.0.128/25-VirtualNetworkGateway')
+    await expect(moreSpecific).toContainText('Invalid')
+    await expect(moreSpecific).toContainText('protected System VNetPeering')
+    await page.getByTestId('aznet-lpm-input').fill('10.2.0.132')
+    await expect(system).toContainText('LPM Winner')
+    await expect(moreSpecific).not.toHaveClass(/lpm-winner/)
+    await page.getByTestId('aznet-lpm-input').fill('10.2.1.4')
+    await expect(page.getByTestId('aznet-route-row-10.2.1.0/24-VirtualNetworkGateway')).toContainText('LPM Winner')
+    await expect(page.getByTestId('aznet-route-row-10.2.2.0/24-VirtualNetworkGateway')).toContainText('Active')
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(topology)
+  })
+}
