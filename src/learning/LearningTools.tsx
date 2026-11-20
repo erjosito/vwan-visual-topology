@@ -16,19 +16,20 @@ export function LearningTools(props: {
   const trigger = useRef<HTMLButtonElement>(null)
   const [Panel, setPanel] = useState<typeof LearningDialog>()
   const [failed, setFailed] = useState(false)
-  const loading = view.open && !Panel && !failed
+  const ready = Boolean(Panel && (!session || session.learning))
+  const loading = view.open && !ready && !failed
   const loadLearning = session?.loadLearning
   useEffect(() => {
-    if (!view.open || Panel || failed) return
+    if (!view.open || ready || failed) return
     let active = true
     Promise.all([import('./LearningDialog'), loadLearning?.()]).then(([{ LearningDialog }]) => {
       if (active) setPanel(() => LearningDialog)
     }, () => { if (active) setFailed(true) })
     return () => { active = false }
-  }, [view.open, Panel, failed, loadLearning])
+  }, [view.open, ready, failed, loadLearning])
   useEffect(() => {
-    if (view.open && Panel) document.getElementById('learning-title')?.focus({ preventScroll: true })
-  }, [view.open, Panel])
+    if (view.open && ready) document.getElementById('learning-title')?.focus({ preventScroll: true })
+  }, [view.open, ready])
   return <>
     <button ref={trigger} type="button" data-testid="learning-open"
       aria-haspopup="dialog" aria-expanded={session?.learningDetailsOpen ?? view.open}
