@@ -6,6 +6,8 @@ import { beltProgress, createProgressLedger, earnedAwards, guidedProgressKey, le
 import { orderedTasks, type TaskCompletion } from './runner'
 import { learningTracks } from './tracks'
 import { editions, highestTrackBelt, scenarioAssessments, scenarioCourse, selectedEdition } from './editions'
+import { nextBeltLabel } from './belt-progress-label'
+import { loadLanguage } from '../messages'
 
 const empty = (): ProgressLedger => ({ version: 1, policyVersion: 1, completions: [] })
 const completion = (index = 0, changes: Partial<TaskCompletion> = {}): TaskCompletion => {
@@ -112,21 +114,29 @@ describe('versioned completion and first-award ledger', () => {
     expect(() => recordCompletion(ledger, completion(0, { awardId: 'unversioned-award-change' }))).toThrow('Unversioned')
   })
 
-  it('derives points and revised checkpoints, including a terminal two-belt content configuration', () => {
+  it('derives points and revised checkpoints, including a terminal two-belt content configuration', async () => {
+    await loadLanguage('ja')
     const course = { ...previewCourse, belts: previewCourse.belts.slice(0, 2) }
     let ledger = empty()
     for (let index = 0; index < 6; index++) ledger = recordCompletion(ledger, completion(index))
     expect(beltProgress(ledger, course, checkpointAssessments)).toMatchObject({
       points: 80, belt: { id: 'white' }, pointsRemaining: 20, checkpointsRemaining: ['peering.explain'],
     })
+    expect(nextBeltLabel(beltProgress(ledger, course, checkpointAssessments), 'en')).toBe('20 points to Yellow belt')
+    expect(nextBeltLabel(beltProgress(ledger, course, checkpointAssessments), 'ja')).toBe('黄帯まであと 20 ポイント')
     ledger = recordCompletion(ledger, completion(7, { points: 100 }))
     expect(beltProgress(ledger, course, checkpointAssessments)).toMatchObject({
       points: 180, belt: { id: 'white' }, pointsRemaining: 0, checkpointsRemaining: ['peering.explain'],
     })
+    const awaitingCheckpoint = beltProgress(ledger, course, checkpointAssessments)
+    expect(nextBeltLabel(awaitingCheckpoint, 'en')).toBe('0 points to Yellow belt · Finish the stage to earn it')
+    expect(nextBeltLabel(awaitingCheckpoint, 'ja')).toBe('黄帯まであと 0 ポイント · ステージを完了して帯を獲得')
     ledger = recordCompletion(ledger, completion(6))
     expect(beltProgress(ledger, course, checkpointAssessments)).toMatchObject({
       points: 200, belt: { id: 'yellow' }, next: undefined, pointsRemaining: 0,
     })
+    expect(nextBeltLabel(beltProgress(ledger, course, checkpointAssessments), 'en')).toBe('Core belts completed')
+    expect(nextBeltLabel(beltProgress(ledger, course, checkpointAssessments), 'ja')).toBe('基礎コースの帯をすべて獲得')
     const revised = checkpointAssessments.map((entry) => ({ ...entry, assessmentVersion: 2 }))
     expect(beltProgress(ledger, course, revised).belt.id).toBe('white')
     ledger = recordCompletion(ledger, completion(6, { assessmentVersion: 2, points: 500 }))

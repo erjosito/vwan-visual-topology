@@ -13,6 +13,10 @@ export const learningAnchor = (page: Page, ...scope: string[]) =>
 
 export async function advanceLearningTask(page: Page, language: 'en' | 'ja' = 'en') {
   await expect(learningSidebar(page).getByTestId('learning-debrief')).toBeVisible()
+  if (await learningSidebar(page).getByTestId('learning-belt-earned').count()) {
+    const celebration = page.getByTestId('learning-belt-dialog')
+    if (await celebration.count()) await celebration.getByRole('button', { name: language === 'ja' ? '学習に戻る' : 'Continue learning', exact: true }).click()
+  }
   await learningSidebar(page).getByRole('button', { name: runnerLabels.next[language], exact: true }).click()
 }
 

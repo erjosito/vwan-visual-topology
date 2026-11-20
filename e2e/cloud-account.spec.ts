@@ -666,6 +666,43 @@ test('anonymous history requires import consent; reload, switching and sign-out 
   expect(errors).toEqual([])
 })
 
+test('cloud-restored belts and account switches never replay milestone celebrations', async ({ page }) => {
+  const service = await setup(page)
+  const raw = JSON.stringify({ version: 1, policyVersion: 1, enrollment: exampleCourse.course.id,
+    completions: orderedTasks(exampleCourse).slice(0, exampleCourse.lessons[0].taskOrder.length).map(({ task, lesson }) => ({
+      courseId: exampleCourse.course.id, contentVersion: 6, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'historical-cloud', revision: 1, scope: 1, engineVersion: 'test',
+      completedAt: '2026-11-17T12:00:00Z',
+    })) })
+  for (const user of ['alice', 'bob']) service.data.set(`users/${testOwner(user)}/progress.json`, { raw, etag: `"historical-${user}"` })
+  await page.goto('/?mode=full')
+  const popup = page.getByTestId('learning-belt-dialog')
+  const account = page.getByRole('dialog', { name: 'Cloud account', exact: true })
+  await signIn(page)
+  await expect(page.getByTestId('learning-status')).toContainText('Yellow belt')
+  await account.getByRole('button', { name: 'Close', exact: true }).click()
+  for (const user of ['alice', 'bob']) {
+    if (user === 'bob') {
+      await page.getByTestId('cloud-account-open').click()
+      await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'bob'))
+      await account.getByRole('button', { name: 'Sign in again / switch account', exact: true }).click()
+      await expect(page.getByTestId('cloud-progress-status')).toContainText('Synced')
+      await account.getByRole('button', { name: 'Close', exact: true }).click()
+    }
+    await expect(page.getByTestId('learning-status')).toContainText(user === 'alice' ? 'Test Alice' : 'Test Bob')
+    await expect(page.getByTestId('learning-status')).toContainText('Yellow belt')
+    await expect(popup).toHaveCount(0)
+    expect(service.data.get(`users/${testOwner(user)}/progress.json`)!.raw).toBe(raw)
+  }
+  await page.reload()
+  await expect(page.getByTestId('learning-status')).toContainText('Test Bob')
+  await expect(page.getByTestId('learning-status')).toContainText('Yellow belt')
+  await page.getByTestId('learning-open').click()
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'override.load')
+  await expect(popup).toHaveCount(0)
+})
+
 test('switching accounts preserves session-only history when both local and cloud writes fail', async ({ page }) => {
   await setup(page)
   await page.goto('/?mode=full')

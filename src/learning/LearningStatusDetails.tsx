@@ -8,6 +8,7 @@ import { statusLabels as labels } from './status-content'
 import { TrackOverview } from './TrackOverview'
 import './learning-status-details.css'
 import { progressStatusLabel } from '../cloud/progress-status'
+import { beltStages } from './belt-stages'
 
 export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
   const session = useWorkspaceSession(), language = useLanguage()
@@ -52,6 +53,16 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
           <p>{label(labels.checkpoints)}: {progress.checkpointsRemaining.length}</p>
         </> : <p>{label(course.publication === 'preview' ? labels.preview : labels.terminal)}</p>}
       </>}
+      <details data-testid="learning-belt-stages">
+        <summary>{language === 'ja' ? '帯のステージとトピック' : 'Belt stages and topics'}</summary>
+        <ol>{(beltStages[course.id] ?? []).map((stage) => <li key={stage.beltId}>
+          <strong>{course.belts.find((belt) => belt.id === stage.beltId)!.name[language]} · {stage.title[language]}</strong>
+          <ul>{stage.topics.map((topic) => <li key={topic.en}>{topic[language]}</li>)}</ul>
+        </li>)}</ol>
+        {course.id === 'azure-routing-scenarios' && <p>{language === 'ja'
+          ? 'ハイブリッド接続、複数ハブ、引き継ぎ課題は、基礎コースの黒帯以降も続く専門トピックです。'
+          : 'Hybrid connectivity, multi-hub routing and the handover challenge continue as specialist practice beyond core black belt.'}</p>}
+      </details>
       <section aria-label={language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}>
         <h3>{language === 'ja' ? 'カリキュラムの版' : 'Curriculum editions'}</h3>
         <p>{language === 'ja' ? '版ごとの進捗を保持します。切り替えても過去のポイントや帯は失われません。' : 'Each edition keeps its own progress. Switching preserves historical points and belts.'}</p>

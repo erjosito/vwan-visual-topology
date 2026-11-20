@@ -140,6 +140,10 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     const readyMs = await page.evaluate(() => performance.now())
     await page.waitForLoadState('networkidle')
     const graph = await assetGraph([...requests])
+    const startupCss = await Promise.all(graph.files.filter(({ path }) => path.endsWith('.css'))
+      .map(({ path }) => readFile(resolve('dist', `.${path}`), 'utf8')))
+    expect(startupCss.some((css) => /\.learning-belt-progress\b|\.belt-achievement-dialog\b/.test(css)),
+      'Optional belt styles must stay out of normal startup').toBe(false)
     expect(graph.localGzipBytes).toBeLessThanOrEqual(300_000)
     expect(graph.rawBytes).toBeLessThanOrEqual(1_200_000)
     expect(graph.files.some(({ path }: { path: string }) => /\/packet-flow-/.test(path))).toBe(false)
@@ -155,7 +159,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     if (!await page.getByTestId('document-cloud-state').count()) {
       expect(graph.files.some(({ path }: { path: string }) => /\/CloudDocumentSaveStatus-/.test(path))).toBe(false)
     }
-    expect(graph.files.some(({ path }: { path: string }) => /\/(?:LearningDialog|task-guidance|LearningStatusDetails|TrackOverview|tracks|concept-bodies)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:LearningDialog|task-guidance|LearningStatusDetails|TrackOverview|tracks|concept-bodies|belt-stages)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => mode === 'vwan' ? /\/AzureNetApp-/.test(path) : /\/App-/.test(path))).toBe(false)
     await page.getByTestId('learning-status').click()
     await expect(page.getByTestId('learning-status-details')).toContainText('Saved locally')

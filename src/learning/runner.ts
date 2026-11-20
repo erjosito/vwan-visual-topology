@@ -3,6 +3,7 @@ import type { CourseBundle, CourseTask } from './course-contract'
 import type { Localized } from './content'
 import type { PracticeWorkspace } from './practice-workspace'
 import type { AzSimulationResult } from '../azure-net/engine'
+import { newBeltAchievement, type BeltAchievement } from './belt-achievement'
 
 export type LearningWorkspace = { practice: PracticeWorkspace; revision: number; scope: number }
 export type LearningObservation = {
@@ -44,7 +45,7 @@ export type RunnerState = {
   explanation?: Localized
   unmet: string[]
   observation?: LearningObservation
-  celebration?: { title: Localized; points: number; explanation?: Localized }
+  celebration?: { title: Localized; points: number; explanation?: Localized; belt?: BeltAchievement; beltDismissed?: boolean }
   canContinue: boolean
 }
 export type CourseRunner = ReturnType<typeof createCourseRunner>
@@ -240,6 +241,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     }
     const { task, lesson } = current()!
     const firstAward = !taskCompleted(bundle, completions, task)
+    const before = completions
     if (firstAward) {
       const live = options.workspace()!
       const completion: TaskCompletion = {
@@ -251,9 +253,10 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       try {
         if (options.completed?.(completion) === false) { proof = undefined; feedback = 'progress'; publish(); return false }
       } catch { proof = undefined; feedback = 'progress'; publish(); return false }
-      completions.push(completion)
+      completions = [...completions, completion]
     }
-    celebration = { title: task.title, points: firstAward ? task.points : 0, explanation }
+    const belt = firstAward ? newBeltAchievement(bundle, before, completions) : undefined
+    celebration = { title: task.title, points: firstAward ? task.points : 0, explanation, belt }
     awaitingNext = true
     invalidate(); publish()
     return true
@@ -295,6 +298,10 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
     bundle,
     getSnapshot: () => state,
     assess, advance, review, replayLesson, workspaceChanged,
+    dismissBelt: () => {
+      if (!celebration?.belt) return
+      celebration = { ...celebration, beltDismissed: true }; publish()
+    },
     setAutomatic: (enabled: boolean) => {
       if (automatic === enabled) return
       automatic = enabled

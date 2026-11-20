@@ -20,6 +20,8 @@ import { requirementDescription, runnerLabels as runnerText } from './runner-con
 import { TrackOverview } from './TrackOverview'
 import { editions } from './editions'
 import { prepareCourseScenario, scenarioTransitionConflict } from './course-transition'
+import { BeltProgressSummary } from './BeltProgressSummary'
+import { BeltAchievementDialog } from './BeltAchievementDialog'
 import './learning.css'
 
 type PanelProps = {
@@ -153,12 +155,15 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
     </span>
   }
   return createPortal(<>
+    {!reviewing && state.awaitingNext && state.celebration?.belt && !state.celebration.beltDismissed && <BeltAchievementDialog
+      achievement={state.celebration.belt} onClose={() => runner.dismissBelt()} />}
     <aside ref={panel} id="learning-sidebar" className="learning-sidebar" aria-labelledby="learning-title" data-testid="learning-sidebar" onKeyDown={(event) => {
       if (event.key === 'Escape') { event.stopPropagation(); onPause() }
     }}>
       <header><h2 id="learning-title">{text(learningLabels.learn, language)}</h2><button type="button" onClick={onPause}>{text(labels.pause, language)}</button></header>
       <p data-testid="learning-active-track"><strong>{text(bundle.course.title, language)}</strong> · {text(editions.find((entry) => entry.course.id === bundle.course.id)!.name, language)}</p>
       <p data-testid="learning-completion-count">{instructions.filter(({ task }) => taskCompleted(bundle, state.completions, task)).length} / {instructions.length} {text(runnerText.completed, language)}</p>
+      <BeltProgressSummary lessonId={lesson.id} />
       {state.replayLessonId && <p>{text(runnerText.replaying, language)}</p>}
       {reviewing && <div className="learning-notice"><p>{text(runnerText.review, language)}</p>
         <button type="button" onClick={() => runner.review()}>{text(runnerText.return, language)}</button></div>}
@@ -170,6 +175,10 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
         {(state.awaitingNext || reviewing) && task.debrief ? <div className="learning-debrief" data-testid="learning-debrief">
           {!reviewing && state.celebration && <p className="learning-success" role="status" data-testid="learning-celebration">
             <strong>{text(runnerText.success, language)}{state.celebration.points > 0 && ` +${state.celebration.points} ${text(runnerText.points, language)}`}</strong>
+          </p>}
+          {!reviewing && state.celebration?.belt && <p className="learning-success" data-testid="learning-belt-earned">
+            {text(bundle.course.belts.find((belt) => belt.id === state.celebration!.belt!.beltId)!.name, language)}
+            {language === 'ja' ? 'を獲得！' : ' earned!'}
           </p>}
           <h5 id="learning-debrief-title" tabIndex={-1}>{text(runnerText.learned, language)}</h5>
           {reviewing && <p>{text(task.instruction, language)}</p>}

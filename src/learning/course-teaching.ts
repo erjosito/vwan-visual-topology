@@ -1,6 +1,7 @@
 import type { CourseBundle } from './course-contract'
 import type { Localized } from './content'
 import { hubRouteTables } from '../hub-routing'
+import { introduceBeltStages } from './belt-stages'
 
 const l = (en: string, ja: string): Localized => ({ en, ja })
 const routing = 'https://learn.microsoft.com/azure/virtual-network/virtual-networks-udr-overview'
@@ -429,4 +430,5 @@ export function teachCourse(bundle: CourseBundle) {
       task.debrief ??= taskTeaching[task.id] ?? { paragraphs, references }
     }
   }
+  introduceBeltStages(bundle)
 }

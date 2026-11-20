@@ -7,6 +7,9 @@ import type { CourseBundle } from './course-contract'
 import type { AzSimulationResult } from '../azure-net/engine'
 import { requirementDescription } from './runner-content'
 import { createCourseRunner, orderedTasks, type LearningWorkspace, type RunnerOptions, type TaskCompletion } from './runner'
+import { createProgressLedger, guidedProgressKey } from './progress-ledger'
+import { newBeltAchievement } from './belt-achievement'
+import { achievedStages, beltStages } from './belt-stages'
 
 function harness(overrides: Partial<RunnerOptions> = {}, course = exampleCourse) {
   const bundle = structuredClone(course)
@@ -58,6 +61,88 @@ function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
 }
 
 describe('evidence-gated course runner', () => {
+  it.each(['saved', 'session', 'conflict'] as const)('celebrates only accepted upward belt awards, preserving the held debrief: %s', async (mode) => {
+    vi.useFakeTimers()
+    const ledger = { version: 1, policyVersion: 1, completions: beforeTask(exampleCourse, 'peering.explain') }
+    const data = new Map([[guidedProgressKey, JSON.stringify(ledger)]])
+    const store = createProgressLedger(() => ({
+      getItem: (key) => data.get(key) ?? null,
+      setItem: (key, value) => { if (mode === 'session') throw new Error('quota'); data.set(key, value) },
+      removeItem: (key) => { data.delete(key) },
+    }))
+    if (mode === 'conflict') data.set(guidedProgressKey, 'preserve conflicting bytes')
+    const h = harness({ completions: ledger.completions, completed: (completion) => store.record(completion, true) })
+    try {
+      expect(h.state().celebration).toBeUndefined()
+      h.load(); h.runner.setAutomatic(true)
+      await h.runner.assess('not-transitive')
+      await vi.advanceTimersByTimeAsync(2000)
+      expect(store.getSnapshot().status).toBe(mode)
+      if (mode === 'conflict') {
+        expect(h.state().celebration).toBeUndefined()
+        expect(h.state().awaitingNext).toBe(false)
+        expect(data.get(guidedProgressKey)).toBe('preserve conflicting bytes')
+      } else {
+        expect(h.state().celebration?.belt).toEqual({ courseId: exampleCourse.course.id, previousBeltId: 'white', beltId: 'yellow' })
+        expect(h.state().awaitingNext).toBe(true)
+        const accepted = store.backup(false)
+        h.runner.dismissBelt(); h.runner.cancel()
+        expect(h.state().celebration?.beltDismissed).toBe(true)
+        expect(h.state().taskId).toBe('peering.explain')
+        expect(h.state().awaitingNext).toBe(true)
+        h.runner.review('peering.inspect')
+        h.runner.review()
+        expect(h.state().celebration?.beltDismissed).toBe(true)
+        expect(store.backup(false)).toBe(accepted)
+        expect(h.runner.advance()).toBe(true)
+        expect(h.state().taskId).toBe('override.load')
+      }
+    } finally { h.runner.setAutomatic(false); vi.useRealTimers() }
+  })
+
+  it('does not celebrate restored, externally replaced or replayed historical achievements', async () => {
+    const historical = beforeTask(exampleCourse, 'override.load')
+    const h = harness({ completions: historical })
+    expect(h.state().celebration).toBeUndefined()
+    h.runner.replaceProgress(historical)
+    expect(h.state().celebration).toBeUndefined()
+    h.runner.replayLesson('direct-peering')
+    await h.finishPeering()
+    expect(h.completed).not.toHaveBeenCalled()
+    expect(h.state().celebration?.belt).toBeUndefined()
+    expect(h.state().completions).toEqual(historical)
+  })
+
+  it('summarizes every newly crossed stage when one missing checkpoint unlocks several historical XP thresholds', () => {
+    const all = beforeTask(exampleCourse, 'capstone.explain')
+    const { lesson, task } = orderedTasks(exampleCourse).at(-1)!
+    all.push({ ...all[0], lessonId: lesson.id, taskId: task.id, checkId: task.checkId, awardId: task.awardId, points: task.points })
+    const before = all.filter((entry) => entry.taskId !== 'peering.explain')
+    const achievement = newBeltAchievement(exampleCourse, before, all)!
+    expect(achievement).toMatchObject({ previousBeltId: 'white', beltId: 'black' })
+    expect(achievedStages(achievement).map((stage) => stage.lessonIds)).toEqual(exampleCourse.course.lessonOrder.map((id) => [id]))
+    expect(newBeltAchievement(exampleCourse, all, before)).toBeUndefined()
+    expect(newBeltAchievement(exampleCourse, all, all)).toBeUndefined()
+  })
+
+  it.each([exampleCourse, scenarioBundle])('aligns authored stages with actual opening debriefs and existing terminal checkpoints: $course.id', (bundle) => {
+    const stages = beltStages[bundle.course.id]
+    const covered = stages.flatMap((stage) => stage.lessonIds)
+    expect(covered).toEqual(bundle.course.lessonOrder.slice(0, bundle.course.id === scenarioBundle.course.id ? 8 : 6))
+    expect(new Set(covered).size).toBe(covered.length)
+    for (const [index, stage] of stages.entries()) {
+      const first = bundle.lessons.find((lesson) => lesson.id === stage.lessonIds[0])!
+      const last = bundle.lessons.find((lesson) => lesson.id === stage.lessonIds.at(-1))!
+      expect(bundle.course.belts[index + 1].id).toBe(stage.beltId)
+      expect(bundle.course.belts[index + 1].checkpointTaskIds.at(-1)).toBe(last.taskOrder.at(-1))
+      const opening = first.tasks.find((task) => task.id === first.taskOrder[0])!.debrief!
+      for (const language of ['en', 'ja'] as const) {
+        expect(opening.paragraphs[0][language]).toContain(stage.introduction[language])
+        expect(stage.topics.every((topic) => topic[language].length > 0)).toBe(true)
+      }
+    }
+  })
+
   it.each([false, true])('grades stable quiz IDs and feedback after authored choice reversal: %s', async (reverse) => {
     const h = harness({ completions: beforeTask(exampleCourse, 'override.explain') })
     const check = h.bundle.checks.find((entry) => entry.id === 'explain-udr')!

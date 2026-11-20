@@ -1,0 +1,5 @@
+.learning-explain { white-space: normal; margin: 8px 0; font-size: 13px; font-weight: normal; }
+.learning-explain summary { cursor: pointer; }
+.learning-explain p { line-height: 1.5; }
+.learning-explain a { color: var(--accent, #1857b6); }
+.learning-explain summary:focus-visible { outline: 2px solid var(--focus, #1857b6); outline-offset: 3px; }
