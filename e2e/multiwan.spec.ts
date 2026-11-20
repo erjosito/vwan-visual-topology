@@ -57,5 +57,6 @@ test('a saved 501-VNet native topology opens without truncation', async ({ page 
   const topology = importAzureCapture(largeVwanCapture(501, 4, 1))
   await page.addInitScript((native) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(native)), topology)
   await page.goto('/?mode=vwan')
+  await page.locator('svg.diagram').waitFor({ state: 'visible' })
   await expect(page.locator('svg.diagram .spoke-node')).toHaveCount(501)
 })

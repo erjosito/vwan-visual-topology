@@ -330,9 +330,9 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
         if (!vpn.enabled || vpn.status !== 'configured' || ![vpn.aHubId, vpn.bHubId].includes(hub.id)) return []
         const from = hub.id === vpn.bHubId ? vpn.aHubId : vpn.bHubId
         const exported = hub.id === vpn.bHubId ? vpn.aToB : vpn.bToA
-        if (!wanBranchTransit(topology, hub.id) || !wanBranchTransit(topology, from)) return []
         return hubTables[from][DEFAULT_HUB_TABLE].flatMap((row) => row.selected)
           .filter((route) => !route.interWanVpnId && route.kind !== 'policy' && route.prefix !== '0.0.0.0/0'
+            && (route.transport === 'VNet' || wanBranchTransit(topology, from))
             && exported.some((prefix) => cidr(prefix)!.length <= cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))
           .map((route) => ({
             ...route, key: `${vpn.id}:${route.key}`, kind: 'vpn-static', transport: 'VPN',

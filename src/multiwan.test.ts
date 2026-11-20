@@ -57,10 +57,23 @@ describe('explicit bounded two-WAN S2S composition', () => {
     topology.interWanVpns![0].status = 'configured'
     topology.azureImport!.hubs[2].routingScopeComplete = false
     expect(forward(topology)[0].status).toBe('unknown')
-    const clean = native()
-    clean.wans![1].allowBranchToBranchTraffic = false
-    expect(forward(clean)[0].status).toBe('unreachable')
     expect(simulate(native()).tables[native().hubs[0].id].find((row) => row.prefix === '10.2.0.0/24')?.selected[0].interWanVpnId).toBeUndefined()
+  })
+
+  it('scopes branch transit independently without suppressing VNet-to-VPN traffic', () => {
+    const topology = native()
+    topology.sites.push({ id: 'branch', name: 'Declared branch', asn: 65001, prefixes: ['192.0.2.0/24'] })
+    topology.connections.push({ id: 'branch-vpn', name: 'Branch VPN', hubId: topology.hubs[0].id,
+      siteId: 'branch', transport: 'VPN', enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] })
+    topology.interWanVpns![0].aToB.push('192.0.2.0/24')
+    const branch = () => traceFlow(topology, simulate(topology), topology.hubs[3].id, '192.0.2.4')[0].status
+    expect(branch()).toBe('delivered')
+    topology.wans![0].allowBranchToBranchTraffic = false
+    expect(branch()).toBe('unreachable')
+    expect(forward(topology)[0].status).toBe('delivered')
+    topology.wans![0].allowBranchToBranchTraffic = true
+    topology.wans![1].allowBranchToBranchTraffic = false
+    expect(branch()).toBe('delivered')
   })
 
   it('rejects invalid ownership, peer bindings, ambiguous duplicate captures and unsupported default export', () => {

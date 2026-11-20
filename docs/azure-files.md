@@ -90,8 +90,9 @@ prefixes. Empty exports mean no routes; default-route export is unsupported.
 These are explicit static VPN route exports with an empty modeled local AS path,
 not inferred BGP advertisements or a prediction of negotiated AS-path preference.
 Imported VPN routes are not reflected back across the tunnel.
-WAN branch-to-branch controls are retained independently; the explicit VPN model
-conservatively requires branch transit enabled on both WANs.
+WAN branch-to-branch controls are retained independently. A WAN with branch
+transit disabled does not export its branch-origin routes to the inter-WAN VPN
+or other branches; VNet-to-VPN traffic remains enabled.
 
 Edit either endpoint hub to change **S2S tunnel enabled**, **VPN model provenance**
 and **A to B / B to A IPv4 export prefixes**. WAN ownership is shown on hubs and
