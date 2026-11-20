@@ -24,13 +24,13 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
   const trigger = useRef<HTMLButtonElement>(null)
   const progress = state?.ledger ? beltProgress(state.ledger, course, assessments) : undefined
   const highest = state?.ledger ? highestTrackBelt(state.ledger) : undefined
-  const unknown = language === 'ja' ? '学習の進捗を利用不可' : 'Learning progress unavailable'
-  const identity = cloud?.account?.name ?? (language === 'ja' ? '未サインイン' : 'Not signed in')
+  const unknown = t('Learning progress unavailable')
+  const identity = cloud?.account?.name ?? t('Not signed in')
   const syncStatus = session?.cloudProgress && progressStatusLabel(session.cloudProgress.status, language, true)
   const beltLabel = highest ? `${highest.belt.name[language]}${highest.trackCount > 1 ? ` x${highest.trackCount}` : ''}` : unknown
   const localWarning = progress && state?.status !== 'saved'
-    ? state?.status === 'session' ? language === 'ja' ? 'セッションのみ' : 'Session only' : unknown : undefined
-  const pointsUnit = language === 'ja' ? 'ポイント' : 'points'
+    ? state?.status === 'session' ? t('Session only') : unknown : undefined
+  const pointsUnit = t('points')
   const progressLabel = progress ? `${highest?.belt.id !== progress.belt.id ? `${name[language]}: ` : ''}${session?.presentationPreview ? `${progress.points} ${pointsUnit} · ` : ''}${nextBeltLabel(progress, language)}` : ''
   const description = `${identity} · ${t('Highest belt across tracks')}: ${highest ? `${highest.belt.name[language]} · ${t('Tracks at this belt: {0}', highest.trackCount)}` : unknown} · ${course.title[language]} · ${name[language]} · ${progress ? `${progress.belt.name[language]} · ${progress.points} ${pointsUnit} · ${nextBeltLabel(progress, language)}` : unknown}${syncStatus ? ` · ${syncStatus}` : ''}`
   return <>
@@ -49,7 +49,7 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
       </> : <>{identity} · {course.title[language]} · {name[language]} - </>}{progress ? <>
         {!session?.presentationPreview && <>
         <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={progress.belt.color} stroke="currentColor" /></svg>
-        {progress.belt.name[language]} · {progress.points} {language === 'ja' ? 'ポイント' : 'points'}
+        {progress.belt.name[language]} · {progress.points} {pointsUnit}
         </>}
         {localWarning && <> · {localWarning}</>}
         {' '}<span className="learning-status-next" data-testid="learning-next-belt">{progressLabel}</span>
@@ -58,7 +58,7 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
     </button>
     {open && Panel && <Panel onClose={() => { setOpen(false); trigger.current?.focus({ preventScroll: true }) }} />}
     {open && !Panel && <span role="status">{failed
-      ? language === 'ja' ? '学習状態の詳細を読み込めません。再読み込みして再試行してください。' : 'Learning status details could not load. Reload to retry.'
-      : language === 'ja' ? '学習状態を読み込み中...' : 'Loading learning status...'}</span>}
+      ? t('Learning status details could not load. Reload to retry.')
+      : t('Loading learning status...')}</span>}
   </>
 }

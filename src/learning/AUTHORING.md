@@ -60,6 +60,9 @@ the task. The native dialog and topic copy stay in the optional learning UI,
 not normal startup. Confetti is decorative, bounded
 and disabled by reduced-motion preferences. Reload retains the award but does not
 replay a dismissed or pending notification.
+Native route explanations import only `explain.css`. Keep sidebar and belt
+styles in the optional `LearningDialog` import of `learning.css`; importing
+that stylesheet through `Explain` would load the learning UI styles at startup.
 
 The full-journey task counter and final completion screen remain separate from
 the scenario edition's eight-mission core black belt. Available-course denominators and

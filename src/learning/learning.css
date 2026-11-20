@@ -5,12 +5,7 @@
   align-items: center;
   margin-bottom: 12px;
 }
-.learning-explain { white-space: normal; margin: 8px 0; font-size: 13px; font-weight: normal; }
-.learning-explain summary { cursor: pointer; }
-.learning-explain p { line-height: 1.5; }
-.learning-explain a { color: var(--accent, #1857b6); }
 .learning-notice { border-left: 3px solid var(--border, #b8c7d8); padding: 8px 12px; }
-.learning-explain summary:focus-visible { outline: 2px solid var(--focus, #1857b6); outline-offset: 3px; }
 .learning-sidebar {
   position: fixed;
   inset: 64px 8px 8px auto;

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useLanguage, localizeDiagnostic } from '../i18n'
 import { concepts, labels, text } from './content'
 import type { ConceptId } from './content'
-import './learning.css'
+import './explain.css'
 
 export function Explain({ concept, evidence = [] }: { concept: ConceptId; evidence?: readonly string[] }) {
   const language = useLanguage()
