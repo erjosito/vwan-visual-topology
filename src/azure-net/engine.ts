@@ -1628,7 +1628,22 @@ function compileSingleSubnetEffectiveRoutes(
   }
 
   const resolved: AzEffectiveRoute[] = []
-  for (const [, group] of byPrefix) {
+  const protectedRoutes = candidates.filter((route) => route.source === 'System' &&
+    (route.nextHopType === 'VnetLocal' || route.nextHopType === 'VNetPeering'))
+    .map((route) => ({ route, range: cidr(route.prefix) }))
+  for (const [prefix, entries] of byPrefix) {
+    const range = cidr(prefix)
+    const protection = range && protectedRoutes.find((entry) => entry.range &&
+      entry.range.length <= range.length &&
+      range.network >= entry.range.network && range.network < entry.range.network + 2 ** (32 - entry.range.length))
+    // Exclude contained BGP routes before exact-prefix selection and later LPM; UDRs remain eligible.
+    const group = entries.filter((route) => {
+      if (!protection || (route.source !== 'RouteServer' && route.source !== 'VirtualNetworkGateway')) return true
+      resolved.push({ ...route, active: false,
+        suppressedReason: `Overridden by protected System ${protection.route.nextHopType} route ${protection.route.prefix} (${protection.route.originLabel}); BGP cannot override local or peered VNet routes, even with a more-specific prefix.` })
+      return false
+    })
+    if (!group.length) continue
     if (group.length === 1) {
       resolved.push({ ...group[0], active: true })
       continue
