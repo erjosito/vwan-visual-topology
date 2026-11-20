@@ -1628,21 +1628,36 @@ function compileSingleSubnetEffectiveRoutes(
   }
 
   const resolved: AzEffectiveRoute[] = []
-  for (const [, group] of byPrefix) {
+  const sourceRank = (r: AzEffectiveRoute): number => {
+    if (
+      r.nextHopType === 'InterfaceEndpoint' &&
+      !r.privateEndpointRouteTableEnabled
+    ) {
+      return 0
+    }
+    if (r.source === 'User') return 1
+    if (r.source === 'RouteServer' || r.source === 'VirtualNetworkGateway') return 2
+    return 3 // System
+  }
+  const protectedRoutes = candidates.filter((route) => route.source === 'System' &&
+    (route.nextHopType === 'VnetLocal' || route.nextHopType === 'VNetPeering'))
+    .map((route) => ({ route, range: cidr(route.prefix) }))
+  for (const [prefix, entries] of byPrefix) {
+    const range = cidr(prefix)
+    const protection = range && protectedRoutes.find((entry) => entry.range &&
+      entry.range.length <= range.length &&
+      range.network >= entry.range.network && range.network < entry.range.network + 2 ** (32 - entry.range.length))
+    // Exclude contained BGP routes before exact-prefix selection and later LPM; UDRs remain eligible.
+    const group = entries.filter((route) => {
+      if (!protection || sourceRank(route) !== 2) return true
+      resolved.push({ ...route, active: false,
+        suppressedReason: `Overridden by protected System ${protection.route.nextHopType} route ${protection.route.prefix}, even for more-specific BGP.` })
+      return false
+    })
+    if (!group.length) continue
     if (group.length === 1) {
       resolved.push({ ...group[0], active: true })
       continue
-    }
-    const sourceRank = (r: AzEffectiveRoute): number => {
-      if (
-        r.nextHopType === 'InterfaceEndpoint' &&
-        !r.privateEndpointRouteTableEnabled
-      ) {
-        return 0
-      }
-      if (r.source === 'User') return 1
-      if (r.source === 'RouteServer' || r.source === 'VirtualNetworkGateway') return 2
-      return 3 // System
     }
     const minRank = Math.min(...group.map(sourceRank))
     const topRanked = group.filter((r) => sourceRank(r) === minRank && !vpnCoexistenceBackups.has(r.id))
