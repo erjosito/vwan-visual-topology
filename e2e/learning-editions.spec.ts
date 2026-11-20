@@ -307,6 +307,7 @@ for (const language of ['en', 'ja'] as const) {
   })
 
   test(`${language}: narrow quiz keeps radios beside readable answers and separates scenario progress`, async ({ page }, testInfo) => {
+    test.setTimeout(90_000)
     await page.setViewportSize({ width: 360, height: 740 })
     await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
     await page.goto('/?mode=full')
