@@ -244,6 +244,7 @@ try {
     }
     $configModes = if ($Suite -eq 'Metadata') { @('normal') } elseif ($Suite -eq 'Contexts') { @('missing-table-labels', 'missing-table-routes') } else { @('normal', 'static-routes', 'partial', 'cross', 'vnet-only', 'basic', 'bad-next') }
     foreach ($mode in $configModes) {
+        Set-Content -LiteralPath $env:MOCK_AZ_LOG -Value ''
         $env:MOCK_AZ_MODE = if ($mode -eq 'cross') { 'partial' } else { $mode }
         $file = Join-Path $output "$mode.json"
         [string[]]$extra = if ($mode -eq 'cross') { @('-AllowCrossSubscriptionVnets') } else { @() }
