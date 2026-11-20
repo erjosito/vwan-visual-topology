@@ -4057,19 +4057,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         (p) => p.vnetAId === selectedVnetId || p.vnetBId === selectedVnetId,
                       )
                     : topology.vnetPeerings
-              const filteredUdrTables =
-                selected.kind === 'subnet'
-                  ? topology.udrTables.filter((rt) => {
-                      const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
-                      const snet = vnet?.subnets.find((s) => s.id === selected.subnetId)
-                      return snet?.routeTableId === rt.id
-                    })
-                  : selectedVnetId
-                    ? topology.udrTables.filter((rt) => {
-                        const vnet = topology.vnets.find((v) => v.id === selectedVnetId)
-                        return vnet?.subnets.some((s) => s.routeTableId === rt.id) ?? false
-                      })
-                    : topology.udrTables
 
               const context = (
               <>
@@ -4483,17 +4470,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </InspectorSection>
               )
               const routeTableEditor = showVnetEditor && (
-                <InspectorSection key={`routes-${selectedVnetId}`} title={t('Route tables')}
-                  summary={t('{0} route tables', filteredUdrTables.length)}
-                  initialOpen={guidanceNavigation && selected.kind === 'subnet'}>
-                <Suspense fallback={null}><UdrTablesEditor topology={topology} tables={filteredUdrTables}
+                <Suspense key={`routes-${selectedVnetId}`} fallback={null}><UdrTablesEditor topology={topology}
+                  selected={selected} selectedVnetId={selectedVnetId} initialOpen={guidanceNavigation && selected.kind === 'subnet'}
                   commit={commitTopology} onClone={(cloneId) => setUdrManager({ cloneId })}
                   onLibrary={(tableId) => setUdrManager(tableId ? { tableId } : {})}
                   onCreate={() => selected.kind === 'subnet'
                     ? createAndAssociateRouteTable(selected.vnetId, selected.subnetId)
                     : createAndAssociateRouteTable()}
                   anchor={selected.kind === 'subnet' ? { vnetId: selected.vnetId, subnetId: selected.subnetId } : undefined} /></Suspense>
-                </InspectorSection>
               )
               const subnetEditor = showVnetEditor && (
                 <InspectorSection key={`subnets-${selectedVnetId}`} title={t('Subnet configuration')}
