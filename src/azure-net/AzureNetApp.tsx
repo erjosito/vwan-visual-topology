@@ -143,7 +143,7 @@ const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
 const CloneVnetDialog = lazy(() => import('../CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
 const UdrTableManager = lazy(() => import('./UdrTableManager'))
-const UdrTableEditor = lazy(() => import('./UdrTableEditor'))
+const UdrTablesEditor = lazy(() => import('./UdrTableEditor').then((module) => ({ default: module.UdrTablesEditor })))
 const TopologyContextMenu = lazy(() => import('../TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridConnectionEditor })))
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
@@ -4486,30 +4486,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 <InspectorSection key={`routes-${selectedVnetId}`} title={t('Route tables')}
                   summary={t('{0} route tables', filteredUdrTables.length)}
                   initialOpen={guidanceNavigation && selected.kind === 'subnet'}>
-                <div className="aznet-card" data-testid="aznet-udr-editor">
-                  <div className="row" style={{ flexWrap: 'wrap' }}>
-                    <button type="button" className="aznet-btn" onClick={() => setUdrManager({})}>{t('Route-table library')}</button>
-                    <button
-                      type="button"
-                      className="aznet-btn aznet-btn-primary"
-                      data-testid="aznet-create-rt-btn"
-                      onClick={() =>
-                        selected.kind === 'subnet'
-                          ? createAndAssociateRouteTable(selected.vnetId, selected.subnetId)
-                          : createAndAssociateRouteTable()
-                      }
-                    >
-                      + Create Route Table
-                    </button>
-                  </div>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
-                    {t('Route tables are independent resources. Only subnets in the same region can share a table. Legacy regions are inferred only from unambiguous existing associations; otherwise set an explicit region.')}
-                  </p>
-                  <Suspense fallback={null}>{filteredUdrTables.map((rt) => <UdrTableEditor key={rt.id} topology={topology} table={rt}
-                    commit={commitTopology} onClone={(cloneId) => setUdrManager({ cloneId })}
-                    onLibrary={(tableId) => setUdrManager({ tableId })}
-                    anchor={selected.kind === 'subnet' ? { vnetId: selected.vnetId, subnetId: selected.subnetId } : undefined} />)}</Suspense>
-                </div>
+                <Suspense fallback={null}><UdrTablesEditor topology={topology} tables={filteredUdrTables}
+                  commit={commitTopology} onClone={(cloneId) => setUdrManager({ cloneId })}
+                  onLibrary={(tableId) => setUdrManager(tableId ? { tableId } : {})}
+                  onCreate={() => selected.kind === 'subnet'
+                    ? createAndAssociateRouteTable(selected.vnetId, selected.subnetId)
+                    : createAndAssociateRouteTable()}
+                  anchor={selected.kind === 'subnet' ? { vnetId: selected.vnetId, subnetId: selected.subnetId } : undefined} /></Suspense>
                 </InspectorSection>
               )
               const subnetEditor = showVnetEditor && (

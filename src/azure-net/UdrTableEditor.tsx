@@ -6,6 +6,28 @@ import { resolveUdrRegion } from './udr-regions'
 import { deleteUdrTable, udrAssociations } from './udr-tables'
 import './udr-tables.css'
 
+export function UdrTablesEditor({ topology, tables, commit, onCreate, onClone, onLibrary, anchor }: {
+  topology: AzNetTopology; tables: AzUdrTable[]
+  commit: (update: (draft: AzNetTopology) => void) => boolean
+  onCreate: () => void
+  onClone: (id: string) => void
+  onLibrary: (id?: string) => void
+  anchor?: { vnetId: string; subnetId: string }
+}) {
+  return <div className="aznet-card" data-testid="aznet-udr-editor">
+    <div className="row" style={{ flexWrap: 'wrap' }}>
+      <button type="button" className="aznet-btn" onClick={() => onLibrary()}>{t('Route-table library')}</button>
+      <button type="button" className="aznet-btn aznet-btn-primary" data-testid="aznet-create-rt-btn"
+        onClick={onCreate}>+ Create Route Table</button>
+    </div>
+    <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
+      {t('Route tables are independent resources. Only subnets in the same region can share a table. Legacy regions are inferred only from unambiguous existing associations; otherwise set an explicit region.')}
+    </p>
+    {tables.map((table) => <UdrTableEditor key={table.id} topology={topology} table={table}
+      commit={commit} onClone={onClone} onLibrary={onLibrary} anchor={anchor} />)}
+  </div>
+}
+
 export default function UdrTableEditor({ topology, table, commit, onClone, onLibrary, anchor }: {
   topology: AzNetTopology; table: AzUdrTable
   commit: (update: (draft: AzNetTopology) => void) => boolean
