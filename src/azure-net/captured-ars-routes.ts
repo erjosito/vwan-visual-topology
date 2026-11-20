@@ -9,14 +9,14 @@ export function capturedArsRoutes(input: unknown) {
     const row = raw as Record<string, unknown>
     const strings = ['network', 'localAddress', 'localRole', 'nextHop', 'sourcePeer', 'origin', 'asPath'] as const
     if (typeof row.network !== 'string' || !row.network ||
-      strings.some((key) => row[key] !== undefined && (typeof row[key] !== 'string' || (row[key] as string).length > 512)) ||
-      (row.weight !== undefined && (typeof row.weight !== 'number' || !Number.isSafeInteger(row.weight) || row.weight < 0))) {
+      strings.some((key) => row[key] != null && (typeof row[key] !== 'string' || (row[key] as string).length > 512)) ||
+      (row.weight != null && (typeof row.weight !== 'number' || !Number.isSafeInteger(row.weight) || row.weight < 0))) {
       rejected = true
       continue
     }
     const route: AzCapturedBgpPeerRoute = { network: row.network }
-    for (const key of strings) if (row[key] !== undefined) route[key] = row[key] as string
-    if (row.weight !== undefined) route.weight = row.weight as number
+    for (const key of strings) if (row[key] != null) route[key] = row[key] as string
+    if (row.weight != null) route.weight = row.weight as number
     rows.push(route)
   }
   return { rows, rejected }

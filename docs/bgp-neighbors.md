@@ -49,6 +49,10 @@ remain unknown; these views do not resolve #233 or #298.
 Historical [captured BGP observations](bgp-observations.md) stay in **Azure
 files**, with their original endpoint scope, timestamps and native fields.
 They are not merged into simulated rows or updated by configuration edits.
+That view also exposes managed-gateway learned routes by exact captured local
+address and explicit source peer, including route-only captures. These are
+native historical rows, not the simulated inspector's shared logical counts;
+they do not supply missing ER circuit/MSEE or physical-alias mappings.
 
 ## Identity and managed boundaries
 
