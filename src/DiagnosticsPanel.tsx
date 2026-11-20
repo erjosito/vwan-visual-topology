@@ -11,7 +11,7 @@ import { nodePrefixes } from './paths'
 import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
-import { canAcknowledgeWarning, orderWarningFindings } from './warning-triage'
+import { canAcknowledgeWarning, orderWarningFindings } from './warning-acknowledgements'
 import { WarningAcknowledgement } from './WarningAcknowledgement'
 
 const storageKey = 'vwan-visual-topology:diagnostics:v1'

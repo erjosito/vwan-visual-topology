@@ -1,5 +1,6 @@
 // Presentation-only equivalents of engine diagnostics. The engine's English API is unchanged.
 export const diagnosticJa: Record<string, string> = {
+  'Could not load warning triage. Reopen diagnostics to retry.': '警告の確認機能を読み込めませんでした。診断を開き直して再試行してください。',
   'Acknowledge warning': '警告を確認済みにする',
   'Restore attention': '要確認に戻す',
   'Restore all warning attention': 'すべての警告を要確認に戻す',

@@ -9,7 +9,7 @@ import type { ObjectSelection, RouterSelection, Topology } from './model'
 import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
 import { Explain } from './learning/Explain'
-import { canAcknowledgeWarning, orderWarningFindings } from './warning-triage'
+import { canAcknowledgeWarning, orderWarningFindings } from './warning-acknowledgements'
 import { WarningAcknowledgement } from './WarningAcknowledgement'
 
 export function RoutingIssuesPanel({ topology, report, findingId, selectedFindingId, coverageOpen, onFinding, onShowAll, onInspect, onEditObject, onOpenStaticRouting, onAssignPrefixToSite, isAcknowledged, onAcknowledge, onRestoreAll, onClose }: {

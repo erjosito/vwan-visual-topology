@@ -1,16 +1,7 @@
 import type { DiagnosticsFinding } from './diagnostics'
 import type { Topology } from './model'
 import { topologyObject } from './model'
-import { evidenceSet, warningFingerprint } from './warning-acknowledgements'
-
-export function canAcknowledgeWarning(finding: {
-  severity: string; rule?: string; category?: string; confidence?: string
-  forward?: { status: string; traceComplete?: boolean }[]; reverse?: { status: string; traceComplete?: boolean }[]
-}) {
-  return finding.severity === 'warning' && finding.confidence !== 'unknown'
-    && !['unknown', 'network-unreachable', 'unreachable', 'connectivity-failure', 'routing-not-assessed', 'scale-limit'].includes(finding.category ?? finding.rule ?? '')
-    && ![...(finding.forward ?? []), ...(finding.reverse ?? [])].some((path) => path.status === 'unknown' || path.traceComplete === false)
-}
+import { evidenceSet, warningFingerprint } from './warning-evidence'
 
 export function vwanWarningToken(topology: Topology, finding: DiagnosticsFinding): string {
   const entries = finding.occurrences ?? [finding]
@@ -37,8 +28,4 @@ export function vwanWarningToken(topology: Topology, finding: DiagnosticsFinding
     }))),
     objects: evidenceSet(objects), maps, allowBranchToBranchTraffic: topology.allowBranchToBranchTraffic,
   })
-}
-
-export function orderWarningFindings<T>(findings: T[], acknowledged: (finding: T) => boolean): T[] {
-  return [...findings.filter((finding) => !acknowledged(finding)), ...findings.filter(acknowledged)]
 }

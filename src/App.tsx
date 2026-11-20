@@ -1,6 +1,6 @@
 import { t, localizeDiagnostic, useLanguage, documentTitles } from './i18n'
-import { canAcknowledgeWarning, vwanWarningToken } from './warning-triage'
-import { setWarningAcknowledgement } from './warning-acknowledgements'
+import { vwanWarningToken } from './warning-triage'
+import { canAcknowledgeWarning, setWarningAcknowledgement } from './warning-acknowledgements'
 import { LearningTools } from './learning/LearningTools'
 import { WorkspaceAccountStatus, WorkspaceMenu } from './WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'

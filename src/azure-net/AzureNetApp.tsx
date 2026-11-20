@@ -7,16 +7,12 @@ import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
-import { azWarningToken } from './warning-triage'
-import { canAcknowledgeWarning, orderWarningFindings } from '../warning-triage'
-import { setWarningAcknowledgement } from '../warning-acknowledgements'
-import { WarningAcknowledgement } from '../WarningAcknowledgement'
+import { canAcknowledgeWarning, orderWarningFindings, setWarningAcknowledgement } from '../warning-acknowledgements'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
-import { Explain } from '../learning/Explain'
 import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
 import { ConfigurationEditStatus, InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
@@ -134,6 +130,8 @@ function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const Explain = lazy(() => import('../learning/Explain').then((module) => ({ default: module.Explain })))
+const WarningAcknowledgement = lazy(() => import('../WarningAcknowledgement').then((module) => ({ default: module.WarningAcknowledgement })))
 const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls }))
   .catch(() => ({ default: () => <p role="status">{t('Flow export controls unavailable. Reconnect and reload to retry; routing results remain available.')}</p> })))
 const VpnNatGatewayEditor = lazy(() => import('../VpnNatEditor').then((module) => ({ default: module.VpnNatGatewayEditor })))
@@ -556,18 +554,27 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [activeTopology, rawSimulation, rawAnalysis])
   const diagnostics = useMemo(() => azDisplayResult(rawDiagnostics, displayNames), [rawDiagnostics, displayNames])
   const rawFindingById = useMemo(() => new Map(rawDiagnostics.map((finding) => [finding.id, finding])), [rawDiagnostics])
+  const [warningTriage, setWarningTriage] = useState<typeof import('./warning-triage')>()
+  useEffect(() => {
+    if (warningTriage || (activeTab !== 'diagnostics' && !topology.warningAcknowledgements?.length)) return
+    let active = true
+    void import('./warning-triage').then((module) => { if (active) setWarningTriage(module) })
+      .catch(() => { if (active) setWorkspaceNotice(t('Could not load warning triage. Reopen diagnostics to retry.')) })
+    return () => { active = false }
+  }, [activeTab, topology.warningAcknowledgements?.length, warningTriage])
   const warningTokens = new Map<string, string>()
   const acknowledgedTokens = useMemo(() => new Set(topology.warningAcknowledgements ?? []), [topology.warningAcknowledgements])
   const warningToken = (finding: AzDiagnosticFinding) => {
+    if (!warningTriage) return undefined
     let token = warningTokens.get(finding.id)
     if (!token) {
-      token = azWarningToken(activeTopology, rawSimulation, rawFindingById.get(finding.id) ?? finding)
+      token = warningTriage.azWarningToken(activeTopology, rawSimulation, rawFindingById.get(finding.id) ?? finding)
       warningTokens.set(finding.id, token)
     }
     return token
   }
   const isAcknowledged = (finding: AzDiagnosticFinding) => canAcknowledgeWarning(finding)
-    && acknowledgedTokens.size > 0 && acknowledgedTokens.has(warningToken(finding))
+    && acknowledgedTokens.size > 0 && acknowledgedTokens.has(warningToken(finding) ?? '')
   const attentionDiagnostics = diagnostics.filter((finding) => !isAcknowledged(finding))
   const actionableCount = attentionDiagnostics.filter((f) => f.severity !== 'info').length
   const visibleDiagnostics = orderWarningFindings(reviewFindingIds
@@ -577,7 +584,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const affectedFlowCount = azFindingImpact(attentionDiagnostics.filter((f) => f.severity !== 'info'), endpointOptions).pairs
   const acknowledgeWarning = (finding: AzDiagnosticFinding, acknowledged: boolean) => {
     if (!canAcknowledgeWarning(finding)) return
-    commitTopology((draft) => setWarningAcknowledgement(draft, warningToken(finding), acknowledged))
+    const token = warningToken(finding)
+    if (token) commitTopology((draft) => setWarningAcknowledgement(draft, token, acknowledged))
   }
   const traceFinding = (finding: AzDiagnosticFinding) => {
     const sf = finding.sampleFlow
@@ -4004,7 +4012,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           </div>
                         </div>
                         <h4 style={{ margin: '8px 0 4px 0', fontSize: 13 }}>{finding.title}</h4>
-                        {canAcknowledgeWarning(finding) && <WarningAcknowledgement acknowledged={isAcknowledged(finding)} onChange={(acknowledged) => acknowledgeWarning(finding, acknowledged)} />}
+                        {canAcknowledgeWarning(finding) && <Suspense fallback={null}><WarningAcknowledgement disabled={!warningTriage} acknowledged={isAcknowledged(finding)} onChange={(acknowledged) => acknowledgeWarning(finding, acknowledged)} /></Suspense>}
                         <p data-testid="aznet-root-impact">
                           {(() => {
                             const impact = azFindingImpact([finding], endpointOptions)
@@ -4014,7 +4022,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         <p style={{ margin: '0 0 6px 0', fontSize: 11.5, color: 'var(--text)' }}>
                           {finding.summary}
                         </p>
-                        <Explain concept="coverage" evidence={[finding.summary]} />
+                        <Suspense fallback={null}><Explain concept="coverage" evidence={[finding.summary]} /></Suspense>
                         <div
                           style={{
                             fontSize: 11.5,

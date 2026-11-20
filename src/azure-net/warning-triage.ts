@@ -1,7 +1,7 @@
 import type { AzDiagnosticFinding } from './diagnostics'
 import type { AzNetTopology } from './model'
 import { traceAzNetPair, type AzSimulationResult } from './engine'
-import { evidenceSet, warningFingerprint } from '../warning-acknowledgements'
+import { evidenceSet, warningFingerprint } from '../warning-evidence'
 
 export function azWarningToken(topology: AzNetTopology, simulation: AzSimulationResult, finding: AzDiagnosticFinding): string {
   const entries = finding.occurrences ?? [finding]
