@@ -6,6 +6,7 @@ import { PeerRouteAttributes } from './RouteMapsPanel'
 import { VpnNatConnectionEditor } from '../VpnNatEditor'
 import { saveManagedVnra, vnraSubnetName } from './vnra-authoring'
 import { guidanceAnchor } from '../learning/guidance'
+import { ApplianceAvailability } from './VnetRoutingSettings'
 
 type Props = { topology: AzNetTopology; commit: (edit: (draft: AzNetTopology) => void) => boolean | void }
 const prefixes = (text: string) => {
@@ -95,7 +96,11 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
   const app = vnet?.appliances.find((app) => app.id === applianceId)
   if (!app || !vnet) return null
   if (app.kind === 'vnra') return <ManagedVnraEditor key={app.subnetId} topology={topology} vnetId={vnet.id} applianceId={app.id} commit={commit} />
+  if (app.kind === 'azure-firewall') return <section className="aznet-card" data-testid="aznet-firewall-availability">
+    <h3>{app.name}</h3><ApplianceAvailability kind="azure-firewall" />
+  </section>
   return <section className="aznet-card" data-testid="aznet-hybrid-nva-editor">
+    <ApplianceAvailability kind="nva-vm" />
     <h3>{t('NVA BGP advertisements')}</h3>
     <form onSubmit={(event) => {
       event.preventDefault()
@@ -117,7 +122,7 @@ export function HybridNvaEditor({ topology, applianceId, commit }: Props & { app
     }}>
       <label className="field"><span>{t('Peer ASN')}</span><input type="number" min={1} max={4294967294} name="asn" defaultValue={app.asn ?? 65501} /></label>
       <label><input type="checkbox" name="bgp" defaultChecked={app.bgpEnabled === true} />{t('BGP enabled')}</label>
-      <label><input type="checkbox" name="hub" disabled={!vnet.vwanHubAttachment?.enabled || app.kind === 'azure-firewall'} defaultChecked={app.vwanBgpEnabled === true} />{t('Peer with the attached Virtual WAN hub')}</label>
+      <label><input type="checkbox" name="hub" disabled={!vnet.vwanHubAttachment?.enabled} defaultChecked={app.vwanBgpEnabled === true} />{t('Peer with the attached Virtual WAN hub')}</label>
       <label className="field"><span>{t('Advertised prefixes')}</span><textarea name="prefixes" defaultValue={app.advertisedPrefixes?.join('\n') ?? ''} /></label>
       <p className="muted">{t('Uses this original appliance and VNet connection. Requires BGP and IP forwarding; hub policies apply on the hosting VNet connection. Advertisements do not create data-plane reachability.')}</p>
       <button type="submit">{t('Save NVA BGP routing')}</button>

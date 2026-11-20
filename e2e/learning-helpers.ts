@@ -12,6 +12,16 @@ export const learningSidebar = (page: Page) => page.getByTestId('learning-sideba
 export const learningAnchor = (page: Page, ...scope: string[]) =>
   page.locator(`[data-learning-anchor=${JSON.stringify(guidanceAnchor(...scope))}]`)
 
+export async function openLearning(page: Page) {
+  await page.getByTestId('learning-open').click()
+  await page.getByTestId('learning-start').click()
+}
+
+export async function learningAdvancedOptions(page: Page) {
+  const options = page.getByTestId('learning-advanced')
+  if (!await options.evaluate((element) => (element as HTMLDetailsElement).open)) await options.locator('summary').click()
+}
+
 export async function advanceLearningTask(page: Page, language: 'en' | 'ja' = 'en') {
   await expect(learningSidebar(page).getByTestId('learning-debrief')).toBeVisible()
   if (await learningSidebar(page).getByTestId('learning-belt-earned').count()) {

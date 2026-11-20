@@ -76,6 +76,7 @@ for (const mode of ['hub-spoke', 'full']) {
       await page.keyboard.press('Shift+F10')
       await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
       const summary = page.locator('.aznet-inspector-window summary').filter({ hasText: text('Route tables') }).first()
+      if (profile.preview) await expect(summary).toBeVisible()
       if (await summary.count() && await summary.locator('..').getAttribute('open') === null) await summary.click()
       await page.locator('.aznet-inspector-window').getByTestId('aznet-rt-card-shared')
         .getByRole('button', { name: text('Open in route-table library'), exact: true }).click()

@@ -47,14 +47,19 @@ describe('secured WAN and hybrid transfer content', () => {
     })
   })
 
-  it('keeps inspection with active intent and rejects a delivered peering bypass when intent is disabled', () => {
+  it('rejects a direct peering bypass even when the secured hub has active routing intent', () => {
     const input = document('secured-wan')
     input.topology.udrTables[0].routes[0].enabled = false
+    expect(outcomes(input, 'secured-workload-path')).toEqual(['satisfied'])
     const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
     input.topology.vnetPeerings.push({
       id: 'shortcut', name: 'Shortcut', vnetAId: 'a', vnetBId: 'b', enabled: true, aToB: flags, bToA: { ...flags },
     })
-    expect(outcomes(input, 'secured-workload-path')).toEqual(['satisfied'])
+    expect(outcomes(input, 'secured-workload-path')).toEqual(['violated'])
+    expect(assess(input, 'secured-workload-path').assessments[0].evidence).toMatchObject({
+      forward: { status: 'delivered', traversedApplianceIds: [] },
+      reverse: { status: 'delivered', traversedApplianceIds: [] },
+    })
     input.topology.vwanHubs[0].routingIntent.private = false
     expect(outcomes(input, 'secured-workload-path')).toEqual(['violated'])
     expect(assess(input, 'secured-workload-path').assessments[0].evidence).toMatchObject({

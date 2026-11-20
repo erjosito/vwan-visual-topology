@@ -38,6 +38,7 @@ export async function auditAccessibility({ baseURL, artifacts }) {
           await expect(page.getByTestId(sample.state === 'vwan-workspace' ? 'vwan-app' : 'aznet-app')).toBeVisible()
           if (sample.state.startsWith('learning-')) {
             await page.getByTestId('learning-open').click()
+            await page.getByTestId('learning-start').click()
             const sidebar = page.getByTestId('learning-sidebar')
             await expect(sidebar).toBeVisible()
             if (sample.state !== 'learning-sidebar') {

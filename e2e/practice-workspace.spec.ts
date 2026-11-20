@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { exercises } from '../src/learning/exercises'
 import { practiceWorkspaceKey, type PracticeWorkspace } from '../src/learning/practice-workspace'
 import { progressKey } from '../src/learning/progress'
-import { learningOptions } from './learning-helpers'
+import { openLearning, learningOptions } from './learning-helpers'
 
 const normalKeys = ['vwan-visual-topology:v1', 'aznet-visual-topology:v1']
 const stored = (page: Page) => page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), normalKeys)
@@ -28,7 +28,7 @@ async function seed(page: Page, vwan: boolean) {
 
 async function start(page: Page) {
   const dialog = page.getByTestId('learning-sidebar')
-  if (!await dialog.isVisible()) await page.getByTestId('learning-open').click()
+  if (!await dialog.isVisible()) await openLearning(page)
   await dialog.getByRole('button', { name: 'Load practice network', exact: true }).click()
   return dialog
 }
@@ -75,7 +75,7 @@ for (const vwan of [true, false]) {
     }).toBe(true)
     const practicePosition = await position(page, vwan)
     const edited = (await practice(page)).document
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     const reopened = page.getByTestId('learning-sidebar')
     await learningOptions(page)
     await reopened.getByText('Learning path and completed-task review', { exact: true }).click()

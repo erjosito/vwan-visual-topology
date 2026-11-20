@@ -6,7 +6,7 @@ import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { practiceLockName } from '../src/learning/practice-ownership'
 import { scenarioBundle } from '../src/learning/scenario-course'
 import { orderedTasks } from '../src/learning/runner'
-import { completeLearningTasks, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { openLearning, learningAdvancedOptions, completeLearningTasks, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
 import { runnerLabels } from '../src/learning/runner-content'
 
 for (const language of ['en', 'ja'] as const) {
@@ -79,13 +79,14 @@ for (const language of ['en', 'ja'] as const) {
     const outline = details(page).getByTestId('learning-belt-stages')
     await outline.locator('summary').click()
     await expect(outline).toContainText(text('specialist practice beyond core black belt', '黒帯以降も続く専門トピック'))
+    await learningAdvancedOptions(page)
     for (const original of [true, false]) {
       await details(page).getByRole('button', { name: original ? text('Switch to Original edition', '従来版に切り替える') : text('Switch to Scenario edition', 'シナリオ版に切り替える'), exact: true }).click()
       await details(page).getByRole('button', { name: text('Confirm edition switch', '版の切り替えを確認'), exact: true }).click()
       await expect(popup).toHaveCount(0)
     }
     await details(page).getByRole('button', { name: text('Close learning status', '学習状態を閉じる'), exact: true }).click()
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     await expect(panel.getByTestId('learning-belt-progress')).toContainText(text('Route selection and inspection', 'ルート選択と検査'))
     await expect(popup).toHaveCount(0)
   })
@@ -96,10 +97,11 @@ const details = (page: Page) => page.getByTestId('learning-status-details')
 const saved = (page: Page, key: string) => page.evaluate((key) => localStorage.getItem(key), key)
 async function open(page: Page) {
   await page.goto('/?mode=full')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(learningSidebar(page)).toBeVisible()
 }
 async function backup(page: Page, legacy = false) {
+  await learningAdvancedOptions(page)
   const downloaded = page.waitForEvent('download')
   await details(page).getByRole('button', { name: legacy ? 'Download previous practice backup' : 'Download learning backup', exact: true }).click()
   return readFile((await (await downloaded).path())!, 'utf8')
@@ -134,7 +136,7 @@ for (const language of ['en', 'ja'] as const) {
     expect((await new AxeBuilder({ page }).include('.learning-status-panel').analyze()).violations).toEqual([])
     expect(await details(page).evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true)
     await details(page).getByRole('button', { name: language === 'en' ? 'Close learning status' : '学習状態を閉じる', exact: true }).click()
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     const panel = learningSidebar(page)
     await expect(panel.getByTestId('learning-active-track')).toContainText(name)
     await expect(panel.getByTestId('learning-completion-count')).toHaveText(`0 / ${orderedTasks(scenarioBundle).length} ${language === 'en' ? 'Completed' : '完了'}`)
@@ -183,7 +185,7 @@ test('first-earned points, checkpoint gap and linear position survive reload and
   await page.reload()
   await expect(status(page)).toContainText('Scenario edition - White belt')
   await expect(status(page)).toContainText('10 points')
-  await page.getByTestId('learning-open').click()
+  await openLearning(page)
   await expect(learningSidebar(page).getByTestId('learning-active-track')).toContainText('Routing foundations')
   await expect(learningSidebar(page).getByRole('heading', { name: 'Find the service’s address owner', exact: true })).toBeVisible()
   const repairIndex = scenarioBundle.lessons[0].taskOrder.indexOf('private-link.repair')
@@ -251,6 +253,7 @@ test('damaged guided data is not zero credit, cannot be overwritten by completio
   expect(await saved(page, guidedProgressKey)).toBe('damaged guided original')
   await status(page).click()
   await expect(details(page)).toContainText('original is preserved')
+  await learningAdvancedOptions(page)
   await expect(details(page)).toContainText('Original edition: Learning progress unavailable')
   expect(await backup(page)).toBe('damaged guided original')
   await details(page).getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
@@ -268,7 +271,7 @@ test('actual competing tabs cannot write practice or farm points, and recover th
     const bar = other.getByTestId('practice-workspace-bar')
     await expect(bar.getByRole('alert')).toContainText('Another tab owns practice')
     await expect(bar.getByRole('button', { name: 'Resume practice', exact: true })).toBeVisible()
-    await other.getByTestId('learning-open').click()
+    await openLearning(other)
     await expect(learningSidebar(other).getByRole('button', { name: 'Load practice network', exact: true })).toBeVisible()
     await expect(learningSidebar(other).getByRole('button', { name: 'Check task', exact: true })).toHaveCount(0)
     await learningSidebar(other).getByRole('button', { name: 'Load practice network', exact: true }).click()
@@ -306,6 +309,7 @@ test('missing exclusive locking fails closed without persisting or opening a pra
 test('reset refuses a record changed after confirmation instead of deleting the newer saved bytes', async ({ page, context }) => {
   await open(page); await completeLearningTasks(page)
   await status(page).click()
+  await learningAdvancedOptions(page)
   await details(page).getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
   const other = await context.newPage()
   try {
