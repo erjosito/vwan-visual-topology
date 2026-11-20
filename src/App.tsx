@@ -1,4 +1,6 @@
 import { t, localizeDiagnostic, useLanguage, documentTitles } from './i18n'
+import { canAcknowledgeWarning, vwanWarningToken } from './warning-triage'
+import { setWarningAcknowledgement } from './warning-acknowledgements'
 import { LearningTools } from './learning/LearningTools'
 import { WorkspaceAccountStatus, WorkspaceMenu } from './WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
@@ -156,7 +158,12 @@ function App() {
   )
   const routingKey = useMemo(() => routingRevision(activeTopology), [activeTopology])
   const currentCheck = routingCheck?.revision === routingKey ? routingCheck : undefined
-  const routingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity === 'error' || finding.severity === 'warning') ?? []
+  const acknowledgedTokens = useMemo(() => new Set(topology.warningAcknowledgements ?? []), [topology.warningAcknowledgements])
+  const warningToken = (finding: DiagnosticsFinding) => vwanWarningToken(activeTopology, finding)
+  const isAcknowledged = (finding: DiagnosticsFinding) => canAcknowledgeWarning(finding)
+    && acknowledgedTokens.size > 0 && acknowledgedTokens.has(warningToken(finding))
+  const allRoutingIssues = currentCheck?.report?.findings.filter((finding) => finding.severity === 'error' || finding.severity === 'warning') ?? []
+  const routingIssues = allRoutingIssues.filter((finding) => !isAcknowledged(finding))
   const checkCoverage = currentCheck?.report ? summarizeCoverage(currentCheck.report) : undefined
   const editCoveredObject = (node: ObjectSelection) => {
     closePanel()
@@ -300,6 +307,12 @@ function App() {
     try { const next = structuredClone(topology); mutate(next); pruneDeletedInventory(next, topology); save(validateTopology(next)) }
     catch (error) { setError(message(error)) }
   }
+  const acknowledgeWarning = (finding: DiagnosticsFinding, acknowledged: boolean) => {
+    if (!canAcknowledgeWarning(finding)) return
+    update((next) => setWarningAcknowledgement(next, warningToken(finding), acknowledged))
+    if (acknowledged && diagnosticHighlight?.findingId === finding.id) setDiagnosticHighlight(undefined)
+  }
+  const restoreWarningAttention = () => update((next) => { delete next.warningAcknowledgements })
   const assignPrefixToSite = (siteId: string, prefixesToAdd: string[]) => {
     try {
       const next = assignSitePrefixes(topology, siteId, prefixesToAdd)
@@ -744,12 +757,13 @@ function App() {
             : currentCheck.status === 'cancelled' ? 'Routing check cancelled. No complete result is available.'
             : currentCheck.status === 'failed' ? 'Routing check failed. No complete result is available.'
             : checkCoverage?.scanIncomplete ? 'Routing check is incomplete. Some networks or scenarios could not be assessed.'
-            : routingIssues.length ? 'Routing check completed.'
+            : allRoutingIssues.length ? 'Routing check completed.'
             : checkCoverage?.noCheckablePairs || checkCoverage?.unassignedPrefixes.length
               ? 'Advertised networks have no declared owner. Assign site or VNet prefixes to verify end-to-end reachability.'
               : 'No routing issues found within the checked model scope.')}</span>
           {currentCheck?.report && checkCoverage && <><span>{[
             t('{0} routing issues', routingIssues.length),
+            ...(acknowledgedTokens.size ? [t('{0} findings need attention · {1} acknowledged · {2} total', routingIssues.length, allRoutingIssues.length - routingIssues.length, currentCheck.report.findings.length)] : []),
             t('{0} root-cause issues affecting {1} flow pairs', routingIssues.length, diagnosticFlowCount(routingIssues)),
             ...(checkCoverage.unassignedPrefixes.length ? [checkCoverage.unassignedPrefixes.length === 1 ? t('1 unassigned advertised prefix') : t('{0} unassigned advertised prefixes', checkCoverage.unassignedPrefixes.length)] : []),
             ...(checkCoverage.unsupportedFlowCount ? [checkCoverage.unsupportedFlowCount === 1 ? t('1 model-limited flow pair') : t('{0} model-limited flow pairs', checkCoverage.unsupportedFlowCount)] : []),
@@ -766,8 +780,8 @@ function App() {
           {bgpInspection && <Suspense fallback={null}><BgpNeighborsPanel key={bgpInspection.revision} topology={topology}
             initialResource={bgpInspection.resource} unavailableIds={Object.keys(scenario.affected)}
             onClose={() => setBgpInspection(undefined)} /></Suspense>}
-          {panel === 'diagnostics' && <DiagnosticsPanel topology={activeTopology} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
-          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClose={closePanel} />}
+          {panel === 'diagnostics' && <DiagnosticsPanel topology={activeTopology} isAcknowledged={isAcknowledged} onAcknowledge={acknowledgeWarning} onRestoreAll={restoreWarningAttention} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
+          {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} isAcknowledged={isAcknowledged} onAcknowledge={acknowledgeWarning} onRestoreAll={restoreWarningAttention} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
           {panel === 'azure' && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} /></Suspense>}
           <TopologyDiagram topology={topology} faults={scenario.affected} risks={risks} onRisk={setResilienceEndpoint} onClearSelection={() => setSelection(undefined)}

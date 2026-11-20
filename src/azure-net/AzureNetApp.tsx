@@ -7,6 +7,10 @@ import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
+import { azWarningToken } from './warning-triage'
+import { canAcknowledgeWarning, orderWarningFindings } from '../warning-triage'
+import { setWarningAcknowledgement } from '../warning-acknowledgements'
+import { WarningAcknowledgement } from '../WarningAcknowledgement'
 import { measureAzWork, recordAzWork } from './performance'
 import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
@@ -551,12 +555,30 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     return groupAzNetFindings([...staticFindings, ...flowFindings])
   }, [activeTopology, rawSimulation, rawAnalysis])
   const diagnostics = useMemo(() => azDisplayResult(rawDiagnostics, displayNames), [rawDiagnostics, displayNames])
-  const actionableCount = diagnostics.filter((f) => f.severity !== 'info').length
-  const visibleDiagnostics = reviewFindingIds
-    ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics
-  const connectivityFailures = diagnostics.filter((f) => f.category === 'connectivity-failure').length
-  const statefulAsymmetries = diagnostics.filter((f) => f.category === 'asymmetric-firewall-bypass').length
-  const affectedFlowCount = azFindingImpact(diagnostics.filter((f) => f.severity !== 'info'), endpointOptions).pairs
+  const rawFindingById = useMemo(() => new Map(rawDiagnostics.map((finding) => [finding.id, finding])), [rawDiagnostics])
+  const warningTokens = new Map<string, string>()
+  const acknowledgedTokens = useMemo(() => new Set(topology.warningAcknowledgements ?? []), [topology.warningAcknowledgements])
+  const warningToken = (finding: AzDiagnosticFinding) => {
+    let token = warningTokens.get(finding.id)
+    if (!token) {
+      token = azWarningToken(activeTopology, rawSimulation, rawFindingById.get(finding.id) ?? finding)
+      warningTokens.set(finding.id, token)
+    }
+    return token
+  }
+  const isAcknowledged = (finding: AzDiagnosticFinding) => canAcknowledgeWarning(finding)
+    && acknowledgedTokens.size > 0 && acknowledgedTokens.has(warningToken(finding))
+  const attentionDiagnostics = diagnostics.filter((finding) => !isAcknowledged(finding))
+  const actionableCount = attentionDiagnostics.filter((f) => f.severity !== 'info').length
+  const visibleDiagnostics = orderWarningFindings(reviewFindingIds
+    ? diagnostics.filter((finding) => reviewFindingIds.includes(finding.id)) : diagnostics, isAcknowledged)
+  const connectivityFailures = attentionDiagnostics.filter((f) => f.category === 'connectivity-failure').length
+  const statefulAsymmetries = attentionDiagnostics.filter((f) => f.category === 'asymmetric-firewall-bypass').length
+  const affectedFlowCount = azFindingImpact(attentionDiagnostics.filter((f) => f.severity !== 'info'), endpointOptions).pairs
+  const acknowledgeWarning = (finding: AzDiagnosticFinding, acknowledged: boolean) => {
+    if (!canAcknowledgeWarning(finding)) return
+    commitTopology((draft) => setWarningAcknowledgement(draft, warningToken(finding), acknowledged))
+  }
   const traceFinding = (finding: AzDiagnosticFinding) => {
     const sf = finding.sampleFlow
     if (!sf) return
@@ -3086,12 +3108,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               ? t('Analysis cancelled; unassessed cases remain unverified.') : validationErrors.length ? 'Routing check incomplete: fix topology validation errors.'
               : !analysis.checked ? 'No eligible endpoint pairs were checked; connectivity has not been verified.'
                 : !analysis.complete ? 'Routing check incomplete; unchecked pairs are not verified.'
-                  : actionableCount ? 'Routing check completed.'
+                  : diagnostics.some((finding) => finding.severity !== 'info') ? 'Routing check completed.'
                     : 'No routing issues found within the checked model scope.'}</span>
             <span>{actionableCount} routing issues: {connectivityFailures} connectivity failures, {statefulAsymmetries} stateful asymmetries.
               {' '}{actionableCount} root-cause issue{actionableCount === 1 ? '' : 's'} affecting {affectedFlowCount} sampled flow pairs.
               {' '}Checked {analysis.checked} of {analysis.total} representative pairs ({analysis.checked * 2} directional traces).
               {' '}Results update when routing changes.</span>
+            {acknowledgedTokens.size > 0 && <span>{t('{0} findings need attention · {1} acknowledged · {2} total', actionableCount, diagnostics.filter(isAcknowledged).length, diagnostics.length)}</span>}
             <span>{t('{0} representative pairs remain unassessed.', analysis.continuation.remainingPairs)}
               {analysis.limitsReached.length > 0 && ` ${t('Reached limit: {0}', analysis.limitsReached.map((limit) => t(limit === 'maxPairs' ? 'Representative pairs per batch' : limit === 'maxMillis' ? 'Elapsed time' : 'Stored findings')).join(', '))}`}</span>
             {analysis.continuation.status === 'capacity' && <span>{t('Stored evidence capacity reached. Narrow the scope before starting another run.')}</span>}
@@ -3161,7 +3184,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             reverseTrace={singleFlowForCustomIp ? null : (pairAnalysis?.reverse ?? null)}
             additionalForwardTraces={groupedPaths?.paths.map((path) => path.pair.forward)}
             additionalReverseTraces={groupedPaths?.paths.map((path) => path.pair.reverse)}
-            diagnostics={diagnostics}
+            diagnostics={attentionDiagnostics}
             showDiagnosticBadges={showDiagnosticBadges}
             onShowIssues={(findings) => {
               setReviewFindingIds(findings.map((finding) => finding.id))
@@ -3913,6 +3936,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     ))}
                   </div>
                 )}
+                <p data-testid="warning-attention-count" role="status">{t('{0} findings need attention · {1} acknowledged · {2} total', actionableCount, diagnostics.filter(isAcknowledged).length, diagnostics.length)}</p>
+                <p className="muted">{t('Acknowledgement is saved with this design. It does not fix a warning or change routing checks; changed evidence needs attention again.')}</p>
+                {!!topology.warningAcknowledgements?.length && <button className="aznet-btn" onClick={() => commitTopology((draft) => { delete draft.warningAcknowledgements })}>{t('Restore all warning attention')}</button>}
                 {visibleDiagnostics.length === 0 ? (
                   <div
                     style={{
@@ -3931,10 +3957,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {visibleDiagnostics.map((finding) => (
+                    {visibleDiagnostics.map((finding, index) => (
+                      <div key={finding.id}>
+                      {isAcknowledged(finding) && (index === 0 || !isAcknowledged(visibleDiagnostics[index - 1])) && <h3 className="warning-acknowledged-heading">{t('Acknowledged warnings')}</h3>}
                       <div
-                        key={finding.id}
-                        className="aznet-card"
+                        className={`aznet-card${isAcknowledged(finding) ? ' acknowledged-warning' : ''}`}
+                        data-finding-id={finding.id}
                         data-testid={`aznet-finding-${finding.category}`}
                         style={{ background: 'var(--surface)' }}
                       >
@@ -3976,6 +4004,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           </div>
                         </div>
                         <h4 style={{ margin: '8px 0 4px 0', fontSize: 13 }}>{finding.title}</h4>
+                        {canAcknowledgeWarning(finding) && <WarningAcknowledgement acknowledged={isAcknowledged(finding)} onChange={(acknowledged) => acknowledgeWarning(finding, acknowledged)} />}
                         <p data-testid="aznet-root-impact">
                           {(() => {
                             const impact = azFindingImpact([finding], endpointOptions)
@@ -4004,6 +4033,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                             <button type="button" className="aznet-btn" onClick={() => traceFinding(entry)}>Trace affected flow</button>
                           </div>)}
                         </details>}
+                      </div>
                       </div>
                     ))}
                   </div>

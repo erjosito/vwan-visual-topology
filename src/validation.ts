@@ -1,5 +1,6 @@
 import type { DiagramLayout, HubRouteTable, HubRoutingConfiguration, LayoutMode, PrependRule, RouteMap, RouteMapAssignment, RouteMapRule, Topology } from './model'
 import { parseVnetBgpCommunities } from './vnet-communities'
+import { parseWarningAcknowledgements } from './warning-acknowledgements'
 import { attachmentHubRouting, hubRouteTables, propagatesLocally, propagationLabels } from './hub-routing'
 import { validateInventory, type InventorySubnet, type NetworkInventory } from './inventory'
 import { validateApplicationInventory } from './application-inventory'
@@ -668,6 +669,8 @@ export function validateTopology(input: unknown): Topology {
   const topology: Topology = { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,
     ...(root.allowBranchToBranchTraffic === undefined ? {} : { allowBranchToBranchTraffic: root.allowBranchToBranchTraffic as boolean }),
     ...(root.erLocations === undefined && root.erLinks === undefined ? {} : { erLocations, erLinks }), ...(layout ? { layout } : {}), ...(azureImport ? { azureImport } : {}) }
+  const warningAcknowledgements = parseWarningAcknowledgements(root.warningAcknowledgements)
+  if (warningAcknowledgements?.length) topology.warningAcknowledgements = warningAcknowledgements
   for (const hub of hubs) {
     const branches = [...connections, ...erLinks]
       .filter((branch) => branch.hubId === hub.id)
