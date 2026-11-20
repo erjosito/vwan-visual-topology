@@ -310,13 +310,12 @@ for (const language of ['en', 'ja'] as const) {
   })
 
   test(`${language}: narrow quiz keeps radios beside readable answers and separates scenario progress`, async ({ page }, testInfo) => {
-    test.setTimeout(90_000)
     await page.setViewportSize({ width: 360, height: 740 })
     await page.addInitScript(() => localStorage.setItem('aznet-theme', 'dark'))
     await page.goto('/?mode=full')
     await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
     await page.locator('header [data-language-selector]').selectOption(language)
-    await page.getByTestId('learning-open').click()
+    await openLearning(page)
     await completeLearningTasks(page, 2, language)
     const panel = learningSidebar(page)
     await expect(panel.getByTestId('learning-task')).toHaveAttribute('data-task-id', 'private-link.address-range')
