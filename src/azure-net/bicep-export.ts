@@ -54,7 +54,12 @@ export function generateAzNetBicep(
 
   const warnings: string[] = []
   warnings.push(...coexistenceFindings(topology).map((finding) => `${finding.summary} ${finding.remediation}`))
-  for (const vnet of topology.vnets) parseVnetBgpCommunities(vnet.bgpCommunities)
+  for (const vnet of topology.vnets) {
+    parseVnetBgpCommunities(vnet.bgpCommunities)
+    if (vnet.appliances.filter((app) => app.kind === 'azure-firewall').length > 1) {
+      throw new Error(`VNet "${vnet.name}" supports only one Azure Firewall.`)
+    }
+  }
   if (topology.vnets.some((vnet) => vnet.bgpCommunities)) warnings.push(vnetCommunityHelp)
   if (topology.vnets.some((vnet) => vnet.vwanHubAttachment?.staticRoutes?.length)) {
     warnings.push('Virtual WAN VNet-connection static routes and their propagation are not deployed by this Bicep starter. Preserve native JSON; this is not an equivalent indirect-spoke deployment.')
