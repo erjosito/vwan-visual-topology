@@ -570,6 +570,13 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
     await expect(page.getByTestId('aznet-bicep-code')).toContainText('Renamed data workload')
     await openNodeMenu(page, 'aznet-vnet-vnet-spoke-data')
     await page.getByRole('menuitem', { name: 'Configure VNet & Elements', exact: true }).click()
+    const subnets = page.locator('.aznet-inspector-window summary').filter({ hasText: 'Subnet configuration' }).first()
+    if (await subnets.count() && await subnets.locator('..').getAttribute('open') === null) await subnets.click()
+    const beforeDissociation = await counts(page)
+    for (const association of await page.getByTestId(/^aznet-subnet-rt-select-/).all()) {
+      await association.selectOption('')
+    }
+    await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeDissociation.simulation)
     const beforeRegion = await counts(page)
     await page.getByTestId('aznet-vnet-region-vnet-spoke-data').fill('eastus')
     await expect.poll(async () => (await counts(page)).simulation).toBeGreaterThan(beforeRegion.simulation)

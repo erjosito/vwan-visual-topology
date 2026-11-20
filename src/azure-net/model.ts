@@ -9,6 +9,7 @@ import { subnetAddressError, usableSubnetAddress } from './addressing'
 import type { ClassicVpnNatGateway, VpnNat, VwanVpnNatGateway } from '../vpn-nat'
 import { parseVnetBgpCommunities, type VnetBgpCommunities } from '../vnet-communities'
 import { indirectFirewallTopology } from './indirect-firewall-sample'
+import { udrAssociationFindings, udrRegionKey } from './udr-regions'
 
 export type AzVnetRole =
   | 'hub-vnet'
@@ -64,6 +65,8 @@ export interface AzUdrRoute {
 export interface AzUdrTable {
   id: string
   name: string
+  /** Omitted in legacy JSON; infer only from unambiguous existing subnet associations. */
+  region?: string
   disableBgpRoutePropagation: boolean
   disablePeeringRoutePropagation?: boolean
   routes: AzUdrRoute[]
@@ -1297,6 +1300,7 @@ export function validateAzNetTopology(input: unknown): string[] {
   catch (error) { return [error instanceof Error ? error.message : 'Invalid topology.'] }
   const errors: string[] = coexistenceChecks(topology).filter((finding) => finding.severity === 'error')
     .map((finding) => finding.summary)
+  errors.push(...udrAssociationFindings(topology).map((finding) => finding.summary))
   if (!input || typeof input !== 'object') {
     return ['Topology must be a JSON object.']
   }
@@ -1354,6 +1358,7 @@ export function validateAzNetTopology(input: unknown): string[] {
     }
   }
   for (const table of candidate.udrTables ?? []) {
+    if (table.region !== undefined && !udrRegionKey(table.region)) errors.push(`Route table "${table.name}" has an invalid region.`)
     for (const route of table.routes ?? []) {
       if (!cidr(route.prefix)) {
         errors.push(`UDR route "${route.name}" in "${table.name}" has invalid CIDR "${route.prefix}".`)

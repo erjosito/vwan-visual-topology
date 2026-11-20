@@ -7,6 +7,7 @@ import { generateConnectivityBicep } from '../connectivity-bicep'
 import { validateSubnetPeeringScopes } from './subnet-peering'
 import { parseVnetBgpCommunities, vnetCommunityHelp } from '../vnet-communities'
 import { coexistenceFindings } from './coexistence'
+import { resolveUdrRegion, udrAssociationFindings, udrRegionKey } from './udr-regions'
 
 export interface AzNetBicepOptions {
   defaultLocation?: string
@@ -29,7 +30,7 @@ function escapeBicepString(value: string): string {
 }
 
 function resolveVnetLocation(vnet: AzVNet, fallback: string): string {
-  return canonicalLocation(vnet.region) || fallback || 'swedencentral'
+  return udrRegionKey(vnet.region) || fallback || 'swedencentral'
 }
 
 export function generateAzNetBicep(
@@ -39,9 +40,14 @@ export function generateAzNetBicep(
   validateInventory(topology)
   const peeringErrors = validateSubnetPeeringScopes(topology)
   if (peeringErrors.length) throw new Error(peeringErrors.join(' '))
+  const regionErrors = udrAssociationFindings(topology).map((finding) => finding.summary)
+  for (const table of topology.udrTables) {
+    if (!resolveUdrRegion(topology, table)) regionErrors.push(`Route table "${table.name}" requires an explicit region before Bicep export.`)
+  }
+  if (regionErrors.length) throw new Error(regionErrors.join(' '))
   const defaultLoc =
     canonicalLocation(options.defaultLocation ?? '') ||
-    canonicalLocation(topology.vnets[0]?.region ?? '') ||
+    udrRegionKey(topology.vnets[0]?.region) ||
     'swedencentral'
   const includeGateways = options.includeGateways ?? true
   const includeRouteServers = options.includeRouteServers ?? true
@@ -135,7 +141,7 @@ export function generateAzNetBicep(
 
     lines.push(`resource ${sym} 'Microsoft.Network/routeTables@2024-05-01' = {`)
     lines.push(`  name: '${escapeBicepString(rt.name)}'`)
-    lines.push(`  location: location`)
+    lines.push(`  location: '${escapeBicepString(resolveUdrRegion(topology, rt)!)}'`)
     lines.push(`  properties: {`)
     lines.push(`    disableBgpRoutePropagation: ${rt.disableBgpRoutePropagation ? 'true' : 'false'}`)
     if (enabledRoutes.length === 0) {

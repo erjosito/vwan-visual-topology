@@ -23,6 +23,7 @@ import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
 import { confirmConfigurationSwitch } from '../configuration-selection'
+import { udrAssociationError, validateUdrRegionEdit } from './udr-regions'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { azHubGatewayConnections } from '../hub-gateways'
 import { useDeleteShortcut } from '../useDeleteShortcut'
@@ -78,7 +79,6 @@ import {
   type AzErCircuitSku,
   type AzNetTopology,
   type AzPeeringDirectionFlags,
-  type AzUdrNextHopType,
 } from './model'
 
 type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor' | 'azure'
@@ -146,6 +146,7 @@ const HybridConnectionEditor = lazy(() => import('./HybridRoutingEditor').then((
 const HybridNvaEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.HybridNvaEditor })))
 const ManagedVnraEditor = lazy(() => import('./HybridRoutingEditor').then((module) => ({ default: module.ManagedVnraEditor })))
 const NvaCreationEditor = lazy(() => import('./VnetRoutingSettings').then((module) => ({ default: module.NvaCreationEditor })))
+const UdrTableEditor = lazy(() => import('./VnetRoutingSettings').then((module) => ({ default: module.UdrTableEditor })))
 const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.AzRouteMapsPanel })))
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
@@ -348,6 +349,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       next = measureAzWork('commit', () => {
         const draft = cloneAzNetTopology(topology)
         updater(draft)
+        validateUdrRegionEdit(topology, draft)
         pruneAzSiteRouteMaps(draft)
         pruneAzArsRouteMaps(draft)
         pruneDeletedInventory(draft, topology)
@@ -722,6 +724,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           rt = {
             id: `rt-gw-${hubVnet.id}`,
             name: `RT-${hubVnet.name}-GatewaySubnet`,
+            region: hubVnet.region,
             disableBgpRoutePropagation: false,
             routes: [],
           }
@@ -835,6 +838,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           rt = {
             id: `rt-nva-egress-${sub.id}`,
             name: `RT-${vnet.name}-${sub.name}`,
+            region: vnet.region,
             disableBgpRoutePropagation: false,
             routes: [],
           }
@@ -946,6 +950,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               rt = {
                 id: `rt-egress-${sub.id}`,
                 name: `RT-${vnet.name}-${sub.name}`,
+                region: vnet.region,
                 disableBgpRoutePropagation: false,
                 routes: [],
               }
@@ -1337,6 +1342,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       draft.udrTables.push({
         id: rtId,
         name: `rt-workload-${idx}`,
+        region: draft.vnets.find((vnet) => vnet.id === vnetId)?.region,
         disableBgpRoutePropagation: false,
         disablePeeringRoutePropagation: false,
         routes: firstApp
@@ -1756,6 +1762,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 : []),
               ...topology.udrTables.map((candidateRt) => ({
                 label: `${candidateRt.name}${candidateRt.id === subnet.routeTableId ? ' (Associated)' : ''}`,
+                disabled: !!udrAssociationError(topology, vnet, candidateRt),
                 onSelect: () => {
                   commitTopology((draft) => {
                     const targetV = draft.vnets.find((v) => v.id === vnet.id)
@@ -4518,9 +4525,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     </button>
                   </div>
                   <p style={{ margin: '0 0 8px 0', fontSize: 11.5, color: 'var(--text)' }}>
-                    Route tables are independent objects that can be associated with any subnet via
-                    the subnet&apos;s right-click menu, hover badge, or the subnet association
-                    selector below.
+                    {t('Route tables are independent resources. Only subnets in the same region can share a table. Legacy regions are inferred only from unambiguous existing associations; otherwise set an explicit region.')}
                   </p>
                   {(filteredUdrTables.length > 0 ? filteredUdrTables : topology.udrTables).map((rt) => {
                     const associatedSubnets = topology.vnets.flatMap((v) =>
@@ -4529,279 +4534,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         .map((s) => `${v.name}/${s.name}`),
                     )
                     return (
-                      <div
-                        key={rt.id}
-                        data-testid={`aznet-rt-card-${rt.id}`}
-                        data-learning-anchor={selected.kind === 'subnet' ? guidanceAnchor('udr-table', selected.vnetId, selected.subnetId, rt.id) : undefined}
-                        style={{
-                          marginBottom: 10,
-                          padding: 10,
-                          background: 'var(--surface)',
-                          borderRadius: 6,
-                          border: '1px solid var(--border)',
-                        }}
-                      >
-                        <div
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            flexWrap: 'wrap',
-                            gap: 8,
-                            marginBottom: 6,
-                          }}
-                        >
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <input
-                              type="text"
-                              className="aznet-input"
-                              value={rt.name}
-                              aria-label={`Route Table name ${rt.name}`}
-                              onChange={(e) => {
-                                const val = e.target.value
-                                commitTopology((draft) => {
-                                  const target = draft.udrTables.find((t) => t.id === rt.id)
-                                  if (target) target.name = val
-                                })
-                              }}
-                              style={{ fontWeight: 700, width: 175 }}
-                            />
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                              {associatedSubnets.length > 0
-                                ? `Associated: ${associatedSubnets.join(', ')}`
-                                : 'Unassociated'}
-                            </span>
-                          </div>
-                          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <label className="aznet-checkbox-row">
-                              <input
-                                type="checkbox"
-                                data-testid={`aznet-rt-disable-bgp-${rt.id}`}
-                                checked={rt.disableBgpRoutePropagation}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  commitTopology((draft) => {
-                                    const target = draft.udrTables.find((t) => t.id === rt.id)
-                                    if (target) target.disableBgpRoutePropagation = checked
-                                  })
-                                }}
-                              />
-                              <span>Disable Gateway routes (GWroutes:OFF)</span>
-                            </label>
-                            <label className="aznet-checkbox-row">
-                              <input
-                                type="checkbox"
-                                data-testid={`aznet-rt-disable-peering-${rt.id}`}
-                                checked={Boolean(rt.disablePeeringRoutePropagation)}
-                                onChange={(e) => {
-                                  const checked = e.target.checked
-                                  commitTopology((draft) => {
-                                    const target = draft.udrTables.find((t) => t.id === rt.id)
-                                    if (target) target.disablePeeringRoutePropagation = checked
-                                  })
-                                }}
-                              />
-                              <span>Disable Peering route propagation (Preview; requires an active covering UDR)</span>
-                            </label>
-                            <button
-                              type="button"
-                              className="aznet-btn"
-                              data-testid={`aznet-delete-rt-${rt.id}`}
-                              style={{
-                                padding: '2px 8px',
-                                fontSize: 11,
-                                color: 'var(--error)',
-                                borderColor: 'var(--border)',
-                              }}
-                              onClick={() => {
-                                commitTopology((draft) => {
-                                  draft.udrTables = draft.udrTables.filter((t) => t.id !== rt.id)
-                                  for (const v of draft.vnets) {
-                                    for (const s of v.subnets) {
-                                      if (s.routeTableId === rt.id) {
-                                        s.routeTableId = undefined
-                                      }
-                                    }
-                                  }
-                                })
-                              }}
-                            >
-                              Delete RT
-                            </button>
-                          </div>
-                        </div>
-
-                        <table className="aznet-route-table">
-                          <thead>
-                            <tr>
-                              <th>On</th>
-                              <th>Name</th>
-                              <th>Prefix</th>
-                              <th>Next Hop Type</th>
-                              <th>Next Hop IP</th>
-                              <th></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {rt.routes.map((r) => (
-                              <tr key={r.id} data-learning-anchor={selected.kind === 'subnet' ? guidanceAnchor('udr-route', selected.vnetId, selected.subnetId, rt.id, r.id) : undefined}>
-                                <td>
-                                  <input
-                                    type="checkbox"
-                                    checked={r.enabled}
-                                    onChange={(e) => {
-                                      const checked = e.target.checked
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.enabled = checked
-                                      })
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    className="aznet-input"
-                                    style={{ width: 110 }}
-                                    value={r.name}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.name = val
-                                      })
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <input
-                                    type="text"
-                                    className="aznet-input"
-                                    style={{ width: 105, fontFamily: 'monospace' }}
-                                    value={r.prefix}
-                                    onChange={(e) => {
-                                      const val = e.target.value
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.prefix = val
-                                      })
-                                    }}
-                                  />
-                                </td>
-                                <td>
-                                  <select
-                                    className="aznet-select"
-                                    value={r.nextHopType}
-                                    onChange={(e) => {
-                                      const val = e.target.value as AzUdrNextHopType
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        const targetR = targetRt?.routes.find(
-                                          (x) => x.id === r.id,
-                                        )
-                                        if (targetR) targetR.nextHopType = val
-                                      })
-                                    }}
-                                  >
-                                    <option value="VirtualAppliance">VirtualAppliance</option>
-                                    <option value="VirtualNetworkGateway">
-                                      VirtualNetworkGateway
-                                    </option>
-                                    <option value="VnetLocal">VnetLocal</option>
-                                    <option value="Internet">Internet</option>
-                                    <option value="None">None (Blackhole)</option>
-                                  </select>
-                                </td>
-                                <td>
-                                  {r.nextHopType === 'VirtualAppliance' ? (
-                                    <input
-                                      type="text"
-                                      className="aznet-input"
-                                      style={{ width: 105 }}
-                                      value={r.nextHopIp ?? ''}
-                                      onChange={(e) => {
-                                        const val = e.target.value
-                                        commitTopology((draft) => {
-                                          const targetRt = draft.udrTables.find(
-                                            (t) => t.id === rt.id,
-                                          )
-                                          const targetR = targetRt?.routes.find(
-                                            (x) => x.id === r.id,
-                                          )
-                                          if (targetR) targetR.nextHopIp = val
-                                        })
-                                      }}
-                                    />
-                                  ) : (
-                                    '—'
-                                  )}
-                                </td>
-                                <td>
-                                  <button
-                                    type="button"
-                                    className="aznet-btn"
-                                    style={{ padding: '1px 6px', fontSize: 10.5, color: 'var(--error)' }}
-                                    onClick={() => {
-                                      commitTopology((draft) => {
-                                        const targetRt = draft.udrTables.find(
-                                          (t) => t.id === rt.id,
-                                        )
-                                        if (targetRt) {
-                                          targetRt.routes = targetRt.routes.filter(
-                                            (x) => x.id !== r.id,
-                                          )
-                                        }
-                                      })
-                                    }}
-                                  >
-                                    ✕
-                                  </button>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-
-                        <button
-                          type="button"
-                          className="aznet-btn"
-                          style={{ marginTop: 6 }}
-                          onClick={() => {
-                            commitTopology((draft) => {
-                              const targetRt = draft.udrTables.find((t) => t.id === rt.id)
-                              if (!targetRt) return
-                              const firstApp = draft.vnets.flatMap((v) => v.appliances)[0]
-                              targetRt.routes.push({
-                                id: `udr-custom-${Date.now()}`,
-                                name: `custom-route-${targetRt.routes.length + 1}`,
-                                prefix: '10.2.0.0/16',
-                                nextHopType: firstApp ? 'VirtualAppliance' : 'Internet',
-                                nextHopIp: firstApp?.privateIp,
-                                enabled: true,
-                              })
-                            })
-                          }}
-                        >
-                          + Add UDR Row
-                        </button>
-                      </div>
+                      <Suspense key={rt.id} fallback={null}><UdrTableEditor topology={topology} rt={rt}
+                        associatedSubnets={associatedSubnets} selected={selected} commit={commitTopology}
+                        onRegionSaved={() => setWorkspaceNotice('')} /></Suspense>
                     )
                   })}
                 </div>
@@ -4932,7 +4667,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 >
                                   <option value="">None (No Route Table)</option>
                                   {topology.udrTables.map((rt) => (
-                                    <option key={rt.id} value={rt.id}>
+                                    <option key={rt.id} value={rt.id} disabled={!!udrAssociationError(topology, vnet, rt)}>
                                       {rt.name}
                                     </option>
                                   ))}

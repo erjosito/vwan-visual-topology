@@ -320,6 +320,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     udrTables.push({
       id,
       name,
+      region: asString(rt.location) || undefined,
       disableBgpRoutePropagation: disableBgp,
       routes,
     })
