@@ -7,6 +7,7 @@ import { simulate, traceFlow } from './routing'
 import { bicepDefaults, generateBicep } from './bicep-export'
 import { executePlatform } from './platform/service'
 import { diagramLayout } from './diagram-layout'
+import { projectVwanFailures } from './failures'
 import type { Topology } from './model'
 
 function native() {
@@ -43,6 +44,19 @@ describe('explicit bounded two-WAN S2S composition', () => {
     topology.interWanVpns![0].bToA = []
     expect(forward(topology)[0].status).toBe('unreachable')
     expect(traceFlow(topology, simulate(topology), topology.hubs[3].id, '10.2.0.4')[0].status).toBe('delivered')
+  })
+
+  it('withdraws the tunnel when a gateway endpoint region fails', () => {
+    const topology = native()
+    topology.hubs.forEach((hub) => { hub.region = 'eastus' })
+    topology.spokes.forEach((spoke) => { spoke.region = 'eastus' })
+    topology.hubs[0].region = 'westeurope'
+    const fault = { kind: 'region' as const, id: 'westeurope', name: 'West Europe' }
+    const projection = projectVwanFailures(topology, [fault])
+    expect(projection.affected[topology.interWanVpns![0].id]).toEqual([fault])
+    expect(projection.active.interWanVpns).toEqual([])
+    expect(forward(projection.active, topology.hubs[1].id)[0].status).toBe('unreachable')
+    expect(topology.interWanVpns).toHaveLength(1)
   })
 
   it('does not re-export VPN routes or invent P2S/unknown capture reachability', () => {

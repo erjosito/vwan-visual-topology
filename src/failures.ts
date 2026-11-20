@@ -57,6 +57,7 @@ export function projectVwanFailures(baseline: Topology, faults: FailureDomain[] 
   for (const c of baseline.connections) inherit(c.id, [c.hubId, c.siteId, c.spokeId])
   for (const l of baseline.siteLinks) inherit(l.id, [l.a, l.b])
   for (const l of baseline.erLinks ?? []) inherit(l.id, [l.locationId, l.siteId, l.hubId])
+  for (const vpn of baseline.interWanVpns ?? []) inherit(vpn.id, [vpn.aHubId, vpn.bHubId])
   const alive = (item: { id: string }) => !affected[item.id]
   const active = structuredClone(baseline)
   active.hubs = active.hubs.filter(alive)
@@ -70,6 +71,7 @@ export function projectVwanFailures(baseline: Topology, faults: FailureDomain[] 
   active.siteLinks = active.siteLinks.filter(alive)
   active.erLocations = active.erLocations?.filter(alive).map((l) => ({ ...l, globalReachLocationIds: l.globalReachLocationIds?.filter((id) => !affected[id]) }))
   active.erLinks = active.erLinks?.filter(alive)
+  active.interWanVpns = active.interWanVpns?.filter(alive)
   return { active, affected, unassessed, domains: domainList([...regions.values()], baseline.sites.filter((s) => !embedded.has(s.id)), baseline.erLocations ?? []) }
 }
 
