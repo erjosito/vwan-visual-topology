@@ -1213,11 +1213,61 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     expect(finding).toMatchObject({ category: 'asymmetric-firewall-bypass', severity: 'warning' })
     expect(finding.summary).toContain('No active covering UDR to suppress VNet peering routes in Hub/GatewaySubnet')
     expect(finding.summary).not.toContain('matched only the 0.0.0.0/0 Internet')
+    expect(finding.inspection?.forward).toMatchObject({
+      sourceIp: '10.1.1.4', destinationIp: '172.16.0.4', inspected: ['Inspection firewall'], bypassed: [],
+    })
+    expect(finding.inspection?.reverse).toMatchObject({
+      sourceIp: '172.16.0.4', destinationIp: '10.1.1.4', inspected: [], bypassed: ['Inspection firewall'],
+    })
+    expect(finding.inspection?.reverse.routes).toContainEqual(expect.objectContaining({
+      vnetId: 'hub', subnetId: 'gateway', prefix: '10.1.0.0/16', source: 'System', routeTable: 'Return table',
+    }))
+    expect(finding.inspection?.repairs).toEqual([expect.objectContaining({
+      direction: 'reverse', vnetId: 'hub', subnetId: 'gateway', tableName: 'Return table',
+      prefix: '10.1.1.0/24', nextHopIp: '10.0.2.4', replacing: false,
+    })])
     expect(lookupSubnetEffectiveRoute(simulation.subnetTables.gateway, '10.1.1.4')?.nextHopType).toBe('VNetPeering')
     topology.udrTables[0].routes.push({
       id: 'return-fw', name: 'Inspect return', prefix: '10.0.0.0/8', nextHopType: 'VirtualAppliance', nextHopIp: '10.0.2.4', enabled: true,
     })
     expect(analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings).toEqual([])
+  })
+
+  it('retains the correct direction when the site is the source and never mutates the topology to propose a repair', () => {
+    const topology = inspectedTransitTopology()
+    const before = structuredClone(topology)
+    const finding = analyzeAzNetConnectivity(topology, simulateAzNet(topology), {
+      scope: 'pair', sourceKey: expectedPair.destinationKey, destinationKey: expectedPair.sourceKey,
+    }).findings[0]
+    expect(finding.inspection?.forward.bypassed).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.reverse.inspected).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.repairs[0]).toMatchObject({ direction: 'forward', subnetId: 'gateway' })
+    expect(topology).toEqual(before)
+  })
+
+  it('shows differing inspected appliances without proposing an unverified single-hop replacement for a service chain', () => {
+    const topology = inspectedTransitTopology()
+    topology.vnets[0].subnets.push({ id: 'nva-subnet', name: 'NVA', prefix: '10.0.3.0/24' })
+    topology.vnets[0].appliances.push({
+      id: 'other-inspection', name: 'Return NVA', kind: 'nva-vm', subnetId: 'nva-subnet',
+      privateIp: '10.0.3.4', enableIpForwarding: true, inspectsTraffic: true, staticRoutes: [],
+    })
+    topology.udrTables[0].routes.push({ id: 'return-nva', name: 'Return NVA', prefix: '10.1.0.0/16',
+      enabled: true, nextHopType: 'VirtualAppliance', nextHopIp: '10.0.3.4' })
+    const finding = analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings[0]
+    expect(finding.inspection?.forward.inspected).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.forward.bypassed).toEqual(['Return NVA'])
+    expect(finding.inspection?.reverse.inspected).toEqual(['Return NVA'])
+    expect(finding.inspection?.reverse.bypassed).toEqual(['Inspection firewall'])
+    expect(finding.inspection?.repairs).toEqual([])
+  })
+
+  it('does not propose a route-table edit for an invalid regional association or describe unknown routing as a bypass', () => {
+    const topology = inspectedTransitTopology()
+    topology.udrTables[0].region = 'eastus'
+    const finding = analyzeAzNetConnectivity(topology, simulateAzNet(topology), expectedPair).findings[0]
+    expect(finding.category).toBe('routing-not-assessed')
+    expect(finding.inspection).toBeUndefined()
   })
 
   it('groups a shared return-UDR cause while retaining each flow and recomputing partial repairs', () => {
