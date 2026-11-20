@@ -16,7 +16,7 @@ export function LearningTools(props: {
   const trigger = useRef<HTMLButtonElement>(null)
   const [Panel, setPanel] = useState<typeof LearningDialog>()
   const [failed, setFailed] = useState(false)
-  const ready = Boolean(Panel && (!session || session.learning))
+  const ready = Panel && (!session || session.learning)
   const loading = view.open && !ready && !failed
   const loadLearning = session?.loadLearning
   useEffect(() => {
