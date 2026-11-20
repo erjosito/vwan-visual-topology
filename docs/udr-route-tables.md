@@ -30,4 +30,21 @@ rather than substituting the export's default location.
 Subscription identity is not modeled here, so same-subscription eligibility
 is not assessed. Virtual WAN hub route tables are outside this contract.
 
+## Workspace management
+
+Open **Workspace controls > Manage workspace resources > Route-table library**
+to see every table, including unused tables and all shared subnet associations.
+**+ Route Table** opens the same manager's creation form without selecting a VNet.
+Creation requires a name and region and starts with no routes or associations;
+subnet-specific **Create & Associate** explicitly associates only that subnet.
+
+VNet configuration uses the same table editor and links to the global library.
+Route and propagation edits apply immediately to all associated subnets;
+region changes require **Apply region**. Cloud saving remains a separate action.
+Deletion is blocked until every subnet has been explicitly dissociated.
+Cloning copies routes and propagation settings with fresh table/route IDs,
+does not copy associations, and does not rewrite next-hop addresses when the
+new region differs. All workspace changes participate in normal undo/redo and
+JSON save/load.
+
 Reference: [Azure route-table association rules](https://learn.microsoft.com/en-us/azure/virtual-network/manage-route-table#associate-a-route-table-to-a-subnet).
