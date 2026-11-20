@@ -68,6 +68,7 @@ for (const language of ['en', 'ja']) {
       const sidebar = page.getByTestId('learning-sidebar')
       await sidebar.getByRole('button', { name: 'Load practice network', exact: true }).click()
       await sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()
+      await sidebar.getByRole('button', { name: 'Show me where', exact: true }).click()
       await expect(sidebar.getByTestId('learning-debrief')).toBeVisible()
       await page.locator('header [data-language-selector]').selectOption(language)
       await page.getByLabel('Theme', { exact: true }).selectOption(width === 390 ? 'dark' : 'light')
