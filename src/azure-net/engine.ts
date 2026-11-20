@@ -3,7 +3,7 @@ import { vnetCommunityHelp, vnetCommunityValues } from '../vnet-communities'
 import { mappedVpnAddress, translateVpnRoutes, validateVpnNat } from '../vpn-nat'
 import { loadBalancerOutboundCandidates, namedEndpoints, natGatewayForSubnet } from '../inventory'
 import { resolveHaPortsNextHop, type HaPortsAssessment } from '../ha-ports'
-import { chooseVwanHubRoutes, type Candidate } from '../routing'
+import { chooseVwanHubRoutes, RFC1918_PREFIXES, type Candidate } from '../routing'
 import { evaluateErSkuRegionalCompatibility, type ErSkuCompatibilityResult } from '../er-locations-catalog'
 import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
 import { peeringPrefixes, peeringSubnetIds, subnetPeeringLimitations, validateSubnetPeeringScopes } from './subnet-peering'
@@ -24,8 +24,6 @@ import type {
   AzVNet,
   AzVnetPeering,
 } from './model'
-
-const RFC1918_PREFIXES = ['10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16']
 
 export function checkErLocationAzureRegionAccess(
   loc: AzErLocation,
