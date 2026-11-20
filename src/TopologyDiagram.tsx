@@ -5,6 +5,7 @@ import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from './CanvasPresentation'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { topologyObject, transportLabels } from './model'
+import { sameWan } from './wan-scopes'
 import { diagnosticFlowCount, type DiagnosticsFinding } from './diagnostics'
 import { isolationLinkName } from './resilience'
 import type { Candidate } from './routing'
@@ -166,7 +167,8 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
       motionEdges.set(`vnet-nva:${spoke.id}:${nvaSpokeId}`, { a: spoke.id, b: nvaSpokeId, curve: diagramCurve(point(spoke.id), point(nvaSpokeId), nodeSize, nodeSize, 18) })
     }
   }))
-  topology.hubs.forEach((hub, i) => topology.hubs.slice(i + 1).forEach((other) => motionEdges.set(`interhub:${edgeKey(hub.id, other.id)}`, {
+  topology.hubs.forEach((hub, i) => topology.hubs.slice(i + 1).filter((other) => sameWan(hub, other)
+    || topology.interWanVpns?.some((vpn) => vpn.enabled && vpn.status === 'configured' && edgeKey(vpn.aHubId, vpn.bHubId) === edgeKey(hub.id, other.id))).forEach((other) => motionEdges.set(`interhub:${edgeKey(hub.id, other.id)}`, {
     a: hub.id, b: other.id, curve: diagramCurve(point(hub.id), point(other.id), hubSize, hubSize, -35),
   })))
   const flows: MotionFlow[] = []
@@ -409,10 +411,16 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
     <CanvasBackground x={pan.x + (fitted?.x ?? 0)} y={pan.y + (fitted?.y ?? 0)} width={width} height={height} />
     {layout === 'layered' ? <g className="diagram-captions"><text x="24" y="28" className="diagram-caption">{t("AZURE SPOKE NETWORKS")}</text><text x="24" y="225" className="diagram-caption">{t("MICROSOFT GLOBAL BACKBONE")}</text><text x="24" y="465" className="diagram-caption">{topology.erLocations?.length ? t("EXPRESSROUTE LOCATIONS") : t("ON-PREMISES SITES")}</text>{!!topology.erLocations?.length && <text x="24" y="700" className="diagram-caption">{t("ON-PREMISES SITES")}</text>}</g>
       : <g className="constellation-orbits" aria-hidden="true"><ellipse cx={width / 2} cy={height / 2} rx={width / 2 - 130} ry={height / 2 - 80} /><ellipse cx={width / 2} cy={height / 2} rx={Math.max(180, topology.hubs.length * 130)} ry="145" /><text x="24" y="30" className="diagram-caption">{t("VIRTUAL WAN · NETWORK CONSTELLATION")}</text></g>}
-    {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).map((other) => {
+    {topology.hubs.flatMap((h, i) => topology.hubs.slice(i + 1).filter((other) => sameWan(h, other)).map((other) => {
       const edge = diagramCurve(point(h.id), point(other.id), hubSize, hubSize, -35)
       return <g key={edgeKey(h.id, other.id)}><path data-testid={`interhub-${h.id}-${other.id}`} className={`network-link backbone ${activeHubEdges.has(edgeKey(h.id, other.id)) ? 'preferred-link' : ''}`} d={edge.d} />{badge(t("Inter-hub"), edge.label)}</g>
     }))}
+    {topology.interWanVpns?.map((vpn) => {
+      const edge = diagramCurve(point(vpn.aHubId), point(vpn.bHubId), hubSize, hubSize, -35)
+      return <g key={vpn.id}><title>{vpn.name}: {vpn.status}; A→B: {vpn.aToB.join(', ') || 'none'}; B→A: {vpn.bToA.join(', ') || 'none'}</title>
+        <path data-testid={`interwan-${vpn.id}`} className={`network-link VPN ${!vpn.enabled || vpn.status === 'unknown' ? 'disabled-link' : ''} ${activeHubEdges.has(edgeKey(vpn.aHubId, vpn.bHubId)) ? 'preferred-link' : ''}`} d={edge.d} />
+        {badge(`S2S VPN · ${vpn.name}${!vpn.enabled ? ' (down)' : vpn.status === 'unknown' ? ' (unknown)' : ''}`, edge.label)}</g>
+    })}
     {topology.spokes.filter((spoke): spoke is typeof spoke & { hubId: string } => Boolean(spoke.hubId)).map((spoke) => {
       const nvas = topology.connections.filter((connection) => connection.transport === 'SpokeNVA' && connection.spokeId === spoke.id)
       const active = activeConnections.has(spoke.id) || sourceSpokeIds.includes(spoke.id)
@@ -483,12 +491,13 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
       const secured = Boolean(hub.firewall) || hub.routingIntent.private || hub.routingIntent.internet
       const firewallActive = secured && (tracing ? paths.some((path) => path.firewalls?.includes(hub.id)) : hub.id === hubId)
       const gatewayLabel = hubGatewayLabel(hubGatewayConnections(topology, hub.id))
+      const ownerName = topology.wans?.find((wan) => wan.id === hub.wanId)?.name
       return <DiagramButton key={hub.id} data-node-id={hub.id} {...destinationProps(hub.id)} transform={`translate(${p.x}, ${p.y})`} {...selectable('hub', hub.id, t("Select hub {0}", hub.name))} {...movable('hub', hub.id)} className={`hub-node draggable-node ${hub.id === hubId ? 'active' : ''} ${firewallActive ? 'firewall-active' : ''}`}
         description={<g role="group" aria-label={`${hub.region}. ${gatewayLabel}. ${t('Enabled/defined modeled connections')}`}>
-          <DiagramNodeText text={hub.region} x={0} y={26} width={200} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />
+          <DiagramNodeText text={ownerName ? `${ownerName} · ${hub.region}` : hub.region} x={0} y={26} width={200} fontSize={10.5} anchor="middle" className="node-detail" weight={400} />
           <DiagramNodeText text={gatewayLabel} title={t('Enabled/defined modeled connections')} x={0} y={42} width={200} fontSize={9} anchor="middle" className="node-detail" weight={400} />
         </g>}>
-        <title>{hub.name} · {hub.region}{hub.label ? ` · ${hub.label}` : ''}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic'), !hub.routingIntent.private && !hub.routingIntent.internet && hub.firewall?.name].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title>
+        <title>{hub.name} · {hub.region}{ownerName ? ` · WAN: ${ownerName}` : ''}{hub.label ? ` · ${hub.label}` : ''}{secured && t(" · Secured virtual hub · Azure Firewall ({0})", [hub.routingIntent.private && t('private traffic'), hub.routingIntent.internet && t('Internet traffic'), !hub.routingIntent.private && !hub.routingIntent.internet && hub.firewall?.name].filter(Boolean).join(', '))}{tracing && firewallActive && t(" · Active path traverses Azure Firewall")}</title>
         <rect x="-112" y="-48" width="224" height="96" rx="12" /><NodeIcon kind="hub" secured={secured} />
         <DiagramNodeBadge label={secured ? t("SECURED VIRTUAL HUB") : t("VIRTUAL HUB")} x={-54} y={-34} width={152} tone={secured ? 'warning' : 'info'} />
         <DiagramNodeText text={hub.name} x={0} y={6} width={200} fontSize={15} anchor="middle" className="node-name" />
