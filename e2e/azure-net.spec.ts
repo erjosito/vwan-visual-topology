@@ -1,4 +1,5 @@
 import { expect, test } from './vwan-example-fixture'
+import { replaceActiveSavedTopology, waitForWorkspaceSample } from './workspace-storage-helpers'
 import type { Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -16,6 +17,11 @@ async function inspectSubnet(page: Page, subnetId: string) {
 }
 
 async function loadTopology(page: Page, topology: AzNetTopology, mode = 'hub-spoke') {
+  if (await page.getByTestId('aznet-app').count()) {
+    await replaceActiveSavedTopology(page, 'azure-net', JSON.stringify({ sampleId: '', topology }))
+    await page.reload()
+    return
+  }
   await page.addInitScript((value) => {
     localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
   }, topology)
@@ -452,16 +458,20 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
   })
 
   test('reports rejected imports and quota failure while preserving the active design and export', async ({ page }) => {
-    await page.addInitScript(() => {
+    await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
+    await waitForWorkspaceSample(page, 'azure-net', 'hub-spoke-firewall-udr')
+    const retained = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    await page.evaluate(() => {
       const set = Storage.prototype.setItem
       Storage.prototype.setItem = function (key, value) {
-        if (key === 'aznet-visual-topology:v1') throw new DOMException('Test quota exhausted', 'QuotaExceededError')
+        if (key.startsWith('network-simulator:workspace-tab:v1:') && key.endsWith(':topology')) throw new DOMException('Test quota exhausted', 'QuotaExceededError')
         return set.call(this, key, value)
       }
     })
-    await page.goto('/?mode=full&sample=hub-spoke-firewall-udr')
+    await page.getByTestId('aznet-add-vnet-btn').click()
     await expect(page.getByTestId('aznet-save-error')).toContainText('Export JSON')
     await expect(page.getByTestId('document-local-state')).toHaveText('Local save not confirmed')
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(retained)
     const node = page.getByTestId('aznet-vnet-vnet-hub-weu')
     const input = page.locator('input[type=file]').first()
     for (const body of ['null', '{"version":2,"kind":"azure-network-topology","name":"Broken","vnets":[]}']) {
@@ -873,7 +883,8 @@ test.describe('AzNetSim native workspace compatibility', () => {
 
     // Switch to Sample 2 (Azure Route Server + SD-WAN NVA)
     await page.getByTestId('aznet-sample-select').selectOption('ars-sdwan-nva-coexistence')
-    await page.getByTestId('aznet-tab-diagnostics').click()
+    await waitForWorkspaceSample(page, 'azure-net', 'ars-sdwan-nva-coexistence')
+    await page.getByRole('button', { name: /^Advanced checks/ }).click()
     await expect(page.getByTestId('aznet-finding-bgp-routes-suppressed')).toBeVisible()
 
     // Load the all-features stress case from the secondary validation collection.
@@ -882,9 +893,13 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await page.getByTestId('aznet-sample-gallery-modal').getByRole('combobox', { name: 'Collection', exact: true }).selectOption('validation')
     await expect(page.getByTestId('aznet-gallery-card-uc9-expressroute-hairpin-two-vnets')).toBeVisible()
     await page.getByTestId('aznet-gallery-load-enterprise-vnet-all-features-showcase').click()
-    await page.getByRole('button', { name: 'Replace and load', exact: true }).click()
     await expect(page.getByTestId('aznet-sample-gallery-modal')).toHaveCount(0)
     await expect(page.getByTestId('aznet-vnet-vnet-hub-neu')).toBeVisible()
+    const designs = page.getByRole('tablist', { name: 'Designs', exact: true }).getByRole('tab')
+    await expect(designs).toHaveCount(3)
+    await designs.first().click()
+    await expect(page.getByTestId('aznet-vnet-vnet-hub-weu')).toBeVisible()
+    await expect(page.getByTestId('aznet-symmetry-verdict')).toContainText('Symmetric')
   })
 
   test('supports all samples without mode restrictions, URL hash sharing, Internet tracing and native label compatibility', async ({
@@ -943,7 +958,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
 
     await expect(page.getByTestId('aznet-app')).toBeVisible()
     await page.getByTestId('workspace-library-open').click()
-    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('One active design')
+    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('Open designs in separate tabs')
     await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
 
     await expect(page.getByTestId('aznet-subnet-sub-app-web')).not.toContainText('GWroutes:OFF')
@@ -966,7 +981,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
     await expect(peerHoverCard).toHaveCount(0)
 
     // #36: Right-click VNet node to open contextual menu
-    await page.getByTestId('aznet-vnet-vnet-spoke-app').click({ button: 'right', position: { x: 24, y: 18 }, force: true })
+    await page.getByTestId('aznet-select-vnet-vnet-spoke-app').locator('rect').nth(1).click({ button: 'right' })
     const ctxMenu = page.getByRole('menu').first()
     await expect(ctxMenu).toBeVisible()
     await expect(ctxMenu.getByRole('menuitem', { name: /Configure VNet/i })).toBeVisible()

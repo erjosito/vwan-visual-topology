@@ -36,6 +36,7 @@ async function confirmImport(page: Page) {
 test('Azure captures preview without replacement, cancel cleanly, and retain limitations through reload/native JSON', async ({ page }) => {
   const externalRequests: string[] = []
   await page.goto('/?mode=vwan')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   const appOrigin = new URL(page.url()).origin
   page.on('request', (request) => { if (new URL(request.url()).origin !== appOrigin) externalRequests.push(request.url()) })
   const original = await saved(page)
@@ -66,6 +67,7 @@ test('Azure captures preview without replacement, cancel cleanly, and retain lim
 
 test('partial imports disclose omissions, require renewed acknowledgement, and reject malformed files without changing the workspace', async ({ page }) => {
   await page.goto('/?mode=vwan')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   const original = await saved(page)
   await upload(page, capture())
   await panel(page).getByLabel('I understand this is a structure-only import, not verified Azure routing.').check()
@@ -239,6 +241,7 @@ test('version 2 Azure captures retain observed effective-route snapshots and exp
 
 test('collector downloads the exact reviewable script from a static asset, with no Azure authentication', async ({ page }) => {
   await page.goto('/?mode=vwan')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   const original = await saved(page)
   await page.getByRole('button', { name: 'Azure files', exact: true }).click()
   const link = panel(page).getByRole('link', { name: 'Download Azure collector' })

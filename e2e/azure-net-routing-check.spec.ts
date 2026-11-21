@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { replaceActiveSavedTopology } from './workspace-storage-helpers'
 import { AZURE_NET_SAMPLES, createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
 
 function missingTransitTopology() {
@@ -112,18 +113,14 @@ test('never claims success for empty, invalid or pair-limited coverage', async (
   topology.sites = Array.from({ length: 22 }, (_, i) => ({
     id: `site-${i}`, name: `Site ${i}`, asn: 65000 + i, prefixes: [`10.${i}.0.0/24`],
   }))
-  await page.evaluate((value) => {
-    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
-  }, topology)
+  await replaceActiveSavedTopology(page, 'azure-net', JSON.stringify({ sampleId: '', topology }))
   await page.reload()
   await page.getByTestId('aznet-check-routing-btn').click()
   await expect(status).toContainText('Routing check incomplete; unchecked pairs are not verified')
   await expect(status).toContainText('Checked 200 of 231')
   await expect(status).not.toContainText('No routing issues found')
   topology.sites = [{ id: 'invalid', name: 'Invalid site', asn: 65001, prefixes: ['not-a-prefix'] }]
-  await page.evaluate((value) => {
-    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology: value }))
-  }, topology)
+  await replaceActiveSavedTopology(page, 'azure-net', JSON.stringify({ sampleId: '', topology }))
   await page.reload()
   await page.getByTestId('aznet-check-routing-btn').click()
   await expect(status).not.toContainText('No routing issues found')

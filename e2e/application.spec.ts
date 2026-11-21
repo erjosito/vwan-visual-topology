@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { replaceActiveSavedTopology } from './workspace-storage-helpers'
 import type { ElectronApplication } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { mkdir, rm } from 'node:fs/promises'
@@ -134,10 +135,10 @@ test('offline Electron keeps unavailable contracts honest through UI and desktop
     application = await playwright._electron.launch({ args: [resolve('platform-dist', 'electron', 'main.cjs'), `--user-data-dir=${profile}`] })
     const page = await application.firstWindow(), topology = applicationFixture('full')
     await page.getByTestId('aznet-app').waitFor()
-    await page.evaluate((topology) => {
-      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    await replaceActiveSavedTopology(page, 'azure-net', JSON.stringify({ sampleId: '', topology }))
+    await page.evaluate(() => {
       localStorage.setItem('vwan-visual-topology:language:v1', 'ja')
-    }, topology)
+    })
     await application.context().setOffline(true)
     await page.goto('app://simulator/?mode=full')
     await page.getByTestId('aznet-vnet-original-network').click()
