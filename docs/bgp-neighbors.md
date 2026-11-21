@@ -36,7 +36,7 @@ modeled neighbors remain separate rows.
 Received evidence is logical post-policy reception. For NVA-to-ARS exchange,
 advertised candidates are snapshotted before the ARS inbound route map, after
 the existing eligibility and AS-loop checks. This is not a raw native
-Adj-RIB-In. **Peer received** is explicitly post-policy and must not be
+received routes before import policy (Adj-RIB-In). **Peer received** is explicitly post-policy and must not be
 misread as the local router's pre-policy advertisements. Where that distinction
 cannot be supported, advertisements/counts remain **Not assessed**.
 

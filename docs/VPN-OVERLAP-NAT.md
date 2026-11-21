@@ -71,7 +71,7 @@ The gateway-wide **BGP route translation** switch affects only matching rules
 on each associated BGP connection: exact ingress internal prefixes become
 external learned prefixes, and exact egress internal prefixes become external
 advertised prefixes. Unmatched prefixes and connections remain unchanged.
-Original prefix and rule identity survive in RIB evidence; the BGP inspector
+Original prefix and rule identity survive in BGP-table evidence; the BGP inspector
 shows original and translated prefixes. Overlapping aggregates/more-specific
 site advertisements are rejected where an exact ingress advertisement is
 required. Existing route-map, AS-loop, hub-table and preference semantics stay

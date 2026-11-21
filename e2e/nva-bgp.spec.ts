@@ -216,7 +216,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(inspector.getByText('ARS selects before export. NVA best-path selection and forwarding from these candidates are not modeled.', { exact: true })).toBeVisible()
     await inspector.getByLabel('NVA BGP peer filter', { exact: true }).selectOption('west-ars')
     await expect(routes.locator('[data-prefix="198.18.0.0/24"]')).toHaveCount(1)
-    await open(page, 'east-ars', 'Inspect Route Server RIB (ASN 65515)')
+    await open(page, 'east-ars', 'Inspect Route Server BGP table (ASN 65515)')
     await expect(page.getByTestId('aznet-control-rib-card')).toContainText('east Route Server')
     await expect(inspector.getByLabel('NVA BGP peer filter', { exact: true })).toHaveValue('west-ars')
     await expect(routes.locator('[data-ars-id="east-ars"]')).toHaveCount(0)

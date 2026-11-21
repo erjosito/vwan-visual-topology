@@ -155,7 +155,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(policy.getByRole('textbox', { name: 'Rule 1 modification 4 values', exact: true })).toHaveValue('65001:300')
     await policy.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
     await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Inspect Route Server BGP table (ASN 65515)', exact: true }).click()
     await expect(page.getByTestId('aznet-control-rib-card').locator('[data-prefix="192.168.10.0/24"]', { hasText: 'NVA one' }).locator('td').nth(2)).toHaveText('64501')
     expect(errors).toEqual([])
   })
@@ -191,7 +191,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(policy.getByTestId('aznet-policy-inbound').locator('tbody tr[data-prefix]')).toHaveCount(0)
     await policy.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
     await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Inspect Route Server BGP table (ASN 65515)', exact: true }).click()
     const rib = page.getByTestId('aznet-control-rib-card')
     await expect(rib.locator('[data-prefix="10.1.0.0/16"]')).toContainText('On-link')
     await expect(rib.locator('[data-prefix="192.168.20.0/24"]')).toHaveCount(0)
@@ -383,7 +383,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await policy.getByRole('button', { name: 'Close Route maps · Route Server', exact: true }).click()
     const inspect = async () => {
       await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
-      await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+      await page.getByRole('menuitem', { name: 'Inspect Route Server BGP table (ASN 65515)', exact: true }).click()
     }
     await inspect()
     const rib = page.getByTestId('aznet-control-rib-card')
@@ -430,7 +430,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(policy.getByRole('combobox', { name: 'Inbound route map', exact: true })).toHaveValue('')
     await policy.getByRole('button', { name: 'Close Route maps · Site A', exact: true }).click()
     await page.getByTestId('aznet-chip-gw').click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Inspect Gateway BGP RIB', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Inspect Gateway BGP table', exact: true }).click()
     const rib = page.getByTestId('aznet-control-rib-card')
     await expect(rib.locator('[data-prefix="172.16.0.0/24"]')).toHaveCount(1)
     await expect(rib.locator('[data-prefix="172.16.0.0/24"]')).not.toContainText('Primary VPN')
@@ -592,7 +592,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await page.getByTestId('aznet-site-b').focus()
     await page.keyboard.press('Enter')
     await expect(rib.getByRole('heading')).toContainText('Site A')
-    await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+    await page.getByRole('button', { name: 'Close BGP table', exact: true }).click()
     await inspectSite(page, 'b')
     await expect(rib.getByRole('heading')).toContainText('Site B')
     await expect(rib.locator('[data-prefix="172.16.0.0/24"]')).toHaveCount(0)
@@ -620,21 +620,31 @@ for (const mode of ['hub-spoke', 'full']) {
 
 test('all full-mode router inspectors use the same grouped table without a subnet fallback', async ({ page }) => {
   await load(page, 'full')
+  const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   for (const [id, action, heading] of [
-    ['aznet-chip-gw', 'Inspect Gateway BGP RIB', 'VPN gateway'],
-    ['aznet-chip-ars', 'Inspect Route Server RIB (ASN 65515)', 'Route Server'],
-    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP RIB', 'Amsterdam'],
-    ['aznet-vwanhub-vhub', 'Inspect Virtual WAN Hub Effective RIB', 'Virtual hub'],
+    ['aznet-chip-gw', 'Inspect Gateway BGP table', 'VPN gateway'],
+    ['aznet-chip-ars', 'Inspect Route Server BGP table (ASN 65515)', 'Route Server'],
+    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP table', 'Amsterdam'],
+    ['aznet-vwanhub-vhub', 'Inspect Virtual WAN Hub BGP table', 'Virtual hub'],
   ]) {
     await page.getByTestId(id).click({ button: 'right' })
     await page.getByRole('menuitem', { name: action, exact: true }).click()
     const rib = page.getByTestId('aznet-control-rib-card')
+    await expect(page.getByRole('dialog', { name: 'BGP table', exact: true })).toBeVisible()
     await expect(rib.getByRole('heading')).toContainText(heading)
+    if (id === 'aznet-chip-gw') {
+      await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+      await expect(page.getByRole('dialog', { name: 'BGP テーブル', exact: true })).toBeVisible()
+      await expect(rib.getByRole('heading')).toContainText('仮想ネットワーク ゲートウェイ BGP テーブル')
+      await page.getByRole('combobox', { name: '言語 / Language', exact: true }).selectOption('en')
+      await expect(rib.getByRole('heading')).toContainText('Virtual Network Gateway BGP table')
+    }
     await expect(rib.locator('thead th')).toHaveText(['Status', 'Network', 'Next hop', 'AS path', 'Route details'])
     await expect(page.getByTestId('aznet-subnet-routes-card')).toHaveCount(0)
-    await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+    await page.getByRole('button', { name: 'Close BGP table', exact: true }).click()
   }
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
   expect(errors).toEqual([])
 })

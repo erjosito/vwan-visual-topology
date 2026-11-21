@@ -4,6 +4,15 @@ import { workspaceCapabilitiesJa } from './workspace-capabilities-ja'
 // English source messages are stable catalog keys. Numbered slots contain opaque user data.
 export const ja: Record<string, string> = {
   ...workspaceCapabilitiesJa,
+  'Virtual Network Gateway BGP table': '仮想ネットワーク ゲートウェイ BGP テーブル',
+  'Azure Route Server BGP table (ASN 65515)': 'Azure Route Server BGP テーブル (ASN 65515)',
+  'Virtual WAN Hub BGP table': 'Virtual WAN ハブ BGP テーブル',
+  'ExpressRoute location BGP table (ASN 12076)': 'ExpressRoute ロケーション BGP テーブル (ASN 12076)',
+  'On-premises site BGP table': 'オンプレミス サイト BGP テーブル',
+  'Inspect Gateway BGP table': 'ゲートウェイ BGP テーブルを検査',
+  'Inspect Route Server BGP table (ASN 65515)': 'Route Server BGP テーブルを検査 (ASN 65515)',
+  'Inspect Virtual WAN Hub BGP table': 'Virtual WAN ハブ BGP テーブルを検査',
+  'Inspect ExpressRoute Location BGP table': 'ExpressRoute ロケーション BGP テーブルを検査',
   'Manage workspace resources': 'ワークスペースのリソース管理',
   'Route-table library': 'ルート テーブル ライブラリ',
   'Route-table details': 'ルート テーブルの詳細',

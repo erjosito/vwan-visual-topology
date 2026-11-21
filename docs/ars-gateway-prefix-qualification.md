@@ -31,7 +31,7 @@ topologies.
 **Automatic ARS-to-NVA summary projection remains unassessed.** The bounded live
 observations below do not qualify every gateway/peer combination. Do not interpret the displayed
 ordinary received candidates, or absence of a configured summary among them, as
-proof of actual Azure advertisements. Do not substitute an ARS RIB or a hosting
+proof of actual Azure advertisements. Do not substitute an ARS BGP table or a hosting
 subnet's effective routes for an NVA's received BGP table.
 
 For each configured original NVA/ARS pair whose exporting VNet has configured
@@ -62,7 +62,7 @@ replace/coexist with connected advertisements sent to a BGP NVA.
 ## Coexisting ER/VPN observations (2026-11-18)
 
 An approved lab recorded native ARS advertised routes and the local NVA's
-retained **pre-import-filter Adj-RIB-In**, independently for both established
+retained **received routes before import policy (Adj-RIB-In)**, independently for both established
 ARS endpoints. ExpressRoute and active/active VPN gateways coexisted in the
 tested VNet. Their simultaneous presence prevents unique gateway-source
 attribution; this is not separate ER-only and VPN-only qualification.
@@ -126,7 +126,7 @@ on this Route Server.
 
 Before the first map request, both actual VPN receiver neighbors and both local
 NVA/ARS neighbors were established. All four internal gateway/ARS endpoint pairs
-also supplied positive controls. Actual retained pre-import-filter Adj-RIB-In
+also supplied positive controls. Actual retained received routes before import policy (Adj-RIB-In)
 was captured separately per neighbor, not inferred from a selected best route.
 
 | Pre-map phase | VPN receiver, both neighbors | Local NVA, both ARS neighbors |

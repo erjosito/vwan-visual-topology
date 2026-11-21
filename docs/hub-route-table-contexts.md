@@ -75,7 +75,7 @@ Default routes do not propagate between hubs.
 VNet ingress and NVA ingress use their connection association. The hub-origin
 path selector and BGP-table inspector expose explicit table selection. Forward
 and return directions are evaluated independently. Longest-prefix lookup is
-performed inside the selected table, not by filtering a preselected global RIB.
+performed inside the selected table, not by filtering a preselected global BGP table.
 
 Unsupported static next hops, incomplete inventory/configuration, ambiguous
 remote context, and custom contexts involving secured hubs produce **Not

@@ -48,7 +48,7 @@ export default function CapturedGatewayRoutes({ gateway, address, rows, rejected
       {' '}{t('Rows {0}–{1} of {2}', page * 100 + 1, Math.min(filtered.length, page * 100 + 100), filtered.length)}{' '}
       <button type="button" className="aznet-btn" disabled={(page + 1) * 100 >= filtered.length} onClick={() => onPageChange(page + 1)}>{t('Next routes')}</button>
     </div>}
-    <p role="status">{t('Gateway route capture coverage: {0}. Missing rows do not establish an empty Adj-RIB, withdrawal or an unavailable session.',
+    <p role="status">{t('Gateway route capture coverage: {0}. Missing rows do not establish an empty learned-route table, withdrawal or an unavailable session.',
       `${section?.state ?? 'unknown'}${section?.complete && !rejected ? '' : ` · ${t('Unknown / incomplete')}`}`)}</p>
     {rejected && <p role="status">{t('Malformed or oversized route observations cannot establish complete coverage.')}</p>}
   </section>

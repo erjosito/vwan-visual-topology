@@ -9,7 +9,7 @@ import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspac
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { canAcknowledgeWarning, orderWarningFindings, setWarningAcknowledgement } from '../warning-acknowledgements'
 import { measureAzWork, recordAzWork } from './performance'
-import { t, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
+import { t, translate, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
 import { guidanceAnchor, resolveGuidance } from '../learning/guidance'
@@ -1071,7 +1071,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
       const gw = vnet?.gateways.find((g) => g.id === selected.gatewayId)
       return {
-        title: `Virtual Network Gateway BGP RIB · ${gw?.name ?? selected.gatewayId}`,
+        title: `${translate(language, 'Virtual Network Gateway BGP table')} · ${gw?.name ?? selected.gatewayId}`,
         entries: simulation.gatewayRibs[selected.gatewayId] ?? [],
         available: Boolean(gw) && !scenario.affected[selected.gatewayId],
       }
@@ -1080,7 +1080,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
       const ars = vnet?.routeServer
       return {
-        title: `Azure Route Server (ASN 65515) RIB · ${ars?.name ?? selected.routeServerId}`,
+        title: `${translate(language, 'Azure Route Server BGP table (ASN 65515)')} · ${ars?.name ?? selected.routeServerId}`,
         entries: simulation.routeServerRibs[selected.routeServerId] ?? [],
         available: ars?.id === selected.routeServerId && !scenario.affected[selected.routeServerId],
       }
@@ -1090,7 +1090,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       const tableId = hubTableInspection?.hubId === selected.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE
       const firewall = hubTableInspection?.hubId === selected.hubId && hubTableInspection.firewall && hub?.firewall
       return {
-        title: `Virtual WAN Hub Effective RIB · ${hub?.name ?? selected.hubId} · ${firewall ? t('Firewall onward routes') : tableId}`,
+        title: `${translate(language, 'Virtual WAN Hub BGP table')} · ${hub?.name ?? selected.hubId} · ${firewall ? translate(language, 'Firewall onward routes') : tableId}`,
         entries: firewall ? simulation.vwanFirewallRibs[selected.hubId] ?? [] : simulation.vwanHubTables[selected.hubId]?.[tableId] ?? [],
         available: Boolean(hub && simulation.vwanHubTables[hub.id]?.[tableId]) && !scenario.affected[selected.hubId],
       }
@@ -1098,7 +1098,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (selected.kind === 'er-location') {
       const loc = topology.erLocations.find((l) => l.id === selected.locationId)
       return {
-        title: `ExpressRoute location (ASN 12076) RIB · ${loc?.name ?? selected.locationId}`,
+        title: `${translate(language, 'ExpressRoute location BGP table (ASN 12076)')} · ${loc?.name ?? selected.locationId}`,
         entries: simulation.erLocationRibs[selected.locationId] ?? [],
         available: Boolean(loc) && !scenario.affected[selected.locationId],
       }
@@ -1106,13 +1106,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (selected.kind === 'site') {
       const site = topology.sites.find((s) => s.id === selected.siteId)
       return {
-        title: `On-Premises Site BGP Table · ${site?.name ?? selected.siteId}`,
+        title: `${translate(language, 'On-premises site BGP table')} · ${site?.name ?? selected.siteId}`,
         entries: simulation.siteRibs[selected.siteId] ?? [],
         available: Boolean(site) && !scenario.affected[selected.siteId],
       }
     }
     return null
-  }, [routeSelection, topology, simulation, scenario.affected, hubTableInspection])
+  }, [routeSelection, topology, simulation, scenario.affected, hubTableInspection, language])
 
   const visibleCatalogEntries = useMemo(
     () =>
@@ -1874,7 +1874,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         actions: [
           ...(workspaceSession?.presentationPreview ? [{ label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) }] : []),
           {
-            label: 'Inspect Gateway BGP RIB',
+            label: 'Inspect Gateway BGP table',
             onSelect: () => {
               inspectRoutes({ kind: 'gateway', vnetId: vnet.id, gatewayId: gw.id })
             },
@@ -1904,7 +1904,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         actions: [
           { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapHubId(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
           {
-            label: 'Inspect Route Server RIB (ASN 65515)',
+            label: 'Inspect Route Server BGP table (ASN 65515)',
             onSelect: () => {
               inspectRoutes({ kind: 'route-server', vnetId: vnet.id, routeServerId: ars.id })
             },
@@ -2154,7 +2154,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id) },
           },
           {
-            label: 'Inspect Virtual WAN Hub Effective RIB',
+            label: 'Inspect Virtual WAN Hub BGP table',
             onSelect: () => {
               inspectRoutes({ kind: 'vwan-hub', hubId: hub.id })
             },
@@ -2267,7 +2267,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             },
           },
           {
-            label: 'Inspect ExpressRoute Location BGP RIB',
+            label: 'Inspect ExpressRoute Location BGP table',
             onSelect: () => {
               inspectRoutes({ kind: 'er-location', locationId: loc.id })
             },
@@ -3330,7 +3330,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           key={guidanceRevision}
           focusOnOpen={!guidanceNavigation}
           title={{
-            routes: 'Effective routes',
+            routes: t(inspectedControlRib ? 'BGP table' : 'Effective routes'),
             tracer: 'Path explorer',
             diagnostics: 'Topology analysis',
             editor: 'Configure selected object',
@@ -3346,7 +3346,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               data-testid="aznet-tab-routes"
               onClick={() => setActiveTab('routes')}
             >
-              Effective Routes
+              {t(inspectedControlRib ? 'BGP table' : 'Effective routes')}
             </button>
             <button
               type="button"

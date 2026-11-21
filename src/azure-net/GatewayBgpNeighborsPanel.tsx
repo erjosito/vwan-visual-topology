@@ -35,7 +35,7 @@ registerJapaneseMessages({
   'Previous routes': '前のルート',
   'Next routes': '次のルート',
   'Rows {0}–{1} of {2}': '全 {2} 行中 {0}～{1} 行',
-  'Gateway route capture coverage: {0}. Missing rows do not establish an empty Adj-RIB, withdrawal or an unavailable session.': 'ゲートウェイ ルート取得のカバレッジ: {0}。行がないことは空の Adj-RIB、経路取り消し、またはセッションの利用不可を証明しません。',
+  'Gateway route capture coverage: {0}. Missing rows do not establish an empty learned-route table, withdrawal or an unavailable session.': 'ゲートウェイ ルート取得のカバレッジ: {0}。行がないことは空の学習ルート テーブル、経路取り消し、またはセッションの利用不可を証明しません。',
   'Captured learned routes are not advertised routes or simulator best paths. Source peer is not inferred from next hop. ER circuit, primary/secondary edge and physical instance mappings remain unknown.': '取得済み学習ルートは通知ルートやシミュレーターの最適経路ではありません。送信元ピアをネクスト ホップから推測しません。ER 回線、プライマリ/セカンダリ エッジ、物理インスタンスの対応は不明です。',
   'No rows were captured for this selection. Missing rows do not establish that no routes or sessions exist.': 'この選択の行は取得されていません。行がないことはルートやセッションが存在しない証明ではありません。',
   'Malformed or oversized route observations cannot establish complete coverage.': '不正またはサイズ上限を超えたルート観測では、完全なカバレッジを確認できません。',

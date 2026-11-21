@@ -359,7 +359,7 @@ it('shows route-only gateway captures without inventing neighbors and discloses 
   }))
   expect(html).toContain('Malformed or oversized')
   expect(html).toContain('Unknown / incomplete')
-  expect(html).toContain('Missing rows do not establish an empty Adj-RIB')
+  expect(html).toContain('Missing rows do not establish an empty learned-route table')
 })
 
 it('keeps native gateway route rows with null optional attributes, showing missing values rather than losing the prefix or inventing defaults', () => {
@@ -391,6 +391,6 @@ it('retains failed gateway route command coverage even when no gateway returned 
   const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))
   expect(html).toContain('denied-gateway')
   expect(html).toContain('Gateway route capture coverage: denied · Unknown / incomplete')
-  expect(html).toContain('Missing rows do not establish an empty Adj-RIB')
+  expect(html).toContain('Missing rows do not establish an empty learned-route table')
   expect(html).not.toContain('<tbody>')
 })

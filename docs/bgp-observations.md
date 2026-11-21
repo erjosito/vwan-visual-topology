@@ -96,7 +96,7 @@ neighbor counters and learned rows remain independent: apparent disagreement
 is not resolved by rewriting native counters or deriving session state from
 route rows. Capture time, original gateway/local endpoint scope and per-command
 coverage remain visible. Missing/failed/empty observations are not proof of an
-empty per-session Adj-RIB, withdrawal, convergence or session failure.
+empty per-session learned-route table, withdrawal, convergence or session failure.
 
 This adds read-only per-endpoint managed-gateway coverage, not physical-instance
 qualification. An ER virtual network gateway is not a circuit, primary/secondary
@@ -150,7 +150,7 @@ An Azure role is not a guessed physical identity or IP-alias mapping. Legacy
 rows without a role can still be scoped by their captured local address; rows
 without either remain explicitly unassigned. Endpoints with no rows are not
 invented from an expected redundant pair. A missing row does not establish an
-empty Adj-RIB, a disconnected peer or successful withdrawal.
+empty learned-route table, a disconnected peer or successful withdrawal.
 
 Next hop and source peer remain separate. Native hyphenated or empty AS paths,
 zero weight and missing attributes are preserved. The view renders at most 100
