@@ -937,6 +937,7 @@ test('a cloud upload stays busy and confirms only its original live tab after sw
     await expect.poll(() => [...service.data.keys()].filter(key => key.includes('/topologies/')).length).toBe(1)
     await account.getByRole('button', { name: 'Close', exact: true }).click()
     await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).not.toBe(originalId)
     const otherId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
     await page.locator(`#workspace-tab-${originalId}`).click()
     await expect(page.getByTestId('document-cloud-state')).toHaveText('Uploading a snapshot…')
