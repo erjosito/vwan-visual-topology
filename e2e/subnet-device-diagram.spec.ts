@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { graphicalDetailTopology } from '../tests/fixtures/network-detail'
+import { openWorkspaceActions } from './document-action-helpers'
 
 async function openDiagram(page: Page, mode: string, extraNics = 0, topology = graphicalDetailTopology(mode, extraNics), preview = true) {
   const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
@@ -14,6 +15,7 @@ async function openDiagram(page: Page, mode: string, extraNics = 0, topology = g
   await page.goto(`/?mode=${mode}`)
   const node = page.locator(mode === 'vwan' ? '.spoke-node[data-node-id="detail-network"]' : '[data-testid="aznet-vnet-detail-network"]')
   await node.click()
+  await openWorkspaceActions(page)
   const opener = page.getByRole('button', { name: 'VNet detail', exact: true })
   await opener.click()
   const dialog = page.getByTestId('network-detail-dialog')
@@ -87,6 +89,7 @@ test('preview Japanese narrow detail retains translated graph relationships', as
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/?mode=hub-spoke')
   await page.getByTestId('aznet-vnet-detail-network').click()
+  await openWorkspaceActions(page)
   await page.getByRole('button', { name: 'VNet の詳細', exact: true }).click()
   const dialog = page.getByTestId('network-detail-dialog')
   await expect(dialog.getByRole('region', { name: '共有される元のエンティティ', exact: true })).toBeVisible()

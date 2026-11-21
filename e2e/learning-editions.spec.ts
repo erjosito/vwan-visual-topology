@@ -13,6 +13,7 @@ import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
 import { openLearning, learningAdvancedOptions, advanceLearningTask, completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { openWorkspaceActions } from './document-action-helpers'
 
 async function show(page: Page, taskId: string, guidanceId: string, language: 'en' | 'ja') {
   const task = scenarioBundle.lessons.flatMap((lesson) => lesson.tasks).find((task) => task.id === taskId)!
@@ -638,8 +639,10 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       const details = page.getByTestId('learning-status-details')
       const primary = page.getByTestId('learning-start')
       for (const entry of ['learning-status', 'learning-open']) {
+        await openWorkspaceActions(page)
         const trigger = page.getByTestId(entry)
         await trigger.focus()
+        await expect(trigger).toBeFocused()
         await page.keyboard.press('Enter')
         await expect(details).toHaveCount(1)
         await expect(details).toHaveAttribute('role', 'dialog')
@@ -679,6 +682,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
         revision: 0, scope: 1, engineVersion: 'historical', completedAt: '2026-11-20T12:00:00.000Z',
       } })
       await page.reload()
+      await openWorkspaceActions(page)
       await page.getByTestId('learning-open').click()
       await expect(primary).toHaveText(statusLabels.continueLearning[language])
       await primary.click()
@@ -690,6 +694,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await primary.click()
       await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', tasks[1].task.id)
       for (const entry of ['learning-open', 'learning-status']) {
+        await openWorkspaceActions(page)
         await page.getByTestId(entry).click()
         await expect(primary).toHaveText(statusLabels.continueLearning[language])
         await primary.click()

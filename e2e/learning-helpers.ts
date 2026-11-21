@@ -7,12 +7,14 @@ import { runnerLabels } from '../src/learning/runner-content'
 import { sidebarLabels } from '../src/learning/sidebar-content'
 import { practiceLabels } from '../src/learning/practice-content'
 import { inspectionScope } from '../src/learning/task-guidance'
+import { openWorkspaceActions } from './document-action-helpers'
 
 export const learningSidebar = (page: Page) => page.getByTestId('learning-sidebar')
 export const learningAnchor = (page: Page, ...scope: string[]) =>
   page.locator(`[data-learning-anchor=${JSON.stringify(guidanceAnchor(...scope))}]`)
 
 export async function openLearning(page: Page) {
+  await openWorkspaceActions(page)
   await page.getByTestId('learning-open').click()
   await page.getByTestId('learning-start').click()
 }

@@ -1,8 +1,9 @@
 import type { Page } from '@playwright/test'
 
 export async function openWorkspaceActions(page: Page) {
-  await page.locator('header').waitFor({ state: 'visible' })
-  const overflow = page.locator('.workspace-header-toggle')
+  const header = page.locator('header.unified-topbar, header.aznet-topbar')
+  await header.waitFor({ state: 'visible' })
+  const overflow = header.locator('.workspace-header-toggle')
   if (await overflow.isVisible() && await overflow.getAttribute('aria-expanded') === 'false') await overflow.click()
 }
 

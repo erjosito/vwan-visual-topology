@@ -13,6 +13,7 @@ import { graphicalDetailTopology } from '../tests/fixtures/network-detail'
 import { example } from '../src/model'
 import AxeBuilder from '@axe-core/playwright'
 import { languageStorageKey } from '../src/i18n'
+import { openWorkspaceActions } from './document-action-helpers'
 
 async function documentCloudMetadata(page: Page, documentId?: string) {
   return page.evaluate(documentId => {
@@ -179,6 +180,7 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
       const status = page.getByTestId('document-cloud-state')
       const matches = text('Matches last confirmed cloud save', '最後に確認したクラウドの保存と一致')
       const modified = text('Local changes not saved to cloud', 'ローカルの変更はクラウドに未保存')
+      await openWorkspaceActions(page)
       await expect(page.getByTestId('document-local-state')).toHaveText(text('Saved locally', 'ローカルに保存済み'))
       await expect(status).toHaveText(text('No cloud save linked in this tab', 'このタブに関連するクラウドの保存はありません'))
       await persistent.focus(); await page.keyboard.press('Enter')
@@ -201,6 +203,7 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
         await page.keyboard.press('Escape')
       }
       await expect(status).toHaveText(modified)
+      await openWorkspaceActions(page)
       if (mode === 'vwan') { await persistent.focus(); await page.keyboard.press('Control+z') }
       else await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
       await expect(status).toHaveText(matches)
@@ -235,6 +238,7 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
       expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(edited)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       await page.screenshot({ path: info.outputPath(`save-header-${mode}-${language}.png`) })
+      await openWorkspaceActions(page)
       await persistent.click()
       await expect(account.getByText('Separate copy', { exact: true }).first()).toBeVisible()
       await account.getByRole('button', { name: text('Sign out of this app', 'このアプリからサインアウト'), exact: true }).click()

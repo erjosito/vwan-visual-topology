@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
 import type { Topology } from '../src/model'
+import { openWorkspaceActions } from './document-action-helpers'
 
 for (const mode of ['vwan', 'hub-spoke', 'full'] as const) {
   const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
@@ -200,7 +201,10 @@ test.describe('VNet structure cloning', () => {
       await node.press('Enter')
 
       const openClone = async () => {
-        if (!await tools.isVisible()) await opener.click()
+        if (!await tools.isVisible()) {
+          await openWorkspaceActions(page)
+          await opener.click()
+        }
         await tools.getByRole('button', { name: cloneAction, exact: true }).click()
         await expect(name).toBeFocused()
       }

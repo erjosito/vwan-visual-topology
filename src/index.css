@@ -25,7 +25,8 @@ summary { cursor: pointer; color: var(--accent); }
 .canvas-maximized .canvas-app,
 .canvas-maximized .canvas-app main,
 .canvas-maximized .canvas-workspace { height: 100%; min-height: 0; }
-.canvas-maximized .canvas-app main { margin: 0; padding: 0; display: flex; flex-direction: column; }
+.canvas-maximized .canvas-app { display: flex; flex-direction: column; }
+.canvas-maximized .canvas-app main { flex: 1; height: auto; margin: 0; padding: 0; display: flex; flex-direction: column; }
 .canvas-maximized .canvas-workspace { flex: 1; display: flex; flex-direction: column; border: 0; border-radius: 0; }
 .canvas-maximized .canvas-stage { flex: 1; height: auto; min-height: 0; }
 .canvas-maximized .aznet-app { height: 100dvh; }
