@@ -23,7 +23,21 @@ function readStyle(): CanvasStyle {
 export function CanvasPresentationProvider({ children }: { children: ReactNode }) {
   const [style, setStyle] = useState<CanvasStyle>(readStyle)
   const [maximized, setMaximized] = useState(false)
+  const [headerActionsOpen, setHeaderActionsOpen] = useState(false)
   const [connectionStyle, setConnectionStyle] = useState(readConnectionStyle)
+  useEffect(() => {
+    if (!headerActionsOpen) return
+    const dismiss = (event: KeyboardEvent) => {
+      const target = event.target
+      if (event.key !== 'Escape' || event.defaultPrevented || !(target instanceof Element)
+        || !target.closest('header') || target.closest('dialog, details[open]')) return
+      event.preventDefault()
+      setHeaderActionsOpen(false)
+      document.querySelector<HTMLButtonElement>('.workspace-header-toggle')?.focus()
+    }
+    window.addEventListener('keydown', dismiss)
+    return () => window.removeEventListener('keydown', dismiss)
+  }, [headerActionsOpen])
   useEffect(() => {
     const sync = (event: StorageEvent) => {
       if (event.key === storageKey || event.key === null) setStyle(readStyle())
@@ -39,12 +53,17 @@ export function CanvasPresentationProvider({ children }: { children: ReactNode }
       try { localStorage.setItem(storageKey, next) } catch { /* Keep the in-session choice. */ }
     },
     maximized,
+    headerActionsOpen,
+    toggleHeaderActions: () => setHeaderActionsOpen(value => !value),
     connectionStyle,
     setConnectionStyle: (next) => {
       setConnectionStyle(next)
       try { localStorage.setItem(connectionStorageKey, next) } catch { /* Keep the in-session choice. */ }
     },
-    toggleMaximized: () => setMaximized((value) => !value),
+    toggleMaximized: () => {
+      setHeaderActionsOpen(false)
+      setMaximized((value) => !value)
+    },
   }}>{children}</CanvasPresentationContext.Provider>
 }
 
@@ -123,4 +142,10 @@ export function CanvasMaximizeButton() {
     <span className="canvas-maximize-label">{label}</span>
     <span className="canvas-maximize-icon" aria-hidden="true">[ ]</span>
   </button>
+}
+
+export function WorkspaceActionsToggle() {
+  const { headerActionsOpen, toggleHeaderActions } = useCanvasPresentation()
+  return <button type="button" className="workspace-header-toggle" aria-expanded={headerActionsOpen}
+    onClick={toggleHeaderActions}>{t('Workspace actions')}</button>
 }

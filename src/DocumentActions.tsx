@@ -2,6 +2,7 @@ import { Component, lazy, Suspense, useEffect, useState, useSyncExternalStore, t
 import { createPortal } from 'react-dom'
 import { useLanguage } from './i18n'
 import { useWorkspaceSession } from './workspace-context'
+import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
 import './document-actions.css'
 
 const CloudPanel = lazy(() => import('./cloud/CloudPanel').then(module => ({ default: module.CloudPanel })))
@@ -47,6 +48,7 @@ export function DocumentArtifactStatus() {
       {state.destination && ` · ${state.destination.name}`}
       {state.notice?.kind === 'downloaded' && ` · ${text('Download unconfirmed', 'ダウンロード未確認')}`}</span></summary>
     <div className="presentation-group-content">
+      <DocumentSaveStatus detail />
       <p>{label}{state.destination
         && ` · ${state.destination.kind === 'cloud' ? text('Cloud', 'クラウド') : text('File', 'ファイル')}: ${destination}`}</p>
       <p>{text('Profile recovery is separate from an explicitly saved file or cloud artifact.',

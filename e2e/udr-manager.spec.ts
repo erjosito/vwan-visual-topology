@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import { loadLanguage, translate } from '../src/i18n'
+import { openWorkspaceActions } from './document-action-helpers'
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -32,6 +33,7 @@ for (const mode of ['hub-spoke', 'full']) {
       await page.goto(`/?mode=${mode}`)
       const read = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
       const open = async () => {
+        await openWorkspaceActions(page)
         await page.getByRole('button', { name: text('Workspace controls'), exact: true }).click()
         await page.getByTestId('aznet-route-table-library-btn').click()
       }
@@ -68,6 +70,7 @@ for (const mode of ['hub-spoke', 'full']) {
       await copy.getByTestId(`aznet-delete-rt-${clone.id}`).click()
       await expect.poll(async () => (await read()).udrTables.length).toBe(2)
       await close()
+      await openWorkspaceActions(page)
       await page.getByTitle('Undo', { exact: true }).click()
       await expect.poll(async () => (await read()).udrTables.length).toBe(3)
       await page.getByTitle('Redo', { exact: true }).click()

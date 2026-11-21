@@ -53,4 +53,8 @@
   .canvas-view-toggle { width: 44px; height: 44px; padding: 6px; }
   .canvas-maximize-label { display: none; }
   .canvas-maximize-icon { display: inline; }
+  .canvas-maximized .canvas-view-toggle { width: auto; min-height: 44px; height: auto; }
+  .canvas-maximized .canvas-maximize-label { display: inline; }
+  .canvas-maximized .canvas-maximize-icon { display: none; }
+  .simulator-shell.canvas-maximized .canvas-controls-stack { max-width: calc(100% - 180px); }
 }

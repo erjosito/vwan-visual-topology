@@ -7,6 +7,8 @@ export const CanvasPresentationContext = createContext({
   setStyle: (_style: CanvasStyle) => {},
   maximized: false,
   toggleMaximized: () => {},
+  headerActionsOpen: false,
+  toggleHeaderActions: () => {},
   connectionStyle: 'default' as ConnectionStyle,
   setConnectionStyle: (_style: ConnectionStyle) => {},
 })

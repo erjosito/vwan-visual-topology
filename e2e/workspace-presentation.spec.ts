@@ -1,4 +1,4 @@
-import { downloadTopologyCopy } from './document-action-helpers'
+import { downloadTopologyCopy, openWorkspaceActions } from './document-action-helpers'
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { createEmptyAzNetTopology, sampleHubSpokeFirewallUdr, type AzNetTopology } from '../src/azure-net/model'
@@ -17,6 +17,11 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await expect(mark).toHaveText('AzNetSim')
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 1000 })
+      if (width < 760) {
+        await expect(mark).toBeHidden()
+        await expect(page).toHaveTitle('Azure Network Simulator (AzNetSim)')
+        continue
+      }
       expect(await mark.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       const bounds = (await mark.boundingBox())!
@@ -103,6 +108,7 @@ test.describe('subnet and gateway menu disclosure', () => {
       await group.tap()
       await policies.getByRole('menuitem', { name: 'Enable GWroutes Propagation on Route Table', exact: true }).tap()
       await expect.poll(async () => (await read()).udrTables[0].disableBgpRoutePropagation).toBe(false)
+      await openWorkspaceActions(page)
       await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
       expect(await read()).toEqual(before)
       await open()
@@ -207,6 +213,7 @@ test.describe('subnet and gateway menu disclosure', () => {
       })).toHaveValue('active-standby')
       await expect(settings).toContainText(language === 'ja' ? 'モデル化しません' : 'does not model instance failure')
       await page.keyboard.press('Escape')
+      await openWorkspaceActions(page)
       await page.getByTestId('ui-preview-toggle').click()
       await open()
       await expect(page.getByRole('menuitem', { name: detailLabel, exact: true })).toHaveCount(0)
@@ -288,6 +295,7 @@ for (const mode of ['hub-spoke', 'full']) {
       await expect(enabled).not.toBeVisible()
       await peerings.locator(':scope > summary').click()
       await expect(enabled).not.toBeChecked()
+      await openWorkspaceActions(page)
       await page.getByRole('button', { name: /Undo/ }).click()
       await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
       expect((await new AxeBuilder({ page }).include('.presentation-inspector-section').analyze()).violations).toEqual([])
@@ -324,6 +332,14 @@ for (const mode of ['hub-spoke', 'full']) {
       await page.keyboard.press('Enter')
       const draft = advertisements.getByRole('textbox')
       await draft.fill('10.0.0.0/8')
+      const maximize = page.locator('.canvas-view-toggle')
+      await maximize.dispatchEvent('click')
+      await expect(maximize).toHaveAttribute('aria-pressed', 'true')
+      await expect(draft).toHaveValue('10.0.0.0/8')
+      expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
+      await maximize.dispatchEvent('click')
+      await expect(maximize).toHaveAttribute('aria-pressed', 'false')
+      await expect(draft).toHaveValue('10.0.0.0/8')
       const toggle = page.getByTestId('ui-preview-toggle')
       // Avoid blur so this checks an uncommitted editor draft, not just saved JSON.
       await toggle.dispatchEvent('click')
@@ -339,6 +355,7 @@ for (const mode of ['hub-spoke', 'full']) {
       await expect(draft).toHaveValue('10.0.0.0/8')
       await draft.press('Tab')
       await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].summarizedGatewayPrefixes)).toEqual(['10.0.0.0/8'])
+      await openWorkspaceActions(page)
       await page.getByRole('button', { name: /Undo/ }).click()
       await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
       await devices.locator('summary').focus()
@@ -406,6 +423,7 @@ for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja']) {
         await expect(row.getByTestId('aznet-subnet-outbound-app')).not.toBeVisible()
         await expect(row.getByTestId('aznet-subnet-rt-select-app')).toHaveValue('existing')
         await expect(row.getByRole('status')).toContainText(language === 'ja' ? '評価されていません' : 'Internet access is not assessed')
+        await openWorkspaceActions(page)
         await page.getByTestId('ui-preview-toggle').click()
         await expect(row.getByTestId('aznet-subnet-outbound-app')).toBeVisible()
         await expect(row.getByTestId('aznet-subnet-pe-policy-app')).toHaveValue('Enabled')
@@ -426,6 +444,7 @@ for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja']) {
         await expect(prefix).toHaveValue('10.0.2.0/24')
         await prefix.press('Tab')
         await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].subnets[0].prefix)).toBe('10.0.2.0/24')
+        await openWorkspaceActions(page)
         await page.getByRole('button', { name: /Undo/ }).click()
         await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(before)
         await section.locator('summary').focus()
@@ -579,6 +598,7 @@ for (const mode of ['vwan', 'full'] as const) {
       }, theme)
       await page.goto(`/?mode=${mode}`)
       await expect(page.getByTestId(rootId)).toBeVisible()
+      await openWorkspaceActions(page)
       await expect(page.getByTestId('ui-preview-toggle')).toHaveAttribute('aria-pressed', 'true')
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       const settings = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Settings$/ }) })
@@ -651,6 +671,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
 test('default UI can switch to legacy with keyboard and persist across reload', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 800 })
   await page.goto('/?mode=full')
+  await openWorkspaceActions(page)
   const toggle = page.getByTestId('ui-preview-toggle')
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await toggle.focus()
@@ -661,6 +682,7 @@ test('default UI can switch to legacy with keyboard and persist across reload', 
   await toggle.click()
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
   await page.reload()
+  await openWorkspaceActions(page)
   await expect(toggle).toHaveAttribute('aria-pressed', 'true')
 })
 
@@ -688,6 +710,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
         return (parsed.topology ?? parsed).name
       }, key)).toBe(sampleName)
       const before = await page.evaluate(key => localStorage.getItem(key), key)
+      await openWorkspaceActions(page)
       const controls = page.getByRole('group', { name: language === 'ja' ? 'キャンバス コントロール' : 'Canvas controls' })
       await expect(controls.locator('select')).toHaveCount(mode === 'vwan' ? 2 : 1)
       await settings.locator('summary').click()
@@ -700,6 +723,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.keyboard.press('Escape')
       await expect(settings.locator('summary')).toBeFocused()
       await page.reload()
+      await openWorkspaceActions(page)
       await settings.locator('summary').click()
       await expect(background).toHaveValue('dots')
       await expect(connections).toHaveValue('straight')
@@ -733,6 +757,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
       const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
       await page.goto(`/?mode=${mode}&sample=${sample}`)
+      await openWorkspaceActions(page)
       const checks = page.locator('.presentation-group').filter({
         has: page.locator('summary', { hasText: language === 'ja' ? /^ルーティングの確認$/ : /^Routing checks$/ }),
       })

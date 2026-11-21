@@ -9,6 +9,10 @@ export async function auditAccessibility({ baseURL, artifacts }) {
   const { default: AxeBuilder } = await import('@axe-core/playwright')
   const browser = await chromium.launch({ timeout: 30_000 })
   const entries = []
+  const headerActions = async (page, expanded) => {
+    const toggle = page.locator('.workspace-header-toggle')
+    if (await toggle.isVisible() && await toggle.getAttribute('aria-expanded') !== String(expanded)) await toggle.click()
+  }
   try {
     for (const sample of accessibilityPlan.samples) {
       const start = performance.now()
@@ -37,6 +41,7 @@ export async function auditAccessibility({ baseURL, artifacts }) {
           await page.goto(new URL(sample.path, baseURL).href)
           await expect(page.getByTestId(sample.state === 'vwan-workspace' ? 'vwan-app' : 'aznet-app')).toBeVisible()
           if (sample.state.startsWith('learning-')) {
+            await headerActions(page, true)
             await page.getByTestId('learning-open').click()
             await page.getByTestId('learning-start').click()
             const sidebar = page.getByTestId('learning-sidebar')
@@ -51,12 +56,14 @@ export async function auditAccessibility({ baseURL, artifacts }) {
               } else await expect(sidebar.getByRole('button', { name: 'Open protected practice workspace', exact: true })).toBeVisible()
             }
           }
+          await headerActions(page, true)
           await page.locator('.presentation-group:has([data-language-selector]) > summary').click()
           await page.locator('header [data-language-selector]').selectOption(sample.language)
           await expect(page.locator('html')).toHaveAttribute('lang', sample.language)
           // The existing theme control sets the application's own supported preference.
           await page.getByLabel('Theme', { exact: true }).selectOption(sample.viewport.theme)
           await page.keyboard.press('Escape')
+          if (sample.state !== 'command-palette' && sample.state !== 'original-inspector') await headerActions(page, false)
           const controls = page.getByRole('button', {
             name: sample.language === 'ja' ? 'ワークスペースの操作' : 'Workspace controls', exact: true,
           })
