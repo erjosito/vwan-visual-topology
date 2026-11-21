@@ -89,6 +89,13 @@ function sameFile(first: Snapshot, second: Snapshot) {
   return first.digest === second.digest && first.dev === second.dev && first.ino === second.ino
 }
 
+async function writableFile(file: string) {
+  await access(file, constants.W_OK)
+  // access() does not enforce Windows ACLs; opening without truncation checks actual write permission.
+  const handle = await open(file, constants.O_RDWR | (constants.O_NOFOLLOW ?? 0))
+  await handle.close()
+}
+
 function publicDestination(destination: Destination): DesktopFileDestination {
   return { token: destination.token, name: basename(destination.path), location: destination.path,
     revision: destination.snapshot.digest }
@@ -204,7 +211,7 @@ export class DesktopDocumentFiles {
       const native = nativeContent(loaded.content)
       let writable = native
       if (writable) {
-        try { await access(file, constants.W_OK) } catch { writable = false }
+        try { await writableFile(file) } catch { writable = false }
       }
       this.current(owner)
       if (writable) owner.destination = { token: randomUUID(), path: file, snapshot: loaded }
@@ -241,6 +248,7 @@ export class DesktopDocumentFiles {
         if (expected) {
           try { if (!sameFile(expected, await snapshot(file))) throw new DocumentFileError('conflict') }
           catch { throw new DocumentFileError('conflict') }
+          await writableFile(file)
         }
         const handle = await open(temporary, 'wx', expected ? expected.mode & 0o777 : 0o600)
         created = true
@@ -250,6 +258,7 @@ export class DesktopDocumentFiles {
         if (expected) {
           try { if (!sameFile(expected, await snapshot(file))) throw new DocumentFileError('conflict') }
           catch { throw new DocumentFileError('conflict') }
+          await writableFile(file)
           await replaceFile(temporary, file, expected.digest, owner.controller.signal)
           created = false
         } else {

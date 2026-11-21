@@ -219,6 +219,53 @@ it('rejects symlink destinations rather than modifying their unrelated targets',
   })
 })
 
+it('honors Windows write-deny ACLs on Load, Save As and a remembered destination', async context => {
+  if (process.platform !== 'win32') { context.skip(); return }
+  await fixture(async directory => {
+    const original = join(directory, 'write-denied.json')
+    await writeFile(original, topology('Original'))
+    const denyWrite = async (deny: boolean) => new Promise<void>((resolve, reject) => {
+      const command = `
+$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'
+[Console]::InputEncoding=[Text.UTF8Encoding]::new($false)
+$p=[Console]::In.ReadToEnd() | ConvertFrom-Json
+$acl=[IO.File]::GetAccessControl([string]$p.file)
+$rule=[Security.AccessControl.FileSystemAccessRule]::new(
+  [Security.Principal.WindowsIdentity]::GetCurrent().User,
+  [Security.AccessControl.FileSystemRights]::Write,
+  [Security.AccessControl.AccessControlType]::Deny)
+if ($p.deny) { $acl.AddAccessRule($rule) } else { $acl.RemoveAccessRuleSpecific($rule) }
+[IO.File]::SetAccessControl([string]$p.file,$acl)`
+      const child = execFile(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
+        ['-NoLogo', '-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(command, 'utf16le').toString('base64')],
+        { windowsHide: true, timeout: 15_000, maxBuffer: 4096 },
+        error => { if (error) reject(error); else resolve() })
+      child.stdin?.on('error', () => {})
+      child.stdin?.end(JSON.stringify({ file: original, deny }))
+    })
+    const select = vi.fn(async () => original)
+    const files = new DesktopDocumentFiles({ open: async () => original, save: select })
+    try {
+      await denyWrite(true)
+      expect(await files.open({ documentId })).toMatchObject({ readOnly: true })
+      await expect(files.save({ documentId, content: topology('Denied Save As') })).rejects.toEqual(code('permission'))
+      expect(await readFile(original, 'utf8')).toBe(topology('Original'))
+      await denyWrite(false)
+      const destination = (await files.open({ documentId }))!.destination!
+      await denyWrite(true)
+      await expect(files.save({ documentId, content: topology('Denied update'), destinationToken: destination.token })).rejects.toEqual(code('permission'))
+      expect(await readFile(original, 'utf8')).toBe(topology('Original'))
+      await denyWrite(false)
+      await files.save({ documentId, content: topology('Allowed update'), destinationToken: destination.token })
+      expect(await readFile(original, 'utf8')).toBe(topology('Allowed update'))
+      expect(select).toHaveBeenCalledTimes(1)
+    } finally {
+      await files.close()
+      await denyWrite(false)
+    }
+  })
+}, 45_000)
+
 it('preserves a protected Windows file ACL and handles quoted Unicode filenames during replacement', async context => {
   if (process.platform !== 'win32') { context.skip(); return }
   await fixture(async directory => {
