@@ -47,6 +47,7 @@ for (const mode of ['hub-spoke', 'full']) for (const preview of [false, true]) {
     await card.getByTestId('warning-acknowledgement').click()
     await expect(card).toHaveClass(/acknowledged-warning/)
     await expect(card.getByText('Acknowledged warning — not fixed', { exact: true })).toBeVisible()
+    await expect(card.getByText('Remediation:', { exact: true })).toBeVisible()
     await expect(badge).toHaveAttribute('data-root-count', String(before - 1))
     await expect(page.getByTestId('warning-attention-count')).toContainText('1 acknowledged')
     await expect.poll(async () => (await nativeSaved(page)).warningAcknowledgements?.length).toBe(1)
