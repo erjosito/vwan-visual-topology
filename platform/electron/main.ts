@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto'
 import { AzureBroker, type Scope, type Collection } from './broker'
 import { PlatformJobs } from '../jobs'
 import { admitJson } from '../../src/platform/service'
+import { DesktopDocumentFiles, DocumentFileError } from './document-files'
 
 // Local assets need no proxy; avoid Chromium's automatic PAC/WPAD discovery.
 // The explicitly invoked Azure CLI keeps its independent enterprise proxy settings.
@@ -16,6 +17,20 @@ const site = resolve(__dirname, '..', '..', 'dist')
 const jobs = new PlatformJobs(app.isPackaged ? join(process.resourcesPath, 'platform', 'worker.cjs') : join(__dirname, '..', 'worker.cjs'))
 const broker = new AzureBroker(app.isPackaged ? join(process.resourcesPath, 'desktop') : __dirname, app.isPackaged ? join(process.resourcesPath, 'collectors') : join(site, 'scripts'))
 let window: BrowserWindow
+const documentFiles = new DesktopDocumentFiles({
+  open: async language => {
+    const selected = await dialog.showOpenDialog(window, { title: language === 'ja' ? 'トポロジを読み込む' : 'Load topology',
+      buttonLabel: language === 'ja' ? '読み込む' : 'Load', properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }] })
+    return selected.canceled ? undefined : selected.filePaths[0]
+  },
+  save: async (name, language, saveAs) => {
+    const title = language === 'ja' ? saveAs ? 'トポロジを別名で保存' : 'トポロジを保存' : saveAs ? 'Save topology as' : 'Save topology'
+    const selected = await dialog.showSaveDialog(window, { title, buttonLabel: language === 'ja' ? '保存' : 'Save', defaultPath: name,
+      properties: ['createDirectory', 'showOverwriteConfirmation'], filters: [{ name: 'JSON', extensions: ['json'] }] })
+    return selected.canceled ? undefined : selected.filePath
+  },
+})
 
 const mime: Record<string, string> = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json',
@@ -97,6 +112,18 @@ void app.whenReady().then(async () => {
     return approved.response === 1 ? broker.collect(request as Collection) : null
   })
   handle('desktop:simulate', (request) => jobs.run(request))
+  for (const [name, action] of [
+    ['desktop:document-open', (value: unknown) => documentFiles.open(value)],
+    ['desktop:document-save', (value: unknown) => documentFiles.save(value)],
+    ['desktop:document-release', (value: unknown) => documentFiles.release(value)],
+  ] as const) ipcMain.handle(name, async (event, value: unknown) => {
+    trusted(event)
+    try { return { ok: true, value: await action(value) } }
+    catch (error) {
+      const failure = error instanceof DocumentFileError ? error : new DocumentFileError('failed')
+      return { ok: false, error: failure.message, code: failure.code }
+    }
+  })
   await window.loadURL('app://simulator/')
 })
 let quitting = false
@@ -105,6 +132,6 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   quitting = true
   jobs.close()
-  void broker.close().finally(() => app.quit())
+  void Promise.allSettled([broker.close(), documentFiles.close()]).finally(() => app.quit())
 })
 app.on('window-all-closed', () => app.quit())

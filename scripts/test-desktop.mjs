@@ -95,7 +95,7 @@ try {
   await page.reload()
   await page.evaluate(() => localStorage.removeItem('aznet-simulator:practice:v1'))
   expect(await page.evaluate(() => ({ node: typeof window.require, ipc: Object.keys(window.desktopSimulator) }))).toEqual({
-    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate'],
+    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate', 'openDocument', 'saveDocument', 'releaseDocument'],
   })
   for (const [mode, file] of [
     ['vwan', 'hub-routing-preferences.json'],
