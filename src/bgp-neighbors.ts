@@ -186,18 +186,21 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     if (!site || !target) continue
     const targetBgpEnabled = conn.targetKind !== 'vnet-gateway' ||
       topology.vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.id === conn.targetId && gateway.bgpEnabled))
+    const underlay = conn.underlay || conn.useLocalAzureIpAddress
+      ? simulation?.vpnUnderlays?.[conn.id] ?? { state: 'not-assessed', reason: 'Private VPN underlay has not been assessed.' } : undefined
     if (!target.instances.length) {
-      managed(identity('vpn', conn.id), conn.id, target, site, conn.enabled && conn.bgpEnabled && targetBgpEnabled,
-        !conn.bgpEnabled || !targetBgpEnabled ? 'BGP is disabled on this connection or gateway; static routes do not establish BGP neighbors.' : opaqueMapping)
+      managed(identity('vpn', conn.id), conn.id, target, site, conn.enabled && conn.bgpEnabled && targetBgpEnabled && (!underlay || underlay.state === 'available'),
+        underlay && underlay.state !== 'available' ? underlay.reason
+          : !conn.bgpEnabled || !targetBgpEnabled ? 'BGP is disabled on this connection or gateway; static routes do not establish BGP neighbors.' : opaqueMapping)
       continue
     }
-    const availability = conn.enabled && conn.bgpEnabled && targetBgpEnabled && site.enabled && target.enabled ? 'available' : 'unavailable'
+    const availability = conn.enabled && conn.bgpEnabled && targetBgpEnabled && site.enabled && target.enabled ? underlay?.state ?? 'available' : 'unavailable'
     const gatewayRoutes = conn.targetKind === 'vnet-gateway' ? simulation?.gatewayRibs[conn.targetId] : undefined
     const siteRoutes = simulation?.siteRibs[conn.siteId]
     for (const instance of target.instances) pair(identity('vpn', conn.id), conn.id, target, instance, site, site.instances[0],
       availability, availability === 'available'
         ? 'Configured BGP relationship is available in the steady-state model; actual BGP establishment is not assessed.'
-        : 'Connection, resource or BGP is disabled, or unavailable in the selected failure scenario.',
+        : underlay?.reason ?? 'Connection, resource or BGP is disabled, or unavailable in the selected failure scenario.',
       evidence('received-post-policy', gatewayRoutes?.filter((route) => route.connectionId === conn.id)),
       undefined, evidence('received-post-policy', siteRoutes?.filter((route) => route.connectionId === conn.id)), undefined)
   }

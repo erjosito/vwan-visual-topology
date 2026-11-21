@@ -39,11 +39,9 @@ import {
   type AzContextMenuTarget,
   type AzSelectedEntity,
 } from './AzureNetDiagram'
-import {
-  compareAzNetWithObservations,
-  importAzNetCapture,
-  type AzCapturedObservations,
-  type AzNetComparisonReport,
+import type {
+  AzCapturedObservations,
+  AzNetComparisonReport,
 } from './azure-import'
 import { validateVpnNat } from '../vpn-nat'
 import { pruneDeletedInventory, validateInventory } from '../inventory'
@@ -625,7 +623,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })
     }
   }
-  const applyCapture = (raw: unknown) => {
+  const applyCapture = (raw: unknown, { importAzNetCapture, compareAzNetWithObservations }: typeof import('./azure-import')) => {
     const imported = importAzNetCapture(raw)
     const admitted = parseAzNetTopology(imported.topology)
     const importedComparison = imported.observations
@@ -637,11 +635,18 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setWorkspaceNotice('')
     setActiveTab('azure')
   }
-  const importSessionCapture = useEffectEvent(() => { if (workspaceSession?.capture) applyCapture(workspaceSession.capture) })
+  const importSessionCapture = useEffectEvent((module: typeof import('./azure-import')) => {
+    if (workspaceSession?.capture) applyCapture(workspaceSession.capture, module)
+  })
   useEffect(() => {
-    // Apply the capture handed off by the external workspace session.
-    // oxlint-disable-next-line react/set-state-in-effect
-    if (workspaceSession?.capture) importSessionCapture()
+    if (!workspaceSession?.capture) return
+    let cancelled = false
+    void import('./azure-import').then((module) => {
+      if (!cancelled) importSessionCapture(module)
+    }).catch((error) => {
+      if (!cancelled) setWorkspaceNotice(`Import rejected; the active design is unchanged. ${workspaceError(error)}`)
+    })
+    return () => { cancelled = true }
   }, [workspaceSession?.capture])
 
   const loadSample = async (id: string, signal?: AbortSignal) => {
@@ -3017,7 +3022,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   return
                 }
                 if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-network-capture') {
-                  applyCapture(raw)
+                  applyCapture(raw, await import('./azure-import'))
                   return
                 }
                 applyLoadedTopology('', parseAzNetJson(text))
@@ -3040,6 +3045,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 if (file.size > AZNET_MAX_JSON_LENGTH) throw new Error('JSON exceeds 4 MB limit.')
                 const raw = JSON.parse(await file.text()) as Record<string, unknown>
                 if (raw.kind === 'azure-network-capture') {
+                  const { importAzNetCapture, compareAzNetWithObservations } = await import('./azure-import')
                   const imported = importAzNetCapture(raw)
                   setCaptureNotices(imported.warnings)
                   setCaptureObservations(imported.observations ?? null)
@@ -3116,6 +3122,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           <AzureNetDiagram
             frameRequest={frameRequest}
             topology={topology}
+            vpnUnderlays={simulation.vpnUnderlays}
             onResetLayout={() => commitTopology((next) => {
               for (const node of [...next.vnets, ...next.vwanHubs, ...next.erLocations, ...next.sites]) {
                 delete node.x; delete node.y
@@ -4095,7 +4102,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 <Suspense fallback={null}>
                 {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} />}
                 {selected.kind === 'vwan-hub' && <VpnNatGatewayEditor key={selected.hubId} topology={topology} targetKind="vwan-hub" targetId={selected.hubId} commit={commitTopology} />}
-                {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} connectionId={selected.connectionId} commit={commitTopology} />}
+                {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} simulation={simulation} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
                 {nvaCreationVnetId && selectedVnetId === nvaCreationVnetId && <NvaCreationEditor key={nvaCreationVnetId}

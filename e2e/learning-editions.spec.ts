@@ -507,7 +507,7 @@ test('default mobile table guidance preserves practice and requires each exact m
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
 })
 
-test('default mobile connection guidance never configures the assessed hybrid backup', async ({ page }) => {
+test('default mobile connection guidance never configures the assessed hybrid backup before explicit save', async ({ page }) => {
   const completions = orderedTasks(scenarioBundle).filter(({ lesson }) =>
     scenarioBundle.course.lessonOrder.indexOf(lesson.id) < scenarioBundle.course.lessonOrder.indexOf('hybrid-preference'))
     .map(({ lesson, task }, revision) => ({
@@ -532,6 +532,10 @@ test('default mobile connection guidance never configures the assessed hybrid ba
   await expect(page.getByTestId('aznet-hybrid-connection-editor').locator('input[name="enabled"]')).not.toBeChecked()
   expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(before)
   expect(await page.evaluate((key) => localStorage.getItem(key), guidedProgressKey)).toBe(awards)
+  const editor = page.getByTestId('aznet-hybrid-connection-editor')
+  await editor.locator('input[name="enabled"]').check()
+  await editor.getByRole('button', { name: 'Save connection routing', exact: true }).click()
+  await expect(learningSidebar(page).getByTestId('learning-debrief')).toBeVisible()
 })
 
 test('historical black belt stays intact across explicit edition opt-in, reload and return', async ({ page }) => {

@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import { executePlatform } from '../src/platform/service'
 import type { PlatformRequest } from '../src/platform/contract'
+import { vpnErTopology } from '../tests/fixtures/vpn-er'
 
 function design() {
   const topology = createEmptyAzNetTopology()
@@ -22,6 +23,42 @@ function design() {
   topology.routeMaps = [{ id: 'hub-policy', name: 'Hub policy', hubId: 'wan', rules: [] }]
   return topology
 }
+
+test('full: private VPN overlay stays selectable, exposes dependencies and persists endpoint edits', async ({ page }) => {
+  const topology = vpnErTopology()
+  await page.addInitScript((topology) => {
+    if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.goto('/?mode=full')
+  const overlay = page.getByTestId('aznet-vpnconn-s2s')
+  await expect(overlay).toBeVisible()
+  await expect(overlay).toContainText('VPN over ER')
+  await overlay.focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Configure VPN Connection', exact: true }).click()
+  const editor = page.getByTestId('aznet-hybrid-connection-editor')
+  await expect(editor.getByRole('status')).toContainText('available')
+  await expect(editor.getByRole('combobox', { name: 'Azure ER link', exact: true })).toHaveValue('er-azure')
+  await expect(editor.getByRole('combobox', { name: 'Site ER link', exact: true })).toHaveValue('er-site-link')
+  await editor.getByLabel('On-premises private tunnel endpoint', { exact: true }).fill('172.17.0.4')
+  await editor.getByRole('button', { name: 'Save connection routing', exact: true }).click()
+  await expect(editor.getByRole('alert')).toHaveCount(0)
+  await expect(editor.getByRole('status')).toContainText('unavailable')
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  expect(saved.vpnConnections[0].underlay.onPremEndpoint).toBe('172.17.0.4')
+  expect(saved.vpnConnections[0].advertisedPrefixes).toEqual(['192.168.10.0/24'])
+  expect(saved.vnets[0].gateways[0].privateIpAddresses).toEqual(['10.0.255.4'])
+  const request: PlatformRequest = { contractVersion: 1, operation: 'simulate', document: { mode: 'full', topology: saved } }
+  const browser = await page.evaluate(async (request) => {
+    const { runBrowserSimulation } = await import('/src/platform/browser.ts')
+    return await runBrowserSimulation(request)
+  }, request)
+  expect(browser).toEqual(executePlatform(request))
+  await page.reload()
+  await expect(overlay).toBeVisible()
+  const restored = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  expect(restored).toEqual(saved)
+})
 
 for (const narrow of [false, true]) {
   test(`full: ${narrow ? 'narrow dark' : 'wide light'} original hub policy markers, SD-WAN and NVA controls persist and match the worker`, async ({ page }) => {

@@ -80,6 +80,9 @@ export interface AzVnetGateway {
   asn: number
   bgpEnabled: boolean
   activeActive?: boolean
+  publicIpSku?: 'Basic' | 'Standard'
+  enablePrivateIpAddress?: boolean
+  privateIpAddresses?: string[]
   vpnType?: 'RouteBased' | 'PolicyBased'
   vpnGatewayGeneration?: 'Generation1' | 'Generation2'
   sku?: string
@@ -227,6 +230,7 @@ export interface AzErGlobalReachLink {
 }
 
 export interface AzErLink {
+  advertisedPrefixes?: string[]
   id: string
   name: string
   locationId: string
@@ -241,6 +245,15 @@ export interface AzErLink {
 }
 
 export interface AzVpnConnection {
+  advertisedPrefixes?: string[]
+  useLocalAzureIpAddress?: boolean
+  underlay?: {
+    kind: 'express-route'
+    azureLinkId: string
+    siteLinkId: string
+    azureEndpoint: string
+    onPremEndpoint: string
+  }
   nat?: VpnNat
   id: string
   name: string

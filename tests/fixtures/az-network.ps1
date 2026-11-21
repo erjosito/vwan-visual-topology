@@ -132,7 +132,7 @@ if ($command -eq 'network nic show-effective-route-table') {
     ConvertTo-Json -InputObject @($result) -Depth 10 -Compress
 } elseif ($command -eq 'network vnet-gateway list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors')) {
     $gateway = @{ id = "$prefix/virtualNetworkGateways/vpn"; name = 'vpn'; gatewayType = 'Vpn'; enableBgp = $true
-        vpnType = 'RouteBased'; activeActive = $true; vpnGatewayGeneration = 'Generation2'
+        vpnType = 'RouteBased'; activeActive = $true; vpnGatewayGeneration = 'Generation2'; enablePrivateIpAddress = $true
         sku = @{ name = 'VpnGw4AZ'; tier = 'VpnGw4AZ'; secret = 'must-not-be-exported' }
         bgpSettings = @{ asn = 65515; bgpPeeringAddress = '10.82.253.4' }
         ipConfigurations = @(@{ id = "$prefix/virtualNetworkGateways/vpn/ipConfigurations/default"
@@ -144,17 +144,17 @@ if ($command -eq 'network nic show-effective-route-table') {
             externalMappings = @(@{ addressSpace = 'must-not-be-exported' }); secret = 'must-not-be-exported' })
     }
     ConvertTo-Json -InputObject @($gateway) -Depth 10 -Compress
-} elseif ($command -eq 'network vpn-connection list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+} elseif ($command -eq 'network vpn-connection list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors')) {
     $connection = @{ id = "$prefix/connections/site"; name = 'site'; enableBgp = $true
         virtualNetworkGateway1 = @{ id = "$prefix/virtualNetworkGateways/vpn" }
         localNetworkGateway2 = @{ id = "$prefix/localNetworkGateways/site" }
-        ingressNatRules = @(); egressNatRules = @(); sharedKey = 'must-not-be-exported' }
+        ingressNatRules = @(); egressNatRules = @(); useLocalAzureIpAddress = $true; sharedKey = 'must-not-be-exported' }
     if ($env:MOCK_NETWORK_MODE -in @('vpn-nat-ingress', 'vpn-nat-egress')) {
         $key = if ($env:MOCK_NETWORK_MODE -eq 'vpn-nat-ingress') { 'ingressNatRules' } else { 'egressNatRules' }
         $connection[$key] = @(@{ id = "$prefix/virtualNetworkGateways/vpn/natRules/overlap"; secret = 'must-not-be-exported' })
     }
     ConvertTo-Json -InputObject @($connection) -Depth 10 -Compress
-} elseif ($command -eq 'network local-gateway list' -and $env:MOCK_NETWORK_MODE -like 'vpn-nat-*') {
+} elseif ($command -eq 'network local-gateway list' -and ($env:MOCK_NETWORK_MODE -like 'vpn-nat-*' -or $env:MOCK_NETWORK_MODE -eq 'bgp-neighbors')) {
     ConvertTo-Json -InputObject @(@{ id = "$prefix/localNetworkGateways/site"; name = 'site'
         localNetworkAddressSpace = @{ addressPrefixes = @('10.90.0.0/16') }
         bgpSettings = @{ asn = 65001; bgpPeeringAddress = '10.90.0.4' } }) -Depth 10 -Compress
