@@ -45,11 +45,12 @@ export function DesktopTools({ mode }: { mode: SimulatorMode }) {
   return <section className="desktop-tools" aria-label={t('Local desktop tools')}>
     <strong>{t('Desktop · offline modeling · no automatic uploads')}</strong>
     <button disabled={busy} onClick={() => { void perform(async (current) => {
+      if (workspace?.loadFile) { await workspace.loadFile(); return }
       const result = await bridge.openTopology()
       if (!current()) return
       if (!result.ok) throw new Error(result.error)
       importFile(result.value)
-    }) }}>{t('Open local JSON')}</button>
+    }) }}>{t('Load file')}</button>
     <details><summary>{t('Read-only local Azure collection')}</summary>
       <p>{t('Uses existing Azure CLI and PowerShell 7. No automatic installation, login or resource changes. Public Azure only.')}</p>
       <label>{t('Capture type')} <select value={collectionMode === 'vwan' ? 'vwan' : 'full'} disabled={busy}

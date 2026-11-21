@@ -1,9 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { cloudDocumentKey } from './cloud/document-state'
 import { example, type Topology } from './model'
 import { workspaceStorageKeys } from './workspace-session'
 import { workspaceTabKey, type WorkspaceTab } from './workspace-tabs'
 import { createWorkspaceDocuments } from './workspace-documents'
+import { createDocumentRuntime } from './document-runtime'
+import type { CloudSessionValue } from './cloud/useCloudSession'
 
 const first: WorkspaceTab = { id: '11111111-1111-4111-8111-111111111111', provider: 'vwan', name: 'First' }
 const second: WorkspaceTab = { id: '22222222-2222-4222-8222-222222222222', provider: 'vwan', name: 'Second' }
@@ -22,6 +24,89 @@ function storage() {
 }
 
 describe('workspace document ownership', () => {
+  it('rejects an account cycle before the lazy cloud writer starts', async () => {
+    vi.stubGlobal('window', { confirm: vi.fn(() => true) })
+    let ready!: () => void
+    const loading = new Promise<void>(resolve => { ready = resolve })
+    let begin!: () => void
+    const started = new Promise<void>(resolve => { begin = resolve })
+    vi.doMock('./cloud/client', async () => {
+      begin()
+      await loading
+      return vi.importActual('./cloud/client')
+    })
+    const saveTopology = vi.fn()
+    let cloud = { account: { id: source.accountId }, api: { saveTopology } } as unknown as CloudSessionValue
+    const runtime = createDocumentRuntime(() => cloud, () => 'en', () => true)
+    const documents = createWorkspaceDocuments(storage(), () => true, runtime.initialize)
+    try {
+      documents.setAccount(source.accountId)
+      const document = documents.activate(first)
+      document.remember(history('First'))
+      const saving = document.commands!.saveAs({ kind: 'choose-cloud', accountId: source.accountId, name: 'First' })
+      await started
+      documents.setAccount('account-b')
+      cloud = { ...cloud, account: { id: 'account-b', name: 'Other account' } }
+      documents.setAccount(source.accountId)
+      cloud = { ...cloud, account: { id: source.accountId, name: 'Original account' },
+        api: { saveTopology } as unknown as CloudSessionValue['api'] }
+      ready()
+      expect(await saving).toBe('failed')
+      expect(saveTopology).not.toHaveBeenCalled()
+      expect(window.confirm).not.toHaveBeenCalled()
+    } finally {
+      documents.dispose()
+      await runtime.dispose()
+      vi.doUnmock('./cloud/client')
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('does not start a lazy file writer after its document closes', async () => {
+    vi.stubGlobal('window', {})
+    let ready!: () => void
+    const loading = new Promise<void>(resolve => { ready = resolve })
+    const write = vi.fn()
+    vi.doMock('./browser-document-writer', async () => {
+      await loading
+      return { createBrowserDocumentWriter: () => ({ write }) }
+    })
+    const runtime = createDocumentRuntime(() => undefined, () => 'en', () => true)
+    const documents = createWorkspaceDocuments(storage(), () => true, runtime.initialize)
+    try {
+      const document = documents.activate(first)
+      document.remember(history('First'))
+      const saving = document.commands!.saveAs({ kind: 'choose-file', name: 'first.json' })
+      documents.forget(first.id)
+      ready()
+      expect(await saving).toBe('revoked')
+      expect(write).not.toHaveBeenCalled()
+    } finally {
+      documents.dispose()
+      await runtime.dispose()
+      vi.doUnmock('./browser-document-writer')
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('starts without optional artifact metadata when storage reads fail', async () => {
+    vi.stubGlobal('window', {})
+    const runtime = createDocumentRuntime(() => undefined, () => 'en', () => false)
+    const documents = createWorkspaceDocuments({
+      ...storage(), getItem: () => { throw new Error('Storage unavailable') },
+    }, () => false, runtime.initialize)
+    try {
+      const document = documents.activate(first)
+      expect(document.remember(history('Recovered design'))).toBe(true)
+      expect(await document.commands?.save()).toBe('needs-destination')
+      expect(document.commands?.getSnapshot().destination).toBeUndefined()
+    } finally {
+      documents.dispose()
+      await runtime.dispose()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('does not claim cloud-destination persistence when a temporary document confirms a save', async () => {
     const backing = storage(), documents = createWorkspaceDocuments(backing, () => false)
     documents.setAccount(source.accountId)

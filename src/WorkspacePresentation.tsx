@@ -37,6 +37,7 @@ export function PresentationGroup({ label, children }: { label: string; children
   if (!preview) return children
   return <details ref={details} className="presentation-group" name="workspace-presentation-actions"
     onKeyDown={(event) => {
+      if ((event.target as Element).closest('dialog')) return
       if (event.key === 'Escape' && details.current?.open) {
         event.preventDefault(); event.stopPropagation()
         details.current.open = false
@@ -45,6 +46,7 @@ export function PresentationGroup({ label, children }: { label: string; children
     }}>
     <summary>{label}</summary>
     <div className="presentation-group-content" onClick={(event) => {
+      if ((event.target as Element).closest('dialog')) return
       if ((event.target as Element).closest('button') && details.current) {
         details.current.open = false
         details.current.querySelector('summary')?.focus()

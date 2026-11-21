@@ -1,4 +1,5 @@
 import { cloudDocumentKey } from './cloud/document-state'
+import { documentArtifactKey } from './document-metadata'
 import { workspaceStorageKeys, type WorkspaceProvider, type WorkspaceStorage } from './workspace-session'
 
 export const workspaceTabsKey = 'network-simulator:workspace-tabs:v1'
@@ -68,7 +69,7 @@ export function writeWorkspaceTabs(storage: Pick<Storage, 'getItem' | 'setItem'>
   storage.setItem(workspaceTabsKey, JSON.stringify(next))
 }
 
-export function workspaceTabKey(tab: WorkspaceTab, field: 'topology' | 'diagnostics' | 'cloud' | 'closed') {
+export function workspaceTabKey(tab: WorkspaceTab, field: 'topology' | 'diagnostics' | 'cloud' | 'closed' | 'artifact') {
   if (!idPattern.test(tab.id) || !Object.hasOwn(workspaceStorageKeys, tab.provider)) throw new Error('Invalid workspace tab.')
   return `network-simulator:workspace-tab:v1:${tab.id}:${field}`
 }
@@ -78,6 +79,7 @@ export function workspaceTabStorage(storage: WorkspaceStorage, tab: WorkspaceTab
     [workspaceStorageKeys[tab.provider], workspaceTabKey(tab, 'topology')],
     [diagnosticsKey, workspaceTabKey(tab, 'diagnostics')],
     [cloudDocumentKey, workspaceTabKey(tab, 'cloud')],
+    [documentArtifactKey, workspaceTabKey(tab, 'artifact')],
   ])
   const target = (key: string) => keys.get(key) ?? key
   const check = () => { if (!writable()) throw new Error('This workspace tab is no longer writable.') }

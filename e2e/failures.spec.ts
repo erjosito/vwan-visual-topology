@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test, type Locator, type Page } from '@playwright/test'
 import { example, type Topology } from '../src/model'
 import { validateTopology } from '../src/validation'
@@ -96,7 +97,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(initial)
       if (label.startsWith('Azure')) {
         const download = page.waitForEvent('download')
-        await page.getByRole('button', { name: /Export JSON/ }).click()
+        await downloadTopologyCopy(page)
         const chunks: Buffer[] = []
         for await (const chunk of (await (await download).createReadStream())!) chunks.push(chunk)
         const exported = JSON.parse(Buffer.concat(chunks).toString())

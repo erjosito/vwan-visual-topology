@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test } from './vwan-example-fixture'
 import { replaceActiveSavedTopology } from './workspace-storage-helpers'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -47,7 +48,8 @@ async function createMap(page: Page, name: string) {
 }
 async function downloadTopology(page: Page, button = 'Export JSON'): Promise<Topology> {
   const event = page.waitForEvent('download')
-  await page.getByRole('button', { name: button, exact: true }).click()
+  if (button === 'Export JSON') await downloadTopologyCopy(page)
+  else await page.getByRole('button', { name: button, exact: true }).click()
   const chunks: Buffer[] = []
   for await (const chunk of (await (await event).createReadStream())!) chunks.push(chunk)
   return JSON.parse(Buffer.concat(chunks).toString())
@@ -131,7 +133,7 @@ test('the public workspace does not expose a feedback link to a private GitHub i
   await page.goto('/')
   await expect(page.getByRole('link', { name: 'File issue', exact: true })).toHaveCount(0)
   await expect(page.locator('a[href*="github.com"][href*="/issues"]')).toHaveCount(0)
-  for (const name of ['Export JSON', 'Import JSON', 'Azure files', 'Clear topology']) {
+  for (const name of ['Load', 'Save', 'Save As', 'Azure files', 'Clear topology']) {
     await expect(page.getByRole('button', { name, exact: true })).toBeVisible()
   }
 })
@@ -2045,7 +2047,7 @@ for (const id of ['b2b-on-baseline', 'er-only-summary']) {
     }
     const before = await readTopology(page)
     const downloading = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+    await downloadTopologyCopy(page)
     const exported = JSON.parse(await readFile((await (await downloading).path())!, 'utf8')) as Topology
     expect(exported).toEqual(before)
     await importTopology(page, exported)
@@ -2071,7 +2073,7 @@ test('JSON import/export, mobile overlays and Escape preserve user data', async 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
   await page.getByLabel('Topology name').fill('Portable workspace')
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+  await downloadTopologyCopy(page)
   const path = await (await downloadPromise).path()
   await page.getByLabel('Open model notes and warnings').click()
   await page.getByRole('button', { name: 'Load example (replaces workspace)', exact: true }).click()
@@ -2239,7 +2241,7 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   await page.goto('/'); await importTopology(page, topology)
   const original = await readTopology(page)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
-  await expect(dialog(page, 'Clear topology')).toContainText('cannot be undone')
+  await expect(dialog(page, 'Clear topology')).toContainText('A blank topology will open in a new document.')
   await dialog(page, 'Clear topology').getByRole('button', { name: 'Cancel clearing', exact: true }).click()
   expect(await readTopology(page)).toEqual(original)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
@@ -2247,6 +2249,7 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   expect(await readTopology(page)).toEqual(original)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
   await dialog(page, 'Clear topology').getByRole('button', { name: 'Clear all objects', exact: true }).click()
+  await dialog(page, 'Save changes before closing?').getByRole('button', { name: 'Discard and close', exact: true }).click()
   const empty = await readTopology(page)
   expect(empty).toEqual({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)

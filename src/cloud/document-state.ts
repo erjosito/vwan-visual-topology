@@ -14,7 +14,7 @@ export interface DocumentSaveSnapshot {
   cloud?: CloudDocumentSource & { state: 'checking' | 'matches' | 'modified' | 'changed' | 'missing' | 'unavailable' | 'unknown' }
 }
 
-async function fingerprint(value: unknown) {
+export async function fingerprint(value: unknown) {
   const raw = JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
@@ -118,6 +118,12 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       pending = ticket; operation = 'saving'; publish()
       return ticket
     },
+    beginArtifact(id: string, owner: string) {
+      if (revoked || !documentOwned || accountId !== owner || pending) return undefined
+      const ticket = { epoch, sequence: ++sequence, id }
+      pending = ticket; operation = 'saving'; publish()
+      return ticket
+    },
     async confirmed(ticket: { epoch: number; sequence: number }, source: CloudDocumentSource,
       value: unknown, kind: WorkspaceProvider) {
       if (!valid(ticket) || accountId !== source.accountId) return false
@@ -136,6 +142,11 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
     },
     link(source: CloudDocumentSource, value: unknown, kind: WorkspaceProvider) {
       if (!active || source.accountId !== accountId) return
+      const ticket = { epoch, sequence: ++sequence }
+      void this.confirmed(ticket, source, value, kind)
+    },
+    linkArtifact(source: CloudDocumentSource, value: unknown, kind: WorkspaceProvider) {
+      if (revoked || !documentOwned || source.accountId !== accountId) return
       const ticket = { epoch, sequence: ++sequence }
       void this.confirmed(ticket, source, value, kind)
     },

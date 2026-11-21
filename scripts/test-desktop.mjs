@@ -109,7 +109,7 @@ try {
   await page.reload()
   await page.evaluate(() => localStorage.removeItem('aznet-simulator:practice:v1'))
   expect(await page.evaluate(() => ({ node: typeof window.require, ipc: Object.keys(window.desktopSimulator) }))).toEqual({
-    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate'],
+    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate', 'openDocument', 'saveDocument', 'releaseDocument'],
   })
   for (const [mode, file] of [
     ['vwan', 'hub-routing-preferences.json'],
@@ -177,8 +177,8 @@ try {
     await application.evaluate(({ dialog }, filePath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
     }, localFile)
-    await page.getByRole('button', { name: 'Open local JSON', exact: true }).click()
-    await expect(page.getByRole('status').filter({ hasText: 'Review the local file' })).toBeVisible()
+    await page.getByRole('button', { name: 'Load file', exact: true }).click()
+    await expect(page.locator('.document-artifact-status')).toContainText(`Saved · roundtrip-${mode}.json`)
     const readSaved = () => page.evaluate((mode) => {
       const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'))
       return mode === 'vwan' ? value : value.topology
@@ -270,7 +270,10 @@ try {
         })
       })
     }, exportFile)
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await page.getByRole('button', { name: 'Save As', exact: true }).click()
+    const saveDialog = page.getByRole('dialog', { name: 'Save As', exact: true })
+    await saveDialog.getByRole('combobox', { name: 'Destination', exact: true }).selectOption('download')
+    await saveDialog.getByRole('button', { name: 'Save', exact: true }).click()
     expect(await application.evaluate(() => globalThis.__desktopDownloadDone)).toBe('completed')
     expect(JSON.parse(await readFile(exportFile, 'utf8'))).toEqual(await readSaved())
     if (mode === 'full') {

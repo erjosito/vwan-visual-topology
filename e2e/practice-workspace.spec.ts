@@ -376,7 +376,7 @@ test('returning to an unsaved normal VWAN design retains its edit and storage wa
   })
   await move(page, true)
   const editedPosition = await position(page, true)
-  const warning = page.getByText('Browser storage is unavailable or full. Export JSON to preserve your topology.', { exact: true })
+  const warning = page.getByText('Browser storage is unavailable or full. Use Save As to preserve your topology.', { exact: true })
   await expect(warning).toBeVisible()
   await confirmStart(page, 'vwan-connect')
   await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()

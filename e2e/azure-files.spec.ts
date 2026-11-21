@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test } from '@playwright/test'
 import type { Download, Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
@@ -54,7 +55,7 @@ test('Azure captures preview without replacement, cancel cleanly, and retain lim
   await page.reload()
   await expect(page.getByRole('status').filter({ hasText: 'Azure structure-only import' })).toBeVisible()
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+  await downloadTopologyCopy(page)
   const native = JSON.parse((await contents(await download)).toString()) as Topology
   expect(native.azureImport?.hubs[0].addressPrefix).toBe('10.250.0.0/23')
   await upload(page, native)
@@ -121,7 +122,7 @@ test('synthetic 200-VNet capture remains selectable, bounded and lossless throug
   expect(before.spokes).toHaveLength(200)
   expect(before.azureImport?.spokes).toHaveLength(200)
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: 'Export JSON', exact: true }).click()
+  await downloadTopologyCopy(page)
   const native = JSON.parse((await contents(await download)).toString()) as Topology
   await upload(page, native)
   await page.reload()

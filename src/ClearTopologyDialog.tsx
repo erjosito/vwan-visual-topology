@@ -24,8 +24,8 @@ export function ClearTopologyDialog({ workspace, onClose, onConfirm }: {
     }}>
     <div className="row dialog-heading"><h2>{t('Clear topology')}</h2><button aria-label={t('Close {0}', t('Clear topology'))} onClick={onClose}>{t('Close')}</button></div>
     <p>{t(workspace === 'vwan'
-      ? 'Remove all hubs, sites, spokes, ER locations, connections, route maps and saved layouts? This replaces the workspace saved in this browser and cannot be undone. Export JSON first if you need a backup.'
-      : 'Clear all objects from the current topology? This replaces the saved topology in this workspace and cannot be undone. Export JSON first if you need a backup. Other workspaces, preferences and training progress are kept.')}</p>
+      ? 'Remove all hubs, sites, spokes, ER locations, connections, route maps and saved layouts? A blank topology will open in a new document. Save first if you need a file or cloud backup.'
+      : 'Clear all objects from the current topology? A blank topology will open in a new document. Save first if you need a file or cloud backup. Other topologies, preferences and training progress are kept.')}</p>
     <div className="row dialog-actions">
       <button ref={cancel} onClick={onClose}>{t('Cancel clearing')}</button>
       <button className="danger" onClick={onConfirm}>{t('Clear all objects')}</button>

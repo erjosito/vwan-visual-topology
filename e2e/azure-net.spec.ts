@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test } from './vwan-example-fixture'
 import { replaceActiveSavedTopology, waitForWorkspaceSample } from './workspace-storage-helpers'
 import type { Page } from '@playwright/test'
@@ -283,7 +284,7 @@ for (const mode of ['hub-spoke', 'full']) {
     }
 
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const exported = JSON.parse(readFileSync((await (await download).path())!, 'utf8')) as AzNetTopology
     expect(exported.vnets.map(({ id, role }) => ({ id, role }))).toEqual(
       topology.vnets.map(({ id, role }) => ({ id, role })),
@@ -362,7 +363,7 @@ test('authors Managed VNRA transit with original ownership, scoped inspection, h
   await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
 
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Export JSON/ }).click()
+  await downloadTopologyCopy(page)
   const file = (await (await download).path())!
   const exported = JSON.parse(readFileSync(file, 'utf8')) as AzNetTopology
   expect(exported.vnets[0].appliances[0]).toEqual((await saved()).vnets[0].appliances[0])
@@ -469,7 +470,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
       }
     })
     await page.getByTestId('aznet-add-vnet-btn').click()
-    await expect(page.getByTestId('aznet-save-error')).toContainText('Export JSON')
+    await expect(page.getByTestId('aznet-save-error')).toContainText('Save As')
     await expect(page.getByTestId('document-local-state')).toHaveText('Local save not confirmed')
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(retained)
     const node = page.getByTestId('aznet-vnet-vnet-hub-weu')
@@ -480,7 +481,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
       await expect(node).toBeVisible()
     }
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: '⬇ Export JSON', exact: true }).click()
+    await downloadTopologyCopy(page)
     expect((await download).suggestedFilename()).toMatch(/\.json$/)
   })
 

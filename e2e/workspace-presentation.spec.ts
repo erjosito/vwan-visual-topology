@@ -1,8 +1,10 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { createEmptyAzNetTopology, sampleHubSpokeFirewallUdr, type AzNetTopology } from '../src/azure-net/model'
 import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
 import { readFileSync } from 'node:fs'
+import { waitForWorkspaceSample } from './workspace-storage-helpers'
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 
@@ -467,9 +469,9 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
 }
 
 for (const mode of ['vwan', 'full'] as const) {
+  const rootId = mode === 'vwan' ? 'vwan-app' : 'aznet-app'
   const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
   const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
-  const rootId = mode === 'vwan' ? 'vwan-app' : 'aznet-app'
 
   test(`${mode}: preview preserves the selected design and history while exposing every VNet action`, async ({ page }, info) => {
     await page.setViewportSize({ width: 1440, height: 1000 })
@@ -477,7 +479,7 @@ for (const mode of ['vwan', 'full'] as const) {
       if (localStorage.getItem('aznet-ui-preview:v1') === null) localStorage.setItem('aznet-ui-preview:v1', 'false')
     })
     await page.goto(`/?mode=${mode}&sample=${sample}`)
-    await expect(page.getByTestId(rootId)).toBeVisible()
+    await waitForWorkspaceSample(page, mode === 'vwan' ? 'vwan' : 'azure-net', sample)
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), key)).not.toBeNull()
     const saved = JSON.parse((await page.evaluate((key) => localStorage.getItem(key), key))!)
     const imported = mode === 'full' ? saved.topology : saved
@@ -535,7 +537,7 @@ for (const mode of ['vwan', 'full'] as const) {
     const file = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^File$/ }) })
     await file.locator('summary').click()
     const download = page.waitForEvent('download')
-    await file.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     await download
     await expect(file).not.toHaveAttribute('open')
     await expect(file.locator('summary')).toBeFocused()

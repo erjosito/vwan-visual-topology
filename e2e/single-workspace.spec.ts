@@ -76,7 +76,7 @@ test('competing browser windows edit temporary copies without overwriting the ow
     await expect(other.getByText('Temporary', { exact: true })).toBeVisible()
     await expect(other.getByLabel('Topology name', { exact: true })).toHaveValue('Owner design')
     await other.getByLabel('Topology name', { exact: true }).fill('Temporary design')
-    await expect(other.getByText('Browser storage is unavailable or full. Export JSON to preserve your topology.', { exact: true })).toBeVisible()
+    await expect(other.getByText('Browser storage is unavailable or full. Use Save As to preserve your topology.', { exact: true })).toBeVisible()
     expect(await other.evaluate(() => ({
       topology: localStorage.getItem('vwan-visual-topology:v1'),
       tabs: localStorage.getItem('network-simulator:workspace-tabs:v1'),
@@ -111,11 +111,12 @@ test('closing, cancelling, reopening and close-all keep recovery data and do not
   await page.getByLabel('Topology name', { exact: true }).fill('Recoverable design')
   const manifest = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!))
   const id = manifest.activeId
-  page.once('dialog', dialog => dialog.dismiss())
   await page.getByRole('button', { name: 'Close topology: Recoverable design', exact: true }).click()
+  const closing = page.getByRole('dialog', { name: 'Save changes before closing?', exact: true })
+  await closing.getByRole('button', { name: 'Cancel', exact: true }).click()
   await expect(page.getByRole('tab', { name: 'Recoverable design', exact: true })).toBeVisible()
-  page.once('dialog', dialog => dialog.accept())
   await page.getByRole('button', { name: 'Close topology: Recoverable design', exact: true }).click()
+  await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
   const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
   await expect(library).toBeVisible()
   await library.getByRole('button', { name: 'Reopen topology: Recoverable design', exact: true }).click()
@@ -123,13 +124,13 @@ test('closing, cancelling, reopening and close-all keep recovery data and do not
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).toBe(id)
   await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
   await expect(page.getByTestId('aznet-app')).toBeVisible()
-  page.once('dialog', dialog => dialog.accept())
   await page.getByRole('button', { name: 'Close topology: Empty Topology', exact: true }).click()
+  await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
   await expect(page.getByRole('tab', { name: 'Recoverable design', exact: true })).toBeFocused()
   await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
   await page.getByTestId('workspace-library-open').click()
-  page.once('dialog', dialog => dialog.accept())
   await library.getByRole('button', { name: 'Close all topology tabs', exact: true }).click()
+  await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
   await expect(page.getByRole('tablist', { name: 'Designs', exact: true })).toHaveCount(0)
   await page.reload()
   await expect(library).toBeVisible()
@@ -462,14 +463,15 @@ for (const provider of ['vwan', 'full']) {
   })
 }
 
-for (const operation of ['openTopology', 'collect'] as const) {
+for (const operation of ['openDocument', 'collect'] as const) {
   test(`a delayed desktop ${operation} cannot import into a newly selected workspace`, async ({ page }) => {
     await page.addInitScript(({ operation, content }) => {
       const delayed = () => new Promise((resolve) => Reflect.set(window, 'releaseDesktopResult', () => resolve({
         ok: true, value: { name: 'previous-workspace.json', content },
       })))
       Object.defineProperty(window, 'desktopSimulator', { value: {
-        openTopology: operation === 'openTopology' ? delayed : async () => ({ ok: true, value: null }),
+        openDocument: operation === 'openDocument' ? delayed : async () => ({ ok: true, value: null }),
+        releaseDocument: async () => ({ ok: true }),
         collect: delayed,
         accounts: async () => ({ ok: true, value: {
           cloud: { name: 'AzureCloud', resourceManager: 'https://management.azure.com/' },
@@ -483,10 +485,10 @@ for (const operation of ['openTopology', 'collect'] as const) {
           Reflect.set(window, 'desktopImportEvents', Reflect.get(window, 'desktopImportEvents') + 1)
         }
       })
-    }, { operation, content: JSON.stringify(operation === 'openTopology' ? example : { ...observationFixture(), version: 1 }) })
+    }, { operation, content: JSON.stringify(operation === 'openDocument' ? example : { ...observationFixture(), version: 1 }) })
     await page.goto('/')
     await expect(page.getByTestId('aznet-app')).toBeVisible()
-    if (operation === 'openTopology') await page.getByRole('button', { name: 'Open local JSON', exact: true }).click()
+    if (operation === 'openDocument') await page.getByRole('button', { name: 'Load file', exact: true }).click()
     else {
       await page.getByText('Read-only local Azure collection', { exact: true }).click()
       await page.getByRole('combobox', { name: 'Capture type', exact: true }).selectOption('vwan')

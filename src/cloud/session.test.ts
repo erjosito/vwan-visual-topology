@@ -115,6 +115,23 @@ describe('document save provenance', () => {
     await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('matches'))
     expect(state.getSnapshot()).toMatchObject({ ready: true, provider: 'azure-net', local: 'saved' })
   })
+  it('limits inactive artifact confirmations to live document-owned sessions', async () => {
+    const ordinary = createDocumentSaveState(storage)
+    ordinary.setAccount('alice'); ordinary.observe(design, 'azure-net'); ordinary.setActive(false)
+    expect(ordinary.beginArtifact(source.id, 'alice')).toBeUndefined()
+    const cache = storage(), document = createDocumentSaveState(() => cache, undefined, true)
+    document.setAccount('alice'); document.observe(design, 'azure-net'); document.setActive(false)
+    expect(document.begin(source.id, 'alice')).toBeUndefined()
+    expect(document.beginArtifact(source.id, 'alice')).toBeDefined()
+    document.linkArtifact(source, design, 'azure-net')
+    await vi.waitFor(() => expect(cache.getItem(cloudDocumentKey)).toContain(source.id))
+    document.setActive(true)
+    await vi.waitFor(() => expect(document.getSnapshot().cloud?.state).toBe('matches'))
+    document.revoke()
+    expect(document.beginArtifact(source.id, 'alice')).toBeUndefined()
+    document.linkArtifact({ ...source, name: 'Late save' }, design, 'azure-net')
+    expect(cache.getItem(cloudDocumentKey)).not.toContain('Late save')
+  })
   it('does not turn a failed upload into saved state or reuse an earlier list during a new upload', async () => {
     const { state } = await linked()
     const oldList = state.scope('alice'), ticket = state.begin(source.id, 'alice')!
