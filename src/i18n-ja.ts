@@ -381,7 +381,7 @@ export const ja: Record<string, string> = {
   'unassessed': '未評価',
   'Local desktop tools': 'ローカルのデスクトップ ツール',
   'Desktop · offline modeling · no automatic uploads': 'デスクトップ · オフラインのモデル作成 · 自動アップロードなし',
-  'Open local JSON': 'ローカル JSON を開く',
+  'Load file': 'ファイルを読み込み',
   'Read-only local Azure collection': 'ローカルでの読み取り専用 Azure データ取得',
   'Uses existing Azure CLI and PowerShell 7. No automatic installation, login or resource changes. Public Azure only.': '既存の Azure CLI と PowerShell 7 を使用します。自動インストール、ログイン、リソース変更は行いません。パブリック Azure のみ対応します。',
   'Read existing Azure session': '既存の Azure セッションを読み取る',

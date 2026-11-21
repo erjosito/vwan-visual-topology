@@ -50,7 +50,7 @@ export function DesktopTools({ mode }: { mode: SimulatorMode }) {
       if (!current()) return
       if (!result.ok) throw new Error(result.error)
       importFile(result.value)
-    }) }}>{t('Open local JSON')}</button>
+    }) }}>{t('Load file')}</button>
     <details><summary>{t('Read-only local Azure collection')}</summary>
       <p>{t('Uses existing Azure CLI and PowerShell 7. No automatic installation, login or resource changes. Public Azure only.')}</p>
       <label>{t('Capture type')} <select value={collectionMode === 'vwan' ? 'vwan' : 'full'} disabled={busy}

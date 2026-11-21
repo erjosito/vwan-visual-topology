@@ -177,8 +177,8 @@ try {
     await application.evaluate(({ dialog }, filePath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
     }, localFile)
-    await page.getByRole('button', { name: 'Open local JSON', exact: true }).click()
-    await expect(page.getByRole('status').filter({ hasText: 'Review the local file' })).toBeVisible()
+    await page.getByRole('button', { name: 'Load file', exact: true }).click()
+    await expect(page.locator('.document-artifact-status')).toContainText(`Saved · roundtrip-${mode}.json`)
     const readSaved = () => page.evaluate((mode) => {
       const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'))
       return mode === 'vwan' ? value : value.topology

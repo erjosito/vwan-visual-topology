@@ -463,14 +463,15 @@ for (const provider of ['vwan', 'full']) {
   })
 }
 
-for (const operation of ['openTopology', 'collect'] as const) {
+for (const operation of ['openDocument', 'collect'] as const) {
   test(`a delayed desktop ${operation} cannot import into a newly selected workspace`, async ({ page }) => {
     await page.addInitScript(({ operation, content }) => {
       const delayed = () => new Promise((resolve) => Reflect.set(window, 'releaseDesktopResult', () => resolve({
         ok: true, value: { name: 'previous-workspace.json', content },
       })))
       Object.defineProperty(window, 'desktopSimulator', { value: {
-        openTopology: operation === 'openTopology' ? delayed : async () => ({ ok: true, value: null }),
+        openDocument: operation === 'openDocument' ? delayed : async () => ({ ok: true, value: null }),
+        releaseDocument: async () => ({ ok: true }),
         collect: delayed,
         accounts: async () => ({ ok: true, value: {
           cloud: { name: 'AzureCloud', resourceManager: 'https://management.azure.com/' },
@@ -484,10 +485,10 @@ for (const operation of ['openTopology', 'collect'] as const) {
           Reflect.set(window, 'desktopImportEvents', Reflect.get(window, 'desktopImportEvents') + 1)
         }
       })
-    }, { operation, content: JSON.stringify(operation === 'openTopology' ? example : { ...observationFixture(), version: 1 }) })
+    }, { operation, content: JSON.stringify(operation === 'openDocument' ? example : { ...observationFixture(), version: 1 }) })
     await page.goto('/')
     await expect(page.getByTestId('aznet-app')).toBeVisible()
-    if (operation === 'openTopology') await page.getByRole('button', { name: 'Open local JSON', exact: true }).click()
+    if (operation === 'openDocument') await page.getByRole('button', { name: 'Load file', exact: true }).click()
     else {
       await page.getByText('Read-only local Azure collection', { exact: true }).click()
       await page.getByRole('combobox', { name: 'Capture type', exact: true }).selectOption('vwan')

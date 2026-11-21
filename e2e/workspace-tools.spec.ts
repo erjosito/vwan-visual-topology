@@ -121,7 +121,7 @@ test('the wide palette leaves native desktop file and read-only collection contr
   await page.goto('/?mode=full')
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   const native = page.getByRole('region', { name: 'Local desktop tools', exact: true })
-  await native.getByRole('button', { name: 'Open local JSON', exact: true }).click({ trial: true })
+  await native.getByRole('button', { name: 'Load file', exact: true }).click({ trial: true })
   await native.getByText('Read-only local Azure collection', { exact: true }).click()
   await native.getByRole('button', { name: 'Read existing Azure session', exact: true }).click({ trial: true })
 })
