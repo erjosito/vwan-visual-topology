@@ -514,6 +514,7 @@ export const ja: Record<string, string> = {
   'Reset canvas view': 'キャンバス表示をリセット',
   'Maximize canvas': 'キャンバスを最大化',
   'Restore panels': 'パネルを再表示',
+  'Workspace actions': 'ワークスペース メニュー',
   'Undo': '元に戻す',
   'Redo': 'やり直す',
   'Undo last topology change (Ctrl+Z)': '直前のトポロジ変更を元に戻す (Ctrl+Z)',

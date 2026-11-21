@@ -19,7 +19,7 @@ a { color: var(--accent); }
 summary { cursor: pointer; color: var(--accent); }
 .canvas-view-toggle { position: fixed; right: 14px; bottom: 14px; z-index: 10; box-shadow: 0 4px 12px var(--shadow); }
 .simulator-shell.canvas-maximized { position: fixed; inset: 0; overflow: hidden; background: var(--page); }
-.canvas-maximized :is(.failure-controls, .unified-topbar, .aznet-topbar, .aznet-scenario-banner, .routing-check-status, .workspace-heading, .canvas-toolbar),
+.canvas-maximized :is(.failure-controls, .aznet-scenario-banner, .routing-check-status, .workspace-heading, .canvas-toolbar),
 .canvas-maximized .canvas-workspace > .legend,
 .canvas-maximized .canvas-app > footer { display: none; }
 .canvas-maximized .canvas-app,

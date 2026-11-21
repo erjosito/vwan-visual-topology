@@ -9,6 +9,75 @@ import '../src/route-map-messages-ja'
 
 const styleKey = 'aznet-canvas-style:v1'
 
+for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja'] as const) {
+  for (const [width, height] of [[1366, 768], [1920, 1080], [390, 844]]) {
+    test(`${mode}: ${language} compact header preserves the document and reclaims usable canvas at ${width}px`, async ({ page }, info) => {
+      await loadLanguage(language)
+      const text = (message: string) => translate(language, message)
+      await page.setViewportSize({ width, height })
+      await page.addInitScript(({ mode, language, vwan, native }) => {
+        localStorage.setItem('aznet-ui-preview:v1', 'true')
+        localStorage.setItem('vwan-visual-topology:language:v1', language)
+        localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+        localStorage.setItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1',
+          JSON.stringify(mode === 'vwan' ? vwan : { topology: native, sampleId: '' }))
+      }, { mode, language, vwan: example, native: sampleHybridVwanAndHubSpoke })
+      await page.goto(`/?mode=${mode}`)
+      await expect(page.locator('.document-artifact-status')).toBeVisible()
+      const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+      const original = await page.evaluate(key => localStorage.getItem(key), key)
+      const svg = page.locator(mode === 'vwan' ? 'svg.diagram' : '[data-testid="aznet-diagram-svg"]')
+      const node = svg.locator('g[role="button"]').first()
+      await node.click()
+      const selection = await node.getAttribute('aria-pressed')
+      await page.getByRole('combobox', { name: text('Canvas zoom'), exact: true }).selectOption('1.25')
+      const bounds = () => page.evaluate(selector => {
+        const r = document.querySelector(selector)!.getBoundingClientRect()
+        const h = document.querySelector('header')!.getBoundingClientRect()
+        return { headerHeight: h.height, x: r.x, y: r.y,
+          width: Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0)),
+          height: Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)) }
+      }, mode === 'vwan' ? '.diagram-scroll' : '[data-testid="aznet-diagram-svg"]')
+      const normal = await bounds()
+      expect(normal.headerHeight).toBeLessThan(width < 760 ? 220 : 110)
+      await page.getByRole('button', { name: text('Maximize canvas'), exact: true }).click()
+      const restore = page.getByRole('button', { name: text('Restore panels'), exact: true })
+      await expect(restore.locator('.canvas-maximize-label')).toBeVisible()
+      await expect(page.getByTestId('account-belt-status')).toBeVisible()
+      await expect(page.locator('.document-artifact-status')).toBeVisible()
+      const focused = await bounds()
+      expect(focused.headerHeight).toBeLessThan(width < 760 ? 180 : 70)
+      expect(focused.width * focused.height).toBeGreaterThan(normal.width * normal.height + width * 40)
+      const actions = page.getByRole('button', { name: text('Workspace actions'), exact: true })
+      await actions.click()
+      await expect(actions).toHaveAttribute('aria-expanded', 'true')
+      const file = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: new RegExp(`^${text('File')}$`) }) })
+      await file.locator('summary').click()
+      await expect(file.getByRole('button', { name: language === 'ja' ? '保存' : 'Save', exact: true })).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(file).not.toHaveAttribute('open')
+      await expect(actions).toHaveAttribute('aria-expanded', 'true')
+      await page.keyboard.press('Escape')
+      await expect(actions).toBeFocused()
+      await expect(actions).toHaveAttribute('aria-expanded', 'false')
+      await page.keyboard.press('Control+s')
+      const chooser = page.getByRole('dialog', { name: language === 'ja' ? '名前を付けて保存' : 'Save As', exact: true })
+      await expect(chooser).toBeVisible()
+      await chooser.getByRole('textbox', { name: language === 'ja' ? '名前' : 'Name', exact: true }).fill('Keep the pending save name')
+      await restore.evaluate(button => (button as HTMLButtonElement).click())
+      await expect(chooser).toBeVisible()
+      await expect(chooser.getByRole('textbox', { name: language === 'ja' ? '名前' : 'Name', exact: true })).toHaveValue('Keep the pending save name')
+      await page.keyboard.press('Escape')
+      await expect(chooser).toHaveCount(0)
+      await expect(page.getByRole('combobox', { name: text('Canvas zoom'), exact: true })).toHaveValue('1.25')
+      expect(await node.getAttribute('aria-pressed')).toBe(selection)
+      expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(original)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await info.attach('usable-canvas-bounds', { body: JSON.stringify({ mode, language, width, height, normal, focused }), contentType: 'application/json' })
+    })
+  }
+}
+
 for (const mode of ['hub-spoke', 'full']) for (const language of ['en', 'ja'] as const) {
   test(`${mode}: ${language} connection focus preserves inspection, failures and the saved design`, async ({ page }, info) => {
     await loadLanguage(language)
@@ -385,7 +454,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.getByRole('button', { name: 'Maximize canvas', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Restore panels', exact: true })).toBeVisible()
     const tabHeight = (await page.locator('.workspace-tabs').boundingBox())!.height
-    expect((await canvas.boundingBox())!.height + tabHeight).toBeGreaterThan(960)
+    const headerHeight = (await page.locator('header').boundingBox())!.height
+    expect((await canvas.boundingBox())!.height + tabHeight + headerHeight).toBeGreaterThan(960)
     await page.setViewportSize({ width: 360, height: 800 })
     const controlBounds = (await controls.boundingBox())!
     expect(controlBounds.x).toBeGreaterThanOrEqual(0)

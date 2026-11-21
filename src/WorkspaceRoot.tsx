@@ -169,7 +169,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
   }, [accountId, progressKey, anonymousProgress, accountProgress])
   const learningIdentity = useRef(progress)
   const learningProgress = useSyncExternalStore(progress.subscribe, progress.getSnapshot)
-  const { style, maximized } = useCanvasPresentation()
+  const { style, maximized, headerActionsOpen } = useCanvasPresentation()
   const request = useRef(0)
   const loadLearning = useCallback(() => {
     const courseId = selectedEdition(progress.getSnapshot().ledger, practiceRef.current?.current?.courseId).course.id
@@ -730,7 +730,8 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       },
     } : undefined,
   }}>
-    <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style} data-ui-preview={presentationPreview || undefined}>
+    <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style} data-ui-preview={presentationPreview || undefined}
+      data-header-actions={headerActionsOpen || undefined}>
       {practiceReady && !practicing && tabs.tabs.length > 0 && <WorkspaceTabsNavigation tabs={tabs.tabs} activeId={active?.id}
         temporary={ownership.status !== 'owned'}
         getSave={tab => documents.get(tab).save}
