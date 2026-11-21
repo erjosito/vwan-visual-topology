@@ -100,16 +100,43 @@ empty per-session Adj-RIB, withdrawal, convergence or session failure.
 
 This adds read-only per-endpoint managed-gateway coverage, not physical-instance
 qualification. An ER virtual network gateway is not a circuit, primary/secondary
-MSEE pair or peering-location speaker. No such bindings, advertised gateway
-routes or native alias mappings are inferred. The committed gateway-route fixture
+MSEE pair or peering-location speaker. No such bindings or native alias mappings
+are inferred. The committed gateway-route fixture
 and browser/offline tests are synthetic; this increment performs no fresh Azure
 reads and claims no new ER/VPN live qualification.
 
-This is not full simulator-to-Azure BGP route-result parity. Gateway advertised
-route collection, captured ARS neighbor inspection, physical-instance
+This is not full simulator-to-Azure BGP route-result parity. Captured ARS neighbor inspection, physical-instance
 bindings, MSEE/provider sessions and data-plane/failover qualification remain
 outside these bounded checks. Historical lab results do not certify sessions
 after later configuration drift.
+
+## Captured managed-gateway advertised routes
+
+With `-IncludeEffectiveRoutes`, the collector queries
+`az network vnet-gateway list-advertised-routes --peer <neighbor>` once per
+distinct captured remote address. Native self-address rows are not remote
+query targets. `vngAdvertisedRoutes[gateway][requestedPeer]` retains the
+requested **advertised-to peer** separately from each row's `localAddress`,
+`nextHop` and optional `sourcePeer`. The request is never inserted as a source
+peer. Per-command coverage distinguishes successful empty data from denied,
+unsupported or failed reads; these failures do not invalidate otherwise
+complete configuration capture. Missing remote addresses leave the gateway's
+advertisement inventory incomplete, even when its known-peer queries succeed.
+
+Choose the local endpoint first, then expand **Captured gateway advertised
+routes**, or use **Inspect advertised routes** on a captured neighbor.
+The table preserves duplicate paths, empty/native AS paths, zero weight and
+missing source attributes. A different local endpoint's rows stay excluded;
+missing local addresses remain **Unassigned**. Peer choices, rows and pages are
+bounded to 256 peers, 10,000 rows per requested peer and 100 rows per page.
+Malformed observations cannot establish complete coverage. Capture replacement
+resets selection; inspection does not change topology or saved simulation state.
+
+These are historical, command-reported advertisements, not proof of peer
+acceptance, pre/post-policy parity, route installation or packet delivery.
+No primary/secondary MSEE binding, physical identity or live FSM is inferred.
+The separately approved #259 provider lab supplies native gateway output shapes;
+the committed advertisement fixture remains synthetic and contains no lab IDs.
 
 ## Captured ARS learned and advertised routes
 

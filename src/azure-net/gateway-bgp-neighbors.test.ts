@@ -275,6 +275,42 @@ it.each(['arsLearnedRoutes', 'vngLearnedRoutes', 'arsAdvertisedRoutes'] as const
 )
 
 const routeFixture = () => JSON.parse(readFileSync(resolve('tests', 'fixtures', 'gateway-route-capture.json'), 'utf8'))
+const advertisedFixture = () => JSON.parse(readFileSync(resolve('tests', 'fixtures', 'gateway-advertised-capture.json'), 'utf8'))
+
+it('retains per-destination gateway advertisements without inventing a source peer, neighbor or saved route configuration', () => {
+  const capture = advertisedFixture()
+  delete capture.vngBgpPeerStatus
+  delete capture.vngLearnedRoutes
+  capture.sections = Object.fromEntries(Object.entries(capture.sections).filter(([key]) => key.startsWith('vngAdvertisedRoutes:')))
+  capture.sections['vngAdvertisedRoutes:er-gateway'] = { state: 'failed', complete: false }
+  const original = JSON.stringify(capture)
+  const result = importAzNetCapture(capture)
+  expect(result.observations!.vngAdvertisedRoutes).toEqual(capture.vngAdvertisedRoutes)
+  expect(result.observations!.vngAdvertisedRoutes!['er-gateway']['192.0.2.9'][0].sourcePeer).toBeUndefined()
+  expect(result.observations!.vngBgpPeerStatus).toBeUndefined()
+  const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations: result.observations! }))
+  expect(html).toContain('Advertised to peer 192.0.2.9')
+  expect(html).toContain('203.0.113.0/24')
+  expect(html).not.toContain('198.51.100.0/24')
+  expect(html).not.toContain('192.0.2.0/24')
+  expect(html).toContain('do not prove peer acceptance')
+  expect(html).toContain('Some peers or reads remain unknown')
+  expect(html).not.toContain('data-testid="captured-gateway-neighbor-table"')
+  expect(JSON.stringify(result.topology)).not.toContain('vngAdvertisedRoutes')
+  expect(JSON.stringify(capture)).toBe(original)
+})
+
+it.each([null, [], { '192.0.2.9': null }, { '192.0.2.9': [{ network: '203.0.113.0/24', localAddress: {} }] },
+  Object.fromEntries(Array.from({ length: 257 }, (_, i) => [`peer-${i}`, []]))].map((value) => [value]))(
+  'discloses malformed or oversized advertised observations instead of declaring complete empty coverage',
+  (value) => {
+    const capture = advertisedFixture()
+    capture.vngAdvertisedRoutes = { 'er-gateway': value }
+    const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations: importAzNetCapture(capture).observations! }))
+    expect(html).toContain('Malformed or oversized')
+    expect(html).toContain('Unknown / incomplete')
+  },
+)
 
 it('scopes native gateway routes by exact local address without reconciling contradictory counters or inventing a source peer', () => {
   const capture = routeFixture()
