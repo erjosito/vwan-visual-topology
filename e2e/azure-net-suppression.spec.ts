@@ -101,6 +101,8 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(repair).toContainText('VirtualAppliance 10.0.2.4')
     await expect(repair).toContainText('Bypass route decision: Hub/GatewaySubnet')
     await expect(repair).toContainText('has not been retraced')
+    await expect(finding.getByRole('button', { name: 'Acknowledge warning', exact: true })).toHaveCount(0)
+    await expect(repair.getByRole('button', { name: 'Configure Hub/GatewaySubnet', exact: true })).toBeVisible()
     const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
     await repair.getByRole('button', { name: 'Configure Hub/GatewaySubnet', exact: true }).click()
     await expect(page.getByTestId('aznet-editor-scope-banner')).toContainText('GatewaySubnet')

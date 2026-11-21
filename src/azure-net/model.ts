@@ -283,6 +283,7 @@ export interface AzNetTopology {
   version: 2
   kind: 'azure-network-topology'
   name: string
+  warningAcknowledgements?: string[]
   subtitle?: string
   vnets: AzVNet[]
   vnetPeerings: AzVnetPeering[]

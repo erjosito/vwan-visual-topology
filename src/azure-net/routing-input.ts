@@ -22,6 +22,7 @@ export function azRoutingInput(topology: AzNetTopology) {
   name(routing)
   delete routing.subtitle
   delete routing.layout
+  delete routing.warningAcknowledgements
   for (const vnet of routing.vnets) {
     node(vnet)
     for (const subnet of vnet.subnets) {

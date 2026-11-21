@@ -9,6 +9,7 @@ import { cidr, ipv4, isVwanNvaAsn } from '../validation'
 import { validateVpnNat } from '../vpn-nat'
 import { validateSubnetPeeringScopes } from './subnet-peering'
 import { parseVnetBgpCommunities } from '../vnet-communities'
+import { parseWarningAcknowledgements } from '../warning-acknowledgements'
 
 export const AZNET_MAX_JSON_LENGTH = 4_000_000
 const MAX_ITEMS = 4096
@@ -120,6 +121,7 @@ const schema = object({
   siteLinks: array(object({ ...named, siteAId: id, siteBId: id, enabled: bool })),
 }, {
   subtitle: text, routeMaps: maps, allowBranchToBranchTraffic: bool,
+  warningAcknowledgements: (value) => { parseWarningAcknowledgements(value) },
   erGlobalReachLinks: array(object({ ...named, locationAId: id, locationBId: id, enabled: bool })),
   layout: object({ mode: choice('layered', 'constellation'), positions: (v, p) => {
     object({})(v, p)
