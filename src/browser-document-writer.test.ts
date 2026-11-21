@@ -127,6 +127,21 @@ test('released picker completions cannot attach to a reopened document with the 
   expect(reopened.value()).toBe('new')
 })
 
+test('disposing commands releases a pending picker before it can write, not merely after its completion', async () => {
+  const file = fileHandle()
+  let finish!: (handle: BrowserDocumentHandle) => void
+  const writer = createBrowserDocumentWriter({ picker: () => new Promise(resolve => { finish = resolve }) })
+  const { commands } = setup(writer)
+  const pending = commands.saveAs({ kind: 'choose-file', name: 'network.json' })
+  await Promise.resolve()
+  const disposal = commands.dispose()
+  finish(file.handle)
+  expect(await pending).toBe('revoked')
+  await disposal
+  expect(file.handle.createWritable).not.toHaveBeenCalled()
+  expect(file.value()).toBe('{}')
+})
+
 test('different documents cannot concurrently save through the same file handle', async () => {
   const file = fileHandle()
   const writer = createBrowserDocumentWriter()

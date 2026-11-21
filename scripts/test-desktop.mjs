@@ -270,7 +270,10 @@ try {
         })
       })
     }, exportFile)
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await page.getByRole('button', { name: 'Save As', exact: true }).click()
+    const saveDialog = page.getByRole('dialog', { name: 'Save As', exact: true })
+    await saveDialog.getByRole('combobox', { name: 'Destination', exact: true }).selectOption('download')
+    await saveDialog.getByRole('button', { name: 'Save', exact: true }).click()
     expect(await application.evaluate(() => globalThis.__desktopDownloadDone)).toBe('completed')
     expect(JSON.parse(await readFile(exportFile, 'utf8'))).toEqual(await readSaved())
     if (mode === 'full') {

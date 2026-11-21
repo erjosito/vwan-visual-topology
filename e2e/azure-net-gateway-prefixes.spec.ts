@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { createEmptyAzNetTopology } from '../src/azure-net/model'
@@ -60,7 +61,7 @@ for (const [mode, transport] of [['hub-spoke', 'ExpressRoute'], ['full', 'Vpn']]
     await inspect(page)
     await expect(rib.getByText('10.0.0.0/15', { exact: true })).toBeVisible()
     const downloadEvent = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadEvent
     const exported = JSON.parse(readFileSync((await download.path())!, 'utf8'))
     expect(exported.vnets[0].summarizedGatewayPrefixes).toEqual(['10.0.0.0/15', '198.18.0.0/15'])

@@ -57,6 +57,26 @@ try {
   expect(released.ok).toBe(true)
   expect(await save({ documentId, content: content('Released overwrite'), destinationToken: updated.value.token }))
     .toMatchObject({ ok: false, code: 'revoked' })
+  const fileMenu = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^File$/ }) })
+  await fileMenu.locator('summary').click()
+  await page.getByRole('button', { name: 'Load', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Saved')
+  await page.getByLabel('Topology name', { exact: true }).fill('UI saved')
+  await page.keyboard.press('Control+s')
+  await expect(page.locator('.document-artifact-status')).toContainText('Saved', { timeout: 30_000 })
+  expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved')
+  expect(await application.evaluate(() => globalThis.documentDialogPicks)).toBe(2)
+  await page.reload()
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('UI saved')
+  await page.getByLabel('Topology name', { exact: true }).fill('UI saved after reload')
+  await page.keyboard.press('Control+s')
+  await expect(page.locator('.document-artifact-status')).not.toContainText('Saving', { timeout: 30_000 })
+  if (await page.locator('.document-artifact-status').textContent().then(value => value.includes('failed'))) {
+    throw new Error(await page.locator('.document-artifact-details [role="alert"]').textContent())
+  }
+  await expect(page.locator('.document-artifact-status')).toContainText('Saved', { timeout: 30_000 })
+  expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved after reload')
   await page.goto('app://simulator/docs/index.html')
   const untrusted = await page.evaluate(async () => {
     try {
@@ -66,7 +86,7 @@ try {
     } catch { return true }
   })
   expect(untrusted).toBe(true)
-  expect(await readFile(source, 'utf8')).toBe(content('Saved'))
+  expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved after reload')
   expect(await readFile(copy, 'utf8')).toBe(content('External change'))
   expect((await readdir(directory)).some(file => file.endsWith('.tmp'))).toBe(false)
   console.log('Desktop document capabilities passed: remembered updates, Save As/cancel, ownership, conflicts and IPC origin.')

@@ -45,6 +45,7 @@ export function DesktopTools({ mode }: { mode: SimulatorMode }) {
   return <section className="desktop-tools" aria-label={t('Local desktop tools')}>
     <strong>{t('Desktop · offline modeling · no automatic uploads')}</strong>
     <button disabled={busy} onClick={() => { void perform(async (current) => {
+      if (workspace?.loadFile) { await workspace.loadFile(); return }
       const result = await bridge.openTopology()
       if (!current()) return
       if (!result.ok) throw new Error(result.error)

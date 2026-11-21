@@ -432,7 +432,7 @@ for (const desktop of [false, true]) test(`${desktop ? 'desktop never resolves e
   else { expect(requests.length).toBeGreaterThan(0); expect(requests.every(url => new URL(url).pathname === '/api/cloud/shared')).toBe(true) }
   const count = requests.length
   await page.getByRole('button', { name: 'Return to workspace', exact: true }).click()
-  await expect(page.getByRole('button', { name: /Export JSON/ })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Save As', exact: true })).toBeEnabled()
   if (desktop) await expect(page.getByTestId('aznet-share-url-btn')).toBeDisabled()
   expect(requests).toHaveLength(count)
 })

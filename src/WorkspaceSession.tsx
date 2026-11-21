@@ -8,6 +8,7 @@ import { CloudMenu } from './cloud/CloudMenu'
 import { PresentationGroup } from './WorkspacePresentation'
 import { CanvasStyleSettings } from './CanvasPresentation'
 import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
+import { DocumentArtifactStatus } from './DocumentActions'
 
 const FeedbackDialog = lazy(() => import('./FeedbackDialog').then((module) => ({ default: module.FeedbackDialog })))
 
@@ -18,6 +19,7 @@ export function WorkspaceMenu() {
   return <>
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
     <DocumentSaveStatus />
+    <DocumentArtifactStatus />
     <PresentationGroup label={t(session?.presentationPreview ? 'Settings' : 'Settings & help')}>
     <ThemeSelector />
     <LanguageSelector />

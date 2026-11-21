@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { expect, test } from '@playwright/test'
@@ -48,7 +49,7 @@ test('recorded S4 hybrid BGP origins, asymmetric inspection and native round-tri
   }
   await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
   const downloadPromise = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Export JSON/ }).click()
+  await downloadTopologyCopy(page)
   const exported = JSON.parse(await readFile((await (await downloadPromise).path())!, 'utf8'))
   expect(exported).toEqual(topology)
   await writeFile(testInfo.outputPath(archive.exportFile), JSON.stringify(exported, null, 2) + '\n')
@@ -96,7 +97,7 @@ for (const id of ['access-disabled', 'access-corrected']) {
     }
     await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadPromise
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8'))
     expect(exported).toEqual(entry.topology)
@@ -132,7 +133,7 @@ for (const id of ['summary-only', 'explicit-spokes']) {
     if (id === 'explicit-spokes') await expect(winner).toContainText('10.0.1.4')
     await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadPromise
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8'))
     expect(exported).toEqual(entry.topology)
@@ -188,7 +189,7 @@ for (const id of ['baseline-ecmp', 'bird-default-prepend']) {
     await page.keyboard.press('Escape')
     await importTopology()
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: /Export JSON/ }).click()
+    await downloadTopologyCopy(page)
     const download = await downloadPromise
     await download.saveAs(testInfo.outputPath(entry.exportFile))
     const exported = JSON.parse(await readFile((await download.path())!, 'utf8'))

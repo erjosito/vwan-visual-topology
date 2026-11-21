@@ -10,10 +10,42 @@ function setup(write = vi.fn<ArtifactWriter>(async () => ({ confirmed: true, des
   const retain = vi.fn<Parameters<typeof createDocumentCommands>[0]['retain']>(() => true)
   const commands = createDocumentCommands({ documentId: 'document-a', getTopology: () => topology,
     getAccountId: () => account, write, retain, digest: async value => JSON.stringify(value) })
-  return { commands, write, retain, edit: (name: string) => { topology = { ...topology, name } }, account: (value: string) => { account = value } }
+  return { commands, write, retain, edit: (name: string) => { topology = { ...topology, name } },
+    account: (value: string) => { account = value; commands.accountChanged() } }
 }
 
 describe('document artifact commands', () => {
+  it('freezes edits before renewing exact file permission and keeps newer edits unsaved', async () => {
+    let finish!: (value: Extract<ArtifactDestination, { kind: 'file' }>) => void
+    let topology = { name: 'Submitted' }
+    const write = vi.fn<ArtifactWriter>(async () => ({ confirmed: true, destination: file }))
+    const authorizeFile = vi.fn(() => new Promise<Extract<ArtifactDestination, { kind: 'file' }>>(resolve => { finish = resolve }))
+    const commands = createDocumentCommands({ documentId: 'renew', getTopology: () => topology,
+      getAccountId: () => undefined, retain: () => true, write, authorizeFile, digest: async value => JSON.stringify(value) })
+    const { authority: _authority, ...hint } = file as Extract<ArtifactDestination, { kind: 'file' }>
+    await commands.restore({ version: 1, destination: hint, digest: '{"name":"Submitted"}' })
+    const pending = commands.save()
+    await Promise.resolve()
+    expect(commands.getSnapshot().operation).toBe('saving')
+    topology = { name: 'Newer edits' }
+    finish(file as Extract<ArtifactDestination, { kind: 'file' }>)
+    expect(await pending).toBe('saved')
+    expect(JSON.parse(write.mock.calls[0][0].content).name).toBe('Submitted')
+    expect(commands.getSnapshot().revision).toBe('modified')
+  })
+
+  it('rejects renewed authority for a different same-name or changed file without invoking the writer', async () => {
+    const write = vi.fn<ArtifactWriter>()
+    const commands = createDocumentCommands({ documentId: 'renew', getTopology: () => ({ name: 'Lab' }),
+      getAccountId: () => undefined, retain: () => true, write,
+      authorizeFile: async destination => ({ ...destination, location: 'C:\\Other\\original.json', authority: 'different' }) })
+    const { authority: _authority, ...hint } = file as Extract<ArtifactDestination, { kind: 'file' }>
+    await commands.restore({ version: 1, destination: hint })
+    expect(await commands.save()).toBe('failed')
+    expect(write).not.toHaveBeenCalled()
+    expect(commands.getSnapshot().destination).toMatchObject({ location: file.location })
+  })
+
   it('asks only on first Save and keeps actual confirmed file authority outside portable JSON and retained hints', async () => {
     const { commands, write, retain, edit } = setup()
     expect(await commands.save()).toBe('needs-destination')
@@ -121,5 +153,58 @@ describe('document artifact commands', () => {
     expect(await commands.saveAs(file)).toBe('failed')
     expect(write).not.toHaveBeenCalled()
     expect(commands.canClose()).toBe(false)
+  })
+
+  it('creates a cloud default only from an acknowledged first-save choice and subsequently updates that identity', async () => {
+    const { commands, write } = setup(vi.fn<ArtifactWriter>(async () => ({ confirmed: true, destination: cloud })))
+    expect(await commands.saveAs({ kind: 'choose-cloud', accountId: 'alice', name: 'Lab' })).toBe('saved')
+    expect(await commands.save()).toBe('saved')
+    expect(write.mock.calls[1][0].choice).toEqual(cloud)
+    write.mockResolvedValueOnce(null)
+    expect(await commands.saveAs({ kind: 'choose-cloud', accountId: 'alice', name: 'Other' })).toBe('cancelled')
+    expect(commands.getSnapshot().destination).toEqual(cloud)
+  })
+
+  it('restores the saved model digest without restoring file authority or treating newer recovered edits as saved', async () => {
+    const { commands, write, edit } = setup()
+    const { authority, ...destination } = file
+    const metadata = { version: 1 as const, destination, digest: JSON.stringify({ version: 1, name: 'Original', hubs: [] }) }
+    edit('Recovered newer edits')
+    await commands.restore(metadata)
+    expect(commands.getSnapshot()).toMatchObject({ revision: 'modified', fileAccess: 'required' })
+    expect(await commands.save()).toBe('failed')
+    expect(write).not.toHaveBeenCalled()
+    await commands.restore(metadata, authority)
+    expect(commands.getSnapshot()).toMatchObject({ revision: 'modified', fileAccess: 'available' })
+    expect(await commands.save()).toBe('saved')
+    expect(write.mock.calls[0][0].choice).toEqual(file)
+  })
+
+  it('hides restored private cloud identity until its account is active, without forgetting its retained hint', async () => {
+    const { commands, account } = setup()
+    account('bob')
+    await commands.restore({ version: 1, destination: cloud, digest: JSON.stringify({ version: 1, name: 'Original', hubs: [] }) })
+    expect(commands.getSnapshot()).toMatchObject({ destination: undefined, revision: 'draft', retained: false })
+    expect(commands.canClose()).toBe(false)
+    account('alice')
+    await commands.observe()
+    expect(commands.getSnapshot()).toMatchObject({ destination: cloud, revision: 'matches', retained: true })
+    account('bob')
+    account('alice')
+    await commands.observe()
+    expect(commands.getSnapshot().retained).toBe(true)
+  })
+
+  it('rejects stale cloud completion even when the same account signs in again before acknowledgement', async () => {
+    let finish!: (value: ArtifactReceipt) => void
+    const { commands, account } = setup(vi.fn<ArtifactWriter>(() => new Promise(resolve => { finish = resolve })))
+    await commands.loaded(file, { version: 1, name: 'Original', hubs: [] })
+    const pending = commands.saveAs({ kind: 'choose-cloud', accountId: 'alice', name: 'Lab' })
+    await Promise.resolve()
+    account('bob')
+    account('alice')
+    finish({ confirmed: true, destination: cloud })
+    expect(await pending).toBe('failed')
+    expect(commands.getSnapshot().destination).toMatchObject({ name: file.name })
   })
 })

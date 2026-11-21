@@ -8,6 +8,7 @@ import { previewVnetActions } from './context-actions'
 import { confirmConfigurationSwitch } from './configuration-selection'
 import { useWorkspaceEditorState, useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
 import { WorkspaceTabPanel } from './WorkspaceTabs'
+import { DocumentActions } from './DocumentActions'
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
@@ -725,8 +726,7 @@ function App() {
           <button onClick={openDiagnostics} title={t('Inspect findings and assess declared connectivity requirements')}>{t('Advanced checks')}</button>
         </PresentationGroup>}
         <PresentationGroup label={t('File')}>
-          <button onClick={() => exportTopology()}>{t("Export JSON")}</button>
-          <button onClick={() => importer.current?.click()}>{t("Import JSON")}</button>
+          <DocumentActions />
           <button onClick={() => setPanel('azure')}>{t("Azure files")}</button>
           <button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button>
         </PresentationGroup>
@@ -849,7 +849,11 @@ function App() {
           {clearRequested && <Suspense fallback={null}><ClearTopologyDialog
             workspace="vwan"
             onClose={() => setClearRequested(false)}
-            onConfirm={() => { reset(validateTopology({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })); setZoom(1) }} /></Suspense>}
+            onConfirm={() => {
+              setClearRequested(false)
+              if (workspaceSession?.clearDocument && !workspaceSession.practice) workspaceSession.clearDocument()
+              else { reset(validateTopology({ version: 1, name: 'New topology', hubs: [], sites: [], spokes: [], connections: [], siteLinks: [], routeMaps: [] })); setZoom(1) }
+            }} /></Suspense>}
           {cloneVnetId && <Suspense fallback={null}><CloneVnetDialog key={cloneVnetId} topology={topology} sourceId={cloneVnetId}
             onClose={() => setCloneVnetId(undefined)} onClone={copy => {
               if ('gateways' in copy) return false
@@ -862,7 +866,7 @@ function App() {
     </WorkspaceTabPanel>
     </main>
     {contextMenu && <Suspense fallback={null}><TopologyContextMenu key={contextSelection ? nodeKey(contextSelection) : 'canvas'} x={contextMenu.x} y={contextMenu.y} title={contextSelection ? t("{0} actions: {1}", t(objectLabels[contextSelection.kind]), contextObject?.name ?? '') : t("Canvas actions")} actions={contextActions} onClose={() => { contextMenu.invoker.focus({ preventScroll: true }); setContextMenu(undefined) }} /></Suspense>}
-    <footer>{t("Calculated locally in your browser · Export JSON for portable backups")}</footer>
+    <footer>{t("Calculated locally in your browser · Use Save As for portable backups")}</footer>
   </div>
 }
 

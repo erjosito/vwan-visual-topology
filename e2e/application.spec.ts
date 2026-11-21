@@ -1,3 +1,4 @@
+import { downloadTopologyCopy } from './document-action-helpers'
 import { expect, test } from '@playwright/test'
 import { replaceActiveSavedTopology } from './workspace-storage-helpers'
 import type { ElectronApplication } from '@playwright/test'
@@ -119,7 +120,7 @@ test('native edit/undo/export retains application identities and blocks deleting
   expect(persisted.application).toEqual(topology.application)
   // The exported native document is the exact persistence envelope's topology.
   const download = page.waitForEvent('download')
-  await page.getByRole('button', { name: /Export JSON/, exact: true }).click()
+  await downloadTopologyCopy(page)
   const exported = await download
   const stream = await exported.createReadStream()
   const chunks: Buffer[] = []

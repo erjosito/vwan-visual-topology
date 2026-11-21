@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { cloudDocumentKey } from './cloud/document-state'
 import { example, type Topology } from './model'
 import { workspaceStorageKeys } from './workspace-session'
 import { workspaceTabKey, type WorkspaceTab } from './workspace-tabs'
 import { createWorkspaceDocuments } from './workspace-documents'
+import { createDocumentRuntime } from './document-runtime'
 
 const first: WorkspaceTab = { id: '11111111-1111-4111-8111-111111111111', provider: 'vwan', name: 'First' }
 const second: WorkspaceTab = { id: '22222222-2222-4222-8222-222222222222', provider: 'vwan', name: 'Second' }
@@ -22,6 +23,24 @@ function storage() {
 }
 
 describe('workspace document ownership', () => {
+  it('starts without optional artifact metadata when storage reads fail', async () => {
+    vi.stubGlobal('window', {})
+    const runtime = createDocumentRuntime(() => undefined, () => 'en', () => false)
+    const documents = createWorkspaceDocuments({
+      ...storage(), getItem: () => { throw new Error('Storage unavailable') },
+    }, () => false, runtime.initialize)
+    try {
+      const document = documents.activate(first)
+      expect(document.remember(history('Recovered design'))).toBe(true)
+      expect(await document.commands?.save()).toBe('needs-destination')
+      expect(document.commands?.getSnapshot().destination).toBeUndefined()
+    } finally {
+      documents.dispose()
+      await runtime.dispose()
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('does not claim cloud-destination persistence when a temporary document confirms a save', async () => {
     const backing = storage(), documents = createWorkspaceDocuments(backing, () => false)
     documents.setAccount(source.accountId)

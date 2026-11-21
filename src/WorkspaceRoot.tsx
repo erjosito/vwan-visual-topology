@@ -19,6 +19,8 @@ import { editions, selectedEdition } from './learning/editions'
 import { CloudProvider } from './cloud/CloudSession'
 import { useCloudSession } from './cloud/useCloudSession'
 import { cloudDocumentKey, createDocumentSaveState, type CloudDocumentSource } from './cloud/document-state'
+import { createDocumentRuntime, desktopArtifact } from './document-runtime'
+import type { ArtifactDestination } from './document-commands'
 
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
@@ -26,6 +28,7 @@ const WorkspaceLibrary = lazy(() => import('./WorkspaceLibrary').then((module) =
 const DesktopTools = lazy(() => import('./DesktopTools').then((module) => ({ default: module.DesktopTools })))
 const PracticeWorkspaceBar = lazy(() => import('./learning/PracticeWorkspaceBar').then((module) => ({ default: module.PracticeWorkspaceBar })))
 const SharedTopology = lazy(() => import('./cloud/SharedTopology'))
+const CloseDocumentsDialog = lazy(() => import('./CloseDocumentsDialog').then(module => ({ default: module.CloseDocumentsDialog })))
 const selectionFailure = 'Workspace could not be selected or preserved. Originals have not been intentionally replaced. Export your design before freeing browser storage.'
 
 class WorkspaceBoundary extends Component<{ children: ReactNode; onRecover: () => void }, { failed: boolean }> {
@@ -82,6 +85,9 @@ function Workspace({ visible = true }: { visible?: boolean }) {
   const cloud = useCloudSession()
   const accountId = cloud?.account?.id
   const accountRef = useRef(accountId)
+  const cloudRef = useRef(cloud)
+  const languageRef = useRef(language)
+  useLayoutEffect(() => { cloudRef.current = cloud; languageRef.current = language }, [cloud, language])
   useLayoutEffect(() => { accountRef.current = accountId }, [accountId])
   const [documentSave] = useState(() => {
     const state = createDocumentSaveState(() => sessionStorage)
@@ -115,11 +121,14 @@ function Workspace({ visible = true }: { visible?: boolean }) {
   })
   const [tabs, setTabs] = useState<WorkspaceTabs>(() => tabsStartup.session ?? { version: 1, tabs: [] })
   const tabsRef = useRef(tabs)
-  const [documents] = useState(() => createWorkspaceDocuments(storage, () => ownership.current.current === 'owned'))
+  const [runtime] = useState(() => createDocumentRuntime(() => cloudRef.current, () => languageRef.current,
+    () => ownership.current.current === 'owned'))
+  const [documents] = useState(() => createWorkspaceDocuments(storage, () => ownership.current.current === 'owned', runtime.initialize))
   const [active, setActive] = useState<{ id: string; provider: WorkspaceProvider; revision: number }>()
   const [libraryOpen, setLibraryOpen] = useState(tabsStartup.recovery === 'invalid' || !startup.provider && !tabs.activeId)
   const [notice, setNotice] = useState(tabsStartup.recovery
     ? 'The workspace tab session could not be read. Its stored designs have not been replaced.' : startup.recovery ?? '')
+  const [closing, setClosing] = useState<{ tabs: WorkspaceTab[]; after?: () => void }>()
   const [practice, setPractice] = useState<PracticeWorkspace>()
   const [practiceReady, setPracticeReady] = useState(false)
   const [practiceNotice, setPracticeNotice] = useState<'' | 'read' | 'save' | 'conflict' | 'ownership'>('')
@@ -314,7 +323,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
     if (!preserveQuery) url.searchParams.delete('sample')
     window.history.replaceState(null, '', url)
   }
-  const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown, preserveQuery = false) => {
+  const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown, preserveQuery = false, candidateId?: string) => {
     if (!visibleRef.current) return false
     if (!preserveQuery && active && !confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return false
     if (tabsRef.current.tabs.length >= workspaceTabsLimit) {
@@ -328,7 +337,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       if (raw === undefined) throw new Error('Topology data is unavailable.')
       let name = 'Untitled topology'
       try { const parsed = JSON.parse(raw); if (typeof (parsed.topology ?? parsed).name === 'string') name = (parsed.topology ?? parsed).name.slice(0, 120) } catch {}
-      const tab = { id: randomUUID(), provider, name }
+      const tab = { id: candidateId ?? randomUUID(), provider, name }
       selectWorkspace(storage, provider)
       const legacy = ownership.current.current === 'owned' && preserveQuery && !tabsRef.current.tabs.length && !new URLSearchParams(location.search).has('sample')
       const next = addWorkspaceTab(storage, tabsRef.current, tab, raw)
@@ -393,26 +402,23 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       return false
     }
   }
-  const closeTabs = (targets: WorkspaceTab[]) => {
+  const closeTabs = (targets: WorkspaceTab[], after?: () => void) => {
     if (targets.some(tab => documents.get(tab).capture !== undefined)) {
       setNotice(text('Finish or cancel the capture review in its tab before closing it.', '閉じる前に、そのタブでキャプチャの確認を完了またはキャンセルしてください。'))
       return
     }
-    if (targets.some(tab => documents.get(tab).save.getSnapshot().operation === 'saving')) {
+    if (targets.some(tab => documents.get(tab).save.getSnapshot().operation === 'saving'
+      || documents.get(tab).commands?.getSnapshot().operation === 'saving')) {
       setNotice(text('Wait for the save to finish before closing its tab.', '保存が完了してからタブを閉じてください。'))
       return
     }
     if (targets.some(tab => tab.id === active?.id) && !confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return
-    const recoverable = ownership.current.current === 'owned' && targets.every(tab => {
-      const state = documents.get(tab).save.getSnapshot()
-      try {
-        return storage.getItem(workspaceTabKey(tab, 'topology')) !== null
-          && (state.local === 'saved' || !state.ready && state.local !== 'unavailable')
-      } catch { return false }
-    })
-    if (!window.confirm(recoverable
-      ? text('Close the selected topology tabs? Their profile recovery copies are retained in Workspace. This does not save a file or cloud artifact.', '選択したトポロジ タブを閉じますか? プロファイルの復元用コピーはワークスペースに保持されます。ファイルやクラウドへの保存ではありません。')
-      : text('Close and discard unsaved in-memory changes? The profile may not contain your latest edits. Save/export a file or cloud copy first to preserve them.', '閉じて、メモリ上の未保存の変更を破棄しますか? 最新の編集がプロファイルに保存されていない可能性があります。保持するには、先にファイルまたはクラウドに保存・エクスポートしてください。'))) return
+    if (targets.some(tab => !documents.get(tab).commands?.canClose())) { setClosing({ tabs: targets, after }); return }
+    finishClose(targets, after)
+  }
+  const finishClose = (targets: WorkspaceTab[], after?: () => void) => {
+    if (targets.some(tab => !tabsRef.current.tabs.some(current => current.id === tab.id)
+      || documents.get(tab).commands?.getSnapshot().operation === 'saving')) return
     try {
       const next = closeWorkspaceTabs(storage, tabsRef.current, targets.map(tab => tab.id))
       request.current++
@@ -426,6 +432,8 @@ function Workspace({ visible = true }: { visible?: boolean }) {
         }
         else { setActive(undefined); setLibraryOpen(true) }
       }
+      setClosing(undefined)
+      after?.()
     } catch { setNotice(text('Tabs could not be closed. Their designs have not been removed.', 'タブを閉じられませんでした。デザインは削除されていません。')) }
   }
   const reopenTab = (tab: WorkspaceTab) => {
@@ -528,7 +536,8 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       request.current++
     }
   }, [ownership.status, visible])
-  const openDocument = async (input: unknown, source?: CloudDocumentSource, options?: { sampleId?: string }) => {
+  const openDocument = async (input: unknown, source?: CloudDocumentSource,
+    options?: { sampleId?: string; candidateId?: string; destination?: ArtifactDestination }) => {
     if (!visibleRef.current) throw new Error('Return to your design before loading a document.')
     const ticket = ++request.current
     if (options?.sampleId !== undefined && (options.sampleId.length > 128 || !/^[a-z0-9-]*$/.test(options.sampleId))) throw new Error('Invalid sample identity.')
@@ -537,29 +546,80 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       await practiceRef.current.importDocument(input, () => ticket === request.current)
       return
     }
-    const commit = (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
+    let openedId: string | undefined
+    const commit = async (provider: WorkspaceProvider, replacement?: string, capture?: unknown) => {
       if (ticket !== request.current) return
       if (source && source.accountId !== accountRef.current) throw new Error('The cloud account changed while loading the design.')
-      if (!open(provider, replacement, capture)) throw new Error(selectionFailure)
-      if (source) documents.active()?.save.link(source, input, provider)
+      if (!open(provider, replacement, capture, false, options?.candidateId)) throw new Error(selectionFailure)
+      const opened = documents.active()!
+      openedId = opened.id
+      const raw = replacement ? JSON.parse(replacement) : undefined
+      const normalized = raw ? provider === 'vwan' ? raw : raw.topology : input
+      if (source) {
+        opened.save.link(source, normalized, provider)
+        await opened.commands?.loaded({ kind: 'cloud', ...source }, normalized)
+      } else if (options?.destination && !capture) {
+        await opened.commands?.loaded(options.destination, normalized)
+      }
     }
     if (!input || typeof input !== 'object') throw new Error('Topology object required.')
     if ('kind' in input && ['azure-vwan-capture', 'azure-vwan-federation'].includes(String(input.kind))) {
       const { importAzureCapture } = await import('./azure-import')
       importAzureCapture(input)
-      commit('vwan', undefined, input)
+      await commit('vwan', undefined, input)
     } else if ('kind' in input && input.kind === 'azure-network-capture') {
       const { importAzNetCapture } = await import('./azure-net/azure-import')
       const imported = importAzNetCapture(input)
-      commit('azure-net', JSON.stringify({ sampleId: '', topology: imported.topology }), input)
+      await commit('azure-net', JSON.stringify({ sampleId: '', topology: imported.topology }), input)
     } else if ('version' in input && input.version === 1 && !('kind' in input)) {
       const { validateTopology } = await import('./validation')
       const topology = validateTopology(input)
-      commit('vwan', JSON.stringify(topology))
+      await commit('vwan', JSON.stringify(topology))
     } else {
       const { parseAzNetTopology } = await import('./azure-net/admission')
       const topology = parseAzNetTopology(input)
-      commit('azure-net', JSON.stringify({ sampleId: options?.sampleId ?? '', topology }))
+      await commit('azure-net', JSON.stringify({ sampleId: options?.sampleId ?? '', topology }))
+    }
+    return openedId
+  }
+  const loadFile = async () => {
+    if (practiceRef.current?.current?.active || !visibleRef.current) throw new Error('Return to your design before loading a file.')
+    const candidateId = randomUUID(), version = request.current
+    let adopted = false
+    try {
+      if (window.desktopSimulator) {
+        const reply = await window.desktopSimulator.openDocument({ documentId: candidateId, language })
+        if (!reply.ok) throw new Error(reply.error)
+        if (!reply.value || version !== request.current || !visibleRef.current) return
+        const value = reply.value
+        const id = await openDocument(JSON.parse(value.content), undefined, { candidateId,
+          destination: value.destination ? desktopArtifact(value.destination) : undefined })
+        adopted = id === candidateId
+      } else {
+        const browser = window as Window & { showOpenFilePicker?: (options: unknown) => Promise<import('./browser-document-writer').BrowserDocumentHandle[]> }
+        if (!browser.showOpenFilePicker) {
+          document.querySelector<HTMLInputElement>('[data-desktop-import]')?.click()
+          return
+        }
+        const [handle] = await browser.showOpenFilePicker({ multiple: false,
+          types: [{ description: 'Topology JSON', accept: { 'application/json': ['.json'] } }] })
+        if (!handle || version !== request.current || !visibleRef.current) return
+        const value = await runtime.browser.read(handle)
+        if (version !== request.current || !visibleRef.current) return
+        const destination = runtime.browser.bind(candidateId, handle, value.revision)
+        const id = await openDocument(JSON.parse(value.content), undefined, { candidateId, destination })
+        adopted = id === candidateId
+        if (adopted && destination.kind === 'file') {
+          await runtime.retainBrowserFile(candidateId, handle, value.revision, destination.bindingId!)
+        }
+      }
+    } catch (error) {
+      if (!(error instanceof Error && error.name === 'AbortError')) throw error
+    } finally {
+      if (!adopted) {
+        runtime.browser.release(candidateId)
+        await window.desktopSimulator?.releaseDocument({ documentId: candidateId })
+      }
     }
   }
   const newWorkspace = async () => {
@@ -598,6 +658,18 @@ function Workspace({ visible = true }: { visible?: boolean }) {
     openLibrary: () => { leavePractice(); request.current++; setLibraryOpen(true) },
     openDocument, getRequestVersion: () => request.current,
     documentSave: practicing || !visible ? undefined : activeSave,
+    artifactCommands: practicing || !visible ? undefined : design?.commands,
+    loadFile,
+    clearDocument: () => {
+      if (practicing || !design) return
+      const tab = tabsRef.current.tabs.find(tab => tab.id === design.id)
+      if (!tab) return
+      closeTabs([tab], () => {
+        if (tab.provider === 'vwan') open('vwan', emptyVwan)
+        else void import('./azure-net/model').then(({ createEmptyAzNetTopology }) =>
+          open('azure-net', JSON.stringify({ sampleId: '', topology: createEmptyAzNetTopology() })))
+      })
+    },
     storage: !practicing && design ? {
       getItem: design.storage.getItem,
       removeItem: design.storage.removeItem,
@@ -662,6 +734,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       {practiceReady && !practicing && tabs.tabs.length > 0 && <WorkspaceTabsNavigation tabs={tabs.tabs} activeId={active?.id}
         temporary={ownership.status !== 'owned'}
         getSave={tab => documents.get(tab).save}
+        getCommands={tab => documents.get(tab).commands}
         onActivate={activateTab} onClose={tab => closeTabs([tab])} onNew={() => { void newWorkspace() }} />}
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
       <CanvasMaximizeButton />
@@ -686,6 +759,8 @@ function Workspace({ visible = true }: { visible?: boolean }) {
           onResetTabs={tabsStartup.recovery === 'invalid' && ownership.status === 'owned' ? resetTabList : undefined}
           onResumePractice={practice && !practicing ? resumePractice : undefined} onClose={() => setLibraryOpen(false)} />
       </Suspense>}
+      {closing && <Suspense fallback={null}><CloseDocumentsDialog documents={closing.tabs.map(tab => documents.get(tab))}
+        onClose={() => setClosing(undefined)} onDiscard={() => finishClose(closing.tabs, closing.after)} /></Suspense>}
     </div>
   </WorkspaceSessionContext>
 }

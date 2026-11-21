@@ -2,19 +2,23 @@ import { createDocumentSaveState, type DocumentSaveState } from './cloud/documen
 import type { WorkspaceEditorHistory } from './workspace-context'
 import type { WorkspaceStorage } from './workspace-session'
 import { workspaceTabKey, workspaceTabStorage, workspaceTabsLimit, type WorkspaceTab } from './workspace-tabs'
+import type { createDocumentCommands } from './document-commands'
 
 export interface WorkspaceDocument {
   id: string
   provider: WorkspaceTab['provider']
   storage: WorkspaceStorage
   save: DocumentSaveState
+  commands?: ReturnType<typeof createDocumentCommands>
+  association: WorkspaceStorage
   editorState: Map<string, unknown>
   history?: WorkspaceEditorHistory
   capture?: unknown
   remember: (history: WorkspaceEditorHistory) => boolean
 }
 
-export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent = () => true) {
+export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent = () => true,
+  initialize?: (document: WorkspaceDocument) => void) {
   const documents = new Map<string, WorkspaceDocument>()
   let activeId: string | undefined
   let accountId: string | undefined
@@ -43,15 +47,17 @@ export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent =
     }), undefined, true)
     const save = { ...state, reset: () => { if (owned()) state.reset() } }
     document = {
-      id: tab.id, provider: tab.provider, storage: scoped, save, editorState: new Map(),
+      id: tab.id, provider: tab.provider, storage: scoped, association, save, editorState: new Map(),
       remember(history) {
         if (!owned() || history.provider !== tab.provider) return false
         document.history = history
         save.observe(history.topology, history.provider)
+        void document.commands?.observe()
         return true
       },
     }
     documents.set(tab.id, document)
+    initialize?.(document)
     save.setActive(false)
     save.setAccount(accountId)
     return document
@@ -73,18 +79,26 @@ export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent =
     },
     suspend,
     setAccount(next: string | undefined) {
+      const changed = accountId !== next
       accountId = next
-      for (const document of documents.values()) document.save.setAccount(next)
+      for (const document of documents.values()) {
+        document.save.setAccount(next)
+        if (changed) document.commands?.accountChanged()
+      }
     },
     forget(id: string) {
       if (activeId === id) suspend()
       documents.get(id)?.save.revoke()
+      void documents.get(id)?.commands?.dispose()
       documents.delete(id)
     },
     dispose() {
       suspend()
       disposed = true
-      for (const document of documents.values()) document.save.revoke()
+      for (const document of documents.values()) {
+        document.save.revoke()
+        void document.commands?.dispose()
+      }
       documents.clear()
     },
   }

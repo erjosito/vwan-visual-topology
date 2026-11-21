@@ -241,7 +241,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
     <form onSubmit={save} data-configuration-scope data-configuration-pending={dirty} onChange={() => setDirty(true)}>
       {!request.deleting && <Suspense fallback={null}><ConfigurationEditStatus form /></Suspense>}
       {request.deleting ? <>
-        <p>{t("Delete")} <strong>{item?.name}</strong>{t("? This cannot be undone. Export JSON first if you need a backup.")}</p>
+        <p>{t("Delete")} <strong>{item?.name}</strong>{t("? This cannot be undone. Save first if you need a file or cloud backup.")}</p>
         {request.kind === 'hub' && <p>{t('This also removes {0} attached spoke{1} and {2} connection{3}. On-premises sites are kept.', removedSpokes, removedSpokes === 1 ? '' : 's', removedConnections, removedConnections === 1 ? '' : 's')}</p>}
         {request.kind === 'site' && <p>{t('This also removes {0} hub connection{1} and {2} on-premises link{3}.', removedConnections, removedConnections === 1 ? '' : 's', removedPeers, removedPeers === 1 ? '' : 's')}</p>}
         {(request.kind === 'hub' || request.kind === 'site' || request.kind === 'erLocation') && <p>{t("Attached ER connections are also removed; the other endpoints are kept.")}</p>}

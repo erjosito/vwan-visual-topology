@@ -1,4 +1,5 @@
 import type { ArtifactDestination, ArtifactWriter } from './document-commands'
+import { randomUUID } from './random-id'
 
 interface BrowserWritable {
   write(content: string): Promise<void>
@@ -20,7 +21,7 @@ interface Owner {
   live: boolean
   pending: boolean
   writing?: BrowserDocumentHandle
-  file?: { handle: BrowserDocumentHandle; authority: object; revision: string }
+  file?: { handle: BrowserDocumentHandle; authority: object; revision: string; bindingId: string }
 }
 
 async function revision(bytes: ArrayBuffer) {
@@ -52,6 +53,7 @@ function download(content: string, name: string) {
 export function createBrowserDocumentWriter(options: {
   picker?: Picker | null
   download?: (content: string, name: string) => void
+  retainHandle?: (documentId: string, handle: BrowserDocumentHandle, revision: string, bindingId: string) => Promise<boolean>
 } = {}) {
   const picker = options.picker === undefined ? browserPicker() : options.picker
   const downloadFile = options.download ?? download
@@ -71,28 +73,33 @@ export function createBrowserDocumentWriter(options: {
   const destination = (owner: Owner): FileDestination => {
     const file = owner.file!
     return { kind: 'file', platform: 'browser', name: file.handle.name, location: file.handle.name,
-      revision: file.revision, authority: file.authority }
+      revision: file.revision, bindingId: file.bindingId, authority: file.authority }
   }
-  const bind = (documentId: string, handle: BrowserDocumentHandle, savedRevision: string) => {
+  const bind = (documentId: string, handle: BrowserDocumentHandle, savedRevision: string, bindingId = randomUUID()) => {
     const owner = ownerFor(documentId)
     if (owner.pending) throw new Error('Wait for the pending file operation.')
     if (!/^[0-9a-f]{64}$/.test(savedRevision) || handle.kind !== 'file' || !handle.name
       || typeof handle.getFile !== 'function' || typeof handle.createWritable !== 'function') {
       throw new Error('A real file handle and verified file revision are required.')
     }
-    owner.file = { handle, revision: savedRevision, authority: {} }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(bindingId)) throw new Error('Invalid private file binding.')
+    owner.file = { handle, revision: savedRevision, authority: {}, bindingId }
     return destination(owner)
   }
   const write: ArtifactWriter = async ({ documentId, choice, content }) => {
-    if (choice.kind === 'cloud' || choice.kind === 'file' && choice.platform !== 'browser') {
+    if (choice.kind === 'cloud' || choice.kind === 'choose-cloud' || choice.kind === 'file' && choice.platform !== 'browser') {
       throw new Error('The selected destination is not a browser file.')
     }
     const bytes = new TextEncoder().encode(content)
     if (bytes.byteLength > 4_000_000) throw new Error('The topology exceeds the supported document size.')
+    if (choice.kind === 'download-copy') {
+      downloadFile(content, choice.name)
+      return { confirmed: false, name: choice.name }
+    }
     const owner = ownerFor(documentId)
     if (owner.pending) throw new Error('A file operation is already pending for this document.')
     if (choice.kind === 'file' && (!owner.file || choice.authority !== owner.file.authority
-      || choice.revision !== owner.file.revision || choice.location !== owner.file.handle.name)) {
+      || choice.revision !== owner.file.revision || choice.location !== owner.file.handle.name || choice.bindingId !== owner.file.bindingId)) {
       throw new Error('The file permission must be renewed before saving.')
     }
     owner.pending = true
@@ -135,7 +142,10 @@ export function createBrowserDocumentWriter(options: {
       const written = await revision(bytes.buffer)
       if (await fileRevision(handle) !== written) throw new Error('The saved file revision could not be confirmed.')
       valid(owner)
-      owner.file = { handle, revision: written, authority: choice.kind === 'file' ? owner.file!.authority : {} }
+      owner.file = { handle, revision: written, authority: choice.kind === 'file' ? owner.file!.authority : {},
+        bindingId: choice.kind === 'file' ? owner.file!.bindingId : randomUUID() }
+      try { await options.retainHandle?.(documentId, handle, written, owner.file.bindingId) } catch { /* The file is confirmed even if its permission cannot be retained. */ }
+      valid(owner)
       return { confirmed: true, destination: destination(owner) }
     } finally {
       if (writable) { try { await writable.abort() } catch { /* Keep the original write failure. */ } }

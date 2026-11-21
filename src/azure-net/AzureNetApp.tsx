@@ -18,6 +18,7 @@ import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
 import { ConfigurationEditStatus, InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
 import { previewSubnetActions, previewVnetActions } from '../context-actions'
 import { useWorkspaceEditorState, useWorkspaceSession, useWorkspaceStorage } from '../workspace-context'
+import { DocumentActions } from '../DocumentActions'
 import { WorkspaceTabPanel } from '../WorkspaceTabs'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
@@ -329,7 +330,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       if (!workspaceSession?.practice) consumeAzSnapshotUrl()
     } catch (error) {
       workspaceSession?.documentSave?.local(topology, 'unavailable')
-      setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Export JSON to preserve this design; saved originals and URL snapshots have not been overwritten.`)
+      setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Use Save As to preserve this design; saved originals and URL snapshots have not been overwritten.`)
     }
   })
   useEffect(() => {
@@ -459,8 +460,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     if (window.desktopSimulator) return
     window.dispatchEvent(new Event('aznet-open-cloud-sharing'))
     setWorkspaceNotice(language === 'ja'
-      ? '共有リンクはクラウドの保存から作成します。クラウド アカウントでサインインし、保存したバージョンを共有してください。この環境でサインインを利用できない場合は JSON をエクスポートしてください。'
-      : 'Create shared links from a cloud save: sign in through Cloud account, then Share saved version. If sign-in is unavailable in this build, export JSON instead. Unsaved edits are not shared.')
+      ? '共有リンクはクラウドの保存から作成します。クラウド アカウントでサインインし、保存したバージョンを共有してください。この環境でサインインを利用できない場合は「名前を付けて保存」でコピーをダウンロードしてください。未保存の編集は共有されません。'
+      : 'Create shared links from a cloud save: sign in through Cloud account, then Share saved version. If sign-in is unavailable in this build, use Save As to download a copy instead. Unsaved edits are not shared.')
   }
 
   const rawSourceOpt =
@@ -3030,16 +3031,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             {language === 'ja' ? 'クラウドの保存を共有' : 'Share cloud save'}
           </button>
 
-          <button type="button" className="aznet-btn" onClick={handleExportJson}>
-            ⬇ Export JSON
-          </button>
-          <button
-            type="button"
-            className="aznet-btn"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            ⬆ Import JSON
-          </button>
+          <DocumentActions />
           <button type="button" className="aznet-btn" data-testid="aznet-clear-topology-btn"
             onClick={() => setClearRequested(true)} title={t('Clear canvas to an empty topology')}>{t('Clear')}</button>
           </PresentationGroup>
@@ -3296,7 +3288,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           {clearRequested && <Suspense fallback={null}><ClearTopologyDialog
             workspace="azure-net"
             onClose={() => setClearRequested(false)}
-            onConfirm={() => { setClearRequested(false); void loadSample('') }} /></Suspense>}
+            onConfirm={() => {
+              setClearRequested(false)
+              if (workspaceSession?.clearDocument && !workspaceSession.practice) workspaceSession.clearDocument()
+              else void loadSample('')
+            }} /></Suspense>}
           {deletionSpec && deletionAction && (
             <CanvasOverlay title={deletionAction.label} className="object-editor" onClose={() => setDeleteTarget(null)}>
               <p>Delete <strong>{deletionSpec.title}</strong>? Associated elements and connections may also be removed. Other endpoint nodes are kept.</p>

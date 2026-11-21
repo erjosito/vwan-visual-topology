@@ -118,7 +118,7 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
     </div>
     <p>{openInTab ? language === 'ja' ? 'サンプルは新しいタブで開きます。既存のデザインと編集履歴はそのまま保持します。'
       : 'Samples open in a new tab. Your existing designs and edit histories stay open.'
-      : t('Browse reference designs and validation scenarios. Loading a sample replaces the current workspace; export JSON first to keep a copy.')}</p>
+      : t('Browse reference designs and validation scenarios. Loading a sample replaces the current workspace; download a copy first to keep it.')}</p>
     <label className="field"><span>{t('Collection')}</span>
       <select value={collection} disabled={!!loadingId || !!pending}
         onChange={(event) => { setCollection(event.target.value as 'flagship' | 'validation'); setTrackFilter('all'); setDifficultyFilter('all') }}>
@@ -150,9 +150,9 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
     {error && <p role="alert" className="notice error">{t(error)}</p>}
     {pending && <section className="sample-replacement" aria-label={t('Replace current workspace')}>
       <h3>{t('Replace current workspace')}</h3>
-      <p>{t('Load {0}? This replaces the current design and its undo history. Export JSON first to keep your work.', t(pending.title))}</p>
+      <p>{t('Load {0}? This replaces the current design and its undo history. Download a copy first to keep your work.', t(pending.title))}</p>
       <div className="row">
-        <button type="button" disabled={!!loadingId} onClick={onExport}>{t('Export JSON')}</button>
+        <button type="button" disabled={!!loadingId} onClick={onExport}>{t('Download copy')}</button>
         <button type="button" autoFocus disabled={!!loadingId} onClick={() => {
           setPending(undefined); setError('')
           requestAnimationFrame(() => lastChoice.current?.focus())

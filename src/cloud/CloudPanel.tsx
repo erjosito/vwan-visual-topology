@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
 import { useLanguage } from '../i18n'
 import { useDocumentSaveState, useWorkspaceSession } from '../workspace-context'
 import { parseCloudTopology, type CloudEntry } from './contracts'
@@ -8,10 +8,14 @@ import './cloud-panel.css'
 import { CloudSharing } from './CloudSharing'
 import { DocumentSaveStatus } from './DocumentSaveStatus'
 import { progressStatusLabel } from './progress-status'
+const noSubscribe = () => () => {}
+const noSnapshot = () => undefined
 
 export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; returnFocus?: RefObject<HTMLElement | null> }) {
   const cloud = useCloudSession()!, session = useWorkspaceSession(), language = useLanguage()
   const documentState = useDocumentSaveState(), documentSave = session?.documentSave
+  const artifact = useSyncExternalStore(session?.artifactCommands?.subscribe ?? noSubscribe,
+    session?.artifactCommands?.getSnapshot ?? noSnapshot)
   const text = useCallback((en: string, ja: string) => language === 'ja' ? ja : en, [language])
   const dialog = useRef<HTMLDialogElement>(null)
   const [entries, setEntries] = useState<CloudEntry[]>([])
@@ -81,6 +85,21 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
   const save = async (entry?: CloudEntry) => {
     const history = session?.getEditorHistory?.()
     if (!api || !history || session?.practice || !cloud.account || !documentSave) throw new Error('Return to your design first.')
+    if (session.artifactCommands) {
+      const result = await session.artifactCommands.saveAs(entry
+        ? { kind: 'cloud', accountId: cloud.account.id, id: entry.id, name: name.trim() || history.topology.name, etag: entry.etag }
+        : { kind: 'choose-cloud', accountId: cloud.account.id, name: name.trim() || history.topology.name })
+      if (result === 'failed' || result === 'busy' || result === 'revoked') throw new Error(session.artifactCommands.getSnapshot().error ?? 'Cloud save did not complete.')
+      if (result === 'saved') {
+        const destination = session.artifactCommands.getSnapshot().destination
+        if (destination?.kind === 'cloud') setEntries(values => [...values.filter(item => item.id !== destination.id),
+          { id: destination.id, name: destination.name, etag: destination.etag, updatedAt: '' }])
+        setNotice(text('Topology saved to your cloud library.', 'トポロジをクラウドに保存しました。'))
+        await refresh()
+        if (entry) search.current?.focus()
+      }
+      return
+    }
     const value = parseCloudTopology({ version: 1, name: name.trim() || history.topology.name, topology: history.topology })
     if (!window.confirm(text('Upload this topology to your private cloud library? It may contain network configuration. Do not upload secrets or confidential data without approval.',
       'このトポロジを自分のクラウドにアップロードしますか。ネットワーク構成が含まれる場合があります。許可のない機密データや秘密情報を保存しないでください。'))) return
@@ -122,7 +141,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
       `クラウドの保存「${entry.name}」(${entry.id}) を現在のデザインで上書きしますか。クラウドの内容を変更し、ローカルのワークスペースは保持します。`))) void run(() => save(entry))
   }
   const linked = documentState?.cloud?.accountId === cloud.account?.id ? documentState?.cloud : undefined
-  const saving = busy || documentState?.operation === 'saving'
+  const saving = busy || documentState?.operation === 'saving' || artifact?.operation === 'saving'
   const status = progress?.status
   const matching = entries.filter(entry => entry.name.toLocaleLowerCase(language).includes(query.trim().toLocaleLowerCase(language)))
     .sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name, language)

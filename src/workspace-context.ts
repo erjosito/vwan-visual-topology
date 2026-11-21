@@ -8,6 +8,7 @@ import type { LedgerState } from './learning/progress-ledger'
 import type { SyncStatus } from './cloud/progress-sync'
 import type { CloudDocumentSource, DocumentSaveState } from './cloud/document-state'
 import type { WorkspaceStorage } from './workspace-session'
+import type { createDocumentCommands, ArtifactDestination } from './document-commands'
 
 export type WorkspaceEditorHistory =
   | { provider: 'vwan'; topology: Topology; past: Topology[]; future: Topology[]; error: string; saveError: string; backup: string }
@@ -19,7 +20,10 @@ export const WorkspaceSessionContext = createContext<{
   openLibrary: () => void
   presentationPreview?: boolean
   setPresentationPreview?: (preview: boolean) => void
-  openDocument: (input: unknown, source?: CloudDocumentSource, options?: { sampleId?: string }) => Promise<void>
+  openDocument: (input: unknown, source?: CloudDocumentSource, options?: { sampleId?: string; candidateId?: string; destination?: ArtifactDestination }) => Promise<string | undefined>
+  artifactCommands?: ReturnType<typeof createDocumentCommands>
+  loadFile?: () => Promise<void>
+  clearDocument?: () => void
   documentSave?: DocumentSaveState
   storage?: WorkspaceStorage
   editorState?: Map<string, unknown>

@@ -3,7 +3,10 @@ import { useLanguage } from './i18n'
 import { useWorkspaceSession } from './workspace-context'
 import { workspaceTabsLimit, type WorkspaceTab } from './workspace-tabs'
 import type { DocumentSaveState } from './cloud/document-state'
+import type { createDocumentCommands } from './document-commands'
 import './workspace-tabs.css'
+const noSubscribe = () => () => {}
+const noSnapshot = () => undefined
 
 export function WorkspaceTabPanel({ children }: { children: ReactNode }) {
   const id = useWorkspaceSession()?.tabId
@@ -13,13 +16,18 @@ export function WorkspaceTabPanel({ children }: { children: ReactNode }) {
   </div>
 }
 
-function TabButton({ tab, selected, save, onActivate }: {
-  tab: WorkspaceTab; selected: boolean; save: DocumentSaveState; onActivate: (tab: WorkspaceTab) => void
+function TabButton({ tab, selected, save, commands, onActivate }: {
+  tab: WorkspaceTab; selected: boolean; save: DocumentSaveState; commands?: ReturnType<typeof createDocumentCommands>; onActivate: (tab: WorkspaceTab) => void
 }) {
   const language = useLanguage()
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
   const state = useSyncExternalStore(save.subscribe, save.getSnapshot)
-  const status = state.operation === 'saving' ? text('Saving', '保存中')
+  const artifact = useSyncExternalStore(commands?.subscribe ?? noSubscribe, commands?.getSnapshot ?? noSnapshot)
+  const status = artifact?.operation === 'saving' ? text('Saving', '保存中')
+    : artifact?.operation === 'failed' ? text('Save failed', '保存失敗')
+      : artifact?.destination?.kind === 'file' ? artifact.revision === 'matches' ? text('File saved', 'ファイル保存済み')
+        : text('File modified', 'ファイル未保存')
+        : state.operation === 'saving' ? text('Saving', '保存中')
     : state.operation === 'failed' ? text('Save failed', '保存失敗')
       : state.cloud ? state.cloud.state === 'matches' ? text('Cloud saved', 'クラウド保存済み')
         : state.cloud.state === 'modified' ? text('Cloud modified', 'クラウド未保存')
@@ -37,11 +45,12 @@ function TabButton({ tab, selected, save, onActivate }: {
   </button><small id={`workspace-tab-state-${tab.id}`}>{status}</small></>
 }
 
-export function WorkspaceTabs({ tabs, activeId, temporary, getSave, onActivate, onNew, onClose }: {
+export function WorkspaceTabs({ tabs, activeId, temporary, getSave, getCommands, onActivate, onNew, onClose }: {
   tabs: WorkspaceTab[]
   activeId?: string
   temporary?: boolean
   getSave: (tab: WorkspaceTab) => DocumentSaveState
+  getCommands?: (tab: WorkspaceTab) => ReturnType<typeof createDocumentCommands> | undefined
   onActivate: (tab: WorkspaceTab) => void
   onNew: () => void
   onClose?: (tab: WorkspaceTab) => void
@@ -67,7 +76,7 @@ export function WorkspaceTabs({ tabs, activeId, temporary, getSave, onActivate, 
         buttons[next]?.focus()
       }}>
       {tabs.map(tab => <div className="workspace-tab" key={tab.id}>
-        <TabButton tab={tab} selected={tab.id === activeId} save={getSave(tab)} onActivate={onActivate} />
+        <TabButton tab={tab} selected={tab.id === activeId} save={getSave(tab)} commands={getCommands?.(tab)} onActivate={onActivate} />
       </div>)}
     </div>
     {onClose && selected && <button type="button" className="workspace-tab-close"

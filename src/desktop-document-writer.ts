@@ -6,7 +6,7 @@ export function createDesktopDocumentWriter(
   language: () => 'en' | 'ja' = () => 'en',
 ): ArtifactWriter {
   return async ({ documentId, choice, content }) => {
-    if (choice.kind === 'cloud' || choice.kind === 'file' && choice.platform !== 'desktop') {
+    if (choice.kind === 'cloud' || choice.kind === 'choose-cloud' || choice.kind === 'download-copy' || choice.kind === 'file' && choice.platform !== 'desktop') {
       throw new Error('The selected destination is not a desktop file.')
     }
     if (choice.kind === 'file' && (typeof choice.authority !== 'string' || !choice.authority)) {
