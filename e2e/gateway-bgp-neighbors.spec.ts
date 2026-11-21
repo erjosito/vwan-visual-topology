@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { resolve } from 'node:path'
 import AxeBuilder from '@axe-core/playwright'
+import { readFileSync } from 'node:fs'
 
 for (const mode of ['hub-spoke', 'full']) {
   test(`${mode} scopes captured gateway neighbors to one local endpoint without inventing instance mappings or counters`, async ({ page }) => {
@@ -49,4 +50,88 @@ test('keeps captured gateway neighbors readable and keyboard-operable in a narro
   await expect(endpoint).toHaveValue('10.1.0.5')
   await expect(panel.locator('tbody tr')).toHaveCount(2)
   expect((await new AxeBuilder({ page }).include('[data-testid="captured-bgp-neighbors"]').analyze()).violations).toEqual([])
+})
+
+for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} inspects gateway learned routes only for the captured endpoint and explicit source peer`, async ({ page }) => {
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-route-capture.json'))
+    const panel = page.getByTestId('captured-bgp-neighbors')
+    const routes = panel.getByTestId('captured-gateway-routes')
+    const endpoint = panel.getByRole('combobox', { name: 'Local BGP endpoint', exact: true })
+    await expect(routes.locator('tbody tr')).toHaveCount(3)
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toContain('gateway-routes-test')
+    const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    await expect(routes).toContainText('truncated · Unknown / incomplete')
+    await expect(routes).not.toContainText('198.51.100.0/24')
+    await expect(routes.locator('tbody tr').nth(1).locator('td').nth(2)).toHaveText('')
+    await routes.getByText('Captured route attributes', { exact: true }).first().click()
+    await expect(routes).toContainText('Weight: 0')
+    await expect(panel.getByTestId('captured-gateway-neighbor-table').locator('tbody td').last()).toHaveText('0')
+    await panel.getByRole('button', { name: 'Inspect captured routes', exact: true }).click()
+    await expect(routes.locator('tbody tr')).toHaveCount(1)
+    await expect(routes).toContainText('198.51.100.1')
+    await expect(routes).not.toContainText('198.18.0.0/24')
+    await routes.getByRole('combobox', { name: 'Source peer', exact: true }).selectOption('[""]')
+    await expect(routes).toContainText('198.18.0.0/24')
+    await expect(routes).not.toContainText('203.0.113.0/24')
+    await endpoint.selectOption('10.1.0.5')
+    await expect(routes.locator('tbody tr')).toHaveCount(1)
+    await expect(routes).toContainText('198.51.100.0/24')
+    await expect(routes).not.toContainText('203.0.113.0/24')
+    await endpoint.selectOption('')
+    await expect(routes).toContainText('192.0.2.0/24')
+    await expect(panel.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
+    await panel.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-routes-only')
+    await expect(endpoint).toHaveValue('10.2.0.4')
+    await expect(routes).toContainText('172.16.0.0/16')
+    await expect(routes).toContainText('coverage: succeeded')
+    await expect(panel).toContainText('No neighbor observations')
+    await panel.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-empty')
+    await expect(routes.locator('tbody tr')).toHaveCount(0)
+    await expect(routes).toContainText('coverage: empty')
+    await expect(routes).toContainText('Missing rows do not establish an empty Adj-RIB')
+    await panel.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('z-denied')
+    await expect(routes).toContainText('coverage: denied · Unknown / incomplete')
+    await expect(routes.locator('tbody tr')).toHaveCount(0)
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
+    expect(saved).not.toContain('vngLearnedRoutes')
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-route-capture.json'))
+    await expect(panel.getByRole('combobox', { name: 'Captured gateway', exact: true })).toHaveValue('er-gateway')
+    await expect(endpoint).toHaveValue('10.1.0.4')
+    await expect(routes.locator('tbody tr')).toHaveCount(3)
+  })
+}
+
+test('bounds route-only gateway inspection and keeps malformed coverage unknown in narrow Japanese dark mode', async ({ page }) => {
+  const capture = JSON.parse(readFileSync(resolve('tests', 'fixtures', 'gateway-route-capture.json'), 'utf8'))
+  delete capture.vngBgpPeerStatus
+  const route = capture.vngLearnedRoutes['er-gateway'][0]
+  capture.vngLearnedRoutes = { 'er-gateway': [
+    ...Array.from({ length: 101 }, (_, index) => ({ ...route, network: `172.16.${index}.0/24` })),
+    { network: '10.0.0.0/16', localAddress: {} },
+  ] }
+  capture.sections['vngLearnedRoutes:er-gateway'] = { state: 'succeeded', complete: true }
+  await page.setViewportSize({ width: 700, height: 1000 })
+  await page.goto('/?mode=full')
+  await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark')
+  await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+  await page.locator('input[data-desktop-import]').setInputFiles({
+    name: 'route-only.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(capture)),
+  })
+  const routes = page.getByTestId('captured-gateway-routes')
+  await expect(routes.getByRole('heading', { name: '取得済みゲートウェイ学習 BGP ルート', exact: true })).toBeVisible()
+  await expect(routes.locator('tbody tr')).toHaveCount(100)
+  await expect(routes).toContainText('不明 / 不完全')
+  await expect(routes).toContainText('不正またはサイズ上限')
+  await routes.getByRole('button', { name: '次のルート', exact: true }).focus()
+  await page.keyboard.press('Enter')
+  await expect(routes.locator('tbody tr')).toHaveCount(1)
+  await expect(routes).toContainText('172.16.100.0/24')
+  expect((await new AxeBuilder({ page }).include('[data-testid="captured-bgp-neighbors"]').analyze()).violations).toEqual([])
+  await page.locator('input[data-desktop-import]').setInputFiles({
+    name: 'same-scope-new-capture.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(capture)),
+  })
+  await expect(routes.locator('tbody tr')).toHaveCount(100)
+  await expect(routes).not.toContainText('172.16.100.0/24')
 })

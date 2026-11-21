@@ -7,6 +7,11 @@ import { simulateAzNet } from './engine'
 import { parseAzNetJson } from './admission'
 import { bgpNeighborTopology } from '../../tests/fixtures/bgp-neighbors'
 import { example } from '../model'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import GatewayBgpNeighborsPanel from './GatewayBgpNeighborsPanel'
+import CapturedGatewayRoutes from './CapturedGatewayRoutes'
+import { capturedArsRoutes as capturedBgpRoutes } from './captured-ars-routes'
 
 const fixture = () => JSON.parse(readFileSync(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'), 'utf8'))
 
@@ -203,3 +208,88 @@ it.each(['arsLearnedRoutes', 'vngLearnedRoutes', 'arsAdvertisedRoutes'] as const
     expect(JSON.stringify(capture)).toBe(original)
   },
 )
+
+const routeFixture = () => JSON.parse(readFileSync(resolve('tests', 'fixtures', 'gateway-route-capture.json'), 'utf8'))
+
+it('scopes native gateway routes by exact local address without reconciling contradictory counters or inventing a source peer', () => {
+  const capture = routeFixture()
+  const original = JSON.stringify(capture)
+  const observations = importAzNetCapture(capture).observations!
+  const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))
+  expect(html).toContain('203.0.113.0/24')
+  expect(html).toContain('198.18.0.0/24')
+  expect(html).not.toContain('198.51.100.0/24')
+  expect(html).not.toContain('192.0.2.0/24')
+  expect(html).toContain('truncated')
+  expect(html).toContain('Unknown / incomplete')
+  expect(html).toContain('>Connected<')
+  expect(html).toContain('>0</td>')
+  expect(html).toContain('Weight: 0')
+  expect(html).toContain('65515-65001')
+  expect(observations.vngLearnedRoutes).toEqual(capture.vngLearnedRoutes)
+  expect(JSON.stringify(capture)).toBe(original)
+})
+
+it('matches only explicitly captured source peers, never forwarding next hops, and keeps unknown source rows inspectable', () => {
+  const rows = routeFixture().vngLearnedRoutes['er-gateway'].filter((row: { localAddress?: string }) => row.localAddress === '10.1.0.4')
+  const props = { gateway: 'er-gateway', address: '10.1.0.4', rows, rejected: false, onSourcePeerChange: () => {},
+    selectedPage: 0, onPageChange: () => {} }
+  const html = renderToStaticMarkup(createElement(CapturedGatewayRoutes, { ...props, sourcePeer: '["192.0.2.9"]' }))
+  expect(html).toContain('198.51.100.1')
+  expect(html).not.toContain('198.51.100.2')
+  expect(html).not.toContain('198.18.0.0/24')
+  const missing = renderToStaticMarkup(createElement(CapturedGatewayRoutes, { ...props, sourcePeer: '[""]' }))
+  expect(missing).toContain('198.18.0.0/24')
+  expect(missing).not.toContain('203.0.113.0/24')
+})
+
+it('shows route-only gateway captures without inventing neighbors and discloses malformed or empty route coverage', () => {
+  const capture = routeFixture()
+  delete capture.vngBgpPeerStatus
+  capture.vngLearnedRoutes = { 'vpn-routes-only': capture.vngLearnedRoutes['vpn-routes-only'] }
+  capture.sections = { 'vngLearnedRoutes:vpn-routes-only': capture.sections['vngLearnedRoutes:vpn-routes-only'] }
+  const observations = importAzNetCapture(capture).observations!
+  expect(renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))).toContain('172.16.0.0/16')
+  expect(renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))).toContain('No neighbor observations')
+  const parsed = capturedBgpRoutes([{ network: '172.16.0.0/16', localAddress: {} }])
+  const html = renderToStaticMarkup(createElement(CapturedGatewayRoutes, {
+    gateway: 'bad', rows: parsed.rows, rejected: parsed.rejected, section: { state: 'succeeded', complete: true },
+    sourcePeer: '', onSourcePeerChange: () => {}, selectedPage: 0, onPageChange: () => {},
+  }))
+  expect(html).toContain('Malformed or oversized')
+  expect(html).toContain('Unknown / incomplete')
+  expect(html).toContain('Missing rows do not establish an empty Adj-RIB')
+})
+
+it('keeps native gateway route rows with null optional attributes, showing missing values rather than losing the prefix or inventing defaults', () => {
+  const parsed = capturedBgpRoutes([{
+    network: '172.16.0.0/16', localAddress: '10.1.0.4',
+    sourcePeer: null, nextHop: null, asPath: null, origin: null, weight: null,
+  }])
+  expect(parsed).toEqual({ rows: [{ network: '172.16.0.0/16', localAddress: '10.1.0.4' }], rejected: false })
+  expect(capturedBgpRoutes([{ network: null }])).toEqual({ rows: [], rejected: true })
+})
+
+it.each([[], { 'bad-gateway': null }, Object.fromEntries(Array.from({ length: 257 }, (_, i) => [`gateway-${i}`, []]))].map((value) => [value]))(
+  'does not silently turn a malformed or oversized gateway route map into successful empty coverage',
+  (vngLearnedRoutes) => {
+    const capture = routeFixture()
+    delete capture.vngBgpPeerStatus
+    capture.vngLearnedRoutes = vngLearnedRoutes
+    const observations = importAzNetCapture(capture).observations!
+    expect(renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))).toContain('Malformed or oversized')
+  },
+)
+
+it('retains failed gateway route command coverage even when no gateway returned a single route or neighbor row', () => {
+  const capture = routeFixture()
+  delete capture.vngBgpPeerStatus
+  capture.vngLearnedRoutes = {}
+  capture.sections = { 'vngLearnedRoutes:denied-gateway': { state: 'denied', complete: false } }
+  const observations = importAzNetCapture(capture).observations!
+  const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))
+  expect(html).toContain('denied-gateway')
+  expect(html).toContain('Gateway route capture coverage: denied · Unknown / incomplete')
+  expect(html).toContain('Missing rows do not establish an empty Adj-RIB')
+  expect(html).not.toContain('<tbody>')
+})
