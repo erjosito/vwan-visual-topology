@@ -98,7 +98,7 @@ for (const mode of ['vwan', 'full'] as const) {
     await hubNode.focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menuitem', { name: mode === 'vwan' ? 'BGP table' : 'Inspect Virtual WAN Hub BGP table', exact: true }).click()
-    const routes = page.getByRole('dialog', { name: mode === 'vwan' ? /^(BGP table|Firewall forwarding table) · Local secure hub$/ : 'Effective routes', exact: true })
+    const routes = page.getByRole('dialog', { name: mode === 'vwan' ? /^(BGP table|Firewall forwarding table) · Local secure hub$/ : 'BGP table', exact: true })
     await expect(routes.locator('tr[data-prefix="10.0.0.0/8"][data-preferred="true"]')).toContainText('Original local Firewall')
     if (mode === 'vwan') await routes.getByLabel('Route view', { exact: true }).selectOption('firewall')
     else await routes.getByLabel('Hub routing table', { exact: true }).selectOption('')

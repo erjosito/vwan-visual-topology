@@ -364,8 +364,8 @@ for (const mode of ['hub-spoke', 'full']) {
     hub.routeServer!.branchToBranchTraffic = true
     await load(page, mode, topology)
     const open = async () => {
-      const routes = page.getByRole('dialog', { name: 'Effective routes', exact: true })
-      if (await routes.isVisible()) await routes.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+      const routes = page.getByRole('dialog', { name: 'BGP table', exact: true })
+      if (await routes.isVisible()) await routes.getByRole('button', { name: 'Close BGP table', exact: true }).click()
       await page.getByTestId('aznet-chip-ars').click({ button: 'right' })
       await page.getByRole('menuitem', { name: 'Manage ARS Route Maps', exact: true }).click()
     }

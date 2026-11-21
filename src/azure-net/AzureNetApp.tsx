@@ -1874,7 +1874,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         actions: [
           ...(workspaceSession?.presentationPreview ? [{ label: t('Open VNet detail'), onSelect: () => openDetail(vnet.id) }] : []),
           {
-            label: 'Inspect Gateway BGP table',
+            label: t('Inspect Gateway BGP table'),
             onSelect: () => {
               inspectRoutes({ kind: 'gateway', vnetId: vnet.id, gatewayId: gw.id })
             },
@@ -1904,7 +1904,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         actions: [
           { label: 'Manage ARS Route Maps', onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapHubId(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(ars.id) } },
           {
-            label: 'Inspect Route Server BGP table (ASN 65515)',
+            label: t('Inspect Route Server BGP table (ASN 65515)'),
             onSelect: () => {
               inspectRoutes({ kind: 'route-server', vnetId: vnet.id, routeServerId: ars.id })
             },
@@ -2154,7 +2154,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             onSelect: () => { setActiveTab(null); setRouteMapInspection(undefined); setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id) },
           },
           {
-            label: 'Inspect Virtual WAN Hub BGP table',
+            label: t('Inspect Virtual WAN Hub BGP table'),
             onSelect: () => {
               inspectRoutes({ kind: 'vwan-hub', hubId: hub.id })
             },
@@ -2267,7 +2267,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             },
           },
           {
-            label: 'Inspect ExpressRoute Location BGP table',
+            label: t('Inspect ExpressRoute Location BGP table'),
             onSelect: () => {
               inspectRoutes({ kind: 'er-location', locationId: loc.id })
             },
