@@ -41,6 +41,21 @@ HTTP/Buffer V8 abort documented in
 [nodejs/node#66870](https://github.com/nodejs/node/issues/66870); do not mask a
 server crash by relaxing assertions, retries or test timeouts.
 
+Web qualification runs collectors independently, builds the web/platform/backend
+inputs once, then runs four complete browser shards and production checks on
+isolated runners. `validate` remains the required release aggregate: every job,
+all planned browser cases, raw shard receipts, and collector/production receipts
+must pass with matching source, run and attempt. Production checks and final
+packaging reuse checksum-verified build bytes; the release workflow is unchanged.
+Retries retain the existing browser policy and their raw evidence; no test
+selection depends on the application version.
+
+**Rerun all web qualification jobs together**, or dispatch a fresh main CI with
+`target=web`. A failed-jobs-only rerun can retain successful jobs or build inputs
+from an earlier attempt; these cannot qualify a new-attempt candidate. Backend
+qualification remains part of the web aggregate: its short tests are not the
+measured latency bottleneck.
+
 ## One-time repository setup
 
 Before the first actual promotion:
