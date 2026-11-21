@@ -278,16 +278,67 @@ for (const mode of ['hub-spoke', 'full']) {
   })
 }
 
-test('VWAN managed BGP relationships do not invent gateway speakers or standalone VPN mode controls', async ({ page }) => {
+for (const mode of ['vwan', 'full']) test(`${mode} managed BGP relationships show known hub, MSEE and VPN peers without invented sessions`, async ({ page }) => {
+  const vwan = bgpNeighborVwanTopology()
+  const full = bgpNeighborTopology()
+  full.vwanHubs = vwan.hubs
+  full.erLinks.push({ id: 'er-hub', name: 'Hub ER', locationId: 'edge-location', targetKind: 'vwan-hub', targetId: 'managed-hub', enabled: true })
+  full.vpnConnections.push({ id: 'managed-vpn', name: 'Managed VPN', siteId: 'branch', targetKind: 'vwan-hub', targetId: 'managed-hub', enabled: true, bgpEnabled: true })
+  const topology = mode === 'vwan' ? vwan : full
+  const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+  await page.addInitScript(({ key, topology, mode }) => localStorage.setItem(key,
+    JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology })), { key, topology, mode })
+  await page.goto(`/?mode=${mode}`)
+  await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
+  await dialog.getByLabel('Local BGP resource').selectOption(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
+  await expect(dialog.getByLabel('Local BGP instance')).toHaveCount(0)
+  const rows = dialog.getByTestId('bgp-managed-rows').locator('tbody tr')
+  await expect(rows).toHaveCount(3)
+  await expect(rows.filter({ hasText: 'Remote hub' })).toContainText('65515')
+  await expect(rows.filter({ hasText: 'Managed VPN' })).toContainText('65050')
+  await expect(rows.filter({ hasText: 'Hub ER' })).toContainText('12076')
+  await expect(rows).toContainText(['Not observed', 'Not observed', 'Not observed'])
+  await expect(dialog).toContainText('Standalone VPN active/standby controls do not apply')
+  await dialog.getByRole('searchbox', { name: 'Filter neighbors', exact: true }).fill('12076')
+  await expect(rows).toHaveCount(1)
+  await rows.getByRole('button', { name: mode === 'vwan' ? 'Synthetic ER location' : 'Frankfurt', exact: true }).click()
+  await expect(dialog.getByLabel('Local BGP resource')).toBeFocused()
+  await expect(rows.filter({ hasText: 'er-hub' })).toContainText('65515')
+  await dialog.getByLabel('Local BGP resource').selectOption(bgpResourceKey({ kind: 'site', id: 'branch' }))
+  await expect(rows.filter({ hasText: 'managed-vpn' })).toContainText('65515')
+  await expect(rows.filter({ hasText: 'er-site' })).toContainText('12076')
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark')
+  await page.locator('header [data-language-selector]').selectOption('ja')
+  const translated = page.getByRole('dialog', { name: 'BGP ネイバー', exact: true })
+  const region = translated.getByRole('region', { name: 'マネージド ピア関係', exact: true })
+  await region.focus()
+  await expect(region).toBeFocused()
+  await translated.getByLabel('ローカル BGP リソース').selectOption(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
+  await expect(translated.getByTestId('bgp-managed-rows')).toContainText('ハブ間ルーティング')
+  await translated.getByTestId('bgp-managed-rows').locator('summary').first().focus()
+  await page.keyboard.press('Enter')
+  await expect(translated.getByTestId('bgp-managed-rows').locator('details[open]')).toHaveCount(1)
+  expect((await new AxeBuilder({ page }).include('.bgp-neighbors-panel').analyze()).violations).toEqual([])
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key))
+    .toEqual(mode === 'vwan' ? topology : { sampleId: '', topology })
+})
+
+test('static VWAN routing and disabled ER remain visible without implying BGP sessions', async ({ page }) => {
   const topology = bgpNeighborVwanTopology()
+  topology.connections[0].learnSiteRoutes = false
+  topology.sites[0].vpnStaticRoutes = [{ id: 'static', prefix: '203.0.113.0/24', connectionId: 'managed-vpn' }]
+  topology.erLinks![1].enabled = false
   await page.addInitScript((value) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(value)), topology)
   await page.goto('/?mode=vwan')
   await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
   await dialog.getByLabel('Local BGP resource').selectOption(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
+  const rows = dialog.getByTestId('bgp-managed-rows').locator('tbody tr')
+  await expect(rows.filter({ hasText: 'managed-vpn' })).toContainText('Not applicable (static routing)')
+  await expect(rows.filter({ has: page.getByText('er-hub', { exact: true }) })).toContainText('Disabled / unavailable')
   await expect(dialog.getByLabel('Local BGP instance')).toHaveCount(0)
-  await expect(dialog.getByTestId('bgp-managed-relationships')).toContainText('managed-vpn')
-  await expect(dialog).toContainText('Standalone VPN active/standby controls do not apply')
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))).toEqual(topology)
 })
 

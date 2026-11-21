@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { CanvasOverlay } from './CanvasOverlay'
 import { CompactBgpTable } from './CompactBgpTable'
 import { t } from './i18n'
 import { inspectAzBgp, inspectVwanBgp, bgpResourceKey } from './bgp-neighbors'
-import type { BgpInstance, BgpResourceRef, BgpRouteEvidence } from './bgp-neighbors'
+import type { BgpInstance, BgpManagedRelationship, BgpResourceRef, BgpRouteEvidence } from './bgp-neighbors'
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 import type { AzSimulationResult } from './azure-net/engine'
@@ -19,6 +19,10 @@ const scopes: Record<BgpRouteEvidence['scope'], string> = {
   'peer-received-post-policy': 'Peer received routes (logical, post-policy; not pre-policy advertisements)',
 }
 const count = (value: BgpRouteEvidence | undefined) => value === undefined ? t('Not assessed') : new Set(value.routes.map((route) => route.prefix)).size
+const relationshipKinds: Record<NonNullable<BgpManagedRelationship['kind']>, string> = {
+  'inter-hub': 'Inter-hub routing', vpn: 'VPN peering', 'vpn-static': 'Static VPN routing', 'express-route': 'ExpressRoute / MSEE aggregate',
+  'express-route-logical': 'ExpressRoute routing (edge unmapped)', nva: 'NVA peering', 'route-exchange': 'Managed route exchange',
+}
 
 export default function BgpNeighborsPanel({ topology, simulation, initialResource, unavailableIds = [], onClose }: {
   topology: AzNetTopology | Topology
@@ -35,6 +39,7 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
   const [filter, setFilter] = useState('')
   const [prefix, setPrefix] = useState('')
   const [copyStatus, setCopyStatus] = useState('')
+  const resourceSelect = useRef<HTMLSelectElement>(null)
   const resource = inspection.resources.find((candidate) => candidate.key === resourceKey)
   const instance = instanceId ? resource?.instances.find((candidate) => candidate.id === instanceId) : resource?.instances[0]
   const neighbors = inspection.neighbors.filter((neighbor) => neighbor.localResourceKey === resourceKey && neighbor.localInstanceId === instance?.id)
@@ -47,10 +52,16 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
   const visible = neighbors.filter((neighbor) => `${remoteLabel(neighbor.remoteResourceKey, neighbor.remoteInstanceId)} ${neighbor.remoteResourceKey} ${resourceByKey(neighbor.remoteResourceKey).asn ?? ''} ${neighbor.connectionId}`.toLowerCase().includes(filter.toLowerCase().trim()))
   const selected = neighbors.find((neighbor) => neighbor.id === neighborId)
   const managed = inspection.managedRelationships.filter((relationship) => relationship.resourceKeys.includes(resourceKey))
+  const visibleManaged = managed.filter((relationship) => {
+    const remote = resourceByKey(relationship.resourceKeys.find((key) => key !== resourceKey) ?? resourceKey)
+    return `${remote.name} ${remote.key} ${remote.asn ?? ''} ${relationship.name ?? ''} ${relationship.connectionId} ${relationship.peerAddress ?? ''}`
+      .toLowerCase().includes(filter.toLowerCase().trim())
+  })
   const availability = (value: typeof neighbors[number]['availability']) => t(value === 'available' ? 'Modeled relationship available'
     : value === 'unavailable' ? 'Modeled relationship unavailable' : 'Not assessed')
   const changeResource = (key: string) => {
     setResourceKey(key); setInstanceId(''); setNeighborId(''); setFilter(''); setPrefix(''); setCopyStatus('')
+    resourceSelect.current?.focus()
   }
   const routeTable = (value: BgpRouteEvidence | undefined, field: string) => {
     if (!value) return <p>{t('No qualified route evidence in this exact scope. This is not a zero-prefix observation.')}</p>
@@ -70,20 +81,22 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
   }
   return <CanvasOverlay title={t('BGP neighbors')} className="bgp-neighbors-panel aznet-routes-window" onClose={onClose}>
     <div data-testid="bgp-neighbors">
-      <p>{t('Simulated BGP: availability is not Established. Counts are logical, not native per-instance counters.')}</p>
+      <p>{t('Configuration and modeled relationships')}</p>
       <details><summary>{t('Scope and limitations')}</summary>
         <p>{t('Simulated relationships, not live BGP state or imported Azure observations. Availability does not mean Established. No FSM, uptime or message counters are simulated.')}</p>
         <p>{t('Select one local resource and one local speaker. Modeled speaker roles are not physical Azure instance mappings. Captured observations remain separate in Azure files.')}</p>
         <p>{t('Route counts and routes describe the logical relationship, not measured per-instance advertisements or counters.')}</p>
         {resource?.limitations.map((limitation) => <p key={limitation}>{t(limitation)}</p>)}
       </details>
-      <label className="field"><span>{t('Local BGP resource')}</span><select aria-label={t('Local BGP resource')} value={resourceKey}
+      <label className="field"><span>{t('Local BGP resource')}</span><select ref={resourceSelect} aria-label={t('Local BGP resource')} value={resourceKey}
         onChange={(event) => changeResource(event.target.value)}>
         {!resource && <option value={resourceKey}>{resourceKey || t('Select local resource')}</option>}
         {inspection.resources.map((candidate) => <option key={candidate.key} value={candidate.key}>{candidate.name} ({candidate.kind} · {candidate.id})</option>)}
       </select></label>
       {!resource ? <p role="status">{t('The requested BGP resource is unavailable. No other resource is substituted.')}</p> : <>
         <p><strong>{resource.name}</strong> · {resource.id} · ASN {resource.asn ?? t('Not assessed')}</p>
+        <label className="field"><span>{t('Filter neighbors')}</span><input type="search" aria-label={t('Filter neighbors')} value={filter}
+          onChange={(event) => setFilter(event.target.value)} /></label>
         {resource.instances.length > 0 ? <>
           <label className="field"><span>{t('Local BGP instance')}</span><select aria-label={t('Local BGP instance')} value={instance?.id ?? instanceId}
             onChange={(event) => { setInstanceId(event.target.value); setNeighborId(''); setPrefix(''); setCopyStatus('') }}>
@@ -92,8 +105,6 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
           </select></label>
           {!instance ? <p role="status">{t('The requested local instance is unavailable. Choose a current instance explicitly.')}</p> : <>
             <p>{t('Local endpoint')}: {instance.address ?? t('IP not modeled')} · {t(roles[instance.role])}</p>
-            <label className="field"><span>{t('Filter neighbors')}</span><input type="search" aria-label={t('Filter neighbors')} value={filter}
-              onChange={(event) => setFilter(event.target.value)} /></label>
             <button type="button" onClick={async () => {
               const text = [
                 `${resource.name} (${resource.id}) · ${t(roles[instance.role])} · ${instance.address ?? t('IP not modeled')} · ASN ${resource.asn ?? t('Not assessed')} · ${t('Simulated relationships')}`,
@@ -116,7 +127,7 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
                 <td>{count(neighbor.received)}</td><td>{count(neighbor.advertised)}</td>
               </tr>)}</tbody>
             </table></div>
-            {!visible.length && <p role="status">{t('No qualified neighbors in this exact instance/filter scope. Missing rows do not prove that no BGP session exists.')}</p>}
+            {!visible.length && !managed.length && <p role="status">{t('No qualified neighbors in this exact instance/filter scope. Missing rows do not prove that no BGP session exists.')}</p>}
             {neighborId && !selected && <p role="status">{t('The selected neighbor is no longer in this instance scope. No other neighbor is substituted.')}</p>}
             {selected && <section data-testid="bgp-neighbor-details">
               <h3>{remoteLabel(selected.remoteResourceKey, selected.remoteInstanceId)}</h3>
@@ -136,17 +147,34 @@ export default function BgpNeighborsPanel({ topology, simulation, initialResourc
               {selected.peerReceived && routeTable({ ...selected.peerReceived, scope: 'peer-received-post-policy' }, 'peer-received')}
             </section>}
           </>}
-        </> : <p role="status">{t('No qualified local instance mapping is exposed for this resource. Managed relationships are listed separately, not fabricated as sessions.')}</p>}
+        </> : <p>{t('Managed aggregate · select a relationship for original identities and mapping details.')}</p>}
         {managed.length > 0 && <section data-testid="bgp-managed-relationships">
-          <h3>{t('Unmapped managed relationships')}</h3>
-          {managed.map((relationship) => {
+          <h3>{t('Managed peer relationships')}</h3>
+          <div className="table-scroll" role="region" aria-label={t('Managed peer relationships')} tabIndex={0}>
+          <table className="aznet-route-table" data-testid="bgp-managed-rows">
+            <caption>{resource.name} · ASN {resource.asn ?? t('Not assessed')} · {t('Resource-level relationships, not physical sessions')}</caption>
+            <thead><tr><th>{t('Neighbor')}</th><th>{t('Remote ASN')}</th><th>{t('Relationship')}</th><th>{t('Connection / scope')}</th><th>{t('Configuration')}</th><th>{t('Session state')}</th><th>{t('Details')}</th></tr></thead>
+            <tbody>{visibleManaged.map((relationship) => {
             const remote = resourceByKey(relationship.resourceKeys.find((key) => key !== resourceKey) ?? resourceKey)
-            return <details key={relationship.id}><summary>{remote.name} · {relationship.connectionId} · {t('Session not assessed')}</summary>
-              <p>{t(relationship.enabled ? 'Logical exchange enabled; native session state is not assessed.' : 'Logical exchange unavailable or disabled; native session state is not assessed.')}</p>
-              <p>{t(relationship.reason)}</p><p>{relationship.id}</p>
-              <button type="button" onClick={() => changeResource(remote.key)}>{t('Inspect from peer')}</button>
-            </details>
-          })}
+            return <tr key={relationship.id} data-relationship-id={relationship.id}>
+              <td><button type="button" onClick={() => changeResource(remote.key)}>{remote.name}</button>
+                {remote.kind === 'er-location' && <small> · {t('MSEE aggregate')}</small>}
+                {relationship.peerAddress && <div>{relationship.peerAddress}</div>}</td>
+              <td>{remote.asn ?? t('Not assessed')}</td>
+              <td>{t(relationshipKinds[relationship.kind ?? 'route-exchange'])}</td>
+              <td>{relationship.name ?? relationship.connectionId}<br /><small>{relationship.connectionId}</small></td>
+              <td>{t(relationship.enabled ? 'Enabled' : 'Disabled / unavailable')}</td>
+              <td>{t(relationship.kind === 'vpn-static' ? 'Not applicable (static routing)' : 'Not observed')}</td>
+              <td><details><summary>{t('Mapping and provenance')}</summary>
+                <p>{t(relationship.reason)}</p>
+                {relationship.kind === 'express-route-logical' && <p>{t('MSEE ASN 12076; the original site remains the routing endpoint, not a direct BGP peer.')}</p>}
+                <pre>{JSON.stringify({ provenance: inspection.provenance, relationshipId: relationship.id,
+                  connectionId: relationship.connectionId, localResource: resource.key, remoteResource: remote.key }, null, 2)}</pre>
+                <button type="button" onClick={() => changeResource(remote.key)}>{t('Inspect from peer')}</button>
+              </details></td>
+            </tr>
+          })}</tbody></table></div>
+          {!visibleManaged.length && <p role="status">{t('No managed relationships match this filter.')}</p>}
         </section>}
       </>}
     </div>
