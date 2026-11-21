@@ -3,6 +3,41 @@ import { resolve } from 'node:path'
 import AxeBuilder from '@axe-core/playwright'
 import { readFileSync } from 'node:fs'
 
+test('retains native configuration-only endpoint associations without inventing sessions in a narrow Japanese workspace', async ({ page }) => {
+  await page.setViewportSize({ width: 700, height: 1000 })
+  await page.goto('/?mode=full')
+  await page.getByRole('combobox', { name: 'Theme', exact: true }).selectOption('dark')
+  await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+  await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-native-endpoints-capture.json'))
+  const panel = page.getByTestId('captured-bgp-neighbors')
+  const endpoint = panel.getByRole('combobox', { name: 'ローカル BGP エンドポイント', exact: true })
+  await expect(endpoint).toHaveValue('10.1.0.4')
+  await expect(endpoint.locator('option')).toHaveCount(3)
+  await expect(panel.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toContain('native-endpoint-test')
+  const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await panel.getByText('ネイティブ VPN IP 構成', { exact: true }).first().focus()
+  await page.keyboard.press('Enter')
+  const configs = panel.getByTestId('captured-vpn-ip-configurations')
+  await expect(configs).toBeVisible()
+  await expect(configs.locator('tbody tr')).toHaveCount(2)
+  await expect(configs.locator('tbody tr').first()).toContainText('ipConfigurations/second')
+  await expect(configs.locator('tbody tr').first()).toContainText('10.1.0.5')
+  await expect(configs).toContainText('169.254.21.2')
+  await expect(configs).toContainText('198.51.100.2')
+  await expect(endpoint.locator('option[value="198.51.100.2"]')).toHaveCount(0)
+  const scrollRegion = panel.getByRole('region', { name: 'ネイティブ VPN IP 構成', exact: true })
+  await scrollRegion.focus()
+  await page.keyboard.press('ArrowRight')
+  await expect.poll(() => scrollRegion.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
+  await panel.getByRole('combobox', { name: '取得済みゲートウェイ', exact: true }).selectOption('vpn-as')
+  await expect(endpoint.locator('option')).toHaveCount(1)
+  await expect(configs.locator('tbody tr')).toHaveCount(1)
+  await expect(panel.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
+  expect((await new AxeBuilder({ page }).include('[data-testid="captured-bgp-neighbors"]').analyze()).violations).toEqual([])
+})
+
 for (const mode of ['hub-spoke', 'full']) {
   test(`${mode} scopes captured gateway neighbors to one local endpoint without inventing instance mappings or counters`, async ({ page }) => {
     await page.goto(`/?mode=${mode}`)
