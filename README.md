@@ -154,6 +154,8 @@ The coverage panel names the actual exhausted budget and shows the limits used b
 
 H&S / Full Hybrid connectivity checks also run in a local worker and resume in batches of at most 200 representative pairs / 5 seconds, retaining at most 10,000 findings. Their exact remaining-pair count is not exhaustive address-space or ECMP coverage. Use `npm run benchmark:diagnostics -- <output.json>` to reproduce declared-star 500/1,000-prefix workloads and parallel-link/ECMP/N-1 continuation comparisons. The benchmark asserts complete report parity across batch sizes and records elapsed time and process heap sampled at batch boundaries, not a guaranteed browser memory peak.
 
+For native interactive edits, traces and Undo, see the separate [responsiveness benchmark](docs/interactive-responsiveness.md). It measures real production-UI operations on small, dense and native near-limit synthetic workloads without changing routing behavior.
+
 Unsupported analysis is tracked separately from detected network problems:
 
 | Coverage gap | Implementation tracking |

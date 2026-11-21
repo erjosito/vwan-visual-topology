@@ -39,7 +39,7 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix functions/user-cloud
       - run: npm run build:user-cloud
-      - run: node --test scripts/release-candidate.test.mjs scripts/ci-qualification.test.mjs scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs scripts/github-statistics-swa.test.mjs scripts/external-reports.test.mjs
+      - run: node --test scripts/release-candidate.test.mjs scripts/ci-qualification.test.mjs scripts/benchmark-interactive.test.mjs scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs scripts/github-statistics-swa.test.mjs scripts/external-reports.test.mjs
       - run: npm run lint
       - run: npm run test:evaluation
       - run: npm test

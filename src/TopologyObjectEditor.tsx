@@ -11,6 +11,7 @@ import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLi
 import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validation'
 import { CanvasOverlay } from './CanvasOverlay'
 import { ConfigurationEditStatus } from './WorkspacePresentation'
+import { measureAzWork } from './azure-net/performance'
 const HubStaticRoutesEditor = lazy(() => import('./HubStaticRoutesEditor').then((module) => ({ default: module.HubStaticRoutesEditor })))
 
 export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean; focusFirewall?: boolean }
@@ -52,7 +53,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   const nvaSpokes = topology.spokes.filter((s) => s.id !== request.id && Boolean(s.hubId) && Boolean(spokeNvaConnectionForSpoke(topology, s.id)))
   const title = request.deleting ? t("Delete {0}", label) : t(item ? 'Edit {0}' : 'Add {0}', connectedSite ? t('connected site') : label)
 
-  const save = (event: FormEvent<HTMLFormElement>) => {
+  const save = (event: FormEvent<HTMLFormElement>) => measureAzWork('editor-submit', () => {
     event.preventDefault()
     try {
       const id = request.id ?? crypto.randomUUID()
@@ -229,7 +230,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
       }
       onSave(validateTopology(next), savedSelection)
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid input.') }
-  }
+  })
   const hubOptions = topology.hubs.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)
   const siteOptions = topology.sites.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)
   const transport = <Field title={t("Transport")}><select name="transport" value={transportValue} onChange={(event) => setTransportValue(event.target.value as Transport)}>{Object.entries(transportLabels).map(([value, name]) => <option key={value} value={value}>{name}</option>)}</select></Field>

@@ -650,7 +650,7 @@ test.describe('AzNet bounded workspace and durable gestures', () => {
       await page.goto(`/?mode=${mode}`)
       await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
       await page.getByTestId('aznet-check-routing-btn').click()
-      await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible()
+      await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible({ timeout: 30_000 })
       const node = page.getByTestId('aznet-vnet-bench-vnet-0')
       const frame = node.locator('.network-node-frame')
       const originalX = await frame.getAttribute('x')

@@ -8,7 +8,7 @@ import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './adm
 import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { canAcknowledgeWarning, orderWarningFindings, setWarningAcknowledgement } from '../warning-acknowledgements'
-import { measureAzWork, recordAzWork } from './performance'
+import { measureAzWork, recordAzWork, useMeasuredRender } from './performance'
 import { t, translate, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
@@ -177,6 +177,7 @@ function useSubnetAddressEditing(commit: (updater: (draft: AzNetTopology) => voi
 }
 
 export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
+  useMeasuredRender()
   const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
   const workspaceStorage = useWorkspaceStorage()
@@ -351,7 +352,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [faults, setFaults] = useWorkspaceEditorState<FailureDomain[]>('aznet.faults', [])
   const [resilience, setResilience] = useWorkspaceEditorState<{ revision: string; report: ResilienceReport }>('aznet.resilience')
   const [resilienceEndpoint, setResilienceEndpoint] = useWorkspaceEditorState<string>('aznet.resilienceEndpoint')
-  const routingInput = useMemo(() => azRoutingInput(topology), [topology])
+  const routingInput = useMemo(() => measureAzWork('routing-projection', () => azRoutingInput(topology)), [topology])
   const baselineRevision = routingInput.revision
   const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
   // The revision is deliberately exhaustive except the documented presentation fields.
@@ -432,29 +433,29 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       setWorkspaceNotice(error instanceof Error ? error.message : 'Inventory edit rejected.')
       return false
     }
-    setHistory((prev) => [...prev.slice(-24), cloneAzNetTopology(topology)])
+    setHistory((prev) => [...prev.slice(-24), measureAzWork('history-clone', () => cloneAzNetTopology(topology))])
     setFuture([])
     if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
     setTopology(next)
     return true
   }
   const editSubnetAddresses = useSubnetAddressEditing(commitTopology, setWorkspaceNotice)
-  const handleUndo = () => {
+  const handleUndo = () => measureAzWork('undo', () => {
     if (!history.length) return
     const previous = history[history.length - 1]
-    setFuture((f) => [cloneAzNetTopology(topology), ...f])
+    setFuture((f) => [measureAzWork('history-clone', () => cloneAzNetTopology(topology)), ...f])
     setHistory((h) => h.slice(0, -1))
     if (analysisRequest && azRoutingInput(previous).revision !== routingInput.revision) setAnalysisEnabled(true)
     setTopology(previous)
-  }
-  const handleRedo = () => {
+  })
+  const handleRedo = () => measureAzWork('redo', () => {
     if (!future.length) return
     const next = future[0]
-    setHistory((h) => [...h, cloneAzNetTopology(topology)])
+    setHistory((h) => [...h, measureAzWork('history-clone', () => cloneAzNetTopology(topology))])
     setFuture((f) => f.slice(1))
     if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
     setTopology(next)
-  }
+  })
 
   const handleShareUrl = () => {
     if (window.desktopSimulator) return
