@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { t } from '../i18n'
 import { registerJapaneseMessages } from '../messages'
+import { ipv4 } from '../validation'
 import type { AzCapturedObservations } from './azure-import'
 import { capturedArsRoutes as capturedBgpRoutes } from './captured-ars-routes'
 import CapturedGatewayRoutes from './CapturedGatewayRoutes'
@@ -39,6 +40,13 @@ registerJapaneseMessages({
   'No rows were captured for this selection. Missing rows do not establish that no routes or sessions exist.': 'この選択の行は取得されていません。行がないことはルートやセッションが存在しない証明ではありません。',
   'Malformed or oversized route observations cannot establish complete coverage.': '不正またはサイズ上限を超えたルート観測では、完全なカバレッジを確認できません。',
   'Unknown / incomplete': '不明 / 不完全',
+  'Native VPN IP configurations': 'ネイティブ VPN IP 構成',
+  'IP configuration ID': 'IP 構成 ID',
+  'Assigned default BGP addresses': '割り当て済み既定 BGP アドレス',
+  'Custom BGP addresses': 'カスタム BGP アドレス',
+  'Tunnel addresses': 'トンネル アドレス',
+  'These are captured configuration associations, not physical instance identities, session state or failover evidence. Tunnel addresses are not BGP neighbors.': 'これは取得済み構成の関連付けであり、物理インスタンスの識別情報、セッション状態、フェールオーバーの証拠ではありません。トンネル アドレスは BGP ネイバーではありません。',
+  'Malformed native endpoint metadata cannot establish an instance association.': '不正なネイティブ エンドポイント メタデータでは、インスタンスの関連付けを確認できません。',
 })
 
 export default function GatewayBgpNeighborsPanel({ observations }: { observations: AzCapturedObservations }) {
@@ -50,9 +58,9 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
   const routeSectionGateways = Object.keys(observations.sections ?? {}).filter((key) => key.startsWith('vngLearnedRoutes:'))
     .map((key) => key.slice('vngLearnedRoutes:'.length))
   const gateways = [...new Set([...Object.keys(observations.vngBgpPeerStatus ?? {}),
-    ...Object.keys(observations.vngLearnedRoutes ?? {}), ...routeSectionGateways])].sort()
+    ...Object.keys(observations.vngLearnedRoutes ?? {}), ...Object.keys(observations.vngBgpEndpoints ?? {}), ...routeSectionGateways])].sort()
   const gateway = gateways.includes(gatewayName) ? gatewayName : gateways[0]
-  if (Array.isArray(observations.vngLearnedRoutes) || gateways.length > 256 ||
+  if (Array.isArray(observations.vngLearnedRoutes) || Array.isArray(observations.vngBgpEndpoints) || gateways.length > 256 ||
       gateways.some((key) => key.length > 512)) return <section className="aznet-card" data-testid="captured-bgp-neighbors">
     <p role="status">{t('Malformed or oversized route observations cannot establish complete coverage.')}</p>
   </section>
@@ -61,7 +69,16 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
   const hasLearned = !!observations.vngLearnedRoutes && Object.hasOwn(observations.vngLearnedRoutes, gateway)
   const routeSection = observations.sections?.[`vngLearnedRoutes:${gateway}`]
   const learned = capturedBgpRoutes(hasLearned ? observations.vngLearnedRoutes![gateway] : [])
+  const rawEndpoints = observations.vngBgpEndpoints?.[gateway]
+  const endpoints = Array.isArray(rawEndpoints) && rawEndpoints.length <= 64 ? rawEndpoints.filter((endpoint) =>
+    endpoint && typeof endpoint === 'object' &&
+    typeof endpoint.gatewayResourceId === 'string' && !!endpoint.gatewayResourceId && endpoint.gatewayResourceId.length <= 512 &&
+    typeof endpoint.ipConfigurationId === 'string' && !!endpoint.ipConfigurationId && endpoint.ipConfigurationId.length <= 512 &&
+    endpoint.ipConfigurationId.toLowerCase().startsWith(`${endpoint.gatewayResourceId.toLowerCase()}/ipconfigurations/`) &&
+    [endpoint.defaultBgpIpAddresses, endpoint.customBgpIpAddresses, endpoint.tunnelIpAddresses].every((values) =>
+      Array.isArray(values) && values.length <= 64 && values.every((value) => typeof value === 'string' && ipv4(value) !== undefined))) : []
   const addresses = [...new Set([...peers.map((peer) => peer.localAddress).filter((value): value is string => !!value),
+    ...endpoints.flatMap((endpoint) => [...endpoint.defaultBgpIpAddresses, ...endpoint.customBgpIpAddresses]),
     ...learned.rows.map((route) => route.localAddress || '')])].sort((a, b) => Number(!a) - Number(!b) || a.localeCompare(b))
   const address = localAddress !== undefined && addresses.includes(localAddress) ? localAddress : addresses[0]
   const rows = !address ? [] : peers.filter((peer) => peer.localAddress === address)
@@ -79,6 +96,22 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
       onChange={(event) => setSelection({ ...initialScope, gatewayName: event.target.value })}>
       {gateways.map((name) => <option key={name}>{name}</option>)}
     </select></label>
+    {endpoints.length > 0 && <details>
+      <summary>{t('Native VPN IP configurations')}</summary>
+      <p>{t('These are captured configuration associations, not physical instance identities, session state or failover evidence. Tunnel addresses are not BGP neighbors.')}</p>
+      <div className="table-scroll" role="region" aria-label={t('Native VPN IP configurations')} tabIndex={0}><table className="aznet-route-table" data-testid="captured-vpn-ip-configurations">
+        <caption>{gateway} · {t('Native VPN IP configurations')}</caption>
+        <thead><tr><th>{t('IP configuration ID')}</th><th>{t('Assigned default BGP addresses')}</th><th>{t('Custom BGP addresses')}</th><th>{t('Tunnel addresses')}</th></tr></thead>
+        <tbody>{endpoints.map((endpoint, index) => <tr key={`${endpoint.ipConfigurationId}:${index}`}>
+          <td><code>{endpoint.ipConfigurationId}</code></td>
+          <td>{endpoint.defaultBgpIpAddresses.join(', ') || missing}</td>
+          <td>{endpoint.customBgpIpAddresses.join(', ') || missing}</td>
+          <td>{endpoint.tunnelIpAddresses.join(', ') || missing}</td>
+        </tr>)}</tbody>
+      </table></div>
+    </details>}
+    {rawEndpoints !== undefined && (!Array.isArray(rawEndpoints) || endpoints.length !== rawEndpoints.length) &&
+      <p role="status">{t('Malformed native endpoint metadata cannot establish an instance association.')}</p>}
     {address !== undefined ? <>
       <label className="field"><span>{t('Local BGP endpoint')}</span><select aria-label={t('Local BGP endpoint')} value={address}
         onChange={(event) => setSelection({ ...scope, localAddress: event.target.value, sourcePeer: '', page: 0 })}>

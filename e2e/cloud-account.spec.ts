@@ -13,7 +13,13 @@ import { graphicalDetailTopology } from '../tests/fixtures/network-detail'
 import { example } from '../src/model'
 import AxeBuilder from '@axe-core/playwright'
 import { languageStorageKey } from '../src/i18n'
-import { cloudDocumentKey } from '../src/cloud/document-state'
+
+async function documentCloudMetadata(page: Page, documentId?: string) {
+  return page.evaluate(documentId => {
+    const id = documentId ?? JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId
+    return localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:cloud`)
+  }, documentId)
+}
 
 async function setup(page: Page, accountName?: string) {
   const service = cloudFixture([new URL(test.info().project.use.baseURL as string).origin])
@@ -214,7 +220,7 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
       await create.click()
       await expect(account.getByRole('heading', { name: 'Separate copy', exact: true })).toBeVisible()
       expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(2)
-      const metadata = await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)!), cloudDocumentKey)
+      const metadata = JSON.parse((await documentCloudMetadata(page))!)
       expect(metadata.id).not.toBe(originalKey.split('/').at(-1)!.replace('.json', ''))
       expect(metadata).not.toHaveProperty('topology')
       expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
@@ -235,12 +241,12 @@ for (const [mode, topology] of [['vwan', example], ['hub-spoke', sampleHubSpokeF
       await account.getByRole('button', { name: text('Close', '閉じる'), exact: true }).click()
       await expect(status).toHaveText(text('No cloud save linked in this tab', 'このタブに関連するクラウドの保存はありません'))
       expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(edited)
-      expect(await page.evaluate(key => sessionStorage.getItem(key), cloudDocumentKey)).toBeNull()
+      expect(await documentCloudMetadata(page)).toBeNull()
     })
   }
 }
 
-test('an acknowledged upload keeps later edits dirty and accepted imports alone clear its link', async ({ page }) => {
+test('an acknowledged upload keeps later edits dirty and imports open independent unlinked tabs', async ({ page }) => {
   const service = await setup(page)
   await page.addInitScript(topology => {
     localStorage.setItem('aznet-ui-preview:v1', 'true')
@@ -273,14 +279,19 @@ test('an acknowledged upload keeps later edits dirty and accepted imports alone 
     release()
     await expect(page.getByTestId('document-cloud-state')).toHaveText('Local changes not saved to cloud')
     const current = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    const originalId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
     expect(current.vnets.length).toBe(JSON.parse(uploaded.raw).topology.vnets.length + 1)
     const input = page.locator('input[type=file]').first()
     await input.setInputFiles({ name: 'bad.json', mimeType: 'application/json', buffer: Buffer.from('{"version":99}') })
     await expect(page.getByTestId('aznet-workspace-notice')).toContainText('Import rejected')
-    expect(await page.evaluate(key => sessionStorage.getItem(key), cloudDocumentKey)).not.toBeNull()
+    const linked = await documentCloudMetadata(page)
+    expect(linked).not.toBeNull()
     await input.setInputFiles({ name: 'replacement.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(current)) })
     await expect(page.getByTestId('document-cloud-state')).toHaveText('No cloud save linked in this tab')
-    expect(await page.evaluate(key => sessionStorage.getItem(key), cloudDocumentKey)).toBeNull()
+    expect(await documentCloudMetadata(page)).toBeNull()
+    expect(await documentCloudMetadata(page, originalId)).toBe(linked)
+    await page.locator(`#workspace-tab-${originalId}`).click()
+    await expect(page.getByTestId('document-cloud-state')).toHaveText('Local changes not saved to cloud')
     expect(JSON.parse([...service.data].find(([key]) => key.includes('/topologies/'))![1].raw)).toEqual(JSON.parse(uploaded.raw))
   } finally { release() }
 })
@@ -498,7 +509,7 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     }
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(local)
     await search.fill('Saved 00')
-    await rows.getByRole('button', { name: /^Load into workspace |^ワークスペースに読み込む / }).click()
+    await rows.getByRole('button', { name: /^Load in new tab |^新しいタブに読み込む / }).click()
     await expect(dialog).toHaveCount(0)
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.name)).toBe('Cloud topology 0')
     for (const [key, raw] of original) {
@@ -871,7 +882,7 @@ test('a missing API is not an empty library and a confirmed save survives a fail
   await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Confirmed save', exact: true })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(local)
-  await page.getByRole('button', { name: /^Load into workspace Confirmed save / }).click()
+  await page.getByRole('button', { name: /^Load in new tab Confirmed save / }).click()
   await expect(page.getByRole('dialog', { name: 'Cloud account', exact: true })).toHaveCount(0)
 })
 
@@ -891,11 +902,58 @@ test('retrying a lost save acknowledgement confirms the original record without 
   await expect(page.getByRole('status').filter({ hasText: 'cloud operation did not complete' })).toBeVisible()
   await expect(page.getByText('Topology saved to your cloud library.', { exact: true })).toHaveCount(0)
   await expect(page.getByTestId('document-cloud-state')).toHaveText('Cloud operation not confirmed')
+  const originalId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
+  await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
+  await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+  await page.locator(`#workspace-tab-${originalId}`).click()
+  await page.getByTestId('cloud-account-open').click()
+  await page.getByLabel('Cloud topology name', { exact: true }).fill('Lost acknowledgement')
   await page.unroute('**/api/cloud/topologies/*', interrupted)
   await page.getByRole('button', { name: 'Save as new cloud copy', exact: true }).click()
   await expect(page.getByRole('heading', { name: 'Lost acknowledgement', exact: true })).toBeVisible()
   await expect(page.getByText('Topology saved to your cloud library.', { exact: true })).toBeVisible()
   expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(1)
+})
+
+test('a cloud upload stays busy and confirms only its original live tab after switching', async ({ page }) => {
+  const service = await setup(page)
+  await page.goto('/?mode=full')
+  await signIn(page)
+  const originalId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
+  let release!: () => void
+  const acknowledgement = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/api/cloud/topologies/*', async route => {
+    const request = route.request()
+    if (request.method() !== 'PUT') return route.fallback()
+    const result = await service.request(request.url(), { method: 'PUT', headers: request.headers(), body: request.postData()! })
+    await acknowledgement
+    await route.fulfill({ status: result.status ?? 200,
+      headers: { ...result.headers as Record<string, string>, 'content-type': 'application/json' },
+      body: result.jsonBody === undefined ? '' : JSON.stringify(result.jsonBody) })
+  })
+  const account = page.getByRole('dialog', { name: 'Cloud account', exact: true })
+  try {
+    await page.getByRole('button', { name: 'Save as new cloud copy', exact: true }).click()
+    await expect.poll(() => [...service.data.keys()].filter(key => key.includes('/topologies/')).length).toBe(1)
+    await account.getByRole('button', { name: 'Close', exact: true }).click()
+    await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+    const otherId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
+    await page.locator(`#workspace-tab-${originalId}`).click()
+    await expect(page.getByTestId('document-cloud-state')).toHaveText('Uploading a snapshot…')
+    await page.getByRole('button', { name: 'Close topology: Empty Topology', exact: true }).click()
+    await expect(page.getByText('Wait for the save to finish before closing its tab.', { exact: true })).toBeVisible()
+    await page.getByTestId('cloud-account-open').click()
+    await expect(account.getByRole('button', { name: 'Save as new cloud copy', exact: true })).toBeDisabled()
+    await account.getByRole('button', { name: 'Close', exact: true }).click()
+    await page.locator(`#workspace-tab-${otherId}`).click()
+    release()
+    await expect.poll(() => documentCloudMetadata(page, originalId)).not.toBeNull()
+    expect(await documentCloudMetadata(page, otherId)).toBeNull()
+    await expect(page.getByTestId('document-cloud-state')).toHaveText('No cloud save linked in this tab')
+    await page.locator(`#workspace-tab-${originalId}`).click()
+    await expect(page.getByTestId('document-cloud-state')).toHaveText('Matches last confirmed cloud save')
+    expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(1)
+  } finally { release() }
 })
 
 for (const theme of ['light', 'dark']) {
@@ -923,10 +981,10 @@ for (const theme of ['light', 'dark']) {
     await page.getByRole('button', { name: 'Refresh cloud topologies', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Remote changed', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Update linked cloud save', exact: true })).toBeDisabled()
-    expect(await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)!).etag, cloudDocumentKey)).toBe(record.etag)
+    expect(JSON.parse((await documentCloudMetadata(page))!).etag).toBe(record.etag)
     await expect(page.getByRole('status').filter({ hasText: 'cloud operation did not complete' })).toHaveCount(0)
     await page.getByRole('dialog', { name: 'Cloud account', exact: true }).screenshot({ path: testInfo.outputPath(`cloud-${theme}.png`) })
-    await page.getByRole('button', { name: /^Load into workspace Remote changed / }).click()
+    await page.getByRole('button', { name: /^Load in new tab Remote changed / }).click()
     await expect(page.getByRole('dialog', { name: 'Cloud account', exact: true })).toHaveCount(0)
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.name)).toBe('Remote topology')
     await page.getByRole('button', { name: 'Cloud account', exact: true }).click()

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import type { Topology } from './model'
 import { validateTopology } from './validation'
-import { useWorkspaceSession } from './workspace-context'
+import { useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
 
 export interface UseTopologyHistoryOptions {
   storageKey: string
@@ -20,6 +20,7 @@ export function useTopologyHistory({
   onAfterChange,
 }: UseTopologyHistoryOptions) {
   const session = useWorkspaceSession()
+  const storage = useWorkspaceStorage()
   const [cached] = useState(() => session?.getEditorHistory?.())
   const [initial] = useState(() => {
     if (cached?.provider === 'vwan') return cached
@@ -28,7 +29,7 @@ export function useTopologyHistory({
     }
     let saved: string | null = null
     try {
-      saved = localStorage.getItem(storageKey)
+      saved = storage.getItem(storageKey)
       return {
         topology: validateTopology(saved ? JSON.parse(saved) : structuredClone(initialTopology)),
         error: '',
@@ -62,7 +63,7 @@ export function useTopologyHistory({
   const persist = (next: Topology) => {
     try {
       if (session?.practice && session.savePractice) session.savePractice({ mode: 'vwan', topology: next })
-      else localStorage.setItem(storageKey, JSON.stringify(next))
+      else storage.setItem(storageKey, JSON.stringify(next))
       session?.documentSave?.local(next, 'saved')
       setSaveError('')
     } catch {

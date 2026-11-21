@@ -15,6 +15,71 @@ import { capturedArsRoutes as capturedBgpRoutes } from './captured-ars-routes'
 
 const fixture = () => JSON.parse(readFileSync(resolve('tests', 'fixtures', 'gateway-bgp-capture.json'), 'utf8'))
 
+const endpointCapture = () => {
+  const capture = fixture()
+  const id = '/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/capture-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-aa'
+  capture.vnetGateways = [{
+    id, name: 'vpn-aa', gatewayType: 'Vpn', activeActive: true,
+    ipConfigurations: [{ id: `${id}/ipConfigurations/first` }, { id: `${id}/ipConfigurations/second` }],
+    bgpSettings: { asn: 65515, bgpPeeringAddresses: [
+      { ipconfigurationId: `${id}/ipConfigurations/second`, defaultBgpIpAddresses: ['10.1.0.5'], customBgpIpAddresses: ['169.254.21.2'], tunnelIpAddresses: ['198.51.100.2'] },
+      { ipconfigurationId: `${id}/ipConfigurations/first`, defaultBgpIpAddresses: ['10.1.0.4'], customBgpIpAddresses: [], tunnelIpAddresses: ['198.51.100.1'] },
+    ] },
+  }]
+  return capture
+}
+
+it('preserves native VPN IP-configuration associations independently of returned ordering, without assigning physical roles or session state', () => {
+  const capture = endpointCapture()
+  const before = JSON.stringify(capture)
+  const result = importAzNetCapture(capture)
+  const endpoints = result.observations!.vngBgpEndpoints!['vpn-aa']
+  expect(endpoints.map((endpoint) => [endpoint.ipConfigurationId.split('/').at(-1), endpoint.defaultBgpIpAddresses]))
+    .toEqual([['second', ['10.1.0.5']], ['first', ['10.1.0.4']]])
+  expect(endpoints[0].customBgpIpAddresses).toEqual(['169.254.21.2'])
+  expect(endpoints[0].tunnelIpAddresses).toEqual(['198.51.100.2'])
+  expect(JSON.stringify(result.topology)).not.toContain('198.51.100.2')
+  expect(JSON.stringify(capture)).toBe(before)
+  const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations: result.observations! }))
+  expect(html).toContain('Native VPN IP configurations')
+  expect(html).toContain('not physical instance identities')
+  expect(html).not.toContain('<option value="198.51.100.2"')
+  expect(html).toContain('<option value="169.254.21.2"')
+  endpoints[0].defaultBgpIpAddresses.push('10.1.0.6')
+  expect(JSON.stringify(capture)).toBe(before)
+})
+
+it('retains configuration-only endpoints without claiming neighbors or creating a standby session', () => {
+  const capture = endpointCapture()
+  delete capture.vngBgpPeerStatus
+  capture.vnetGateways[0].activeActive = false
+  capture.vnetGateways[0].bgpSettings.bgpPeeringAddresses = [capture.vnetGateways[0].bgpSettings.bgpPeeringAddresses[1]]
+  const observations = importAzNetCapture(capture).observations!
+  expect(observations.vngBgpEndpoints!['vpn-aa']).toHaveLength(1)
+  expect(observations.vngBgpPeerStatus).toBeUndefined()
+  const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))
+  expect(html).toContain('No neighbor observations were captured for this endpoint')
+  expect(html).not.toContain('captured-gateway-neighbor-table')
+})
+
+it('does not invent associations for foreign configuration IDs, malformed IPs or oversized native endpoint inventories', () => {
+  for (const corrupt of [
+    (entry: Record<string, unknown>) => { entry.ipconfigurationId = '/foreign/ipConfigurations/second' },
+    (entry: Record<string, unknown>) => { entry.defaultBgpIpAddresses = ['not-an-ip'] },
+    (entry: Record<string, unknown>) => { entry.tunnelIpAddresses = Array(65).fill('198.51.100.2') },
+  ]) {
+    const capture = endpointCapture()
+    corrupt(capture.vnetGateways[0].bgpSettings.bgpPeeringAddresses[0])
+    const result = importAzNetCapture(capture)
+    expect(result.observations!.vngBgpEndpoints!['vpn-aa']).toHaveLength(1)
+    expect(result.unknownAddressing.some((item) => item.field === 'native VPN BGP endpoint association')).toBe(true)
+  }
+  const observations = importAzNetCapture(endpointCapture()).observations!
+  observations.vngBgpEndpoints!['vpn-aa'][0].tunnelIpAddresses = ['invalid']
+  const html = renderToStaticMarkup(createElement(GatewayBgpNeighborsPanel, { observations }))
+  expect(html).toContain('Malformed native endpoint metadata cannot establish an instance association')
+})
+
 it('retains both documented ARS neighbors and both original ARS resources without inventing endpoint IPs or changing the design', () => {
   const topology = bgpNeighborTopology()
   const simulation = simulateAzNet(topology)

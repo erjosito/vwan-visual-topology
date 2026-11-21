@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
-import { createEmptyAzNetTopology, type AzNetTopology } from '../src/azure-net/model'
+import { createEmptyAzNetTopology, sampleHubSpokeFirewallUdr, type AzNetTopology } from '../src/azure-net/model'
 import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
 import { readFileSync } from 'node:fs'
 
@@ -668,6 +668,9 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.setViewportSize({ width: 390, height: 900 })
       await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
       const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
+      const sampleName = mode === 'vwan'
+        ? JSON.parse(readFileSync(new URL('../public/docs/samples/hub-routing-preferences.json', import.meta.url), 'utf8')).name
+        : sampleHubSpokeFirewallUdr.name
       await page.goto(`/?mode=${mode}&sample=${sample}`)
       const settings = page.locator('.presentation-group').filter({
         has: page.locator('summary', { hasText: language === 'ja' ? /^設定$/ : /^Settings$/ }),
@@ -676,7 +679,12 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
         has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプとフィードバック$/ : /^Help & feedback$/ }),
       })
       const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
-      await expect.poll(() => page.evaluate(key => localStorage.getItem(key), key)).not.toBeNull()
+      await expect.poll(() => page.evaluate(key => {
+        const raw = localStorage.getItem(key)
+        if (!raw) return undefined
+        const parsed = JSON.parse(raw)
+        return (parsed.topology ?? parsed).name
+      }, key)).toBe(sampleName)
       const before = await page.evaluate(key => localStorage.getItem(key), key)
       const controls = page.getByRole('group', { name: language === 'ja' ? 'キャンバス コントロール' : 'Canvas controls' })
       await expect(controls.locator('select')).toHaveCount(mode === 'vwan' ? 2 : 1)

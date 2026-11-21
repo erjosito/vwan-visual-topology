@@ -26,7 +26,6 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
   const refreshButton = useRef<HTMLButtonElement>(null)
   const restoreFocus = useRef(false)
   const [name, setName] = useState(() => documentState?.cloud?.name ?? session?.getEditorHistory?.()?.topology.name ?? '')
-  const draftId = useRef(crypto.randomUUID())
   const api = cloud.api, progress = session?.cloudProgress
   useEffect(() => {
     if (!busy && restoreFocus.current) { restoreFocus.current = false; refreshButton.current?.focus() }
@@ -85,7 +84,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
     const value = parseCloudTopology({ version: 1, name: name.trim() || history.topology.name, topology: history.topology })
     if (!window.confirm(text('Upload this topology to your private cloud library? It may contain network configuration. Do not upload secrets or confidential data without approval.',
       'このトポロジを自分のクラウドにアップロードしますか。ネットワーク構成が含まれる場合があります。許可のない機密データや秘密情報を保存しないでください。'))) return
-    const id = entry?.id ?? draftId.current
+    const id = entry?.id ?? documentSave.newCopyId()
     const ticket = documentSave.begin(id, cloud.account.id)
     if (!ticket) throw new Error('Cloud selection changed or another upload is pending.')
     let etag: string
@@ -103,7 +102,6 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
       throw error
     }
     setEntries(values => [...values.filter(item => item.id !== id), { id, name: value.name, etag, updatedAt: '' }])
-    if (!entry) draftId.current = crypto.randomUUID()
     setNotice(text('Topology saved to your cloud library.', 'トポロジをクラウドに保存しました。'))
     await refresh()
     if (entry) search.current?.focus()
@@ -114,8 +112,8 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
     const found = await api.getTopology(entry.id)
     if (!found || revision !== session.getRequestVersion()) throw new Error('Cloud selection changed.')
     const value = parseCloudTopology(found.value)
-    if (!window.confirm(text(`Load cloud save "${entry.name}" (${entry.id}) into the active workspace? Export any unsaved design first. The cloud save is not changed.`,
-      `クラウドの保存「${entry.name}」(${entry.id}) を現在のワークスペースに読み込みますか。未保存のデザインは先にエクスポートしてください。クラウドの保存は変更しません。`))) return
+    if (!window.confirm(text(`Open cloud save "${entry.name}" (${entry.id}) in a new topology tab? Your current design and the cloud save are kept unchanged.`,
+      `クラウドの保存「${entry.name}」(${entry.id}) を新しいトポロジ タブで開きますか。現在のデザインとクラウドの保存は変更しません。`))) return
     await session.openDocument(value.topology, { accountId: cloud.account!.id, id: entry.id, name: value.name, etag: found.etag })
     onClose()
   }
@@ -197,8 +195,8 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
         </div>}
       </section>
       <section><h3>{text('Cloud topology library', 'クラウド トポロジ ライブラリ')}</h3>
-        <p id="cloud-library-help">{text('Load into workspace opens a cloud save locally. Overwrite cloud save uploads your current design to that save. Delete removes only the cloud save. Nothing is deployed to Azure.',
-          'ワークスペースに読み込むと、保存内容をローカルで開きます。クラウドの保存を上書きすると、現在のデザインをアップロードします。削除はクラウドの保存だけを削除します。Azure へのデプロイは行いません。')}</p>
+        <p id="cloud-library-help">{text('Load in new tab opens a cloud save without replacing your current design. Overwrite cloud save uploads your current design to that save. Delete removes only the cloud save. Nothing is deployed to Azure.',
+          '新しいタブに読み込むと、現在のデザインを置き換えずに保存内容を開きます。クラウドの保存を上書きすると、現在のデザインをアップロードします。削除はクラウドの保存だけを削除します。Azure へのデプロイは行いません。')}</p>
         <button ref={refreshButton} type="button" disabled={busy} onClick={() => { setBusy(true); setNotice(''); void refresh() }}>{text('Refresh cloud topologies', 'クラウドの一覧を更新')}</button>
         {listError && <p role="alert">{listError}</p>}
         {busy && <p role="status">{text('Cloud operation in progress…', 'クラウドの操作中…')}</p>}
@@ -220,8 +218,8 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
                 <th scope="row" role="rowheader"><h4>{entry.name}</h4><small>{text('Save ID', '保存 ID')}: {entry.id}</small></th>
                 <td role="cell"><time dateTime={entry.updatedAt || undefined}>{updated(entry.updatedAt)}</time></td>
                 <td role="cell"><div className="cloud-library-actions">
-                  <button type="button" aria-label={`${text('Load into workspace', 'ワークスペースに読み込む')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice}
-                    onClick={() => { void run(() => load(entry)) }}>{text('Load into workspace', 'ワークスペースに読み込む')}</button>
+                  <button type="button" aria-label={`${text('Load in new tab', '新しいタブに読み込む')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice}
+                    onClick={() => { void run(() => load(entry)) }}>{text('Load in new tab', '新しいタブに読み込む')}</button>
                   <button type="button" aria-label={`${text('Overwrite cloud save', 'クラウドの保存を上書き')} ${entry.name} (${entry.id})`} disabled={saving || !!session?.practice}
                     onClick={() => overwrite(entry)}>{text('Overwrite cloud save', 'クラウドの保存を上書き')}</button>
                   <button type="button" aria-label={`${text('Share saved version', '保存したバージョンを共有')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice}

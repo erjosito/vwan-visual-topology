@@ -415,6 +415,19 @@ try {
     await capturedNeighbors.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-routes-only')
     await expect(capturedRoutes).toContainText('172.16.0.0/16')
     await expect(capturedNeighbors.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
+    await page.locator('input[data-desktop-import]').setInputFiles(resolve('tests', 'fixtures', 'gateway-native-endpoints-capture.json'))
+    await capturedNeighbors.getByText('Native VPN IP configurations', { exact: true }).first().click()
+    const nativeConfigurations = capturedNeighbors.getByTestId('captured-vpn-ip-configurations')
+    await expect(nativeConfigurations.locator('tbody tr')).toHaveCount(2)
+    await expect(nativeConfigurations.locator('tbody tr').first()).toContainText('ipConfigurations/second')
+    await expect(nativeConfigurations.locator('tbody tr').first()).toContainText('10.1.0.5')
+    await expect(capturedNeighbors.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
+    const nativeEndpoint = capturedNeighbors.getByRole('combobox', { name: 'Local BGP endpoint', exact: true })
+    await expect(nativeEndpoint.locator('option[value="198.51.100.2"]')).toHaveCount(0)
+    await capturedNeighbors.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-as')
+    await expect(nativeEndpoint.locator('option')).toHaveCount(1)
+    await expect(nativeConfigurations.locator('tbody tr')).toHaveCount(1)
+    await expect(capturedNeighbors.getByTestId('captured-gateway-neighbor-table')).toHaveCount(0)
     if (mode === 'full') topology.vnets[0].summarizedGatewayPrefixes = ['10.0.0.0/12', '203.0.113.0/24']
     await page.locator('input[type="file"]').first().setInputFiles({
       name: 'nva-bgp-native.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
