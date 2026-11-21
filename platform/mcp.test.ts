@@ -12,8 +12,53 @@ import { haRoutingRequirements, haRoutingTopology } from '../tests/fixtures/ha-r
 import { haBackend, haPacket, haPortsTopology } from '../tests/fixtures/ha-ports'
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
 import { readFileSync } from 'node:fs'
+import { vpnErTopology } from '../tests/fixtures/vpn-er'
 
 const serverPath = resolve(process.env.MCP_PACKAGE_DIR ?? 'platform-dist', 'mcp.cjs')
+
+it('exposes private VPN ER dependencies and directional protection through the actual stdio worker', async () => {
+  const client = new Client({ name: 'vpn-over-er-contract-test', version: '1' })
+  await client.connect(new StdioClientTransport({ command: process.execPath, args: [serverPath], stderr: 'pipe' }))
+  const call = async (name: string, args: Record<string, unknown> = {}) => {
+    const response = await client.callTool({ name, arguments: args })
+    if (response.isError) throw new Error(JSON.stringify(response.content))
+    return response.structuredContent as Record<string, any>
+  }
+  const read = async (handle: string, section: string) => {
+    const chunks: string[] = []
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle, section, offset, limit: 4000 })
+      chunks.push(chunk.jsonText)
+      if (chunk.complete) return JSON.parse(chunks.join(''))
+      expect(chunk.jsonText.length).toBeGreaterThan(0)
+      offset += chunk.jsonText.length
+    }
+    throw new Error('Private VPN evidence exceeded the test retrieval bound.')
+  }
+  try {
+    expect((await call('get_schema', { mode: 'full' })).optionalVpnOverEr.connection.underlay.kind).toBe('express-route')
+    const topology = vpnErTopology()
+    const request = { contractVersion: 1 as const, operation: 'evaluate' as const, document: { mode: 'full' as const, topology },
+      requirements: [{ id: 'private-workload', kind: 'flow' as const, source: { kind: 'subnet' as const, vnetId: 'hub', subnetId: 'app' },
+        target: { kind: 'site' as const, siteId: 'site' }, sourceAddress: '10.0.1.4', destinationAddress: '192.168.10.4', expectation: 'allow' as const }] }
+    const { handle } = await call('start_simulation', { request })
+    let state
+    for (let attempt = 0; attempt < 100; attempt++) {
+      state = await call('get_job', { handle })
+      if (state.status === 'finished') break
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    expect(state?.status).toBe('finished')
+    expect(state?.resultStatus).toBe('complete')
+    const expected = executePlatform(request)
+    expect(await read(handle, 'simulation')).toEqual(expected.simulation)
+    const assessments = await read(handle, 'assessments')
+    expect(assessments).toEqual(expected.assessments)
+    expect(assessments[0].outcome).toBe('satisfied')
+    expect(assessments[0].evidence.forward.vpnProtection[0].protection).toBe('intended-ipsec')
+    expect(assessments[0].evidence.reverse.vpnProtection[0].underlay.onPremEndpoint).toBe('172.16.0.4')
+  } finally { await client.close() }
+}, 20000)
 
 it('qualifies subnet-peering route visibility separately from forwarding through the actual stdio engine', async () => {
   const client = new Client({ name: 'subnet-peering-contract-test', version: '1' })

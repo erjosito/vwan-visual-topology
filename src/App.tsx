@@ -16,7 +16,6 @@ import { ipv4, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
 import type { DiagramContextMenu } from './TopologyDiagram'
 import type { ContextAction } from './TopologyContextMenu'
-import { TopologyObjectEditor } from './TopologyObjectEditor'
 import type { EditorRequest } from './TopologyObjectEditor'
 import { ErLocationInfoModal } from './ErLocationInfoModal'
 import type { ErCircuitSku } from './er-locations-catalog'
@@ -62,6 +61,7 @@ const ClearTopologyDialog = lazy(() => import('./ClearTopologyDialog').then((mod
 const CloneVnetDialog = lazy(() => import('./CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
 const TopologyContextMenu = lazy(() => import('./TopologyContextMenu').then((module) => ({ default: module.TopologyContextMenu })))
 const AzureFilesPanel = lazy(() => import('./AzureFilesPanel').then((module) => ({ default: module.AzureFilesPanel })))
+const TopologyObjectEditor = lazy(() => import('./TopologyObjectEditor').then((module) => ({ default: module.TopologyObjectEditor })))
 const RouterSnatDialog = lazy(() => import('./RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const storageKey = 'vwan-visual-topology:v1'
 const pathGroups: { group: PathGroup; label: string }[] = [
@@ -624,7 +624,7 @@ function App() {
         await workspaceSession.openDocument(input)
         return
       }
-      if (input && typeof input === 'object' && 'kind' in input && input.kind === 'azure-vwan-capture') {
+      if (input && typeof input === 'object' && 'kind' in input && ['azure-vwan-capture', 'azure-vwan-federation'].includes(String(input.kind))) {
         const next = importAzureCapture(input)
         setPendingAzureImport({ revision, topology: next }); setError(''); setPanel('azure')
       } else reset(validateTopology(input))
@@ -819,14 +819,14 @@ function App() {
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">{t("Microsoft hub routing preference")}</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">{t("Microsoft route-map behavior and limitations")}</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>{t("Load example (replaces workspace)")}</button>
           </CanvasOverlay>}
-          {editorRequest && <TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onOpenErLocationInfo={(peeringLocation, sku, hubRegion, erLocationId) => setErLocationModal({ open: true, peeringLocation, sku, targetAzureRegion: hubRegion, erLocationId })} onAddNva={(spokeId) => {
+          {editorRequest && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onOpenErLocationInfo={(peeringLocation, sku, hubRegion, erLocationId) => setErLocationModal({ open: true, peeringLocation, sku, targetAzureRegion: hubRegion, erLocationId })} onAddNva={(spokeId) => {
             const existing = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeId)
             setEditorRequest({ kind: 'site', id: existing?.siteId, spokeId })
           }} onSave={(next, value) => {
             save(next); setSelection(editorRequest.deleting ? undefined : value); setEditorRequest(undefined)
             if (editorRequest.deleting && nodeKey(value) === nodeKey(router)) { setPanel(undefined); setHighlighting(false) }
             else if (editorRequest.deleting && mapRouter && nodeKey(value) === nodeKey(mapRouter) && (panel === 'maps' || panel === 'rules' || panel === 'static')) setPanel(undefined)
-          }} />}
+          }} /></Suspense>}
           {topology.hubs.filter((hub) => hub.id === capabilitiesHubId).map((hub) => <Suspense key={hub.id} fallback={null}>
             <HubCapabilitiesDialog hub={hub} connections={hubGatewayConnections(topology, hub.id)} onClose={() => setCapabilitiesHubId(undefined)} />
           </Suspense>)}

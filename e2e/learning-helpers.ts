@@ -6,6 +6,7 @@ import { guidanceAnchor } from '../src/learning/guidance'
 import { runnerLabels } from '../src/learning/runner-content'
 import { sidebarLabels } from '../src/learning/sidebar-content'
 import { practiceLabels } from '../src/learning/practice-content'
+import { inspectionScope } from '../src/learning/task-guidance'
 
 export const learningSidebar = (page: Page) => page.getByTestId('learning-sidebar')
 export const learningAnchor = (page: Page, ...scope: string[]) =>
@@ -83,7 +84,7 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
       await sidebar.getByRole('radio', { name: choice.text[language], exact: true }).check()
       await sidebar.getByRole('button', { name: runnerLabels.submit[language], exact: true }).click()
     }
-    if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') {
+    if (inspectionScope(check)) {
       await sidebar.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
     }
     if (check.kind === 'vnet.peered') await createLessonPeering(page, language)

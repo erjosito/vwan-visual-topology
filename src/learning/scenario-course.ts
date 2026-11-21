@@ -274,8 +274,8 @@ for (const [index, definition] of definitions.entries()) {
     tasks.splice(1, 0,
       { id: `${id}.connect`, assessmentVersion: 1, awardId: `${id}.connect`, points: 10,
         title: l('Connect the spokes to the inspection hub', 'スポークを検査ハブに接続する'),
-        instruction: l('Create Application–Inspection hub and Partner–Inspection hub peerings. Leave the existing Application–Partner peering in place for now. Connecting spokes to a hub does not make the hub forward between them.',
-          'Application–Inspection hub と Partner–Inspection hub のピアリングを作ります。比較のため、既存の Application–Partner ピアリングは残します。スポークをハブに接続するだけでは、ハブ経由の転送は始まりません。'),
+        instruction: l('Create Application–Inspection hub and Partner–Inspection hub peerings. Leave the existing Application–Partner peering in place for now. Connecting spokes to a hub does not make the hub forward between them. Warning/error indicators about unfinished inspection routing are expected while the policy tables are empty. You do not need to resolve those yet; the upcoming routing and path-check steps explain and address them.',
+          'Application–Inspection hub と Partner–Inspection hub のピアリングを作ります。比較のため、既存の Application–Partner ピアリングは残します。スポークをハブに接続するだけでは、ハブ経由の転送は始まりません。ポリシー テーブルが空の間は、未完成の検査ルーティングに関する警告やエラーの表示があっても想定内です。今はそれらを解消する必要はありません。後続のルーティングと経路確認のステップで説明し、対処します。'),
         checkId: `${id}.connect-check`, guidanceIds: [`${id}.peer-a`, `${id}.peer-b`], hints: [] },
       { id: `${id}.summary`, assessmentVersion: 1, awardId: `${id}.summary`, points: 15,
         title: l('Add the first routing policies', '最初のルーティング ポリシーを追加する'),
@@ -283,7 +283,7 @@ for (const [index, definition] of definitions.entries()) {
           'ルート テーブルは、関連付いたサブネットから出る通信の規則をまとめます。各 Workload の空のポリシー テーブルに、有効な UDR を 1 つ追加します。宛先 10.0.0.0/8、ネクストホップ VirtualAppliance、IP 10.20.1.4 (Inspection firewall) です。まだ /16 は追加しません。次のステップで重複するルートを比較します。'),
         checkId: `${id}.summary-check`, guidanceIds: [`${id}.table-a-work`, `${id}.table-b-work`], hints: [] })
   }
-  scenarioBundle.lessons.push({ id, contentVersion: 1, scenarioId: id, title: definition.title, objective: definition.objective,
+  scenarioBundle.lessons.push({ id, contentVersion: id === 'inspection-bypass' ? 2 : 1, scenarioId: id, title: definition.title, objective: definition.objective,
     prerequisites: index ? [definitions[index - 1].id] : [], taskOrder: tasks.map((task) => task.id), tasks })
 }
 appendHybridLesson(scenarioBundle)

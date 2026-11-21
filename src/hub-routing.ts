@@ -67,6 +67,7 @@ export function hubTableCoverage(topology: Topology): Record<string, Record<stri
   const attachments = [...topology.spokes, ...topology.connections, ...(topology.erLinks ?? [])]
     .filter((entry) => !('enabled' in entry) || entry.enabled)
   const unknownPropagation = topology.hubs.some((hub) => hub.routeTablesStatus === 'unknown')
+    || topology.interWanVpns?.some((vpn) => vpn.enabled && vpn.status === 'unknown')
     || topology.azureImport?.hubs.some((hub) => hub.routingScopeComplete === false || hub.limitations.length > 0)
     || attachments.some((entry) => entry.hubRouting?.status === 'unknown' || entry.hubRouting?.limitations?.length)
   const remoteOnlySources = attachments.filter((entry) => {

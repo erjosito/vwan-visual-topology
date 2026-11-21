@@ -18,7 +18,7 @@ try {
   const { diagramLayout } = await server.ssrLoadModule('/src/diagram-layout.ts')
   const { simulate } = await server.ssrLoadModule('/src/routing.ts')
   console.log(JSON.stringify({ synthetic: true, node: process.version, cpu: cpus()[0]?.model, platform: process.platform }))
-  for (const [vnets, hubs, prefixCount] of [[61, 1, 1], [120, 4, 4], [200, 1, 4], [200, 20, 5]]) {
+  for (const [vnets, hubs, prefixCount] of [[61, 1, 1], [120, 4, 4], [200, 1, 4], [200, 20, 5], [501, 4, 1], [1000, 4, 1]]) {
     const capture = largeVwanCapture(vnets, hubs, prefixCount)
     const heapBefore = process.memoryUsage().heapUsed
     const durations = {}
@@ -41,18 +41,18 @@ try {
     assert.deepEqual(saved, topology)
     const simulation = measure('simulationMillis', () => simulate(saved))
     for (const hub of saved.hubs) {
-      assert.ok(simulation.tables[hub.id].some((row) => row.prefix === `10.${vnets}.${prefixCount - 1}.0/24` && row.selected.length))
+      assert.ok(simulation.tables[hub.id].some((row) => row.prefix === saved.spokes.at(-1).prefixes.at(-1) && row.selected.length))
     }
     const input = { contractVersion: 1, operation: 'validate', document: { mode: 'vwan', topology: saved } }
     let start = performance.now()
     const validated = await jobs.run(input)
     durations.headlessValidationMillis = Math.round(performance.now() - start)
-    assert.equal(validated.status, 'complete')
+    assert.equal(validated.status, vnets > 508 ? 'invalid' : 'complete')
     start = performance.now()
     const result = await jobs.run({ ...input, operation: 'simulate' })
     durations.headlessSimulationMillis = Math.round(performance.now() - start)
-    assert.equal(result.status, vnets === 61 ? 'complete' : 'not assessed')
-    assert.deepEqual(result.errors.map((error) => error.code), vnets === 61 ? [] : ['OUTPUT_LIMIT'])
+    assert.equal(result.status, vnets > 508 ? 'invalid' : vnets === 61 ? 'complete' : 'not assessed')
+    assert.deepEqual(result.errors.map((error) => error.code), vnets > 508 ? ['INVALID_REQUEST_OR_TOPOLOGY'] : vnets === 61 ? [] : ['OUTPUT_LIMIT'])
     const outputBytes = Buffer.byteLength(JSON.stringify(result))
     assert.ok(outputBytes <= 8_000_000, 'Existing headless output budget')
     console.log(JSON.stringify({

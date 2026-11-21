@@ -4,6 +4,8 @@ export const workspaceCapabilitiesJa: Record<string, string> = {
   'Classic gateways, Azure Route Server and appliances': '従来のゲートウェイ、Azure Route Server とアプライアンス',
   'ExpressRoute, locations, SKU scope and Global Reach': 'ExpressRoute、接続場所、SKU の範囲と Global Reach',
   'BGP and static VPN connections': 'BGP および静的 VPN 接続',
+  'Classic BGP VPN over ER private peering with explicit underlay': '明示的なアンダーレイを使う ER プライベート ピアリング経由の従来型 BGP VPN',
+  'VPN over ER requires explicit classic active/standby Standard-IP private endpoints and independent outer ER context; static, active/active, NAT and VWAN/NVA/SD-WAN private overlays remain unassessed.': 'ER 経由の VPN には、従来型アクティブ / スタンバイ、Standard IP、明示的なプライベート エンドポイント、独立した外側 ER 経路が必要です。静的ルーティング、アクティブ / アクティブ、NAT、VWAN / NVA / SD-WAN プライベート オーバーレイは未評価です。',
   'Bounded classic/VWAN VPN overlap NAT (Azure/Full Hybrid native provider)': '従来型 / VWAN VPN の限定的な重複アドレス NAT (Azure / Full Hybrid ネイティブ プロバイダー)',
   'Integrated SD-WAN and spoke NVA BGP peering': '統合 SD-WAN とスポーク NVA の BGP ピアリング',
   'Default, custom and None hub tables; association and propagation': 'Default、カスタム、None ハブ テーブルの関連付けと伝達',

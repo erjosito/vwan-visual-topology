@@ -60,6 +60,68 @@ VPN public-IP underlay must remain Internet-reachable independently of the ER
 path it backs up. Microsoft-peering failover and this underlay dependency are
 explicitly outside the routing model, not successful delivery assertions.
 
+## VPN over ExpressRoute private peering
+
+This is a distinct, explicit connection mode, not the independent Internet VPN
+backup described above. Open **Configure VPN Connection**, enable **VPN over ER
+private peering**, and select the existing Azure and site ER links on one circuit.
+Declare both RFC1918 outer endpoints, gateway private-IP enablement, Standard
+public-IP capability and the gateway-owned private tunnel IP. Configure the
+gateway as active/standby and RouteBased. A gateway SKU alone is not evidence of
+its public-IP capability.
+
+One logical site can advertise different exact subsets of its routes per
+transport. On a site ER link select only the VPN device/transport prefix; on the
+VPN connection select workload prefixes. An omitted selection preserves legacy
+all-route export; an explicitly empty selection withdraws all BGP advertisements.
+Outbound maps run after selection. A selection does not originate a missing route.
+For example, declare `172.16.0.0/24` and `192.168.10.0/24` at the site; advertise
+the former over ER and the latter over VPN. The VPN device can be
+`172.16.0.4` and the Azure tunnel endpoint `10.0.255.4` in GatewaySubnet.
+An ER host route or broader aggregate is also valid; no fixed small CIDR is required.
+
+The connection declares a separate **outer ER routing context**: endpoint
+reachability is resolved bidirectionally with every private overlay withdrawn.
+The selected links must connect this site to an enabled ER gateway in the VPN
+gateway's VNet. GatewaySubnet UDRs, missing endpoint routes, disabled links or ER
+gateway failure prevent tunnel use. This does not certify that an actual on-prem
+router has installed the equivalent underlay context/endpoint host routes; the
+operator must configure those separately and avoid recursive overlay resolution.
+The overlay must never be its own evidence of endpoint reachability.
+
+Workload forwarding still uses normal effective routes and site policies.
+Explicitly prefer Azure workload routes received on VPN using the site's
+**inbound local preference**; Azure-side route choice does not configure the
+on-prem return path. More-specific VPN workloads beat an ER aggregate, but equal
+prefixes at Azure prefer direct ER. Withdrawal of the overlay can reveal an ER
+aggregate: directional trace evidence explicitly says **direct ER without
+IPsec**. There is no inferred fail-closed guarantee. Inspect both directions.
+VPN failure leaves ER and independently configured Internet tunnels intact.
+
+Native JSON retains `connection.underlay` (kind `express-route`, `azureLinkId`,
+`siteLinkId`, `azureEndpoint`, `onPremEndpoint`), `useLocalAzureIpAddress`,
+transport `advertisedPrefixes`, and explicit gateway private-IP declarations.
+Simulation/headless output includes `vpnUnderlays`; flow evidence includes
+directional `vpnProtection` and named inner/outer contexts. The independently
+selectable dashed **VPN over ER** overlay follows the selected ER location,
+beside rather than hidden inside its edges.
+
+The bounded milestone assesses BGP, classic active/standby RouteBased gateways
+with explicit Standard IP capability. **Static VPN, active/active endpoint
+ownership, VPN NAT composition, Virtual WAN and NVA/SD-WAN private overlays are
+not assessed**. BGP is not an Azure prerequisite: this is a simulator boundary.
+Captures preserve the private-IP connection flag and gateway enablement but do
+not invent uncaptured ER links, endpoint ownership or public-IP capability.
+Until these declarations are supplied, a captured private VPN is not assessed,
+never silently converted into an Internet tunnel. Bicep export refuses private
+overlays rather than emitting an inequivalent public VPN. Preserve native JSON.
+
+These are deterministic routing checks, not a live Azure deployment or proof of
+established IKE/IPsec SAs, crypto correctness, packet delivery, MTU/MSS,
+throughput or convergence.
+
+Reference: [S2S VPN over private peering](https://learn.microsoft.com/en-us/azure/vpn-gateway/site-to-site-vpn-private-peering).
+
 The BGP inspector separates an enabled gateway and eligible managed ARS exchange
 from external VPN BGP enablement. Static VPN does not acquire external BGP
 neighbors merely because its routes can be exchanged with ARS. Managed endpoint

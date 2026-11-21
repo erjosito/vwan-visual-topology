@@ -122,6 +122,7 @@ export function spokeExportBlocker(topology: Topology, spokeId: string): string 
 }
 
 export function generateBicep(input: Topology, settings: BicepSettings): BicepExport {
+  if (input.wans || input.interWanVpns?.length) throw new Error('Federated WAN Bicep export is unsupported; exporting as one WAN would change connectivity.')
   const topology = validateTopology(input)
   const name = (value: string) => {
     if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9_-]{0,48}[a-zA-Z0-9])?$/.test(value)) throw new Error('Resource names must be 1-50 letters/digits/hyphens/underscores, starting and ending with a letter or digit.')

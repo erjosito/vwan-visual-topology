@@ -103,6 +103,7 @@ export function parseAzureObservation(input: unknown): AzureObservation {
   if (root.kind !== 'azure-vwan-capture' || root.version !== 2) return invalid()
   if (new TextEncoder().encode(JSON.stringify(input)).length > 8_000_000) return invalid()
   const structure: Topology = importAzureCapture({ ...root, version: 1 })
+  const spokeById = new Map(structure.spokes.map((spoke) => [spoke.id, spoke]))
   const context = record(root.context)
   const cloud = text(context.cloud, 40), subscriptionId = text(context.subscriptionId, 36)
   const tenantId = context.tenantId === null ? null : text(context.tenantId, 36)
@@ -122,15 +123,16 @@ export function parseAzureObservation(input: unknown): AzureObservation {
       ...(info.routingScopeComplete === undefined ? {} : { routingScopeComplete: info.routingScopeComplete }),
       spokes: list(source.connections, VWAN_MAX_SPOKES).map((value) => {
         const connection = record(value), virtualNetworkId = text(connection.virtualNetworkId)
+        const importedId = azureObjectId('spoke', virtualNetworkId)
+        const hubRouting = spokeById.get(importedId)?.hubRouting
         const resourceId = text(connection.id)
         const prefix = `${armKey(info.resourceId)}/hubvirtualnetworkconnections/`
         if (!armKey(resourceId).startsWith(prefix) || !/^[^/?#\r\n]+$/.test(armKey(resourceId).slice(prefix.length))) return invalid()
         return {
-          resourceId, virtualNetworkId, importedId: azureObjectId('spoke', virtualNetworkId),
+          resourceId, virtualNetworkId, importedId,
           name: text(connection.name, 120), prefixes: connection.addressPrefixes === null ? null : strings(connection.addressPrefixes, 30, 256),
           defaultRouting: nullableBoolean(connection.defaultRouting), enableInternetSecurity: nullableBoolean(connection.enableInternetSecurity),
-          ...(structure.spokes.find((spoke) => spoke.id === azureObjectId('spoke', virtualNetworkId))?.hubRouting
-            ? { hubRouting: structure.spokes.find((spoke) => spoke.id === azureObjectId('spoke', virtualNetworkId))!.hubRouting } : {}),
+          ...(hubRouting ? { hubRouting } : {}),
         }
       }),
     }

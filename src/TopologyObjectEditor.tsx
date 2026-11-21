@@ -70,11 +70,15 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         if (request.kind === 'hub') {
           const value = {
             ...hub, id, name, label: customLabel, region: text('region'), preference: text('preference') as Preference,
+            ...(topology.wans ? { wanId: text('wan') } : {}),
             firewall: hubStatic.firewall, routeTables: hubStatic.routeTables,
             routingIntent: { private: data.has('privateIntent'), internet: data.has('internetIntent'), privatePrefixes: prefixes(text('privatePrefixes')) },
           }
           if (hub) next.hubs[next.hubs.findIndex((h) => h.id === id)] = value
           else next.hubs.push(value)
+          if (next.interWanVpns) next.interWanVpns = next.interWanVpns.map((vpn) => [vpn.aHubId, vpn.bHubId].includes(id)
+            ? { ...vpn, enabled: data.has(`vpn-enabled-${vpn.id}`), status: text(`vpn-status-${vpn.id}`) as 'configured' | 'unknown',
+              aToB: prefixes(text(`vpn-a-${vpn.id}`)), bToA: prefixes(text(`vpn-b-${vpn.id}`)) } : vpn)
         } else if (request.kind === 'spoke') {
           const hubIdValue = text('hub') || undefined
           const selectedNvaSpokes = data.getAll('nvaSpokeIds').map(String).filter(Boolean)
@@ -329,6 +333,16 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           </>}
         </>}
         {request.kind === 'hub' && <>
+          {topology.wans && <Field title="Virtual WAN scope"><select name="wan" aria-label="Virtual WAN scope" required defaultValue={hub?.wanId ?? topology.wans[0]?.id}>{topology.wans.map((wan) => <option key={wan.id} value={wan.id}>{wan.name}</option>)}</select></Field>}
+          {topology.interWanVpns?.filter((vpn) => [vpn.aHubId, vpn.bHubId].includes(request.id ?? '')).map((vpn) => <fieldset key={vpn.id}>
+            <legend>Inter-WAN S2S VPN: {vpn.name}</legend>
+            <p>A: {topology.hubs.find((entry) => entry.id === vpn.aHubId)?.name} → B: {topology.hubs.find((entry) => entry.id === vpn.bHubId)?.name}</p>
+            <label className="checkbox-field"><input type="checkbox" name={`vpn-enabled-${vpn.id}`} defaultChecked={vpn.enabled} />S2S tunnel enabled</label>
+            <Field title="VPN model provenance"><select name={`vpn-status-${vpn.id}`} aria-label="VPN model provenance" defaultValue={vpn.status}><option value="configured">Manually configured assumptions</option><option value="unknown">Unknown / not assessed</option></select></Field>
+            <Field title="A to B IPv4 export prefixes"><input name={`vpn-a-${vpn.id}`} aria-label="A to B IPv4 export prefixes" defaultValue={vpn.aToB.join(', ')} /></Field>
+            <Field title="B to A IPv4 export prefixes"><input name={`vpn-b-${vpn.id}`} aria-label="B to A IPv4 export prefixes" defaultValue={vpn.bToA.join(', ')} /></Field>
+            <p className="muted">Exports selected Default-table routes contained in these prefixes. Empty means no export. P2S clients, authentication and gateway BGP sessions are unsupported.</p>
+          </fieldset>)}
           <Field title={t("Region")}><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
           <Field title={t("Routing preference")}><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{t(name)}</option>)}</select></Field>
           <fieldset><legend>{t("Routing intent")}</legend>

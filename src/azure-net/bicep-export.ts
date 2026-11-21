@@ -53,6 +53,13 @@ export function generateAzNetBicep(
   const includeRouteServers = options.includeRouteServers ?? true
 
   const warnings: string[] = []
+  if (topology.vpnConnections.some((connection) => connection.underlay || connection.useLocalAzureIpAddress)) {
+    throw new Error('VPN over ER private endpoints and underlay dependencies are not deployed by this Bicep starter. Preserve native JSON; exporting an ordinary public VPN would not be equivalent.')
+  }
+  if (topology.erLinks.some((link) => link.advertisedPrefixes !== undefined)
+    || topology.vpnConnections.some((connection) => connection.advertisedPrefixes !== undefined)) {
+    warnings.push('Transport-specific site advertised-prefix selections require on-premises router configuration; this Bicep starter does not deploy those policies.')
+  }
   warnings.push(...coexistenceFindings(topology).map((finding) => `${finding.summary} ${finding.remediation}`))
   for (const vnet of topology.vnets) {
     parseVnetBgpCommunities(vnet.bgpCommunities)
