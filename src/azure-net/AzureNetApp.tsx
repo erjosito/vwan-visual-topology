@@ -5303,7 +5303,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
             {activeTab === 'azure' && (
               <>
-                {(captureObservations?.vngBgpPeerStatus || captureObservations?.vngLearnedRoutes || captureObservations?.vngBgpEndpoints) && <Suspense fallback={null}>
+                {(captureObservations?.vngBgpPeerStatus || captureObservations?.vngLearnedRoutes || captureObservations?.vngAdvertisedRoutes || captureObservations?.vngBgpEndpoints) && <Suspense fallback={null}>
                   <GatewayBgpNeighborsPanel observations={captureObservations} />
                 </Suspense>}
                 {(captureObservations?.arsLearnedRoutes || captureObservations?.arsAdvertisedRoutes) && <Suspense fallback={null}>

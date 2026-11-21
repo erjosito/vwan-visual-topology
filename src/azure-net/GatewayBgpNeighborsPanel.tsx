@@ -47,10 +47,18 @@ registerJapaneseMessages({
   'Tunnel addresses': 'トンネル アドレス',
   'These are captured configuration associations, not physical instance identities, session state or failover evidence. Tunnel addresses are not BGP neighbors.': 'これは取得済み構成の関連付けであり、物理インスタンスの識別情報、セッション状態、フェールオーバーの証拠ではありません。トンネル アドレスは BGP ネイバーではありません。',
   'Malformed native endpoint metadata cannot establish an instance association.': '不正なネイティブ エンドポイント メタデータでは、インスタンスの関連付けを確認できません。',
+  'Captured gateway advertised routes': '取得済みゲートウェイ通知ルート',
+  'Captured gateway advertised BGP routes': '取得済みゲートウェイ通知 BGP ルート',
+  'Advertised-to peer': '通知先ピア',
+  'Advertised to peer {0}': 'ピア {0} に通知',
+  'Inspect advertised routes': '通知ルートを検査',
+  'Gateway advertisement capture coverage: {0}. Some peers or reads remain unknown.': 'ゲートウェイ通知ルート取得のカバレッジ: {0}。一部のピアまたは取得結果は不明です。',
+  'Advertised-to peer is the explicit capture request, not source peer or next hop. Command-reported advertisements do not prove peer acceptance, policy installation or packet delivery. ER edge and physical instance mappings remain unknown.': '通知先ピアは明示的な取得要求の対象であり、送信元ピアやネクスト ホップではありません。コマンドの通知ルートはピアの受信、ポリシー適用、パケット到達を証明しません。ER エッジと物理インスタンスの対応は不明です。',
 })
 
 export default function GatewayBgpNeighborsPanel({ observations }: { observations: AzCapturedObservations }) {
-  const initialScope = { observations, gatewayName: '', localAddress: undefined as string | undefined, sourcePeer: '', page: 0 }
+  const initialScope = { observations, gatewayName: '', localAddress: undefined as string | undefined, sourcePeer: '', page: 0,
+    advertisedPeer: '', advertisedPage: 0, advertisedOpen: false }
   const [selection, setSelection] = useState(initialScope)
   const scope = selection.observations === observations ? selection : initialScope
   const { gatewayName, localAddress, sourcePeer } = scope
@@ -58,9 +66,10 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
   const routeSectionGateways = Object.keys(observations.sections ?? {}).filter((key) => key.startsWith('vngLearnedRoutes:'))
     .map((key) => key.slice('vngLearnedRoutes:'.length))
   const gateways = [...new Set([...Object.keys(observations.vngBgpPeerStatus ?? {}),
-    ...Object.keys(observations.vngLearnedRoutes ?? {}), ...Object.keys(observations.vngBgpEndpoints ?? {}), ...routeSectionGateways])].sort()
+    ...Object.keys(observations.vngLearnedRoutes ?? {}), ...Object.keys(observations.vngAdvertisedRoutes ?? {}),
+    ...Object.keys(observations.vngBgpEndpoints ?? {}), ...routeSectionGateways])].sort()
   const gateway = gateways.includes(gatewayName) ? gatewayName : gateways[0]
-  if (Array.isArray(observations.vngLearnedRoutes) || Array.isArray(observations.vngBgpEndpoints) || gateways.length > 256 ||
+  if (Array.isArray(observations.vngLearnedRoutes) || Array.isArray(observations.vngAdvertisedRoutes) || Array.isArray(observations.vngBgpEndpoints) || gateways.length > 256 ||
       gateways.some((key) => key.length > 512)) return <section className="aznet-card" data-testid="captured-bgp-neighbors">
     <p role="status">{t('Malformed or oversized route observations cannot establish complete coverage.')}</p>
   </section>
@@ -69,6 +78,22 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
   const hasLearned = !!observations.vngLearnedRoutes && Object.hasOwn(observations.vngLearnedRoutes, gateway)
   const routeSection = observations.sections?.[`vngLearnedRoutes:${gateway}`]
   const learned = capturedBgpRoutes(hasLearned ? observations.vngLearnedRoutes![gateway] : [])
+  const hasAdvertised = !!observations.vngAdvertisedRoutes && Object.hasOwn(observations.vngAdvertisedRoutes, gateway)
+  const rawAdvertised = observations.vngAdvertisedRoutes?.[gateway]
+  const advertisedSectionPrefix = `vngAdvertisedRoutes:${gateway}:`
+  const advertisedPeers = [...new Set([...Object.keys(rawAdvertised ?? {}),
+    ...Object.keys(observations.sections ?? {}).filter((key) => key.startsWith(advertisedSectionPrefix))
+      .map((key) => key.slice(advertisedSectionPrefix.length))])].sort((a, b) =>
+        (ipv4(a) ?? Infinity) - (ipv4(b) ?? Infinity) || a.localeCompare(b))
+  const invalidAdvertised = hasAdvertised && (!rawAdvertised || typeof rawAdvertised !== 'object' || Array.isArray(rawAdvertised))
+    || advertisedPeers.length > 256 || advertisedPeers.some((peer) => !peer || peer.length > 512)
+  const advertisedPeer = advertisedPeers.includes(scope.advertisedPeer) ? scope.advertisedPeer : advertisedPeers[0] ?? ''
+  const advertised = capturedBgpRoutes(invalidAdvertised ? null
+    : rawAdvertised && Object.hasOwn(rawAdvertised, advertisedPeer) ? rawAdvertised[advertisedPeer] : [])
+  const advertisedSection = observations.sections?.[advertisedSectionPrefix + advertisedPeer]
+    ?? observations.sections?.[`vngAdvertisedRoutes:${gateway}`]
+  const advertisedInventory = observations.sections?.[`vngAdvertisedRoutes:${gateway}`]
+  const setAdvertisedPeer = (value: string) => setSelection({ ...scope, advertisedPeer: value, advertisedPage: 0, advertisedOpen: true })
   const rawEndpoints = observations.vngBgpEndpoints?.[gateway]
   const endpoints = Array.isArray(rawEndpoints) && rawEndpoints.length <= 64 ? rawEndpoints.filter((endpoint) =>
     endpoint && typeof endpoint === 'object' &&
@@ -79,7 +104,8 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
       Array.isArray(values) && values.length <= 64 && values.every((value) => typeof value === 'string' && ipv4(value) !== undefined))) : []
   const addresses = [...new Set([...peers.map((peer) => peer.localAddress).filter((value): value is string => !!value),
     ...endpoints.flatMap((endpoint) => [...endpoint.defaultBgpIpAddresses, ...endpoint.customBgpIpAddresses]),
-    ...learned.rows.map((route) => route.localAddress || '')])].sort((a, b) => Number(!a) - Number(!b) || a.localeCompare(b))
+    ...learned.rows.map((route) => route.localAddress || ''),
+    ...advertised.rows.map((route) => route.localAddress || '')])].sort((a, b) => Number(!a) - Number(!b) || a.localeCompare(b))
   const address = localAddress !== undefined && addresses.includes(localAddress) ? localAddress : addresses[0]
   const rows = !address ? [] : peers.filter((peer) => peer.localAddress === address)
   const routes = learned.rows.filter((route) => (route.localAddress || '') === address)
@@ -114,7 +140,7 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
       <p role="status">{t('Malformed native endpoint metadata cannot establish an instance association.')}</p>}
     {address !== undefined ? <>
       <label className="field"><span>{t('Local BGP endpoint')}</span><select aria-label={t('Local BGP endpoint')} value={address}
-        onChange={(event) => setSelection({ ...scope, localAddress: event.target.value, sourcePeer: '', page: 0 })}>
+        onChange={(event) => setSelection({ ...scope, localAddress: event.target.value, sourcePeer: '', page: 0, advertisedPage: 0 })}>
         {addresses.map((value) => <option key={value} value={value}>{value || t('Unassigned (no local endpoint captured)')}</option>)}
       </select></label>
       {rows.length > 0 ? <div className="table-scroll"><table className="aznet-route-table" data-testid="captured-gateway-neighbor-table">
@@ -126,7 +152,9 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
             <p>{t('Messages sent / received')}: {peer.messagesSent ?? missing} / {peer.messagesReceived ?? missing}</p>
           </details>
           {peer.neighbor && routeSources.has(peer.neighbor) &&
-            <button type="button" className="aznet-btn" onClick={() => setSourcePeer(JSON.stringify([peer.neighbor]))}>{t('Inspect captured routes')}</button>}</td>
+            <button type="button" className="aznet-btn" onClick={() => setSourcePeer(JSON.stringify([peer.neighbor]))}>{t('Inspect captured routes')}</button>}
+          {peer.neighbor && !invalidAdvertised && advertisedPeers.includes(peer.neighbor) &&
+            <button type="button" className="aznet-btn" onClick={() => setAdvertisedPeer(peer.neighbor!)}>{t('Inspect advertised routes')}</button>}</td>
           <td>{peer.asn ?? missing}</td><td>{peer.state || missing}</td><td>{peer.routesReceived ?? missing}</td>
         </tr>)}</tbody>
       </table></div> : <p role="status">{t('No neighbor observations were captured for this endpoint. Route rows do not establish session state or counters.')}</p>}
@@ -139,5 +167,24 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
         rows={routes} rejected={learned.rejected} section={routeSection}
         sourcePeer={sourcePeer} onSourcePeerChange={setSourcePeer} selectedPage={scope.page}
         onPageChange={(page) => setSelection({ ...scope, page })} />}
+    {(hasAdvertised || advertisedPeers.length > 0 || advertisedSection) && <details open={scope.advertisedOpen}
+      onToggle={(event) => {
+        const advertisedOpen = event.currentTarget.open
+        if (advertisedOpen !== scope.advertisedOpen) setSelection({ ...scope, advertisedOpen })
+      }}>
+      <summary>{t('Captured gateway advertised routes')}</summary>
+      {advertisedInventory && !advertisedInventory.complete &&
+        <p role="status">{t('Gateway advertisement capture coverage: {0}. Some peers or reads remain unknown.', advertisedInventory.state)}</p>}
+      {!invalidAdvertised && <label className="field">{t('Advertised-to peer')}<select aria-label={t('Advertised-to peer')} value={advertisedPeer}
+        onChange={(event) => setAdvertisedPeer(event.target.value)}>
+        {!advertisedPeers.length && <option value="">{missing}</option>}
+        {advertisedPeers.map((peer) => <option key={peer}>{peer}</option>)}
+      </select></label>}
+      <CapturedGatewayRoutes gateway={gateway} address={address} advertisedTo={advertisedPeer}
+        rows={advertised.rows.filter((route) => (route.localAddress || '') === address)}
+        rejected={advertised.rejected} section={advertisedSection}
+        sourcePeer="" onSourcePeerChange={() => {}} selectedPage={scope.advertisedPage}
+        onPageChange={(advertisedPage) => setSelection({ ...scope, advertisedPage })} />
+    </details>}
   </section>
 }

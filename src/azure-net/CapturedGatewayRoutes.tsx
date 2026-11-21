@@ -1,7 +1,7 @@
 import { t } from '../i18n'
 import type { AzCapturedBgpPeerRoute, AzCaptureSection } from './azure-import'
 
-export default function CapturedGatewayRoutes({ gateway, address, rows, rejected, section, sourcePeer, onSourcePeerChange, selectedPage, onPageChange }: {
+export default function CapturedGatewayRoutes({ gateway, address, rows, rejected, section, sourcePeer, onSourcePeerChange, selectedPage, onPageChange, advertisedTo }: {
   gateway: string
   address?: string
   rows: AzCapturedBgpPeerRoute[]
@@ -11,6 +11,7 @@ export default function CapturedGatewayRoutes({ gateway, address, rows, rejected
   onSourcePeerChange: (value: string) => void
   selectedPage: number
   onPageChange: (page: number) => void
+  advertisedTo?: string
 }) {
   const sourceKey = (route: AzCapturedBgpPeerRoute) => JSON.stringify([route.sourcePeer || ''])
   const sources = [...new Set(rows.map(sourceKey))].sort()
@@ -19,17 +20,21 @@ export default function CapturedGatewayRoutes({ gateway, address, rows, rejected
   const page = Math.min(selectedPage, Math.max(0, Math.ceil(filtered.length / 100) - 1))
   const shown = filtered.slice(page * 100, page * 100 + 100)
   const missing = t('Not captured')
+  const advertised = advertisedTo !== undefined
   const sourceName = (value: string) => (JSON.parse(value) as string[])[0] || t('Source peer not captured')
-  return <section data-testid="captured-gateway-routes">
-    <h4>{t('Captured gateway learned BGP routes')}</h4>
-    <p>{t('Captured learned routes are not advertised routes or simulator best paths. Source peer is not inferred from next hop. ER circuit, primary/secondary edge and physical instance mappings remain unknown.')}</p>
-    <label className="field">{t('Source peer')}<select aria-label={t('Source peer')} value={selected}
+  return <section data-testid={advertised ? 'captured-gateway-advertised-routes' : 'captured-gateway-routes'}>
+    <h4>{t(advertised ? 'Captured gateway advertised BGP routes' : 'Captured gateway learned BGP routes')}</h4>
+    <p>{t(advertised
+      ? 'Advertised-to peer is the explicit capture request, not source peer or next hop. Command-reported advertisements do not prove peer acceptance, policy installation or packet delivery. ER edge and physical instance mappings remain unknown.'
+      : 'Captured learned routes are not advertised routes or simulator best paths. Source peer is not inferred from next hop. ER circuit, primary/secondary edge and physical instance mappings remain unknown.')}</p>
+    {!advertised && <label className="field">{t('Source peer')}<select aria-label={t('Source peer')} value={selected}
       onChange={(event) => onSourcePeerChange(event.target.value)}>
       <option value="">{t('All captured source peers')}</option>
       {sources.map((value) => <option key={value} value={value}>{sourceName(value)}</option>)}
-    </select></label>
+    </select></label>}
     {shown.length > 0 ? <div className="table-scroll"><table className="aznet-route-table">
-      <caption>{gateway} · {address || t('Unassigned (no local endpoint captured)')} · {t('Learned from peer')}</caption>
+      <caption>{gateway} · {address || t('Unassigned (no local endpoint captured)')} · {advertised
+        ? t('Advertised to peer {0}', advertisedTo || missing) : t('Learned from peer')}</caption>
       <thead><tr><th>{t('Prefix')}</th><th>{t('Next hop')}</th><th>{t('AS path')}</th><th>{t('Source peer')}</th></tr></thead>
       <tbody>{shown.map((route, index) => <tr key={index}>
         <td>{route.network}<details><summary>{t('Captured route attributes')}</summary>
