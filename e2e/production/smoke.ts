@@ -464,6 +464,9 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       expect(packet.packet!.reply.routing).toBe('not-assessed')
     }
 
+    const cachedCopy = page.waitForEvent('download')
+    await downloadTopologyCopy(page)
+    await cachedCopy
     await context.setOffline(true)
     const beforeDiscovery = await page.evaluate((key) => localStorage.getItem(key), storageKey)
     const design = JSON.parse(beforeDiscovery!)

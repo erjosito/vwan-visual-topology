@@ -2,3 +2,4 @@
 .document-artifact-details .presentation-group-content { max-width: min(420px, calc(100vw - 24px)); overflow-wrap: anywhere; }
 .document-command-dialog form > label { display: block; margin: 12px 0; }
 .document-command-dialog form > label input { max-width: 100%; }
+.document-dialog-error { position: fixed; z-index: 1800; inset: 16px 16px auto; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); }

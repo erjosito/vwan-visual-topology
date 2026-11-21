@@ -116,6 +116,9 @@ export function createDocumentCommands({
     const operation = async (): Promise<CommandResult> => {
       try {
         if (!live) return 'revoked'
+        if (cloudChoice && (choice.accountId !== getAccountId() || accountTicket !== accountGeneration)) {
+          throw new Error('The cloud account changed before saving.')
+        }
         let authorized = choice
         if (choice.kind === 'file' && choice.authority === undefined) {
           const renewed = await authorizeFile!(choice)

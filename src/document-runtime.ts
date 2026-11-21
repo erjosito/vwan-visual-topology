@@ -4,7 +4,6 @@ import type { createBrowserDocumentStore } from './browser-document-store'
 import { documentArtifactKey, parseArtifactMetadata } from './document-metadata'
 import type { CloudSessionValue } from './cloud/useCloudSession'
 import type { WorkspaceDocument } from './workspace-documents'
-import { randomUUID } from './random-id'
 
 export function createDocumentRuntime(getCloud: () => CloudSessionValue | undefined, language: () => 'en' | 'ja',
   persistent: () => boolean) {
@@ -20,10 +19,11 @@ export function createDocumentRuntime(getCloud: () => CloudSessionValue | undefi
   })
   const bridge = window.desktopSimulator
   let desktop: Promise<ArtifactWriter> | undefined
+  let cloudWriter: Promise<ArtifactWriter> | undefined
   const attempts = new Map<string, string>()
   const owners = new Map<string, WorkspaceDocument>()
   const write: ArtifactWriter = async request => {
-    const { choice, documentId, content } = request
+    const { choice, documentId } = request
     const document = owners.get(documentId)
     const requireLive = () => {
       if (!document || owners.get(documentId) !== document) throw new Error('The document closed before saving.')
@@ -44,35 +44,13 @@ export function createDocumentRuntime(getCloud: () => CloudSessionValue | undefi
       requireLive()
       return writer(request)
     }
-    const [{ CloudHttpError }, { parseCloudTopology }] = await Promise.all([import('./cloud/client'), import('./cloud/contracts')])
-    requireLive()
     const cloud = getCloud(), api = cloud?.api
     if (!api || cloud.account?.id !== choice.accountId) throw new Error('Sign in to the saved cloud account before saving.')
-    const value = parseCloudTopology({ version: 1, name: choice.name, topology: JSON.parse(content) })
-    if (!window.confirm(language() === 'ja'
-      ? 'このトポロジを自分のクラウドにアップロードしますか。許可のない機密データや秘密情報を保存しないでください。'
-      : 'Upload this topology to your private cloud library? Do not upload secrets or confidential data without approval.')) return null
-    const attemptKey = `${documentId}:${choice.accountId}`
-    const id = choice.kind === 'cloud' ? choice.id : attempts.get(attemptKey) ?? randomUUID()
-    if (choice.kind === 'choose-cloud') attempts.set(attemptKey, id)
-    const ticket = document?.save.beginArtifact(id, choice.accountId)
-    if (!document || !ticket) throw new Error('The document closed or another cloud operation is pending.')
-    let etag: string
-    try {
-      try { etag = await api.saveTopology(id, value, choice.kind === 'cloud' ? choice.etag : null) }
-      catch (error) {
-        if (choice.kind !== 'choose-cloud' || !(error instanceof CloudHttpError) || error.status !== 412) throw error
-        const found = await api.getTopology(id)
-        if (!found || JSON.stringify(found.value) !== JSON.stringify(value)) throw error
-        etag = found.etag
-      }
-      if (getCloud()?.api !== api || getCloud()?.account?.id !== choice.accountId) throw new Error('The cloud account changed while saving.')
-    } catch (error) {
-      document.save.failed(ticket, error instanceof CloudHttpError && error.status === 412)
-      throw error
-    }
-    attempts.delete(attemptKey)
-    return { confirmed: true, destination: { kind: 'cloud', accountId: choice.accountId, id, name: value.name, etag } }
+    cloudWriter ??= import('./cloud/document-writer').then(module => module.createCloudDocumentWriter(getCloud, language, owners, attempts))
+    const writer = await cloudWriter
+    requireLive()
+    if (getCloud()?.api !== api || getCloud()?.account?.id !== choice.accountId) throw new Error('The cloud account changed before saving.')
+    return writer(request)
   }
   return {
     browser: {

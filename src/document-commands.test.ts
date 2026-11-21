@@ -164,6 +164,14 @@ describe('document artifact commands', () => {
     expect(await commands.saveAs({ kind: 'choose-cloud', accountId: 'alice', name: 'Other' })).toBe('cancelled')
     expect(commands.getSnapshot().destination).toEqual(cloud)
   })
+  it('rejects a queued cloud save when the account cycles before writing begins', async () => {
+    const { commands, write, account } = setup()
+    const saving = commands.saveAs(cloud)
+    account('bob')
+    account('alice')
+    expect(await saving).toBe('failed')
+    expect(write).not.toHaveBeenCalled()
+  })
 
   it('restores the saved model digest without restoring file authority or treating newer recovered edits as saved', async () => {
     const { commands, write, edit } = setup()

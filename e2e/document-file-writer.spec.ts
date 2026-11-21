@@ -1,6 +1,20 @@
 import { expect, test } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
+test('a failed document dialog chunk keeps the active design editable', async ({ page }) => {
+  await page.route('**/DocumentDialogs.tsx', route => route.abort())
+  await page.goto('/?mode=vwan')
+  const name = page.getByLabel('Topology name', { exact: true })
+  await name.fill('Keep this design')
+  await page.keyboard.press('Control+s')
+  await expect(page.locator('.document-dialog-error')).toContainText('Your design stays open')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.document-dialog-error')).toHaveCount(0)
+  await expect(name).toHaveValue('Keep this design')
+  await name.fill('Still editable')
+  await expect(page.getByRole('tab', { name: 'Still editable', exact: true })).toBeVisible()
+})
+
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   for (const language of ['en', 'ja']) {
     test(`${mode} ${language}: document destination dialog fits, announces and supports keyboard cancellation`, async ({ page }) => {

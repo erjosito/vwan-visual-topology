@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useLanguage } from './i18n'
-import { DestinationDialog } from './DocumentActions'
+import { DestinationDialog, DocumentDialogBoundary } from './DocumentActions'
 import type { WorkspaceDocument } from './workspace-documents'
 
 export function CloseDocumentsDialog({ documents, onClose, onDiscard }: {
@@ -37,7 +37,8 @@ export function CloseDocumentsDialog({ documents, onClose, onDiscard }: {
       onDiscard()
     } finally { setBusy(false) }
   }
-  if (choosing?.commands) return <DestinationDialog commands={choosing.commands}
+  if (choosing?.commands) return <DocumentDialogBoundary onClose={() => setChoosing(undefined)} language={language}>
+    <Suspense fallback={null}><DestinationDialog commands={choosing.commands}
     name={choosing.history?.topology.name ?? 'Topology'} onClose={() => {
       const saved = choosing.commands?.canClose()
       setChoosing(undefined)
@@ -47,7 +48,7 @@ export function CloseDocumentsDialog({ documents, onClose, onDiscard }: {
       if (result === 'downloaded') setNotice(text(
         'A download cannot confirm a durable save. Keep the tab open or explicitly discard it after checking your file.',
         'ダウンロードでは保存を確認できません。ファイルを確認してタブを保持するか、明示的に破棄してください。'))
-    }} />
+    }} /></Suspense></DocumentDialogBoundary>
   return <dialog ref={dialog} className="object-dialog" aria-labelledby="close-documents-title"
     onCancel={event => { event.preventDefault(); if (!busy) onClose() }}>
     <h2 id="close-documents-title">{text('Save changes before closing?', '閉じる前に変更を保存しますか?')}</h2>

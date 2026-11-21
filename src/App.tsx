@@ -19,7 +19,6 @@ import { TopologyDiagram } from './TopologyDiagram'
 import type { DiagramContextMenu } from './TopologyDiagram'
 import type { ContextAction } from './TopologyContextMenu'
 import type { EditorRequest } from './TopologyObjectEditor'
-import { ErLocationInfoModal } from './ErLocationInfoModal'
 import type { ErCircuitSku } from './er-locations-catalog'
 import { CanvasOverlay } from './CanvasOverlay'
 import { hubGatewayConnections } from './hub-gateways'
@@ -57,6 +56,7 @@ const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ d
 const RouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.RouteMapsPanel })))
 const BgpNeighborsPanel = lazy(() => import('./BgpNeighborsPanel'))
 const FlowExportControls = lazy(() => import('./FlowExportControls').then(module => ({ default: module.FlowExportControls })))
+const ErLocationInfoModal = lazy(() => import('./ErLocationInfoModal').then(module => ({ default: module.ErLocationInfoModal })))
 const SampleGallery = lazy(() => import('./SampleGallery').then((module) => ({ default: module.VwanSampleGallery })))
 const HubCapabilitiesDialog = lazy(() => import('./HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('./ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
@@ -105,7 +105,7 @@ function App() {
   const [clearRequested, setClearRequested] = useState(false)
   const [cloneVnetId, setCloneVnetId] = useState<string>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
-  const [erLocationModal, setErLocationModal] = useState<{ open: boolean; peeringLocation?: string; sku?: ErCircuitSku; targetAzureRegion?: string; erLocationId?: string }>({ open: false })
+  const [erLocationModal, setErLocationModal] = useState<{ open: boolean; hasOpened?: boolean; peeringLocation?: string; sku?: ErCircuitSku; targetAzureRegion?: string; erLocationId?: string }>({ open: false })
   const [panel, setPanel] = useWorkspaceEditorState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>('vwan.panel')
   const [comparisonSession, setComparisonSession] = useState<ComparisonSession>()
   const [diagnosticHighlight, setDiagnosticHighlight] = useWorkspaceEditorState<{ revision: string; findingId: string; paths: GroupPath[] }>('vwan.diagnosticHighlight')
@@ -577,7 +577,7 @@ function App() {
             const loc = topology.erLocations?.find((l) => l.id === contextSelection.id)
             const hubLink = topology.erLinks?.find((l) => l.locationId === contextSelection.id && l.hubId)
             const hub = hubLink ? topology.hubs.find((h) => h.id === hubLink.hubId) : undefined
-            setErLocationModal({ open: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
+            setErLocationModal({ open: true, hasOpened: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
           } },
         { label: t("Connect to hub"), disabled: !topology.hubs.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id }) },
         { label: t("Connect to site"), disabled: !topology.sites.length, run: () => setEditorRequest({ kind: 'erLink', locationId: contextSelection.id, siteId: topology.sites[0]?.id }) },
@@ -587,7 +587,7 @@ function App() {
             const link = topology.erLinks?.find((l) => l.id === contextSelection.id)
             const loc = link ? topology.erLocations?.find((l) => l.id === link.locationId) : undefined
             const hub = link?.hubId ? topology.hubs.find((h) => h.id === link.hubId) : undefined
-            setErLocationModal({ open: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
+            setErLocationModal({ open: true, hasOpened: true, peeringLocation: loc?.peeringLocation ?? loc?.name, sku: loc?.sku ?? 'Standard', targetAzureRegion: hub?.region, erLocationId: loc?.id })
           } },
         { label: topology.erLinks?.find((link) => link.id === contextSelection.id)?.enabled ? t("Disable connection") : t("Enable connection"), run: () => update((next) => { const link = next.erLinks!.find((link) => link.id === contextSelection.id)!; link.enabled = !link.enabled }) },
       ] : []),
@@ -716,7 +716,7 @@ function App() {
         {selection?.kind === 'hub' && <button type="button" onClick={() => setSnatHubId(selection.id)}>{t('Firewall SNAT')}</button>}
         <PresentationGroup label={t('Explore')}>
           <span className="local-badge">{t("Local-first · no Azure credentials")}</span>
-          <button onClick={() => setErLocationModal({ open: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button>
+          <button onClick={() => setErLocationModal({ open: true, hasOpened: true })} data-testid="vwan-topbar-er-locations-btn">{t("ER Locations")}</button>
           <button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button>
           {!workspaceSession?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button>}
         </PresentationGroup>
@@ -739,7 +739,7 @@ function App() {
       onLoad={loadGallerySample} onExport={() => exportTopology()}
       onOpenCurriculum={workspaceSession?.setLearningView ? () => workspaceSession.setLearningView?.({ open: true }) : undefined}
       onClose={closePanel} /></Suspense>}
-    <ErLocationInfoModal
+    {erLocationModal.hasOpened && <Suspense fallback={null}><ErLocationInfoModal
       isOpen={erLocationModal.open}
       initialLocationName={erLocationModal.peeringLocation}
       currentSku={erLocationModal.sku}
@@ -754,7 +754,7 @@ function App() {
           }
         })
       } : undefined}
-    />
+    /></Suspense>}
     <main>
     <WorkspaceTabPanel>
       <section className="workspace-heading"><div><p className="eyebrow">{t("NETWORK WORKSPACE")}</p><input className="topology-name" aria-label={t("Topology name")} maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong>  {t("hubs")}</span><span><strong>{topology.spokes.length}</strong>  {t("spokes")}</span><span><strong>{topology.sites.length - nvaSiteIds.size}</strong>  {t("sites")}</span>{nvaSiteIds.size > 0 && <span><strong>{nvaSiteIds.size}</strong>  {t("spoke NVAs")}</span>}{!!topology.erLocations?.length && <span><strong>{topology.erLocations.length}</strong>  {t("ER locations")}</span>}</div></section>
@@ -835,7 +835,7 @@ function App() {
             <p><a href="https://learn.microsoft.com/azure/virtual-wan/about-virtual-hub-routing-preference" target="_blank" rel="noreferrer">{t("Microsoft hub routing preference")}</a></p><p><a href="https://learn.microsoft.com/azure/virtual-wan/route-maps-about" target="_blank" rel="noreferrer">{t("Microsoft route-map behavior and limitations")}</a></p>
             <button onClick={() => reset(validateTopology(structuredClone(example)))}>{t("Load example (replaces workspace)")}</button>
           </CanvasOverlay>}
-          {editorRequest && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onOpenErLocationInfo={(peeringLocation, sku, hubRegion, erLocationId) => setErLocationModal({ open: true, peeringLocation, sku, targetAzureRegion: hubRegion, erLocationId })} onAddNva={(spokeId) => {
+          {editorRequest && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><TopologyObjectEditor key={`${editorRequest.kind}:${editorRequest.id ?? 'new'}:${!!editorRequest.deleting}`} topology={topology} request={editorRequest} onClose={() => setEditorRequest(undefined)} onRouteMaps={openRouteMaps} onStaticRouting={openStaticRouting} onOpenErLocationInfo={(peeringLocation, sku, hubRegion, erLocationId) => setErLocationModal({ open: true, hasOpened: true, peeringLocation, sku, targetAzureRegion: hubRegion, erLocationId })} onAddNva={(spokeId) => {
             const existing = topology.connections.find((c) => c.transport === 'SpokeNVA' && c.spokeId === spokeId)
             setEditorRequest({ kind: 'site', id: existing?.siteId, spokeId })
           }} onSave={(next, value) => {
