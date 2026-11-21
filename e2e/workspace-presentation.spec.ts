@@ -469,6 +469,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
 }
 
 for (const mode of ['vwan', 'full'] as const) {
+  const rootId = mode === 'vwan' ? 'vwan-app' : 'aznet-app'
   const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
   const sample = mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'
 

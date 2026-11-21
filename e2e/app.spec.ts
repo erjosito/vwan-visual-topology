@@ -2241,7 +2241,7 @@ test('clearing requires confirmation, persists an empty workspace and allows sta
   await page.goto('/'); await importTopology(page, topology)
   const original = await readTopology(page)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
-  await expect(dialog(page, 'Clear topology')).toContainText('cannot be undone')
+  await expect(dialog(page, 'Clear topology')).toContainText('A blank topology will open in a new document.')
   await dialog(page, 'Clear topology').getByRole('button', { name: 'Cancel clearing', exact: true }).click()
   expect(await readTopology(page)).toEqual(original)
   await page.getByRole('button', { name: 'Clear topology', exact: true }).click()
