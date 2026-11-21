@@ -83,6 +83,9 @@ test('competing browser windows edit temporary copies without overwriting the ow
     }))).toEqual(original)
     await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Owner design')
     await page.close()
+    await expect.poll(() => other.evaluate(async () =>
+      (await navigator.locks.query()).held?.some(lock => lock.name === 'aznetsim-workspace-profile-v1') ?? false,
+    )).toBe(false)
     await other.reload()
     await expect(other.getByLabel('Topology name', { exact: true })).toHaveValue('Owner design')
     await expect(other.getByText('Temporary', { exact: true })).toHaveCount(0)
@@ -93,6 +96,7 @@ for (const partial of [false, true]) test(`${partial ? 'partial' : 'unavailable'
   const topology = { ...example, name: 'Stored original' }
   await page.addInitScript(({ topology, partial }) => {
     Object.defineProperty(navigator, 'locks', { value: partial ? {} : undefined })
+    Object.defineProperty(crypto, 'randomUUID', { value: undefined })
     localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
   }, { topology, partial })
   await page.goto('/?mode=vwan')

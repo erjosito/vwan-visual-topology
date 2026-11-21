@@ -15,6 +15,7 @@ export type WorkspaceEditorHistory =
       recovery: { source: string; raw: string; message: string }[]; recoveryAcknowledged: boolean; pendingUrlSample: string }
 
 export const WorkspaceSessionContext = createContext<{
+  tabId?: string
   openLibrary: () => void
   presentationPreview?: boolean
   setPresentationPreview?: (preview: boolean) => void

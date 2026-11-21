@@ -1,5 +1,6 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { t, useLanguage } from './i18n'
+import { randomUUID } from './random-id'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
 import { WorkspaceSessionContext, type WorkspaceEditorHistory } from './workspace-context'
@@ -306,6 +307,13 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       return true
     } finally { session.release() }
   }
+  const syncProviderUrl = (provider: WorkspaceProvider, preserveQuery = false) => {
+    const url = new URL(location.href)
+    if (ownership.current.current === 'owned') url.searchParams.delete('mode')
+    else url.searchParams.set('mode', provider === 'vwan' ? 'vwan' : 'full')
+    if (!preserveQuery) url.searchParams.delete('sample')
+    window.history.replaceState(null, '', url)
+  }
   const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown, preserveQuery = false) => {
     if (!visibleRef.current) return false
     if (!preserveQuery && active && !confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return false
@@ -320,7 +328,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       if (raw === undefined) throw new Error('Topology data is unavailable.')
       let name = 'Untitled topology'
       try { const parsed = JSON.parse(raw); if (typeof (parsed.topology ?? parsed).name === 'string') name = (parsed.topology ?? parsed).name.slice(0, 120) } catch {}
-      const tab = { id: crypto.randomUUID(), provider, name }
+      const tab = { id: randomUUID(), provider, name }
       selectWorkspace(storage, provider)
       const legacy = ownership.current.current === 'owned' && preserveQuery && !tabsRef.current.tabs.length && !new URLSearchParams(location.search).has('sample')
       const next = addWorkspaceTab(storage, tabsRef.current, tab, raw)
@@ -350,10 +358,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       setActive((current) => ({ id: tab.id, provider, revision: (current?.revision ?? 0) + 1 }))
       setLibraryOpen(false); setNotice(ownership.current.current !== 'owned'
         ? 'Workspace storage is unavailable. Save a file or cloud copy before closing this session.' : '')
-      const url = new URL(location.href)
-      url.searchParams.delete('mode')
-      if (!preserveQuery) url.searchParams.delete('sample')
-      window.history.replaceState(null, '', url)
+      syncProviderUrl(provider, preserveQuery)
       return true
     } catch {
       setNotice(selectionFailure)
@@ -380,6 +385,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
           rootStorage.setItem(workspaceStorageKeys[tab.provider], raw)
         } catch {}
       }
+      syncProviderUrl(tab.provider)
       return true
     } catch {
       setNotice('The workspace tab could not be restored. Its stored data has not been replaced.')
@@ -444,7 +450,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
         return
       }
       const raw = rootStorage.getItem(workspaceTabsKey)
-      if (raw !== null) rootStorage.setItem(`network-simulator:workspace-tabs:recovery:v1:${crypto.randomUUID()}`, raw)
+      if (raw !== null) rootStorage.setItem(`network-simulator:workspace-tabs:recovery:v1:${randomUUID()}`, raw)
       rootStorage.removeItem(workspaceTabsKey)
       window.location.reload()
     } catch { setNotice(text('The damaged tab list could not be archived. Nothing was reset; download the recovery data before freeing storage.', '破損したタブ一覧をアーカイブできませんでした。リセットしていません。ストレージを空ける前に復元用データをダウンロードしてください。')) }
@@ -461,7 +467,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
     }
     if (ownership.current.current !== 'owned' && current.session) {
       const originals = current.session
-      const copies = originals.tabs.map(tab => ({ ...tab, id: crypto.randomUUID() }))
+      const copies = originals.tabs.map(tab => ({ ...tab, id: randomUUID() }))
       for (let index = 0; index < copies.length; index++) {
         for (const field of ['topology', 'diagnostics'] as const) {
           const raw = storage.getItem(workspaceTabKey(originals.tabs[index], field))
@@ -498,9 +504,6 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       : tabsRef.current.tabs.find(tab => tab.id === tabsRef.current.activeId)
     if (selected && !params.has('sample')) {
       initialized.current = activateTab(selected, selected.id !== tabsRef.current.activeId)
-      const url = new URL(location.href)
-      url.searchParams.delete('mode')
-      window.history.replaceState(null, '', url)
       return
     }
     const initialProvider = restored?.active ? restored.returnProvider : startup.provider
@@ -587,6 +590,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
     return () => window.removeEventListener('storage', changed)
   }, [active, activeSave])
   return <WorkspaceSessionContext value={{
+    tabId: !practicing ? active?.id : undefined,
     presentationPreview, setPresentationPreview: (value) => {
       setPresentationPreview(value)
       try { localStorage.setItem('aznet-ui-preview:v1', String(value)) } catch { /* Keep the choice in this tab. */ }
@@ -663,8 +667,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       <CanvasMaximizeButton />
       {(practice || practiceNotice) && <Suspense fallback={null}><PracticeWorkspaceBar active={practicing}
         notice={practiceNotice} onReturn={leavePractice} onResume={practice ? resumePractice : undefined} onDiscard={discardPractice} /></Suspense>}
-      <div id="workspace-design-panel" role={!practicing && active ? 'tabpanel' : undefined}
-        aria-labelledby={!practicing && active ? `workspace-tab-${active.id}` : undefined} tabIndex={!practicing && active ? 0 : undefined}>
+      <div id="workspace-design-container">
       {!practiceReady && <p role="status">{t('Loading workspace…')}</p>}
       {visible && practiceReady && (active || practicing) && provider && <>
         {window.desktopSimulator && <Suspense fallback={null}>

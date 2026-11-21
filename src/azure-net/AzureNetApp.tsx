@@ -18,6 +18,7 @@ import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
 import { ConfigurationEditStatus, InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
 import { previewSubnetActions, previewVnetActions } from '../context-actions'
 import { useWorkspaceEditorState, useWorkspaceSession, useWorkspaceStorage } from '../workspace-context'
+import { WorkspaceTabPanel } from '../WorkspaceTabs'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
@@ -3122,6 +3123,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
       {/* Main Split Workspace */}
       <div className="aznet-workspace" role="main">
+        <WorkspaceTabPanel>
         {/* Left: Interactive Compound Topology Canvas */}
         <section className="aznet-canvas-column">
           <div className="aznet-scenario-banner">
@@ -5494,6 +5496,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             )}
           </div>
         </CanvasOverlay>}
+        </WorkspaceTabPanel>
       </div>
 
       {udrManager && <Suspense fallback={null}><UdrTableManager topology={topology} request={udrManager} commit={commitTopology}

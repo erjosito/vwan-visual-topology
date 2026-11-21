@@ -1,8 +1,17 @@
-import { useRef, useSyncExternalStore } from 'react'
+import { useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useLanguage } from './i18n'
+import { useWorkspaceSession } from './workspace-context'
 import { workspaceTabsLimit, type WorkspaceTab } from './workspace-tabs'
 import type { DocumentSaveState } from './cloud/document-state'
 import './workspace-tabs.css'
+
+export function WorkspaceTabPanel({ children }: { children: ReactNode }) {
+  const id = useWorkspaceSession()?.tabId
+  return <div className="workspace-tab-panel" id={id ? 'workspace-design-panel' : undefined}
+    role={id ? 'tabpanel' : undefined} aria-labelledby={id ? `workspace-tab-${id}` : undefined}>
+    {children}
+  </div>
+}
 
 function TabButton({ tab, selected, save, onActivate }: {
   tab: WorkspaceTab; selected: boolean; save: DocumentSaveState; onActivate: (tab: WorkspaceTab) => void
