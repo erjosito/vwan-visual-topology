@@ -21,9 +21,10 @@ async function fingerprint(value: unknown) {
 }
 
 export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
-  digest = fingerprint, showInactive = false) {
+  digest = fingerprint, documentOwned = false) {
   let accountId: string | undefined, provider: WorkspaceProvider | undefined, topology: unknown
-  let active = true, epoch = 0, sequence = 0
+  let active = true, revoked = false, epoch = 0, sequence = 0
+  let draftId = crypto.randomUUID()
   let local: { topology: unknown; state: DocumentSaveSnapshot['local'] } | undefined
   let binding: Association | undefined, restored: Association | undefined
   let verification: 'confirmed' | 'changed' | 'missing' | 'unavailable' = 'confirmed'
@@ -43,7 +44,7 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
   } catch { /* Association recovery must never prevent access to the local design. */ }
   const remove = () => { try { storage().removeItem(cloudDocumentKey) } catch {} }
   const publish = () => {
-    const cloud = (active || showInactive) && binding?.accountId === accountId && binding ? {
+    const cloud = (active || documentOwned) && binding?.accountId === accountId && binding ? {
       accountId: binding.accountId, id: binding.id, name: binding.name, etag: binding.etag,
       state: verification !== 'confirmed' ? verification
         : hashFailed || !binding.digest ? 'unknown' : !currentDigest ? active ? 'checking' : 'unknown'
@@ -56,7 +57,7 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
     for (const listener of listeners) listener()
   }
   const check = () => {
-    if (!active || !binding || topology === undefined) { publish(); return }
+    if (revoked || (!active && !documentOwned) || !binding || topology === undefined) { publish(); return }
     const current = topology, ticket = epoch
     currentDigest = undefined; hashFailed = false
     publish()
@@ -67,16 +68,20 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
     })
   }
   const reset = () => {
-    epoch++; pending = undefined; operation = 'idle'
+    epoch++; pending = undefined; operation = 'idle'; draftId = crypto.randomUUID()
     topology = undefined; provider = undefined; local = undefined
     binding = undefined; restored = undefined; currentDigest = undefined; hashFailed = false; retained = false
     remove(); publish()
   }
   const valid = (ticket: { epoch: number; sequence: number }) =>
-    active && ticket.epoch === epoch && ticket.sequence === sequence
+    !revoked && (active || documentOwned) && ticket.epoch === epoch && ticket.sequence === sequence
   return {
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     getSnapshot: () => snapshot,
+    newCopyId: () => draftId,
+    revoke() {
+      epoch++; revoked = true; active = false; pending = undefined; operation = 'idle'; publish()
+    },
     scope(owner: string | undefined) {
       return owner && owner === accountId && active ? { epoch, sequence } : undefined
     },
@@ -89,8 +94,10 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       retained = !!binding; restored = undefined; verification = 'confirmed'; check()
     },
     setActive(next: boolean) {
-      if (next === active) return
-      epoch++; active = next; pending = undefined; operation = 'idle'; check()
+      if (revoked || next === active) return
+      active = next
+      if (!documentOwned) { epoch++; pending = undefined; operation = 'idle' }
+      check()
     },
     observe(value: unknown, kind: WorkspaceProvider) {
       if (!active || topology === value && provider === kind) return
@@ -118,6 +125,7 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       if (!valid(ticket) || accountId !== source.accountId) return false
       binding = { ...source, version: 1, provider: kind, digest: hash }
       restored = undefined; verification = 'confirmed'; operation = 'idle'; pending = undefined
+      if (source.id === draftId) draftId = crypto.randomUUID()
       retained = false; remove()
       if (hash) {
         try { storage().setItem(cloudDocumentKey, JSON.stringify(binding)); retained = true } catch { remove() }

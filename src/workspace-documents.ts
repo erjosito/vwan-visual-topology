@@ -36,7 +36,7 @@ export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent =
     const state = createDocumentSaveState(() => ({
       getItem: scoped.getItem,
       setItem: (key, value) => {
-        scoped.setItem(key, value)
+        association.setItem(key, value)
         if (!persistent()) throw new Error('Workspace association is retained only in memory.')
       },
       removeItem: association.removeItem,
@@ -78,13 +78,13 @@ export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent =
     },
     forget(id: string) {
       if (activeId === id) suspend()
-      documents.get(id)?.save.setActive(false)
+      documents.get(id)?.save.revoke()
       documents.delete(id)
     },
     dispose() {
       suspend()
       disposed = true
-      for (const document of documents.values()) document.save.setActive(false)
+      for (const document of documents.values()) document.save.revoke()
       documents.clear()
     },
   }

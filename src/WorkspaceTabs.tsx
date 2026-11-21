@@ -63,6 +63,7 @@ export function WorkspaceTabs({ tabs, activeId, temporary, getSave, onActivate, 
     </div>
     {onClose && selected && <button type="button" className="workspace-tab-close"
       aria-label={text(`Close topology: ${selected.name}`, `トポロジを閉じる: ${selected.name}`)}
+      title={text(`Close topology: ${selected.name}`, `トポロジを閉じる: ${selected.name}`)}
       onClick={() => onClose(selected)}>&#215;</button>}
     <button type="button" className="workspace-tab-new" onClick={onNew} disabled={tabs.length >= workspaceTabsLimit}
       title={tabs.length >= workspaceTabsLimit ? text('Close a tab to open another (maximum 16). Closed designs remain in recovery.', '別のタブを開くにはタブを閉じてください (最大16)。閉じたデザインは復元用に保持します。') : undefined}

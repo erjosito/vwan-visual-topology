@@ -153,6 +153,31 @@ test('damaged tab-list recovery archives metadata without deleting saved native 
   expect(archives).toContain('{"version":99,"tabs":[]}')
 })
 
+test('legacy cloud identity migrates once into its own tab and cannot attach to a later design', async ({ page }) => {
+  const association = JSON.stringify({ version: 1, provider: 'vwan', accountId: 'saved-owner',
+    id: '33333333-3333-4333-8333-333333333333', name: 'Original cloud save', etag: '"one"', digest: '0'.repeat(64) })
+  await page.addInitScript(({ topology, association }) => {
+    if (sessionStorage.getItem('legacy-cloud-seeded')) return
+    sessionStorage.setItem('legacy-cloud-seeded', 'true')
+    localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
+    sessionStorage.setItem('network-simulator:cloud-document:v1', association)
+  }, { topology: example, association })
+  await page.goto('/?mode=vwan')
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue(example.name)
+  const originalId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
+  expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:cloud`), originalId)).toBe(association)
+  expect(await page.evaluate(() => sessionStorage.getItem('network-simulator:cloud-document:v1'))).toBeNull()
+  await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+    name: 'independent.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...example, name: 'Independent design' })),
+  })
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Independent design')
+  expect(await page.evaluate(() => {
+    const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId
+    return localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:cloud`)
+  })).toBeNull()
+  expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:cloud`), originalId)).toBe(association)
+})
+
 test('topology tabs support cross-provider keyboard activation and narrow layout without clipping the mixed canvas', async ({ page }) => {
   await page.goto('/?mode=vwan')
   await page.getByLabel('Topology name', { exact: true }).fill('Native design')

@@ -59,7 +59,7 @@ describe('workspace document ownership', () => {
     expect(backing.getItem(workspaceStorageKeys.vwan)).toBe(original)
   })
 
-  it('keeps cloud identity with its document and rejects a delayed confirmation after switching', async () => {
+  it('finishes a delayed cloud save only in its live document after switching', async () => {
     const backing = storage(), documents = createWorkspaceDocuments(backing)
     documents.setAccount(source.accountId)
     const a = documents.activate(first), value = history('First')
@@ -68,8 +68,9 @@ describe('workspace document ownership', () => {
     const pending = a.save.confirmed(ticket, source, value.topology, 'vwan')
     const b = documents.activate(second)
     b.remember(history('Second'))
-    expect(await pending).toBe(false)
-    expect(backing.getItem(workspaceTabKey(first, 'cloud'))).toBeNull()
+    expect(a.save.getSnapshot().operation).toBe('saving')
+    expect(await pending).toBe(true)
+    expect(backing.getItem(workspaceTabKey(first, 'cloud'))).toContain(source.id)
     expect(backing.getItem(workspaceTabKey(second, 'cloud'))).toBeNull()
     documents.activate(first)
     const retry = a.save.begin(source.id, source.accountId)!
@@ -92,7 +93,7 @@ describe('workspace document ownership', () => {
     expect(a.save.getSnapshot().cloud).toBeUndefined()
   })
 
-  it('does not cancel a save when activating the same tab, but suspension invalidates it', async () => {
+  it('keeps a save busy across activation and suspension without accepting inactive editor writes', async () => {
     const documents = createWorkspaceDocuments(storage())
     documents.setAccount(source.accountId)
     const a = documents.activate(first), value = history('First')
@@ -102,9 +103,33 @@ describe('workspace document ownership', () => {
     expect(await a.save.confirmed(ticket, source, value.topology, 'vwan')).toBe(true)
     const next = a.save.begin(source.id, source.accountId)!
     documents.suspend()
-    expect(await a.save.confirmed(next, source, value.topology, 'vwan')).toBe(false)
+    expect(a.save.getSnapshot().operation).toBe('saving')
+    documents.activate(first)
+    expect(a.save.begin(source.id, source.accountId)).toBeUndefined()
+    documents.suspend()
+    expect(await a.save.confirmed(next, source, value.topology, 'vwan')).toBe(true)
     expect(a.remember(history('Practice must not replace the design'))).toBe(false)
     expect(documents.activate(first).history).toBe(value)
+  })
+
+  it('retains a new-copy attempt identity across modal/tab changes and revokes closed completions', async () => {
+    const backing = storage(), documents = createWorkspaceDocuments(backing)
+    documents.setAccount(source.accountId)
+    const a = documents.activate(first), value = history('First')
+    a.remember(value)
+    const id = a.save.newCopyId()
+    documents.activate(second)
+    expect(documents.activate(first).save.newCopyId()).toBe(id)
+    const ticket = a.save.begin(id, source.accountId)!
+    const pending = a.save.confirmed(ticket, { ...source, id }, value.topology, 'vwan')
+    documents.forget(first.id)
+    const reopened = documents.activate(first)
+    reopened.remember(value)
+    a.save.setActive(true)
+    expect(a.save.begin(id, source.accountId)).toBeUndefined()
+    expect(await pending).toBe(false)
+    expect(reopened.save.getSnapshot().cloud).toBeUndefined()
+    expect(backing.getItem(workspaceTabKey(first, 'cloud'))).toBeNull()
   })
 
   it('revokes forgotten owners even when the same stored document is reopened', () => {

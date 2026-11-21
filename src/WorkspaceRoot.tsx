@@ -327,7 +327,10 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       if (legacy) {
         try {
           const saved = sessionStorage.getItem(cloudDocumentKey)
-          if (saved && saved.length <= 4096 && JSON.parse(saved).provider === provider) storage.setItem(workspaceTabKey(tab, 'cloud'), saved)
+          if (saved && saved.length <= 4096 && JSON.parse(saved).provider === provider) {
+            storage.setItem(workspaceTabKey(tab, 'cloud'), saved)
+            sessionStorage.removeItem(cloudDocumentKey)
+          }
         } catch {}
         if (provider === 'vwan') {
           try {
