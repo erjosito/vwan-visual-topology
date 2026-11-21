@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { waitForWorkspaceSample } from './workspace-storage-helpers'
 import { example } from '../src/model'
 import { sampleHybridVwanAndHubSpoke, sampleArsSdwanNvaCoexistence } from '../src/azure-net/model'
 import AxeBuilder from '@axe-core/playwright'
@@ -112,6 +113,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     test.slow()
     await page.setViewportSize({ width: 1440, height: 1000 })
     await page.goto(`/?mode=${mode}&sample=${mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'}`)
+    await waitForWorkspaceSample(page, mode === 'vwan' ? 'vwan' : 'azure-net', mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr')
     const svg = page.locator(mode === 'vwan' ? 'svg.diagram' : '[data-testid="aznet-diagram-svg"]')
     const zoom = page.getByLabel('Canvas zoom', { exact: true })
     const storageKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
@@ -198,6 +200,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     if (mode === 'full') await page.addInitScript(() => localStorage.setItem('vwan-visual-topology:language:v1', 'ja'))
     await page.setViewportSize({ width: 390, height: 320 })
     await page.goto(`/?mode=${mode}&sample=${mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr'}`)
+    await waitForWorkspaceSample(page, mode === 'vwan' ? 'vwan' : 'azure-net', mode === 'vwan' ? 'hub-routing-preferences' : 'hub-spoke-firewall-udr')
     const topologyKey = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), topologyKey)).not.toBeNull()
     const original = await page.evaluate((key) => localStorage.getItem(key), topologyKey)
@@ -307,6 +310,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       }, { ...example, layout: { mode: 'layered', positions: { layered: { eu: { x: 420, y: 300 } } } } })
     }
     await page.goto(`/?mode=${mode}${mode === 'vwan' ? '' : '&sample=hub-spoke-firewall-udr'}`)
+    if (mode !== 'vwan') await waitForWorkspaceSample(page, 'azure-net', 'hub-spoke-firewall-udr')
     await expect(page.getByRole('complementary', { name: 'Workspace controls' })).toBeVisible()
     await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
     const shell = page.locator('.simulator-shell')
@@ -380,7 +384,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(await page.evaluate((key) => localStorage.getItem(key), topologyKey)).toBe(original)
     await page.getByRole('button', { name: 'Maximize canvas', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Restore panels', exact: true })).toBeVisible()
-    expect((await canvas.boundingBox())!.height).toBeGreaterThan(960)
+    const tabHeight = (await page.locator('.workspace-tabs').boundingBox())!.height
+    expect((await canvas.boundingBox())!.height + tabHeight).toBeGreaterThan(960)
     await page.setViewportSize({ width: 360, height: 800 })
     const controlBounds = (await controls.boundingBox())!
     expect(controlBounds.x).toBeGreaterThanOrEqual(0)

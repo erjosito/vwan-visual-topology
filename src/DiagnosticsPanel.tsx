@@ -13,6 +13,7 @@ import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
 import { canAcknowledgeWarning, orderWarningFindings } from './warning-acknowledgements'
 import { WarningAcknowledgement } from './WarningAcknowledgement'
+import { useWorkspaceEditorState, useWorkspaceStorage } from './workspace-context'
 
 const storageKey = 'vwan-visual-topology:diagnostics:v1'
 const emptyProfile = (): DiagnosticsProfile => ({ version: 1, intents: [], failureAnalysis: false })
@@ -36,6 +37,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   onAcknowledge: (finding: DiagnosticsFinding, acknowledged: boolean) => void
   onRestoreAll: () => void
 }) {
+  const storage = useWorkspaceStorage()
   const nodes = [
     ...topology.spokes.map((node) => ({ kind: 'spoke' as const, id: node.id, name: node.name })),
     ...topology.sites.map((node) => ({ kind: 'site' as const, id: node.id, name: node.name })),
@@ -43,31 +45,32 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   ]
   const [initial] = useState(() => {
     try {
-      const saved = localStorage.getItem(storageKey)
+      const saved = storage.getItem(storageKey)
       return { profile: saved ? validateDiagnosticsProfile(JSON.parse(saved)) : emptyProfile(), error: '' }
     } catch { return { profile: emptyProfile(), error: 'The saved analysis profile could not be loaded. Its stored contents have not been overwritten.' } }
   })
-  const [profile, setProfile] = useState(initial.profile)
-  const [error, setError] = useState(initial.error)
-  const [source, setSource] = useState(nodes[0] ? key(nodes[0]) : '')
-  const [target, setTarget] = useState(nodes[1] ? key(nodes[1]) : '')
-  const [sourcePrefix, setSourcePrefix] = useState(nodes[0] ? nodePrefixes(topology, nodes[0])[0] ?? '' : '')
-  const [destinationPrefix, setDestinationPrefix] = useState(nodes[1] ? nodePrefixes(topology, nodes[1])[0] ?? '' : '')
-  const [expectation, setExpectation] = useState<'allow' | 'deny'>('allow')
-  const [firewall, setFirewall] = useState('')
-  const [constraintRouter, setConstraintRouter] = useState(topology.hubs[0] ? `hub:${topology.hubs[0].id}` : '')
-  const [constraintConnection, setConstraintConnection] = useState('')
-  const [constraintDirection, setConstraintDirection] = useState<'inbound' | 'outbound'>('outbound')
-  const [constraintPrefix, setConstraintPrefix] = useState('')
-  const [constraintExpectation, setConstraintExpectation] = useState<'present' | 'absent'>('present')
-  const [report, setReport] = useState<DiagnosticsReport>()
-  const [reportProfile, setReportProfile] = useState('')
-  const [cancelled, setCancelled] = useState(false)
+  const [profile, setProfile] = useWorkspaceEditorState('vwan.diagnostics.profile', initial.profile)
+  const [error, setError] = useWorkspaceEditorState('vwan.diagnostics.error', initial.error)
+  const [source, setSource] = useWorkspaceEditorState('vwan.diagnostics.source', nodes[0] ? key(nodes[0]) : '')
+  const [target, setTarget] = useWorkspaceEditorState('vwan.diagnostics.target', nodes[1] ? key(nodes[1]) : '')
+  const [sourcePrefix, setSourcePrefix] = useWorkspaceEditorState('vwan.diagnostics.sourcePrefix', nodes[0] ? nodePrefixes(topology, nodes[0])[0] ?? '' : '')
+  const [destinationPrefix, setDestinationPrefix] = useWorkspaceEditorState('vwan.diagnostics.destinationPrefix', nodes[1] ? nodePrefixes(topology, nodes[1])[0] ?? '' : '')
+  const [expectation, setExpectation] = useWorkspaceEditorState<'allow' | 'deny'>('vwan.diagnostics.expectation', 'allow')
+  const [firewall, setFirewall] = useWorkspaceEditorState('vwan.diagnostics.firewall', '')
+  const [constraintRouter, setConstraintRouter] = useWorkspaceEditorState('vwan.diagnostics.constraintRouter', topology.hubs[0] ? `hub:${topology.hubs[0].id}` : '')
+  const [constraintConnection, setConstraintConnection] = useWorkspaceEditorState('vwan.diagnostics.constraintConnection', '')
+  const [constraintDirection, setConstraintDirection] = useWorkspaceEditorState<'inbound' | 'outbound'>('vwan.diagnostics.constraintDirection', 'outbound')
+  const [constraintPrefix, setConstraintPrefix] = useWorkspaceEditorState('vwan.diagnostics.constraintPrefix', '')
+  const [constraintExpectation, setConstraintExpectation] = useWorkspaceEditorState<'present' | 'absent'>('vwan.diagnostics.constraintExpectation', 'present')
+  const [report, setReport] = useWorkspaceEditorState<DiagnosticsReport | undefined>('vwan.diagnostics.report', undefined,
+    value => value?.continuation?.status === 'paused' ? { ...value, complete: false, continuation: { ...value.continuation, status: 'cancelled' } } : value)
+  const [reportProfile, setReportProfile] = useWorkspaceEditorState('vwan.diagnostics.reportProfile', '')
+  const [cancelled, setCancelled] = useWorkspaceEditorState('vwan.diagnostics.cancelled', false)
   const [runScope, setRunScope] = useState<{ revision: string; profileRevision: string }>()
-  const [severity, setSeverity] = useState('')
-  const [category, setCategory] = useState('')
-  const [nodeFilter, setNodeFilter] = useState('')
-  const [filter, setFilter] = useState('')
+  const [severity, setSeverity] = useWorkspaceEditorState('vwan.diagnostics.severity', '')
+  const [category, setCategory] = useWorkspaceEditorState('vwan.diagnostics.category', '')
+  const [nodeFilter, setNodeFilter] = useWorkspaceEditorState('vwan.diagnostics.nodeFilter', '')
+  const [filter, setFilter] = useWorkspaceEditorState('vwan.diagnostics.filter', '')
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
   const worker = useRef<Worker | undefined>(undefined)
@@ -85,7 +88,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
       importRequest.current++
       onClearHighlight()
       setProfile(valid); setReport(undefined); setError(''); setCancelled(false)
-      try { localStorage.setItem(storageKey, JSON.stringify(valid)) }
+      try { storage.setItem(storageKey, JSON.stringify(valid)) }
       catch { setError('Browser storage is unavailable or full. Export the analysis profile to preserve it.') }
     } catch { setError('Invalid analysis profile. Use canonical IPv4 addresses or network prefixes and valid flow requirements.') }
   }

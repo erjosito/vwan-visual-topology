@@ -199,6 +199,7 @@ for (const preview of [false, true]) {
     await page.addInitScript((value) => localStorage.setItem('aznet-ui-preview:v1', String(value)), preview)
     await trace(page, 'full')
     await expect(page.locator('.path-flow')).toHaveCount(2)
+    const normalSegments = await page.locator('.path-flow').evaluateAll(flows => flows.map(flow => flow.getAttribute('data-segments')))
     const normal = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
     await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     await openLearning(page)
@@ -238,7 +239,8 @@ for (const preview of [false, true]) {
     await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     await page.getByTestId('practice-workspace-bar').getByRole('button', { name: 'Return to my design', exact: true }).click()
     await expect(page.getByTestId('aznet-subnet-workload')).toBeVisible()
-    await expect(page.locator('.path-flow')).toHaveCount(0)
+    await expect(page.locator('.path-flow')).toHaveCount(2)
+    expect(await page.locator('.path-flow').evaluateAll(flows => flows.map(flow => flow.getAttribute('data-segments')))).toEqual(normalSegments)
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(normal)
   })
 }

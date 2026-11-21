@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useEffectEvent, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useWorkspaceEditorState } from '../workspace-context'
 import { diagramCurve } from '../diagram-layout'
 import { t } from '../i18n'
 import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from '../CanvasPresentation'
@@ -272,8 +273,8 @@ export function AzureNetDiagram({
     clearTimeout(policyTimer.current)
     if (hoverTimerRef.current !== null) clearTimeout(hoverTimerRef.current)
   }, [])
-  const [zoom, setZoom] = useState(1)
-  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useWorkspaceEditorState('aznet.zoom', 1)
+  const [pan, setPan] = useWorkspaceEditorState('aznet.pan', { x: 0, y: 0 })
   const [focusSelection, setFocusSelection] = useState<AzSelectedEntity>()
   const [hoverPopover, setHoverPopover] = useState<
     | { kind: 'peering'; peeringId: string; x: number; y: number }

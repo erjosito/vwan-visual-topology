@@ -25,10 +25,13 @@ try {
   page.on('pageerror', (error) => errors.push(error.message))
   for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.goto(`app://simulator/?mode=${mode}`)
+    await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     await page.evaluate(({ mode, topology }) => {
       localStorage.setItem('aznet-ui-preview:v1', 'true')
-      localStorage.setItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1',
-        JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology }))
+      const raw = JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology })
+      const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId
+      localStorage.setItem(`network-simulator:workspace-tab:v1:${id}:topology`, raw)
+      localStorage.setItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1', raw)
     }, { mode, topology: graphicalDetailTopology(mode, 145) })
     await page.reload()
     const node = page.locator(mode === 'vwan' ? '.spoke-node[data-node-id="detail-network"]' : '[data-testid="aznet-select-vnet-detail-network"]')
@@ -83,10 +86,13 @@ try {
   for (const mode of ['hub-spoke', 'full', 'vwan']) {
     const topology = mode === 'vwan' ? bgpNeighborVwanTopology() : bgpNeighborTopology()
     await page.goto(`app://simulator/?mode=${mode}`)
+    await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     await page.evaluate(({ mode, topology }) => {
       localStorage.setItem('aznet-ui-preview:v1', 'false')
-      localStorage.setItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1',
-        JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology }))
+      const raw = JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology })
+      const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId
+      localStorage.setItem(`network-simulator:workspace-tab:v1:${id}:topology`, raw)
+      localStorage.setItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1', raw)
     }, { mode, topology })
     await page.reload()
     await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()

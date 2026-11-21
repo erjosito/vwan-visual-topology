@@ -54,6 +54,33 @@ async function move(page: Page, vwan: boolean) {
 }
 
 for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} selection and canvas view stay with their own editor`, async ({ page }) => {
+    await seed(page, vwan)
+    const selectedDesign = vwan ? page.locator('[data-node-id="b"]') : page.getByTestId('aznet-select-vnet-b')
+    await selectedDesign.focus()
+    await page.keyboard.press('Enter')
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'true')
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+    const designZoom = await page.getByLabel('Canvas zoom', { exact: true }).inputValue()
+    expect(designZoom).not.toBe('1')
+
+    await confirmStart(page, vwan ? 'vwan-connect' : 'peering-connect')
+    await expect(page.getByLabel('Canvas zoom', { exact: true })).toHaveValue('1')
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'false')
+    const selectedPractice = vwan ? node(page, true) : page.getByTestId('aznet-select-vnet-a')
+    await selectedPractice.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+    const practiceZoom = await page.getByLabel('Canvas zoom', { exact: true }).inputValue()
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByLabel('Canvas zoom', { exact: true })).toHaveValue(designZoom)
+    await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
+    await expect(selectedPractice).toHaveAttribute('aria-pressed', 'true')
+    await expect(selectedDesign).toHaveAttribute('aria-pressed', 'false')
+    await expect(page.getByLabel('Canvas zoom', { exact: true })).toHaveValue(practiceZoom)
+  })
+
   test(`${vwan ? 'VWAN' : 'mixed'} design/practice histories, layout and reload are isolated`, async ({ page }) => {
     await seed(page, vwan)
     await move(page, vwan)
@@ -341,7 +368,9 @@ test('returning to an unsaved normal VWAN design retains its edit and storage wa
   await page.evaluate(() => {
     const original = Storage.prototype.setItem
     Storage.prototype.setItem = function (key, value) {
-      if (key === 'vwan-visual-topology:v1') throw new Error('Normal document exceeds quota')
+      if (key === 'vwan-visual-topology:v1' || /^network-simulator:workspace-tab:v1:.*:topology$/.test(key)) {
+        throw new Error('Normal document exceeds quota')
+      }
       return original.call(this, key, value)
     }
   })

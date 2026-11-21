@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ComponentProps } from 'react'
-import { t } from './i18n'
+import { t, useLanguage } from './i18n'
+import { useWorkspaceSession } from './workspace-context'
 import {
   DIFFICULTY_LABELS,
   SAMPLE_TRACKS,
@@ -25,6 +26,9 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
   onOpenCurriculum?: () => void
   onClose: () => void
 }) {
+  const session = useWorkspaceSession()
+  const language = useLanguage()
+  const openInTab = !!session && !session.practice
   const dialog = useRef<HTMLDialogElement>(null)
   const searchInput = useRef<HTMLInputElement>(null)
   const returnFocus = useRef(document.activeElement)
@@ -112,7 +116,9 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
       <h2 id="sample-gallery-title">{t('Sample topologies')}</h2>
       <button type="button" data-testid={`${testIdPrefix}-close-sample-gallery-btn`} aria-label={t('Close sample gallery')} onClick={close}>{t('Close')}</button>
     </div>
-    <p>{t('Browse reference designs and validation scenarios. Loading a sample replaces the current workspace; export JSON first to keep a copy.')}</p>
+    <p>{openInTab ? language === 'ja' ? 'サンプルは新しいタブで開きます。既存のデザインと編集履歴はそのまま保持します。'
+      : 'Samples open in a new tab. Your existing designs and edit histories stay open.'
+      : t('Browse reference designs and validation scenarios. Loading a sample replaces the current workspace; export JSON first to keep a copy.')}</p>
     <label className="field"><span>{t('Collection')}</span>
       <select value={collection} disabled={!!loadingId || !!pending}
         onChange={(event) => { setCollection(event.target.value as 'flagship' | 'validation'); setTrackFilter('all'); setDifficultyFilter('all') }}>
@@ -205,7 +211,7 @@ export function SampleGallery({ entries, currentId, hasWorkspace, testIdPrefix, 
                   <button type="button" className="primary" data-testid={`${testIdPrefix}-gallery-load-${entry.id}`}
                     disabled={!!loadingId || !!pending} onClick={(event) => {
                       lastChoice.current = event.currentTarget
-                      setError(''); if (hasWorkspace) setPending(entry); else void load(entry)
+                      setError(''); if (hasWorkspace && !openInTab) setPending(entry); else void load(entry)
                     }}>
                     {t('Load sample topology')}
                   </button>

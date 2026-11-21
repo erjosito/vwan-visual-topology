@@ -187,6 +187,7 @@ test('feedback switches inside its modal without losing consent, text, failure o
 test('unsupported or unavailable browser storage safely falls back and still allows switching', async ({ page }) => {
   await page.addInitScript((key) => { localStorage.setItem(key, 'unsupported') }, languageKey)
   await page.goto('/')
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
   await expect(page.locator('html')).toHaveAttribute('lang', 'en')
   await page.evaluate(() => {
     Storage.prototype.getItem = () => { throw new Error('blocked') }

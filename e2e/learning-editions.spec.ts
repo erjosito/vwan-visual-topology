@@ -632,6 +632,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
         if (/LearningDialog|learning-session|practice-session/.test(request.url())) learningRequests.push(request.url())
       })
       await page.goto(`/?mode=${mode}`)
+      await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
       const before = await page.evaluate(() => [localStorage.getItem('vwan-visual-topology:v1'),
         localStorage.getItem('aznet-visual-topology:v1'), localStorage.getItem('network-simulator:practice-workspace:v1')])
       const details = page.getByTestId('learning-status-details')

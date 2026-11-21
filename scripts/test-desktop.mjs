@@ -36,11 +36,16 @@ const { vpnGatewayModeTopology } = require(join(artifacts, 'vpn-gateway-mode-fix
 const outbound = [], failures = []
 try {
   const page = await application.firstWindow()
+  // Format scenarios are independent; reload checks retain their actual tab session.
+  const openScenario = async (url) => {
+    await page.evaluate(() => localStorage.removeItem('network-simulator:workspace-tabs:v1'))
+    await page.goto(url)
+  }
   page.on('request', (request) => { if (/^https?:/.test(request.url())) outbound.push(request.url()) })
   page.on('pageerror', (error) => failures.push(error.message))
   await page.locator('[data-testid="vwan-app"], [data-testid="aznet-app"], dialog[aria-labelledby="workspace-library-title"]').waitFor()
   await page.evaluate(() => {
-    for (const key of ['aznet-ui-preview:v1', 'network-simulator:workspace:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'network-simulator:learning-progress:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
+    for (const key of ['aznet-ui-preview:v1', 'network-simulator:workspace:v1', 'network-simulator:workspace-tabs:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'network-simulator:learning-progress:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
   })
   await page.reload()
   await page.getByTestId('aznet-app').waitFor()
@@ -69,7 +74,7 @@ try {
   await page.getByTestId('ui-preview-toggle').click()
   await expect(page.getByTestId('ui-preview-toggle')).toHaveAttribute('aria-pressed', 'false')
   expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(beforePreview)
-  await page.goto('app://simulator/?mode=vwan')
+  await openScenario('app://simulator/?mode=vwan')
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
@@ -86,12 +91,21 @@ try {
   await page.reload()
   await expect(page.locator('.hub-node')).toHaveCount(hubCount)
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(savedVwan)
-  await page.evaluate(() => localStorage.setItem('vwan-visual-topology:v1', 'damaged saved workspace'))
+  await page.evaluate(() => {
+    const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId
+    localStorage.setItem(`network-simulator:workspace-tab:v1:${id}:topology`, 'damaged saved workspace')
+    localStorage.setItem('vwan-visual-topology:v1', 'damaged saved workspace')
+  })
   await page.reload()
   await expect(page.getByRole('button', { name: 'Download original saved topology', exact: true })).toBeVisible()
   await expect(page.locator('.diagram [data-node-id]')).toHaveCount(0)
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe('damaged saved workspace')
-  await page.evaluate(() => localStorage.removeItem('vwan-visual-topology:v1'))
+  await page.evaluate(() => {
+    const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId
+    localStorage.removeItem(`network-simulator:workspace-tab:v1:${id}:topology`)
+    localStorage.removeItem('network-simulator:workspace-tabs:v1')
+    localStorage.removeItem('vwan-visual-topology:v1')
+  })
   await page.reload()
   await page.evaluate(() => localStorage.removeItem('aznet-simulator:practice:v1'))
   expect(await page.evaluate(() => ({ node: typeof window.require, ipc: Object.keys(window.desktopSimulator) }))).toEqual({
@@ -103,7 +117,7 @@ try {
     ['full', 'azure-net/hybrid-vwan-and-hub-spoke.json'],
   ]) {
     await page.evaluate(() => localStorage.removeItem('network-simulator:learning-progress:v1'))
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', ...file.split('/')), 'utf8'))
     const inventoryOwner = mode === 'vwan' ? topology.spokes[0] : topology.vnets.find((vnet) => vnet.role === 'spoke-vnet')
@@ -353,7 +367,7 @@ try {
   }
   for (const mode of ['hub-spoke', 'full']) {
     const topology = JSON.parse(await readFile(resolve('public', 'docs', 'samples', 'azure-net', 'subnet-peering.json'), 'utf8'))
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId('aznet-app').waitFor()
     await page.locator('input[type="file"]').first().setInputFiles({
       name: 'subnet-peering.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
@@ -376,7 +390,7 @@ try {
   }
   for (const mode of ['hub-spoke', 'full']) {
     const topology = nvaBgpTopology()
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId('aznet-app').waitFor()
     await page.locator('input[data-desktop-import]').setInputFiles({
       name: 'vpn-mode.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(vpnGatewayModeTopology())),
@@ -467,7 +481,7 @@ try {
   }
   for (const mode of ['vwan', 'full']) {
     const topology = mode === 'vwan' ? hubFirewallTopology('published-branch') : azHubFirewallTopology('published-branch')
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app').waitFor()
     await page.locator('input[type="file"]').first().setInputFiles({
       name: 'static-firewall-native.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
@@ -536,7 +550,7 @@ try {
         udrTables: kind === 'direct' ? [] : [{ id: 'steering', name: 'Steering', disableBgpRoutePropagation: false,
           routes: [{ id: 'default', name: 'Default', prefix: '0.0.0.0/0', nextHopType: 'VirtualAppliance', nextHopIp: '10.1.2.4', enabled: true }] }],
         vnetPeerings: [], vwanHubs: [], erLocations: [], erLinks: [], erGlobalReachLinks: [], sites: [], vpnConnections: [], siteLinks: [], inventory }
-    await page.goto(`app://simulator/?mode=${mode}`)
+    await openScenario(`app://simulator/?mode=${mode}`)
     await page.getByTestId(native ? 'vwan-app' : 'aznet-app').waitFor()
     const input = { contractVersion: 1, operation: 'simulate', document: { mode, topology }, packet: {
       source: { kind: 'workload', workloadId: 'client', nicId: 'client-nic', ipConfigurationId: 'client-ip' },
@@ -665,7 +679,7 @@ try {
     expect(unknownGrade.value).toEqual(executePlatform(gradeInput))
     expect(unknownGrade.value.assessments.map((assessment) => assessment.outcome)).toEqual(['not assessed', 'not assessed'])
   }
-  await page.goto('app://simulator/?mode=vwan&feedback=1')
+  await openScenario('app://simulator/?mode=vwan&feedback=1')
   await page.getByTestId('vwan-app').waitFor()
   await expect(page.getByRole('button', { name: 'Feedback', exact: true })).toBeDisabled()
   expect(await page.locator('.feedback-modal').count()).toBe(0)

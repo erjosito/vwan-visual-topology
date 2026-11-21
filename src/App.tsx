@@ -6,7 +6,8 @@ import { WorkspaceAccountStatus, WorkspaceMenu } from './WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
 import { previewVnetActions } from './context-actions'
 import { confirmConfigurationSwitch } from './configuration-selection'
-import { useWorkspaceSession } from './workspace-context'
+import { useWorkspaceEditorState, useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
+import { WorkspaceTabPanel } from './WorkspaceTabs'
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
@@ -79,16 +80,17 @@ const parseNode = (key: string): PathNode => {
 
 function App() {
   const workspaceSession = useWorkspaceSession()
+  const workspaceStorage = useWorkspaceStorage()
   const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
   const language = useLanguage()
   useEffect(() => {
     document.documentElement.lang = language
     document.title = documentTitles[language]
   }, [language])
-  const [selection, setSelection] = useState<ObjectSelection>()
-  const [detailOwner, setDetailOwner] = useState<string>()
-  const [inventorySelection, setInventorySelection] = useState<string>()
-  const [routerState, setRouter] = useState<ObjectSelection>()
+  const [selection, setSelection] = useWorkspaceEditorState<ObjectSelection>('vwan.selection')
+  const [detailOwner, setDetailOwner] = useWorkspaceEditorState<string>('vwan.detail')
+  const [inventorySelection, setInventorySelection] = useWorkspaceEditorState<string>('vwan.inventory')
+  const [routerState, setRouter] = useWorkspaceEditorState<ObjectSelection>('vwan.router')
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [editorRequest, setEditorRequestState] = useState<EditorRequest>()
   const setEditorRequest = (request?: EditorRequest) => {
@@ -103,12 +105,15 @@ function App() {
   const [cloneVnetId, setCloneVnetId] = useState<string>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [erLocationModal, setErLocationModal] = useState<{ open: boolean; peeringLocation?: string; sku?: ErCircuitSku; targetAzureRegion?: string; erLocationId?: string }>({ open: false })
-  const [panel, setPanel] = useState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>()
+  const [panel, setPanel] = useWorkspaceEditorState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>('vwan.panel')
   const [comparisonSession, setComparisonSession] = useState<ComparisonSession>()
-  const [diagnosticHighlight, setDiagnosticHighlight] = useState<{ revision: string; findingId: string; paths: GroupPath[] }>()
-  const [routingCheck, setRoutingCheck] = useState<{ revision: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; report?: DiagnosticsReport }>()
-  const [routingIssueId, setRoutingIssueId] = useState<string>()
-  const [reviewCoverage, setReviewCoverage] = useState(false)
+  const [diagnosticHighlight, setDiagnosticHighlight] = useWorkspaceEditorState<{ revision: string; findingId: string; paths: GroupPath[] }>('vwan.diagnosticHighlight')
+  const [routingCheck, setRoutingCheck] = useWorkspaceEditorState<{ revision: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; report?: DiagnosticsReport } | undefined>(
+    'vwan.routingCheck', undefined, value => value && (value.status === 'running' || value.report?.continuation?.status === 'paused')
+      ? { ...value, status: 'cancelled', report: value.report ? { ...value.report, complete: false,
+        ...(value.report.continuation ? { continuation: { ...value.report.continuation, status: 'cancelled' } } : {}) } : undefined } : value)
+  const [routingIssueId, setRoutingIssueId] = useWorkspaceEditorState<string>('vwan.routingIssue')
+  const [reviewCoverage, setReviewCoverage] = useWorkspaceEditorState('vwan.reviewCoverage', false)
   const checkWorker = useRef<{ worker: Worker; revision: string } | undefined>(undefined)
   const {
     topology,
@@ -132,9 +137,9 @@ function App() {
       if (selection && !topologyObject(next, selection)) setSelection(undefined)
     },
   })
-  const [faults, setFaults] = useState<FailureDomain[]>([])
-  const [resilience, setResilience] = useState<{ revision: string; report: ResilienceReport }>()
-  const [resilienceEndpoint, setResilienceEndpoint] = useState<string>()
+  const [faults, setFaults] = useWorkspaceEditorState<FailureDomain[]>('vwan.faults', [])
+  const [resilience, setResilience] = useWorkspaceEditorState<{ revision: string; report: ResilienceReport }>('vwan.resilience')
+  const [resilienceEndpoint, setResilienceEndpoint] = useWorkspaceEditorState<string>('vwan.resilienceEndpoint')
   const baselineRevision = routingRevision(topology)
   const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
   const scenario = useMemo(() => projectVwanFailures(topology, faults), [topology, faults])
@@ -197,7 +202,7 @@ function App() {
     let profile = { version: 1 as const, intents: [], failureAnalysis: false } as ReturnType<typeof validateDiagnosticsProfile>
     let requirementsUnavailable = false
     try {
-      const saved = localStorage.getItem('vwan-visual-topology:diagnostics:v1')
+      const saved = workspaceStorage.getItem('vwan-visual-topology:diagnostics:v1')
       if (saved) profile = validateDiagnosticsProfile(JSON.parse(saved))
     } catch { requirementsUnavailable = true }
     const targetRevision = routingRevision(targetTopology)
@@ -231,25 +236,25 @@ function App() {
     setRoutingCheck({ ...currentCheck, status: 'running' })
     checkWorker.current.worker.postMessage({ type: 'continue' })
   }
-  const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
+  const [pendingAzureImport, setPendingAzureImport] = useWorkspaceEditorState<{ revision: number; topology: Topology }>('vwan.pendingCapture')
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
-  const [routeView, setRouteView] = useState<'bgp' | 'hub' | 'firewall'>('bgp')
-  const [routeMode, setRouteMode] = useState<RouteMode>('bgp')
-  const [mapRouter, setMapRouter] = useState<RouterSelection>()
-  const [mapDirection, setMapDirection] = useState<RouteMapDirection>()
-  const [mapConnectionId, setMapConnectionId] = useState<string>()
-  const [prefix, setPrefix] = useState('')
-  const [highlightTableId, setHighlightTableId] = useState(DEFAULT_HUB_TABLE)
-  const [highlighting, setHighlighting] = useState(false)
+  const [routeView, setRouteView] = useWorkspaceEditorState<'bgp' | 'hub' | 'firewall'>('vwan.routeView', 'bgp')
+  const [routeMode, setRouteMode] = useWorkspaceEditorState<RouteMode>('vwan.routeMode', 'bgp')
+  const [mapRouter, setMapRouter] = useWorkspaceEditorState<RouterSelection>('vwan.mapRouter')
+  const [mapDirection, setMapDirection] = useWorkspaceEditorState<RouteMapDirection>('vwan.mapDirection')
+  const [mapConnectionId, setMapConnectionId] = useWorkspaceEditorState<string>('vwan.mapConnection')
+  const [prefix, setPrefix] = useWorkspaceEditorState('vwan.prefix', '')
+  const [highlightTableId, setHighlightTableId] = useWorkspaceEditorState('vwan.highlightTable', DEFAULT_HUB_TABLE)
+  const [highlighting, setHighlighting] = useWorkspaceEditorState('vwan.highlighting', false)
   const layout = topology.layout?.mode ?? 'layered'
-  const [zoom, setZoom] = useState(1)
-  const [source, setSource] = useState('')
-  const [sourceTableId, setSourceTableId] = useState(DEFAULT_HUB_TABLE)
-  const [target, setTarget] = useState('')
-  const [destination, setDestination] = useState('')
-  const [destinationPrefix, setDestinationPrefix] = useState('')
-  const [tracing, setTracing] = useState(false)
-  const [groupTrace, setGroupTrace] = useState<{ group: PathGroup; direction: PathDirection }>()
+  const [zoom, setZoom] = useWorkspaceEditorState('vwan.zoom', 1)
+  const [source, setSource] = useWorkspaceEditorState('vwan.source', '')
+  const [sourceTableId, setSourceTableId] = useWorkspaceEditorState('vwan.sourceTable', DEFAULT_HUB_TABLE)
+  const [target, setTarget] = useWorkspaceEditorState('vwan.target', '')
+  const [destination, setDestination] = useWorkspaceEditorState('vwan.destination', '')
+  const [destinationPrefix, setDestinationPrefix] = useWorkspaceEditorState('vwan.destinationPrefix', '')
+  const [tracing, setTracing] = useWorkspaceEditorState('vwan.tracing', false)
+  const [groupTrace, setGroupTrace] = useWorkspaceEditorState<{ group: PathGroup; direction: PathDirection }>('vwan.groupTrace')
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
   const mounted = useRef(false)
@@ -333,6 +338,7 @@ function App() {
   }
   const loadGallerySample = async (id: string, signal: AbortSignal) => {
     const request = ++importRequest.current
+    const scope = workspaceSession?.getRequestVersion()
     const { VWAN_SAMPLE_GALLERY } = await import('./sample-catalog')
     if (signal.aborted || request !== importRequest.current) return false
     const entry = VWAN_SAMPLE_GALLERY.find((sample) => sample.id === id)
@@ -342,8 +348,9 @@ function App() {
         if (!res.ok) throw new Error(`Sample topology "${entry.id}" not found.`)
         return validateTopology(await res.json())
       }) : validateTopology(structuredClone(example))
-      if (signal.aborted || request !== importRequest.current) return false
-      reset(loaded)
+      if (signal.aborted || !mounted.current || request !== importRequest.current || workspaceSession && scope !== workspaceSession.getRequestVersion()) return false
+      if (workspaceSession && !workspaceSession.practice) await workspaceSession.openDocument(loaded)
+      else reset(loaded)
       return true
     } catch (err) {
       if (!signal.aborted) setError(`Sample load failed: ${message(err)}`)
@@ -375,7 +382,7 @@ function App() {
         window.history.replaceState(null, '', url)
       })
       .catch((err) => setError(`Sample load failed: ${message(err)}`))
-  }, [clearHistory, save, setError, workspaceSession?.practice])
+  }, [clearHistory, save, setError, setRouter, workspaceSession?.practice])
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlightTableId(DEFAULT_HUB_TABLE); setHighlighting(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
@@ -619,6 +626,10 @@ function App() {
       if (file.size > 2_000_000) throw new Error('Topology files must be smaller than 2 MB.')
       const input: unknown = JSON.parse(await file.text())
       if (!mounted.current || revision !== importRequest.current || workspaceRequest !== workspaceSession?.getRequestVersion()) return
+      if (workspaceSession && !workspaceSession.practice) {
+        await workspaceSession.openDocument(input)
+        return
+      }
       if (input && typeof input === 'object' && 'kind' in input
         && ['azure-network-topology', 'azure-network-capture'].includes(String(input.kind)) && workspaceSession) {
         await workspaceSession.openDocument(input)
@@ -637,6 +648,10 @@ function App() {
     setError(''); setPanel('azure')
   })
   useEffect(() => { if (workspaceSession?.capture) importSessionCapture() }, [workspaceSession?.capture])
+  const finishCaptureImport = () => {
+    workspaceSession?.consumeCapture?.()
+    setPendingAzureImport(undefined)
+  }
   const pathTitle = (path: NodePath) => [
     'sourceName' in path ? path.sourceName : sourceNode?.name, ...(path.sourceSiteHops?.slice(1).map((id) => topology.sites.find((s) => s.id === id)?.name) ?? []),
     topology.connections.find((c) => c.id === path.sourceConnectionId)?.name,
@@ -668,7 +683,7 @@ function App() {
     <FailurePanel faults={faults} unassessed={scenario.unassessed} onRestore={restoreFault} onRestoreAll={() => restoreFault()}
       revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={() => {
         let intents: ReturnType<typeof validateDiagnosticsProfile>['intents'] = []
-        try { const saved = localStorage.getItem('vwan-visual-topology:diagnostics:v1'); if (saved) intents = validateDiagnosticsProfile(JSON.parse(saved)).intents }
+        try { const saved = workspaceStorage.getItem('vwan-visual-topology:diagnostics:v1'); if (saved) intents = validateDiagnosticsProfile(JSON.parse(saved)).intents }
         catch { const report = analyzeVwanResilience(topology, [], { maxPairs: 0 }); report.complete = false; report.limitations.push('Saved connectivity requirements could not be read; intent coverage is unassessed.'); return report }
         return analyzeVwanResilience(topology, intents)
       }} />
@@ -741,6 +756,7 @@ function App() {
       } : undefined}
     />
     <main>
+    <WorkspaceTabPanel>
       <section className="workspace-heading"><div><p className="eyebrow">{t("NETWORK WORKSPACE")}</p><input className="topology-name" aria-label={t("Topology name")} maxLength={120} value={topology.name} onChange={(e) => update((next) => { next.name = e.target.value })} /></div><div className="stats"><span><strong>{topology.hubs.length}</strong>  {t("hubs")}</span><span><strong>{topology.spokes.length}</strong>  {t("spokes")}</span><span><strong>{topology.sites.length - nvaSiteIds.size}</strong>  {t("sites")}</span>{nvaSiteIds.size > 0 && <span><strong>{nvaSiteIds.size}</strong>  {t("spoke NVAs")}</span>}{!!topology.erLocations?.length && <span><strong>{topology.erLocations.length}</strong>  {t("ER locations")}</span>}</div></section>
       {error && <div role="alert" className="notice error">{localizeDiagnostic(error)}<button aria-label={t("Dismiss error")} onClick={() => setError('')}>{t("Dismiss")}</button></div>}
       {initialBackup && <div className="notice">{t("The saved workspace could not be loaded. Download the original before editing or closing this page.")} <button onClick={() => exportTopology(initialBackup)}>{t("Download original saved topology")}</button></div>}
@@ -783,7 +799,7 @@ function App() {
           {panel === 'diagnostics' && <DiagnosticsPanel topology={activeTopology} isAcknowledged={isAcknowledged} onAcknowledge={acknowledgeWarning} onRestoreAll={restoreWarningAttention} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
           {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} isAcknowledged={isAcknowledged} onAcknowledge={acknowledgeWarning} onRestoreAll={restoreWarningAttention} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClose={closePanel} />}
           {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
-          {panel === 'azure' && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { setPendingAzureImport(undefined); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) reset(validateTopology(pendingAzureImport.topology)) }} onCancelImport={() => { setPendingAzureImport(undefined); setPanel(undefined) }} onClose={() => { setPendingAzureImport(undefined); closePanel() }} /></Suspense>}
+          {panel === 'azure' && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { finishCaptureImport(); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) { reset(validateTopology(pendingAzureImport.topology)); finishCaptureImport() } }} onCancelImport={() => { finishCaptureImport(); setPanel(undefined) }} onClose={() => { finishCaptureImport(); closePanel() }} /></Suspense>}
           <TopologyDiagram topology={topology} faults={scenario.affected} risks={risks} onRisk={setResilienceEndpoint} onClearSelection={() => setSelection(undefined)}
             canvasStatus={(highlighting || tracing || !!diagnosticPaths?.length || routingIssues.length > 0) && <div className="highlight-status" role="status">{(highlighting || tracing || !!diagnosticPaths?.length) ? (diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))) : t('{0} routing issues', routingIssues.length)}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}{(highlighting || tracing || !!diagnosticPaths?.length) && <button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button>}{routingIssues.length > 0 && <button onClick={clearHighlightsAndIcons}>{t("Clear highlights & icons")}</button>}</div>}
             onZoom={setZoom} layoutControls={<>
@@ -843,6 +859,7 @@ function App() {
         </div>
         <div className="legend"><span><i className="legend-line er" />ExpressRoute</span><span><i className="legend-line vpn" />VPN</span><span><i className="legend-line sdwan" />SD-WAN</span><span><i className="legend-line preferred" />{t("Preferred / flow path")}</span><span><b className="policy-tag inbound">{t("IN")}</b><b className="policy-tag outbound">{t("OUT")}</b>{t("Per-connection maps · near owning router · click for rules")}</span><span className="live-dot">{simulation.converged ? t("Routes calculated") : t("Provisional routes")}</span></div>
       </section>
+    </WorkspaceTabPanel>
     </main>
     {contextMenu && <Suspense fallback={null}><TopologyContextMenu key={contextSelection ? nodeKey(contextSelection) : 'canvas'} x={contextMenu.x} y={contextMenu.y} title={contextSelection ? t("{0} actions: {1}", t(objectLabels[contextSelection.kind]), contextObject?.name ?? '') : t("Canvas actions")} actions={contextActions} onClose={() => { contextMenu.invoker.focus({ preventScroll: true }); setContextMenu(undefined) }} /></Suspense>}
     <footer>{t("Calculated locally in your browser · Export JSON for portable backups")}</footer>

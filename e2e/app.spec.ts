@@ -1,4 +1,5 @@
 import { expect, test } from './vwan-example-fixture'
+import { replaceActiveSavedTopology } from './workspace-storage-helpers'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import type { Page } from '@playwright/test'
@@ -888,7 +889,7 @@ test('multi-prefix imports succeed and invalid saved browser data can be downloa
   await importTopology(page, invalid)
   await expect(page.getByRole('alert')).toContainText('Invalid IPv4 network CIDR')
   expect(await readTopology(page)).toEqual(before)
-  await page.evaluate((topology) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology)), invalid)
+  await replaceActiveSavedTopology(page, 'vwan', JSON.stringify(invalid))
   await page.reload()
   await expect(page.getByRole('alert')).toContainText('saved data has not been overwritten')
   expect(await readTopology(page)).toEqual( invalid)

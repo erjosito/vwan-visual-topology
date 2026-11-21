@@ -183,7 +183,8 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await expect(page.getByRole('banner')).toBeHidden()
     await expect(page.getByTestId('active-faults')).toBeHidden()
     await expect(routingStatus).toBeHidden()
-    await expect.poll(async () => (await canvas.boundingBox())!.height).toBeGreaterThan(originalCanvas!.height + 80)
+    const tabHeight = (await page.locator('.workspace-tabs').boundingBox())!.height
+    await expect.poll(async () => (await canvas.boundingBox())!.height + tabHeight).toBeGreaterThan(originalCanvas!.height + 80)
     await expect(er).toHaveAttribute('data-simulated-failed', 'true')
     if (mode === 'vwan') await expect(page.locator('.highlight-status')).toContainText('No route')
     else await expect(page.getByTestId('aznet-path-tracer-panel')).toContainText('dropped-no-route')
