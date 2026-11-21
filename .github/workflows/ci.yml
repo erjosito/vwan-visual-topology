@@ -23,9 +23,11 @@ permissions:
   actions: read
 
 jobs:
-  validate:
+  web-build:
     if: github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && (inputs.target == 'all' || inputs.target == 'web'))
     runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.inputs.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,11 +39,10 @@ jobs:
       - run: npm ci
       - run: npm ci --prefix functions/user-cloud
       - run: npm run build:user-cloud
-      - run: node --test scripts/release-candidate.test.mjs scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs scripts/github-statistics-swa.test.mjs scripts/external-reports.test.mjs
+      - run: node --test scripts/release-candidate.test.mjs scripts/ci-qualification.test.mjs scripts/collect-github-statistics.test.mjs scripts/github-statistics-function.test.mjs scripts/github-statistics-dashboard.test.mjs scripts/github-statistics-swa.test.mjs scripts/external-reports.test.mjs
       - run: npm run lint
       - run: npm run test:evaluation
       - run: npm test
-      - run: npm run test:collector
       - name: Compile generated Bicep (no deployment)
         run: |
           az bicep install --version v0.40.2
@@ -66,6 +67,61 @@ jobs:
           VITE_MICROSOFT_CLIENT_ID: ${{ vars.VITE_MICROSOFT_CLIENT_ID }}
           VITE_CLOUD_API_SCOPE: ${{ vars.VITE_CLOUD_API_SCOPE }}
           VITE_CLOUD_API_BASE_URL: ${{ vars.VITE_CLOUD_API_BASE_URL }}
+      - name: Record the complete browser inventory and immutable build inputs
+        run: |
+          mkdir -p test-artifacts/ci
+          npx playwright test --list --reporter=json > test-artifacts/ci/browser-plan.json
+          node scripts/ci-qualification.mjs prepare-build
+      - uses: actions/upload-artifact@v4
+        id: inputs
+        with:
+          name: web-qualification-inputs-${{ github.run_attempt }}
+          path: |
+            dist/
+            platform-dist/
+            functions/user-cloud/dist/
+            test-artifacts/ci/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  collectors:
+    if: github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && (inputs.target == 'all' || inputs.target == 'web'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm run test:collector
+      - run: node scripts/ci-qualification.mjs record-phase collectors
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-phase-collectors-${{ github.run_attempt }}
+          path: test-artifacts/ci/phases/
+          if-no-files-found: error
+          retention-days: 7
+
+  production:
+    needs: web-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locate configured Node runtime for browser containers
+        run: echo "CI_NODE_HOME=$(dirname "$(dirname "$(command -v node)")")" >> "$GITHUB_ENV"
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.web-build.outputs.artifact-id }}
+          merge-multiple: true
+          path: .
+      - run: node scripts/ci-qualification.mjs verify-build
       - name: Smoke exact production artifact with SWA headers
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
@@ -74,14 +130,6 @@ jobs:
             -e PATH=/opt/ci-node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
             npm run test:production -- --workers=2
-      - name: Run browser suite with matching preinstalled browsers
-        run: |
-          version=$(node -p "require('@playwright/test/package.json').version")
-          docker run --rm --init --ipc=host -e CI=true \
-            -v "$CI_NODE_HOME:/opt/ci-node:ro" \
-            -e PATH=/opt/ci-node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
-            bash -ec 'node --version; exec xvfb-run -a npm run test:e2e -- --workers=2'
       - name: Measure exact production artifact
         run: |
           version=$(node -p "require('@playwright/test/package.json').version")
@@ -99,6 +147,13 @@ jobs:
             -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/work \
             -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
             npm run evaluate:accessibility
+      - run: node scripts/ci-qualification.mjs record-phase production
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-phase-production-${{ github.run_attempt }}
+          path: test-artifacts/ci/phases/
+          if-no-files-found: error
+          retention-days: 7
       - name: Preserve actual accessibility evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -108,19 +163,103 @@ jobs:
           path: test-artifacts/quality/
           if-no-files-found: warn
           retention-days: 7
-      - name: Preserve shared presentation acceptance screenshots
-        uses: actions/upload-artifact@v4
-        with:
-          name: presentation-acceptance
-          overwrite: true
-          path: test-results/**/*.png
-          if-no-files-found: error
-          retention-days: 7
       - uses: actions/upload-artifact@v4
         with:
           name: production-measurements
           overwrite: true
           path: test-results/production-measurements.json
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: production-playwright-results
+          path: test-artifacts/production-playwright/
+          retention-days: 7
+
+  browser:
+    needs: web-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Locate configured Node runtime for browser containers
+        run: echo "CI_NODE_HOME=$(dirname "$(dirname "$(command -v node)")")" >> "$GITHUB_ENV"
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.web-build.outputs.artifact-id }}
+          merge-multiple: true
+          path: .
+      - run: node scripts/ci-qualification.mjs verify-build
+      - name: Run the complete browser shard with matching preinstalled browsers
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p "test-artifacts/ci/shards/$SHARD"
+          version=$(node -p "require('@playwright/test/package.json').version")
+          docker run --rm --init --ipc=host -e CI=true -e SHARD \
+            -e PLAYWRIGHT_JSON_OUTPUT_FILE="/work/test-artifacts/ci/shards/$SHARD/report.json" \
+            -v "$CI_NODE_HOME:/opt/ci-node:ro" \
+            -e PATH=/opt/ci-node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+            -v "$PWD:/work" -w /work "mcr.microsoft.com/playwright:v${version}-noble" \
+            bash -ec 'node --version; exec xvfb-run -a npm run test:e2e -- --workers=2 --shard="$SHARD/4" --reporter=list,json --output="test-results/shard-$SHARD"'
+      - run: node scripts/ci-qualification.mjs record-shard "${{ matrix.shard }}"
+      - name: Preserve each shard's raw evidence, receipts and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-shard-${{ matrix.shard }}-${{ github.run_attempt }}
+          path: |
+            test-artifacts/ci/shards/
+            test-results/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  validate:
+    needs: [web-build, collectors, browser, production]
+    if: always() && (github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && (inputs.target == 'all' || inputs.target == 'web')))
+    runs-on: ubuntu-latest
+    env:
+      CI_QUALIFICATION_NEEDS: ${{ toJSON(needs) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: node scripts/ci-qualification.mjs prerequisites
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ needs.web-build.outputs.artifact-id }}
+          merge-multiple: true
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: browser-shard-*-${{ github.run_attempt }}
+          merge-multiple: true
+          path: .
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: web-phase-*-${{ github.run_attempt }}
+          merge-multiple: true
+          path: test-artifacts/ci/phases/
+      - name: Gate all required jobs, complete shard coverage and exact source/run/attempt bytes
+        run: node scripts/ci-qualification.mjs aggregate
+      - name: Preserve shared presentation acceptance screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: presentation-acceptance
+          path: test-results/**/*.png
+          if-no-files-found: error
           retention-days: 7
       - name: Package locked statistics Function candidate (no deployment)
         run: |
@@ -160,15 +299,6 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 30
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-results
-          overwrite: true
-          path: |
-            test-results/
-            test-artifacts/production-playwright/
-          retention-days: 7
 
   desktop:
     if: github.event_name != 'workflow_dispatch' || (github.ref == 'refs/heads/main' && (inputs.target == 'all' || inputs.target == 'desktop'))

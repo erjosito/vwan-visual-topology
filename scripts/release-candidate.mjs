@@ -30,7 +30,7 @@ export function candidateVersion(version) {
   return { build: version, package: version, file: `${version}.0` }
 }
 
-async function filesIn(root, prefix = '') {
+export async function filesIn(root, prefix = '') {
   const files = {}
   for (const name of (await readdir(resolve(root, prefix))).sort()) {
     requireValue(!name.includes('\\'), 'Backslashes in artifact paths are not supported')
