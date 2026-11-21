@@ -246,5 +246,14 @@ export function inspectVwanBgp(topology: Topology, unavailableIds: string[] = []
           : opaqueMapping,
     })
   }
+  for (const vpn of topology.interWanVpns ?? []) {
+    const endpoints = [vpn.aHubId, vpn.bHubId].map((id) => result.resources.find((resource) => resource.kind === 'vwan-hub' && resource.id === id))
+    if (endpoints.some((endpoint) => !endpoint)) continue
+    result.managedRelationships.push({
+      id: identity('inter-wan-vpn', vpn.id), connectionId: vpn.id, resourceKeys: [endpoints[0]!.key, endpoints[1]!.key],
+      enabled: vpn.enabled && endpoints.every((endpoint) => endpoint!.enabled),
+      reason: 'Explicit inter-WAN S2S route-export model. Gateway BGP instances, negotiated sessions, shared-ASN handling and P2S clients are not assessed.',
+    })
+  }
   return result
 }

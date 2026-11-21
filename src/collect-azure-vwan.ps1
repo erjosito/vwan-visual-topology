@@ -10,7 +10,7 @@ Requires metadata reads (including subscription hub discovery) and
 Microsoft.Network/virtualHubs/effectiveRoutes/action; Reader alone is insufficient.
 Only discovered selected-WAN hub route tables are queried, not connection/NIC
 tables. Observations are non-atomic and independent of configuration completeness.
-Limits: 500 CLI invocations, 20 hubs, 200 total VNet references across all hubs
+Limits: 500 CLI invocations, 20 hubs, 1000 total VNet references across all hubs
 (including unread VNets), 1000 total IPv4 prefixes when more than 60 VNets are
 importable, 20 minutes overall, 180 seconds per
 effective-route invocation, no diagnostic retries, 100 route tables, 10000 rows/table, 20000 total.
@@ -18,6 +18,9 @@ CLI-owned polling/retries share the invocation deadline, not a separate REST bac
 Version 2 also records only the CLI version and selected subscription/tenant/cloud
 metadata. Missing metadata is explicitly warned; a known cloud/subscription mismatch
 fails before resource reads. No account user details or credentials are requested.
+Use -BulkVnetReads for large inventories: this explicitly opts into listing VNets
+in each referenced resource group (Reader scope required). Only referenced VNet
+prefixes/communities are exported. Request, runtime and byte limits are unchanged.
 Effective-route actions are skipped unless account metadata confirms AzureCloud
 and the selected subscription; explicit public-ARM configuration GETs remain usable.
 See https://learn.microsoft.com/cli/azure/network/vhub#az-network-vhub-get-effective-routes
@@ -29,6 +32,7 @@ param(
     [Parameter(Mandatory)][string]$VirtualWanId,
     [string]$OutputFile = './vwan-capture.json',
     [switch]$AllowCrossSubscriptionVnets,
+    [switch]$BulkVnetReads,
     [switch]$IncludeEffectiveRoutes,
     [switch]$Force
 )
@@ -282,6 +286,7 @@ if ($selectedHubs.Count -gt 20) { throw 'This WAN exceeds the app limit of 20 hu
 $capturedHubs = [System.Collections.Generic.List[object]]::new()
 $vnetCache = @{}
 $vnetCommunityCache = @{}
+$vnetGroupCache = @{}
 $connectionCount = 0
 foreach ($hub in $selectedHubs) {
     $limitations = [System.Collections.Generic.List[string]]::new()
@@ -340,7 +345,7 @@ foreach ($hub in $selectedHubs) {
     })
     $connections = [System.Collections.Generic.List[object]]::new()
     foreach ($connection in @(Read-HubCollection "$($hub.id)/hubVirtualNetworkConnections" 'VNet connections' $limitations)) {
-        if (++$connectionCount -gt 200) { throw 'This WAN exceeds the app limit of 200 total VNet connections across all captured hubs.' }
+        if (++$connectionCount -gt 1000) { throw 'This WAN exceeds the app limit of 1000 total VNet connections across all captured hubs.' }
         $vnetId = $connection.properties.remoteVirtualNetwork.id
         if ($vnetId -notmatch '^/subscriptions/([a-f0-9-]{36})/resourceGroups/[^/?#\r\n]+/providers/Microsoft\.Network/virtualNetworks/[^/?#\r\n]+$') { throw 'Invalid referenced VNet ID.' }
         $crossSubscription = $Matches[1] -ine $subscriptionId
@@ -351,7 +356,24 @@ foreach ($hub in $selectedHubs) {
                 $limitations.Add('Cross-subscription VNet read skipped. Opt in with -AllowCrossSubscriptionVnets to read only referenced VNets.')
             } else {
                 try {
-                    $vnet = Read-Resource $vnetId
+                    if ($BulkVnetReads) {
+                        $group = ($vnetId -split '/providers/')[0]
+                        if (!$vnetGroupCache.ContainsKey($group)) {
+                            # Cache only the allowlisted fields, never unrelated VNet configuration.
+                            $vnetGroupCache[$group] = @{}
+                            foreach ($entry in @(Read-Collection "$group/providers/Microsoft.Network/virtualNetworks")) {
+                                if ($entry.id -is [string]) {
+                                    $vnetGroupCache[$group][$entry.id] = @{
+                                        id = $entry.id; properties = @{
+                                            addressSpace = $entry.properties.addressSpace
+                                            bgpCommunities = $entry.properties.bgpCommunities
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        $vnet = $vnetGroupCache[$group][$vnetId]
+                    } else { $vnet = Read-Resource $vnetId }
                     if ($vnet.id -ine $vnetId) { throw 'Unexpected VNet resource.' }
                     $prefixes = @($vnet.properties.addressSpace.addressPrefixes)
                     if ($null -ne $vnet.properties.bgpCommunities) {

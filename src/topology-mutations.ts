@@ -7,6 +7,7 @@ export function deleteTopologyObject(topology: Topology, selection: ObjectSelect
   const existingNvaConn = kind === 'site' ? spokeNvaConnectionForSite(next, id) : undefined
 
   if (kind === 'hub') {
+    if (next.interWanVpns) next.interWanVpns = next.interWanVpns.filter((vpn) => vpn.aHubId !== id && vpn.bHubId !== id)
     next.hubs = next.hubs.filter((h) => h.id !== id)
     next.spokes = next.spokes.filter((s) => s.hubId !== id)
     next.connections = next.connections.filter((c) => c.hubId !== id)
