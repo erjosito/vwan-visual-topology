@@ -53,20 +53,26 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
             target.outboundPrepend = outbound
             target.staticPrefixes = staticPrefixes
             target.bgpEnabled = data.has('bgp')
-            target.advertisedPrefixes = advertised
-            target.useLocalAzureIpAddress = privateEr || undefined
-            target.underlay = privateEr ? {
-              kind: 'express-route', azureLinkId: String(data.get('azureLink')),
-              siteLinkId: String(data.get('siteLink')), azureEndpoint: String(data.get('azureEndpoint')),
-              onPremEndpoint: String(data.get('onPremEndpoint')),
-            } : undefined
+            if (advertised === undefined) delete target.advertisedPrefixes
+            else target.advertisedPrefixes = advertised
             if (privateEr) {
+              target.useLocalAzureIpAddress = true
+              target.underlay = {
+                kind: 'express-route', azureLinkId: String(data.get('azureLink')),
+                siteLinkId: String(data.get('siteLink')), azureEndpoint: String(data.get('azureEndpoint')),
+                onPremEndpoint: String(data.get('onPremEndpoint')),
+              }
               const gateway = draft.vnets.flatMap((vnet) => vnet.gateways).find((gateway) => gateway.id === target.targetId)
               if (gateway) {
                 gateway.enablePrivateIpAddress = data.has('privateIps')
-                gateway.publicIpSku = data.get('publicIpSku') === 'Standard' ? 'Standard' : data.get('publicIpSku') === 'Basic' ? 'Basic' : undefined
+                const publicIpSku = data.get('publicIpSku')
+                if (publicIpSku === 'Standard' || publicIpSku === 'Basic') gateway.publicIpSku = publicIpSku
+                else delete gateway.publicIpSku
                 gateway.privateIpAddresses = String(data.get('privateEndpoints') ?? '').split(/[,\s]+/).filter(Boolean)
               }
+            } else {
+              delete target.useLocalAzureIpAddress
+              delete target.underlay
             }
             if (hub) {
               target.transport = data.get('transport') === 'SDWAN' ? 'SDWAN' : 'VPN'
@@ -79,7 +85,10 @@ export function HybridConnectionEditor({ topology, connectionId, commit, simulat
             link.name = String(data.get('name'))
             link.enabled = data.has('enabled')
             link.prepend = inbound
-            if (link.targetKind === 'site') link.advertisedPrefixes = advertised
+            if (link.targetKind === 'site') {
+              if (advertised === undefined) delete link.advertisedPrefixes
+              else link.advertisedPrefixes = advertised
+            }
             if (hub) {
               link.learnSiteRoutes = data.has('learn')
               link.propagateDefaultRoute = data.has('default')
