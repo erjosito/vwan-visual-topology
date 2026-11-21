@@ -13,6 +13,7 @@ import { topologyObject } from './model'
 import { isolationLinkName } from './resilience'
 import { canAcknowledgeWarning, orderWarningFindings } from './warning-acknowledgements'
 import { WarningAcknowledgement } from './WarningAcknowledgement'
+import { useWorkspaceStorage } from './workspace-context'
 
 const storageKey = 'vwan-visual-topology:diagnostics:v1'
 const emptyProfile = (): DiagnosticsProfile => ({ version: 1, intents: [], failureAnalysis: false })
@@ -36,6 +37,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   onAcknowledge: (finding: DiagnosticsFinding, acknowledged: boolean) => void
   onRestoreAll: () => void
 }) {
+  const storage = useWorkspaceStorage()
   const nodes = [
     ...topology.spokes.map((node) => ({ kind: 'spoke' as const, id: node.id, name: node.name })),
     ...topology.sites.map((node) => ({ kind: 'site' as const, id: node.id, name: node.name })),
@@ -43,7 +45,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
   ]
   const [initial] = useState(() => {
     try {
-      const saved = localStorage.getItem(storageKey)
+      const saved = storage.getItem(storageKey)
       return { profile: saved ? validateDiagnosticsProfile(JSON.parse(saved)) : emptyProfile(), error: '' }
     } catch { return { profile: emptyProfile(), error: 'The saved analysis profile could not be loaded. Its stored contents have not been overwritten.' } }
   })
@@ -85,7 +87,7 @@ export function DiagnosticsPanel({ topology, onFinding, onInspect, onEditObject,
       importRequest.current++
       onClearHighlight()
       setProfile(valid); setReport(undefined); setError(''); setCancelled(false)
-      try { localStorage.setItem(storageKey, JSON.stringify(valid)) }
+      try { storage.setItem(storageKey, JSON.stringify(valid)) }
       catch { setError('Browser storage is unavailable or full. Export the analysis profile to preserve it.') }
     } catch { setError('Invalid analysis profile. Use canonical IPv4 addresses or network prefixes and valid flow requirements.') }
   }

@@ -1,6 +1,7 @@
 import { t, useLanguage } from './i18n'
 import { inventoryCounts } from './inventory'
 import { Fragment, useEffect, useId, useRef, useState } from 'react'
+import { useWorkspaceEditorState } from './workspace-context'
 import type { KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from 'react'
 import { CanvasBackground, CanvasControls, CanvasEdgeSelection } from './CanvasPresentation'
 import type { LayoutMode, NodePosition, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
@@ -67,7 +68,7 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
   const svg = useRef<SVGSVGElement>(null)
   const scroll = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState({ width: 0, height: 0 })
-  const [fitting, setFitting] = useState(false)
+  const [fitting, setFitting] = useWorkspaceEditorState('vwan.fitting', false)
   const [preview, setPreview] = useState<{ owner: RouterSelection; connectionId: string; direction: RouteMapDirection; anchor: SVGGElement }>()
   const previewId = useId()
   const previewTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -87,7 +88,7 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
   const drag = useRef<{ id: string; kind: ObjectSelection['kind']; start: NodePosition; origin: NodePosition; moved: boolean } | undefined>(undefined)
   const suppressClick = useRef(false)
   const [moving, setMoving] = useState<{ id: string; position: NodePosition }>()
-  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [pan, setPan] = useWorkspaceEditorState('vwan.pan', { x: 0, y: 0 })
   const [panning, setPanning] = useState(false)
   const panDrag = useRef<{ pointerId: number; start: NodePosition; origin: NodePosition; unitsPerPixel: number; moved: boolean } | undefined>(undefined)
   useCanvasZoom({

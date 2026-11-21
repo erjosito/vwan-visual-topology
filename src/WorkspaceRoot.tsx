@@ -91,6 +91,8 @@ function Workspace() {
   const practiceLoading = useRef<Promise<PracticeSession> | undefined>(undefined)
   const designHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
   const practiceHistory = useRef<WorkspaceEditorHistory | undefined>(undefined)
+  const designEditorState = useRef(new Map<string, unknown>())
+  const practiceEditorState = useRef(new Map<string, unknown>())
   const [anonymousProgress] = useState(() => createProgressLedger(() => localStorage))
   const anonymousLedger = useSyncExternalStore(anonymousProgress.subscribe, anonymousProgress.getSnapshot)
   const [accountProgress] = useState(() => new Map<string, ProgressLedgerStore>())
@@ -171,6 +173,7 @@ function Workspace() {
         notice: setPracticeNotice,
         replaced: () => {
           practiceHistory.current = undefined; learningRevision.current++
+          practiceEditorState.current = new Map()
           setPracticeEpoch((epoch) => epoch + 1)
         },
       })
@@ -259,6 +262,7 @@ function Workspace() {
       selectWorkspace(localStorage, provider, replacement)
       documentSave.reset()
       designHistory.current = undefined
+      designEditorState.current = new Map()
       setActive((current) => ({ provider, revision: (current?.revision ?? 0) + 1, capture }))
       setLibraryOpen(false); setNotice('')
       const url = new URL(location.href)
@@ -381,6 +385,7 @@ function Workspace() {
     openLibrary: () => { leavePractice(); request.current++; setLibraryOpen(true) },
     openDocument, getRequestVersion: () => request.current,
     documentSave: practicing ? undefined : documentSave,
+    editorState: practicing ? practiceEditorState.current : designEditorState.current,
     capture: practicing ? undefined : active?.capture,
     openPractice, practice: practicing ? practice : undefined,
     savePractice: (document) => practiceRef.current?.save(document, practiceEpoch),

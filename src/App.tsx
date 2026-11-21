@@ -6,7 +6,7 @@ import { WorkspaceAccountStatus, WorkspaceMenu } from './WorkspaceSession'
 import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
 import { previewVnetActions } from './context-actions'
 import { confirmConfigurationSwitch } from './configuration-selection'
-import { useWorkspaceSession } from './workspace-context'
+import { useWorkspaceEditorState, useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
@@ -79,16 +79,17 @@ const parseNode = (key: string): PathNode => {
 
 function App() {
   const workspaceSession = useWorkspaceSession()
+  const workspaceStorage = useWorkspaceStorage()
   const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
   const language = useLanguage()
   useEffect(() => {
     document.documentElement.lang = language
     document.title = documentTitles[language]
   }, [language])
-  const [selection, setSelection] = useState<ObjectSelection>()
-  const [detailOwner, setDetailOwner] = useState<string>()
-  const [inventorySelection, setInventorySelection] = useState<string>()
-  const [routerState, setRouter] = useState<ObjectSelection>()
+  const [selection, setSelection] = useWorkspaceEditorState<ObjectSelection>('vwan.selection')
+  const [detailOwner, setDetailOwner] = useWorkspaceEditorState<string>('vwan.detail')
+  const [inventorySelection, setInventorySelection] = useWorkspaceEditorState<string>('vwan.inventory')
+  const [routerState, setRouter] = useWorkspaceEditorState<ObjectSelection>('vwan.router')
   const [contextMenu, setContextMenu] = useState<DiagramContextMenu>()
   const [editorRequest, setEditorRequestState] = useState<EditorRequest>()
   const setEditorRequest = (request?: EditorRequest) => {
@@ -103,7 +104,7 @@ function App() {
   const [cloneVnetId, setCloneVnetId] = useState<string>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [erLocationModal, setErLocationModal] = useState<{ open: boolean; peeringLocation?: string; sku?: ErCircuitSku; targetAzureRegion?: string; erLocationId?: string }>({ open: false })
-  const [panel, setPanel] = useState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>()
+  const [panel, setPanel] = useWorkspaceEditorState<'routes' | 'maps' | 'rules' | 'static' | 'vpnWizard' | 'paths' | 'notes' | 'azure' | 'diagnostics' | 'issues' | 'comparison' | 'samples'>('vwan.panel')
   const [comparisonSession, setComparisonSession] = useState<ComparisonSession>()
   const [diagnosticHighlight, setDiagnosticHighlight] = useState<{ revision: string; findingId: string; paths: GroupPath[] }>()
   const [routingCheck, setRoutingCheck] = useState<{ revision: string; status: 'running' | 'complete' | 'cancelled' | 'failed'; report?: DiagnosticsReport }>()
@@ -197,7 +198,7 @@ function App() {
     let profile = { version: 1 as const, intents: [], failureAnalysis: false } as ReturnType<typeof validateDiagnosticsProfile>
     let requirementsUnavailable = false
     try {
-      const saved = localStorage.getItem('vwan-visual-topology:diagnostics:v1')
+      const saved = workspaceStorage.getItem('vwan-visual-topology:diagnostics:v1')
       if (saved) profile = validateDiagnosticsProfile(JSON.parse(saved))
     } catch { requirementsUnavailable = true }
     const targetRevision = routingRevision(targetTopology)
@@ -233,23 +234,23 @@ function App() {
   }
   const [pendingAzureImport, setPendingAzureImport] = useState<{ revision: number; topology: Topology }>()
   const [vpnConversion, setVpnConversion] = useState<{ connectionId: string; mode: VpnRoutingMode }>()
-  const [routeView, setRouteView] = useState<'bgp' | 'hub' | 'firewall'>('bgp')
-  const [routeMode, setRouteMode] = useState<RouteMode>('bgp')
-  const [mapRouter, setMapRouter] = useState<RouterSelection>()
-  const [mapDirection, setMapDirection] = useState<RouteMapDirection>()
-  const [mapConnectionId, setMapConnectionId] = useState<string>()
-  const [prefix, setPrefix] = useState('')
-  const [highlightTableId, setHighlightTableId] = useState(DEFAULT_HUB_TABLE)
-  const [highlighting, setHighlighting] = useState(false)
+  const [routeView, setRouteView] = useWorkspaceEditorState<'bgp' | 'hub' | 'firewall'>('vwan.routeView', 'bgp')
+  const [routeMode, setRouteMode] = useWorkspaceEditorState<RouteMode>('vwan.routeMode', 'bgp')
+  const [mapRouter, setMapRouter] = useWorkspaceEditorState<RouterSelection>('vwan.mapRouter')
+  const [mapDirection, setMapDirection] = useWorkspaceEditorState<RouteMapDirection>('vwan.mapDirection')
+  const [mapConnectionId, setMapConnectionId] = useWorkspaceEditorState<string>('vwan.mapConnection')
+  const [prefix, setPrefix] = useWorkspaceEditorState('vwan.prefix', '')
+  const [highlightTableId, setHighlightTableId] = useWorkspaceEditorState('vwan.highlightTable', DEFAULT_HUB_TABLE)
+  const [highlighting, setHighlighting] = useWorkspaceEditorState('vwan.highlighting', false)
   const layout = topology.layout?.mode ?? 'layered'
-  const [zoom, setZoom] = useState(1)
-  const [source, setSource] = useState('')
-  const [sourceTableId, setSourceTableId] = useState(DEFAULT_HUB_TABLE)
-  const [target, setTarget] = useState('')
-  const [destination, setDestination] = useState('')
-  const [destinationPrefix, setDestinationPrefix] = useState('')
-  const [tracing, setTracing] = useState(false)
-  const [groupTrace, setGroupTrace] = useState<{ group: PathGroup; direction: PathDirection }>()
+  const [zoom, setZoom] = useWorkspaceEditorState('vwan.zoom', 1)
+  const [source, setSource] = useWorkspaceEditorState('vwan.source', '')
+  const [sourceTableId, setSourceTableId] = useWorkspaceEditorState('vwan.sourceTable', DEFAULT_HUB_TABLE)
+  const [target, setTarget] = useWorkspaceEditorState('vwan.target', '')
+  const [destination, setDestination] = useWorkspaceEditorState('vwan.destination', '')
+  const [destinationPrefix, setDestinationPrefix] = useWorkspaceEditorState('vwan.destinationPrefix', '')
+  const [tracing, setTracing] = useWorkspaceEditorState('vwan.tracing', false)
+  const [groupTrace, setGroupTrace] = useWorkspaceEditorState<{ group: PathGroup; direction: PathDirection }>('vwan.groupTrace')
   const importer = useRef<HTMLInputElement>(null)
   const importRequest = useRef(0)
   const mounted = useRef(false)
@@ -375,7 +376,7 @@ function App() {
         window.history.replaceState(null, '', url)
       })
       .catch((err) => setError(`Sample load failed: ${message(err)}`))
-  }, [clearHistory, save, setError, workspaceSession?.practice])
+  }, [clearHistory, save, setError, setRouter, workspaceSession?.practice])
   const selectRouter = (value: ObjectSelection) => { setRouter(value); setRouteView('bgp'); setPrefix(''); setHighlightTableId(DEFAULT_HUB_TABLE); setHighlighting(false) }
   const openRouteMaps = (value?: RouterSelection, connectionId?: string) => { setMapRouter(value); setMapConnectionId(connectionId); setEditorRequest(undefined); setPanel('maps') }
   const showRouteMapRules = (value: RouterSelection, direction?: RouteMapDirection, connectionId?: string) => { setMapRouter(value); setMapDirection(direction); setMapConnectionId(connectionId); setSelection(value); setEditorRequest(undefined); setPanel('rules') }
@@ -668,7 +669,7 @@ function App() {
     <FailurePanel faults={faults} unassessed={scenario.unassessed} onRestore={restoreFault} onRestoreAll={() => restoreFault()}
       revision={baselineRevision} onReport={(report) => setResilience({ revision: baselineRevision, report })} focusEndpoint={resilience?.revision === baselineRevision ? resilienceEndpoint : undefined} onSimulate={addFault} analyze={() => {
         let intents: ReturnType<typeof validateDiagnosticsProfile>['intents'] = []
-        try { const saved = localStorage.getItem('vwan-visual-topology:diagnostics:v1'); if (saved) intents = validateDiagnosticsProfile(JSON.parse(saved)).intents }
+        try { const saved = workspaceStorage.getItem('vwan-visual-topology:diagnostics:v1'); if (saved) intents = validateDiagnosticsProfile(JSON.parse(saved)).intents }
         catch { const report = analyzeVwanResilience(topology, [], { maxPairs: 0 }); report.complete = false; report.limitations.push('Saved connectivity requirements could not be read; intent coverage is unassessed.'); return report }
         return analyzeVwanResilience(topology, intents)
       }} />
