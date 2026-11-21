@@ -13,7 +13,7 @@ export interface DocumentSaveSnapshot {
   cloud?: CloudDocumentSource & { state: 'checking' | 'matches' | 'modified' | 'changed' | 'missing' | 'unavailable' | 'unknown' }
 }
 
-async function fingerprint(value: unknown) {
+export async function fingerprint(value: unknown) {
   const raw = JSON.stringify(value, (_key, item) => item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item)
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))
