@@ -10,6 +10,7 @@ export interface WorkspaceDocument {
   save: DocumentSaveState
   editorState: Map<string, unknown>
   history?: WorkspaceEditorHistory
+  capture?: unknown
   remember: (history: WorkspaceEditorHistory) => boolean
 }
 

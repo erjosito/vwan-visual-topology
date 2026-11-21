@@ -24,6 +24,7 @@ export const WorkspaceSessionContext = createContext<{
   editorState?: Map<string, unknown>
   getRequestVersion: () => number
   capture?: unknown
+  consumeCapture?: () => void
   openPractice?: (request: PracticeRequest, signal?: AbortSignal) => Promise<void>
   practice?: PracticeWorkspace
   savePractice?: (document: PlatformDocument) => void
@@ -59,14 +60,14 @@ const browserStorage: WorkspaceStorage = {
 }
 export const useWorkspaceStorage = () => useWorkspaceSession()?.storage ?? browserStorage
 
-export function useWorkspaceEditorState<T>(key: string, initial: T | (() => T)): readonly [T, Dispatch<SetStateAction<T>>]
+export function useWorkspaceEditorState<T>(key: string, initial: T | (() => T), restore?: (value: T) => T): readonly [T, Dispatch<SetStateAction<T>>]
 export function useWorkspaceEditorState<T = undefined>(key: string): readonly [T | undefined, Dispatch<SetStateAction<T | undefined>>]
-export function useWorkspaceEditorState<T>(key: string, initial?: T | (() => T)) {
+export function useWorkspaceEditorState<T>(key: string, initial?: T | (() => T), restore?: (value: T) => T) {
   const session = useWorkspaceSession()
   // Capture the owner once: a delayed update must never write into a newly selected document.
   const [owner] = useState(() => session?.editorState)
   const [value, setValue] = useState<T | undefined>(() => owner?.has(key)
-    ? owner.get(key) as T : typeof initial === 'function' ? (initial as () => T)() : initial)
+    ? restore ? restore(owner.get(key) as T) : owner.get(key) as T : typeof initial === 'function' ? (initial as () => T)() : initial)
   useLayoutEffect(() => { owner?.set(key, value) }, [owner, key, value])
   return [value, setValue] as const
 }

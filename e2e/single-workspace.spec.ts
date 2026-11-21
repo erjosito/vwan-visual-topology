@@ -3,6 +3,162 @@ import { example } from '../src/model'
 import { sampleHybridVwanAndHubSpoke } from '../src/azure-net/model'
 import { workspaceArchiveKey, workspaceSessionKey, workspaceStorageKeys } from '../src/workspace-session'
 import { observationFixture } from '../tests/azure-observation-fixture'
+import { exercises } from '../src/learning/exercises'
+
+for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} topology tabs preserve independent edits, view, history and restart`, async ({ page }) => {
+    const first = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
+    first.name = 'First tab design'
+    const second = structuredClone(first)
+    second.name = 'Second tab design'
+    await page.addInitScript(({ topology, vwan }) => {
+      const key = vwan ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(vwan ? topology : { sampleId: '', topology }))
+    }, { topology: first, vwan })
+    await page.goto(`/?mode=${vwan ? 'vwan' : 'full'}`)
+    const tabs = page.getByRole('tablist', { name: 'Designs', exact: true })
+    const node = vwan ? page.locator('[data-node-id="a"]') : page.getByTestId('aznet-select-vnet-a')
+    const selected = vwan ? page.locator('[data-node-id="b"]') : page.getByTestId('aznet-select-vnet-b')
+    const position = () => vwan ? node.getAttribute('transform')
+      : page.getByTestId('aznet-vnet-a').locator('.network-node-frame').getAttribute('x')
+    await expect(node).toBeVisible()
+    const initialPosition = await position()
+    await node.focus()
+    await page.keyboard.press(vwan ? 'Alt+ArrowRight' : 'ArrowRight')
+    const firstPosition = await position()
+    expect(firstPosition).not.toBe(initialPosition)
+    await selected.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+    const firstZoom = await page.getByLabel('Canvas zoom', { exact: true }).inputValue()
+    await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+      name: 'second.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(second)),
+    })
+    await expect(tabs.getByRole('tab')).toHaveCount(2)
+    await expect(tabs.getByRole('tab', { name: second.name, exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('button', { name: /Undo/ })).toBeDisabled()
+    await expect(selected).toHaveAttribute('aria-pressed', 'false')
+    expect(await position()).toBe(initialPosition)
+    await node.focus()
+    await page.keyboard.press(vwan ? 'Alt+ArrowLeft' : 'ArrowLeft')
+    const secondPosition = await position()
+    await tabs.getByRole('tab', { name: first.name, exact: true }).click()
+    expect(await position()).toBe(firstPosition)
+    await expect(selected).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.getByLabel('Canvas zoom', { exact: true })).toHaveValue(firstZoom)
+    await page.getByRole('button', { name: /Undo/ }).click()
+    expect(await position()).toBe(initialPosition)
+    await page.getByRole('button', { name: /Redo/ }).click()
+    expect(await position()).toBe(firstPosition)
+    await tabs.getByRole('tab', { name: second.name, exact: true }).click()
+    expect(await position()).toBe(secondPosition)
+    await page.reload()
+    await expect(tabs.getByRole('tab', { name: second.name, exact: true })).toHaveAttribute('aria-selected', 'true')
+    await expect(node).toBeVisible()
+    expect(await position()).toBe(secondPosition)
+    await tabs.getByRole('tab', { name: first.name, exact: true }).click()
+    await expect(node).toBeVisible()
+    expect(await position()).toBe(firstPosition)
+  })
+}
+
+test('topology tabs support cross-provider keyboard activation and narrow layout without clipping the mixed canvas', async ({ page }) => {
+  await page.goto('/?mode=vwan')
+  await page.getByLabel('Topology name', { exact: true }).fill('Native design')
+  await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  const tabs = page.getByRole('tablist', { name: 'Designs', exact: true })
+  const native = tabs.getByRole('tab', { name: 'Native design', exact: true })
+  const mixed = tabs.getByRole('tab').last()
+  await mixed.focus()
+  await page.keyboard.press('Home')
+  await expect(native).toBeFocused()
+  await expect(mixed).toHaveAttribute('aria-selected', 'true')
+  await page.keyboard.press('Enter')
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Native design')
+  await page.keyboard.press('End')
+  await expect(mixed).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.locator('header [data-language-selector]').selectOption('ja')
+  await page.getByLabel('Theme', { exact: true }).selectOption('dark')
+  const nav = page.getByRole('navigation', { name: '開いているトポロジ', exact: true })
+  const navBox = await nav.boundingBox()
+  const canvasBox = await page.getByTestId('aznet-app').boundingBox()
+  expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(390)
+  expect(canvasBox!.y + canvasBox!.height).toBeLessThanOrEqual(845)
+  await expect(page.getByRole('tablist', { name: 'デザイン', exact: true }).getByRole('tab')).toHaveCount(2)
+})
+
+test('accepted capture review is not replayed over an edited topology when returning to its tab', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+    name: 'capture.json', mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({ ...observationFixture(), version: 1 })),
+  })
+  const review = page.getByRole('dialog', { name: 'Azure files', exact: true })
+  await review.getByLabel('I understand this is a structure-only import, not verified Azure routing.').check()
+  await review.getByRole('button', { name: 'Replace workspace with Azure capture' }).click()
+  await page.getByLabel('Topology name', { exact: true }).fill('Accepted capture')
+  const tabs = page.getByRole('tablist', { name: 'Designs', exact: true })
+  await tabs.getByRole('tab').first().click()
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await tabs.getByRole('tab', { name: 'Accepted capture', exact: true }).click()
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Accepted capture')
+  await expect(review.getByRole('heading', { name: 'Review Azure capture' })).toHaveCount(0)
+})
+
+for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} completed routing evidence stays with its topology tab`, async ({ page }) => {
+    const topology = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
+    topology.name = 'Checked design'
+    await page.goto('/')
+    await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+      name: 'checked.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+    const status = page.locator('.routing-check-status')
+    await expect(status).toBeVisible()
+    await expect(status).not.toContainText('Checking all modeled networks', { timeout: 30000 })
+    const result = await status.textContent()
+    await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
+    await expect(status).toHaveCount(0)
+    await page.getByRole('tablist', { name: 'Designs', exact: true }).getByRole('tab', { name: topology.name, exact: true }).click()
+    await expect(status).toHaveText(result!)
+  })
+
+  test(`${vwan ? 'VWAN' : 'mixed'} suspended routing workers do not restart or appear running on return`, async ({ page }) => {
+    let release!: () => void
+    const gate = new Promise<void>(resolve => { release = resolve })
+    let requests = 0
+    await page.route('**/*diagnostics-worker*', async route => {
+      requests++
+      await gate
+      await route.continue().catch(() => undefined)
+    })
+    try {
+      const topology = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
+      topology.name = 'Suspended check'
+      await page.goto('/')
+      await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+        name: 'pending.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+      })
+      await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+      await expect.poll(() => requests).toBe(1)
+      await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+      await expect(page.getByTestId('aznet-app')).toBeVisible()
+      await expect(page.locator('.routing-check-status')).toHaveCount(0)
+      await page.getByRole('tablist', { name: 'Designs', exact: true }).getByRole('tab', { name: topology.name, exact: true }).click()
+      await expect(page.locator('.routing-check-status')).toContainText(vwan ? 'Routing check cancelled' : 'Analysis cancelled')
+      release()
+      await expect(page.getByRole('button', { name: 'Check routing', exact: true })).toBeEnabled()
+      await expect(page.locator('.routing-check-status')).not.toContainText('Checking all modeled networks')
+      expect(requests).toBe(1)
+    } finally { release() }
+  })
+}
 
 test('fresh web and desktop enter the same empty mixed workspace with both creation families', async ({ page }) => {
   for (const desktop of [false, true]) {

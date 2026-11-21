@@ -42,7 +42,7 @@ export function WorkspaceLibrary({ required, notice, onOpen, onNew, onClose, onR
     onCancel={(event) => { if (required) event.preventDefault(); else onClose() }} onClose={() => { if (!required) onClose() }}>
     <header className="row dialog-heading"><h2 id="workspace-library-title">{text('Workspace', 'ワークスペース')}</h2>
       {!required && <button type="button" onClick={onClose}>{text('Close', '閉じる')}</button>}</header>
-    <p>{text('One active design. New workspaces support Virtual WAN and classic networking together. Saved native designs keep their original editor and routing provider without conversion.', '編集するデザインは1つです。新しいワークスペースでは Virtual WAN と従来のネットワークを併用できます。既存のデザインは変換せず、元のエディターとルーティング処理で開きます。')}</p>
+    <p>{text('Open designs in separate tabs; your existing designs stay open. New workspaces support Virtual WAN and classic networking together. Saved native designs keep their original editor and routing provider without conversion.', 'デザインは別々のタブで開き、既存のデザインはそのまま保持します。新しいワークスペースでは Virtual WAN と従来のネットワークを併用できます。既存のデザインは変換せず、元のエディターとルーティング処理で開きます。')}</p>
     {notice && <p role="alert">{t(notice)}</p>}
     {required && <p role="status">{text('Choose a saved design or start empty. Neither saved family has been selected or overwritten automatically.', '保存済みデザインを選択するか、空の状態で開始してください。保存済みデータは自動で選択・上書きされていません。')}</p>}
     <button type="button" onClick={onNew}>{text('New mixed-network workspace', '新しい混在ネットワーク ワークスペース')}</button>

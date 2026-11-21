@@ -340,11 +340,76 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [testIpQuery, setTestIpQuery] = useWorkspaceEditorState('aznet.testIp', '')
   const [hubTableInspection, setHubTableInspection] = useWorkspaceEditorState<{ hubId: string; tableId: string; prefix?: string; firewall?: boolean }>('aznet.hubTable')
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useWorkspaceEditorState('aznet.diagnosticBadges', true)
-  const [captureComparison, setCaptureComparison] = useState<AzNetComparisonReport | null>(null)
-  const [captureNotices, setCaptureNotices] = useState<string[]>([])
-  const [captureObservations, setCaptureObservations] = useState<AzCapturedObservations | null>(null)
+  const [captureComparison, setCaptureComparison] = useWorkspaceEditorState<AzNetComparisonReport | null>('aznet.captureComparison', null)
+  const [captureNotices, setCaptureNotices] = useWorkspaceEditorState<string[]>('aznet.captureNotices', [])
+  const [captureObservations, setCaptureObservations] = useWorkspaceEditorState<AzCapturedObservations | null>('aznet.captureObservations', null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const compareFileInputRef = useRef<HTMLInputElement | null>(null)
+
+  const [faults, setFaults] = useWorkspaceEditorState<FailureDomain[]>('aznet.faults', [])
+  const [resilience, setResilience] = useWorkspaceEditorState<{ revision: string; report: ResilienceReport }>('aznet.resilience')
+  const [resilienceEndpoint, setResilienceEndpoint] = useWorkspaceEditorState<string>('aznet.resilienceEndpoint')
+  const routingInput = useMemo(() => azRoutingInput(topology), [topology])
+  const baselineRevision = routingInput.revision
+  const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
+  // The revision is deliberately exhaustive except the documented presentation fields.
+  const routingTopology = useMemo(() => JSON.parse(routingInput.revision) as AzNetTopology, [routingInput.revision])
+  const displayNames = useMemo(() => JSON.parse(routingInput.nameRevision) as string[], [routingInput.nameRevision])
+  const scenario = useMemo(() => projectAzFailures(routingTopology, faults), [routingTopology, faults])
+  const unassessedFailures = useMemo(() => azDisplayResult(scenario.unassessed, displayNames), [scenario.unassessed, displayNames])
+  const failureDomains = useMemo(() => azDisplayResult(scenario.domains, displayNames), [scenario.domains, displayNames])
+  const activeTopology = scenario.active
+  const activeRevision = useMemo(() => azRoutingInput(activeTopology).revision, [activeTopology])
+  const addFault = (fault: FailureDomain) => {
+    if (analysisRequest) setAnalysisEnabled(true)
+    setFaults((current) => [...current.filter((f) => failureKey(f) !== failureKey(fault)), fault])
+    setActiveTab(null)
+    setDeleteTarget(null)
+  }
+  const restoreFault = (fault: FailureDomain) => {
+    if (analysisRequest) setAnalysisEnabled(true)
+    setFaults((current) => current.filter((f) => failureKey(f) !== failureKey(fault)))
+  }
+  const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulateAzNet(activeTopology)), [activeTopology])
+  const simulation = useMemo(() => azDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
+  const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
+
+  const rawEndpointOptions = useMemo(() => getAzNetEndpoints(routingTopology), [routingTopology])
+  const endpointOptions = useMemo(() => azDisplayResult(rawEndpointOptions, displayNames), [rawEndpointOptions, displayNames])
+
+  const [traceSourceKey, setTraceSourceKey] = useWorkspaceEditorState('aznet.traceSource', '')
+  const [traceDestKey, setTraceDestKey] = useWorkspaceEditorState('aznet.traceDestination', '')
+  const [customDestIp, setCustomDestIp] = useWorkspaceEditorState('aznet.traceIp', '')
+  const [traceActive, setTraceActive] = useWorkspaceEditorState('aznet.traceActive', false)
+  const [groupTrace, setGroupTrace] = useWorkspaceEditorState<{
+    anchorKey: string
+    direction: 'to' | 'from'
+    group: 'workload' | 'site'
+  } | null>('aznet.groupTrace', null)
+  const [analysisScope, setAnalysisScope] = useWorkspaceEditorState<AzConnectivityScope['scope']>('aznet.analysisScope', 'pair')
+  const [analysisRequest, setAnalysisRequestState] = useWorkspaceEditorState<AzConnectivityScope | null>('aznet.analysisRequest', null)
+  const [analysisEnabled, setAnalysisEnabled] = useState(false)
+  const setAnalysisRequest = (value: AzConnectivityScope | null) => {
+    setAnalysisEnabled(!!value)
+    setAnalysisRequestState(value)
+    if (value) setAnalysisRun({ revision: activeRevision, request: value, status: 'running' })
+  }
+  const [analysisRun, setAnalysisRun] = useWorkspaceEditorState<{
+    revision: string; request: AzConnectivityScope
+    status: 'running' | 'ready' | 'cancelled' | 'failed'; report?: AzConnectivityReport
+  } | undefined>('aznet.analysisRun', undefined, value => value && (value.status === 'running' || value.report?.continuation.status === 'paused')
+    ? { ...value, status: 'cancelled', report: value.report ? { ...value.report, complete: false,
+      continuation: { ...value.report.continuation, status: 'cancelled' } } : undefined } : value)
+  const analysisWorker = useRef<Worker | undefined>(undefined)
+  const [reviewFindingIds, setReviewFindingIds] = useWorkspaceEditorState<string[] | null>('aznet.reviewFindings', null)
+  const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
+  const sampleRequest = useRef(0)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+  const [contextMenu, setContextMenu] = useState<AzContextMenuTarget | null>(null)
 
   const commitTopology = (updater: (draft: AzNetTopology) => void) => {
     let next: AzNetTopology
@@ -367,79 +432,27 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     }
     setHistory((prev) => [...prev.slice(-24), cloneAzNetTopology(topology)])
     setFuture([])
+    if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
     setTopology(next)
     return true
   }
-
   const editSubnetAddresses = useSubnetAddressEditing(commitTopology, setWorkspaceNotice)
-
   const handleUndo = () => {
     if (!history.length) return
     const previous = history[history.length - 1]
     setFuture((f) => [cloneAzNetTopology(topology), ...f])
     setHistory((h) => h.slice(0, -1))
+    if (analysisRequest && azRoutingInput(previous).revision !== routingInput.revision) setAnalysisEnabled(true)
     setTopology(previous)
   }
-
   const handleRedo = () => {
     if (!future.length) return
     const next = future[0]
     setHistory((h) => [...h, cloneAzNetTopology(topology)])
     setFuture((f) => f.slice(1))
+    if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
     setTopology(next)
   }
-
-  const [faults, setFaults] = useState<FailureDomain[]>([])
-  const [resilience, setResilience] = useState<{ revision: string; report: ResilienceReport }>()
-  const [resilienceEndpoint, setResilienceEndpoint] = useState<string>()
-  const routingInput = useMemo(() => azRoutingInput(topology), [topology])
-  const baselineRevision = routingInput.revision
-  const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
-  // The revision is deliberately exhaustive except the documented presentation fields.
-  const routingTopology = useMemo(() => JSON.parse(routingInput.revision) as AzNetTopology, [routingInput.revision])
-  const displayNames = useMemo(() => JSON.parse(routingInput.nameRevision) as string[], [routingInput.nameRevision])
-  const scenario = useMemo(() => projectAzFailures(routingTopology, faults), [routingTopology, faults])
-  const unassessedFailures = useMemo(() => azDisplayResult(scenario.unassessed, displayNames), [scenario.unassessed, displayNames])
-  const failureDomains = useMemo(() => azDisplayResult(scenario.domains, displayNames), [scenario.domains, displayNames])
-  const activeTopology = scenario.active
-  const addFault = (fault: FailureDomain) => {
-    setFaults((current) => [...current.filter((f) => failureKey(f) !== failureKey(fault)), fault])
-    setActiveTab(null)
-    setDeleteTarget(null)
-  }
-  const restoreFault = (fault: FailureDomain) => setFaults((current) => current.filter((f) => failureKey(f) !== failureKey(fault)))
-  const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulateAzNet(activeTopology)), [activeTopology])
-  const simulation = useMemo(() => azDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
-  const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
-
-  const rawEndpointOptions = useMemo(() => getAzNetEndpoints(routingTopology), [routingTopology])
-  const endpointOptions = useMemo(() => azDisplayResult(rawEndpointOptions, displayNames), [rawEndpointOptions, displayNames])
-
-  const [traceSourceKey, setTraceSourceKey] = useWorkspaceEditorState('aznet.traceSource', '')
-  const [traceDestKey, setTraceDestKey] = useWorkspaceEditorState('aznet.traceDestination', '')
-  const [customDestIp, setCustomDestIp] = useWorkspaceEditorState('aznet.traceIp', '')
-  const [traceActive, setTraceActive] = useWorkspaceEditorState('aznet.traceActive', false)
-  const [groupTrace, setGroupTrace] = useState<{
-    anchorKey: string
-    direction: 'to' | 'from'
-    group: 'workload' | 'site'
-  } | null>(null)
-  const [analysisScope, setAnalysisScope] = useState<AzConnectivityScope['scope']>('pair')
-  const [analysisRequest, setAnalysisRequest] = useState<AzConnectivityScope | null>(null)
-  const [analysisRun, setAnalysisRun] = useState<{
-    topology: AzNetTopology; request: AzConnectivityScope
-    status: 'running' | 'ready' | 'cancelled' | 'failed'; report?: AzConnectivityReport
-  }>()
-  const analysisWorker = useRef<Worker | undefined>(undefined)
-  const [reviewFindingIds, setReviewFindingIds] = useState<string[] | null>(null)
-  const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
-  const sampleRequest = useRef(0)
-  const mounted = useRef(false)
-  useEffect(() => {
-    mounted.current = true
-    return () => { mounted.current = false }
-  }, [])
-  const [contextMenu, setContextMenu] = useState<AzContextMenuTarget | null>(null)
 
   const handleShareUrl = () => {
     if (window.desktopSimulator) return
@@ -500,12 +513,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const groupedPaths = useMemo(() => azDisplayResult(rawGroupedPaths, displayNames), [rawGroupedPaths, displayNames])
 
   useEffect(() => {
-    if (!analysisRequest) return
+    if (!analysisEnabled || !analysisRequest) return
     let next: Worker | undefined
     let disposed = false
     const failed = () => {
       if (disposed || (next && analysisWorker.current !== next)) return
-      setAnalysisRun({ topology: activeTopology, request: analysisRequest, status: 'failed' })
+      setAnalysisRun({ revision: activeRevision, request: analysisRequest, status: 'failed' })
       next?.terminate(); analysisWorker.current = undefined
     }
     try {
@@ -516,7 +529,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         if (analysisWorker.current !== current) return
         if (!data.report) { failed(); return }
         if (typeof data.elapsedMillis === 'number') recordAzWork('connectivity', data.elapsedMillis)
-        setAnalysisRun({ topology: activeTopology, request: analysisRequest, status: 'ready', report: data.report })
+        setAnalysisRun({ revision: activeRevision, request: analysisRequest, status: 'ready', report: data.report })
         if (data.report.continuation.status !== 'paused') { current.terminate(); analysisWorker.current = undefined }
       }
       current.onerror = failed
@@ -527,10 +540,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       next?.terminate()
       if (analysisWorker.current === next) analysisWorker.current = undefined
     }
-  }, [analysisRequest, activeTopology])
-  const currentAnalysisRun = analysisRun?.topology === activeTopology && analysisRun.request === analysisRequest ? analysisRun : undefined
+  }, [analysisRequest, analysisEnabled, activeTopology, activeRevision, setAnalysisRun])
+  const currentAnalysisRun = analysisRun?.revision === activeRevision && analysisRun.request === analysisRequest ? analysisRun : undefined
   const rawAnalysis = currentAnalysisRun?.report ?? null
-  const analysisRunning = Boolean(analysisRequest && (!currentAnalysisRun || currentAnalysisRun.status === 'running'))
+  const analysisRunning = Boolean(analysisEnabled && analysisRequest && (!currentAnalysisRun || currentAnalysisRun.status === 'running'))
   const continueAnalysis = () => {
     if (!analysisWorker.current || !currentAnalysisRun || analysisRunning || rawAnalysis?.continuation.status !== 'paused') return
     setAnalysisRun({ ...currentAnalysisRun, status: 'running' })
@@ -540,7 +553,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     analysisWorker.current?.terminate(); analysisWorker.current = undefined
     if (!analysisRequest) return
     setAnalysisRun({
-      topology: activeTopology, request: analysisRequest, status: 'cancelled',
+      revision: activeRevision, request: analysisRequest, status: 'cancelled',
       report: rawAnalysis ? { ...rawAnalysis, complete: false, continuation: { ...rawAnalysis.continuation, status: 'cancelled' } } : undefined,
     })
   }
@@ -666,7 +679,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setActiveTab('azure')
   }
   const importSessionCapture = useEffectEvent((module: typeof import('./azure-import')) => {
-    if (workspaceSession?.capture) applyCapture(workspaceSession.capture, module)
+    if (workspaceSession?.capture) {
+      applyCapture(workspaceSession.capture, module)
+      workspaceSession.consumeCapture?.()
+    }
   })
   useEffect(() => {
     if (!workspaceSession?.capture) return
@@ -3043,6 +3059,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 const text = await file.text()
                 if (!mounted.current || request !== sampleRequest.current || workspaceRequest !== workspaceSession?.getRequestVersion()) return
                 const raw: unknown = JSON.parse(text)
+                if (workspaceSession && !workspaceSession.practice) {
+                  await workspaceSession.openDocument(raw)
+                  return
+                }
                 if (raw && typeof raw === 'object' && 'kind' in raw && raw.kind === 'azure-vwan-capture' && workspaceSession) {
                   await workspaceSession.openDocument(raw)
                   return

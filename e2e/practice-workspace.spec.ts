@@ -368,7 +368,9 @@ test('returning to an unsaved normal VWAN design retains its edit and storage wa
   await page.evaluate(() => {
     const original = Storage.prototype.setItem
     Storage.prototype.setItem = function (key, value) {
-      if (key === 'vwan-visual-topology:v1') throw new Error('Normal document exceeds quota')
+      if (key === 'vwan-visual-topology:v1' || /^network-simulator:workspace-tab:v1:.*:topology$/.test(key)) {
+        throw new Error('Normal document exceeds quota')
+      }
       return original.call(this, key, value)
     }
   })
