@@ -698,6 +698,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const loadSample = async (id: string, signal?: AbortSignal) => {
     id = resolveSampleIdAlias(id)
     const request = ++sampleRequest.current
+    const scope = workspaceSession?.getRequestVersion()
     try {
       if (id && !/^[a-z0-9-]+$/.test(id)) return false
       const found = AZURE_NET_SAMPLES.find((s) => s.id === id)
@@ -707,8 +708,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           if (!res.ok) throw new Error(`Sample "${id}" not found.`)
           return parseAzNetJson(await res.text())
         })
-      if (signal?.aborted || request !== sampleRequest.current) return false
-      applyLoadedTopology(id, next)
+      if (signal?.aborted || !mounted.current || request !== sampleRequest.current || workspaceSession && scope !== workspaceSession.getRequestVersion()) return false
+      if (id && workspaceSession && !workspaceSession.practice) await workspaceSession.openDocument(next, undefined, { sampleId: id })
+      else applyLoadedTopology(id, next)
       return true
     } catch (error) {
       if (!signal?.aborted && request === sampleRequest.current) setWorkspaceNotice(`Sample rejected: ${workspaceError(error)}`)

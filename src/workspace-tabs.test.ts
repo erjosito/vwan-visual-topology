@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { cloudDocumentKey } from './cloud/document-state'
 import { workspaceStorageKeys, type WorkspaceStorage } from './workspace-session'
-import { addWorkspaceTab, readWorkspaceTabs, workspaceTabKey, workspaceTabStorage, workspaceTabsKey,
+import { addWorkspaceTab, closeWorkspaceTabs, reopenWorkspaceTab, readWorkspaceTabs, workspaceTabKey, workspaceTabStorage, workspaceTabsKey,
   workspaceTabsLimit, writeWorkspaceTabs, type WorkspaceTab, type WorkspaceTabs } from './workspace-tabs'
 
 const first: WorkspaceTab = { id: '11111111-1111-4111-8111-111111111111', provider: 'vwan', name: 'First design' }
@@ -20,6 +20,33 @@ function memory() {
 }
 
 describe('workspace tab persistence', () => {
+  it('closes tabs without deleting native recovery bytes or cloud associations and reopens the same identity', () => {
+    const { storage } = memory()
+    let session = addWorkspaceTab(storage, empty, first, 'first native bytes')
+    session = addWorkspaceTab(storage, session, second, 'second native bytes')
+    storage.setItem(workspaceTabKey(first, 'cloud'), 'retained cloud association')
+    session = closeWorkspaceTabs(storage, session, [first.id])
+    expect(session.tabs).toEqual([second])
+    expect(session.activeId).toBe(second.id)
+    expect(storage.getItem(workspaceTabKey(first, 'topology'))).toBe('first native bytes')
+    expect(storage.getItem(workspaceTabKey(first, 'cloud'))).toBe('retained cloud association')
+    session = reopenWorkspaceTab(storage, session, first)
+    expect(session.activeId).toBe(first.id)
+    expect(session.tabs).toEqual([second, first])
+    session = closeWorkspaceTabs(storage, session, [first.id, second.id])
+    expect(readWorkspaceTabs(storage)).toEqual({ session: empty })
+    expect(storage.getItem(workspaceTabKey(second, 'topology'))).toBe('second native bytes')
+  })
+
+  it('does not close a stale session or reopen missing recovery data', () => {
+    const { storage } = memory()
+    const session = addWorkspaceTab(storage, empty, first, 'first')
+    expect(() => closeWorkspaceTabs(storage, empty, [first.id])).toThrow('changed')
+    expect(() => reopenWorkspaceTab(storage, session, second)).toThrow('missing')
+    expect(readWorkspaceTabs(storage)).toEqual({ session })
+    expect(storage.getItem(workspaceTabKey(first, 'topology'))).toBe('first')
+  })
+
   it('restores every open design and the active tab without changing either native record or legacy originals', () => {
     const { storage } = memory()
     storage.setItem(workspaceStorageKeys.vwan, 'legacy original bytes')

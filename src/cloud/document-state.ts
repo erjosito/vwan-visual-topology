@@ -21,7 +21,7 @@ async function fingerprint(value: unknown) {
 }
 
 export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
-  digest = fingerprint) {
+  digest = fingerprint, showInactive = false) {
   let accountId: string | undefined, provider: WorkspaceProvider | undefined, topology: unknown
   let active = true, epoch = 0, sequence = 0
   let local: { topology: unknown; state: DocumentSaveSnapshot['local'] } | undefined
@@ -43,10 +43,10 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
   } catch { /* Association recovery must never prevent access to the local design. */ }
   const remove = () => { try { storage().removeItem(cloudDocumentKey) } catch {} }
   const publish = () => {
-    const cloud = active && binding?.accountId === accountId && binding ? {
+    const cloud = (active || showInactive) && binding?.accountId === accountId && binding ? {
       accountId: binding.accountId, id: binding.id, name: binding.name, etag: binding.etag,
       state: verification !== 'confirmed' ? verification
-        : hashFailed || !binding.digest ? 'unknown' : !currentDigest ? 'checking'
+        : hashFailed || !binding.digest ? 'unknown' : !currentDigest ? active ? 'checking' : 'unknown'
           : currentDigest === binding.digest ? 'matches' : 'modified',
     } as NonNullable<DocumentSaveSnapshot['cloud']> : undefined
     const next: DocumentSaveSnapshot = { ready: active && topology !== undefined, provider,

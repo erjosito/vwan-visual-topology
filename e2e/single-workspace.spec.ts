@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import { example } from '../src/model'
 import { sampleHybridVwanAndHubSpoke } from '../src/azure-net/model'
 import { workspaceArchiveKey, workspaceSessionKey, workspaceStorageKeys } from '../src/workspace-session'
@@ -62,6 +63,96 @@ for (const vwan of [true, false]) {
   })
 }
 
+test('competing browser windows edit temporary copies without overwriting the owned profile', async ({ page, context }) => {
+  await page.goto('/?mode=vwan')
+  await page.getByLabel('Topology name', { exact: true }).fill('Owner design')
+  const original = await page.evaluate(() => ({
+    topology: localStorage.getItem('vwan-visual-topology:v1'),
+    tabs: localStorage.getItem('network-simulator:workspace-tabs:v1'),
+  }))
+  const other = await context.newPage()
+  try {
+    await other.goto('/')
+    await expect(other.getByText('Temporary', { exact: true })).toBeVisible()
+    await expect(other.getByLabel('Topology name', { exact: true })).toHaveValue('Owner design')
+    await other.getByLabel('Topology name', { exact: true }).fill('Temporary design')
+    await expect(other.getByText('Browser storage is unavailable or full. Export JSON to preserve your topology.', { exact: true })).toBeVisible()
+    expect(await other.evaluate(() => ({
+      topology: localStorage.getItem('vwan-visual-topology:v1'),
+      tabs: localStorage.getItem('network-simulator:workspace-tabs:v1'),
+    }))).toEqual(original)
+    await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Owner design')
+    await page.close()
+    await other.reload()
+    await expect(other.getByLabel('Topology name', { exact: true })).toHaveValue('Owner design')
+    await expect(other.getByText('Temporary', { exact: true })).toHaveCount(0)
+  } finally { await other.close() }
+})
+
+for (const partial of [false, true]) test(`${partial ? 'partial' : 'unavailable'} browser locking keeps normal editing in memory without claiming or replacing profile saves`, async ({ page }) => {
+  const topology = { ...example, name: 'Stored original' }
+  await page.addInitScript(({ topology, partial }) => {
+    Object.defineProperty(navigator, 'locks', { value: partial ? {} : undefined })
+    localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
+  }, { topology, partial })
+  await page.goto('/?mode=vwan')
+  await expect(page.getByText('Temporary', { exact: true })).toBeVisible()
+  await page.getByLabel('Topology name', { exact: true }).fill('Memory edit')
+  expect(JSON.parse((await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1')))!)).toEqual(topology)
+  expect(await page.evaluate(() => localStorage.getItem('network-simulator:workspace-tabs:v1'))).toBeNull()
+})
+
+test('closing, cancelling, reopening and close-all keep recovery data and do not silently reopen after restart', async ({ page }) => {
+  await page.goto('/?mode=vwan')
+  await page.getByLabel('Topology name', { exact: true }).fill('Recoverable design')
+  const manifest = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!))
+  const id = manifest.activeId
+  page.once('dialog', dialog => dialog.dismiss())
+  await page.getByRole('button', { name: 'Close topology: Recoverable design', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'Recoverable design', exact: true })).toBeVisible()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Close topology: Recoverable design', exact: true }).click()
+  const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
+  await expect(library).toBeVisible()
+  await library.getByRole('button', { name: 'Reopen topology: Recoverable design', exact: true }).click()
+  await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Recoverable design')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).toBe(id)
+  await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  page.once('dialog', dialog => dialog.accept())
+  await page.getByRole('button', { name: 'Close topology: Empty Topology', exact: true }).click()
+  await expect(page.getByRole('tab', { name: 'Recoverable design', exact: true })).toBeFocused()
+  await page.getByRole('button', { name: 'New topology tab', exact: true }).click()
+  await page.getByTestId('workspace-library-open').click()
+  page.once('dialog', dialog => dialog.accept())
+  await library.getByRole('button', { name: 'Close all topology tabs', exact: true }).click()
+  await expect(page.getByRole('tablist', { name: 'Designs', exact: true })).toHaveCount(0)
+  await page.reload()
+  await expect(library).toBeVisible()
+  await expect(page.getByTestId('aznet-app')).toHaveCount(0)
+  expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), id)).toContain('Recoverable design')
+})
+
+test('damaged tab-list recovery archives metadata without deleting saved native designs', async ({ page }) => {
+  await page.goto('/?mode=vwan')
+  await page.getByLabel('Topology name', { exact: true }).fill('Recovered native design')
+  const before = await page.evaluate(() => ({
+    id: JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId,
+    raw: localStorage.getItem('vwan-visual-topology:v1'),
+  }))
+  await page.evaluate(() => localStorage.setItem('network-simulator:workspace-tabs:v1', '{"version":99,"tabs":[]}'))
+  await page.reload()
+  const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
+  await expect(library.getByRole('button', { name: 'Reset damaged tab list', exact: true })).toBeVisible()
+  page.once('dialog', dialog => dialog.accept())
+  await library.getByRole('button', { name: 'Reset damaged tab list', exact: true }).click()
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
+  expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), before.id)).toBe(before.raw)
+  const archives = await page.evaluate(() => Object.keys(localStorage).filter(key => key.startsWith('network-simulator:workspace-tabs:recovery:v1:'))
+    .map(key => localStorage.getItem(key)))
+  expect(archives).toContain('{"version":99,"tabs":[]}')
+})
+
 test('topology tabs support cross-provider keyboard activation and narrow layout without clipping the mixed canvas', async ({ page }) => {
   await page.goto('/?mode=vwan')
   await page.getByLabel('Topology name', { exact: true }).fill('Native design')
@@ -81,14 +172,19 @@ test('topology tabs support cross-provider keyboard activation and narrow layout
   await page.keyboard.press('Enter')
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
-  await page.locator('header [data-language-selector]').selectOption('ja')
-  await page.getByLabel('Theme', { exact: true }).selectOption('dark')
-  const nav = page.getByRole('navigation', { name: '開いているトポロジ', exact: true })
-  const navBox = await nav.boundingBox()
-  const canvasBox = await page.getByTestId('aznet-app').boundingBox()
-  expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(390)
-  expect(canvasBox!.y + canvasBox!.height).toBeLessThanOrEqual(845)
-  await expect(page.getByRole('tablist', { name: 'デザイン', exact: true }).getByRole('tab')).toHaveCount(2)
+  for (const language of ['en', 'ja']) {
+    await page.locator('header [data-language-selector]').selectOption(language)
+    for (const theme of ['light', 'dark']) {
+      await page.getByLabel('Theme', { exact: true }).selectOption(theme)
+      const nav = page.getByRole('navigation', { name: language === 'ja' ? '開いているトポロジ' : 'Open topologies', exact: true })
+      const navBox = await nav.boundingBox()
+      const canvasBox = await page.getByTestId('aznet-app').boundingBox()
+      expect(navBox!.x + navBox!.width).toBeLessThanOrEqual(390)
+      expect(canvasBox!.y + canvasBox!.height).toBeLessThanOrEqual(845)
+      await expect(page.getByRole('tablist', { name: language === 'ja' ? 'デザイン' : 'Designs', exact: true }).getByRole('tab')).toHaveCount(2)
+      expect((await new AxeBuilder({ page }).include('.workspace-tabs').analyze()).violations).toEqual([])
+    }
+  }
 })
 
 test('accepted capture review is not replayed over an edited topology when returning to its tab', async ({ page }) => {
@@ -206,6 +302,7 @@ test('live legacy shares are read only across providers and keep the active desi
   const snapshot = Buffer.from(JSON.stringify(sampleHybridVwanAndHubSpoke)).toString('base64url')
   await page.evaluate((snapshot) => { location.hash = `retained&s=${snapshot}` }, snapshot)
   await expect(page.getByRole('heading', { name: 'Shared topology — read only' })).toBeVisible()
+  await expect(page.getByTestId('vwan-app')).toHaveCount(0)
   await expect(page.getByTestId(`aznet-vwanhub-${sampleHybridVwanAndHubSpoke.vwanHubs[0].id}`)).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(original)
   await page.reload()

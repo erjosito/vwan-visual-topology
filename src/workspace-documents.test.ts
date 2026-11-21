@@ -22,6 +22,18 @@ function storage() {
 }
 
 describe('workspace document ownership', () => {
+  it('does not claim cloud-destination persistence when a temporary document confirms a save', async () => {
+    const backing = storage(), documents = createWorkspaceDocuments(backing, () => false)
+    documents.setAccount(source.accountId)
+    const document = documents.activate(first), value = history('Temporary design')
+    document.remember(value)
+    const ticket = document.save.begin(source.id, source.accountId)!
+    expect(await document.save.confirmed(ticket, source, value.topology, 'vwan')).toBe(true)
+    expect(document.save.getSnapshot().cloud?.id).toBe(source.id)
+    expect(document.save.getSnapshot().retained).toBe(false)
+    expect(backing.getItem(workspaceTabKey(first, 'cloud'))).toBeNull()
+  })
+
   it('retains independent histories and view state while scoping writes to the active document', () => {
     const backing = storage(), documents = createWorkspaceDocuments(backing)
     const original = JSON.stringify(example)
@@ -66,6 +78,8 @@ describe('workspace document ownership', () => {
     expect(association).toContain(source.id)
     documents.activate(second)
     expect(b.save.getSnapshot().cloud).toBeUndefined()
+    expect(a.save.getSnapshot()).toMatchObject({ ready: false, cloud: { id: source.id } })
+    expect(a.save.begin(source.id, source.accountId)).toBeUndefined()
     documents.activate(first)
     expect(a.save.getSnapshot().cloud?.id).toBe(source.id)
     expect(backing.getItem(cloudDocumentKey)).toBeNull()

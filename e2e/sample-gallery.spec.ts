@@ -10,7 +10,7 @@ const modes = [
 ] as const
 
 for (const entry of modes) {
-  test(`${entry.mode}: shared search, keyboard focus, replacement backup/cancel and saved sample`, async ({ page }) => {
+  test(`${entry.mode}: shared search, keyboard focus and samples open as independently retained tabs`, async ({ page }) => {
     await page.goto(`/?mode=${entry.mode}`)
     await expect(page.getByTestId(entry.mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
     const opener = page.getByRole('button', { name: 'Sample topologies', exact: true })
@@ -37,28 +37,19 @@ for (const entry of modes) {
     await expect(gallery).toHaveCount(0)
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), entry.key)).not.toBeNull()
     const original = await page.evaluate((key) => localStorage.getItem(key), entry.key)
+    const originalTab = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
     await opener.click()
     await gallery.getByTestId(`${entry.prefix}-gallery-load-${entry.other}`).click()
-    await expect(gallery.getByRole('region', { name: 'Replace current workspace', exact: true })).toBeVisible()
-    expect(await page.evaluate((key) => localStorage.getItem(key), entry.key)).toBe(original)
-    const [download] = await Promise.all([
-      page.waitForEvent('download'),
-      gallery.getByRole('button', { name: 'Export JSON', exact: true }).click(),
-    ])
-    const path = await download.path()
-    const savedDocument = JSON.parse(original!)
-    expect(JSON.parse(await readFile(path!, 'utf8'))).toEqual(entry.mode === 'vwan' ? savedDocument : savedDocument.topology)
-    await gallery.getByRole('button', { name: 'Cancel replacement', exact: true }).click()
-    await expect(gallery.getByTestId(`${entry.prefix}-gallery-load-${entry.other}`)).toBeFocused()
-    expect(await page.evaluate((key) => localStorage.getItem(key), entry.key)).toBe(original)
-    await gallery.getByTestId(`${entry.prefix}-gallery-load-${entry.other}`).click()
-    await gallery.getByRole('button', { name: 'Replace and load', exact: true }).click()
     await expect(gallery).toHaveCount(0)
     await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), entry.key)).not.toBe(original)
     const replacement = await page.evaluate((key) => localStorage.getItem(key), entry.key)
+    expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), originalTab)).toBe(original)
+    await expect(page.getByRole('tablist', { name: 'Designs', exact: true }).getByRole('tab')).toHaveCount(3)
     await page.reload()
     await expect(page.getByTestId(entry.mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
     expect(await page.evaluate((key) => localStorage.getItem(key), entry.key)).toBe(replacement)
+    await page.locator(`#workspace-tab-${originalTab}`).click()
+    await expect.poll(() => page.evaluate((key) => localStorage.getItem(key), entry.key)).toBe(original)
   })
 
   test(`${entry.mode}: failed sample load preserves the workspace and narrow dark gallery retries`, async ({ page }) => {

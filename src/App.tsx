@@ -337,6 +337,7 @@ function App() {
   }
   const loadGallerySample = async (id: string, signal: AbortSignal) => {
     const request = ++importRequest.current
+    const scope = workspaceSession?.getRequestVersion()
     const { VWAN_SAMPLE_GALLERY } = await import('./sample-catalog')
     if (signal.aborted || request !== importRequest.current) return false
     const entry = VWAN_SAMPLE_GALLERY.find((sample) => sample.id === id)
@@ -346,8 +347,9 @@ function App() {
         if (!res.ok) throw new Error(`Sample topology "${entry.id}" not found.`)
         return validateTopology(await res.json())
       }) : validateTopology(structuredClone(example))
-      if (signal.aborted || request !== importRequest.current) return false
-      reset(loaded)
+      if (signal.aborted || !mounted.current || request !== importRequest.current || workspaceSession && scope !== workspaceSession.getRequestVersion()) return false
+      if (workspaceSession && !workspaceSession.practice) await workspaceSession.openDocument(loaded)
+      else reset(loaded)
       return true
     } catch (err) {
       if (!signal.aborted) setError(`Sample load failed: ${message(err)}`)

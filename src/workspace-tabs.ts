@@ -68,7 +68,7 @@ export function writeWorkspaceTabs(storage: Pick<Storage, 'getItem' | 'setItem'>
   storage.setItem(workspaceTabsKey, JSON.stringify(next))
 }
 
-export function workspaceTabKey(tab: WorkspaceTab, field: 'topology' | 'diagnostics' | 'cloud') {
+export function workspaceTabKey(tab: WorkspaceTab, field: 'topology' | 'diagnostics' | 'cloud' | 'closed') {
   if (!idPattern.test(tab.id) || !Object.hasOwn(workspaceStorageKeys, tab.provider)) throw new Error('Invalid workspace tab.')
   return `network-simulator:workspace-tab:v1:${tab.id}:${field}`
 }
@@ -100,5 +100,25 @@ export function addWorkspaceTab(storage: WorkspaceStorage, session: WorkspaceTab
     try { storage.removeItem(key) } catch { /* Keep an orphaned copy rather than replace any existing design. */ }
     throw error
   }
+  return next
+}
+
+export function closeWorkspaceTabs(storage: WorkspaceStorage, session: WorkspaceTabs, ids: string[]): WorkspaceTabs {
+  const remaining = session.tabs.filter(tab => !ids.includes(tab.id))
+  const previous = session.tabs.findIndex(tab => tab.id === session.activeId)
+  const next: WorkspaceTabs = { version: 1, tabs: remaining,
+    ...(remaining.length ? { activeId: remaining.some(tab => tab.id === session.activeId) ? session.activeId
+      : remaining[Math.min(Math.max(previous, 0), remaining.length - 1)].id } : {}) }
+  writeWorkspaceTabs(storage, next, session)
+  for (const tab of session.tabs.filter(tab => ids.includes(tab.id))) {
+    try { storage.setItem(workspaceTabKey(tab, 'closed'), String(Date.now())) } catch {}
+  }
+  return next
+}
+
+export function reopenWorkspaceTab(storage: WorkspaceStorage, session: WorkspaceTabs, tab: WorkspaceTab): WorkspaceTabs {
+  const next = parseSession({ version: 1, activeId: tab.id, tabs: [...session.tabs, tab] })
+  if (storage.getItem(workspaceTabKey(tab, 'topology')) === null) throw new Error('Recovery data is missing.')
+  writeWorkspaceTabs(storage, next, session)
   return next
 }

@@ -1,13 +1,14 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { t } from './i18n'
+import { t, useLanguage } from './i18n'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
 import { WorkspaceSessionContext, type WorkspaceEditorHistory } from './workspace-context'
 import { selectWorkspace, workspaceSessionKey, workspaceStartup, workspaceStorageKeys, type WorkspaceProvider, type WorkspaceStorage } from './workspace-session'
-import { addWorkspaceTab, readWorkspaceTabs, workspaceTabKey, writeWorkspaceTabs, type WorkspaceTabs, type WorkspaceTab } from './workspace-tabs'
+import { addWorkspaceTab, closeWorkspaceTabs, reopenWorkspaceTab, readWorkspaceTabs, workspaceTabKey, workspaceTabsKey, workspaceTabsLimit, writeWorkspaceTabs, type WorkspaceTabs, type WorkspaceTab } from './workspace-tabs'
 import { createWorkspaceDocuments } from './workspace-documents'
 import { WorkspaceTabs as WorkspaceTabsNavigation } from './WorkspaceTabs'
 import { confirmConfigurationSwitch } from './configuration-selection'
+import { useWorkspaceOwnership } from './useWorkspaceOwnership'
 import { practiceWorkspaceKey } from './learning/practice-workspace-key'
 import type { PracticeRequest, PracticeWorkspace } from './learning/practice-workspace'
 import type { PracticeSession } from './learning/practice-session'
@@ -49,7 +50,7 @@ export function UnifiedSimulatorRoot() {
     return () => window.removeEventListener('hashchange', changed)
   }, [])
   return <CloudProvider>
-    {workspaceStarted && <div hidden={!!sharing}><Workspace /></div>}
+    {workspaceStarted && <div hidden={!!sharing}><Workspace visible={!sharing} /></div>}
     {sharing && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}>
       <SharedTopology key={sharing} hash={sharing} modal={workspaceStarted} onReturn={() => {
         const url = new URL(location.href)
@@ -70,7 +71,10 @@ const rootStorage: WorkspaceStorage = {
 }
 const emptyVwan = '{"version":1,"name":"New topology","hubs":[],"sites":[],"spokes":[],"connections":[],"siteLinks":[],"routeMaps":[]}'
 
-function Workspace() {
+function Workspace({ visible = true }: { visible?: boolean }) {
+  const visibleRef = useRef(visible)
+  const language = useLanguage()
+  const text = (en: string, ja: string) => language === 'ja' ? ja : en
   const [presentationPreview, setPresentationPreview] = useState(() => {
     try { return localStorage.getItem('aznet-ui-preview:v1') !== 'false' } catch { return true }
   })
@@ -84,14 +88,33 @@ function Workspace() {
   })
   const [startup] = useState(() => workspaceStartup({ getItem: (key) => localStorage.getItem(key) }, location.search, location.hash))
   const [tabsStartup] = useState(() => readWorkspaceTabs(rootStorage))
+  const ownership = useWorkspaceOwnership(tabsStartup.recovery === 'unavailable')
   const [storage] = useState<WorkspaceStorage>(() => {
-    if (tabsStartup.recovery !== 'unavailable') return rootStorage
-    const values = new Map<string, string>()
-    return { getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value) }, removeItem: key => { values.delete(key) } }
+    const values = new Map<string, string | null>()
+    const writable = () => {
+      if (!['owned', 'memory', 'blocked'].includes(ownership.current.current)) throw new Error('Workspace profile ownership is unavailable.')
+    }
+    return {
+      getItem: key => {
+        if (values.has(key)) return values.get(key) ?? null
+        if (tabsStartup.recovery === 'unavailable' || ownership.current.current !== 'owned' && key.endsWith(':cloud')) return null
+        return rootStorage.getItem(key)
+      },
+      setItem: (key, value) => {
+        writable()
+        if (ownership.current.current === 'owned') rootStorage.setItem(key, value)
+        else values.set(key, value)
+      },
+      removeItem: key => {
+        writable()
+        if (ownership.current.current === 'owned') rootStorage.removeItem(key)
+        else values.set(key, null)
+      },
+    }
   })
   const [tabs, setTabs] = useState<WorkspaceTabs>(() => tabsStartup.session ?? { version: 1, tabs: [] })
   const tabsRef = useRef(tabs)
-  const [documents] = useState(() => createWorkspaceDocuments(storage))
+  const [documents] = useState(() => createWorkspaceDocuments(storage, () => ownership.current.current === 'owned'))
   const [active, setActive] = useState<{ id: string; provider: WorkspaceProvider; revision: number }>()
   const [libraryOpen, setLibraryOpen] = useState(tabsStartup.recovery === 'invalid' || !startup.provider && !tabs.activeId)
   const [notice, setNotice] = useState(tabsStartup.recovery
@@ -284,17 +307,22 @@ function Workspace() {
     } finally { session.release() }
   }
   const open = (provider: WorkspaceProvider, replacement?: string, capture?: unknown, preserveQuery = false) => {
+    if (!visibleRef.current) return false
     if (!preserveQuery && active && !confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return false
+    if (tabsRef.current.tabs.length >= workspaceTabsLimit) {
+      setNotice(text('Close a tab before opening another (maximum 16). Closed designs remain available in Workspace recovery.', '別のタブを開くにはタブを閉じてください (最大16)。閉じたデザインはワークスペースから復元できます。'))
+      return false
+    }
     request.current++
     try {
-      if (tabsStartup.recovery === 'invalid') throw new Error('The tab session requires recovery.')
+      if (tabsStartup.recovery === 'invalid' && ownership.current.current === 'owned') throw new Error('The tab session requires recovery.')
       const raw = replacement ?? storage.getItem(workspaceStorageKeys[provider]) ?? (provider === 'vwan' ? emptyVwan : undefined)
       if (raw === undefined) throw new Error('Topology data is unavailable.')
       let name = 'Untitled topology'
       try { const parsed = JSON.parse(raw); if (typeof (parsed.topology ?? parsed).name === 'string') name = (parsed.topology ?? parsed).name.slice(0, 120) } catch {}
       const tab = { id: crypto.randomUUID(), provider, name }
       selectWorkspace(storage, provider)
-      const legacy = preserveQuery && !tabsRef.current.tabs.length && !new URLSearchParams(location.search).has('sample')
+      const legacy = ownership.current.current === 'owned' && preserveQuery && !tabsRef.current.tabs.length && !new URLSearchParams(location.search).has('sample')
       const next = addWorkspaceTab(storage, tabsRef.current, tab, raw)
       if (legacy) {
         try {
@@ -313,9 +341,11 @@ function Workspace() {
       designRef.current = documents.activate(tab)
       designRef.current.capture = capture
       // Provider slots remain compatibility mirrors; each tab owns its editable design.
-      try { rootStorage.setItem(workspaceStorageKeys[provider], raw) } catch {}
+      if (ownership.current.current === 'owned') {
+        try { rootStorage.setItem(workspaceStorageKeys[provider], raw) } catch {}
+      }
       setActive((current) => ({ id: tab.id, provider, revision: (current?.revision ?? 0) + 1 }))
-      setLibraryOpen(false); setNotice(tabsStartup.recovery === 'unavailable'
+      setLibraryOpen(false); setNotice(ownership.current.current !== 'owned'
         ? 'Workspace storage is unavailable. Save a file or cloud copy before closing this session.' : '')
       const url = new URL(location.href)
       url.searchParams.delete('mode')
@@ -341,10 +371,12 @@ function Workspace() {
       designRef.current = documents.activate(tab)
       setActive({ id: tab.id, provider: tab.provider, revision: 0 })
       setLibraryOpen(false); setNotice('')
-      try {
-        rootStorage.setItem(workspaceSessionKey, JSON.stringify({ version: 1, provider: tab.provider }))
-        rootStorage.setItem(workspaceStorageKeys[tab.provider], raw)
-      } catch {}
+      if (ownership.current.current === 'owned') {
+        try {
+          rootStorage.setItem(workspaceSessionKey, JSON.stringify({ version: 1, provider: tab.provider }))
+          rootStorage.setItem(workspaceStorageKeys[tab.provider], raw)
+        } catch {}
+      }
       return true
     } catch {
       setNotice('The workspace tab could not be restored. Its stored data has not been replaced.')
@@ -352,9 +384,92 @@ function Workspace() {
       return false
     }
   }
+  const closeTabs = (targets: WorkspaceTab[]) => {
+    if (targets.some(tab => documents.get(tab).capture !== undefined)) {
+      setNotice(text('Finish or cancel the capture review in its tab before closing it.', '閉じる前に、そのタブでキャプチャの確認を完了またはキャンセルしてください。'))
+      return
+    }
+    if (targets.some(tab => documents.get(tab).save.getSnapshot().operation === 'saving')) {
+      setNotice(text('Wait for the save to finish before closing its tab.', '保存が完了してからタブを閉じてください。'))
+      return
+    }
+    if (targets.some(tab => tab.id === active?.id) && !confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return
+    const recoverable = ownership.current.current === 'owned' && targets.every(tab => {
+      const state = documents.get(tab).save.getSnapshot()
+      try {
+        return storage.getItem(workspaceTabKey(tab, 'topology')) !== null
+          && (state.local === 'saved' || !state.ready && state.local !== 'unavailable')
+      } catch { return false }
+    })
+    if (!window.confirm(recoverable
+      ? text('Close the selected topology tabs? Their profile recovery copies are retained in Workspace. This does not save a file or cloud artifact.', '選択したトポロジ タブを閉じますか? プロファイルの復元用コピーはワークスペースに保持されます。ファイルやクラウドへの保存ではありません。')
+      : text('Close and discard unsaved in-memory changes? The profile may not contain your latest edits. Save/export a file or cloud copy first to preserve them.', '閉じて、メモリ上の未保存の変更を破棄しますか? 最新の編集がプロファイルに保存されていない可能性があります。保持するには、先にファイルまたはクラウドに保存・エクスポートしてください。'))) return
+    try {
+      const next = closeWorkspaceTabs(storage, tabsRef.current, targets.map(tab => tab.id))
+      request.current++
+      tabsRef.current = next; setTabs(next)
+      for (const tab of targets) documents.forget(tab.id)
+      if (targets.some(tab => tab.id === active?.id)) {
+        const remaining = next.tabs.find(tab => tab.id === next.activeId)
+        if (remaining) {
+          activateTab(remaining, false)
+          requestAnimationFrame(() => document.getElementById(`workspace-tab-${remaining.id}`)?.focus())
+        }
+        else { setActive(undefined); setLibraryOpen(true) }
+      }
+    } catch { setNotice(text('Tabs could not be closed. Their designs have not been removed.', 'タブを閉じられませんでした。デザインは削除されていません。')) }
+  }
+  const reopenTab = (tab: WorkspaceTab) => {
+    if (!confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return
+    try {
+      if (ownership.current.current !== 'owned') {
+        const raw = rootStorage.getItem(workspaceTabKey(tab, 'topology'))
+        if (raw === null) throw new Error('Recovery data is missing.')
+        open(tab.provider, raw)
+        return
+      }
+      const next = reopenWorkspaceTab(storage, tabsRef.current, tab)
+      tabsRef.current = next; setTabs(next)
+      activateTab(tab, false)
+    } catch { setNotice(text('Recovery copy could not be opened. Its stored contents remain unchanged.', '復元用コピーを開けませんでした。保存済みの内容は変更されていません。')) }
+  }
+  const resetTabList = () => {
+    if (ownership.current.current !== 'owned' || !window.confirm(text('Reset the damaged tab list? Its original metadata will be archived and stored designs will remain available in Workspace recovery.', '破損したタブ一覧をリセットしますか? 元のメタデータをアーカイブし、保存済みのデザインはワークスペースから復元できます。'))) return
+    try {
+      if (readWorkspaceTabs(rootStorage).recovery !== 'invalid') {
+        setNotice(text('The tab list changed. Reload before resetting it.', 'タブ一覧が変更されました。リセットする前に再読み込みしてください。'))
+        return
+      }
+      const raw = rootStorage.getItem(workspaceTabsKey)
+      if (raw !== null) rootStorage.setItem(`network-simulator:workspace-tabs:recovery:v1:${crypto.randomUUID()}`, raw)
+      rootStorage.removeItem(workspaceTabsKey)
+      window.location.reload()
+    } catch { setNotice(text('The damaged tab list could not be archived. Nothing was reset; download the recovery data before freeing storage.', '破損したタブ一覧をアーカイブできませんでした。リセットしていません。ストレージを空ける前に復元用データをダウンロードしてください。')) }
+  }
   const initialize = useEffectEvent(async () => {
-    if (initialized.current) return
+    if (initialized.current || !visibleRef.current) return
     const ticket = ++request.current
+    if (ownership.current.current !== 'owned' && tabsStartup.recovery === 'invalid') storage.setItem(workspaceTabsKey, '{"version":1,"tabs":[]}')
+    const current = readWorkspaceTabs(storage)
+    if (ownership.current.current === 'owned' && (JSON.stringify(current.session) !== JSON.stringify(tabsStartup.session) || current.recovery && current.recovery !== tabsStartup.recovery)) {
+      setNotice('The workspace session changed while opening. Reload to use its latest designs.')
+      setLibraryOpen(true); setPracticeReady(true)
+      return
+    }
+    if (ownership.current.current !== 'owned' && current.session) {
+      const originals = current.session
+      const copies = originals.tabs.map(tab => ({ ...tab, id: crypto.randomUUID() }))
+      for (let index = 0; index < copies.length; index++) {
+        for (const field of ['topology', 'diagnostics'] as const) {
+          const raw = storage.getItem(workspaceTabKey(originals.tabs[index], field))
+          if (raw !== null) storage.setItem(workspaceTabKey(copies[index], field), raw)
+        }
+      }
+      const next: WorkspaceTabs = { version: 1, tabs: copies,
+        activeId: copies[originals.tabs.findIndex(tab => tab.id === originals.activeId)]?.id }
+      storage.setItem(workspaceTabsKey, JSON.stringify(next))
+      tabsRef.current = next; setTabs(next)
+    }
     try {
       const raw = localStorage.getItem(practiceWorkspaceKey)
       if (raw !== null) {
@@ -369,7 +484,11 @@ function Workspace() {
     if (ticket !== request.current) return
     setPracticeReady(true)
     const restored = practiceRef.current?.current
-    if (tabsStartup.recovery === 'invalid') { setLibraryOpen(true); return }
+    if (tabsStartup.recovery === 'invalid' && ownership.current.current === 'owned') { setLibraryOpen(true); return }
+    if (tabsStartup.session && !tabsStartup.session.tabs.length) {
+      initialized.current = true; setLibraryOpen(!restored?.active)
+      return
+    }
     const params = new URLSearchParams(location.search)
     const selected = params.has('mode') && startup.provider
       ? [...tabsRef.current.tabs].reverse().find(tab => tab.provider === startup.provider)
@@ -396,15 +515,17 @@ function Workspace() {
   useEffect(() => {
     // Synchronize the selected native provider with external browser storage once.
     // oxlint-disable-next-line react/set-state-in-effect
-    void initialize()
+    if (ownership.status !== 'checking') void initialize()
     return () => {
       // This is a request-generation counter, not a DOM ref.
       // oxlint-disable-next-line react-hooks/exhaustive-deps
       request.current++
     }
-  }, [])
-  const openDocument = async (input: unknown, source?: CloudDocumentSource) => {
+  }, [ownership.status, visible])
+  const openDocument = async (input: unknown, source?: CloudDocumentSource, options?: { sampleId?: string }) => {
+    if (!visibleRef.current) throw new Error('Return to your design before loading a document.')
     const ticket = ++request.current
+    if (options?.sampleId !== undefined && (options.sampleId.length > 128 || !/^[a-z0-9-]*$/.test(options.sampleId))) throw new Error('Invalid sample identity.')
     if (practiceRef.current?.current?.active) {
       if (source) throw new Error('Return to your design before loading a cloud save.')
       await practiceRef.current.importDocument(input, () => ticket === request.current)
@@ -432,7 +553,7 @@ function Workspace() {
     } else {
       const { parseAzNetTopology } = await import('./azure-net/admission')
       const topology = parseAzNetTopology(input)
-      commit('azure-net', JSON.stringify({ sampleId: '', topology }))
+      commit('azure-net', JSON.stringify({ sampleId: options?.sampleId ?? '', topology }))
     }
   }
   const newWorkspace = async () => {
@@ -446,10 +567,15 @@ function Workspace() {
   const provider = practicing ? practice.document.mode === 'vwan' ? 'vwan' : 'azure-net' : active?.provider
   const editorKey = practicing ? `practice:${practiceEpoch}:${provider}` : `design:${active?.id}:${active?.revision}`
   useLayoutEffect(() => {
+    visibleRef.current = visible
+    request.current++
+    if (!visible) learningRef.current?.cancel()
+  }, [visible])
+  useLayoutEffect(() => {
     documents.setAccount(accountId)
-    if (practicing) documents.suspend()
+    if (practicing || !visible) documents.suspend()
     else if (active) documents.activate({ id: active.id, provider: active.provider, name: '' })
-  }, [documents, accountId, practicing, active])
+  }, [documents, accountId, practicing, active, visible])
   useEffect(() => {
     const changed = (event: StorageEvent) => {
       if (active && (event.key === null || event.key === workspaceTabKey({ ...active, name: '' }, 'topology'))) activeSave.invalidateLocal()
@@ -464,14 +590,14 @@ function Workspace() {
     },
     openLibrary: () => { leavePractice(); request.current++; setLibraryOpen(true) },
     openDocument, getRequestVersion: () => request.current,
-    documentSave: practicing ? undefined : activeSave,
+    documentSave: practicing || !visible ? undefined : activeSave,
     storage: !practicing && design ? {
       getItem: design.storage.getItem,
       removeItem: design.storage.removeItem,
       setItem: (key, value) => {
         design.storage.setItem(key, value)
-        if (tabsStartup.recovery === 'unavailable') throw new Error('Profile storage is unavailable.')
-        if (key === workspaceStorageKeys[design.provider]) {
+        if (ownership.current.current !== 'owned') throw new Error('Profile storage is unavailable.')
+        if (ownership.current.current === 'owned' && key === workspaceStorageKeys[design.provider]) {
           try { rootStorage.setItem(key, value) } catch {}
         }
       },
@@ -526,8 +652,10 @@ function Workspace() {
     } : undefined,
   }}>
     <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style} data-ui-preview={presentationPreview || undefined}>
-      {!practicing && tabs.tabs.length > 0 && <WorkspaceTabsNavigation tabs={tabs.tabs} activeId={active?.id}
-        onActivate={activateTab} onNew={() => { void newWorkspace() }} />}
+      {practiceReady && !practicing && tabs.tabs.length > 0 && <WorkspaceTabsNavigation tabs={tabs.tabs} activeId={active?.id}
+        temporary={ownership.status !== 'owned'}
+        getSave={tab => documents.get(tab).save}
+        onActivate={activateTab} onClose={tab => closeTabs([tab])} onNew={() => { void newWorkspace() }} />}
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
       <CanvasMaximizeButton />
       {(practice || practiceNotice) && <Suspense fallback={null}><PracticeWorkspaceBar active={practicing}
@@ -535,7 +663,7 @@ function Workspace() {
       <div id="workspace-design-panel" role={!practicing && active ? 'tabpanel' : undefined}
         aria-labelledby={!practicing && active ? `workspace-tab-${active.id}` : undefined} tabIndex={!practicing && active ? 0 : undefined}>
       {!practiceReady && <p role="status">{t('Loading workspace…')}</p>}
-      {practiceReady && (active || practicing) && provider && <>
+      {visible && practiceReady && (active || practicing) && provider && <>
         {window.desktopSimulator && <Suspense fallback={null}>
           <DesktopTools key={`tools:${provider}:${practicing}`} mode={provider === 'vwan' ? 'vwan' : 'full'} />
         </Suspense>}
@@ -548,6 +676,8 @@ function Workspace() {
       </div>
       {practiceReady && libraryOpen && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}>
         <WorkspaceLibrary required={!active} notice={notice} onOpen={open} onNew={() => { void newWorkspace() }}
+          onReopen={reopenTab} onCloseAll={tabs.tabs.length ? () => closeTabs(tabs.tabs) : undefined}
+          onResetTabs={tabsStartup.recovery === 'invalid' && ownership.status === 'owned' ? resetTabList : undefined}
           onResumePractice={practice && !practicing ? resumePractice : undefined} onClose={() => setLibraryOpen(false)} />
       </Suspense>}
     </div>

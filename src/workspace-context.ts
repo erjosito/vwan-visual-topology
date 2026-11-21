@@ -18,7 +18,7 @@ export const WorkspaceSessionContext = createContext<{
   openLibrary: () => void
   presentationPreview?: boolean
   setPresentationPreview?: (preview: boolean) => void
-  openDocument: (input: unknown, source?: CloudDocumentSource) => Promise<void>
+  openDocument: (input: unknown, source?: CloudDocumentSource, options?: { sampleId?: string }) => Promise<void>
   documentSave?: DocumentSaveState
   storage?: WorkspaceStorage
   editorState?: Map<string, unknown>

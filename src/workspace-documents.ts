@@ -14,7 +14,7 @@ export interface WorkspaceDocument {
   remember: (history: WorkspaceEditorHistory) => boolean
 }
 
-export function createWorkspaceDocuments(storage: WorkspaceStorage) {
+export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent = () => true) {
   const documents = new Map<string, WorkspaceDocument>()
   let activeId: string | undefined
   let accountId: string | undefined
@@ -34,8 +34,13 @@ export function createWorkspaceDocuments(storage: WorkspaceStorage) {
     const scoped = workspaceTabStorage(storage, tab, owned)
     const association = workspaceTabStorage(storage, tab, live)
     const state = createDocumentSaveState(() => ({
-      getItem: scoped.getItem, setItem: scoped.setItem, removeItem: association.removeItem,
-    }))
+      getItem: scoped.getItem,
+      setItem: (key, value) => {
+        scoped.setItem(key, value)
+        if (!persistent()) throw new Error('Workspace association is retained only in memory.')
+      },
+      removeItem: association.removeItem,
+    }), undefined, true)
     const save = { ...state, reset: () => { if (owned()) state.reset() } }
     document = {
       id: tab.id, provider: tab.provider, storage: scoped, save, editorState: new Map(),
