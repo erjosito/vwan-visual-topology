@@ -188,14 +188,15 @@ test.describe('subnet and gateway menu disclosure', () => {
       const before = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
       const gateway = page.getByTestId('aznet-chip-vpn')
       const open = async () => { await gateway.focus(); await page.keyboard.press('ContextMenu') }
+      const bgpLabel = language === 'ja' ? 'ゲートウェイ BGP テーブルを検査' : 'Inspect Gateway BGP table'
       await expect(gateway).toHaveAttribute('data-disabled', 'true')
       await expect(gateway).toHaveAccessibleName(/OFF.*Standalone VPN.*Disabled/)
       await open()
-      await expect(page.getByRole('menuitem', { name: 'Inspect Gateway BGP RIB', exact: true })).toBeVisible()
+      await expect(page.getByRole('menuitem', { name: bgpLabel, exact: true })).toBeVisible()
       await expect(page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true })).toBeVisible()
       await expect(page.getByRole('menuitem', { name: 'Remove Vpn Gateway', exact: true })).toHaveClass(/danger/)
       await expect(page.getByRole('menu').locator('[aria-haspopup="menu"]')).toHaveCount(0)
-      await page.getByRole('menuitem', { name: 'Inspect Gateway BGP RIB', exact: true }).click()
+      await page.getByRole('menuitem', { name: bgpLabel, exact: true }).click()
       await expect(page.getByRole('table', { name: language === 'ja' ? '指定ルーターの BGP テーブル' : 'Requested router BGP table', exact: true })).toBeVisible()
       await page.keyboard.press('Escape')
       await open()

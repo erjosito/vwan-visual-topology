@@ -148,7 +148,7 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
       expect(current.subnets).toEqual(native.spokes[2].subnets)
     } else await page.keyboard.press('Escape')
     await menu('hub-local', true)
-    await page.getByRole('menuitem', { name: text(mode === 'vwan' ? 'BGP table' : 'Inspect Virtual WAN Hub Effective RIB'), exact: true }).click()
+    await page.getByRole('menuitem', { name: text(mode === 'vwan' ? 'BGP table' : 'Inspect Virtual WAN Hub BGP table'), exact: true }).click()
     await expect(page.getByRole('dialog').locator('tr[data-prefix="10.10.0.0/16"][data-preferred="true"]')).toContainText('trusted-a')
     await page.keyboard.press('Escape')
     const result = await saved(page, mode)

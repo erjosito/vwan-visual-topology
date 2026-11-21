@@ -186,7 +186,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await panel.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('vpn-empty')
     await expect(routes.locator('tbody tr')).toHaveCount(0)
     await expect(routes).toContainText('coverage: empty')
-    await expect(routes).toContainText('Missing rows do not establish an empty Adj-RIB')
+    await expect(routes).toContainText('Missing rows do not establish an empty learned-route table')
     await panel.getByRole('combobox', { name: 'Captured gateway', exact: true }).selectOption('z-denied')
     await expect(routes).toContainText('coverage: denied · Unknown / incomplete')
     await expect(routes.locator('tbody tr')).toHaveCount(0)

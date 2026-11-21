@@ -686,7 +686,7 @@ test('mixed hub controls preserve association, expose a label-propagated custom 
   await editor.getByLabel(`Table labels ${id}`, { exact: true }).press('Tab')
   await editor.getByLabel('Associated table Network', { exact: true }).selectOption(id)
   await expect.poll(async () => (await read()).vnets[0].vwanHubAttachment.hubRouting.associatedTableId).toBe(id)
-  await tools.getByRole('button', { name: 'Inspect Virtual WAN Hub Effective RIB', exact: true }).click()
+  await tools.getByRole('button', { name: 'Inspect Virtual WAN Hub BGP table', exact: true }).click()
   await page.getByLabel('Hub routing table', { exact: true }).selectOption(id)
   await expect(page.getByRole('dialog')).toContainText('10.2.0.0/16')
   await page.reload()

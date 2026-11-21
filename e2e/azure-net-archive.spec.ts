@@ -22,8 +22,8 @@ test('recorded S4 hybrid BGP origins, asymmetric inspection and native round-tri
   await importFile.setInputFiles({ name: archive.exportFile, mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)) })
   for (const [node, menu, observations] of [
     ['aznet-site-sdwan', 'Inspect Site BGP Route Table', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.sdwanAsPath }))],
-    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP RIB', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.mseeAsPath }))],
-    ['aznet-chip-ergw-hub', 'Inspect Gateway BGP RIB', archive.erGatewayRoutes],
+    ['aznet-erloc-er', 'Inspect ExpressRoute Location BGP table', archive.azurePrefixes.map((prefix) => ({ prefix, asPath: archive.mseeAsPath }))],
+    ['aznet-chip-ergw-hub', 'Inspect Gateway BGP table', archive.erGatewayRoutes],
   ] as const) {
     await page.getByTestId(node).focus()
     await page.keyboard.press('Shift+F10')
@@ -31,7 +31,7 @@ test('recorded S4 hybrid BGP origins, asymmetric inspection and native round-tri
     for (const observed of observations) {
       await expect(page.getByTestId('aznet-control-rib-card').locator(`tr[data-prefix="${observed.prefix}"] .as-path`)).toHaveText(observed.asPath.join(' '))
     }
-    await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+    await page.getByRole('button', { name: 'Close BGP table', exact: true }).click()
   }
   await page.getByTestId('aznet-subnet-work1').focus()
   await page.keyboard.press('Shift+F10')
@@ -162,13 +162,13 @@ for (const id of ['baseline-ecmp', 'bird-default-prepend']) {
     await importTopology()
     await page.getByTestId('aznet-chip-ars-poland').focus()
     await page.keyboard.press('Shift+F10')
-    await page.getByRole('menuitem', { name: 'Inspect Route Server RIB (ASN 65515)', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Inspect Route Server BGP table (ASN 65515)', exact: true }).click()
     const rib = page.getByTestId('aznet-control-rib-card')
     for (const observed of archive.learned) {
       const path = observed.peerId === 'nva2' && observed.prefix === '0.0.0.0/0' ? entry.nva2DefaultAsPath : observed.asPath
       await expect(rib.locator(`[data-prefix="${observed.prefix}"]`).filter({ hasText: observed.peerId === 'nva1' ? 'NVA1' : 'NVA2' }).locator('.as-path')).toHaveText(path.join(' '))
     }
-    await page.getByRole('button', { name: 'Close Effective routes', exact: true }).click()
+    await page.getByRole('button', { name: 'Close BGP table', exact: true }).click()
     await page.getByTestId('aznet-subnet-c1-work').focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menuitem', { name: 'Inspect Subnet Effective Routes', exact: true }).click()
