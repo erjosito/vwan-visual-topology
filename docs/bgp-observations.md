@@ -42,6 +42,30 @@ BGP route observations without NIC observations or a neighbor table. Local
 addresses, next hops, AS paths and missing `sourcePeer` stay as captured; a next
 hop is not substituted for the advertising neighbor.
 
+## Native VPN endpoint configuration
+
+When a capture includes native `vnetGateways` configuration, **Native VPN IP
+configurations** retains the original gateway and IP-configuration IDs, assigned
+default/custom BGP addresses, and tunnel addresses. The association uses the
+explicit `bgpPeeringAddresses[].ipconfigurationId` reference matched to a
+captured IP configuration, not array ordering. Foreign/missing references or
+malformed addresses remain unknown instead of receiving invented associations.
+Inventories and address arrays are bounded to 64 entries.
+
+These are configuration observations, not physical VM identities, native
+session state or evidence of failover. Assigned BGP addresses can be selected
+even in configuration-only captures, but missing neighbors/counters remain
+missing. Tunnel addresses are shown separately and are never added as BGP
+neighbors. Default and custom addresses remain distinct in the details.
+Nothing is bound to the simulator's projected speaker roles or saved topology.
+
+The separately approved #259 lab verified the native configuration shape for
+active/active (two referenced IP configurations) and standalone active/standby
+(one referenced active configuration). This does not claim one physical
+instance for standby, complete physical aliases, ER/MSEE mappings or live BGP
+establishment. `gateway-native-endpoints-capture.json` is a synthetic regression
+fixture; it contains no original lab identifiers or secret values.
+
 ## Captured managed-gateway learned routes
 
 The same lazy Azure capture inspector now exposes `vngLearnedRoutes`, collected
@@ -49,7 +73,7 @@ by `az network vnet-gateway list-learned-routes` for VPN and ExpressRoute virtua
 network gateways where the command returns records. Unsupported or denied reads
 are not successful empty route sets. Select the original captured gateway key
 and exactly one **Local BGP endpoint**. Endpoint choices come from explicit local addresses in
-the captured neighbors and learned routes, not from configured redundancy,
+the captured neighbors and learned routes, or explicit native VPN BGP assignments, not from configured redundancy,
 array positions or subnet offsets. Routes without a local address are separately
 **Unassigned**; they are never attributed to a known endpoint.
 

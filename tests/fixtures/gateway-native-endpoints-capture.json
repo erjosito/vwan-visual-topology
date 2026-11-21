@@ -1,0 +1,65 @@
+{
+  "kind": "azure-network-capture",
+  "version": 2,
+  "fixture": "Synthetic native-schema regression fixture; not a recording of real Azure resources or sessions.",
+  "resourceGroup": "native-endpoint-test",
+  "capturedAt": "2026-11-21T00:00:00Z",
+  "collectorVersion": "test",
+  "vnets": [],
+  "routeTables": [],
+  "localNetworkGateways": [],
+  "vpnConnections": [],
+  "routeServers": [],
+  "networkInterfaces": [],
+  "vnetGateways": [
+    {
+      "id": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-aa",
+      "name": "vpn-aa",
+      "gatewayType": "Vpn",
+      "activeActive": true,
+      "ipConfigurations": [
+        { "id": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-aa/ipConfigurations/first" },
+        { "id": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-aa/ipConfigurations/second" }
+      ],
+      "bgpSettings": {
+        "asn": 65515,
+        "bgpPeeringAddresses": [
+          {
+            "ipconfigurationId": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-aa/ipConfigurations/second",
+            "defaultBgpIpAddresses": ["10.1.0.5"],
+            "customBgpIpAddresses": ["169.254.21.2"],
+            "tunnelIpAddresses": ["198.51.100.2"]
+          },
+          {
+            "ipconfigurationId": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-aa/ipConfigurations/first",
+            "defaultBgpIpAddresses": ["10.1.0.4"],
+            "customBgpIpAddresses": [],
+            "tunnelIpAddresses": ["198.51.100.1"]
+          }
+        ]
+      }
+    },
+    {
+      "id": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-as",
+      "name": "vpn-as",
+      "properties": {
+        "gatewayType": "Vpn",
+        "activeActive": false,
+        "ipConfigurations": [
+          { "id": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-as/ipConfigurations/active" }
+        ],
+        "bgpSettings": {
+          "asn": 65515,
+          "bgpPeeringAddresses": [
+            {
+              "ipconfigurationId": "/subscriptions/synthetic/resourceGroups/native-endpoint-test/providers/Microsoft.Network/virtualNetworkGateways/vpn-as/ipConfigurations/active",
+              "defaultBgpIpAddresses": ["10.2.0.4"],
+              "customBgpIpAddresses": [],
+              "tunnelIpAddresses": ["198.51.100.3"]
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
