@@ -94,7 +94,7 @@ for (const hostname of ['vwan-simulator.com', 'www.vwan-simulator.com', 'aznet-s
     await ready(page, 'vwan')
     await page.goto(`${origin}/?mode=full`)
     await ready(page, 'full')
-    expect(new URL(page.url()).searchParams.has('mode')).toBe(false)
+    expect(new URL(page.url()).searchParams.get('mode')).toBe('full')
   })
 }
 

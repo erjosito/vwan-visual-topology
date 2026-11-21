@@ -1,5 +1,6 @@
 import type { WorkspaceProvider } from '../workspace-session'
 import type { CloudEntry } from './contracts'
+import { randomUUID } from '../random-id'
 
 export const cloudDocumentKey = 'network-simulator:cloud-document:v1'
 export interface CloudDocumentSource { accountId: string; id: string; name: string; etag: string }
@@ -24,7 +25,7 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
   digest = fingerprint, documentOwned = false) {
   let accountId: string | undefined, provider: WorkspaceProvider | undefined, topology: unknown
   let active = true, revoked = false, epoch = 0, sequence = 0
-  let draftId = crypto.randomUUID()
+  let draftId = randomUUID()
   let local: { topology: unknown; state: DocumentSaveSnapshot['local'] } | undefined
   let binding: Association | undefined, restored: Association | undefined
   let verification: 'confirmed' | 'changed' | 'missing' | 'unavailable' = 'confirmed'
@@ -68,7 +69,7 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
     })
   }
   const reset = () => {
-    epoch++; pending = undefined; operation = 'idle'; draftId = crypto.randomUUID()
+    epoch++; pending = undefined; operation = 'idle'; draftId = randomUUID()
     topology = undefined; provider = undefined; local = undefined
     binding = undefined; restored = undefined; currentDigest = undefined; hashFailed = false; retained = false
     remove(); publish()
@@ -125,7 +126,7 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       if (!valid(ticket) || accountId !== source.accountId) return false
       binding = { ...source, version: 1, provider: kind, digest: hash }
       restored = undefined; verification = 'confirmed'; operation = 'idle'; pending = undefined
-      if (source.id === draftId) draftId = crypto.randomUUID()
+      if (source.id === draftId) draftId = randomUUID()
       retained = false; remove()
       if (hash) {
         try { storage().setItem(cloudDocumentKey, JSON.stringify(binding)); retained = true } catch { remove() }
