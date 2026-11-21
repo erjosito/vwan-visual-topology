@@ -103,6 +103,13 @@ export function validateTopology(input: unknown): Topology {
     return result
   }
   const root = record(input)
+  const wans = root.wans === undefined ? undefined : array(root.wans, 2, 'WAN scopes').map((value) => {
+    const wan = record(value)
+    if (wan.allowBranchToBranchTraffic !== undefined && typeof wan.allowBranchToBranchTraffic !== 'boolean') fail('WAN branch-to-branch traffic must be a boolean.')
+    return { ...wan, id: id(wan.id), name: text(wan.name, 'WAN name'),
+      ...(wan.allowBranchToBranchTraffic === undefined ? {} : { allowBranchToBranchTraffic: wan.allowBranchToBranchTraffic as boolean }) }
+  })
+  if (wans && wans.length !== 2) fail('Explicit federation requires exactly two WAN scopes.')
   for (const entity of [...(Array.isArray(root.hubs) ? root.hubs : []), ...(Array.isArray(root.connections) ? root.connections : [])]) {
     if (entity && typeof entity === 'object' && ('vpnNat' in entity || 'nat' in entity)) {
       fail('VPN NAT requires the Azure/Full Hybrid native provider; legacy VWAN NAT configuration cannot be silently discarded.')
@@ -194,7 +201,9 @@ export function validateTopology(input: unknown): Topology {
         }) }),
       }
     })
-    return { id: id(hub.id), name: text(hub.name, 'Hub name'),
+    if (wans ? !wans.some((wan) => wan.id === hub.wanId) : hub.wanId !== undefined) fail('Every scoped hub must reference an existing WAN; do not mix scoped and legacy hubs.')
+    return { ...hub, id: id(hub.id), name: text(hub.name, 'Hub name'),
+      ...(hub.wanId === undefined ? {} : { wanId: text(hub.wanId, 'Hub WAN') }),
       ...(label === undefined ? {} : { label }),
       region: text(hub.region, 'Region'), preference: hub.preference,
       routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') },
@@ -209,6 +218,18 @@ export function validateTopology(input: unknown): Topology {
       })() }),
       ...(hub.routeTablesStatus === undefined ? {} : { routeTablesStatus: hub.routeTablesStatus }),
       ...(hub.routeMapAssignments === undefined ? {} : { routeMapAssignments: assignments(hub.routeMapAssignments) }) } as Topology['hubs'][number]
+  })
+  const interWanVpns = root.interWanVpns === undefined ? undefined : array(root.interWanVpns, 1, 'Inter-WAN VPNs').map((value) => {
+    const vpn = record(value)
+    const a = hubs.find((hub) => hub.id === vpn.aHubId), b = hubs.find((hub) => hub.id === vpn.bHubId)
+    if (!wans || !a || !b || a.wanId === b.wanId) fail('An inter-WAN VPN needs endpoints in two different explicit WAN scopes.')
+    if (typeof vpn.enabled !== 'boolean' || !['configured', 'unknown'].includes(vpn.status as string)) fail('Inter-WAN VPN needs explicit enabled and configured/unknown status.')
+    const exports = (value: unknown) => prefixes(value, 'VPN directional export prefixes').map((prefix) => {
+      if (prefix === '0.0.0.0/0') fail('Inter-WAN VPN default-route export is unsupported.')
+      return prefix
+    })
+    return { ...vpn, id: id(vpn.id), name: text(vpn.name, 'VPN name'), aHubId: a!.id, bHubId: b!.id,
+      enabled: vpn.enabled as boolean, status: vpn.status as 'configured' | 'unknown', aToB: exports(vpn.aToB), bToA: exports(vpn.bToA) }
   })
   const sites = array(root.sites, 60, 'Sites').map((value) => {
     const site = record(value)
@@ -642,7 +663,9 @@ export function validateTopology(input: unknown): Topology {
     }).filter((entry) => hubs.some((hub) => hub.id === entry.hubId))
     azureImport = {
       capturedAt, collectorVersion: sourceText(source.collectorVersion, 'Azure collector version', 40),
-      wanId: resourceId(source.wanId), warnings: messages(source.warnings),
+      wanId: resourceId(source.wanId),
+      ...(source.wanIds === undefined ? {} : { wanIds: array(source.wanIds, 2, 'Source WAN IDs').map(resourceId) }),
+      warnings: messages(source.warnings),
       hubs: array(source.hubs, 20, 'Azure source hubs').map((value) => {
         const hub = record(value)
         const hubId = sourceText(hub.hubId, 'Azure source hub', 120)
@@ -666,6 +689,7 @@ export function validateTopology(input: unknown): Topology {
     }
   }
   const topology: Topology = { version: 1, name: text(root.name, 'Topology name'), hubs, sites, spokes, connections, siteLinks, routeMaps,
+    ...(wans === undefined ? {} : { wans }), ...(interWanVpns === undefined ? {} : { interWanVpns }),
     ...(root.allowBranchToBranchTraffic === undefined ? {} : { allowBranchToBranchTraffic: root.allowBranchToBranchTraffic as boolean }),
     ...(root.erLocations === undefined && root.erLinks === undefined ? {} : { erLocations, erLinks }), ...(layout ? { layout } : {}), ...(azureImport ? { azureImport } : {}) }
   for (const hub of hubs) {

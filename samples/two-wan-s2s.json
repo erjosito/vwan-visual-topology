@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "name": "Two WANs — explicit S2S routing assumptions, not P2S",
+  "wans": [
+    { "id": "wan-a", "name": "Application WAN", "allowBranchToBranchTraffic": true },
+    { "id": "wan-b", "name": "Remote WAN", "allowBranchToBranchTraffic": true }
+  ],
+  "hubs": [
+    { "id": "a-west", "wanId": "wan-a", "name": "Application gateway hub", "region": "westeurope", "preference": "VPN", "routingIntent": { "private": false, "internet": false, "privatePrefixes": [] } },
+    { "id": "a-east", "wanId": "wan-a", "name": "Application regional hub", "region": "eastus", "preference": "VPN", "routingIntent": { "private": false, "internet": false, "privatePrefixes": [] } },
+    { "id": "b-west", "wanId": "wan-b", "name": "Remote gateway hub", "region": "westeurope", "preference": "VPN", "routingIntent": { "private": false, "internet": false, "privatePrefixes": [] } },
+    { "id": "b-east", "wanId": "wan-b", "name": "Remote regional hub", "region": "eastus", "preference": "VPN", "routingIntent": { "private": false, "internet": false, "privatePrefixes": [] } }
+  ],
+  "spokes": [
+    { "id": "application", "name": "Application VNet", "hubId": "a-east", "prefixes": ["10.10.0.0/16"] },
+    { "id": "remote", "name": "Remote VNet (not a P2S client)", "hubId": "b-east", "prefixes": ["10.20.0.0/16"] }
+  ],
+  "sites": [],
+  "connections": [],
+  "siteLinks": [],
+  "interWanVpns": [
+    { "id": "s2s", "name": "Declared S2S route exports", "aHubId": "a-west", "bHubId": "b-west", "enabled": true, "status": "configured", "aToB": ["10.10.0.0/16"], "bToA": ["10.20.0.0/16"] }
+  ]
+}

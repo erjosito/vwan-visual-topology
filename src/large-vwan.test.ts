@@ -42,10 +42,10 @@ describe('bounded large Virtual WAN import (synthetic captures)', () => {
   }, 15000)
 
   it('rejects aggregate over-budget references, including unread VNets, without flattening WAN scope', () => {
-    const over = largeVwanCapture(201, 4)
-    expect(() => importAzureCapture(over)).toThrow(/200/)
+    const over = largeVwanCapture(1001, 4, 1)
+    expect(() => importAzureCapture(over)).toThrow(/1000/)
     for (const hub of over.hubs) for (const connection of hub.connections) connection.addressPrefixes = null as never
-    expect(() => importAzureCapture(over)).toThrow(/200/)
+    expect(() => importAzureCapture(over)).toThrow(/1000/)
     const mixed = largeVwanCapture(61, 2)
     mixed.hubs[1].virtualWanId = mixed.wan.id.replace('/wan', '/another-wan')
     expect(() => importAzureCapture(mixed)).toThrow(/different WAN/)
@@ -61,7 +61,7 @@ describe('bounded large Virtual WAN import (synthetic captures)', () => {
     expect(() => validateTopology(topology)).toThrow(/1000 total spoke IPv4 prefixes/)
     expect(() => importAzureCapture(largeVwanCapture(61, 1, 17))).toThrow(/1000 total spoke IPv4 prefixes/)
     expect(importAzureCapture(largeVwanCapture(60, 1, 30)).spokes).toHaveLength(60)
-    expect(() => validateTopology({ ...topology, spokes: [...topology.spokes, topology.spokes[0]] })).toThrow(/at most 200/)
+    expect(() => validateTopology({ ...topology, spokes: Array.from({ length: 1001 }, () => topology.spokes[0]) })).toThrow(/at most 1000/)
   })
 
   it('only wraps large layered views and keeps explicit saved positions authoritative', () => {

@@ -41,6 +41,13 @@ server.registerTool('get_schema', {
     { id: 'unique-route-id', kind: 'route', table: mode === 'vwan' ? 'hub ID' : 'simulation subnet table key, or hub ID with explicit hubTableId', prefix: 'canonical IPv4 CIDR', expectation: 'present or absent', optional: 'hubTableId: exact owned table ID, subject to complete modeled coverage' },
   ],
   example: mode === 'vwan' ? vwanExample : mode === 'hub-spoke' ? hubSpokeExample : fullExample,
+  ...(mode === 'vwan' ? { optionalWanFederation: {
+    wans: [{ id: 'wan-a', name: 'WAN A' }, { id: 'wan-b', name: 'WAN B' }],
+    hubOwnership: 'Every hub must carry wanId matching an explicit scope. Without scopes the legacy single-WAN behavior is unchanged.',
+    interWanVpns: [{ id: 'tunnel', name: 'Declared S2S', aHubId: 'hub-in-a', bHubId: 'hub-in-b', enabled: true,
+      status: 'configured or unknown', aToB: ['10.10.0.0/16'], bToA: ['10.20.0.0/16'] }],
+    boundary: 'Exactly two WANs, at most one manually declared S2S route-export link; selected Default-table IPv4 routes only. P2S, gateway session negotiation and default-route exports unsupported. Independent node/input/output budgets still apply.',
+  } } : {}),
   optionalStaticHubFirewall: { firewall: { id: 'original-local-firewall', name: 'Local Azure Firewall' },
     staticRoute: { name: 'inspect-private', destinationType: 'CIDR', destinations: ['10.0.0.0/8'], nextHopType: 'ResourceId', nextHop: 'original-local-firewall' },
     boundary: 'Single hub, routing intent disabled; define the route in the ingress associated hub table. Unknown targets remain unassessed.' },

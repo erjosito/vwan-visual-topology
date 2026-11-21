@@ -15,7 +15,8 @@ export function largeVwanCapture(count = 200, hubCount = 1, prefixCount = 4) {
       id: `${id}/hubVirtualNetworkConnections/vnet-${i}`,
       name: `Synthetic VNet ${i}`,
       virtualNetworkId: template.connections[0].virtualNetworkId.replace(/\/a$/, `/synthetic-${i}`),
-      addressPrefixes: Array.from({ length: prefixCount }, (_, p) => `10.${i + 1}.${p}.0/24`),
+      addressPrefixes: Array.from({ length: prefixCount }, (_, p) => i < 255 ? `10.${i + 1}.${p}.0/24`
+        : `172.${20 + Math.floor((i - 255) / 256)}.${(i - 255) % 256}.${p * 8}/29`),
       routingConfiguration: { status: 'captured', associatedTableId: `${id}/hubRouteTables/defaultRouteTable`,
         propagatedTableIds: [`${id}/hubRouteTables/defaultRouteTable`], labels: ['default'], unsupportedControls: [] as string[] },
     }))

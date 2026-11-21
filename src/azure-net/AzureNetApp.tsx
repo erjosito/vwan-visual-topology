@@ -53,9 +53,8 @@ import { pruneAzArsRouteMaps } from './ars-route-maps'
 import {
   AZ_NET_PAIR_LIMIT,
   azFindingImpact,
-  azFindingFlows,
   groupAzNetFindings,
-  runAzNetDiagnostics,
+  runAzNetStaticDiagnostics,
   type AzConnectivityScope,
   type AzConnectivityReport,
   type AzDiagnosticFinding,
@@ -156,6 +155,7 @@ const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VnetRoutingSettings = lazy(() => import('./VnetRoutingSettings'))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
 const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
+const FindingEvidence = lazy(() => import('./FindingEvidence'))
 
 function useSubnetAddressEditing(commit: (updater: (draft: AzNetTopology) => void) => boolean, onError: (message: string) => void) {
   const commitRef = useRef(commit)
@@ -544,7 +544,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
   const analysis = useMemo(() => azDisplayResult(rawAnalysis, displayNames), [rawAnalysis, displayNames])
   const rawDiagnostics = useMemo(() => {
-    const staticFindings = measureAzWork('diagnostics', () => runAzNetDiagnostics(activeTopology, rawSimulation, { includePairAnalysis: false }))
+    const staticFindings = measureAzWork('diagnostics', () => runAzNetStaticDiagnostics(activeTopology, rawSimulation))
     const flowFindings = rawAnalysis?.findings ?? []
     return groupAzNetFindings([...staticFindings, ...flowFindings])
   }, [activeTopology, rawSimulation, rawAnalysis])
@@ -3993,24 +3993,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           {finding.summary}
                         </p>
                         <Explain concept="coverage" evidence={[finding.summary]} />
-                        <div
-                          style={{
-                            fontSize: 11.5,
-                            color: 'var(--info)',
-                            background: 'var(--surface-muted)',
-                            padding: '6px 8px',
-                            borderRadius: 5,
-                          }}
-                        >
-                          <strong>Remediation:</strong> {finding.remediation}
-                        </div>
-                        {finding.occurrences?.some((entry) => entry.sampleFlow) && <details data-testid="aznet-affected-flows">
-                          <summary>Affected flows and directional evidence</summary>
-                          {azFindingFlows([finding]).map((entry) => <div key={entry.id}>
-                            <p>{entry.sampleFlow!.sourceIp} ↔ {entry.sampleFlow!.destinationIp}: {entry.summary}</p>
-                            <button type="button" className="aznet-btn" onClick={() => traceFinding(entry)}>Trace affected flow</button>
-                          </div>)}
-                        </details>}
+                        <Suspense fallback={<p role="status">{t('Loading...')}</p>}>
+                          <FindingEvidence finding={finding} onTrace={traceFinding} onConfigure={(vnetId, subnetId) => {
+                            if (!setSelected({ kind: 'subnet', vnetId, subnetId })) return
+                            setActiveTab('editor')
+                          }} />
+                        </Suspense>
                       </div>
                     ))}
                   </div>
@@ -5277,7 +5265,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
             {activeTab === 'azure' && (
               <>
-                {captureObservations?.vngBgpPeerStatus && <Suspense fallback={null}>
+                {(captureObservations?.vngBgpPeerStatus || captureObservations?.vngLearnedRoutes) && <Suspense fallback={null}>
                   <GatewayBgpNeighborsPanel observations={captureObservations} />
                 </Suspense>}
                 {(captureObservations?.arsLearnedRoutes || captureObservations?.arsAdvertisedRoutes) && <Suspense fallback={null}>

@@ -40,7 +40,14 @@ export function diagramLayout(topology: Topology, mode: LayoutMode) {
     }
   } else {
     const outer = [...topology.spokes, ...locations, ...visibleSites]
-    const rings = Math.max(1, Math.ceil(outer.length / 12))
+    const ringSizes: number[] = []
+    let remaining = outer.length
+    do {
+      const count = Math.min(remaining, 12 + (outer.length > 200 ? ringSizes.length * 8 : 0))
+      ringSizes.push(count)
+      remaining -= count
+    } while (remaining > 0)
+    const rings = ringSizes.length
     const radiusX = Math.max(440, topology.hubs.length * 130 + 200)
     const radiusY = Math.max(300, Math.ceil(topology.hubs.length / 8) * 110 + 180)
     width = 2 * (radiusX + (rings - 1) * 260) + 260
@@ -50,9 +57,9 @@ export function diagramLayout(topology: Topology, mode: LayoutMode) {
       y: height / 2 + (topology.hubs.length > 1 ? (i % 2 ? 30 : -30) : 0),
     }))
     outer.forEach((node, i) => {
-      const ring = Math.floor(i / 12)
-      const count = Math.min(12, outer.length - ring * 12)
-      const angle = -Math.PI / 2 + 2 * Math.PI * (i % 12) / count
+      let ring = 0, index = i
+      while (index >= ringSizes[ring]) { index -= ringSizes[ring]; ring++ }
+      const angle = -Math.PI / 2 + 2 * Math.PI * index / ringSizes[ring]
       positions.set(node.id, {
         x: width / 2 + Math.cos(angle) * (radiusX + ring * 260),
         y: height / 2 + Math.sin(angle) * (radiusY + ring * 160),

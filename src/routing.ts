@@ -7,6 +7,7 @@ import { azureRoutesAtSites } from './site-routing'
 import { downstreamSpokesForNvaSpoke, downstreamVnetForAddress, resolveAttachment } from './topology-graph'
 import { evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
 import { attachmentHubRouting, DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, hubTableCoverage, propagatesLocally, propagatesRemotely } from './hub-routing'
+import { sameWan, wanBranchTransit } from './wan-scopes'
 
 export function checkErHubLinkCompatibility(topology: Topology, hubLink: ErLink) {
   const hub = hubLink.hubId ? topology.hubs.find((h) => h.id === hubLink.hubId) : undefined
@@ -32,6 +33,9 @@ export interface Candidate {
   siteId: string
   originHubId: string
   originTableId?: string
+  nextHopHubId?: string
+  nextHopTableId?: string
+  interWanVpnId?: string
   remote: boolean
   sitePath?: string[]
   siteLinkIds?: string[]
@@ -136,9 +140,15 @@ function localRoutes(connection: Connection, topology: Topology): Candidate[] {
 }
 
 function decide(hub: Hub, candidates: Candidate[]): Decision[] {
-  return [...new Set(candidates.map((r) => r.prefix))]
+  const grouped = new Map<string, Candidate[]>()
+  for (const route of candidates) {
+    const group = grouped.get(route.prefix)
+    if (group) group.push(route)
+    else grouped.set(route.prefix, [route])
+  }
+  return [...grouped.keys()]
     .sort((a, b) => cidr(a)!.network - cidr(b)!.network || cidr(a)!.length - cidr(b)!.length)
-    .map((prefix) => chooseVwanHubRoutes(hub, prefix, candidates.filter((r) => r.prefix === prefix)))
+    .map((prefix) => chooseVwanHubRoutes(hub, prefix, grouped.get(prefix)!))
 }
 
 function erCustomerExport(route: Candidate): Candidate {
@@ -173,6 +183,12 @@ export function simulate(topology: Topology): Simulation {
 }
 
 function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting): Simulation {
+  const routingConfigs = new Map<string, ReturnType<typeof attachmentHubRouting>>()
+  const routingFor = (id: string) => {
+    let config = routingConfigs.get(id)
+    if (!config) { config = attachmentHubRouting(topology, id); routingConfigs.set(id, config) }
+    return config
+  }
   const siteRouting = propagateSites(topology)
   const exports = siteExportsOverride ?? siteRouting
   const routePolicies: RoutePolicySnapshot[] = []
@@ -217,6 +233,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
     }
   }
   const warnings: string[] = []
+  if (topology.wans) warnings.push('Inter-WAN connectivity is limited to the explicit, manually configured S2S VPN and directional IPv4 exports. P2S/remote-access clients and gateway BGP sessions are unsupported.')
   if (topology.spokes.some((spoke) => spoke.bgpCommunities)) warnings.push(vnetCommunityHelp)
   const erLinks = (topology.erLinks ?? []).filter((link) => link.enabled)
   const erAdvertisements: Record<string, Candidate[]> = {}
@@ -289,7 +306,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   ]))
   const contexts = Object.fromEntries(topology.hubs.map((hub) => [hub.id, hubRouteTables(hub)]))
   const localContexts = Object.fromEntries(topology.hubs.map((hub) => [hub.id, Object.fromEntries(contexts[hub.id].map((table) =>
-    [table.id, local[hub.id].filter((route) => propagatesLocally(attachmentHubRouting(topology, route.connectionId), table))]))]))
+    [table.id, local[hub.id].filter((route) => propagatesLocally(routingFor(route.connectionId), table))]))]))
   let hubTables = Object.fromEntries(topology.hubs.map((hub) => [hub.id, Object.fromEntries(contexts[hub.id].map((table) =>
     [table.id, decide(hub, localContexts[hub.id][table.id])]))]))
   const signature = (value: typeof hubTables) => JSON.stringify(topology.hubs.map((hub) =>
@@ -299,16 +316,33 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   let converged = topology.hubs.length < 2
   for (let round = 0; round < 64 && !converged; round++) {
     const next = Object.fromEntries(topology.hubs.map((hub) => [hub.id, Object.fromEntries(contexts[hub.id].map((table) => {
-      const remote = topology.hubs.filter((h) => h.id !== hub.id).flatMap((origin) => contexts[origin.id].flatMap((originTable) =>
+      const remote = topology.hubs.filter((h) => h.id !== hub.id && sameWan(h, hub)).flatMap((origin) => contexts[origin.id].flatMap((originTable) =>
         hubTables[origin.id][originTable.id].flatMap((decision) => decision.selected)
           .filter((route) => !route.remote && route.prefix !== '0.0.0.0/0'
-            && propagatesRemotely(attachmentHubRouting(topology, route.connectionId), originTable, table, contexts[origin.id]))
+            && propagatesRemotely(routingFor(route.connectionId), originTable, table, contexts[origin.id]))
           .map((route) => ({
             ...route, asPath: [65520, 65520, ...route.asPath], remote: true, secureOrigin: origin.routingIntent.private,
+            ...(route.interWanVpnId ? { nextHopHubId: origin.id, nextHopTableId: originTable.id } : {}),
             ...(originTable.id === DEFAULT_HUB_TABLE ? {} : { key: `${route.key}:table:${originTable.id}`, originTableId: originTable.id }),
           })),
       ))
-      return [table.id, decide(hub, [...localContexts[hub.id][table.id], ...remote])]
+      const vpnImports = table.id !== DEFAULT_HUB_TABLE ? [] : (topology.interWanVpns ?? []).flatMap((vpn): Candidate[] => {
+        if (!vpn.enabled || vpn.status !== 'configured' || ![vpn.aHubId, vpn.bHubId].includes(hub.id)) return []
+        const from = hub.id === vpn.bHubId ? vpn.aHubId : vpn.bHubId
+        const exported = hub.id === vpn.bHubId ? vpn.aToB : vpn.bToA
+        return hubTables[from][DEFAULT_HUB_TABLE].flatMap((row) => row.selected)
+          .filter((route) => !route.interWanVpnId && route.kind !== 'policy' && route.prefix !== '0.0.0.0/0'
+            && (route.transport === 'VNet' || wanBranchTransit(topology, from))
+            && exported.some((prefix) => cidr(prefix)!.length <= cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network)))
+          .map((route) => ({
+            ...route, key: `${vpn.id}:${route.key}`, kind: 'vpn-static', transport: 'VPN',
+            // Explicit route exports do not predict negotiated gateway AS paths or shared-ASN handling.
+            asPath: [], originHubId: hub.id, originTableId: DEFAULT_HUB_TABLE, remote: false,
+            nextHopHubId: from, nextHopTableId: DEFAULT_HUB_TABLE, interWanVpnId: vpn.id,
+            connectionId: vpn.id,
+          }))
+      })
+      return [table.id, decide(hub, [...localContexts[hub.id][table.id], ...remote, ...vpnImports])]
     }))]))
     const previousSignature = signature(hubTables)
     const nextSignature = signature(next)
@@ -408,7 +442,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   }))
   // Use route provenance, not AS-path contents: summaries can clear contributor ASNs.
   const branchExportEligible = (route: Candidate): boolean =>
-    (topology.allowBranchToBranchTraffic !== false || route.transport === 'VNet' || route.kind === 'policy' || route.kind === 'hub-static')
+    (wanBranchTransit(topology, route.originHubId) || route.transport === 'VNet' || route.kind === 'policy' || route.kind === 'hub-static')
     && (route.transport !== 'SpokeNVA' || !topology.spokes.some((spoke) =>
       spoke.prefixes.some((prefix) => cidr(prefix)!.length < cidr(route.prefix)!.length && contains(prefix, cidr(route.prefix)!.network))))
   if (topology.allowBranchToBranchTraffic === false) {
@@ -416,7 +450,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   }
   const hubOutboundCandidates = (hubId: string, propagateDefaultRoute?: boolean, attachmentId?: string): Candidate[] => {
     const hub = topology.hubs.find((h) => h.id === hubId)!
-    const tableId = attachmentId ? attachmentHubRouting(topology, attachmentId).associatedTableId : DEFAULT_HUB_TABLE
+    const tableId = attachmentId ? routingFor(attachmentId).associatedTableId : DEFAULT_HUB_TABLE
     const selected = (hubTables[hubId][tableId ?? ''] ?? []).flatMap((decision) => decision.selected)
     if (!propagateDefaultRoute) return selected.filter((route) => route.prefix !== '0.0.0.0/0')
     if (!hub.routingIntent.internet) return selected
@@ -435,6 +469,7 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
       : mapRoutes(connection, before, 'outbound')
     return [connection.id, connection.transport === 'ExpressRoute' ? routes.map(erCustomerExport) : routes]
   }))
+  const sharedSpokeExports = new Map<string, Candidate[]>()
   for (const spoke of topology.spokes) {
     if (!spoke.hubId) {
       outbound[spoke.id] = []
@@ -442,11 +477,17 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
     }
     const propagateDefault = Boolean(spoke.propagateDefaultRoute
       || topology.connections.some((c) => c.enabled && c.transport === 'SpokeNVA' && c.spokeId === spoke.id && c.propagateDefaultRoute))
-    const before = hubOutboundCandidates(spoke.hubId, propagateDefault, spoke.id)
-      .filter((route) => route.connectionId !== spoke.id)
-      .map((route) => ({ ...route, asPath: [65515, ...route.asPath] }))
+    const exportKey = JSON.stringify([spoke.hubId, routingFor(spoke.id).associatedTableId, propagateDefault])
+    let shared = sharedSpokeExports.get(exportKey)
+    if (!shared) {
+      shared = hubOutboundCandidates(spoke.hubId, propagateDefault, spoke.id)
+        .map((route) => ({ ...route, asPath: [65515, ...route.asPath] }))
+      sharedSpokeExports.set(exportKey, shared)
+    }
+    const before = shared.filter((route) => route.connectionId !== spoke.id)
+    const rules = routerMapRules(topology, { kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound')
     const after = policy({ kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound', before,
-      applyRouteMapRules(before, routerMapRules(topology, { kind: 'hub', id: spoke.hubId }, spoke.id, 'outbound')).map(hubSummaryExport))
+      rules.length ? applyRouteMapRules(before, rules).map(hubSummaryExport) : before)
     outbound[spoke.id] = after
   }
   if (topology.connections.some((connection) => connection.transport === 'SpokeNVA')) {
@@ -535,8 +576,8 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
       const firewall = topology.hubs.find((hub) => hub.id === current)?.firewall
       details.push(`Azure Firewall in ${name}${firewall ? ` (${firewall.name}, ${firewall.id})` : ''}: separate onward lookup, longest prefix ${decision.prefix}. ${decision.explanation.join(' ')}`)
     }
-    const resolve = <T extends { prefix: string; remote?: boolean; forwardingRoutes?: T[] }>(route: T): T[] => {
-      if (route.remote || !route.forwardingRoutes) return [route]
+    const resolve = <T extends { prefix: string; remote?: boolean; nextHopHubId?: string; forwardingRoutes?: T[] }>(route: T): T[] => {
+      if (route.remote || route.nextHopHubId || !route.forwardingRoutes) return [route]
       const matching = route.forwardingRoutes.filter((r) => contains(r.prefix, address))
       const longest = Math.max(...matching.map((r) => cidr(r.prefix)!.length))
       return matching.filter((r) => cidr(r.prefix)!.length === longest).flatMap(resolve)
@@ -552,7 +593,10 @@ export function traceFlow(topology: Topology, simulation: Simulation, hubId: str
     })
     for (const route of forwarding) {
       if (paths.length >= 128) { traceComplete = false; return }
-      if (route.remote) walk(route.originHubId, hubs, details, inspected, route.originTableId ?? DEFAULT_HUB_TABLE, hubContexts)
+      if (route.nextHopHubId) walk(route.nextHopHubId, hubs,
+        route.interWanVpnId && !route.remote ? [...details, `Cross S2S VPN ${topology.interWanVpns?.find((vpn) => vpn.id === route.interWanVpnId)?.name ?? route.interWanVpnId}.`] : details,
+        inspected, route.nextHopTableId ?? DEFAULT_HUB_TABLE, hubContexts)
+      else if (route.remote) walk(route.originHubId, hubs, details, inspected, route.originTableId ?? DEFAULT_HUB_TABLE, hubContexts)
       else if (route.transport === 'Internet') {
         const privateDestination = RFC1918_PREFIXES.some((prefix) => contains(prefix, address))
         append({ hubs, firewalls: inspected,

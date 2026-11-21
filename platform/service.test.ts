@@ -25,6 +25,22 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it('retains explicit WAN scopes and evaluates both VPN directions in compiled execution', () => {
+    const topology = JSON.parse(readFileSync(resolve('samples', 'two-wan-s2s.json'), 'utf8'))
+    const input = {
+      contractVersion: 1, operation: 'evaluate', document: { mode: 'vwan', topology },
+      requirements: [{ id: 'wan-vpn-flow', kind: 'flow', source: { kind: 'spoke', id: 'application' },
+        target: { kind: 'spoke', id: 'remote' }, sourceAddress: '10.10.0.4', destinationAddress: '10.20.0.4', expectation: 'allow' }],
+    }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(result.assessments[0].outcome).toBe('satisfied')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    topology.interWanVpns[0].bToA = []
+    expect(executePlatform(input).assessments[0].outcome).toBe('violated')
+    topology.interWanVpns[0].status = 'unknown'
+    expect(executePlatform(input).assessments[0].outcome).toBe('not assessed')
+  })
   it.each(['hub-spoke', 'full'] as const)('preserves coexistence configuration and supported static-VPN ARS exchange in compiled %s execution', (mode) => {
     const topology = coexistenceTopology()
     topology.vnets[0].gateways[0].bgpEnabled = false

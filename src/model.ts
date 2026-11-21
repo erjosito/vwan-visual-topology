@@ -14,6 +14,7 @@ export interface DiagramLayout {
 
 export interface Hub {
   id: string
+  wanId?: string
   name: string
   label?: string
   region: string
@@ -198,6 +199,7 @@ export interface AzureImportInfo {
   capturedAt: string
   collectorVersion: string
   wanId: string
+  wanIds?: string[]
   warnings: string[]
   hubs: { hubId: string; resourceId: string; addressPrefix: string; limitations: string[]; routingScopeComplete?: boolean }[]
   spokes?: { spokeId: string; resourceId: string; virtualNetworkId: string }[]
@@ -208,6 +210,8 @@ export interface Topology {
   version: 1
   name: string
   allowBranchToBranchTraffic?: boolean
+  wans?: { id: string; name: string; allowBranchToBranchTraffic?: boolean }[]
+  interWanVpns?: InterWanVpn[]
   hubs: Hub[]
   sites: Site[]
   spokes: Spoke[]
@@ -220,6 +224,18 @@ export interface Topology {
   azureImport?: AzureImportInfo
   inventory?: NetworkInventory
   application?: ApplicationInventory
+}
+
+/** Deliberately configured S2S connectivity, not inferred Azure/P2S state. */
+export interface InterWanVpn {
+  id: string
+  name: string
+  aHubId: string
+  bHubId: string
+  enabled: boolean
+  status: 'configured' | 'unknown'
+  aToB: string[]
+  bToA: string[]
 }
 
 export type ObjectKind = 'hub' | 'spoke' | 'site' | 'connection' | 'siteLink' | 'erLocation' | 'erLink'

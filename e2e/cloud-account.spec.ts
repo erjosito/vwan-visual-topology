@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { cloudFixture, testOwner } from '../tests/user-cloud-fixture'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
+import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { exampleCourse } from '../src/learning/course-examples'
 import { orderedTasks } from '../src/learning/runner'
 import { openLearning, learningAdvancedOptions, completeLearningTasks, learningSidebar } from './learning-helpers'
@@ -680,8 +681,14 @@ test('cloud-restored belts and account switches never replay milestone celebrati
     })) })
   for (const user of ['alice', 'bob']) service.data.set(`users/${testOwner(user)}/progress.json`, { raw, etag: `"historical-${user}"` })
   await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
   const popup = page.getByTestId('learning-belt-dialog')
   const account = page.getByRole('dialog', { name: 'Cloud account', exact: true })
+  const savedDesigns = () => page.evaluate((key) => [
+    localStorage.getItem('aznet-visual-topology:v1'), localStorage.getItem('vwan-visual-topology:v1'),
+    localStorage.getItem(key),
+  ], practiceWorkspaceKey)
+  const originals = await savedDesigns()
   await signIn(page)
   await expect(page.getByTestId('learning-status')).toContainText('Yellow belt')
   await account.getByRole('button', { name: 'Close', exact: true }).click()
@@ -696,14 +703,63 @@ test('cloud-restored belts and account switches never replay milestone celebrati
     await expect(page.getByTestId('learning-status')).toContainText(user === 'alice' ? 'Test Alice' : 'Test Bob')
     await expect(page.getByTestId('learning-status')).toContainText('Yellow belt')
     await expect(popup).toHaveCount(0)
+    await openLearning(page)
+    await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'override.load')
+    await learningSidebar(page).getByRole('button', { name: 'Pause learning', exact: true }).click()
+    expect(await savedDesigns()).toEqual(originals)
     expect(service.data.get(`users/${testOwner(user)}/progress.json`)!.raw).toBe(raw)
   }
+  await openLearning(page)
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'override.load')
+  await expect(popup).toHaveCount(0)
+  await completeLearningTasks(page, 1)
+  await expect.poll(() => JSON.parse(service.data.get(`users/${testOwner('bob')}/progress.json`)!.raw).completions.length)
+    .toBe(JSON.parse(raw).completions.length + 1)
+  expect(service.data.get(`users/${testOwner('alice')}/progress.json`)!.raw).toBe(raw)
+  expect(await page.evaluate(() => [
+    localStorage.getItem('aznet-visual-topology:v1'), localStorage.getItem('vwan-visual-topology:v1'),
+  ])).toEqual(originals.slice(0, 2))
+  await expect(popup).toHaveCount(0)
   await page.reload()
   await expect(page.getByTestId('learning-status')).toContainText('Test Bob')
   await expect(page.getByTestId('learning-status')).toContainText('Yellow belt')
   await openLearning(page)
-  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', 'override.load')
+  const nextTask = orderedTasks(exampleCourse)[JSON.parse(raw).completions.length + 1].task.id
+  await expect(learningSidebar(page).getByTestId('learning-task')).toHaveAttribute('data-task-id', nextTask)
   await expect(popup).toHaveCount(0)
+})
+
+test('an open learning sidebar rebinds on account switching and sign-out without creating progress', async ({ page }) => {
+  const service = await setup(page)
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
+  await signIn(page)
+  const account = page.getByRole('dialog', { name: 'Cloud account', exact: true })
+  const closeAccount = () => account.getByRole('button', { name: 'Close', exact: true }).click()
+  await closeAccount()
+  const stored = () => page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), [
+    'aznet-visual-topology:v1', 'vwan-visual-topology:v1', practiceWorkspaceKey, guidedProgressKey,
+  ])
+  const original = await stored()
+  await openLearning(page)
+  const task = learningSidebar(page).getByTestId('learning-task')
+  await expect(task).toHaveAttribute('data-task-id', 'private-link.load')
+  await page.getByTestId('cloud-account-open').click()
+  await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'bob'))
+  await account.getByRole('button', { name: 'Sign in again / switch account', exact: true }).click()
+  await expect(page.getByTestId('learning-status')).toContainText('Test Bob')
+  await expect(page.getByTestId('cloud-progress-status')).toContainText('Synced')
+  await closeAccount()
+  await expect(task).toHaveAttribute('data-task-id', 'private-link.load')
+  await page.getByTestId('cloud-account-open').click()
+  await account.getByRole('button', { name: 'Sign out of this app', exact: true }).click()
+  await expect(page.getByTestId('learning-status')).toContainText('Not signed in')
+  await closeAccount()
+  await expect(task).toHaveAttribute('data-task-id', 'private-link.load')
+  await expect(page.getByTestId('learning-belt-dialog')).toHaveCount(0)
+  await expect(page.getByTestId('learning-status')).toContainText('0 points')
+  expect(await stored()).toEqual(original)
+  expect([...service.data.keys()].filter((key) => key.endsWith('/progress.json'))).toEqual([])
 })
 
 test('switching accounts preserves session-only history when both local and cloud writes fail', async ({ page }) => {
