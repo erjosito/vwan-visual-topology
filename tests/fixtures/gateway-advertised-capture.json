@@ -1,0 +1,45 @@
+{
+  "kind": "azure-network-capture",
+  "version": 2,
+  "fixture": "Synthetic test data, not recorded Azure evidence.",
+  "resourceGroup": "gateway-advertised-test",
+  "capturedAt": "2026-11-21T00:00:00Z",
+  "collectorVersion": "test",
+  "vnets": [],
+  "routeTables": [],
+  "vnetGateways": [],
+  "localNetworkGateways": [],
+  "vpnConnections": [],
+  "routeServers": [],
+  "networkInterfaces": [],
+  "vngBgpPeerStatus": {
+    "er-gateway": [
+      { "localAddress": "10.1.0.4", "neighbor": "192.0.2.9", "asn": 65001, "state": "Connected", "routesReceived": 0 },
+      { "localAddress": "10.1.0.5", "neighbor": "192.0.2.9", "asn": 65001, "state": "Connected" }
+    ]
+  },
+  "vngLearnedRoutes": {
+    "er-gateway": [
+      { "localAddress": "10.1.0.4", "network": "203.0.113.0/24", "sourcePeer": "192.0.2.20", "nextHop": "198.51.100.1", "asPath": "65515-65001" }
+    ]
+  },
+  "vngAdvertisedRoutes": {
+    "er-gateway": {
+      "192.0.2.9": [
+        { "localAddress": "10.1.0.4", "network": "203.0.113.0/24", "nextHop": "198.51.100.1", "asPath": "65515-65001", "origin": "Incomplete", "weight": 0 },
+        { "localAddress": "10.1.0.4", "network": "203.0.113.0/24", "nextHop": "198.51.100.2", "asPath": "" },
+        { "localAddress": "10.1.0.5", "network": "198.51.100.0/24", "asPath": "65002" },
+        { "network": "192.0.2.0/24" }
+      ],
+      "192.0.2.11": []
+    }
+  },
+  "observationVersion": 1,
+  "sections": {
+    "vngLearnedRoutes:er-gateway": { "state": "succeeded", "complete": true },
+    "vngBgpPeerStatus:er-gateway": { "state": "succeeded", "complete": true },
+    "vngAdvertisedRoutes:er-gateway:192.0.2.9": { "state": "succeeded", "complete": true },
+    "vngAdvertisedRoutes:er-gateway:192.0.2.11": { "state": "empty", "complete": true },
+    "vngAdvertisedRoutes:er-gateway:192.0.2.12": { "state": "denied", "complete": false }
+  }
+}

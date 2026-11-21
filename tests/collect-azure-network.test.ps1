@@ -22,8 +22,8 @@ try {
     $env:MOCK_NETWORK_LOG = Join-Path $output 'requests.log'
     $env:MOCK_NETWORK_TIMEOUT_START = Join-Path $output 'timeout-start-ticks.txt'
     $natModes = @('vpn-nat-gateway', 'vpn-nat-ingress', 'vpn-nat-egress')
-    $modes = if ($ArsRoutesOnly) { @('ars-roles') } elseif ($BgpNeighborsOnly) { @('bgp-neighbors') } elseif ($SubnetPeeringOnly) { @('subnet-peering') } elseif ($VpnNatOnly) { $natModes } else {
-        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated', 'subnet-peering', 'bgp-neighbors', 'ars-roles') + $natModes
+    $modes = if ($ArsRoutesOnly) { @('ars-roles') } elseif ($BgpNeighborsOnly) { @('bgp-neighbors', 'bgp-advertised-denied') } elseif ($SubnetPeeringOnly) { @('subnet-peering') } elseif ($VpnNatOnly) { $natModes } else {
+        @('direct', 'subnet-reference', 'empty', 'denied', 'failed', 'timeout', 'oversize', 'stderr-limit', 'long-field', 'unsupported', 'bad-json', 'bad-envelope', 'nat-prefix', 'nat-denied', 'nat-unsupported-sku', 'nat-unallocated', 'subnet-peering', 'bgp-neighbors', 'bgp-advertised-denied', 'ars-roles') + $natModes
     }
     $importer = Join-Path $output 'vpn-nat-importer.cjs'
     @'
@@ -39,10 +39,12 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
     foreach ($mode in $modes) {
         $env:MOCK_NETWORK_MODE = $mode
         $file = Join-Path $output "$mode.json"
+        $requestStart = if (Test-Path -LiteralPath $env:MOCK_NETWORK_LOG) { @(Get-Content -LiteralPath $env:MOCK_NETWORK_LOG).Count } else { 0 }
         $watch = [Diagnostics.Stopwatch]::StartNew()
+        $commandTimeout = if ($mode -like 'bgp-*') { 15 } else { 5 }
         & (Join-Path $repo 'public' 'scripts' 'collect-azure-network.ps1') `
             -ResourceGroupName network -SubscriptionId $subscription -OutputFile $file -Force `
-            -IncludeEffectiveRoutes -CommandTimeoutSeconds 5 -MaxOutputChars 8192
+            -IncludeEffectiveRoutes -CommandTimeoutSeconds $commandTimeout -MaxOutputChars 8192
         $text = Get-Content -LiteralPath $file -Raw
         $capture = $text | ConvertFrom-Json
         Assert (!$text.Contains('must-not-be-exported')) "$mode leaked raw fields or CLI error text."
@@ -55,13 +57,28 @@ createRequire(join(repo, 'package.json'))('esbuild').buildSync({
         if ($mode -eq 'nat-prefix') { Assert ($capture.publicIpPrefixes[0].prefixLength -eq 31) 'Public prefix size was not preserved.' }
         if ($mode -eq 'nat-unallocated') { Assert (!$capture.publicIpAddresses[0].ipAddress) 'An unknown public address was invented.' }
         Assert ($capture.observationVersion -eq 1 -and $capture.version -eq 2) "$mode lost compatible versioned provenance."
-        if ($mode -eq 'bgp-neighbors') {
+        if ($mode -like 'bgp-*') {
             Assert ($capture.vnetGateways[0].enablePrivateIpAddress -eq $true -and $capture.vpnConnections[0].useLocalAzureIpAddress -eq $true) 'Private tunnel flags were lost during collection.'
             Assert ($capture.vnetGateways[0].vpnType -eq 'RouteBased' -and $capture.vnetGateways[0].sku.name -eq 'VpnGw4AZ' -and $capture.vnetGateways[0].vpnGatewayGeneration -eq 'Generation2') 'Gateway coexistence configuration was lost.'
             $peer = $capture.vngBgpPeerStatus.vpn[0]
             Assert ($peer.localAddress -eq '10.82.253.4' -and $peer.neighbor -eq '192.0.2.9') 'Captured BGP endpoint identities were lost.'
             Assert ($peer.routesReceived -eq 0 -and $peer.messagesSent -eq 12 -and $peer.messagesReceived -eq 11 -and $peer.connectedDuration -eq '00:01:00') 'Captured BGP counters were dropped or invented.'
             Assert ($capture.sections.'vngBgpPeerStatus:vpn'.complete) 'Successful neighbor projection lost capture coverage.'
+            $requests = Get-Content -LiteralPath $env:MOCK_NETWORK_LOG | Select-Object -Skip $requestStart | ForEach-Object { ,($_ | ConvertFrom-Json) }
+            $advertisementRequests = @($requests | Where-Object { $_[0..2] -join ' ' -eq 'network vnet-gateway list-advertised-routes' })
+            Assert ($advertisementRequests.Count -eq 2) 'Advertisements were duplicated by local endpoint or queried for a native self row.'
+            Assert ($capture.sections.'vngAdvertisedRoutes:vpn:192.0.2.10'.state -eq 'empty') 'Successful empty advertisement query became unavailable.'
+            Assert (!$capture.sections.'vngAdvertisedRoutes:vpn'.complete) 'Missing remote addresses were declared complete advertisement coverage.'
+            Assert ($capture.configurationComplete) 'Advertisement failure incorrectly invalidated configuration coverage.'
+            if ($mode -eq 'bgp-neighbors') {
+                $advertised = $capture.vngAdvertisedRoutes.vpn.'192.0.2.9'
+                Assert ($advertised.Count -eq 2 -and $advertised[1].localAddress -eq '10.82.253.5') 'Advertised endpoint ownership was merged or lost.'
+                Assert ($advertised[0].weight -eq 0 -and $advertised[1].asPath -eq '') 'Native zero/empty route attributes were lost.'
+                Assert ($null -eq $advertised[0].sourcePeer) 'Requested destination peer was fabricated as source peer.'
+            } else {
+                Assert ($capture.sections.'vngAdvertisedRoutes:vpn:192.0.2.9'.state -eq 'denied' -and !$capture.sections.vngAdvertisedRoutes.complete) 'Denied advertisements became complete empty coverage.'
+                Assert ($null -eq $capture.vngAdvertisedRoutes.vpn.'192.0.2.9') 'Unavailable advertised routes were manufactured.'
+            }
             @'
 const { readFileSync } = require('node:fs');
 const { importAzNetCapture } = require(process.argv[2]);
@@ -70,6 +87,7 @@ const imported = importAzNetCapture(capture);
 const observed = imported.observations;
 require('node:assert/strict').equal(imported.topology.vpnConnections[0].useLocalAzureIpAddress, true);
 require('node:assert/strict').deepEqual(JSON.parse(JSON.stringify(observed.vngBgpPeerStatus)), capture.vngBgpPeerStatus);
+require('node:assert/strict').deepEqual(observed.vngAdvertisedRoutes, capture.vngAdvertisedRoutes);
 '@ | node - $importer $file
             Assert ($LASTEXITCODE -eq 0) 'Collected BGP neighbors did not survive current capture import.'
         }

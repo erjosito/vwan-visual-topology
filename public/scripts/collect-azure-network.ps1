@@ -209,6 +209,7 @@ $vnetGateways = @(Invoke-AzJson 'vnetGateways' @('network', 'vnet-gateway', 'lis
 $localNetworkGateways = @(Invoke-AzJson 'localNetworkGateways' @('network', 'local-gateway', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; bgpSettings = $bgp; localNetworkAddressSpace = @{ addressPrefixes = $true } }))
 $vpnConnections = @(Invoke-AzJson 'vpnConnections' @('network', 'vpn-connection', 'list', '-g', $ResourceGroupName) @(@{ id = $true; name = $true; enableBgp = $true; useLocalAzureIpAddress = $true; virtualNetworkGateway1 = $ref; localNetworkGateway2 = $ref; ingressNatRules = @($ref); egressNatRules = @($ref) }))
 $vngLearnedRoutes = @{}
+$vngAdvertisedRoutes = @{}
 $vngBgpPeerStatus = @{}
 if ($IncludeEffectiveRoutes) {
     foreach ($vng in $vnetGateways) {
@@ -221,6 +222,21 @@ if ($IncludeEffectiveRoutes) {
         $peerStatus = Invoke-AzJson "vngBgpPeerStatus:$vngName" @('network', 'vnet-gateway', 'list-bgp-peer-status', '-g', $ResourceGroupName, '-n', $vngName) @{ value = @(@{ neighbor = $true; state = $true; localAddress = $true; asn = $true; routesReceived = $true; connectedDuration = $true; messagesSent = $true; messagesReceived = $true }) }
         if ($peerStatus) {
             $vngBgpPeerStatus[$vngName] = @($peerStatus.value)
+        }
+        $vngAdvertisedRoutes[$vngName] = @{}
+        $destinationPeers = @($peerStatus.value | Where-Object {
+            $_.neighbor -is [string] -and $_.neighbor -and $_.neighbor -ne $_.localAddress
+        } | ForEach-Object { $_.neighbor } | Sort-Object -Unique)
+        foreach ($destinationPeer in $destinationPeers) {
+            $advertised = Invoke-AzJson "vngAdvertisedRoutes:${vngName}:$destinationPeer" @('network', 'vnet-gateway', 'list-advertised-routes', '-g', $ResourceGroupName, '-n', $vngName, '--peer', $destinationPeer) @{ value = @($bgpRoute) }
+            if ($advertised) { $vngAdvertisedRoutes[$vngName][$destinationPeer] = @($advertised.value) }
+        }
+        $children = @($sections.GetEnumerator() | Where-Object { $_.Key.StartsWith("vngAdvertisedRoutes:${vngName}:") })
+        $unknownPeers = @($peerStatus.value | Where-Object { $_.neighbor -isnot [string] -or !$_.neighbor })
+        $complete = $null -ne $peerStatus -and !$unknownPeers.Count -and !(@($children | Where-Object { !$_.Value.complete }).Count)
+        $sections["vngAdvertisedRoutes:$vngName"] = @{
+            state = if (!$complete) { 'failed' } elseif (!$destinationPeers.Count) { 'empty' } else { 'succeeded' }
+            complete = [bool]$complete
         }
     }
 }
@@ -384,9 +400,9 @@ if ($IncludeEffectiveRoutes) {
 
 Write-Host "[5/6] Assembling v2 capture envelope..."
 $configurationComplete = !(@($sections.GetEnumerator() | Where-Object {
-    $_.Key -notmatch '^(nicEffectiveRoutes|arsLearnedRoutes|arsAdvertisedRoutes|vngLearnedRoutes|vngBgpPeerStatus):' -and !$_.Value.complete
+    $_.Key -notmatch '^(nicEffectiveRoutes|arsLearnedRoutes|arsAdvertisedRoutes|vngLearnedRoutes|vngAdvertisedRoutes|vngBgpPeerStatus):' -and !$_.Value.complete
 }).Count)
-foreach ($section in @('nicEffectiveRoutes', 'arsLearnedRoutes', 'arsAdvertisedRoutes', 'vngLearnedRoutes', 'vngBgpPeerStatus')) {
+foreach ($section in @('nicEffectiveRoutes', 'arsLearnedRoutes', 'arsAdvertisedRoutes', 'vngLearnedRoutes', 'vngAdvertisedRoutes', 'vngBgpPeerStatus')) {
     $children = @($sections.GetEnumerator() | Where-Object { $_.Key.StartsWith("${section}:") })
     $complete = $IncludeEffectiveRoutes -and $configurationComplete -and !(@($children | Where-Object { !$_.Value.complete }).Count)
     $state = if (!$IncludeEffectiveRoutes) { 'not-requested' } elseif (!$complete) { 'failed' } elseif (!$children.Count) { 'empty' } else { 'succeeded' }
@@ -395,7 +411,7 @@ foreach ($section in @('nicEffectiveRoutes', 'arsLearnedRoutes', 'arsAdvertisedR
 $capture = [ordered]@{
     kind               = 'azure-network-capture'
     version            = 2
-    collectorVersion   = '2026.11.16.10'
+    collectorVersion   = '2026.11.21.1'
     connectivityVersion = 1
     observationVersion = 1
     context            = $context
@@ -428,6 +444,7 @@ $capture = [ordered]@{
     arsLearnedRoutes     = $arsLearnedRoutes
     arsAdvertisedRoutes  = $arsAdvertisedRoutes
     vngLearnedRoutes     = $vngLearnedRoutes
+    vngAdvertisedRoutes  = $vngAdvertisedRoutes
     vngBgpPeerStatus     = $vngBgpPeerStatus
 }
 

@@ -92,6 +92,7 @@ export interface AzCapturedObservations {
   nicEffectiveRoutes: AzCapturedNicObservation[]
   arsLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   vngLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
+  vngAdvertisedRoutes?: Record<string, Record<string, AzCapturedBgpPeerRoute[]>>
   arsAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayLearnedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
   gatewayAdvertisedRoutes?: Record<string, AzCapturedBgpPeerRoute[]>
@@ -283,7 +284,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
   const configurationComplete = sections
     ? root.configurationComplete === true && asObject(root.context, 'Capture context').cloud === 'AzureCloud' &&
       ['account', 'vnets', 'routeTables', 'vnetGateways', 'localNetworkGateways', 'vpnConnections', 'routeServers', 'privateEndpoints', 'networkInterfaces'].every((key) => sections[key]?.complete)
-      && Object.entries(sections).filter(([key]) => !/^(nicEffectiveRoutes|arsLearnedRoutes|arsAdvertisedRoutes|vngLearnedRoutes|vngBgpPeerStatus)(:|$)/.test(key)).every(([, section]) => section.complete)
+      && Object.entries(sections).filter(([key]) => !/^(nicEffectiveRoutes|arsLearnedRoutes|arsAdvertisedRoutes|vngLearnedRoutes|vngAdvertisedRoutes|vngBgpPeerStatus)(:|$)/.test(key)).every(([, section]) => section.complete)
     : undefined
   if (!sections) warnings.push('Legacy v2 capture has unknown observation coverage. Present routes can be compared; absence is not evidence of a mismatch.')
   else if (!configurationComplete) warnings.push('Configuration capture is incomplete or unsupported; route comparisons cannot establish a mismatch or complete agreement.')
@@ -926,9 +927,11 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
   }
 
   const vngBgpPeerStatus = capturedBgpNeighbors(root.vngBgpPeerStatus)
+  const vngAdvertised = root.vngAdvertisedRoutes && typeof root.vngAdvertisedRoutes === 'object'
+    ? root.vngAdvertisedRoutes as Record<string, Record<string, AzCapturedBgpPeerRoute[]>> : undefined
   let observations: AzCapturedObservations | undefined
   if (Array.isArray(root.nicEffectiveRoutes) || vngBgpPeerStatus !== undefined ||
-      arsLearned !== undefined || vngLearned !== undefined || arsAdvertised !== undefined || Object.keys(vngBgpEndpoints).length > 0) {
+      arsLearned !== undefined || vngLearned !== undefined || vngAdvertised !== undefined || arsAdvertised !== undefined || Object.keys(vngBgpEndpoints).length > 0) {
     const nicEffectiveRoutes: AzCapturedNicObservation[] = asArray(root.nicEffectiveRoutes).map(
       (rawObs) => {
         const o = asObject(rawObs, 'NicObservation')
@@ -963,6 +966,7 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
       nicEffectiveRoutes,
       arsLearnedRoutes: arsLearned,
       vngLearnedRoutes: vngLearned,
+      ...(vngAdvertised !== undefined ? { vngAdvertisedRoutes: vngAdvertised } : {}),
       arsAdvertisedRoutes: arsAdvertised,
       ...(vngBgpPeerStatus !== undefined ? { vngBgpPeerStatus } : {}),
       ...(Object.keys(vngBgpEndpoints).length > 0 ? { vngBgpEndpoints } : {}),
