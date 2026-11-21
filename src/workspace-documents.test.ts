@@ -23,6 +23,33 @@ function storage() {
 }
 
 describe('workspace document ownership', () => {
+  it('does not start a lazy file writer after its document closes', async () => {
+    vi.stubGlobal('window', {})
+    let ready!: () => void
+    const loading = new Promise<void>(resolve => { ready = resolve })
+    const write = vi.fn()
+    vi.doMock('./browser-document-writer', async () => {
+      await loading
+      return { createBrowserDocumentWriter: () => ({ write }) }
+    })
+    const runtime = createDocumentRuntime(() => undefined, () => 'en', () => true)
+    const documents = createWorkspaceDocuments(storage(), () => true, runtime.initialize)
+    try {
+      const document = documents.activate(first)
+      document.remember(history('First'))
+      const saving = document.commands!.saveAs({ kind: 'choose-file', name: 'first.json' })
+      documents.forget(first.id)
+      ready()
+      expect(await saving).toBe('revoked')
+      expect(write).not.toHaveBeenCalled()
+    } finally {
+      documents.dispose()
+      await runtime.dispose()
+      vi.doUnmock('./browser-document-writer')
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('starts without optional artifact metadata when storage reads fail', async () => {
     vi.stubGlobal('window', {})
     const runtime = createDocumentRuntime(() => undefined, () => 'en', () => false)

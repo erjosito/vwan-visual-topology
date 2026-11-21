@@ -1,5 +1,6 @@
 import { expect, test as base, type Page } from '@playwright/test'
 import { openLearning } from '../learning-helpers'
+import { downloadTopologyCopy } from '../document-action-helpers'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { assetGraph } from '../../scripts/production-assets.mjs'
@@ -508,7 +509,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
       await page.getByRole('button', { name: 'Close Path explorer', exact: true }).click()
     }
     const download = page.waitForEvent('download')
-    await page.getByRole('button', { name: mode === 'vwan' ? 'Export JSON' : '⬇ Export JSON', exact: true }).click()
+    await downloadTopologyCopy(page)
     const native = await readFile((await (await download).path())!)
     await page.locator('input[data-desktop-import]').setInputFiles({ name: 'roundtrip.json', mimeType: 'application/json', buffer: native })
     const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), storageKey)
