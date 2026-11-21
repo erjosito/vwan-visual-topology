@@ -196,11 +196,11 @@ function Workspace() {
     [api, progressSync, progress, applyCloudProgress])
   const cloudProgressStatus = useSyncExternalStore(sync?.subscribe ?? noSubscribe, sync?.getSnapshot ?? noSync)
   useEffect(() => { sync?.start(); return () => sync?.stop() }, [sync])
-  useEffect(() => {
+  useLayoutEffect(() => {
     learningIdentity.current = progress
     learningRef.current?.cancel()
     learningRef.current = undefined; learningLoading.current = undefined; learningCourse.current = undefined
-    // Account changes must not reuse a runner whose completion callback belongs to another ledger.
+    // Invalidate account-bound callbacks before the sidebar's passive loading effect runs.
     // oxlint-disable-next-line react/set-state-in-effect
     setLearning(undefined)
     // oxlint-disable-next-line react/set-state-in-effect

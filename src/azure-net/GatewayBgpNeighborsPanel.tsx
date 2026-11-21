@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { t } from '../i18n'
 import { registerJapaneseMessages } from '../messages'
 import type { AzCapturedObservations } from './azure-import'
+import { capturedArsRoutes as capturedBgpRoutes } from './captured-ars-routes'
+import CapturedGatewayRoutes from './CapturedGatewayRoutes'
 
 registerJapaneseMessages({
   'Captured gateway BGP neighbors': '取得済みゲートウェイ BGP ネイバー',
@@ -19,18 +21,52 @@ registerJapaneseMessages({
   'Observed counters': '取得済みカウンター',
   'Connected duration': '接続継続時間',
   'Messages sent / received': '送信 / 受信メッセージ数',
+  'Captured gateway learned BGP routes': '取得済みゲートウェイ学習 BGP ルート',
+  'Learned from peer': 'ピアから学習',
+  'Unassigned (no local endpoint captured)': '未割り当て（ローカル エンドポイント未取得）',
+  'No neighbor observations were captured for this endpoint. Route rows do not establish session state or counters.': 'このエンドポイントのネイバー観測は取得されていません。ルート行はセッション状態やカウンターを証明しません。',
+  'Inspect captured routes': '取得済みルートを検査',
+  'Source peer': '送信元ピア',
+  'All captured source peers': '取得済み送信元ピアすべて',
+  'Source peer not captured': '送信元ピア未取得',
+  'Captured route attributes': '取得済みルート属性',
+  'Captured Azure route origin': '取得済み Azure ルートの生成元',
+  'Previous routes': '前のルート',
+  'Next routes': '次のルート',
+  'Rows {0}–{1} of {2}': '全 {2} 行中 {0}～{1} 行',
+  'Gateway route capture coverage: {0}. Missing rows do not establish an empty Adj-RIB, withdrawal or an unavailable session.': 'ゲートウェイ ルート取得のカバレッジ: {0}。行がないことは空の Adj-RIB、経路取り消し、またはセッションの利用不可を証明しません。',
+  'Captured learned routes are not advertised routes or simulator best paths. Source peer is not inferred from next hop. ER circuit, primary/secondary edge and physical instance mappings remain unknown.': '取得済み学習ルートは通知ルートやシミュレーターの最適経路ではありません。送信元ピアをネクスト ホップから推測しません。ER 回線、プライマリ/セカンダリ エッジ、物理インスタンスの対応は不明です。',
+  'No rows were captured for this selection. Missing rows do not establish that no routes or sessions exist.': 'この選択の行は取得されていません。行がないことはルートやセッションが存在しない証明ではありません。',
+  'Malformed or oversized route observations cannot establish complete coverage.': '不正またはサイズ上限を超えたルート観測では、完全なカバレッジを確認できません。',
+  'Unknown / incomplete': '不明 / 不完全',
 })
 
 export default function GatewayBgpNeighborsPanel({ observations }: { observations: AzCapturedObservations }) {
-  const [gatewayName, setGatewayName] = useState('')
-  const [localAddress, setLocalAddress] = useState('')
-  const gateways = Object.keys(observations.vngBgpPeerStatus ?? {}).sort()
+  const initialScope = { observations, gatewayName: '', localAddress: undefined as string | undefined, sourcePeer: '', page: 0 }
+  const [selection, setSelection] = useState(initialScope)
+  const scope = selection.observations === observations ? selection : initialScope
+  const { gatewayName, localAddress, sourcePeer } = scope
+  const setSourcePeer = (value: string) => setSelection({ ...scope, sourcePeer: value, page: 0 })
+  const routeSectionGateways = Object.keys(observations.sections ?? {}).filter((key) => key.startsWith('vngLearnedRoutes:'))
+    .map((key) => key.slice('vngLearnedRoutes:'.length))
+  const gateways = [...new Set([...Object.keys(observations.vngBgpPeerStatus ?? {}),
+    ...Object.keys(observations.vngLearnedRoutes ?? {}), ...routeSectionGateways])].sort()
   const gateway = gateways.includes(gatewayName) ? gatewayName : gateways[0]
+  if (Array.isArray(observations.vngLearnedRoutes) || gateways.length > 256 ||
+      gateways.some((key) => key.length > 512)) return <section className="aznet-card" data-testid="captured-bgp-neighbors">
+    <p role="status">{t('Malformed or oversized route observations cannot establish complete coverage.')}</p>
+  </section>
   if (gateway === undefined) return null
-  const peers = observations.vngBgpPeerStatus![gateway]
-  const addresses = [...new Set(peers.map((peer) => peer.localAddress).filter((address): address is string => !!address))].sort()
-  const address = addresses.includes(localAddress) ? localAddress : addresses[0]
-  const rows = address === undefined ? [] : peers.filter((peer) => peer.localAddress === address)
+  const peers = observations.vngBgpPeerStatus?.[gateway] ?? []
+  const hasLearned = !!observations.vngLearnedRoutes && Object.hasOwn(observations.vngLearnedRoutes, gateway)
+  const routeSection = observations.sections?.[`vngLearnedRoutes:${gateway}`]
+  const learned = capturedBgpRoutes(hasLearned ? observations.vngLearnedRoutes![gateway] : [])
+  const addresses = [...new Set([...peers.map((peer) => peer.localAddress).filter((value): value is string => !!value),
+    ...learned.rows.map((route) => route.localAddress || '')])].sort((a, b) => Number(!a) - Number(!b) || a.localeCompare(b))
+  const address = localAddress !== undefined && addresses.includes(localAddress) ? localAddress : addresses[0]
+  const rows = !address ? [] : peers.filter((peer) => peer.localAddress === address)
+  const routes = learned.rows.filter((route) => (route.localAddress || '') === address)
+  const routeSources = new Set(routes.map((route) => route.sourcePeer))
   const unscoped = peers.filter((peer) => !peer.localAddress).length
   const section = observations.sections?.[`vngBgpPeerStatus:${gateway}`]
   const missing = t('Not captured')
@@ -40,28 +76,35 @@ export default function GatewayBgpNeighborsPanel({ observations }: { observation
       observations.capturedAt || t('Not captured'), observations.resourceGroup)}</p>
     <p>{t('One local endpoint is shown at a time. Physical instance identity and other IP aliases are not inferred from IP addresses.')}</p>
     <label className="field"><span>{t('Captured gateway')}</span><select aria-label={t('Captured gateway')} value={gateway}
-      onChange={(event) => { setGatewayName(event.target.value); setLocalAddress('') }}>
+      onChange={(event) => setSelection({ ...initialScope, gatewayName: event.target.value })}>
       {gateways.map((name) => <option key={name}>{name}</option>)}
     </select></label>
     {address !== undefined ? <>
       <label className="field"><span>{t('Local BGP endpoint')}</span><select aria-label={t('Local BGP endpoint')} value={address}
-        onChange={(event) => setLocalAddress(event.target.value)}>
-        {addresses.map((value) => <option key={value}>{value}</option>)}
+        onChange={(event) => setSelection({ ...scope, localAddress: event.target.value, sourcePeer: '', page: 0 })}>
+        {addresses.map((value) => <option key={value} value={value}>{value || t('Unassigned (no local endpoint captured)')}</option>)}
       </select></label>
-      <div className="table-scroll"><table className="aznet-route-table">
+      {rows.length > 0 ? <div className="table-scroll"><table className="aznet-route-table" data-testid="captured-gateway-neighbor-table">
         <caption>{gateway} · {address}</caption>
         <thead><tr><th>{t('Neighbor')}</th><th>{t('Remote ASN')}</th><th>{t('Captured state')}</th><th>{t('Received prefixes')}</th></tr></thead>
         <tbody>{rows.map((peer, index) => <tr key={index} data-local-address={peer.localAddress}>
           <td>{peer.neighbor || missing}<details><summary>{t('Observed counters')}</summary>
             <p>{t('Connected duration')}: {peer.connectedDuration || missing}</p>
             <p>{t('Messages sent / received')}: {peer.messagesSent ?? missing} / {peer.messagesReceived ?? missing}</p>
-          </details></td>
+          </details>
+          {peer.neighbor && routeSources.has(peer.neighbor) &&
+            <button type="button" className="aznet-btn" onClick={() => setSourcePeer(JSON.stringify([peer.neighbor]))}>{t('Inspect captured routes')}</button>}</td>
           <td>{peer.asn ?? missing}</td><td>{peer.state || missing}</td><td>{peer.routesReceived ?? missing}</td>
         </tr>)}</tbody>
-      </table></div>
+      </table></div> : <p role="status">{t('No neighbor observations were captured for this endpoint. Route rows do not establish session state or counters.')}</p>}
     </> : <p role="status">{t('No local BGP endpoint was captured for this gateway. Its neighbors cannot be scoped to an instance.')}</p>}
     {unscoped > 0 && <p role="status">{t('{0} rows have no local address and cannot be assigned to this endpoint.', unscoped)}</p>}
     {(!section?.complete || section.state !== 'succeeded') &&
       <p role="status">{t('Neighbor capture coverage: {0}. Missing rows do not establish that no BGP session exists.', section?.state ?? 'unknown')}</p>}
+    {(hasLearned || routeSection) &&
+      <CapturedGatewayRoutes gateway={gateway} address={address}
+        rows={routes} rejected={learned.rejected} section={routeSection}
+        sourcePeer={sourcePeer} onSourcePeerChange={setSourcePeer} selectedPage={scope.page}
+        onPageChange={(page) => setSelection({ ...scope, page })} />}
   </section>
 }

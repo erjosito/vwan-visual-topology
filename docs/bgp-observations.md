@@ -42,6 +42,45 @@ BGP route observations without NIC observations or a neighbor table. Local
 addresses, next hops, AS paths and missing `sourcePeer` stay as captured; a next
 hop is not substituted for the advertising neighbor.
 
+## Captured managed-gateway learned routes
+
+The same lazy Azure capture inspector now exposes `vngLearnedRoutes`, collected
+by `az network vnet-gateway list-learned-routes` for VPN and ExpressRoute virtual
+network gateways where the command returns records. Unsupported or denied reads
+are not successful empty route sets. Select the original captured gateway key
+and exactly one **Local BGP endpoint**. Endpoint choices come from explicit local addresses in
+the captured neighbors and learned routes, not from configured redundancy,
+array positions or subnet offsets. Routes without a local address are separately
+**Unassigned**; they are never attributed to a known endpoint.
+
+The learned-route table preserves duplicate prefixes, native AS paths (including
+empty paths), next hops, source peers, Azure route origin (not BGP ORIGIN) and
+zero weight. Null optional attributes remain missing, not fabricated defaults.
+Filter by an explicit **Source peer**, or choose **Inspect captured routes** on a neighbor
+with matching source-peer evidence at that exact local endpoint. A forwarding
+next hop is never used to make that match. Rows without a source peer remain
+separately inspectable. Changing gateway or endpoint resets the peer filter.
+Importing another capture resets gateway, endpoint, peer and page selection,
+even when its resource keys or timestamp match the previous capture.
+Tables show at most 100 routes per page and accept at most 10,000 rows per
+gateway and 256 captured gateway keys; malformed/oversized route data is
+disclosed as incomplete, even if the capture section claimed completeness.
+
+Route-only captures do not need a neighbor table or NIC observation. Conversely,
+a captured neighbor does not imply that routes were collected. Historical
+neighbor counters and learned rows remain independent: apparent disagreement
+is not resolved by rewriting native counters or deriving session state from
+route rows. Capture time, original gateway/local endpoint scope and per-command
+coverage remain visible. Missing/failed/empty observations are not proof of an
+empty per-session Adj-RIB, withdrawal, convergence or session failure.
+
+This adds read-only per-endpoint managed-gateway coverage, not physical-instance
+qualification. An ER virtual network gateway is not a circuit, primary/secondary
+MSEE pair or peering-location speaker. No such bindings, advertised gateway
+routes or native alias mappings are inferred. The committed gateway-route fixture
+and browser/offline tests are synthetic; this increment performs no fresh Azure
+reads and claims no new ER/VPN live qualification.
+
 This is not full simulator-to-Azure BGP route-result parity. Gateway advertised
 route collection, captured ARS neighbor inspection, physical-instance
 bindings, MSEE/provider sessions and data-plane/failover qualification remain
