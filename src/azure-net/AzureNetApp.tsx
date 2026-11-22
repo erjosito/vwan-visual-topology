@@ -23,7 +23,7 @@ import { ConfigurationEditStatus, InspectorSection, PresentationGroup, Presentat
 import { previewSubnetActions, previewVnetActions } from '../context-actions'
 import { useWorkspaceEditorState, useWorkspaceSession } from '../workspace-context'
 import { DocumentActions } from '../DocumentActions'
-import { WorkspaceTabPanel } from '../WorkspaceTabs'
+import { WorkspaceCanvasTabs, WorkspaceTabPanel } from '../WorkspaceTabs'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
@@ -2853,6 +2853,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             </p>}
           </div>}
 
+          <WorkspaceCanvasTabs />
           <AzureNetDiagram
             frameRequest={frameRequest}
             topology={topology}

@@ -7,7 +7,7 @@ import { observationFixture } from '../tests/azure-observation-fixture'
 import { exercises } from '../src/learning/exercises'
 
 for (const vwan of [true, false]) {
-  test(`${vwan ? 'VWAN' : 'mixed'} topology tabs preserve independent edits, view, history and restart`, async ({ page }) => {
+  test(`${vwan ? 'VWAN' : 'mixed'} topology tabs preserve independent edits, view, history and restart`, async ({ page }, info) => {
     const first = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
     first.name = 'First tab design'
     const second = structuredClone(first)
@@ -23,6 +23,17 @@ for (const vwan of [true, false]) {
     const position = () => vwan ? node.getAttribute('transform')
       : page.getByTestId('aznet-vnet-a').locator('.network-node-frame').getAttribute('x')
     await expect(node).toBeVisible()
+    const navigation = page.getByRole('navigation', { name: 'Open topologies', exact: true })
+    const canvas = page.locator(vwan ? '.canvas-stage' : '.aznet-canvas-shell')
+    const header = page.locator(vwan ? 'header.unified-topbar' : 'header.aznet-topbar')
+    const navBounds = await navigation.boundingBox()
+    const canvasBounds = await canvas.boundingBox()
+    const headerBounds = await header.boundingBox()
+    expect(navBounds!.y).toBeGreaterThanOrEqual(headerBounds!.y + headerBounds!.height)
+    expect(Math.abs(navBounds!.y + navBounds!.height - canvasBounds!.y)).toBeLessThanOrEqual(1)
+    await expect(navigation.getByRole('button', { name: `Close topology: ${first.name}`, exact: true })).toBeVisible()
+    await expect(tabs.getByRole('tab', { name: first.name, exact: true }).locator('..')).toHaveCSS('border-top-left-radius', '10px')
+    await info.attach('canvas-tabs', { body: await page.screenshot({ path: info.outputPath('canvas-tabs.png') }), contentType: 'image/png' })
     const initialPosition = await position()
     await node.focus()
     await page.keyboard.press(vwan ? 'Alt+ArrowRight' : 'ArrowRight')

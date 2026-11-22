@@ -1,12 +1,20 @@
-import { useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { useContext, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useLanguage } from './i18n'
-import { useWorkspaceSession } from './workspace-context'
+import { WorkspaceTabsContext, useWorkspaceSession } from './workspace-context'
 import { workspaceTabsLimit, type WorkspaceTab } from './workspace-tabs'
 import type { DocumentSaveState } from './cloud/document-state'
 import type { createDocumentCommands } from './document-commands'
 import './workspace-tabs.css'
 const noSubscribe = () => () => {}
 const noSnapshot = () => undefined
+
+export function WorkspaceCanvasTabs() {
+  const tabs = useContext(WorkspaceTabsContext)
+  useLayoutEffect(() => {
+    tabs?.restoreFocus()
+  })
+  return tabs?.navigation
+}
 
 export function WorkspaceTabPanel({ children }: { children: ReactNode }) {
   const id = useWorkspaceSession()?.tabId
@@ -41,7 +49,7 @@ function TabButton({ tab, selected, save, commands, onActivate }: {
     aria-describedby={`workspace-tab-state-${tab.id}`} aria-selected={selected} tabIndex={selected ? 0 : -1}
     title={`${tab.name} · ${tab.provider === 'vwan' ? 'Virtual WAN' : text('Mixed networking', '混在ネットワーク')} · ${status}${state.cloud ? `: ${state.cloud.name}` : ''}`}
     onClick={() => onActivate(tab)}>
-    <span>{tab.name || text('Untitled topology', '名称未設定のトポロジ')}</span>
+    <span className="workspace-tab-name">{tab.name || text('Untitled topology', '名称未設定のトポロジ')}</span>
   </button><small id={`workspace-tab-state-${tab.id}`}>{status}</small></>
 }
 

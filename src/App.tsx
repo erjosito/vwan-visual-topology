@@ -7,7 +7,7 @@ import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
 import { previewVnetActions } from './context-actions'
 import { confirmConfigurationSwitch } from './configuration-selection'
 import { useWorkspaceEditorState, useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
-import { WorkspaceTabPanel } from './WorkspaceTabs'
+import { WorkspaceCanvasTabs, WorkspaceTabPanel } from './WorkspaceTabs'
 import { DocumentActions } from './DocumentActions'
 import { lazy, Suspense, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
@@ -804,6 +804,7 @@ function App() {
           {(currentCheck?.status === 'running' || currentCheck?.report?.continuation?.status === 'paused') && <button onClick={() => { checkWorker.current?.worker.terminate(); checkWorker.current = undefined; setRoutingCheck({ revision: routingKey, status: 'cancelled' }) }}>{t('Cancel analysis')}</button>}
           {!workspaceSession?.presentationPreview && <button onClick={openDiagnostics}>{t('Advanced checks')}</button>}
         </div>}
+        <WorkspaceCanvasTabs />
         <div className="canvas-stage">
           {bgpInspection && <Suspense fallback={null}><BgpNeighborsPanel key={bgpInspection.revision} topology={topology}
             initialResource={bgpInspection.resource} unavailableIds={Object.keys(scenario.affected)}
