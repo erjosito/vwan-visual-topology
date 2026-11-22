@@ -13,7 +13,7 @@ import { engineVersion } from '../src/platform/contract'
 import { resolve } from 'node:path'
 import { largeVwanCapture } from '../tests/large-vwan-fixture'
 import { importAzureCapture } from '../src/azure-import'
-import { bgpNeighborTopology } from '../tests/fixtures/bgp-neighbors'
+import { bgpNeighborTopology, bgpNeighborVwanTopology } from '../tests/fixtures/bgp-neighbors'
 import { coexistenceTopology } from '../tests/fixtures/coexistence'
 
 const require = createRequire(import.meta.url)
@@ -25,6 +25,18 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it('exports managed VWAN BGP relationship metadata in compiled execution without altering routing or native JSON', () => {
+    const topology = bgpNeighborVwanTopology()
+    const input = { contractVersion: 1, operation: 'simulate', document: { mode: 'vwan', topology } }
+    const result = executePlatform(input)
+    expect(result.status).toBe('complete')
+    expect(compiled.executePlatform(input)).toEqual(result)
+    expect(result.document?.topology).toEqual(validateTopology(topology))
+    expect(result.simulation).toEqual(simulate(validateTopology(topology)))
+    expect(result.bgpNeighbors?.managedRelationships.map((relationship) => relationship.kind).sort())
+      .toEqual(['express-route', 'express-route', 'inter-hub', 'vpn'])
+    expect(result.bgpNeighbors?.neighbors).toEqual([])
+  })
   it('retains explicit WAN scopes and evaluates both VPN directions in compiled execution', () => {
     const topology = JSON.parse(readFileSync(resolve('samples', 'two-wan-s2s.json'), 'utf8'))
     const input = {

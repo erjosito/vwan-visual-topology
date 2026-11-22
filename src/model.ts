@@ -262,6 +262,14 @@ export function siteLabel(topology: Topology, id: string): string {
   return topology.connections.some((connection) => connection.transport === 'SpokeNVA' && connection.siteId === id) ? 'Spoke BGP NVA' : 'site'
 }
 
+export type VpnRoutingMode = 'static' | 'bgp'
+
+export function vpnRoutingMode(topology: Topology, connection: Connection): VpnRoutingMode | 'mixed' {
+  const statics = topology.sites.find((site) => site.id === connection.siteId)?.vpnStaticRoutes?.some((route) => route.connectionId === connection.id)
+  const bgp = connection.learnSiteRoutes
+  return statics ? bgp ? 'mixed' : 'static' : 'bgp'
+}
+
 export const preferenceLabels: Record<Preference, string> = {
   ExpressRoute: 'ExpressRoute',
   VPN: 'VPN',
