@@ -148,13 +148,15 @@ mapping or filtering cannot certify either connectivity or isolation. Supported
 repairs are open-ended; no guest/listener or live-session readiness is certified.
 
 The lazy, non-modal learning sidebar runs the **Routing foundations** track's
-six sequential missions through black belt (40 tasks, 1,325 first-earned points) from `course-examples.ts`,
-`course-routing.ts` and `course-wan.ts`. They cover direct peering, equal-prefix
-UDR preference, longest-prefix diagnosis, shared-gateway return routing, secured
-Virtual WAN and a two-fault hybrid capstone. `runner.ts` is the single progression authority: scoped
+revised Azure networking journey from `curriculum-v2.ts`: twelve linear chapters,
+72 assessed tasks and 1,345 XP, with mixed/full belt checkpoints through black.
+Topics progress from peering, Firewall/UDRs and Standard/secured Virtual WAN
+through static VPN, BGP, ExpressRoute resilience, VPN backup, NVA HA and
+multi-hub handover. The original and scenario editions remain playable archives.
+`runner.ts` is the single progression authority: scoped
 setup, observation, direct-peering configuration plus engine outcome, open-design
 requirements, and quizzes unlock the next task only after a passing current
-check and explicit **Complete task & continue**. The root keeps task/completion
+check and explicit **Next**. Loading/preparation earns no XP. The root keeps task/completion
 and pause/resume state across native editor switches. Compatible completion and
 linear position restore after reload from the bounded browser-local ledger.
 Raw JSON, raw requirements,
@@ -203,13 +205,13 @@ that today's canvas is still valid. Explicit lesson replay preserves history
 and cannot emit duplicate completion events. Newly inserted/revised unmet
 tasks gate the next uncompleted task even if later historical records exist.
 
-Routing foundations has separately versioned original and scenario editions.
-New learners start the seven-scenario edition. Existing completion history
-keeps the original edition until explicit, confirmed enrollment; old points
+Routing foundations has separately versioned revised, original and scenario editions.
+New learners start `azure-routing-v2`. Existing completion history
+keeps its archived edition until explicit, confirmed enrollment; old points
 and belts remain historical achievements, not credit in the new edition.
 Enrollment is an optional field in the existing v1 progress ledger and uses
 the same writer ownership and optimistic conflict checks as completion writes.
-Changing editions does not replace the current practice canvas. Each scenario
+Changing editions does not replace the current practice canvas. Each chapter
 still requires the existing explicit starter/replacement confirmation.
 
 Mixed flow requirements can declare

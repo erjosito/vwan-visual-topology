@@ -1,0 +1,350 @@
+{
+  "source": "c476571ec8b0248cdf6c4141b55af03f8fd24d3a",
+  "cpu": "Intel(R) Core(TM) Ultra 7 165H",
+  "node": "v22.23.5",
+  "availableMemory": 3986149376,
+  "cases": [
+    {
+      "mode": "vwan",
+      "tier": "small",
+      "variant": "original",
+      "workloadSha256": "6383564cacfed98a1f9ed621a6171146ddb976d90994acb24731eedecba5422e",
+      "samples": [
+        {
+          "simulationMillis": 38.3817999999992,
+          "diagnosticsMillis": 0.004400000001623994,
+          "traceMillis": 3.915000000000873,
+          "output": {
+            "simulation": "17ff64861b395d43edba18fd241d7ffa699bef47f249f0768b46223587e5672b",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "80302d45e7b4e78d3080d3fb569968972dce32e14440db39c9fc8a442be1ee7b",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 0.6402000000016415,
+              "warningOnlyMillis": 0.08329999999841675
+            }
+          }
+        },
+        {
+          "simulationMillis": 0.9871999999995751,
+          "diagnosticsMillis": 0.0034999999988940544,
+          "traceMillis": 0.4886000000005879,
+          "output": {
+            "simulation": "17ff64861b395d43edba18fd241d7ffa699bef47f249f0768b46223587e5672b",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "80302d45e7b4e78d3080d3fb569968972dce32e14440db39c9fc8a442be1ee7b",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 0.13469999999870197,
+              "warningOnlyMillis": 0.007599999997182749
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "small",
+      "variant": "rename",
+      "workloadSha256": "83467961a8daac4ad90115630eaf2e2f25416b0c813fe8fc5e373d00c4dcffd8",
+      "samples": [
+        {
+          "simulationMillis": 5.898600000000442,
+          "diagnosticsMillis": 0.006499999999505235,
+          "traceMillis": 0.6965999999993073,
+          "output": {
+            "simulation": "17ff64861b395d43edba18fd241d7ffa699bef47f249f0768b46223587e5672b",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "fa521133e09d7c1e366415625b5e06c84565178a8997a1164681fb00384eadbc",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 0.1275000000023283,
+              "warningOnlyMillis": 0.007700000001932494
+            }
+          }
+        },
+        {
+          "simulationMillis": 0.46119999999791617,
+          "diagnosticsMillis": 0.0035000000025320332,
+          "traceMillis": 0.16159999999945285,
+          "output": {
+            "simulation": "17ff64861b395d43edba18fd241d7ffa699bef47f249f0768b46223587e5672b",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "fa521133e09d7c1e366415625b5e06c84565178a8997a1164681fb00384eadbc",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 0.17079999999987194,
+              "warningOnlyMillis": 0.007799999999406282
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "small",
+      "variant": "semantic",
+      "workloadSha256": "0998aa51be04dcd8c8f222e3ef5744a7080201858f29bf8be65e7fe74eb96e20",
+      "samples": [
+        {
+          "simulationMillis": 1.3016999999999825,
+          "diagnosticsMillis": 0.0037999999985913746,
+          "traceMillis": 0.3894000000000233,
+          "output": {
+            "simulation": "56f5442cd4cd5475dbed6f194f9914f1ecfcb7c2893eeee6345dfaa6d74291de",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "80302d45e7b4e78d3080d3fb569968972dce32e14440db39c9fc8a442be1ee7b",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 0.07709999999860884,
+              "warningOnlyMillis": 0.01059999999779393
+            }
+          }
+        },
+        {
+          "simulationMillis": 0.314699999998993,
+          "diagnosticsMillis": 0.0018000000018218998,
+          "traceMillis": 7.767899999998917,
+          "output": {
+            "simulation": "56f5442cd4cd5475dbed6f194f9914f1ecfcb7c2893eeee6345dfaa6d74291de",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "80302d45e7b4e78d3080d3fb569968972dce32e14440db39c9fc8a442be1ee7b",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 0.11629999999786378,
+              "warningOnlyMillis": 0.006099999998696148
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "dense",
+      "variant": "original",
+      "workloadSha256": "968c9de78be4352887fd0c25e689464c5dba90db2073c06d69da0764bc91191c",
+      "samples": [
+        {
+          "simulationMillis": 448.11239999999816,
+          "diagnosticsMillis": 0.0072000000000116415,
+          "traceMillis": 9.154999999998836,
+          "output": {
+            "simulation": "b7197c0333242bfb1730fe6334752fafb78d8efc020e8d8b42ac74851e4cc51f",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "62317fc79b5f67785807674402fd387ab3e4801109641513bbcc80ffb7fc1e0a",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 108.72860000000219,
+              "warningOnlyMillis": 0.3445999999967171
+            }
+          }
+        },
+        {
+          "simulationMillis": 170.15039999999863,
+          "diagnosticsMillis": 0.005199999999604188,
+          "traceMillis": 2.565999999998894,
+          "output": {
+            "simulation": "b7197c0333242bfb1730fe6334752fafb78d8efc020e8d8b42ac74851e4cc51f",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "62317fc79b5f67785807674402fd387ab3e4801109641513bbcc80ffb7fc1e0a",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 118.48550000000978,
+              "warningOnlyMillis": 0.021200000002863817
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "dense",
+      "variant": "rename",
+      "workloadSha256": "f675b2f26e27b6e20f9f2deaad6a3e203de0c0258984fea315dfcef2c3b6b1cb",
+      "samples": [
+        {
+          "simulationMillis": 138.36579999999958,
+          "diagnosticsMillis": 0.005600000004051253,
+          "traceMillis": 2.1269999999931315,
+          "output": {
+            "simulation": "b7197c0333242bfb1730fe6334752fafb78d8efc020e8d8b42ac74851e4cc51f",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "6116feb3aac08d7d3837a75a8fecb457346acfdec948d8bf612a56dd0e6fc3b9",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 45.21680000000924,
+              "warningOnlyMillis": 0.06909999999334104
+            }
+          }
+        },
+        {
+          "simulationMillis": 144.60199999999895,
+          "diagnosticsMillis": 0.007100000002537854,
+          "traceMillis": 7.4452000000019325,
+          "output": {
+            "simulation": "b7197c0333242bfb1730fe6334752fafb78d8efc020e8d8b42ac74851e4cc51f",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "6116feb3aac08d7d3837a75a8fecb457346acfdec948d8bf612a56dd0e6fc3b9",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 61.63050000001385,
+              "warningOnlyMillis": 0.03830000000016298
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "dense",
+      "variant": "semantic",
+      "workloadSha256": "0e03504e6485c08cc16fd413f8844e8d0dc93eeffa6f8443e6cc62f93a73fc79",
+      "samples": [
+        {
+          "simulationMillis": 450.91070000000764,
+          "diagnosticsMillis": 0.003999999986262992,
+          "traceMillis": 4.708899999997811,
+          "output": {
+            "simulation": "4f43d9463b3a96cd084b7a5d9916e0818ebfc612f94630182c0eed2a6e97ed8e",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "62317fc79b5f67785807674402fd387ab3e4801109641513bbcc80ffb7fc1e0a",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 56.204300000012154,
+              "warningOnlyMillis": 0.021800000016810372
+            }
+          }
+        },
+        {
+          "simulationMillis": 156.9438000000082,
+          "diagnosticsMillis": 0.003300000011222437,
+          "traceMillis": 5.327599999989616,
+          "output": {
+            "simulation": "4f43d9463b3a96cd084b7a5d9916e0818ebfc612f94630182c0eed2a6e97ed8e",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "62317fc79b5f67785807674402fd387ab3e4801109641513bbcc80ffb7fc1e0a",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 43.36259999999311,
+              "warningOnlyMillis": 0.028000000020256266
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "near-limit",
+      "variant": "original",
+      "workloadSha256": "ce3606471188eb1ce8b6648462a76d86301f8fbc18d92ed0f5e6fad397c7d924",
+      "samples": [
+        {
+          "simulationMillis": 585.085299999977,
+          "diagnosticsMillis": 0.0040000000153668225,
+          "traceMillis": 6.784899999998743,
+          "output": {
+            "simulation": "8bd82367a4add736664c06e8ba77ddbd254207ec49af4eca011806ecb9d651c9",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "b3ceaf0d9492b97143af8424fab429e306e960cc9b9c9634ea765fb4a13c3a00",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 119.74540000001434,
+              "warningOnlyMillis": 0.012499999953433871
+            }
+          }
+        },
+        {
+          "simulationMillis": 274.14789999998175,
+          "diagnosticsMillis": 0.0055000000284053385,
+          "traceMillis": 5.596599999989849,
+          "output": {
+            "simulation": "8bd82367a4add736664c06e8ba77ddbd254207ec49af4eca011806ecb9d651c9",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "b3ceaf0d9492b97143af8424fab429e306e960cc9b9c9634ea765fb4a13c3a00",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 245.63789999997243,
+              "warningOnlyMillis": 0.04910000000381842
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "near-limit",
+      "variant": "rename",
+      "workloadSha256": "c90925e813d00914f5b4da922cdfcd5c5bfacfb139771c945fa7fbfaeddbfa2c",
+      "samples": [
+        {
+          "simulationMillis": 668.418299999903,
+          "diagnosticsMillis": 0.005100000067614019,
+          "traceMillis": 6.1674000000348315,
+          "output": {
+            "simulation": "8bd82367a4add736664c06e8ba77ddbd254207ec49af4eca011806ecb9d651c9",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "0ffbbc93a9e5f441c45d694d4f2698cd4a48484634b3ec5e9d753d44e65874bf",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 146.64260000002105,
+              "warningOnlyMillis": 0.021699999924749136
+            }
+          }
+        },
+        {
+          "simulationMillis": 330.9235000000335,
+          "diagnosticsMillis": 0.004500000039115548,
+          "traceMillis": 4.3105999999679625,
+          "output": {
+            "simulation": "8bd82367a4add736664c06e8ba77ddbd254207ec49af4eca011806ecb9d651c9",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "0ffbbc93a9e5f441c45d694d4f2698cd4a48484634b3ec5e9d753d44e65874bf",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 157.47320000000764,
+              "warningOnlyMillis": 0.02099999994970858
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "vwan",
+      "tier": "near-limit",
+      "variant": "semantic",
+      "workloadSha256": "3b40c503887bca13c940a704214c329d326af4bd4013c04798f4a78d9049f828",
+      "samples": [
+        {
+          "simulationMillis": 533.8758999999845,
+          "diagnosticsMillis": 0.004499999922700226,
+          "traceMillis": 10.397200000006706,
+          "output": {
+            "simulation": "dec11814ff58bd795c895a165840cb6723c65cfc00d62f1bad91672b405080e5",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "b3ceaf0d9492b97143af8424fab429e306e960cc9b9c9634ea765fb4a13c3a00",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 170.82039999996778,
+              "warningOnlyMillis": 0.02590000000782311
+            }
+          }
+        },
+        {
+          "simulationMillis": 177.68009999999776,
+          "diagnosticsMillis": 0.004200000083073974,
+          "traceMillis": 4.624899999937043,
+          "output": {
+            "simulation": "dec11814ff58bd795c895a165840cb6723c65cfc00d62f1bad91672b405080e5",
+            "diagnostics": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+            "trace": "b3ceaf0d9492b97143af8424fab429e306e960cc9b9c9634ea765fb4a13c3a00",
+            "projection": {
+              "status": "passed",
+              "broadMillis": 86.45129999995697,
+              "warningOnlyMillis": 0.018099999986588955
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
