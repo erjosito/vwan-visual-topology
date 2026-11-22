@@ -85,7 +85,7 @@ interface AzureNetDiagramProps {
     subnetId: string,
     routeTableId: string | undefined,
   ) => void
-  onOpenEditorForEntity?: (entity: AzSelectedEntity) => void
+  onOpenEditorForEntity?: (entity: AzSelectedEntity, section?: 'routes') => void
   onShowRouteMapRules?: (selection: AzRouteMapSelection) => void
   forwardTrace?: AzFlowTrace | null
   reverseTrace?: AzFlowTrace | null
@@ -2279,8 +2279,7 @@ export function AzureNetDiagram({
                     vnetId: vnet.id,
                     subnetId: subnet.id,
                   }
-                  onSelect(entity)
-                  onOpenEditorForEntity?.(entity)
+                  onOpenEditorForEntity?.(entity, 'routes')
                   setHoverPopover(null)
                 }}
               >

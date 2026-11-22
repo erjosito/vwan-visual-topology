@@ -147,6 +147,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [nvaCreationVnetId, setNvaCreationVnetId] = useState<string>()
   const [guidanceNavigation, setGuidanceNavigation] = useState(false)
   const [guidanceRevision, setGuidanceRevision] = useState(0)
+  const [routeTableConfiguration, setRouteTableConfiguration] = useWorkspaceEditorState('aznet.routeTableConfiguration', false)
+  const [configurationRevision, setConfigurationRevision] = useState(0)
   const [frameRequest, setFrameRequest] = useState<{ vnetId: string; revision: number }>()
   const guidanceRoot = useRef<HTMLDivElement>(null)
   const {
@@ -155,7 +157,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   } = useAzSelection(topology, () => {
     setVnraCreationVnetId(undefined)
     setNvaCreationVnetId(undefined)
-  }, () => setGuidanceNavigation(false))
+    setRouteTableConfiguration(false)
+  }, () => { setGuidanceNavigation(false); setRouteTableConfiguration(false) })
   const [detailOwner, setDetailOwner] = useWorkspaceEditorState<string>('aznet.detail')
   const [snatHubId, setSnatHubId] = useState<string>()
   const [detailReturnFocus, setDetailReturnFocus] = useState<Element | null>(null)
@@ -2551,6 +2554,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
             onGuide={(cue) => {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
+              setRouteTableConfiguration(false)
               setContextMenu(null)
               if (cue.action === 'connection.configure') {
                 if (!setSelected(cue.params.kind === 'er-link' ? { kind: 'er-link', linkId: cue.params.connectionId }
@@ -2901,7 +2905,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               setGroupTrace(null)
               setShowDiagnosticBadges(false)
             }}
-            onContextMenu={(target) => { setGuidanceNavigation(false); setContextReturnFocus(document.activeElement); setContextMenu(target) }}
+            onContextMenu={(target) => { setGuidanceNavigation(false); setRouteTableConfiguration(false); setContextReturnFocus(document.activeElement); setContextMenu(target) }}
             onTogglePeeringEnabled={(peeringId, enabled) => {
               commitTopology((draft) => {
                 const p = draft.vnetPeerings.find((x) => x.id === peeringId)
@@ -2930,8 +2934,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 }
               })
             }}
-            onOpenEditorForEntity={(entity) => {
-              setSelected(entity)
+            onOpenEditorForEntity={(entity, section) => {
+              if (!setSelected(entity)) return
+              setRouteTableConfiguration(section === 'routes')
+              setConfigurationRevision((revision) => revision + 1)
+              setGuidanceNavigation(false)
               setActiveTab('editor')
             }}
           />
@@ -2996,7 +3003,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
           onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
         {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
-          key={guidanceRevision}
+          key={`${guidanceRevision}:${configurationRevision}:${routeTableConfiguration}`}
           focusOnOpen={!guidanceNavigation}
           title={{
             routes: t(inspectedControlRib ? 'BGP table' : 'Effective routes'),
@@ -3006,7 +3013,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             azure: 'Azure & Bicep',
           }[activeTab]}
           className={`aznet-inspector-window${activeTab === 'routes' ? ' aznet-routes-window' : ''}`}
-          onClose={() => { setActiveTab(null); setGuidanceNavigation(false) }}
+          onClose={() => { setActiveTab(null); setGuidanceNavigation(false); setRouteTableConfiguration(false) }}
         >
           <nav className="aznet-tabs">
             <button
@@ -4149,7 +4156,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               )
               const routeTableEditor = showVnetEditor && (
                 <Suspense key={`routes-${selectedVnetId}`} fallback={null}><UdrTablesEditor topology={topology}
-                  selected={selected} selectedVnetId={selectedVnetId} initialOpen={guidanceNavigation && selected.kind === 'subnet'}
+                  selected={selected} selectedVnetId={selectedVnetId} initialOpen={(routeTableConfiguration || guidanceNavigation) && selected.kind === 'subnet'}
                   commit={commitTopology} onClone={(cloneId) => setUdrManager({ cloneId })}
                   onLibrary={(tableId) => setUdrManager(tableId ? { tableId } : {})}
                   onCreate={() => selected.kind === 'subnet'
@@ -4160,7 +4167,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               const subnetEditor = showVnetEditor && (
                 <InspectorSection key={`subnets-${selectedVnetId}`} title={t('Subnet configuration')}
                   summary={t('{0} subnets', selected.kind === 'subnet' ? 1 : filteredVnets.reduce((count, vnet) => count + vnet.subnets.length, 0))}
-                  initialOpen={!guidanceNavigation && selected.kind === 'subnet'}>
+                  initialOpen={!routeTableConfiguration && !guidanceNavigation && selected.kind === 'subnet'}>
                 <div className="aznet-card" data-testid="aznet-subnet-security-editor">
                   <h3 hidden={workspaceSession?.presentationPreview}>Subnets: Create, Rename, Route Table, Private Endpoint & Outbound Policies</h3>
                   <p className="aznet-muted" style={{ fontSize: 11.5 }}>{t('These settings do not prove Internet or private-service reachability.')}</p>
@@ -4469,10 +4476,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               <div key={workspaceIdentityKey(azWorkspaceIdentity(selected))} data-configuration-scope>
                 <Suspense fallback={null}><ConfigurationEditStatus /></Suspense>
                 {context}
+                {routeTableConfiguration && routeTableEditor}
                 {vnetEditor}
                 {subnetEditor}
                 {peeringEditor}
-                {routeTableEditor}
+                {!routeTableConfiguration && routeTableEditor}
                 {(showSiteEditor || showErEditor) && (
                 <InspectorSection key={selected.kind} title={t(showSiteEditor ? 'On-premises site configuration' : 'ExpressRoute location configuration')}
                   summary={selected.kind === 'site' ? topology.sites.find(site => site.id === selected.siteId)?.name ?? ''

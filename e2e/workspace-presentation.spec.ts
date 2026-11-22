@@ -10,6 +10,48 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
+for (const [mode, preview] of [['hub-spoke', true], ['full', true], ['full', false]] as const) {
+  test(`${mode} ${preview ? 'preview' : 'legacy'}: Edit Route Table opens and reopens Route tables without changing subnet configuration`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await page.addInitScript(({ topology, preview }) => {
+      localStorage.setItem('aznet-ui-preview:v1', String(preview))
+      localStorage.setItem('aznet-workspace-tools:v1', 'closed')
+      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+    }, { topology: sampleHubSpokeFirewallUdr, preview })
+    await page.goto(`/?mode=${mode}`)
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    const before = await saved()
+    const openTable = async () => {
+      await page.getByTestId('aznet-subnet-rt-badge-sub-app-web').hover({ force: true })
+      await page.getByTestId('aznet-rt-hover-card').getByRole('button', { name: 'Edit Route Table…', exact: true }).click()
+    }
+    const routes = page.getByTestId('aznet-udr-editor').locator('..')
+    const subnets = page.getByTestId('aznet-subnet-security-editor').locator('..')
+    const tableId = sampleHubSpokeFirewallUdr.vnets.flatMap((vnet) => vnet.subnets)
+      .find((subnet) => subnet.id === 'sub-app-web')!.routeTableId!
+    const card = page.getByTestId(`aznet-rt-card-${tableId}`)
+    await openTable()
+    await expect(routes).toHaveJSProperty('open', true)
+    await expect(subnets).toHaveJSProperty('open', !preview)
+    await expect(card).toBeInViewport()
+    if (preview) {
+      await routes.locator(':scope > summary').click()
+      await expect(routes).toHaveJSProperty('open', false)
+    }
+    await openTable()
+    await expect(routes).toHaveJSProperty('open', true)
+    await expect(card).toBeInViewport()
+    expect(await saved()).toEqual(before)
+    await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
+    await page.getByTestId('aznet-subnet-sub-app-web').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Configure Subnet (Name, Prefix, Route Table, PE Policies)...', exact: true }).click()
+    await expect(subnets).toHaveJSProperty('open', true)
+    await expect(routes).toHaveJSProperty('open', !preview)
+  })
+}
+
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode}: AzNetSim brand fits wide and narrow headers`, async ({ page }) => {
     await page.goto(`/?mode=${mode}`)

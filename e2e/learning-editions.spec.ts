@@ -252,6 +252,13 @@ for (const language of ['en', 'ja'] as const) {
     }
     await expect(debrief).toContainText(language === 'en' ? 'this intermediate network is not ready to deploy' : 'この中間構成はデプロイの準備ができた状態ではなく')
     await advanceLearningTask(page, language)
+    await page.getByTestId('ui-preview-toggle').click()
+    await page.getByTestId('aznet-subnet-rt-badge-a-work').hover({ force: true })
+    await page.getByTestId('aznet-rt-hover-card').getByRole('button', { name: 'Edit Route Table…', exact: true }).click()
+    await expect(page.getByTestId('aznet-udr-editor').locator('..')).toHaveJSProperty('open', true)
+    await expect(page.getByTestId('aznet-subnet-security-editor').locator('..')).toHaveJSProperty('open', false)
+    await expect(page.getByTestId('aznet-rt-card-application-policy')).toBeVisible()
+    await page.getByRole('dialog', { name: 'Configure selected object', exact: true }).press('Escape')
     const applicationPolicy = await openTable(page, 'inspection-bypass.summary', 'application-policy', language)
     await applicationPolicy.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
     const inputs = applicationPolicy.locator('tbody tr').last().locator('input[type="text"]')
