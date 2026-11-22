@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useState } from 'react'
 import type { Topology } from './model'
 import { validateTopology } from './validation'
 import { useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
+import { measureAzWork } from './azure-net/performance'
 
 export interface UseTopologyHistoryOptions {
   storageKey: string
@@ -63,7 +64,7 @@ export function useTopologyHistory({
   const persist = (next: Topology) => {
     try {
       if (session?.practice && session.savePractice) session.savePractice({ mode: 'vwan', topology: next })
-      else storage.setItem(storageKey, JSON.stringify(next))
+      else measureAzWork('persist', () => storage.setItem(storageKey, JSON.stringify(next)))
       session?.documentSave?.local(next, 'saved')
       setSaveError('')
     } catch {
@@ -73,8 +74,8 @@ export function useTopologyHistory({
   }
 
   const save = (next: Topology, recordHistory = true) => {
-    if (recordHistory && JSON.stringify(next) !== JSON.stringify(topology)) {
-      const snapshot = structuredClone(topology)
+    if (recordHistory && measureAzWork('history-compare', () => JSON.stringify(next) !== JSON.stringify(topology))) {
+      const snapshot = measureAzWork('history-clone', () => structuredClone(topology))
       setHistory((current) => ({ past: [...current.past.slice(-(maxHistory - 1)), snapshot], future: [] }))
     }
     setTopology(next)
@@ -86,10 +87,10 @@ export function useTopologyHistory({
   const canUndo = history.past.length > 0
   const canRedo = history.future.length > 0
 
-  const undo = () => {
+  const undo = () => measureAzWork('undo', () => {
     const previous = history.past.at(-1)
     if (!previous) return
-    const currentSnapshot = structuredClone(topology)
+    const currentSnapshot = measureAzWork('history-clone', () => structuredClone(topology))
     setHistory((current) => ({
       past: current.past.slice(0, -1),
       future: [currentSnapshot, ...current.future].slice(0, maxHistory),
@@ -99,12 +100,12 @@ export function useTopologyHistory({
     onBeforeUndoRedo?.(previous)
     onAfterChange?.(previous)
     persist(previous)
-  }
+  })
 
-  const redo = () => {
+  const redo = () => measureAzWork('redo', () => {
     const [next, ...rest] = history.future
     if (!next) return
-    const currentSnapshot = structuredClone(topology)
+    const currentSnapshot = measureAzWork('history-clone', () => structuredClone(topology))
     setHistory((current) => ({
       past: [...current.past.slice(-(maxHistory - 1)), currentSnapshot],
       future: rest,
@@ -114,7 +115,7 @@ export function useTopologyHistory({
     onBeforeUndoRedo?.(next)
     onAfterChange?.(next)
     persist(next)
-  }
+  })
 
   const clearHistory = () => setHistory({ past: [], future: [] })
 

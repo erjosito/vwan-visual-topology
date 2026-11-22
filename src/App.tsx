@@ -51,6 +51,7 @@ import { projectVwanFailures, regionKey, failureKey, failureLabel, type FailureD
 import { analyzeVwanResilience, resilienceMarkers, type ResilienceReport } from './failure-analysis'
 import { FailurePanel } from './FailurePanel'
 import { pruneDeletedInventory } from './inventory'
+import { measureAzWork, useMeasuredRender } from './azure-net/performance'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
 const RouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.RouteMapsPanel })))
@@ -80,6 +81,7 @@ const parseNode = (key: string): PathNode => {
 }
 
 function App() {
+  useMeasuredRender()
   const workspaceSession = useWorkspaceSession()
   const workspaceStorage = useWorkspaceStorage()
   const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
@@ -141,7 +143,7 @@ function App() {
   const [faults, setFaults] = useWorkspaceEditorState<FailureDomain[]>('vwan.faults', [])
   const [resilience, setResilience] = useWorkspaceEditorState<{ revision: string; report: ResilienceReport }>('vwan.resilience')
   const [resilienceEndpoint, setResilienceEndpoint] = useWorkspaceEditorState<string>('vwan.resilienceEndpoint')
-  const baselineRevision = routingRevision(topology)
+  const baselineRevision = measureAzWork('routing-projection', () => routingRevision(topology))
   const risks = resilienceMarkers(resilience?.revision === baselineRevision ? resilience.report : undefined)
   const scenario = useMemo(() => projectVwanFailures(topology, faults), [topology, faults])
   const activeTopology = scenario.active
@@ -162,7 +164,7 @@ function App() {
     () => (routerState && topologyObject(topology, routerState) ? routerState : { kind: 'hub', id: topology.hubs[0]?.id ?? '' }),
     [routerState, topology],
   )
-  const routingKey = useMemo(() => routingRevision(activeTopology), [activeTopology])
+  const routingKey = useMemo(() => measureAzWork('routing-projection', () => routingRevision(activeTopology)), [activeTopology])
   const currentCheck = routingCheck?.revision === routingKey ? routingCheck : undefined
   const acknowledgedTokens = useMemo(() => new Set(topology.warningAcknowledgements ?? []), [topology.warningAcknowledgements])
   const warningToken = (finding: DiagnosticsFinding) => vwanWarningToken(activeTopology, finding)
@@ -263,7 +265,7 @@ function App() {
     mounted.current = true
     return () => { mounted.current = false }
   }, [])
-  const simulation = useMemo(() => simulate(activeTopology), [activeTopology])
+  const simulation = useMemo(() => measureAzWork('simulation', () => simulate(activeTopology)), [activeTopology])
   const nvaSiteIds = useMemo(() => embeddedSpokeNvaSiteIds(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
@@ -277,8 +279,10 @@ function App() {
   const targetNode = nodes.find((n) => nodeKey(n) === target)
   const paths: (NodePath | GroupPath)[] = useMemo(() => {
     if (!tracing) return []
-    if (groupTrace) return traceGroupedPaths(activeTopology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
-    return source && topologyObject(activeTopology, parseNode(source)) ? traceNodePath(activeTopology, simulation, parseNode(source), destination, undefined, sourceContextId) : []
+    return measureAzWork('trace', () => {
+      if (groupTrace) return traceGroupedPaths(activeTopology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
+      return source && topologyObject(activeTopology, parseNode(source)) ? traceNodePath(activeTopology, simulation, parseNode(source), destination, undefined, sourceContextId) : []
+    })
   }, [tracing, source, target, activeTopology, simulation, destination, groupTrace, sourceContextId])
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
@@ -310,7 +314,15 @@ function App() {
   }
   const openDiagnostics = () => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPanel('diagnostics') }
   const update = (mutate: (next: Topology) => void) => {
-    try { const next = structuredClone(topology); mutate(next); pruneDeletedInventory(next, topology); save(validateTopology(next)) }
+    try {
+      const next = measureAzWork('commit', () => {
+        const draft = structuredClone(topology)
+        mutate(draft)
+        pruneDeletedInventory(draft, topology)
+        return validateTopology(draft)
+      })
+      save(next)
+    }
     catch (error) { setError(message(error)) }
   }
   const acknowledgeWarning = (finding: DiagnosticsFinding, acknowledged: boolean) => {
