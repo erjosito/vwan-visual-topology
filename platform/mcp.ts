@@ -3,7 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { PlatformJobs } from './jobs'
 import { RenderJobs } from './render-jobs'
-import { capabilities, engineVersion } from '../src/platform/contract'
+import { capabilities, engineVersion, platformLimits, platformModes, platformOperations, supportedContractVersions } from '../src/platform/contract'
 import vwanExample from '../public/docs/samples/hub-routing-preferences.json'
 import hubSpokeExample from '../public/docs/samples/azure-net/hub-spoke-firewall-udr.json'
 import fullExample from '../public/docs/samples/azure-net/hybrid-vwan-and-hub-spoke.json'
@@ -23,7 +23,7 @@ server.registerTool('get_capabilities', {
 
 server.registerTool('get_schema', {
   description: 'Get the request envelope, owned endpoint shapes and an authored native topology example for a mode. Use the real validator before assuming compatibility.',
-  inputSchema: { mode: z.enum(['vwan', 'hub-spoke', 'full']) }, annotations,
+  inputSchema: { mode: z.enum(platformModes) }, annotations,
 }, async ({ mode }) => reply({
   ...capabilities,
   envelope: { contractVersion: 1, operation: 'evaluate', document: { mode, topology: 'native topology JSON shown below' }, requirements: [], budget: { maxMillis: 15000, maxOutputBytes: 8000000 } },
@@ -109,12 +109,12 @@ server.registerTool('start_simulation', {
   description: 'Start an isolated bounded validation/simulation/evaluation job. Requirements must be explicit, uniquely identified and fully represented. Returns an expiring session-local handle, not a passing grade.',
   inputSchema: {
     request: z.object({
-      contractVersion: z.union([z.literal(1), z.literal(2)]),
+      contractVersion: z.union([z.literal(supportedContractVersions[0]), z.literal(supportedContractVersions[1])]),
       engineVersion: z.string().optional(),
-      operation: z.enum(['validate', 'simulate', 'evaluate', 'application']),
-      document: z.object({ mode: z.enum(['vwan', 'hub-spoke', 'full']), topology: z.record(z.string(), z.unknown()) }).strict(),
+      operation: z.enum(platformOperations),
+      document: z.object({ mode: z.enum(platformModes), topology: z.record(z.string(), z.unknown()) }).strict(),
       locale: z.enum(['en', 'ja']).optional(),
-      requirements: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
+      requirements: z.array(z.record(z.string(), z.unknown())).max(platformLimits.maxRequirements).optional(),
       application: z.record(z.string(), z.unknown()).optional(),
       packet: z.object({
         source: z.record(z.string(), z.unknown()), target: z.record(z.string(), z.unknown()),
@@ -125,7 +125,7 @@ server.registerTool('start_simulation', {
         tuple: z.object({ sourceAddress: z.string(), destinationAddress: z.string(), protocol: z.enum(['tcp', 'udp']),
           sourcePort: z.number().int().min(1).max(65535), destinationPort: z.number().int().min(1).max(65535) }).strict(),
       }).strict().optional(),
-      budget: z.object({ maxMillis: z.number().int().positive().max(15000).optional(), maxOutputBytes: z.number().int().positive().max(8000000).optional() }).strict().optional(),
+      budget: z.object({ maxMillis: z.number().int().positive().max(platformLimits.maxMillis).optional(), maxOutputBytes: z.number().int().positive().max(platformLimits.maxOutputBytes).optional() }).strict().optional(),
     }).strict(),
   }, annotations,
 }, async ({ request }) => reply({ handle: jobs.start(request), status: 'running', lifetimeSeconds: 600 }))

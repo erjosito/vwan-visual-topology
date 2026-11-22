@@ -7,6 +7,7 @@ import { simulateAzNet, traceAzNetPair } from './azure-net/engine'
 import { analyzeAzResilience, analyzeVwanResilience, groupResilienceGaps, resilienceMarkers } from './failure-analysis'
 import { projectAzFailures, projectVwanFailures, regionKey, type FailureDomain } from './failures'
 import { validateTopology } from './validation'
+import { admitJson } from './platform/service'
 
 export function vwanFailureFixture(): Topology {
   return {
@@ -68,6 +69,17 @@ const faults: FailureDomain[] = [
 ]
 
 describe('reversible offline failure overlays', () => {
+  it('keeps live baseline and failed projections admissible without a JSON round-trip', () => {
+    const vwan = vwanFailureFixture()
+    const mixed = azFailureFixture(true)
+    for (const fault of [[], [faults[0]], [faults[1]]] as FailureDomain[][]) {
+      expect(() => admitJson(projectVwanFailures(vwan, fault).active)).not.toThrow()
+      expect(() => admitJson(projectAzFailures(mixed, fault).active)).not.toThrow()
+    }
+    expect(Object.hasOwn(projectVwanFailures(vwan).active.spokes[0], 'nvaSpokeIds')).toBe(false)
+    expect(Object.hasOwn(projectAzFailures(mixed, [faults[0]]).active.vnets[0], 'vwanHubAttachment')).toBe(false)
+    expect(mixed.vnets[1].vwanHubAttachment).toBeDefined()
+  })
   it('withdraws each VWAN transit domain, selects a surviving alternate, and preserves baseline/administrative flags', () => {
     const t = vwanFailureFixture(), original = JSON.stringify(t)
     const trace = (active: Topology) => traceNodePath(active, simulate(active), { kind: 'site', id: 'a' }, '10.1.0.1')

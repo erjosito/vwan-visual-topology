@@ -5,7 +5,7 @@ import { parseAzNetTopology } from '../azure-net/admission'
 import { validateAzNetTopology } from '../azure-net/model'
 import { simulateAzNet, traceAzNetPair } from '../azure-net/engine'
 import { getAzNetEndpoints, azEndpointKey } from '../azure-net/endpoints'
-import { contractVersion, engineVersion, platformLimits } from './contract'
+import { contractVersion, engineVersion, platformLimits, platformModes, platformOperations, supportedContractVersions } from './contract'
 import type { Assessment, FlowRequirement, PlatformDocument, PlatformRequest, PlatformResult, Requirement } from './contract'
 import type { AzEndpointRef } from '../azure-net/engine'
 import { tracePacket, validatePacketRequest } from '../packet-flow'
@@ -56,8 +56,8 @@ export function validateRequest(input: unknown): PlatformRequest {
   }
   if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Request object required.')
   keys(request, ['contractVersion', 'engineVersion', 'document', 'operation', 'locale', 'requirements', 'budget', 'packet', 'vpnPacket', 'application'])
-  if (![1, 2].includes(request.contractVersion) || (request.engineVersion !== undefined && request.engineVersion !== engineVersion)) throw new Error('Unsupported contract or engine version.')
-  if (!['validate', 'simulate', 'evaluate', 'application'].includes(request.operation)) throw new Error('Unknown operation.')
+  if (!supportedContractVersions.includes(request.contractVersion) || (request.engineVersion !== undefined && request.engineVersion !== engineVersion)) throw new Error('Unsupported contract or engine version.')
+  if (!platformOperations.includes(request.operation)) throw new Error('Unknown operation.')
   if (request.contractVersion === 1 && (request.operation === 'application' || request.application !== undefined
     || (request.document?.topology as { application?: unknown })?.application !== undefined)) throw new Error('Application contracts require contractVersion 2; legacy clients must negotiate capabilities.')
   if (request.operation === 'application') {
@@ -68,7 +68,7 @@ export function validateRequest(input: unknown): PlatformRequest {
     if (request.operation !== 'simulate') throw new Error('Packet tracing requires the simulate operation.')
     validatePacketRequest(request.packet)
   }
-  if (!request.document || !['vwan', 'hub-spoke', 'full'].includes(request.document.mode)) throw new Error('Explicit supported mode required.')
+  if (!request.document || !platformModes.includes(request.document.mode)) throw new Error('Explicit supported mode required.')
   if (request.vpnPacket !== undefined) {
     if (request.operation !== 'simulate' || request.document.mode === 'vwan') throw new Error('VPN NAT packet assessment requires simulate and the Azure/Full Hybrid native provider.')
     validateVpnNatPacketRequest(request.vpnPacket)

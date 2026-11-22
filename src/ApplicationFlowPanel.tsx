@@ -5,6 +5,7 @@ import type { InventoryOwner, InventoryTopology } from './inventory'
 import { sameInventoryOwner } from './inventory'
 import { packetEndpointOptions } from './packet-flow'
 import { runBrowserSimulation } from './platform/browser'
+import { createPlatformRequest } from './platform/request'
 import { t } from './i18n'
 import './application-messages-ja'
 
@@ -51,10 +52,10 @@ export function ApplicationFlowPanel({ topology, owner, result, onResult }: {
           evaluatedAt: String(form.get('time')), cache: 'fresh' }
       setRunning(true); setError(''); onResult(undefined)
       try {
-        const response = await runBrowserSimulation({
+        const response = await runBrowserSimulation(createPlatformRequest({
           contractVersion: 2, operation: 'application', application,
-          document: { mode: topology.version === 1 ? 'vwan' : 'full', topology },
-        }, controller.signal)
+          document: topology.version === 1 ? { mode: 'vwan', topology } : { mode: 'full', topology },
+        }), controller.signal)
         if (job.current !== controller) return
         if (response.errors.length) setError('The request could not be assessed. Check the original identities, hostname, path and explicit evaluation time.')
         else onResult(response.application)

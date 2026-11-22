@@ -1,7 +1,8 @@
 import type { HubFirewallPolicy, Topology } from '../model'
 import type { PathNode } from '../paths'
 import type { AzNetTopology } from '../azure-net/model'
-import type { AzEndpointRef } from '../azure-net/engine'
+import type { AzEndpointRef, AzSimulationResult } from '../azure-net/engine'
+import type { Simulation } from '../routing'
 import type { PacketRequest, PacketResult } from '../packet-flow'
 import type { WorkloadIpReference } from '../inventory'
 import type { VpnNatPacketRequest, VpnNatPacketResult } from '../vpn-nat-packet'
@@ -14,8 +15,11 @@ import type { BgpInspection } from '../bgp-neighbors'
 
 export const contractVersion = 1 as const
 export const latestContractVersion = 2 as const
+export const supportedContractVersions = [contractVersion, latestContractVersion] as const
+export const platformModes = ['vwan', 'hub-spoke', 'full'] as const
+export const platformOperations = ['validate', 'simulate', 'evaluate', 'application'] as const
 export const engineVersion = '2026.11.20.1'
-export type PlatformMode = 'vwan' | 'hub-spoke' | 'full'
+export type PlatformMode = typeof platformModes[number]
 export type PlatformDocument =
   | { mode: 'vwan'; topology: Topology }
   | { mode: 'hub-spoke' | 'full'; topology: AzNetTopology }
@@ -52,10 +56,10 @@ export type PacketRequirement = {
 }
 export type Requirement = FlowRequirement | RouteRequirement | PacketRequirement
 export type PlatformRequest = {
-  contractVersion: 1 | 2
+  contractVersion: typeof supportedContractVersions[number]
   engineVersion?: string
   document: PlatformDocument
-  operation: 'validate' | 'simulate' | 'evaluate' | 'application'
+  operation: typeof platformOperations[number]
   locale?: 'en' | 'ja'
   requirements?: Requirement[]
   budget?: { maxMillis?: number; maxOutputBytes?: number }
@@ -75,7 +79,7 @@ export type PlatformResult = {
   revision: string
   status: 'complete' | 'invalid' | 'not assessed'
   document?: PlatformDocument
-  simulation?: unknown
+  simulation?: Simulation | AzSimulationResult
   bgpNeighbors?: BgpInspection
   assessments: Assessment[]
   errors: { code: string; message: string }[]
@@ -96,10 +100,10 @@ export const platformLimits = {
 }
 
 export const capabilities = {
-  contractVersion: latestContractVersion, supportedContractVersions: [contractVersion, latestContractVersion], engineVersion,
-  modes: ['vwan', 'hub-spoke', 'full'],
+  contractVersion: latestContractVersion, supportedContractVersions, engineVersion,
+  modes: platformModes,
   topologyVersions: { vwan: 1, 'hub-spoke': 2, full: 2 },
-  operations: ['validate', 'simulate', 'evaluate', 'application'],
+  operations: platformOperations,
   application: applicationCapabilities,
   bgpNeighbors: {
     evidence: 'bgpNeighbors', version: 1, provenance: 'simulation',

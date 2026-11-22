@@ -3,7 +3,7 @@ import type { CourseBundle, CourseTask } from './course-contract'
 import { inspectionScope } from './task-guidance'
 import type { Localized } from './content'
 import type { PracticeWorkspace } from './practice-workspace'
-import type { AzSimulationResult } from '../azure-net/engine'
+import { createPlatformRequest } from '../platform/request'
 import { newBeltAchievement, type BeltAchievement } from './belt-achievement'
 
 export type LearningWorkspace = { practice: PracticeWorkspace; revision: number; scope: number }
@@ -202,8 +202,8 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
         if (!configured) result = check.kind === 'vnet.peered' ? 'peering' : 'requirements'
         else {
           const requirements = 'requirements' in check.params ? check.params.requirements : undefined
-          const evaluated = await options.evaluate({ contractVersion, engineVersion, document,
-            operation: requirements ? 'evaluate' : 'validate', ...(requirements ? { requirements } : {}) }, controller.signal)
+          const evaluated = await options.evaluate(createPlatformRequest({ contractVersion, engineVersion, document,
+            operation: requirements ? 'evaluate' : 'validate', requirements }), controller.signal)
           if (evaluated.status === 'complete' && evaluated.contractVersion === contractVersion
             && evaluated.engineVersion === engineVersion && evaluated.document && !evaluated.errors.length) {
             if (!requirements) result = 'passed'
@@ -216,7 +216,8 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
                 result = failures.length ? 'requirements' : 'passed'
               }
               if (result === 'passed' && check.kind === 'connections.configured') {
-                const simulation = evaluated.simulation as AzSimulationResult | undefined
+                const simulation = evaluated.document.mode !== 'vwan' && evaluated.simulation
+                  && 'subnetTables' in evaluated.simulation ? evaluated.simulation : undefined
                 const selected = check.params.selectedRoutes.every((scope) => {
                   const table = simulation?.subnetTables?.[scope.subnetId]
                   return table?.vnetId === scope.vnetId && table.routes.some((route) =>

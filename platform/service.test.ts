@@ -10,6 +10,9 @@ import { loadLanguage, translate } from '../src/messages'
 import { PlatformJobs } from './jobs'
 import type { PlatformRequest } from '../src/platform/contract'
 import { engineVersion } from '../src/platform/contract'
+import { createPlatformRequest } from '../src/platform/request'
+import { validatePlatformResult } from '../src/platform/result'
+import { validateRequest } from '../src/platform/service'
 import { resolve } from 'node:path'
 import { largeVwanCapture } from '../tests/large-vwan-fixture'
 import { importAzureCapture } from '../src/azure-import'
@@ -25,6 +28,53 @@ export const request = (): PlatformRequest => ({
 })
 
 describe('browser-free platform contract', () => {
+  it('omits absent typed request options without sanitizing live topology or unknown contract inputs', async () => {
+    const input = createPlatformRequest({ ...request(), locale: undefined, requirements: undefined,
+      budget: { maxMillis: undefined, maxOutputBytes: 1000 } })
+    expect(Object.hasOwn(input, 'locale')).toBe(false)
+    expect(input.budget).toEqual({ maxOutputBytes: 1000 })
+    expect(validateRequest(input)).toEqual(input)
+    const topology = input.document.topology
+    Object.assign(topology, { unknownExtension: { keep: true } })
+    expect(validateRequest(input).document.topology).toHaveProperty('unknownExtension.keep', true)
+    topology.name = 'Live unsaved Node edit'
+    const jobs = new PlatformJobs(resolve('platform-dist', 'worker.cjs'))
+    try {
+      const live = createPlatformRequest({ ...input, budget: { maxMillis: undefined } })
+      const result = await jobs.run(live)
+      expect(result.status).toBe('complete')
+      expect(result.document?.topology.name).toBe('Live unsaved Node edit')
+    } finally { jobs.close() }
+    Object.assign(topology, { unsafeUnset: undefined })
+    expect(() => validateRequest(input)).toThrow('Plain JSON')
+    delete (topology as unknown as Record<string, unknown>).unsafeUnset
+    expect(() => validateRequest(createPlatformRequest({ ...input, unknownOption: true } as PlatformRequest))).toThrow('Unknown contract field')
+    let accessed = false
+    const accessor = Object.defineProperty({ ...input }, 'locale', { get: () => { accessed = true; return 'en' }, enumerable: true })
+    expect(() => createPlatformRequest(accessor)).toThrow('Unsafe request option')
+    expect(accessed).toBe(false)
+  })
+  it('rejects wrong-provider, malformed and incomplete worker envelopes without upgrading uncertainty', () => {
+    const input = request()
+    const result = executePlatform(input)
+    expect(validatePlatformResult(result, input)).toBe(result)
+    expect(() => validatePlatformResult({ ...result, simulation: undefined }, input)).toThrow('simulation evidence')
+    expect(() => validatePlatformResult({ ...result, contractVersion: 2 }, input)).toThrow()
+    expect(() => validatePlatformResult({ ...result, document: { ...result.document, mode: 'full' } }, input)).toThrow('provider')
+    expect(() => validatePlatformResult({ ...result, simulation: { subnetTables: {}, warnings: [] } }, input)).toThrow('provider')
+    expect(() => validatePlatformResult({ ...result, errors: null }, input)).toThrow('envelope')
+    const document = input.document
+    if (document.mode !== 'vwan') throw new Error('VWAN fixture required.')
+    const evaluation: PlatformRequest = { ...input, operation: 'evaluate', requirements: [
+      { id: 'owned-table', kind: 'route', table: document.topology.hubs[0].id, prefix: '10.0.0.0/8', expectation: 'present' },
+    ] }
+    const assessed = executePlatform(evaluation)
+    expect(validatePlatformResult(assessed, evaluation)).toBe(assessed)
+    expect(() => validatePlatformResult({ ...assessed, assessments: [] }, evaluation)).toThrow('incomplete')
+    expect(() => validatePlatformResult({ ...assessed, status: 'complete', assessments: [
+      { ...assessed.assessments[0], outcome: 'not assessed' },
+    ] }, evaluation)).toThrow('inconsistent')
+  })
   it('exports managed VWAN BGP relationship metadata in compiled execution without altering routing or native JSON', () => {
     const topology = bgpNeighborVwanTopology()
     const input = { contractVersion: 1, operation: 'simulate', document: { mode: 'vwan', topology } }
