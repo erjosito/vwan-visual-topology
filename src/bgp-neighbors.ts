@@ -3,7 +3,7 @@ import type { AzNetTopology } from './azure-net/model'
 import { gatewayArsExchange } from './azure-net/ars-route-maps'
 import type { AzBgpRibEntry, AzNvaBgpPeer, AzNvaReceivedRoute, AzSimulationResult } from './azure-net/engine'
 import { sameWan } from './wan-scopes'
-import { vpnRoutingMode } from './vpn-routing'
+import { vpnRoutingMode } from './model'
 
 export type BgpResourceKind = 'appliance' | 'route-server' | 'gateway' | 'site' | 'er-location' | 'vwan-hub'
 export interface BgpResourceRef { kind: BgpResourceKind; id: string }
