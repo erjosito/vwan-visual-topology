@@ -14,6 +14,7 @@ import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
 import type { LayoutMode, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { simulate } from './routing'
+import { vwanDisplayResult, vwanRoutingInput } from './vwan-routing-input'
 import { ipv4, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
 import type { DiagramContextMenu } from './TopologyDiagram'
@@ -265,7 +266,11 @@ function App() {
     mounted.current = true
     return () => { mounted.current = false }
   }, [])
-  const simulation = useMemo(() => measureAzWork('simulation', () => simulate(activeTopology)), [activeTopology])
+  const routingInput = useMemo(() => measureAzWork('routing-projection', () => vwanRoutingInput(activeTopology)), [activeTopology])
+  const routingTopology = useMemo(() => JSON.parse(routingInput.revision) as Topology, [routingInput.revision])
+  const displayNames = useMemo(() => JSON.parse(routingInput.nameRevision) as string[], [routingInput.nameRevision])
+  const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulate(routingTopology)), [routingTopology])
+  const simulation = useMemo(() => vwanDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
   const nvaSiteIds = useMemo(() => embeddedSpokeNvaSiteIds(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
@@ -277,13 +282,18 @@ function App() {
   const sourceTables = sourceHub ? hubRouteTables(sourceHub).filter((table) => table.id !== 'noneRouteTable') : []
   const sourceContextId = sourceTables.some((table) => table.id === sourceTableId) ? sourceTableId : DEFAULT_HUB_TABLE
   const targetNode = nodes.find((n) => nodeKey(n) === target)
-  const paths: (NodePath | GroupPath)[] = useMemo(() => {
-    if (!tracing) return []
-    return measureAzWork('trace', () => {
-      if (groupTrace) return traceGroupedPaths(activeTopology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
-      return source && topologyObject(activeTopology, parseNode(source)) ? traceNodePath(activeTopology, simulation, parseNode(source), destination, undefined, sourceContextId) : []
-    })
-  }, [tracing, source, target, activeTopology, simulation, destination, groupTrace, sourceContextId])
+  const rawPaths = useMemo(() => {
+    if (!tracing || groupTrace) return []
+    return measureAzWork('trace', () => source && topologyObject(routingTopology, parseNode(source))
+      ? traceNodePath(routingTopology, rawSimulation, parseNode(source), destination, undefined, sourceContextId) : [])
+  }, [tracing, source, routingTopology, rawSimulation, destination, groupTrace, sourceContextId])
+  const groupedPaths = useMemo(() => {
+    if (!tracing || !groupTrace) return []
+    return measureAzWork('trace', () => traceGroupedPaths(activeTopology, simulation,
+      parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group))
+  }, [tracing, groupTrace, activeTopology, simulation, source, target])
+  const paths: (NodePath | GroupPath)[] = useMemo(() => groupTrace ? groupedPaths : vwanDisplayResult(rawPaths, displayNames),
+    [groupTrace, groupedPaths, rawPaths, displayNames])
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
   const activeView = routeView === 'firewall' && !hub?.firewall && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView

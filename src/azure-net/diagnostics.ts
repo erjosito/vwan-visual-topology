@@ -132,6 +132,11 @@ export function runAzNetStaticDiagnostics(
   topology: AzNetTopology,
   simulation: AzSimulationResult,
 ): AzDiagnosticFinding[] {
+  const ranges = new Map<string, ReturnType<typeof cidr>>()
+  const cachedCidr = (prefix: string) => {
+    if (!ranges.has(prefix)) ranges.set(prefix, cidr(prefix))
+    return ranges.get(prefix)
+  }
   const findings: AzDiagnosticFinding[] = coexistenceFindings(topology)
   findings.push(...udrAssociationFindings(topology).map((finding) => ({
     ...finding, id: `udr-region:${finding.subnetId}`, severity: 'error' as const,
@@ -669,7 +674,7 @@ export function runAzNetStaticDiagnostics(
 
       for (const udr of rt.routes) {
         if (!udr.enabled) continue
-        const udrCidr = cidr(udr.prefix)
+        const udrCidr = cachedCidr(udr.prefix)
         if (!udrCidr) continue
 
         // (a) Check if udr points to VirtualNetworkGateway for another Azure VNet's address space
@@ -718,7 +723,7 @@ export function runAzNetStaticDiagnostics(
             if (!r.active) return false
             if (r.source !== 'VirtualNetworkGateway' && r.source !== 'RouteServer') return false
             if (r.nextHopIp && r.nextHopIp === udr.nextHopIp) return false
-            const rCidr = cidr(r.prefix)
+            const rCidr = cachedCidr(r.prefix)
             if (!rCidr || rCidr.length <= udrCidr.length) return false
             const sampleIp = ipv4(firstUsableIp(r.prefix))
             return sampleIp !== undefined && contains(udr.prefix, sampleIp)

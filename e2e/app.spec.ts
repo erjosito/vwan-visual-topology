@@ -24,6 +24,38 @@ async function action(page: Page, object: string, command: string) {
   await page.getByRole('menu').getByRole('menuitem', { name: command, exact: true }).click()
 }
 const dialog = (page: Page, name: string) => page.getByRole('dialog', { name, exact: true })
+test('VWAN rename and Undo retain routing caches while refreshing native path prose', async ({ page }) => {
+  await page.addInitScript(() => { window.__AZNET_METRICS__ = { counts: {}, durations: {} } })
+  await page.goto('/?mode=vwan&ui=new')
+  const original = await readTopology(page)
+  const source = original.spokes[0], destination = original.spokes.at(-1)!, hub = original.hubs.find(entry => entry.id === source.hubId)!
+  const trace = async () => {
+    await action(page, `Select spoke ${source.name}`, 'Open path explorer')
+    await page.getByLabel('Destination node', { exact: true }).selectOption(`spoke:${destination.id}`)
+    await page.getByLabel('Destination prefix', { exact: true }).selectOption(destination.prefixes[0])
+    await page.getByRole('button', { name: 'Show preferred path', exact: true }).click()
+  }
+  await trace()
+  await action(page, `Select hub ${hub.name}`, 'Edit configuration')
+  const editor = dialog(page, 'Edit hub')
+  const renamed = `${hub.name} renamed`
+  await editor.getByLabel('Name', { exact: true }).fill(renamed)
+  await page.evaluate(() => { window.__AZNET_METRICS__ = { counts: {}, durations: {} } })
+  await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+  expect((await readTopology(page)).hubs.find(entry => entry.id === hub.id)!.name).toBe(renamed)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.simulation ?? 0)).toBe(0)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.trace ?? 0)).toBe(0)
+  await trace()
+  await expect(page.locator('.flow-results ol').first()).toContainText(renamed)
+  await page.evaluate(() => { window.__AZNET_METRICS__ = { counts: {}, durations: {} } })
+  await page.getByRole('button', { name: /Undo$/, exact: false }).click()
+  expect(await readTopology(page)).toEqual(original)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.simulation ?? 0)).toBe(0)
+  expect(await page.evaluate(() => window.__AZNET_METRICS__!.counts.trace ?? 0)).toBe(0)
+  await expect(page.locator('.flow-results ol').first()).toContainText(hub.name)
+  await expect(page.locator('.flow-results ol').first()).not.toContainText(renamed)
+})
+
 async function showRoutes(page: Page, hub = 'Europe hub') { await action(page, `Select hub ${hub}`, 'BGP table') }
 function spokeNvaTopology(): Topology {
   return {

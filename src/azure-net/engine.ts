@@ -340,9 +340,10 @@ function chooseBgpWinners(
       output.push({ ...c, preferred: isWinner, explanation })
     }
   }
+  const ranges = new Map(output.map(route => [route.prefix, cidr(route.prefix)]))
   return output.sort((a, b) => {
-    const ca = cidr(a.prefix)
-    const cb = cidr(b.prefix)
+    const ca = ranges.get(a.prefix)
+    const cb = ranges.get(b.prefix)
     if (ca && cb && ca.network !== cb.network) return ca.network - cb.network
     if (ca && cb && ca.length !== cb.length) return ca.length - cb.length
     return Number(b.preferred) - Number(a.preferred)
@@ -1333,6 +1334,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
 
   // 7. Compile Subnet Effective Route Tables for every Subnet in every VNet
   const subnetTables: Record<string, AzSubnetRouteTableResult> = {}
+  const prefixRanges = new Map<string, ReturnType<typeof cidr>>()
   for (const vnet of topology.vnets) {
     for (const subnet of vnet.subnets) {
       subnetTables[subnet.id] = compileSingleSubnetEffectiveRoutes(
@@ -1343,6 +1345,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         routeServerRibs,
         routeServerOutbound,
         vwanHubTables,
+        prefixRanges,
       )
     }
   }
@@ -1374,7 +1377,12 @@ function compileSingleSubnetEffectiveRoutes(
   routeServerRibs: Record<string, AzBgpRibEntry[]>,
   routeServerOutbound: Record<string, Record<string, AzBgpRibEntry[]>>,
   vwanHubTables: Record<string, Record<string, AzBgpRibEntry[]>>,
+  prefixRanges: Map<string, ReturnType<typeof cidr>>,
 ): AzSubnetRouteTableResult {
+  const rangeFor = (prefix: string) => {
+    if (!prefixRanges.has(prefix)) prefixRanges.set(prefix, cidr(prefix))
+    return prefixRanges.get(prefix)
+  }
   const associatedTable = subnet.routeTableId
     ? topology.udrTables.find((t) => t.id === subnet.routeTableId)
     : undefined
@@ -1667,10 +1675,10 @@ function compileSingleSubnetEffectiveRoutes(
   }
   const protectedRoutes = candidates.filter((route) => route.source === 'System' &&
     (route.nextHopType === 'VnetLocal' || route.nextHopType === 'VNetPeering'))
-    .map((route) => ({ route, range: cidr(route.prefix) }))
+    .map((route) => ({ route, range: rangeFor(route.prefix) }))
   for (const [prefix, entries] of byPrefix) {
-    const range = cidr(prefix)
-    const protection = range && protectedRoutes.find((entry) => entry.range &&
+    const range = rangeFor(prefix)
+    const protection = range && entries.some(route => sourceRank(route) === 2) && protectedRoutes.find((entry) => entry.range &&
       entry.range.length <= range.length &&
       range.network >= entry.range.network && range.network < entry.range.network + 2 ** (32 - entry.range.length))
     // Exclude contained BGP routes before exact-prefix selection and later LPM; UDRs remain eligible.
@@ -1682,7 +1690,7 @@ function compileSingleSubnetEffectiveRoutes(
     })
     if (!group.length) continue
     if (group.length === 1) {
-      resolved.push({ ...group[0], active: true })
+      resolved.push(group[0].active ? group[0] : { ...group[0], active: true })
       continue
     }
     const minRank = Math.min(...group.map(sourceRank))
@@ -1697,7 +1705,7 @@ function compileSingleSubnetEffectiveRoutes(
     const winner = group.find((r) => winnerIds.has(r.id))!
     for (const r of group) {
       if (winnerIds.has(r.id)) {
-        resolved.push({ ...r, active: true })
+        resolved.push(r.active ? r : { ...r, active: true })
       } else {
         resolved.push({
           ...r,
@@ -1757,9 +1765,10 @@ function compileSingleSubnetEffectiveRoutes(
     }
   }
 
+  for (const route of resolved) rangeFor(route.prefix)
   resolved.sort((a, b) => {
-    const ca = cidr(a.prefix)
-    const cb = cidr(b.prefix)
+    const ca = prefixRanges.get(a.prefix)
+    const cb = prefixRanges.get(b.prefix)
     if (ca && cb && ca.length !== cb.length) return cb.length - ca.length
     if (ca && cb && ca.network !== cb.network) return ca.network - cb.network
     return Number(b.active) - Number(a.active)
@@ -1807,25 +1816,23 @@ export function lookupSubnetEffectiveRoute(
   const ipNum = ipv4(destinationIp)
   if (ipNum === undefined) return undefined
 
-  // Also check if a Private Endpoint /32 route is present even if a broader UDR exists
-  const matchingActive = table.routes.filter((r) => {
-    if (!r.active) return false
-    const parsed = cidr(r.prefix)
-    return parsed ? contains(r.prefix, ipNum) : false
-  })
-  if (!matchingActive.length) return undefined
-
-  const maxPrefixLen = Math.max(...matchingActive.map((r) => cidr(r.prefix)!.length))
-  const longestMatches = matchingActive.filter((r) => cidr(r.prefix)!.length === maxPrefixLen)
-
-  // If multiple active routes share the longest prefix, User > BGP > System
   const rank = (r: AzEffectiveRoute) => {
     if (r.nextHopType === 'InterfaceEndpoint' && !r.privateEndpointRouteTableEnabled) return 0
     if (r.source === 'User') return 1
     if (r.source === 'RouteServer' || r.source === 'VirtualNetworkGateway') return 2
     return 3
   }
-  return [...longestMatches].sort((a, b) => rank(a) - rank(b))[0]
+  let winner: AzEffectiveRoute | undefined, length = -1, priority = Infinity
+  for (const route of table.routes) {
+    if (!route.active) continue
+    const range = cidr(route.prefix)
+    if (!range || range.length < length || ipNum < range.network || ipNum >= range.network + 2 ** (32 - range.length)) continue
+    const routeRank = rank(route)
+    if (range.length > length || routeRank < priority) {
+      winner = route; length = range.length; priority = routeRank
+    }
+  }
+  return winner
 }
 
 export function locateDestinationIp(
