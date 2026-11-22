@@ -1,5 +1,8 @@
 import { build } from 'esbuild'
 import { copyFile, mkdir, writeFile } from 'node:fs/promises'
+import { assertDependencyBoundaries } from './dependency-boundaries.mjs'
+
+await assertDependencyBoundaries()
 
 const entries = {
   service: 'src/platform/service.ts',

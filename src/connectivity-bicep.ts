@@ -1,4 +1,4 @@
-import { canonicalLocation } from './bicep-export'
+import { canonicalLocation } from './deployment-location'
 import type { NetworkInventory } from './inventory'
 import type { AzVNet } from './azure-net/model'
 

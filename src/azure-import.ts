@@ -1,6 +1,8 @@
 import type { AzureImportInfo, Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
 import { parseVnetBgpCommunities } from './vnet-communities'
-import { armKey, parseAzureObservation } from './azure-observation'
+import { armKey, azureObjectId as stableId } from './azure-identity'
+import { azureObservationEnvelope, parseAzureObservationData } from './azure-observation-data'
+export { azureObjectId } from './azure-identity'
 import { cidr, validateTopology } from './validation'
 import { VWAN_MAX_SPOKES } from './topology-limits'
 
@@ -25,13 +27,6 @@ function resourceId(value: unknown, type: string): string {
   if (!match || match[1].toLowerCase() !== type.toLowerCase()) throw new Error(`Expected a ${type} Azure resource ID.`)
   return result
 }
-function stableId(kind: string, armId: string): string {
-  let hash = 14695981039346656037n
-  for (const char of armId.toLowerCase()) hash = BigInt.asUintN(64, (hash ^ BigInt(char.charCodeAt(0))) * 1099511628211n)
-  return `az-${kind}-${hash.toString(16)}`
-}
-export { stableId as azureObjectId }
-
 export function importAzureCapture(input: unknown): Topology {
   const root = object(input, 'Azure capture')
   if (root.kind === 'azure-vwan-federation') {
@@ -68,8 +63,9 @@ export function importAzureCapture(input: unknown): Topology {
   }
   if (root.kind !== 'azure-vwan-capture' || (root.version !== 1 && root.version !== 2)) throw new Error('Unsupported Azure capture format/version. Use the supplied collector.')
   if (root.version === 2) {
-    const observation = parseAzureObservation(input)
+    azureObservationEnvelope(input)
     const topology = importAzureCapture({ ...root, version: 1 })
+    const observation = parseAzureObservationData(input, topology)
     const spokeIds = new Set(topology.spokes.map((spoke) => spoke.id))
     const spokes = observation.hubs.flatMap((hub) => hub.spokes)
       .filter((spoke) => spokeIds.has(spoke.importedId))
