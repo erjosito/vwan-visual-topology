@@ -1,5 +1,5 @@
 import type { Hub, HubRouteTable, HubRoutingConfiguration, Topology } from './model'
-import { cidr } from './validation'
+import { cidr } from './ipv4'
 
 export const DEFAULT_HUB_TABLE = 'defaultRouteTable'
 export const NONE_HUB_TABLE = 'noneRouteTable'

@@ -95,3 +95,20 @@ They do not introduce a global store, second document graph or new wire format.
 The page retains feature composition and shared action wiring. Optional feature
 editors stay in their existing lazy modules; unrelated context concerns are not
 split without independent subscription/ownership semantics.
+
+## Foundational dependency boundaries
+
+Platform builds run `scripts/dependency-boundaries.mjs` before bundling. Its
+TypeScript AST graph covers non-test TS/TSX/MJS/CJS modules in `src`, `platform`,
+`functions` and `scripts`, including relative static runtime imports and
+re-exports. Type-only edges, dynamic imports, external packages and non-code
+assets are excluded. Unresolved code edges and runtime cycles fail the build;
+this is not a proof about dynamic execution or external package internals.
+
+IPv4/CIDR, stable ARM identity and deployment location primitives remain
+runtime leaves. Aggregate validation consumes inventory projections, not the
+reverse. Observation data parsing receives already validated capture structure;
+the observation facade and importer compose it without mutual imports. Cloud
+handlers and sharing use the same bounded body reader and error identity from
+`functions/user-cloud/http.ts`. Compatibility re-exports retain existing APIs
+but remain visible to the cycle guard.
