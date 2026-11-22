@@ -8,7 +8,7 @@ import { sidebarLabels } from '../src/learning/sidebar-content'
 import { runnerLabels } from '../src/learning/runner-content'
 import { statusLabels } from '../src/learning/status-content'
 import AxeBuilder from '@axe-core/playwright'
-import { createEmptyAzNetTopology } from '../src/azure-net/model'
+import { createEmptyAzNetTopology, type AzVnetPeering } from '../src/azure-net/model'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
@@ -241,6 +241,14 @@ for (const language of ['en', 'ja'] as const) {
       await show(page, 'inspection-bypass.connect', `inspection-bypass.peer-${vnetId}`, language)
       await learningAnchor(page, 'peer-menu', vnetId).click()
       await learningAnchor(page, 'peer-target', vnetId, 'hub').click()
+    }
+    const hubPeerings: AzVnetPeering[] = await page.evaluate((key) =>
+      JSON.parse(localStorage.getItem(key)!).document.topology.vnetPeerings
+        .filter((peering: AzVnetPeering) => peering.vnetAId === 'hub' || peering.vnetBId === 'hub'), practiceWorkspaceKey)
+    expect(hubPeerings).toHaveLength(2)
+    for (const peering of hubPeerings) {
+      expect(peering.aToB).toMatchObject({ allowGatewayTransit: false, useRemoteGateways: false })
+      expect(peering.bToA).toMatchObject({ allowGatewayTransit: false, useRemoteGateways: false })
     }
     await expect(debrief).toContainText(language === 'en' ? 'this intermediate network is not ready to deploy' : 'この中間構成はデプロイの準備ができた状態ではなく')
     await advanceLearningTask(page, language)

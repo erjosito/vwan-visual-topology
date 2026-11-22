@@ -71,6 +71,8 @@ import {
   AZURE_NET_SAMPLES,
   cloneAzNetTopology,
   createEmptyAzNetTopology,
+  defaultPeeringFlags,
+  peeringFlagUnavailableReason,
   validateAzNetTopology,
   type AzErCircuitSku,
   type AzNetTopology,
@@ -532,18 +534,29 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       } else if (finding.category === 'remote-gateway-transit-mismatch' && finding.peeringId) {
         const p = draft.vnetPeerings.find((pr) => pr.id === finding.peeringId)
         if (p) {
-          if (p.aToB.useRemoteGateways) p.bToA.allowGatewayTransit = true
-          if (p.bToA.useRemoteGateways) p.aToB.allowGatewayTransit = true
+          const vA = draft.vnets.find((v) => v.id === p.vnetAId)
+          const vB = draft.vnets.find((v) => v.id === p.vnetBId)
+          for (const direction of ['aToB', 'bToA'] as const) {
+            if (!p[direction].useRemoteGateways) continue
+            const opposite = direction === 'aToB' ? 'bToA' : 'aToB'
+            const local = direction === 'aToB' ? vA : vB
+            const remote = direction === 'aToB' ? vB : vA
+            if (peeringFlagUnavailableReason(local, remote, { ...p[opposite], allowGatewayTransit: true }, 'useRemoteGateways')) {
+              p[direction].useRemoteGateways = false
+            } else {
+              p[opposite].allowGatewayTransit = true
+            }
+          }
         }
       } else if (finding.category === 'peering-use-remote-gateways-conflict' && finding.peeringId) {
         const p = draft.vnetPeerings.find((pr) => pr.id === finding.peeringId)
         if (p) {
           const vA = draft.vnets.find((v) => v.id === p.vnetAId)
           const vB = draft.vnets.find((v) => v.id === p.vnetBId)
-          if (vA && (vA.gateways.length > 0 || Boolean(vA.routeServer?.enabled))) {
+          if (vA && (vA.gateways.length > 0 || Boolean(vA.routeServer))) {
             p.aToB.useRemoteGateways = false
           }
-          if (vB && (vB.gateways.length > 0 || Boolean(vB.routeServer?.enabled))) {
+          if (vB && (vB.gateways.length > 0 || Boolean(vB.routeServer))) {
             p.bToA.useRemoteGateways = false
           }
         }
@@ -552,8 +565,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         if (p) {
           const vA = draft.vnets.find((v) => v.id === p.vnetAId)
           const vB = draft.vnets.find((v) => v.id === p.vnetBId)
-          const vAHasGwOrArs = Boolean(vA && (vA.gateways.length > 0 || vA.routeServer?.enabled))
-          const vBHasGwOrArs = Boolean(vB && (vB.gateways.length > 0 || vB.routeServer?.enabled))
+          const vAHasGwOrArs = Boolean(vA && (vA.gateways.length > 0 || vA.routeServer))
+          const vBHasGwOrArs = Boolean(vB && (vB.gateways.length > 0 || vB.routeServer))
           if (vAHasGwOrArs && !vBHasGwOrArs) {
             p.aToB.allowGatewayTransit = true
             p.bToA.useRemoteGateways = true
@@ -732,6 +745,20 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           }
         }
       }
+    })
+  }
+
+  const updatePeeringFlag = (peeringId: string, direction: 'aToB' | 'bToA',
+    flag: keyof AzPeeringDirectionFlags, checked: boolean) => {
+    commitTopology((draft) => {
+      const peering = draft.vnetPeerings.find((entry) => entry.id === peeringId)
+      if (!peering) return
+      const opposite = direction === 'aToB' ? 'bToA' : 'aToB'
+      const local = draft.vnets.find((vnet) => vnet.id === (direction === 'aToB' ? peering.vnetAId : peering.vnetBId))
+      const remote = draft.vnets.find((vnet) => vnet.id === (direction === 'aToB' ? peering.vnetBId : peering.vnetAId))
+      if (checked && peeringFlagUnavailableReason(local, remote, peering[opposite], flag)) return
+      peering[direction][flag] = checked
+      if (flag === 'allowGatewayTransit' && !checked) peering[opposite].useRemoteGateways = false
     })
   }
 
@@ -1394,28 +1421,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               label: `${other.name} (${other.region})`,
               onSelect: () => {
                 commitTopology((draft) => {
-                  const vAHasGwOrArs = vnet.gateways.length > 0 || Boolean(vnet.routeServer?.enabled)
-                  const vBHasGwOrArs = other.gateways.length > 0 || Boolean(other.routeServer?.enabled)
-                  const isVnetHub = (vnet.role === 'hub' || vnet.role === 'hub-vnet') || vAHasGwOrArs
-                  const isOtherHub = (other.role === 'hub' || other.role === 'hub-vnet') || vBHasGwOrArs
                   draft.vnetPeerings.push({
                     id: `peer-${vnet.id}-${other.id}`,
                     name: `${vnet.name}-to-${other.name}`,
                     vnetAId: vnet.id,
                     vnetBId: other.id,
                     enabled: true,
-                    aToB: {
-                      allowVirtualNetworkAccess: true,
-                      allowForwardedTraffic: true,
-                      allowGatewayTransit: isVnetHub,
-                      useRemoteGateways: !vAHasGwOrArs && isOtherHub,
-                    },
-                    bToA: {
-                      allowVirtualNetworkAccess: true,
-                      allowForwardedTraffic: true,
-                      allowGatewayTransit: isOtherHub,
-                      useRemoteGateways: !vBHasGwOrArs && isVnetHub,
-                    },
+                    aToB: defaultPeeringFlags(vnet, other),
+                    bToA: defaultPeeringFlags(other, vnet),
                   })
                 })
               },
@@ -1733,32 +1746,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 ['useRemoteGateways', 'Use Remote Gateways'],
               ] as const
             ).map(([flagKey, flagLabel]) => {
-              const aHasGwOrArs = Boolean((vA?.gateways.length ?? 0) > 0 || vA?.routeServer)
-              const bHasGwOrArs = Boolean((vB?.gateways.length ?? 0) > 0 || vB?.routeServer)
-              const disabledReason =
-                flagKey === 'allowGatewayTransit' && !aHasGwOrArs
-                  ? `Requires VNet Gateway or Route Server in ${vA?.name ?? 'VNet A'}`
-                  : flagKey === 'useRemoteGateways' && aHasGwOrArs
-                    ? `Cannot enable Use Remote Gateways on ${vA?.name ?? 'VNet A'} while it hosts its own Gateway or Route Server`
-                    : flagKey === 'useRemoteGateways' && !bHasGwOrArs
-                      ? `Remote VNet ${vB?.name ?? 'VNet B'} has no Gateway or Route Server`
-                      : flagKey === 'useRemoteGateways' && !peering.bToA.allowGatewayTransit
-                        ? `Requires Allow Gateway Transit on ${vB?.name ?? 'VNet B'} → ${vA?.name ?? 'VNet A'}`
-                        : null
+              const disabledReason = peeringFlagUnavailableReason(vA, vB, peering.bToA, flagKey)
               return {
                 label: `${peering.aToB[flagKey] ? '✓ ' : ''}${flagLabel}${disabledReason && !peering.aToB[flagKey] ? ' (Unavailable)' : ''}`,
                 disabled: Boolean(disabledReason && !peering.aToB[flagKey]),
                 onSelect: () => {
                   if (disabledReason && !peering.aToB[flagKey]) return
-                  commitTopology((draft) => {
-                    const p = draft.vnetPeerings.find((x) => x.id === peering.id)
-                    if (p) {
-                      p.aToB[flagKey] = !p.aToB[flagKey]
-                      if (flagKey === 'allowGatewayTransit' && !p.aToB.allowGatewayTransit) {
-                        p.bToA.useRemoteGateways = false
-                      }
-                    }
-                  })
+                  updatePeeringFlag(peering.id, 'aToB', flagKey, !peering.aToB[flagKey])
                 },
               }
             }),
@@ -1773,32 +1767,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 ['useRemoteGateways', 'Use Remote Gateways'],
               ] as const
             ).map(([flagKey, flagLabel]) => {
-              const aHasGwOrArs = Boolean((vA?.gateways.length ?? 0) > 0 || vA?.routeServer)
-              const bHasGwOrArs = Boolean((vB?.gateways.length ?? 0) > 0 || vB?.routeServer)
-              const disabledReason =
-                flagKey === 'allowGatewayTransit' && !bHasGwOrArs
-                  ? `Requires VNet Gateway or Route Server in ${vB?.name ?? 'VNet B'}`
-                  : flagKey === 'useRemoteGateways' && bHasGwOrArs
-                    ? `Cannot enable Use Remote Gateways on ${vB?.name ?? 'VNet B'} while it hosts its own Gateway or Route Server`
-                    : flagKey === 'useRemoteGateways' && !aHasGwOrArs
-                      ? `Remote VNet ${vA?.name ?? 'VNet A'} has no Gateway or Route Server`
-                      : flagKey === 'useRemoteGateways' && !peering.aToB.allowGatewayTransit
-                        ? `Requires Allow Gateway Transit on ${vA?.name ?? 'VNet A'} → ${vB?.name ?? 'VNet B'}`
-                        : null
+              const disabledReason = peeringFlagUnavailableReason(vB, vA, peering.aToB, flagKey)
               return {
                 label: `${peering.bToA[flagKey] ? '✓ ' : ''}${flagLabel}${disabledReason && !peering.bToA[flagKey] ? ' (Unavailable)' : ''}`,
                 disabled: Boolean(disabledReason && !peering.bToA[flagKey]),
                 onSelect: () => {
                   if (disabledReason && !peering.bToA[flagKey]) return
-                  commitTopology((draft) => {
-                    const p = draft.vnetPeerings.find((x) => x.id === peering.id)
-                    if (p) {
-                      p.bToA[flagKey] = !p.bToA[flagKey]
-                      if (flagKey === 'allowGatewayTransit' && !p.bToA.allowGatewayTransit) {
-                        p.aToB.useRemoteGateways = false
-                      }
-                    }
-                  })
+                  updatePeeringFlag(peering.id, 'bToA', flagKey, !peering.bToA[flagKey])
                 },
               }
             }),
@@ -2933,12 +2908,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 if (p) p.enabled = enabled
               })
             }}
-            onUpdatePeeringFlag={(peeringId, direction, flag, value) => {
-              commitTopology((draft) => {
-                const p = draft.vnetPeerings.find((x) => x.id === peeringId)
-                if (p) p[direction][flag] = value
-              })
-            }}
+            onUpdatePeeringFlag={updatePeeringFlag}
             onUpdateRouteTable={(routeTableId, patch) => {
               commitTopology((draft) => {
                 const rt = draft.udrTables.find((t) => t.id === routeTableId)
@@ -3916,26 +3886,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 )
                                 if (!exists) {
                                   const newId = `peer-${a.id}-${b.id}-${Date.now().toString(36).slice(-3)}`
-                                  const aHasGw = a.gateways.length > 0 || Boolean(a.routeServer)
-                                  const bHasGw = b.gateways.length > 0 || Boolean(b.routeServer)
                                   draft.vnetPeerings.push({
                                     id: newId,
                                     name: `${a.name}-to-${b.name}`,
                                     vnetAId: a.id,
                                     vnetBId: b.id,
                                     enabled: true,
-                                    aToB: {
-                                      allowVirtualNetworkAccess: true,
-                                      allowForwardedTraffic: true,
-                                      allowGatewayTransit: a.role === 'hub' && aHasGw,
-                                      useRemoteGateways: b.role === 'hub' && bHasGw && !aHasGw,
-                                    },
-                                    bToA: {
-                                      allowVirtualNetworkAccess: true,
-                                      allowForwardedTraffic: true,
-                                      allowGatewayTransit: b.role === 'hub' && bHasGw,
-                                      useRemoteGateways: a.role === 'hub' && aHasGw && !bHasGw,
-                                    },
+                                    aToB: defaultPeeringFlags(a, b),
+                                    bToA: defaultPeeringFlags(b, a),
                                   })
                                   setSelected({ kind: 'peering', peeringId: newId })
                                   return
@@ -4002,15 +3960,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         if (!activePeering) return null
                         const vA = topology.vnets.find((v) => v.id === activePeering.vnetAId)
                         const vB = topology.vnets.find((v) => v.id === activePeering.vnetBId)
-                        const aHasGwOrArs = Boolean((vA?.gateways.length ?? 0) > 0 || vA?.routeServer)
-                        const bHasGwOrArs = Boolean((vB?.gateways.length ?? 0) > 0 || vB?.routeServer)
                         const renderDirFlags = (
                           label: string,
                           dirKey: 'aToB' | 'bToA',
                           flags: AzPeeringDirectionFlags,
                         ) => {
-                          const localHasGwOrArs = dirKey === 'aToB' ? aHasGwOrArs : bHasGwOrArs
-                          const remoteHasGwOrArs = dirKey === 'aToB' ? bHasGwOrArs : aHasGwOrArs
+                          const local = dirKey === 'aToB' ? vA : vB
+                          const remote = dirKey === 'aToB' ? vB : vA
                           const remoteFlags = dirKey === 'aToB' ? activePeering.bToA : activePeering.aToB
                           return (
                             <div
@@ -4032,16 +3988,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                   ['useRemoteGateways', 'Use Remote Gateways'],
                                 ] as const
                               ).map(([flagName, flagLabel]) => {
-                                const disabledReason =
-                                  flagName === 'allowGatewayTransit' && !localHasGwOrArs
-                                    ? 'Requires a VNet Gateway or Route Server in the local VNet'
-                                    : flagName === 'useRemoteGateways' && localHasGwOrArs
-                                      ? 'Cannot enable Use Remote Gateways on a VNet that has its own Gateway or Route Server'
-                                      : flagName === 'useRemoteGateways' && !remoteHasGwOrArs
-                                        ? 'Remote VNet has no Gateway or Route Server'
-                                        : flagName === 'useRemoteGateways' && !remoteFlags.allowGatewayTransit
-                                          ? 'Requires Allow Gateway Transit on the remote peering direction'
-                                          : null
+                                const disabledReason = peeringFlagUnavailableReason(local, remote, remoteFlags, flagName)
                                 const isDisabled = Boolean(disabledReason && !flags[flagName])
                                 return (
                                   <label
@@ -4056,18 +4003,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                       checked={flags[flagName]}
                                       onChange={(e) => {
                                         const checked = e.target.checked
-                                        commitTopology((draft) => {
-                                          const p = draft.vnetPeerings.find(
-                                            (x) => x.id === activePeering.id,
-                                          )
-                                          if (p) {
-                                            p[dirKey][flagName] = checked
-                                            if (flagName === 'allowGatewayTransit' && !checked) {
-                                              const oppositeKey = dirKey === 'aToB' ? 'bToA' : 'aToB'
-                                              p[oppositeKey].useRemoteGateways = false
-                                            }
-                                          }
-                                        })
+                                        updatePeeringFlag(activePeering.id, dirKey, flagName, checked)
                                       }}
                                     />
                                     <span>{flagLabel}</span>

@@ -31,6 +31,111 @@ async function load(page: Page, topology: AzNetTopology, mode = 'hub-spoke') {
   await page.goto(`/?mode=${mode}`)
 }
 
+function peeringTopology() {
+  const topology = missingTransitTopology()
+  topology.sites = []
+  topology.erLocations = []
+  topology.erLinks = []
+  return topology
+}
+
+async function createPeering(page: Page) {
+  await page.getByTestId('aznet-select-vnet-hub').focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Peer with VNet', exact: true }).click()
+  await page.getByRole('menuitem', { name: 'Spoke (West Europe)', exact: true }).click()
+  await page.getByTestId('aznet-peering-pill-peer-hub-spoke').hover({ force: true })
+  return page.getByTestId('aznet-peering-hover-card')
+}
+
+test('a role-only hub creates ordinary peering and cannot author gateway-sharing flags', async ({ page }) => {
+  const topology = peeringTopology()
+  topology.vnets[0].gateways = []
+  topology.vnetPeerings = []
+  await load(page, topology)
+  const hover = await createPeering(page)
+  for (const flag of ['Allow GW Transit', 'Use Remote GW']) {
+    for (const checkbox of await hover.getByLabel(flag, { exact: true }).all()) {
+      await expect(checkbox).not.toBeChecked()
+      await expect(checkbox).toBeDisabled()
+    }
+  }
+})
+
+test('two gateway/ARS providers create no remote sharing and cannot consume each other', async ({ page }) => {
+  const topology = peeringTopology()
+  topology.vnets[1].routeServer = { id: 'ars', name: 'Spoke ARS', enabled: true,
+    branchToBranchTraffic: false, hubRoutingPreference: 'ExpressRoute', peerApplianceIds: [] }
+  topology.vnetPeerings = []
+  await load(page, topology)
+  const hover = await createPeering(page)
+  for (const checkbox of await hover.getByLabel('Use Remote GW', { exact: true }).all()) {
+    await expect(checkbox).not.toBeChecked()
+    await expect(checkbox).toBeDisabled()
+  }
+  for (const checkbox of await hover.getByLabel('Allow GW Transit', { exact: true }).all()) {
+    await expect(checkbox).not.toBeChecked()
+    await expect(checkbox).toBeEnabled()
+  }
+})
+
+test('hover sharing requires the remote provider and transit; disabling transit clears remote use with undo', async ({ page }) => {
+  await load(page, peeringTopology())
+  await page.getByTestId('aznet-peering-pill-peer').hover({ force: true })
+  const hover = page.getByTestId('aznet-peering-hover-card')
+  const transit = hover.getByLabel('Allow GW Transit', { exact: true }).first()
+  const remote = hover.getByLabel('Use Remote GW', { exact: true }).last()
+  await expect(remote).toBeEnabled()
+  await remote.check()
+  await transit.uncheck()
+  await expect(remote).not.toBeChecked()
+  await expect(remote).toBeDisabled()
+  await page.getByRole('button', { name: /Undo/, exact: false }).click()
+  await page.getByTestId('aznet-peering-pill-peer').hover({ force: true })
+  await expect(transit).toBeChecked()
+  await expect(remote).toBeChecked()
+  await page.reload()
+  await page.getByTestId('aznet-peering-pill-peer').hover({ force: true })
+  await expect(transit).toBeChecked()
+  await expect(remote).toBeChecked()
+})
+
+test('invalid imported gateway flags remain visible and can be cleared without enabling new invalid flags', async ({ page }) => {
+  const topology = peeringTopology()
+  topology.vnets[0].gateways = []
+  topology.vnetPeerings[0].bToA.useRemoteGateways = true
+  await load(page, topology)
+  await page.getByTestId('aznet-peering-pill-peer').hover({ force: true })
+  const hover = page.getByTestId('aznet-peering-hover-card')
+  const transit = hover.getByLabel('Allow GW Transit', { exact: true }).first()
+  const remote = hover.getByLabel('Use Remote GW', { exact: true }).last()
+  await expect(transit).toBeChecked()
+  await expect(transit).toBeEnabled()
+  await expect(remote).toBeChecked()
+  await expect(remote).toBeEnabled()
+  await transit.uncheck()
+  await expect(remote).not.toBeChecked()
+  await expect(remote).toBeDisabled()
+  await expect(transit).toBeDisabled()
+})
+
+test('Auto-Fix clears unshareable remote use rather than enabling transit on a resource-free VNet', async ({ page }) => {
+  const topology = peeringTopology()
+  topology.vnets[0].gateways = []
+  topology.vnetPeerings[0].aToB.allowGatewayTransit = false
+  topology.vnetPeerings[0].bToA.useRemoteGateways = true
+  await load(page, topology)
+  await page.getByRole('button', { name: 'Check routing', exact: true }).click()
+  await page.getByTestId('aznet-review-routing-issues').click()
+  const finding = page.getByTestId('aznet-finding-remote-gateway-transit-mismatch')
+  await finding.getByTestId('aznet-autofix-remote-gateway-transit-mismatch').click()
+  await page.getByRole('button', { name: 'Close Topology analysis', exact: true }).click()
+  await page.getByTestId('aznet-peering-pill-peer').hover({ force: true })
+  const hover = page.getByTestId('aznet-peering-hover-card')
+  await expect(hover.getByLabel('Allow GW Transit', { exact: true }).first()).not.toBeChecked()
+  await expect(hover.getByLabel('Use Remote GW', { exact: true }).last()).not.toBeChecked()
+})
+
 test('queued diagnosis replies cannot cross document owners and interrupted runs restore as cancelled', async ({ page }) => {
   await page.addInitScript(() => {
     const replies: (() => void)[] = []
