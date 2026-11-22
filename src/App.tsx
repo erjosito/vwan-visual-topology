@@ -533,7 +533,10 @@ function App() {
             run: () => {
               if (!spoke.hubId) update((next) => {
                 const original = next.spokes.find((entry) => entry.id === spoke.id)
-                if (original && !original.hubId && !original.nvaSpokeIds?.length) original.hubId = contextSelection.id
+                if (original && !original.hubId && !original.nvaSpokeIds?.length) {
+                  original.hubId = contextSelection.id
+                  original.propagateDefaultRoute = true
+                }
               })
               setEditorRequest({ kind: 'spoke', id: spoke.id })
             },
@@ -561,7 +564,10 @@ function App() {
             run: () => {
               update((next) => {
                 const original = next.spokes.find((entry) => entry.id === contextSelection.id)
-                if (original && !original.hubId && !original.nvaSpokeIds?.length) original.hubId = hub.id
+                if (original && !original.hubId && !original.nvaSpokeIds?.length) {
+                  original.hubId = hub.id
+                  original.propagateDefaultRoute = true
+                }
               })
               setEditorRequest(contextSelection)
             },

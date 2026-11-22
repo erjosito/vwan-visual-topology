@@ -154,6 +154,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
                 next.connections.push({
                   id: crypto.randomUUID(), name: text('connectionName') || `${name} connection`, hubId: request.hubId!, siteId: id,
                   transport: transportValue, enabled: true, inbound: [], outbound: [], learnSiteRoutes: true,
+                  propagateDefaultRoute: true,
                 })
               }
             }
@@ -366,7 +367,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <p className="muted">Region is explicit, not inferred from hub attachment or ER location. Missing or unrecognized regions are unassessed in failure analysis.</p>
           <Field title={t("Prefixes")}><input name="prefixes" required defaultValue={spoke?.prefixes.join(', ') ?? ''} placeholder="10.50.0.0/16" /></Field>
           <VnetCommunityEditor value={spoke?.bgpCommunities} formField />
-          {selectedSpokeHubId && <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>}
+          {selectedSpokeHubId && <label className="checkbox-field"><input key={selectedSpokeHubId} type="checkbox" name="propagateDefaultRoute" defaultChecked={spoke?.hubId ? spoke.propagateDefaultRoute ?? false : true} />{t("Propagate default route (0.0.0.0/0)")}</label>}
           {nvaSpokes.length > 0 && <fieldset><legend>{t("Connected NVA spokes")}</legend>
             <p className="muted">{t("Attach this VNet behind one or more spoke BGP NVAs so those NVAs advertise its prefixes to Virtual WAN.")}</p>
             {nvaSpokes.map((nvaSpoke) => <label key={nvaSpoke.id} className="checkbox-field"><input type="checkbox" name="nvaSpokeIds" value={nvaSpoke.id} defaultChecked={spoke?.nvaSpokeIds?.includes(nvaSpoke.id) || request.nvaSpokeId === nvaSpoke.id} />{nvaSpoke.name} ({nvaSpoke.prefixes.join(', ')})</label>)}
@@ -381,7 +382,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <fieldset><legend>{t("Spoke NVA BGP peering")}</legend>
             <Field title={t("Hosting spoke")}><select name="spoke" required value={selectedHostSpokeId} onChange={(e) => setSelectedHostSpokeId(e.target.value)}>{topology.spokes.filter((s) => Boolean(s.hubId)).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
             <Field title={t("NVA BGP interface IPv4")}><input name="peerIp" defaultValue={existingNvaConn?.peerIp ?? inferredPeerIp} placeholder={inferredPeerIp || '10.50.0.4'} /></Field>
-            <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={Boolean(existingNvaConn?.propagateDefaultRoute || hostSpoke?.propagateDefaultRoute)} />{t("Propagate default route (0.0.0.0/0)")}</label>
+            <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={existingNvaConn ? Boolean(existingNvaConn.propagateDefaultRoute || hostSpoke?.propagateDefaultRoute) : true} />{t("Propagate default route (0.0.0.0/0)")}</label>
             <p className="muted">{t("Optional — automatically inferred from the hosting spoke's range ({0}) if left blank. Must be an IPv4 address inside the hosting spoke.", inferredPeerIp || '.4')}</p>
             <p className="muted">{t("Use a public or private 2-byte NVA ASN, excluding Azure/IANA reserved ASNs. One logical peer represents identical advertisements to both hub router IPs (AS65515).")}</p>
             <a href="https://learn.microsoft.com/azure/virtual-wan/scenario-bgp-peering-hub#benefits-and-considerations" target="_blank" rel="noreferrer">{t("Microsoft spoke NVA BGP requirements")}</a>
@@ -414,7 +415,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <Field title={t("On-premises site")}><select name="site" required defaultValue={connection?.siteId ?? request.siteId ?? topology.sites[0]?.id}>{siteOptions}</select></Field>{transport}
           <label className="checkbox-field"><input type="checkbox" name="enabled" defaultChecked={connection?.enabled ?? true} />{t("Connection enabled")}</label>
           <label className="checkbox-field"><input type="checkbox" name="learnSiteRoutes" defaultChecked={connection?.learnSiteRoutes ?? true} />{t("Advertise site-originated and learned routes")}</label>
-          <label className="checkbox-field"><input type="checkbox" name="propagateDefaultRoute" defaultChecked={connection?.propagateDefaultRoute ?? false} />{t("Propagate default route (0.0.0.0/0)")}</label>
+          <label className="checkbox-field"><input key={connection ? connection.id : transportValue} type="checkbox" name="propagateDefaultRoute" defaultChecked={connection ? connection.propagateDefaultRoute ?? false : transportValue !== 'ExpressRoute'} />{t("Propagate default route (0.0.0.0/0)")}</label>
           <p className="muted">{t("Advertisements are preserved. Route maps belong to the attached hub and site. Unassign their policies before retargeting a connection or making an incompatible transport change.")}</p>
           </div>
           <p className="muted">{t("Use Route maps on either endpoint to configure inbound/outbound policies for this connection.")}</p>

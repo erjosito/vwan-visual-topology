@@ -1177,7 +1177,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     commitTopology((draft) => {
       const vnet = draft.vnets.find((entry) => entry.id === vnetId)
       if (vnet && !vnet.vwanHubAttachment && draft.vwanHubs.some((hub) => hub.id === hubId)) {
-        vnet.vwanHubAttachment = { hubId, enabled: true }
+        vnet.vwanHubAttachment = { hubId, enabled: true, propagateDefaultRoute: true }
       }
     })
   }
@@ -2237,6 +2237,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         bgpEnabled: true,
                         enabled: true,
                         transport,
+                        propagateDefaultRoute: true,
                       })
                     })
                   },

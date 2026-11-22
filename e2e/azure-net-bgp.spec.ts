@@ -42,6 +42,40 @@ async function load(page: Page, mode: string, topology = bgpTopology()) {
   await page.goto(`/?mode=${mode}`)
 }
 
+test('Full Hybrid defaults new VWAN VNet, VPN and SDWAN attachments on, keeps ER off and leaves classic connections unchanged', async ({ page }) => {
+  const topology = bgpTopology()
+  topology.vnets.push({
+    id: 'spoke', name: 'New spoke', role: 'spoke', region: 'West Europe', prefixes: ['10.2.0.0/16'],
+    subnets: [{ id: 'work', name: 'Work', prefix: '10.2.1.0/24' }], gateways: [], appliances: [],
+  })
+  await load(page, 'full', topology)
+  const context = async (testId: string, action: string, child: string) => {
+    await page.getByTestId(testId).focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: action, exact: true }).hover()
+    await page.getByRole('menuitem', { name: child, exact: true }).click()
+  }
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+  await context('aznet-select-vnet-spoke', 'Connect to virtual hub', 'Virtual hub')
+  await expect.poll(async () => (await saved()).vnets[1].vwanHubAttachment).toMatchObject({
+    hubId: 'vhub', enabled: true, propagateDefaultRoute: true,
+  })
+  await page.keyboard.press('Escape')
+  for (const label of ['S2S VPN', 'SD-WAN']) {
+    await context('aznet-site-a', 'Connect Site to...', `${label} to vWAN Hub: Virtual hub`)
+  }
+  await context('aznet-erloc-er', 'Connect ExpressRoute to...', 'vWAN Hub: Virtual hub')
+  const document = await saved()
+  expect(document.vpnConnections.filter((entry: { targetKind: string }) => entry.targetKind === 'vwan-hub')).toEqual([
+    expect.objectContaining({ transport: 'VPN', propagateDefaultRoute: true }),
+    expect.objectContaining({ transport: 'SDWAN', propagateDefaultRoute: true }),
+  ])
+  expect(document.erLinks.find((entry: { targetKind: string }) => entry.targetKind === 'vwan-hub').propagateDefaultRoute).toBeUndefined()
+  expect(document.vpnConnections.filter((entry: { targetKind: string }) => entry.targetKind === 'vnet-gateway')).toEqual(topology.vpnConnections)
+  await page.reload()
+  expect((await saved()).vnets[1].vwanHubAttachment.propagateDefaultRoute).toBe(true)
+})
+
 async function inspectSite(page: Page, id: string) {
   await page.getByTestId(`aznet-site-${id}`).focus()
   await page.keyboard.press('Shift+F10')
