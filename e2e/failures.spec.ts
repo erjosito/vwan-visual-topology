@@ -182,13 +182,11 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     if (mode === 'vwan') await expect(routingStatus).toContainText('Routing check completed.')
     const failedAnalysis = await routingStatus.textContent()
     await page.getByRole('button', { name: 'Maximize canvas', exact: true }).click()
-    await expect(page.getByRole('banner')).toBeVisible()
+    await expect(page.locator('header.unified-topbar, header.aznet-topbar')).not.toBeVisible()
     await expect(page.getByTestId('active-faults')).toBeHidden()
     await expect(routingStatus).toBeHidden()
     const tabHeight = (await page.locator('.workspace-tabs').boundingBox())!.height
-    const headerHeight = (await page.getByRole('banner').boundingBox())!.height
-    expect(headerHeight).toBeLessThan(70)
-    await expect.poll(async () => (await canvas.boundingBox())!.height + tabHeight + headerHeight).toBeGreaterThan(originalCanvas!.height + 80)
+    await expect.poll(async () => (await canvas.boundingBox())!.height + tabHeight).toBeGreaterThan(originalCanvas!.height + 80)
     await expect(er).toHaveAttribute('data-simulated-failed', 'true')
     if (mode === 'vwan') await expect(page.locator('.highlight-status')).toContainText('No route')
     else await expect(page.getByTestId('aznet-path-tracer-panel')).toContainText('dropped-no-route')
