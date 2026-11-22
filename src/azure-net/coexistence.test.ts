@@ -4,7 +4,7 @@ import { inspectAzBgp } from '../bgp-neighbors'
 import { parseAzNetTopology } from './admission'
 import { importAzNetCapture } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
-import { coexistenceFindings } from './coexistence'
+import { basicGatewayFix, coexistenceFindings } from './coexistence'
 import { lookupSubnetEffectiveRoute, simulateAzNet, traceAzNetPair } from './engine'
 
 it.each([true, false])('exchanges ER and VPN site routes through same-VNet ARS with VPN BGP=%s', (bgpEnabled) => {
@@ -128,6 +128,30 @@ it('retains semantic-invalid coexistence settings for diagnosis and leaves unkno
   expect(coexistenceFindings(topology).filter((finding) => finding.severity === 'warning')).toHaveLength(2)
   expect(gateway.sku).toBeUndefined()
   expect(gateway.vpnType).toBeUndefined()
+})
+
+it('targets the actual Basic gateway, preserves NAT capability and refuses stale or unknown-SKU fixes', () => {
+  const topology = coexistenceTopology()
+  const gateway = topology.vnets[0].gateways[0]
+  gateway.sku = ' basic '
+  const finding = coexistenceFindings(topology).find((finding) => finding.id.endsWith(':sku:vpn'))!
+  expect(basicGatewayFix(topology, finding)).toEqual({ gateway, sku: 'VpnGw1AZ' })
+  gateway.vpnNat = { sku: 'VpnGw2AZ', bgpRouteTranslation: false }
+  expect(basicGatewayFix(topology, finding)).toEqual({ gateway, sku: 'VpnGw2AZ' })
+  gateway.sku = 'VpnGw2'
+  expect(basicGatewayFix(topology, finding)).toBeUndefined()
+  delete gateway.sku
+  const unknown = coexistenceFindings(topology).find((candidate) => candidate.id === finding.id)!
+  expect(basicGatewayFix(topology, unknown)).toBeUndefined()
+  gateway.sku = 'Basic'
+  topology.vnets[0].gateways[1].enabled = false
+  expect(basicGatewayFix(topology, finding)).toBeUndefined()
+})
+
+it.each(['VpnGw1', 'VpnGw1AZ', 'VpnGw2', 'VpnGw2AZ'])('does not misdiagnose supported %s as Basic', (sku) => {
+  const topology = coexistenceTopology()
+  Object.assign(topology.vnets[0].gateways[0], { sku, vpnGatewayGeneration: 'Generation1' })
+  expect(coexistenceFindings(topology).filter((finding) => finding.severity !== 'info')).toEqual([])
 })
 
 it('identifies enabled overlapping GatewaySubnet UDRs without confusing valid return routes or disabled rows', () => {

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useId, useState } from 'react'
 import { t } from '../i18n'
 import { registerJapaneseMessages } from '../messages'
 import { InspectorSection } from '../WorkspacePresentation'
@@ -105,23 +105,35 @@ export function NvaCreationEditor({ topology, vnetId, commit, onSaved, onCancel 
   </section>
 }
 
-function VpnGatewaySettings({ gateway, routeExchange, coexisting, onMode, onConfiguration }: {
+export function VpnGatewaySettings({ gateway, routeExchange, coexisting, onMode, onConfiguration }: {
   gateway: AzVnetGateway
   routeExchange: boolean
   coexisting: boolean
   onMode: (mode: boolean | undefined) => void
   onConfiguration: (configuration: Pick<AzVnetGateway, 'sku' | 'vpnType' | 'vpnGatewayGeneration'>) => void
 }) {
+  const skuListId = useId()
   const unsupportedSku = coexisting && gateway.sku?.trim().toLowerCase() === 'basic'
   const unsupportedType = coexisting && gateway.vpnType === 'PolicyBased'
   return <fieldset data-testid={`vpn-gateway-settings-${gateway.id}`}>
     <legend>{gateway.name}</legend>
     <label className="field"><span>{t('Gateway SKU')}</span>
       <input aria-label={t('Gateway SKU')} placeholder={t('Unspecified (not captured)')}
-        value={gateway.sku ?? ''} maxLength={120}
+        value={gateway.sku ?? ''} maxLength={120} list={skuListId}
         aria-invalid={unsupportedSku}
         style={unsupportedSku ? { borderColor: 'var(--error)', color: 'var(--error)' } : undefined}
-        onChange={(event) => onConfiguration({ sku: event.target.value || undefined })} />
+        onChange={(event) => {
+          const sku = event.target.value || undefined
+          onConfiguration({ sku, ...(/^VpnGw1(AZ)?$/.test(sku ?? '')
+            ? { vpnGatewayGeneration: 'Generation1' }
+            : /^VpnGw[45](AZ)?$/.test(sku ?? '') ? { vpnGatewayGeneration: 'Generation2' } : {}) })
+        }} />
+      <datalist id={skuListId}>
+        {(gateway.kind === 'Vpn'
+          ? ['VpnGw1AZ', 'VpnGw2AZ', 'VpnGw3AZ', 'VpnGw4AZ', 'VpnGw5AZ', 'VpnGw1', 'VpnGw2', 'VpnGw3', 'VpnGw4', 'VpnGw5', 'Basic', 'Standard', 'HighPerformance']
+          : ['ErGw1AZ', 'ErGw2AZ', 'ErGw3AZ', 'ErGwScale', 'Standard', 'HighPerformance', 'UltraPerformance', 'Basic'])
+          .map((sku) => <option key={sku} value={sku} />)}
+      </datalist>
     </label>
     {gateway.kind === 'Vpn' && <>
     <label className="field"><span>{t('VPN gateway routing type')}</span>
