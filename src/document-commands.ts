@@ -27,7 +27,7 @@ export interface ArtifactSnapshot {
 }
 
 export function createDocumentCommands({
-  documentId, getTopology, getAccountId, write, retain, release, authorizeFile, confirmed, digest = fingerprint,
+  documentId, getTopology, getAccountId, write, retain, release, authorizeFile, confirmed, hasPendingConfiguration, digest = fingerprint,
 }: {
   documentId: string
   getTopology: () => unknown
@@ -37,6 +37,7 @@ export function createDocumentCommands({
   release?: () => Promise<void>
   authorizeFile?: (destination: Extract<ArtifactDestination, { kind: 'file' }>) => Promise<Extract<ArtifactDestination, { kind: 'file' }> | null>
   confirmed?: (destination: ArtifactDestination, topology: unknown) => void
+  hasPendingConfiguration?: () => boolean
   digest?: (topology: unknown) => Promise<string>
 }) {
   let destination: ArtifactDestination | undefined
@@ -87,7 +88,9 @@ export function createDocumentCommands({
     retained = retainSafely(metadata)
     publish({ ...exposeDestination(), operation: 'idle', retained, error: undefined })
     await observe()
-    if (live && ticket === confirmation && owned(value)) confirmed?.(value, topology)
+    if (!live || ticket !== confirmation || !owned(value)
+      || value.kind === 'cloud' && accountTicket !== accountGeneration) return false
+    confirmed?.(value, topology)
     return true
   }
   const run = (choice: ArtifactChoice | undefined): Promise<CommandResult> => {
@@ -198,7 +201,8 @@ export function createDocumentCommands({
       publish({ destination: undefined, fileAccess: undefined, operation: 'idle', revision: 'draft', retained: false, notice: undefined, error: undefined })
       return true
     },
-    canClose: () => !pending && snapshot.revision === 'matches' && !!destination && owned(destination),
+    canClose: () => !pending && !hasPendingConfiguration?.()
+      && snapshot.revision === 'matches' && !!destination && owned(destination),
     async dispose() {
       live = false; observation++; listeners.clear()
       await Promise.all([pending, release?.()])

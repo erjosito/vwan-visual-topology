@@ -12,6 +12,7 @@ import { defaultSpokeNvaPeerIp, parseAsPath, validateTopology } from './validati
 import { CanvasOverlay } from './CanvasOverlay'
 import { ConfigurationEditStatus } from './WorkspacePresentation'
 import { measureAzWork } from './azure-net/performance'
+import { useWorkspaceConfigurationPending } from './workspace-context'
 const HubStaticRoutesEditor = lazy(() => import('./HubStaticRoutesEditor').then((module) => ({ default: module.HubStaticRoutesEditor })))
 
 export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean; focusFirewall?: boolean }
@@ -27,6 +28,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
 }) {
   const [error, setError] = useState('')
   const [dirty, setDirty] = useState(false)
+  useWorkspaceConfigurationPending(dirty)
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
   const hub = topology.hubs.find((h) => h.id === request.id)
   const [hubStatic, setHubStatic] = useState(() => ({ id: hub?.id ?? crypto.randomUUID(), firewall: hub?.firewall, routeTables: hub?.routeTables }))

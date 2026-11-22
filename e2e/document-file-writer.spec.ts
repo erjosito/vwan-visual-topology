@@ -1,6 +1,97 @@
 import { expect, test } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
+test('closing a saved document keeps unapplied configuration until Apply or explicit Discard', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'showSaveFilePicker', { value: async (options: { suggestedName: string }) =>
+      (await navigator.storage.getDirectory()).getFileHandle(options.suggestedName, { create: true }) })
+  })
+  await page.goto('/?mode=vwan')
+  await page.getByLabel('Topology name', { exact: true }).fill('Pending configuration')
+  await page.keyboard.press('Control+s')
+  const chooser = page.getByRole('dialog', { name: 'Save As', exact: true })
+  await chooser.getByLabel('Name', { exact: true }).fill('configuration-close')
+  await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(chooser).toHaveCount(0)
+  await page.getByRole('button', { name: '+ Hub', exact: true }).click()
+  const editor = page.locator('.object-editor')
+  await editor.getByLabel('Name', { exact: true }).fill('Unapplied hub')
+  await page.getByRole('button', { name: 'Close topology: Pending configuration', exact: true }).click()
+  const closing = page.getByRole('dialog', { name: 'Save changes before closing?', exact: true })
+  await closing.getByRole('button', { name: 'Save and close', exact: true }).click()
+  await expect(closing.getByRole('alert')).toContainText('Apply pending configuration changes')
+  await closing.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(editor.getByLabel('Name', { exact: true })).toHaveValue('Unapplied hub')
+  await expect(page.getByRole('tab', { name: 'Pending configuration', exact: true })).toBeVisible()
+  const saved = await page.evaluate(async () => {
+    const directory = await navigator.storage.getDirectory()
+    const file = await directory.getFileHandle('configuration-close.json')
+    const topology = JSON.parse(await (await file.getFile()).text())
+    await directory.removeEntry('configuration-close.json')
+    return topology
+  })
+  expect(saved.hubs).toEqual([])
+})
+
+test('Save and close rechecks previously saved documents after another document finishes saving', async ({ page }) => {
+  await page.goto('/?mode=vwan')
+  await expect(page.getByLabel('Topology name', { exact: true })).toBeVisible()
+  await page.evaluate(async () => {
+    const commandsModule = '/src/document-commands.ts', dialogModule = '/src/CloseDocumentsDialog.tsx'
+    const clientModule = '/node_modules/.vite/deps/react-dom_client.js', reactModule = '/node_modules/.vite/deps/react.js'
+    const { createDocumentCommands } = await import(commandsModule)
+    const { CloseDocumentsDialog } = await import(dialogModule)
+    const { default: client } = await import(clientModule)
+    const { default: react } = await import(reactModule)
+    const container = document.createElement('section')
+    container.dataset.lifecycleCloseTest = ''
+    document.body.append(container)
+    let firstTopology = { name: 'First document' }
+    let finish!: (receipt: unknown) => void
+    const destination = (name: string) => ({
+      kind: 'file', platform: 'browser', name, location: name, revision: 'original', authority: {},
+    })
+    const firstFile = destination('first.json'), secondFile = destination('second.json')
+    const first = createDocumentCommands({
+      documentId: 'first', getTopology: () => firstTopology, getAccountId: () => undefined,
+      retain: () => true, digest: async (value: unknown) => JSON.stringify(value),
+      write: async () => ({ confirmed: true, destination: firstFile }),
+    })
+    const second = createDocumentCommands({
+      documentId: 'second', getTopology: () => ({ name: 'Second document' }), getAccountId: () => undefined,
+      retain: () => true, digest: async (value: unknown) => JSON.stringify(value),
+      write: () => {
+        container.dataset.saving = 'second'
+        return new Promise(resolve => { finish = resolve })
+      },
+    })
+    await first.loaded(firstFile, firstTopology)
+    await second.loaded(secondFile, { name: 'Older second document' })
+    container.addEventListener('edit-first-during-save', () => {
+      firstTopology = { name: 'Newer first document edits' }
+      void first.observe().then(() => finish({ confirmed: true, destination: secondFile }))
+    })
+    client.createRoot(container).render(react.createElement(CloseDocumentsDialog, {
+      documents: [
+        { id: 'first', commands: first, hasPendingConfiguration: () => false, history: { topology: firstTopology } },
+        { id: 'second', commands: second, hasPendingConfiguration: () => false, history: { topology: { name: 'Second document' } } },
+      ],
+      onClose: () => { container.dataset.cancelled = 'true' },
+      onDiscard: () => { container.dataset.closed = 'true' },
+    }))
+  })
+  const dialog = page.getByRole('dialog', { name: 'Save changes before closing?', exact: true })
+  await dialog.getByRole('button', { name: 'Save and close', exact: true }).click()
+  const container = page.locator('[data-lifecycle-close-test]')
+  await expect(container).toHaveAttribute('data-saving', 'second')
+  await container.evaluate(element => element.dispatchEvent(new Event('edit-first-during-save')))
+  await expect(dialog.getByRole('alert')).toContainText('The latest edits are not confirmed saved')
+  await expect(container).not.toHaveAttribute('data-closed', 'true')
+  await expect(dialog.getByRole('button', { name: 'Save and close', exact: true })).toBeEnabled()
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(container).toHaveAttribute('data-cancelled', 'true')
+})
+
 test('a failed document dialog chunk keeps the active design editable', async ({ page }) => {
   await page.route('**/DocumentDialogs.tsx', route => route.abort())
   await page.goto('/?mode=vwan')
