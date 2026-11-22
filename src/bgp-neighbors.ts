@@ -2,6 +2,8 @@ import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 import { gatewayArsExchange } from './azure-net/ars-route-maps'
 import type { AzBgpRibEntry, AzNvaBgpPeer, AzNvaReceivedRoute, AzSimulationResult } from './azure-net/engine'
+import { sameWan } from './wan-scopes'
+import { vpnRoutingMode } from './model'
 
 export type BgpResourceKind = 'appliance' | 'route-server' | 'gateway' | 'site' | 'er-location' | 'vwan-hub'
 export interface BgpResourceRef { kind: BgpResourceKind; id: string }
@@ -51,6 +53,9 @@ export interface BgpManagedRelationship {
   connectionId: string
   enabled: boolean
   reason: string
+  name?: string
+  kind?: 'inter-hub' | 'vpn' | 'vpn-static' | 'express-route' | 'express-route-logical' | 'nva' | 'route-exchange'
+  peerAddress?: string
 }
 export interface BgpInspection {
   version: 1
@@ -65,6 +70,20 @@ const identity = (...parts: string[]) => JSON.stringify(parts)
 const logicalScope = 'Route counts and routes describe the logical relationship, not measured per-instance advertisements or counters.'
 const opaqueMapping = 'Managed endpoint addresses, instance mapping and session multiplicity are not assessed. This relationship is not an established BGP session.'
 const vpnUnknownMode = 'VPN gateway mode is unspecified. The number of active BGP speakers is not assessed; no standby or second active session is inferred.'
+function addInterHubRelationships(result: BgpInspection, hubs: { id: string; wanId?: string }[]) {
+  for (let i = 0; i < hubs.length; i++) for (const other of hubs.slice(i + 1)) {
+    const hub = hubs[i]
+    if (!sameWan(hub, other)) continue
+    const a = result.resources.find((resource) => resource.kind === 'vwan-hub' && resource.id === hub.id)!
+    const b = result.resources.find((resource) => resource.kind === 'vwan-hub' && resource.id === other.id)!
+    const id = identity('inter-hub', ...[hub.id, other.id].sort())
+    result.managedRelationships.push({
+      id, connectionId: id, resourceKeys: [a.key, b.key], enabled: a.enabled && b.enabled,
+      kind: 'inter-hub', name: 'Automatic inter-hub routing',
+      reason: 'Same-WAN managed routing relationship; physical BGP speakers, endpoint addresses and session state are not exposed.',
+    })
+  }
+}
 const peerReasons: Record<Exclude<AzNvaBgpPeer['state'], 'available'>, string> = {
   'ars-disabled': 'ARS disabled',
   'bgp-disabled': 'NVA BGP disabled',
@@ -98,9 +117,10 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     return resource
   }
   const find = (kind: BgpResourceKind, id: string) => result.resources.find((resource) => resource.kind === kind && resource.id === id)
-  const managed = (id: string, connectionId: string, a: BgpResource | undefined, b: BgpResource | undefined, enabled: boolean, reason = opaqueMapping) => {
+  const managed = (id: string, connectionId: string, a: BgpResource | undefined, b: BgpResource | undefined, enabled: boolean, reason = opaqueMapping,
+    metadata: Pick<BgpManagedRelationship, 'name' | 'kind' | 'peerAddress'> = {}) => {
     if (a && b) result.managedRelationships.push({
-      id, connectionId, resourceKeys: [a.key, b.key], enabled: enabled && a.enabled && b.enabled, reason,
+      id, connectionId, resourceKeys: [a.key, b.key], enabled: enabled && a.enabled && b.enabled, reason, ...metadata,
     })
   }
   const pair = (relationshipId: string, connectionId: string, a: BgpResource, ai: BgpInstance, b: BgpResource, bi: BgpInstance,
@@ -146,8 +166,10 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     limitations: ['ExpressRoute has primary and secondary private-peering edge paths. This topology models a location aggregate, not circuit-specific MSEE instances; no primary/secondary session mapping is inferred.', opaqueMapping],
   })
   for (const hub of topology.vwanHubs) add('vwan-hub', hub.id, hub.name, [], {
+    asn: 65515,
     limitations: ['VWAN hub routing and managed gateways are not a single BGP speaker. Standalone VPN active/standby controls do not apply.', opaqueMapping],
   })
+  addInterHubRelationships(result, topology.vwanHubs)
   for (const vnet of topology.vnets) {
     const ars = vnet.routeServer
     if (!ars) continue
@@ -191,7 +213,8 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     if (!target.instances.length) {
       managed(identity('vpn', conn.id), conn.id, target, site, conn.enabled && conn.bgpEnabled && targetBgpEnabled && (!underlay || underlay.state === 'available'),
         underlay && underlay.state !== 'available' ? underlay.reason
-          : !conn.bgpEnabled || !targetBgpEnabled ? 'BGP is disabled on this connection or gateway; static routes do not establish BGP neighbors.' : opaqueMapping)
+          : !conn.bgpEnabled || !targetBgpEnabled ? 'BGP is disabled on this connection or gateway; static routes do not establish BGP neighbors.' : opaqueMapping,
+        { name: conn.name, kind: conn.targetKind === 'appliance' || conn.transport === 'SDWAN' ? 'nva' : 'vpn' })
       continue
     }
     const availability = conn.enabled && conn.bgpEnabled && targetBgpEnabled && site.enabled && target.enabled ? underlay?.state ?? 'available' : 'unavailable'
@@ -205,7 +228,8 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
       undefined, evidence('received-post-policy', siteRoutes?.filter((route) => route.connectionId === conn.id)), undefined)
   }
   for (const link of topology.erLinks) managed(identity('er', link.id), link.id, find('er-location', link.locationId),
-    find(link.targetKind === 'site' ? 'site' : link.targetKind === 'vnet-gateway' ? 'gateway' : 'vwan-hub', link.targetId), link.enabled)
+    find(link.targetKind === 'site' ? 'site' : link.targetKind === 'vnet-gateway' ? 'gateway' : 'vwan-hub', link.targetId), link.enabled,
+    opaqueMapping, { name: link.name, kind: 'express-route' })
   for (const link of topology.siteLinks) {
     const a = find('site', link.siteAId)
     const b = find('site', link.siteBId)
@@ -239,10 +263,14 @@ export function inspectVwanBgp(topology: Topology, unavailableIds: string[] = []
     const hub = result.resources.find((resource) => resource.kind === 'vwan-hub' && resource.id === conn.hubId)
     const site = result.resources.find((resource) => resource.kind === 'site' && resource.id === conn.siteId)
     if (!hub || !site) continue
+    const staticVpn = conn.transport === 'VPN' && vpnRoutingMode(topology, conn) === 'static'
     result.managedRelationships.push({
       id: identity('vwan-connection', conn.id), connectionId: conn.id, resourceKeys: [hub.key, site.key],
+      name: conn.name, peerAddress: conn.peerIp,
+      kind: staticVpn ? 'vpn-static' : conn.transport === 'ExpressRoute' ? 'express-route-logical' : conn.transport === 'VPN' ? 'vpn' : 'nva',
       enabled: conn.enabled && hub.enabled && site.enabled,
-      reason: conn.transport === 'ExpressRoute'
+      reason: staticVpn ? 'Static VPN routing; no BGP peering is configured on this connection.'
+        : conn.transport === 'ExpressRoute'
         ? 'A logical ExpressRoute connection is not a direct site-to-hub BGP session. Circuit and primary/secondary edge mappings are not assessed.'
         : conn.transport === 'SpokeNVA'
           ? 'VWAN BGP NVA attachment: managed hub instance and session mappings are not assessed.'
@@ -254,9 +282,11 @@ export function inspectVwanBgp(topology: Topology, unavailableIds: string[] = []
     if (endpoints.some((endpoint) => !endpoint)) continue
     result.managedRelationships.push({
       id: identity('inter-wan-vpn', vpn.id), connectionId: vpn.id, resourceKeys: [endpoints[0]!.key, endpoints[1]!.key],
-      enabled: vpn.enabled && endpoints.every((endpoint) => endpoint!.enabled),
+      name: vpn.name, kind: 'vpn-static',
+      enabled: vpn.enabled && vpn.status === 'configured' && endpoints.every((endpoint) => endpoint!.enabled),
       reason: 'Explicit inter-WAN S2S route-export model. Gateway BGP instances, negotiated sessions, shared-ASN handling and P2S clients are not assessed.',
     })
   }
+  result.managedRelationships.sort((a, b) => a.id.localeCompare(b.id))
   return result
 }

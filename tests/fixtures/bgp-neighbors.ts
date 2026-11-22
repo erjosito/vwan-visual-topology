@@ -3,13 +3,20 @@ import type { Topology } from '../../src/model'
 
 export function bgpNeighborVwanTopology(): Topology {
   return {
-    version: 1, name: 'Synthetic managed VWAN neighbor boundary',
+    version: 1, name: 'Two-hub managed ER and VPN neighbor reference',
     hubs: [{ id: 'managed-hub', name: 'Managed hub', region: 'westeurope', preference: 'ExpressRoute',
-      routingIntent: { private: false, internet: false, privatePrefixes: [] } }],
+      routingIntent: { private: false, internet: false, privatePrefixes: [] } },
+      { id: 'remote-hub', name: 'Remote hub', region: 'northeurope', preference: 'ASPath',
+        routingIntent: { private: false, internet: false, privatePrefixes: [] } }],
     sites: [{ id: 'branch', name: 'Synthetic branch', asn: 65050, prefixes: ['203.0.113.0/24'] }],
     spokes: [], siteLinks: [],
     connections: [{ id: 'managed-vpn', name: 'Managed VPN', hubId: 'managed-hub', siteId: 'branch', transport: 'VPN',
       enabled: true, learnSiteRoutes: true, inbound: [], outbound: [] }],
+    erLocations: [{ id: 'edge-location', name: 'Synthetic ER location' }],
+    erLinks: [
+      { id: 'er-site', name: 'Branch ER', locationId: 'edge-location', siteId: 'branch', enabled: true, learnSiteRoutes: true },
+      { id: 'er-hub', name: 'Hub ER', locationId: 'edge-location', hubId: 'managed-hub', enabled: true, learnSiteRoutes: false },
+    ],
   }
 }
 

@@ -56,6 +56,23 @@ they do not supply missing ER circuit/MSEE or physical-alias mappings.
 
 ## Identity and managed boundaries
 
+Managed resources now have a default **Managed peer relationships** table,
+with the original peer name, known remote ASN, relationship type, connection
+ID and enabled configuration. VWAN hubs use ASN **65515**, ER/MSEE location
+aggregates use **12076**, and sites and standalone VPN gateways retain their
+configured ASNs. Same-WAN hubs have an automatic inter-hub routing row;
+separate WANs do not acquire an invented adjacency.
+
+These resource-level relationships are not a physical BGP neighbor matrix.
+**Not observed** describes session state only, not the known ASN or connection.
+Original ER links remain separate; legacy direct site/hub ER connections are
+labeled as routing relationships with an unmapped edge, not direct site/hub
+BGP peers. Static VPN and explicit inter-WAN static routing show
+**Not applicable (static routing)** rather than a BGP session.
+Filter the managed table by name, resource ID, ASN or connection, and select
+a peer to inspect the reverse perspective. Mapping and provenance are
+expandable rather than repeated before useful configuration.
+
 The shared `BgpInspection` contract separates resource keys, local instance
 IDs, remote instance IDs, relationship/connection IDs and directional neighbor
 IDs. Keys are tuples of original kind/ID/role, not names or ASNs. Names can
@@ -70,8 +87,8 @@ IDs; inspector state and projected roles are not new saved configuration.
 | Standalone active/standby VPN | One active modeled speaker | A physical standby still exists; no second established standby neighbor is invented |
 | Legacy VPN with absent `activeActive` | Multiplicity not assessed | Original absence and existing routing behavior are preserved |
 | ARS/gateway exchange | Unmapped managed relationship | B2B disabled is not proof of no native session; ARS/VPN exchange requires explicit active/active and ASN 65515 |
-| ER location, ER gateway | Unmapped managed relationships | A location aggregate is not an ER circuit, MSEE or gateway instance; no primary/secondary full mesh is inferred |
-| VWAN hub/gateways | Unmapped managed relationships | A hub is not one BGP speaker; standalone VPN active/standby controls do not apply |
+| ER location, ER gateway | Original connection and MSEE aggregate relationship; known ASNs | A location aggregate is not an ER circuit or physical MSEE/gateway instance; no primary/secondary full mesh is inferred |
+| VWAN hub/gateways | Same-WAN inter-hub, ER and configured VPN/NVA relationships; ASN 65515 | A hub is not one BGP speaker; standalone VPN active/standby controls do not apply |
 | On-premises site/site link | Original site and logical relationship | Vendor internals, managed remote mappings and unsupported route directions stay unassessed |
 
 Managed relationships have separate enabled/disabled logical exchange
@@ -113,6 +130,15 @@ deletion, instance switching, immutable saves, keyboard, narrow accessibility
 and Japanese. Compiled platform/MCP parity and offline Electron exercise the
 same reference. Production checks prohibit eager inspector/projection loading.
 
+The native version-1 two-hub fixture also has independent ER and VPN
+connections. A local MCP validation/evaluation (contract 1, engine
+`2026.11.16.2`) satisfied exact-prefix presence checks for `203.0.113.0/24`
+in both hubs: the local hub selected ER with AS path `12076 65050`, and the
+remote hub received the inter-hub path `65520 65520 12076 65050`.
+This checks the existing routing context, not session establishment or live
+withdrawal. Known peer/ASN presentation, scoped identities, native save
+immutability and EN/JA keyboard accessibility are separate application tests.
+
 This implementation is a bounded increment of #259, not completion of native
 managed-instance qualification. Previously recorded VPN observations are
 historical, not fresh ER/VPN validation by these tests. The separately approved
@@ -125,6 +151,9 @@ gate; deterministic tests are not reported as live Azure results.
 - [VPN BGP configuration considerations](https://learn.microsoft.com/en-us/azure/vpn-gateway/configure-bgp#bgp-configuration-considerations)
 - [ARS ExpressRoute/VPN support and prerequisites](https://learn.microsoft.com/en-us/azure/route-server/expressroute-vpn-support)
 - [ExpressRoute primary/secondary peering addresses](https://learn.microsoft.com/en-us/azure/expressroute/expressroute-routing#ip-addresses-used-for-peering)
+- [Virtual WAN managed ASN](https://learn.microsoft.com/azure/virtual-wan/connect-virtual-network-gateway-vwan)
+- [Virtual WAN inter-WAN static VPN constraints](https://learn.microsoft.com/azure/virtual-wan/virtual-wan-connectivity)
+- [Azure gateway and MSEE ASNs](https://learn.microsoft.com/azure/networking/connectivity-interoperability-control-plane)
 
 ER/VPN coexistence rules are tracked separately in #334; neither this
 inspector nor the ARS/NVA lab implements that follow-up.
