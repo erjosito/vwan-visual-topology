@@ -283,3 +283,13 @@ budgets. Benchmark evidence is generated before committing its reports; later
 documentation-only commits do not alter the measured runtime source. Publication
 uses only the subsequently successful exact main CI run/attempt, never these
 local builds or PR artifacts.
+
+The first integrated CI exposed a deterministic VWAN startup-budget failure:
+300,313 local gzip bytes versus the unchanged 300,000-byte ceiling. The
+on-demand Azure comparison panel is now lazy, with the existing localized
+loading state and unchanged parent-owned comparison session. No threshold,
+shared stylesheet order, generic vendor policy or optional GIF/learning boundary
+was changed. All three native production startup tests pass with the same
+raw/gzip limits; five browser regressions additionally cover comparison privacy,
+table scope, localization, bad imports, stale results and rename/Undo caches.
+Final exact-head CI still must pass every gate before landing.

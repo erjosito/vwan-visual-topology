@@ -152,7 +152,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:japanese-catalog|vnet-community-messages-ja)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:practice-session|PracticeWorkspaceBar)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/flow-gif-codec-/.test(path))).toBe(false)
-    expect(graph.files.some(({ path }: { path: string }) => /\/(?:BgpNeighborsPanel|bgp-neighbors|ResilienceResults)-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/(?:AzureComparisonPanel|BgpNeighborsPanel|bgp-neighbors|ResilienceResults)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/ConfigurationEditStatus-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/RouteMapsPanel-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/VpnRoutingWizard-/.test(path))).toBe(false)
