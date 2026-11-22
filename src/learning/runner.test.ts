@@ -1,15 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
 import { executePlatform } from '../platform/service'
-import type { PlatformRequest, PlatformResult } from '../platform/contract'
+import type { PlatformDocument, PlatformRequest, PlatformResult } from '../platform/contract'
 import { exampleCourse } from './course-examples'
 import { scenarioBundle } from './scenario-course'
-import type { CourseBundle } from './course-contract'
+import type { CourseBundle, CourseCheck } from './course-contract'
 import type { AzSimulationResult } from '../azure-net/engine'
 import { requirementDescription } from './runner-content'
 import { createCourseRunner, orderedTasks, type LearningWorkspace, type RunnerOptions, type TaskCompletion } from './runner'
 import { createProgressLedger, guidedProgressKey } from './progress-ledger'
 import { newBeltAchievement } from './belt-achievement'
 import { achievedStages, beltStages } from './belt-stages'
+import { haLessonPacket, haLessonRequirements, haLessonTopology } from './ha-scenario'
+import { hybridLessonRequirements, hybridLessonTopology } from './hybrid-scenario'
+import { packetObservationKey } from './task-guidance'
 
 function harness(overrides: Partial<RunnerOptions> = {}, course = exampleCourse) {
   const bundle = structuredClone(course)
@@ -60,7 +63,135 @@ function beforeTask(bundle: CourseBundle, taskId: string): TaskCompletion[] {
   }))
 }
 
+function checkHarness(check: CourseCheck, document: PlatformDocument, count = 1) {
+  const bundle = structuredClone(scenarioBundle)
+  const lesson = bundle.lessons[0]
+  lesson.tasks = lesson.tasks.slice(0, count)
+  lesson.taskOrder = lesson.tasks.map((task) => task.id)
+  bundle.course.lessonOrder = [lesson.id]
+  bundle.checks = lesson.tasks.map((task) => ({ ...structuredClone(check), id: task.checkId }))
+  bundle.scenarios[0].document = document
+  return harness({}, bundle)
+}
+
 describe('evidence-gated course runner', () => {
+  it('requires fresh native inspection and satisfied model requirements for a verification task', async () => {
+    const h = checkHarness({ id: 'inspected-verification', kind: 'routes.inspected', params: {
+      vnetId: 'hybrid-app', subnetId: 'work', prefix: '172.28.0.0/16',
+      requirements: [hybridLessonRequirements[0]],
+    } }, { mode: 'full', topology: hybridLessonTopology() })
+    h.load()
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    h.runner.observe(h.state().observation!)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].enabled = true
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe(h.state().observation!)
+    await h.pass()
+  })
+  it.each([
+    { vnetId: 'hybrid-hub', gatewayId: 'primary-er', prefix: '172.28.0.0/16' },
+    { locationId: 'hybrid-location', prefix: '172.28.0.0/16' },
+  ])('requires the original native gateway/location and current revision for $prefix inspection', async (params) => {
+    const h = checkHarness({ id: 'native-control-check', kind: 'control-routes.inspected', params },
+      { mode: 'full', topology: hybridLessonTopology() })
+    h.load()
+    const first = h.state().observation!
+    h.runner.observe({ ...first, ...('gatewayId' in params ? { vnetId: 'another-vnet' } : { locationId: 'another-location' }) })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    h.edit(() => {})
+    h.runner.observe(first)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe(h.state().observation!)
+    await h.pass()
+    expect(h.completed).toHaveBeenCalledOnce()
+  })
+
+  it('requires declarative fields on the original connection, not a passing unrelated flow or a replacement ID', async () => {
+    const h = checkHarness({ id: 'native-config-check', kind: 'topology.configured', params: {
+      expected: { vpnConnections: [{ id: 'branch-vpn', targetId: 'backup-vpn', enabled: true, bgpEnabled: true }] },
+      requirements: [hybridLessonRequirements.find((entry) => entry.id === 'hybrid-operations')!],
+    } }, { mode: 'full', topology: hybridLessonTopology() })
+    h.load()
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].enabled = true
+      document.topology.vpnConnections[0].id = 'replacement'
+    })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].id = 'branch-vpn'
+    })
+    await h.pass()
+    expect(h.completed).toHaveBeenCalledOnce()
+  })
+
+  it('checks the native destination lookup as well as the exact preferred row when grading transport selection', async () => {
+    const topology = hybridLessonTopology()
+    topology.vpnConnections[0].enabled = true
+    const h = checkHarness({ id: 'transport-selection-check', kind: 'topology.configured', params: {
+      expected: { vpnConnections: [{ id: 'branch-vpn', enabled: true }] },
+      selectedRoutes: [{ vnetId: 'hybrid-app', subnetId: 'work', prefix: '172.28.0.0/16',
+        nextHopResourceId: 'primary-er', destinationAddress: '172.28.10.10' }],
+      requirements: [hybridLessonRequirements.find((entry) => entry.id === 'hybrid-operations')!],
+    } }, { mode: 'full', topology })
+    h.load()
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    expect(h.completed).not.toHaveBeenCalled()
+    h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Native topology required')
+      document.topology.vpnConnections[0].advertisedPrefixes = ['172.28.0.0/16']
+    })
+    await h.pass()
+  })
+
+  it.each(['protocol', 'sourcePort', 'destinationPort', 'target'] as const)('rejects a native packet observation with the wrong %s and cannot reuse a prior trace', async (field) => {
+    const topology = haLessonTopology()
+    topology.udrTables[1].routes[0].nextHopIp = '10.80.3.10'
+    const h = checkHarness({ id: 'native-packet-check', kind: 'packet.inspected', params: {
+      vnetId: 'hub', packet: haLessonPacket, requirements: haLessonRequirements,
+    } }, { mode: 'full', topology }, 2)
+    h.load()
+    const first = h.state().observation!
+    const wrong = { ...haLessonPacket }
+    if (field === 'protocol') wrong.protocol = 'udp'
+    else if (field === 'target') wrong.target = haLessonPacket.source
+    else wrong[field]++
+    h.runner.observe({ ...first, prefix: packetObservationKey(wrong) })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.evaluate).not.toHaveBeenCalled()
+    const { workloadId, nicId, ipConfigurationId } = haLessonPacket.source as Extract<typeof haLessonPacket.source, { kind: 'workload' }>
+    h.runner.observe({ ...first, prefix: packetObservationKey({
+      ...haLessonPacket, source: { ipConfigurationId, nicId, workloadId, kind: 'workload' },
+    }) })
+    await h.pass()
+    h.runner.observe(first)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    expect(h.completed).toHaveBeenCalledOnce()
+    h.runner.observe(h.state().observation!)
+    await h.pass()
+    expect(h.completed).toHaveBeenCalledTimes(2)
+  })
+
   it.each(['saved', 'session', 'conflict'] as const)('celebrates only accepted upward belt awards, preserving the held debrief: %s', async (mode) => {
     vi.useFakeTimers()
     const ledger = { version: 1, policyVersion: 1, completions: beforeTask(exampleCourse, 'peering.explain') }

@@ -5,6 +5,8 @@ import type { Localized } from './content'
 import type { PracticeWorkspace } from './practice-workspace'
 import { createPlatformRequest } from '../platform/request'
 import { newBeltAchievement, type BeltAchievement } from './belt-achievement'
+import { matchesConfiguration } from './configuration-check'
+import { lookupSubnetEffectiveRoute } from '../azure-net/engine'
 
 export type LearningWorkspace = { practice: PracticeWorkspace; revision: number; scope: number }
 export type LearningObservation = {
@@ -14,6 +16,8 @@ export type LearningObservation = {
   siteId?: string
   hubId?: string
   tableId?: string
+  gatewayId?: string
+  locationId?: string
   prefix: string
 }
 export type TaskCompletion = {
@@ -164,6 +168,7 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
       else {
         const document = structuredClone(live.practice.document)
         let configured = true
+        if (check.kind === 'topology.configured') configured = matchesConfiguration(document.topology, check.params.expected)
         if (check.kind === 'udrs.configured') {
           configured = document.mode !== 'vwan' && check.params.routes.every((scope) => {
             const subnet = document.topology.vnets.find((vnet) => vnet.id === scope.vnetId)?.subnets.find((entry) => entry.id === scope.subnetId)
@@ -215,13 +220,15 @@ export function createCourseRunner(bundle: CourseBundle, options: RunnerOptions)
                 failures = evaluated.assessments.filter((entry) => entry.outcome !== 'satisfied').map((entry) => entry.id)
                 result = failures.length ? 'requirements' : 'passed'
               }
-              if (result === 'passed' && check.kind === 'connections.configured') {
+              if (result === 'passed' && (check.kind === 'connections.configured'
+                || check.kind === 'topology.configured' && check.params.selectedRoutes)) {
                 const simulation = evaluated.document.mode !== 'vwan' && evaluated.simulation
                   && 'subnetTables' in evaluated.simulation ? evaluated.simulation : undefined
-                const selected = check.params.selectedRoutes.every((scope) => {
+                const selected = check.params.selectedRoutes!.every((scope) => {
                   const table = simulation?.subnetTables?.[scope.subnetId]
                   return table?.vnetId === scope.vnetId && table.routes.some((route) =>
                     route.active && route.prefix === scope.prefix && route.nextHopResourceId === scope.nextHopResourceId)
+                    && (!scope.destinationAddress || lookupSubnetEffectiveRoute(table, scope.destinationAddress)?.nextHopResourceId === scope.nextHopResourceId)
                 })
                 if (!selected) result = 'requirements'
               }

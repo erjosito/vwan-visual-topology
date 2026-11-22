@@ -9,6 +9,7 @@ export type ProgressStatus = 'saved' | 'session' | 'corrupt' | 'unavailable' | '
 export type LedgerState = { ledger?: ProgressLedger; status: ProgressStatus; legacy: boolean }
 type StorageAccess = () => Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>
 const emptyLedger = (): ProgressLedger => ({ version: 1, policyVersion: 1, completions: [] })
+const enrollmentCourses = ['azure-networking-preview', 'azure-routing-scenarios', 'azure-routing-v2']
 const identity = (entry: TaskCompletion) => JSON.stringify([entry.courseId, entry.taskId, entry.assessmentVersion])
 const keys = ['courseId', 'contentVersion', 'lessonId', 'taskId', 'assessmentVersion', 'checkId', 'awardId',
   'points', 'title', 'sessionId', 'revision', 'scope', 'engineVersion', 'completedAt']
@@ -34,7 +35,7 @@ export function parseProgressLedger(raw: string): ProgressLedger {
   if (raw.length > progressLimits.chars) throw new Error('Progress storage limit')
   const value = JSON.parse(raw) as ProgressLedger
   if (!value || !objectKeys(value, ['version', 'policyVersion', 'completions', ...('enrollment' in value ? ['enrollment'] : [])])
-    || ('enrollment' in value && !['azure-networking-preview', 'azure-routing-scenarios'].includes(value.enrollment!)) || value.version !== 1
+    || ('enrollment' in value && !enrollmentCourses.includes(value.enrollment!)) || value.version !== 1
     || value.policyVersion !== 1 || !Array.isArray(value.completions) || value.completions.length > progressLimits.entries
     || value.completions.some((entry) => !validCompletion(entry))
     || new Set(value.completions.map(identity)).size !== value.completions.length) throw new Error('Invalid guided progress')
@@ -132,7 +133,7 @@ export function createProgressLedger(storage: StorageAccess) {
     },
     enroll(courseId: string, owned: boolean) {
       if (!state.ledger || !['saved', 'session', 'ownership'].includes(state.status)
-        || !['azure-networking-preview', 'azure-routing-scenarios'].includes(courseId)) return false
+        || !enrollmentCourses.includes(courseId)) return false
       return write({ ...state.ledger, enrollment: courseId }, owned)
     },
     retry: (owned: boolean) => !!state.ledger && !['corrupt', 'conflict', 'limit'].includes(state.status) && write(state.ledger, owned),

@@ -435,12 +435,22 @@ export function teachCourse(bundle: CourseBundle) {
           const site = topology.sites.find((entry) => entry.id === siteId)!
           task.instruction = l(`Open the received BGP routes for ${site.name}. Find ${prefix} and read its preferred next hop. This is the branch’s route back, not the Azure workload’s outbound table.`,
             `${site.name} の受信 BGP ルートを開き、${prefix} と優先ネクストホップを調べます。これは拠点からの復路であり、Azure ワークロードの送信テーブルではありません。`)
-        } else {
+        } else if ('hubId' in check.params) {
           const { hubId, tableId } = check.params
           const hub = topology.vwanHubs.find((entry) => entry.id === hubId)!
           const table = hubRouteTables(hub).find((entry) => entry.id === tableId)!
           task.instruction = l(`Open the hub route table ${hub.name} / ${table.name}. Find the exact prefix ${prefix}, or its absence, and read the selected route. This table is the lookup context for its associated connections, not a combination of all hub tables.`,
             `ハブのルート テーブル ${hub.name} / ${table.name} を開き、完全一致の ${prefix} の有無と選択されたルートを調べます。これは関連付いた接続の検索先であり、ハブ全体のテーブルの合成ではありません。`)
+        } else if ('gatewayId' in check.params) {
+          const { vnetId, gatewayId } = check.params
+          const gateway = topology.vnets.find((vnet) => vnet.id === vnetId)!.gateways.find((gateway) => gateway.id === gatewayId)!
+          task.instruction = l(`Inspect the routing table for ${gateway.name}. Find the exact prefix ${prefix}, or its absence. Gateway learning and workload propagation are separate evidence.`,
+            `${gateway.name} のルーティング テーブルを開き、完全一致の ${prefix} の有無を確認します。ゲートウェイの学習とワークロードへの伝達は別々の根拠です。`)
+        } else {
+          const locationId = check.params.locationId
+          const location = topology.erLocations.find((location) => location.id === locationId)!
+          task.instruction = l(`Inspect ${location.name}'s aggregate ExpressRoute location table for ${prefix}. This is not a separate observed table for each physical MSEE.`,
+            `${location.name} の ExpressRoute 拠点の集約テーブルで ${prefix} を確認します。これは物理 MSEE ごとの個別の観測テーブルではありません。`)
         }
       }
       task.debrief ??= taskTeaching[task.id] ?? { paragraphs, references }

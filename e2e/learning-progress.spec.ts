@@ -6,8 +6,10 @@ import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { practiceLockName } from '../src/learning/practice-ownership'
 import { scenarioBundle } from '../src/learning/scenario-course'
 import { orderedTasks } from '../src/learning/runner'
-import { openLearning, learningAdvancedOptions, completeLearningTasks, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { archivedScenarioStorageState, openLearning, learningAdvancedOptions, completeLearningTasks, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
 import { runnerLabels } from '../src/learning/runner-content'
+
+test.use({ storageState: archivedScenarioStorageState() })
 
 for (const language of ['en', 'ja'] as const) {
   test(`${language}: a newly earned belt celebrates its topics without advancing the debrief or replaying on reload and edition changes`, async ({ page }) => {
@@ -298,6 +300,8 @@ test('actual competing tabs cannot write practice or farm points, and recover th
 
 test('missing exclusive locking fails closed without persisting or opening a practice canvas', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'locks', { value: undefined }))
+  await page.goto('/?mode=full')
+  await page.evaluate((key) => localStorage.removeItem(key), guidedProgressKey)
   await open(page)
   await learningSidebar(page).getByRole('button', { name: 'Load practice network', exact: true }).click()
   await learningSidebar(page).getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()

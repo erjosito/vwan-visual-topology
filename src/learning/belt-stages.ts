@@ -1,11 +1,13 @@
 import type { Localized } from './content'
 import type { CourseBundle } from './course-contract'
 import type { BeltAchievement } from './belt-achievement'
+import { curriculumV2Stages } from './curriculum-v2-stages'
 
 type BeltStage = { beltId: string; lessonIds: string[]; title: Localized; introduction: Localized; topics: Localized[] }
 const l = (en: string, ja: string): Localized => ({ en, ja })
 
 export const beltStages: Record<string, BeltStage[]> = {
+  'azure-routing-v2': curriculumV2Stages,
   'azure-routing-scenarios': [
     { beltId: 'yellow', lessonIds: ['private-link'], title: l('Private connectivity', 'プライベート接続'),
       introduction: l('Your first stage builds a private path between two services: identify their address ranges, read effective routes, then connect their VNets.',
