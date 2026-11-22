@@ -3,7 +3,7 @@ import { t, useLanguage } from './i18n'
 import { randomUUID } from './random-id'
 import { CanvasMaximizeButton } from './CanvasPresentation'
 import { useCanvasPresentation } from './useCanvasPresentation'
-import { WorkspaceSessionContext, type WorkspaceEditorHistory } from './workspace-context'
+import { WorkspaceSessionContext, WorkspaceTabsContext, type WorkspaceEditorHistory } from './workspace-context'
 import { selectWorkspace, workspaceSessionKey, workspaceStartup, workspaceStorageKeys, type WorkspaceProvider, type WorkspaceStorage } from './workspace-session'
 import { addWorkspaceTab, closeWorkspaceTabs, reopenWorkspaceTab, readWorkspaceTabs, workspaceTabKey, workspaceTabsKey, workspaceTabsLimit, writeWorkspaceTabs, type WorkspaceTabs, type WorkspaceTab } from './workspace-tabs'
 import { createWorkspaceDocuments } from './workspace-documents'
@@ -374,6 +374,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       return false
     }
   }
+  const tabFocusRequest = useRef<string | undefined>(undefined)
   const activateTab = (tab: WorkspaceTab, persist = true) => {
     if (active?.id === tab.id && !practiceRef.current?.current?.active) return true
     if (persist && !confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return false
@@ -730,13 +731,18 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       },
     } : undefined,
   }}>
-    <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style} data-ui-preview={presentationPreview || undefined}
-      data-header-actions={headerActionsOpen || undefined}>
-      {practiceReady && !practicing && tabs.tabs.length > 0 && <WorkspaceTabsNavigation tabs={tabs.tabs} activeId={active?.id}
+    <WorkspaceTabsContext value={{ restoreFocus: () => {
+      const id = tabFocusRequest.current
+      const button = id ? document.getElementById(`workspace-tab-${id}`) : undefined
+      if (button) { button.focus(); tabFocusRequest.current = undefined }
+    }, navigation: practiceReady && !practicing && tabs.tabs.length > 0 ? <WorkspaceTabsNavigation tabs={tabs.tabs} activeId={active?.id}
         temporary={ownership.status !== 'owned'}
         getSave={tab => documents.get(tab).save}
         getCommands={tab => documents.get(tab).commands}
-        onActivate={activateTab} onClose={tab => closeTabs([tab])} onNew={() => { void newWorkspace() }} />}
+        onActivate={tab => { if (tab.id !== active?.id && activateTab(tab)) tabFocusRequest.current = tab.id }}
+        onClose={tab => closeTabs([tab])} onNew={() => { void newWorkspace() }} /> : null }}>
+    <div className={`simulator-shell${maximized ? ' canvas-maximized' : ''}`} data-canvas-style={style} data-ui-preview={presentationPreview || undefined}
+      data-header-actions={headerActionsOpen || undefined}>
       {notice && !libraryOpen && <p role="alert">{t(notice)}</p>}
       <CanvasMaximizeButton />
       {(practice || practiceNotice) && <Suspense fallback={null}><PracticeWorkspaceBar active={practicing}
@@ -763,5 +769,6 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       {closing && <Suspense fallback={null}><CloseDocumentsDialog documents={closing.tabs.map(tab => documents.get(tab))}
         onClose={() => setClosing(undefined)} onDiscard={() => finishClose(closing.tabs, closing.after)} /></Suspense>}
     </div>
+    </WorkspaceTabsContext>
   </WorkspaceSessionContext>
 }

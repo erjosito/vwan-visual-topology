@@ -1,4 +1,4 @@
-import { createContext, useContext, useId, useLayoutEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from 'react'
+import { createContext, useContext, useId, useLayoutEffect, useState, useSyncExternalStore, type Dispatch, type ReactNode, type SetStateAction } from 'react'
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 import type { PlatformDocument } from './platform/contract'
@@ -56,6 +56,8 @@ export const WorkspaceSessionContext = createContext<{
     importAnonymous: () => Promise<boolean>
   }
 } | undefined>(undefined)
+
+export const WorkspaceTabsContext = createContext<{ navigation: ReactNode; restoreFocus: () => void } | undefined>(undefined)
 
 export const useWorkspaceSession = () => useContext(WorkspaceSessionContext)
 
