@@ -31,6 +31,51 @@ async function load(page: Page, topology: AzNetTopology, mode = 'hub-spoke') {
   await page.goto(`/?mode=${mode}`)
 }
 
+test('queued diagnosis replies cannot cross document owners and interrupted runs restore as cancelled', async ({ page }) => {
+  await page.addInitScript(() => {
+    const replies: (() => void)[] = []
+    const NativeWorker = window.Worker
+    window.Worker = class extends NativeWorker {
+      constructor(url: string | URL, options?: WorkerOptions) {
+        super(url, options)
+        if (String(url).includes('diagnostics-worker')) Object.defineProperty(this, 'onmessage', {
+          set: (handler: (event: MessageEvent) => void) => {
+            this.addEventListener('message', event => replies.push(() => handler(event)))
+          },
+        })
+      }
+    }
+    Object.assign(window, { pendingDiagnosisReplies: () => replies.length,
+      flushDiagnosisReplies: () => replies.splice(0).forEach(deliver => deliver()) })
+  })
+  const first = missingTransitTopology()
+  first.name = 'Diagnosis owner A'
+  await load(page, first, 'full')
+  await page.getByTestId('aznet-check-routing-btn').click()
+  const pending = () => page.evaluate(() => (window as unknown as { pendingDiagnosisReplies: () => number }).pendingDiagnosisReplies())
+  const flush = () => page.evaluate(() => (window as unknown as { flushDiagnosisReplies: () => void }).flushDiagnosisReplies())
+  await expect.poll(pending).toBe(1)
+  const second = structuredClone(first)
+  second.name = 'Diagnosis owner B'
+  second.sites[0].id = 'second-dc'
+  second.erLinks[1].targetId = 'second-dc'
+  await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+    name: 'second.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(second)),
+  })
+  const tabs = page.getByRole('tablist', { name: 'Designs', exact: true })
+  await expect(tabs.getByRole('tab', { name: second.name, exact: true })).toHaveAttribute('aria-selected', 'true')
+  await flush()
+  await expect(page.getByTestId('aznet-routing-check-status')).toHaveCount(0)
+  await expect(page.locator('[data-testid^="aznet-finding-badge-"]')).toHaveCount(0)
+  await page.getByTestId('aznet-check-routing-btn').click()
+  await expect.poll(pending).toBe(1)
+  await flush()
+  await expect(page.getByTestId('aznet-finding-badge-site-second-dc')).toBeVisible()
+  await tabs.getByRole('tab', { name: first.name, exact: true }).click()
+  await expect(page.locator('.routing-check-status')).toContainText('Analysis cancelled')
+  await expect(page.locator('[data-testid^="aznet-finding-badge-"]')).toHaveCount(0)
+})
+
 for (const mode of ['hub-spoke', 'full']) {
   test(`${mode} checks the landscape in one click, navigates endpoint badges and refreshes repaired routing`, async ({ page }) => {
     await load(page, missingTransitTopology(), mode)
