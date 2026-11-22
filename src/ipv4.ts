@@ -1,8 +1,17 @@
 export function ipv4(value: string): number | undefined {
   if (!/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(value)) return undefined
-  const octets = value.split('.').map(Number)
-  if (octets.some((n) => n > 255)) return undefined
-  return octets.reduce((result, n) => result * 256 + n, 0)
+  let address = 0, octet = 0
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code === 46) {
+      if (octet > 255) return undefined
+      address = address * 256 + octet
+      octet = 0
+    } else {
+      octet = octet * 10 + code - 48
+    }
+  }
+  return octet > 255 ? undefined : address * 256 + octet
 }
 
 export function cidr(value: string): { network: number; length: number } | undefined {

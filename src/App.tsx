@@ -14,6 +14,7 @@ import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
 import type { LayoutMode, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { simulate } from './routing'
+import { vwanDisplayResult, vwanDisplaySimulation, vwanRoutingInput } from './vwan-routing-input'
 import { ipv4, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
 import type { DiagramContextMenu } from './TopologyDiagram'
@@ -29,7 +30,6 @@ import { RouteMapInspector } from './RouteMapInspector'
 import { StaticRoutingPanel } from './StaticRoutingPanel'
 import type { RouteMode } from './route-views'
 import { erLocationBgpTable } from './route-views'
-import { AzureComparisonPanel } from './AzureComparisonPanel'
 import type { ComparisonSession } from './AzureComparisonPanel'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
 import { RoutingIssuesPanel } from './RoutingIssuesPanel'
@@ -56,6 +56,7 @@ const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ d
 const VpnRoutingWizard = lazy(() => import('./VpnRoutingWizard').then((module) => ({ default: module.VpnRoutingWizard })))
 const RouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.RouteMapsPanel })))
 const BgpNeighborsPanel = lazy(() => import('./BgpNeighborsPanel'))
+const AzureComparisonPanel = lazy(() => import('./AzureComparisonPanel').then(module => ({ default: module.AzureComparisonPanel })))
 const FlowExportControls = lazy(() => import('./FlowExportControls').then(module => ({ default: module.FlowExportControls })))
 const ErLocationInfoModal = lazy(() => import('./ErLocationInfoModal').then(module => ({ default: module.ErLocationInfoModal })))
 const SampleGallery = lazy(() => import('./SampleGallery').then((module) => ({ default: module.VwanSampleGallery })))
@@ -265,7 +266,11 @@ function App() {
     mounted.current = true
     return () => { mounted.current = false }
   }, [])
-  const simulation = useMemo(() => measureAzWork('simulation', () => simulate(activeTopology)), [activeTopology])
+  const routingInput = useMemo(() => measureAzWork('routing-projection', () => vwanRoutingInput(activeTopology)), [activeTopology])
+  const routingTopology = useMemo(() => JSON.parse(routingInput.revision) as Topology, [routingInput.revision])
+  const displayNames = useMemo(() => JSON.parse(routingInput.nameRevision) as string[], [routingInput.nameRevision])
+  const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulate(routingTopology)), [routingTopology])
+  const simulation = useMemo(() => measureAzWork('display-binding', () => vwanDisplaySimulation(rawSimulation, displayNames)), [rawSimulation, displayNames])
   const nvaSiteIds = useMemo(() => embeddedSpokeNvaSiteIds(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),
@@ -277,13 +282,18 @@ function App() {
   const sourceTables = sourceHub ? hubRouteTables(sourceHub).filter((table) => table.id !== 'noneRouteTable') : []
   const sourceContextId = sourceTables.some((table) => table.id === sourceTableId) ? sourceTableId : DEFAULT_HUB_TABLE
   const targetNode = nodes.find((n) => nodeKey(n) === target)
-  const paths: (NodePath | GroupPath)[] = useMemo(() => {
-    if (!tracing) return []
-    return measureAzWork('trace', () => {
-      if (groupTrace) return traceGroupedPaths(activeTopology, simulation, parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group)
-      return source && topologyObject(activeTopology, parseNode(source)) ? traceNodePath(activeTopology, simulation, parseNode(source), destination, undefined, sourceContextId) : []
-    })
-  }, [tracing, source, target, activeTopology, simulation, destination, groupTrace, sourceContextId])
+  const rawPaths = useMemo(() => {
+    if (!tracing || groupTrace) return []
+    return measureAzWork('trace', () => source && topologyObject(routingTopology, parseNode(source))
+      ? traceNodePath(routingTopology, rawSimulation, parseNode(source), destination, undefined, sourceContextId) : [])
+  }, [tracing, source, routingTopology, rawSimulation, destination, groupTrace, sourceContextId])
+  const groupedPaths = useMemo(() => {
+    if (!tracing || !groupTrace) return []
+    return measureAzWork('trace', () => traceGroupedPaths(activeTopology, simulation,
+      parseNode(groupTrace.direction === 'to' ? source : target), groupTrace.direction, groupTrace.group))
+  }, [tracing, groupTrace, activeTopology, simulation, source, target])
+  const paths: (NodePath | GroupPath)[] = useMemo(() => groupTrace ? groupedPaths : vwanDisplayResult(rawPaths, displayNames),
+    [groupTrace, groupedPaths, rawPaths, displayNames])
   const inspected = topologyObject(topology, router)
   const hub = router.kind === 'hub' ? topology.hubs.find((h) => h.id === router.id) : undefined
   const activeView = routeView === 'firewall' && !hub?.firewall && !hub?.routingIntent.private && !hub?.routingIntent.internet ? 'bgp' : routeView
@@ -817,7 +827,7 @@ function App() {
             onClose={() => setBgpInspection(undefined)} /></Suspense>}
           {panel === 'diagnostics' && <DiagnosticsPanel topology={activeTopology} isAcknowledged={isAcknowledged} onAcknowledge={acknowledgeWarning} onRestoreAll={restoreWarningAttention} onFinding={showDiagnostic} onInspect={(node) => showRoutes(node)} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClearHighlight={() => setDiagnosticHighlight(undefined)} onProfileChange={cancelRoutingCheck} onClose={closePanel} />}
           {panel === 'issues' && currentCheck?.report && <RoutingIssuesPanel key={`${routingKey}:${routingIssueId ?? ''}:${reviewCoverage}`} topology={topology} report={currentCheck.report} isAcknowledged={isAcknowledged} onAcknowledge={acknowledgeWarning} onRestoreAll={restoreWarningAttention} findingId={routingIssueId} coverageOpen={reviewCoverage} selectedFindingId={diagnosticPaths ? diagnosticHighlight?.findingId : undefined} onFinding={showDiagnostic} onShowAll={() => setRoutingIssueId(undefined)} onInspect={showRoutes} onEditObject={editCoveredObject} onOpenStaticRouting={(router) => { setEditorRequest(undefined); openStaticRouting(router) }} onAssignPrefixToSite={assignPrefixToSite} onClose={closePanel} />}
-          {panel === 'comparison' && <AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} />}
+          {panel === 'comparison' && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureComparisonPanel topology={topology} session={comparisonSession} onSession={setComparisonSession} onSelect={setSelection} onClose={closePanel} /></Suspense>}
           {panel === 'azure' && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureFilesPanel key={pendingAzureImport?.revision ?? 'workspace'} topology={topology} pendingImport={pendingAzureImport?.topology} onImportFile={() => importer.current?.click()} onCompare={() => { finishCaptureImport(); setHighlighting(false); setTracing(false); setPanel('comparison') }} onConfirmImport={() => { if (pendingAzureImport) { reset(validateTopology(pendingAzureImport.topology)); finishCaptureImport() } }} onCancelImport={() => { finishCaptureImport(); setPanel(undefined) }} onClose={() => { finishCaptureImport(); closePanel() }} /></Suspense>}
           <TopologyDiagram topology={topology} faults={scenario.affected} risks={risks} onRisk={setResilienceEndpoint} onClearSelection={() => setSelection(undefined)}
             canvasStatus={(highlighting || tracing || !!diagnosticPaths?.length || routingIssues.length > 0) && <div className="highlight-status" role="status">{(highlighting || tracing || !!diagnosticPaths?.length) ? (diagnosticPaths?.length ? t('Diagnostic path evidence') : tracing ? groupTrace ? `${groupSummary} · ${paths.length ? pathStatus : t("No matching sources or destination prefixes configured")}` : t('Path: {0} → {1} · {2} · {3}', sourceNode?.name ?? t('source'), targetNode?.name ?? destination, destinationPrefix || destination, pathStatus) : prefix ? t("Preferred routes to {0}", prefix) : t("Preferred routes · {0}", inspected?.name ?? t('Router'))) : t('{0} routing issues', routingIssues.length)}{tracing && <button onClick={() => setPanel('paths')}>{t("Path details")}</button>}{(highlighting || tracing || !!diagnosticPaths?.length) && <button onClick={() => { setDiagnosticHighlight(undefined); setHighlighting(false); setTracing(false); setPrefix('') }}>{t("Clear highlighting")}</button>}{routingIssues.length > 0 && <button onClick={clearHighlightsAndIcons}>{t("Clear highlights & icons")}</button>}</div>}

@@ -1,7 +1,7 @@
 # Interactive responsiveness measurements
 
-This is the measurement phase of #384, not a worker rollout or a routing
-optimization. Interactive native edits and traces are measured separately from
+This records the measurement phase and bounded native optimization of #384,
+not a worker rollout. Interactive native edits and traces are measured separately from
 the resumable assessment workers and the public/headless platform executor.
 
 ## Reproduce
@@ -69,7 +69,7 @@ opportunity. It is **not physical paint**, user typing duration, Azure
 convergence, or Node/Playwright command elapsed time.
 
 Opt-in `window.__AZNET_METRICS__` records bounded local spans for mutation/
-validation, history comparison/cloning, routing projection, simulation, trace,
+validation, history comparison/cloning, routing projection, simulation, display binding, trace,
 diagnostics, persistence, and render-to-layout. Normal sessions do not enable
 timing or send telemetry. Render spans do not increment durable/engine counters.
 Classic `editor-submit` includes its nested save/history/persistence pipeline;
@@ -81,8 +81,9 @@ retain their grouping.
 
 Reports record Git HEAD, dirty-source/diff/untracked hashes, built-file hashes,
 workload dimensions/hash, Node/Chromium versions, CPU, logical cores, and
-available/total memory. Vite embeds the application version, not a source
-revision: build hashes and controlled source are the provenance evidence.
+available/total memory. Vite embeds the application version; CI also sets
+`VITE_APP_REVISION` to its source SHA. Local benchmark provenance uses recorded
+source identity and built-file hashes, not an assumed CI revision.
 Commit a clean measurement-tool source first when collecting a reference
 baseline; the generated report can be committed afterward.
 
@@ -147,8 +148,148 @@ before/after runs under comparable load with at least 20 samples:
    Recheck variable-load results rather than treating one five-sample run as
    a CI timing gate.
 
-These are selected targets, **not delivered improvements**. Worker candidates must
+These targets were selected before optimization. Any future worker candidates must
 preserve native/provider semantics, original IDs, admission and startup bounds,
 and include document/generation ownership, cancellation, pending-state honesty,
-and tab/account/practice stale-result tests. No improvement or lifecycle
-qualification is claimed by this measurement-only delivery.
+and tab/account/practice stale-result tests. No interactive workers or new
+asynchronous result lifecycle were introduced.
+
+## Bounded optimization and paired evidence
+
+The fresh [before report](benchmarks/interactive-paired-before.json) measures
+900 actions from clean `37a36dd53bc3c2159d74c35f9bf5e24aaf93923f`; the
+[corrected full report](benchmarks/interactive-corrected-full.json) measures
+the identical nine workloads and 20 samples per operation from clean
+`c476571ec8b0248cdf6c4141b55af03f8fd24d3a`. Each run retains one excluded
+warmup, original native IDs, exact saved edits, complete Undo restoration,
+actual trace execution, unchanged source/build checks, and raw phase counts.
+Hardware, Node and Chromium match. Local builds were 0.6.0 and 0.6.1;
+the combined curriculum/architecture release version is 0.7.0, assigned before final CI.
+
+The change reduces repeated IPv4/CIDR allocation and parsing, performs stable
+single-scan longest-prefix selection, shares prefix ranges only within one
+native simulation, and avoids redundant effective-route clones. It adds no
+global route cache, admission relaxation or public-executor reuse.
+
+VWAN simulation and pair traces use full semantic input, with known display
+names rebound at presentation. IDs, unknown native fields, inferred ER location
+names, hub regions and semantic static-route identities remain routing inputs.
+Blank names retain their modeling eligibility. Group traces still use current
+native names because destination-name deduplication is part of their behavior.
+Name edits and Undo execute neither simulation nor pair trace in every measured
+VWAN case; the browser regression also checks current visible hub prose.
+
+Observed median / p95 milliseconds, **before -> corrected full run**:
+
+| Mode / tier | Display edit | Semantic edit | Semantic Undo | Trace |
+|---|---:|---:|---:|---:|
+| VWAN / small | 23/25 -> 41/80 | 23/25 -> 34/64 | 24/26 -> 28/33 | 25/27 -> 24/47 |
+| VWAN / dense | 154/279 -> 186/418 | 135/231 -> 255/330 | 113/253 -> 233/281 | 47/157 -> 196/238 |
+| VWAN / near-limit | 584/1096 -> 195/891 | 453/1281 -> 240/1215 | 448/777 -> 186/928 | 449/890 -> 223/795 |
+| H&S / small | 36/48 -> 26/31 | 33/60 -> 22/29 | 38/55 -> 24/28 | 29/42 -> 25/32 |
+| H&S / dense | 345/502 -> 108/142 | 1370/1874 -> 270/355 | 1461/1818 -> 288/383 | 104/127 -> 41/59 |
+| H&S / near-limit sparse | 445/700 -> 201/235 | 877/1178 -> 362/400 | 812/1056 -> 272/336 | 521/785 -> 232/282 |
+| Full / small | 32/54 -> 23/27 | 31/45 -> 21/30 | 30/43 -> 22/24 | 30/48 -> 27/31 |
+| Full / dense | 353/507 -> 122/145 | 1174/1827 -> 342/396 | 1076/1732 -> 328/404 | 120/177 -> 51/67 |
+| Full / near-limit sparse | 484/699 -> 200/246 | 923/1187 -> 349/421 | 871/1100 -> 290/418 | 512/640 -> 260/303 |
+
+The full corrected run satisfies both mixed dense edit/Undo improvement targets,
+all small p95 targets, and every near-limit median check. **It does not alone
+qualify dense VWAN**: display p95 exceeds 300 ms and trace median exceeds the
+earlier paired control. Those failures and wide near-limit tails are retained,
+not hidden or converted into a passing full-run claim.
+
+### Rejected approach and variance rechecks
+
+The [unqualified broad-binding report](benchmarks/interactive-rejected-broad-binding.json)
+retains all 900 actions at `c4877920956fa5ff06e441cf861f781fc91032b1`.
+Traversing the entire VWAN simulation DAG to replace display strings was
+unnecessarily expensive. Simulation routes contain IDs and semantic static-route
+names; only warning prose needs binding. The corrected typed helper binds
+warnings without traversing route candidates, protected by a regression test.
+
+[Complete native parity](benchmarks/interactive-native-parity.json) covers
+27 original/rename/semantic workload cases, two samples each. The
+[imported VWAN projection probe](benchmarks/interactive-vwan-projection-parity.json)
+also compares complete simulation and pair-trace hashes against fresh native
+outputs across nine variants, twice each, with native-input nonmutation checks.
+Its dense/near-limit last samples measure roughly 43-246 ms for broad DAG
+binding versus 0.018-0.049 ms for warning-only binding. These are isolated
+probe costs, **not browser latency or fleet guarantees**.
+
+After the corrected full run, unchanged-source **ABBA** dense VWAN rechecks
+bracketed two after runs with two before runs. Each report contains all five
+operations, 20 samples each, the same excluded warmup/workload/build identities,
+and complete native functional checks. No concurrent local builds or profiles ran.
+
+| Run | Source | Display median/p95 | Trace median/p95 |
+|---|---|---:|---:|
+| [A1 before](benchmarks/interactive-dense-vwan-before-1.json) | `37a36dd` | 159.4/213.7 | 70.2/163.0 |
+| [B1 corrected](benchmarks/interactive-dense-vwan-after-1.json) | `c476571` | 83.0/105.8 | 60.8/136.5 |
+| [B2 corrected](benchmarks/interactive-dense-vwan-after-2.json) | `c476571` | 84.1/114.8 | 57.2/142.7 |
+| [A2 before](benchmarks/interactive-dense-vwan-before-2.json) | `37a36dd` | 160.2/204.4 | 61.8/146.2 |
+
+Both 20-sample pairs satisfy the original dense display ceilings and show
+no trace median regression (about 13% and 7% lower, respectively). Semantic
+edit/Undo medians also do not regress in either pair. This supports the bounded
+change under these local conditions; it does **not** erase the failed full-run
+tails or guarantee <=300 ms under arbitrary shared-machine load. Mixed observed
+edit/Undo medians improve about 70-80%, with p95 reductions about 77-81%, but
+ambient load also varies. These remain reproducible local evidence, not a CI
+wall-clock gate, physical-paint claim, dense 1,000-VNet transit result, public
+executor qualification, or real Azure validation.
+
+### Combined curriculum/architecture qualification
+
+The [combined 0.7.0 full report](benchmarks/interactive-combined-full.json)
+repeats all 900 actions after integrating merged curriculum #406, from clean
+`60d384891071ec163122f67e8d46fac1640bdcd0`. All native functional checks,
+mixed dense edit/Undo reduction targets, dense VWAN display ceilings and
+near-limit median checks pass. Mixed dense semantic edit/Undo medians are
+349/314 ms for H&S and 281/313 ms for Full; p95 is 747/633 and 456/565 ms,
+respectively, versus the fresh before controls above.
+
+This full run still has two failed event-fence checks: small VWAN trace p95
+121.8 ms and dense VWAN trace median 144.4 ms against the older full control.
+Native trace p95 is 0.3 ms for small; its render-to-layout p95 is 15.7 ms.
+The dense trace kernel median is 2.1 ms and render-to-layout median 45.1 ms.
+These overlapping spans do not explain the whole rendering-opportunity fence,
+and must not be added or treated as proof of the external scheduling cause.
+
+Therefore an additional unchanged-source ABBA experiment brackets the
+**integrated** source, covering both affected tiers. Each of its four reports
+contains 200 measured actions: both workloads, all five operations, 20 samples
+per operation, the same excluded warmup and complete native functional checks.
+
+| Run | Small trace median/p95 | Dense display median/p95 | Dense trace median/p95 |
+|---|---:|---:|---:|
+| [A1 before](benchmarks/interactive-integrated-vwan-before-1.json) | 24.1/37.2 | 189.9/301.4 | 78.2/212.4 |
+| [B1 integrated](benchmarks/interactive-integrated-vwan-after-1.json) | 23.5/31.8 | 100.1/173.5 | 54.9/205.7 |
+| [B2 integrated](benchmarks/interactive-integrated-vwan-after-2.json) | 22.3/33.6 | 77.8/166.0 | 42.3/74.6 |
+| [A2 before](benchmarks/interactive-integrated-vwan-before-2.json) | 23.5/26.1 | 171.1/279.5 | 61.4/208.1 |
+
+Both integrated pairs satisfy **all original selected checks** for those tiers:
+all five small-operation p95 values are below 100 ms, dense display medians/p95
+are below 200/300 ms, name edits/Undo do not recompute simulation or pair trace,
+and trace medians do not regress (about 30% and 31% lower). Dense semantic
+edit/Undo medians also do not regress. Together with complete full-mode coverage,
+this qualifies the bounded improvement under the recorded local conditions.
+The failing full-run fences, wide tails and changing ambient load remain
+explicit limitations; no unconditional fleet latency guarantee is claimed.
+
+Final integration CI must additionally qualify the combined native browser,
+Node/MCP, Electron, learning, account/document ownership, collectors and startup
+budgets. Benchmark evidence is generated before committing its reports; later
+documentation-only commits do not alter the measured runtime source. Publication
+uses only the subsequently successful exact main CI run/attempt, never these
+local builds or PR artifacts.
+
+The first integrated CI exposed a deterministic VWAN startup-budget failure:
+300,313 local gzip bytes versus the unchanged 300,000-byte ceiling. The
+on-demand Azure comparison panel is now lazy, with the existing localized
+loading state and unchanged parent-owned comparison session. No threshold,
+shared stylesheet order, generic vendor policy or optional GIF/learning boundary
+was changed. All three native production startup tests pass with the same
+raw/gzip limits; five browser regressions additionally cover comparison privacy,
+table scope, localization, bad imports, stale results and rename/Undo caches.
+Final exact-head CI still must pass every gate before landing.

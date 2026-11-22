@@ -1,6 +1,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import * as addressPrimitives from '../ipv4'
 import {
   compareAzNetWithObservations,
   importAzNetCapture,
@@ -70,6 +71,21 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
   }
 
   const expectedPair = { scope: 'pair', sourceKey: 'subnet:spoke:work', destinationKey: 'site:site:172.16.0.0/24' } as const
+
+  it('performs one prefix parse per active LPM row and does not cache mutable route-table state', () => {
+    const table = simulateAzNet(transitTopology('Vpn')).subnetTables.work
+    table.routes.reverse()
+    const parse = vi.spyOn(addressPrimitives, 'cidr')
+    try {
+      const selected = lookupSubnetEffectiveRoute(table, '172.16.0.4')!
+      expect(selected.source).toBe('VirtualNetworkGateway')
+      expect(parse).toHaveBeenCalledTimes(table.routes.filter(route => route.active).length)
+      selected.active = false
+      expect(lookupSubnetEffectiveRoute(table, '172.16.0.4')?.id).not.toBe(selected.id)
+    } finally {
+      parse.mockRestore()
+    }
+  })
 
   it.each([false, true])('exports original per-VNet communities over classic ER and preserves alternatives and origin through site policy (ARS: %s)', (ars) => {
     const topology = transitTopology()
