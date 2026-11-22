@@ -164,7 +164,7 @@ the identical nine workloads and 20 samples per operation from clean
 warmup, original native IDs, exact saved edits, complete Undo restoration,
 actual trace execution, unchanged source/build checks, and raw phase counts.
 Hardware, Node and Chromium match. Local builds were 0.6.0 and 0.6.1;
-the combined curriculum/architecture release version is assigned before final CI.
+the combined curriculum/architecture release version is 0.7.0, assigned before final CI.
 
 The change reduces repeated IPv4/CIDR allocation and parsing, performs stable
 single-scan longest-prefix selection, shares prefix ranges only within one
@@ -238,3 +238,48 @@ edit/Undo medians improve about 70-80%, with p95 reductions about 77-81%, but
 ambient load also varies. These remain reproducible local evidence, not a CI
 wall-clock gate, physical-paint claim, dense 1,000-VNet transit result, public
 executor qualification, or real Azure validation.
+
+### Combined curriculum/architecture qualification
+
+The [combined 0.7.0 full report](benchmarks/interactive-combined-full.json)
+repeats all 900 actions after integrating merged curriculum #406, from clean
+`60d384891071ec163122f67e8d46fac1640bdcd0`. All native functional checks,
+mixed dense edit/Undo reduction targets, dense VWAN display ceilings and
+near-limit median checks pass. Mixed dense semantic edit/Undo medians are
+349/314 ms for H&S and 281/313 ms for Full; p95 is 747/633 and 456/565 ms,
+respectively, versus the fresh before controls above.
+
+This full run still has two failed event-fence checks: small VWAN trace p95
+121.8 ms and dense VWAN trace median 144.4 ms against the older full control.
+Native trace p95 is 0.3 ms for small; its render-to-layout p95 is 15.7 ms.
+The dense trace kernel median is 2.1 ms and render-to-layout median 45.1 ms.
+These overlapping spans do not explain the whole rendering-opportunity fence,
+and must not be added or treated as proof of the external scheduling cause.
+
+Therefore an additional unchanged-source ABBA experiment brackets the
+**integrated** source, covering both affected tiers. Each of its four reports
+contains 200 measured actions: both workloads, all five operations, 20 samples
+per operation, the same excluded warmup and complete native functional checks.
+
+| Run | Small trace median/p95 | Dense display median/p95 | Dense trace median/p95 |
+|---|---:|---:|---:|
+| [A1 before](benchmarks/interactive-integrated-vwan-before-1.json) | 24.1/37.2 | 189.9/301.4 | 78.2/212.4 |
+| [B1 integrated](benchmarks/interactive-integrated-vwan-after-1.json) | 23.5/31.8 | 100.1/173.5 | 54.9/205.7 |
+| [B2 integrated](benchmarks/interactive-integrated-vwan-after-2.json) | 22.3/33.6 | 77.8/166.0 | 42.3/74.6 |
+| [A2 before](benchmarks/interactive-integrated-vwan-before-2.json) | 23.5/26.1 | 171.1/279.5 | 61.4/208.1 |
+
+Both integrated pairs satisfy **all original selected checks** for those tiers:
+all five small-operation p95 values are below 100 ms, dense display medians/p95
+are below 200/300 ms, name edits/Undo do not recompute simulation or pair trace,
+and trace medians do not regress (about 30% and 31% lower). Dense semantic
+edit/Undo medians also do not regress. Together with complete full-mode coverage,
+this qualifies the bounded improvement under the recorded local conditions.
+The failing full-run fences, wide tails and changing ambient load remain
+explicit limitations; no unconditional fleet latency guarantee is claimed.
+
+Final integration CI must additionally qualify the combined native browser,
+Node/MCP, Electron, learning, account/document ownership, collectors and startup
+budgets. Benchmark evidence is generated before committing its reports; later
+documentation-only commits do not alter the measured runtime source. Publication
+uses only the subsequently successful exact main CI run/attempt, never these
+local builds or PR artifacts.
