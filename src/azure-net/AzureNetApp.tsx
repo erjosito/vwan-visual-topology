@@ -50,6 +50,7 @@ import type {
 } from './azure-import'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
+import { basicGatewayFix } from './coexistence'
 
 import {
   AZ_NET_PAIR_LIMIT,
@@ -455,6 +456,15 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   // One-click Auto-Remediation for diagnostic findings
   const applyAutoFix = (finding: AzDiagnosticFinding) => {
     commitTopology((draft) => {
+      if (finding.category === 'gateway-coexistence') {
+        const fix = basicGatewayFix(draft, finding)
+        if (fix) {
+          fix.gateway.sku = fix.sku
+          if (fix.sku === 'VpnGw1AZ') fix.gateway.vpnGatewayGeneration = 'Generation1'
+          else if (/^VpnGw[45](AZ)?$/.test(fix.sku)) fix.gateway.vpnGatewayGeneration = 'Generation2'
+        }
+        return
+      }
       if (finding.category === 'gateway-subnet-missing-udr' && finding.vnetId) {
         const hubVnet = draft.vnets.find((v) => v.id === finding.vnetId)
         const gwSubnet = hubVnet?.subnets.find((s) => s.name === 'GatewaySubnet')
@@ -3710,6 +3720,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                               </button>
                             )}
                             {finding.severity !== 'info' &&
+                              (finding.category !== 'gateway-coexistence' || basicGatewayFix(topology, finding)) &&
                               finding.category !== 'connectivity-failure' &&
                               finding.category !== 'private-endpoint-udr-bypass' &&
                               finding.category !== 'peering-non-transitive-next-hop' &&
@@ -3845,7 +3856,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 </div>
 
                 <Suspense fallback={null}>
-                {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} />}
+                {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} showGatewaySettings={false} />}
                 {selected.kind === 'vwan-hub' && <VpnNatGatewayEditor key={selected.hubId} topology={topology} targetKind="vwan-hub" targetId={selected.hubId} commit={commitTopology} />}
                 {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} simulation={simulation} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}

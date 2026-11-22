@@ -17,7 +17,7 @@ for (const mode of ['hub-spoke', 'full']) {
     await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
     const settings = page.getByTestId('vpn-gateway-settings-vpn')
     const type = settings.getByRole('combobox', { name: 'VPN gateway routing type', exact: true })
-    const sku = settings.getByRole('textbox', { name: 'Gateway SKU', exact: true })
+    const sku = settings.getByRole('combobox', { name: 'Gateway SKU', exact: true })
     await expect(type).toHaveValue('')
     await expect(sku).toHaveValue('')
     await expect(settings).toContainText('Missing settings do not prove compatibility')
@@ -28,6 +28,10 @@ for (const mode of ['hub-spoke', 'full']) {
     await expect(type).toHaveAttribute('aria-invalid', 'true')
     await expect(sku).toHaveAttribute('aria-invalid', 'true')
     await type.selectOption('RouteBased')
+    await expect(settings.locator('datalist option[value="VpnGw1"]')).toHaveCount(1)
+    await expect(settings.locator('datalist option[value="VpnGw1AZ"]')).toHaveCount(1)
+    await sku.fill('VpnGw1AZ')
+    await expect(settings.getByRole('combobox', { name: 'VPN gateway generation', exact: true })).toHaveValue('Generation1')
     await sku.fill('VpnGw5AZ')
     await settings.getByRole('combobox', { name: 'VPN gateway generation', exact: true }).selectOption('Generation2')
     await expect(type).toHaveAttribute('aria-invalid', 'false')
@@ -39,6 +43,41 @@ for (const mode of ['hub-spoke', 'full']) {
     await page.reload()
     expect((await saved()).vnets[0].gateways[0]).toMatchObject({
       sku: 'VpnGw5AZ', vpnType: 'RouteBased', vpnGatewayGeneration: 'Generation2',
+    })
+  })
+  test(`${mode} fixes the actual Basic gateway, restores undo and defaults newly added VPN gateways to VpnGw1AZ`, async ({ page }) => {
+    const topology = coexistenceTopology()
+    topology.vnets[0].gateways[0].sku = 'Basic'
+    topology.vnets[0].gateways[0].vpnGatewayGeneration = 'Generation2'
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[data-desktop-import]').setInputFiles({
+      name: 'basic.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await page.getByRole('button', { name: /^Advanced checks/ }).click()
+    const finding = page.locator('[data-finding-id="coexistence:hub:sku:vpn"]')
+    await expect(finding).toContainText('uses Basic')
+    await finding.getByTestId('aznet-autofix-gateway-coexistence').click()
+    await expect(finding).toHaveCount(0)
+    const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    await expect.poll(async () => (await saved()).vnets[0].gateways[0]).toMatchObject({
+      sku: 'VpnGw1AZ', vpnGatewayGeneration: 'Generation1',
+    })
+    expect((await saved()).vnets[0].gateways[1]).toEqual(topology.vnets[0].gateways[1])
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect(finding).toContainText('uses Basic')
+    await finding.getByTestId('aznet-autofix-gateway-coexistence').click()
+    await page.reload()
+    expect((await saved()).vnets[0].gateways[0].sku).toBe('VpnGw1AZ')
+    await page.getByTestId('aznet-chip-vpn').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
+    await page.getByTestId('aznet-remove-gw-vpn').click()
+    await page.getByTestId('aznet-chip-er-gw').focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
+    await page.getByTestId('aznet-add-vpngw-hub').click()
+    await expect.poll(async () => (await saved()).vnets[0].gateways.find((gateway: { kind: string }) => gateway.kind === 'Vpn')).toMatchObject({
+      sku: 'VpnGw1AZ', vpnGatewayGeneration: 'Generation1',
     })
   })
   test(`${mode} authors standalone VPN mode, keeps legacy absence and persists it without changing VWAN`, async ({ page }) => {

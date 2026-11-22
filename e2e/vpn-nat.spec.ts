@@ -34,9 +34,17 @@ for (const provider of ['classic', 'vwan'] as const) {
     }
     await configure()
     const gateway = page.getByTestId('vpn-nat-gateway-editor')
-    if (provider === 'classic') await gateway.getByRole('combobox', { name: 'Classic VPN NAT SKU', exact: true }).selectOption('VpnGw2AZ')
+    if (provider === 'classic') {
+      await expect(gateway.getByRole('combobox', { name: 'Gateway SKU', exact: true })).toHaveValue('')
+      await expect(gateway).toContainText('VpnGw1 and VpnGw1AZ do not support NAT')
+      await expect(gateway.getByRole('combobox', { name: 'Classic VPN NAT SKU', exact: true })).toHaveValue('VpnGw2AZ')
+    }
     await gateway.getByLabel('Enable gateway BGP route translation', { exact: true }).check()
     await gateway.getByRole('button', { name: 'Save VPN NAT gateway capability', exact: true }).click()
+    if (provider === 'classic') {
+      await expect(gateway.getByRole('combobox', { name: 'Gateway SKU', exact: true })).toHaveValue('VpnGw2AZ')
+      await expect.poll(async () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology.vnets[0].gateways[0].sku)).toBe('VpnGw2AZ')
+    }
     const editor = page.getByTestId('vpn-nat-connection-editor')
     await expect(editor.getByRole('status')).toHaveCount(0)
     const addRule = async (name: string, mode: string, external: string) => {
