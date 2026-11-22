@@ -1,9 +1,16 @@
 import type { CourseCheck, CourseGuidance } from './course-contract'
 import type { PlatformDocument } from '../platform/contract'
+import type { PacketRequest } from '../packet-flow'
+
+export function packetObservationKey(packet: PacketRequest) {
+  const endpoint = (value: PacketRequest['source']) => Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+  return JSON.stringify([endpoint(packet.source), endpoint(packet.target), packet.protocol, packet.sourcePort, packet.destinationPort])
+}
 
 export function inspectionScope(check?: CourseCheck) {
   if (check?.kind === 'routes.inspected' || check?.kind === 'control-routes.inspected') return check.params
   if (check?.kind === 'scenario.loaded') return check.params.inspection
+  if (check?.kind === 'packet.inspected') return { vnetId: check.params.vnetId, prefix: packetObservationKey(check.params.packet) }
 }
 
 /** Navigation preference only; completion still requires the runner's full check. */

@@ -3,6 +3,7 @@ import { cloudFixture, testOwner } from '../tests/user-cloud-fixture'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { exampleCourse } from '../src/learning/course-examples'
+import { curriculumV2Bundle } from '../src/learning/curriculum-v2'
 import { orderedTasks } from '../src/learning/runner'
 import { openLearning, learningAdvancedOptions, completeLearningTasks, learningSidebar } from './learning-helpers'
 import { sampleHubSpokeFirewallUdr, sampleHybridVwanAndHubSpoke } from '../src/azure-net/model'
@@ -767,19 +768,20 @@ test('an open learning sidebar rebinds on account switching and sign-out without
   const original = await stored()
   await openLearning(page)
   const task = learningSidebar(page).getByTestId('learning-task')
-  await expect(task).toHaveAttribute('data-task-id', 'private-link.load')
+  const firstTask = curriculumV2Bundle.lessons[0].taskOrder[0]
+  await expect(task).toHaveAttribute('data-task-id', firstTask)
   await page.getByTestId('cloud-account-open').click()
   await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'bob'))
   await account.getByRole('button', { name: 'Sign in again / switch account', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('Test Bob')
   await expect(page.getByTestId('cloud-progress-status')).toContainText('Synced')
   await closeAccount()
-  await expect(task).toHaveAttribute('data-task-id', 'private-link.load')
+  await expect(task).toHaveAttribute('data-task-id', firstTask)
   await page.getByTestId('cloud-account-open').click()
   await account.getByRole('button', { name: 'Sign out of this app', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('Not signed in')
   await closeAccount()
-  await expect(task).toHaveAttribute('data-task-id', 'private-link.load')
+  await expect(task).toHaveAttribute('data-task-id', firstTask)
   await expect(page.getByTestId('learning-belt-dialog')).toHaveCount(0)
   await expect(page.getByTestId('learning-status')).toContainText('0 points')
   expect(await stored()).toEqual(original)
@@ -787,6 +789,7 @@ test('an open learning sidebar rebinds on account switching and sign-out without
 })
 
 test('switching accounts preserves session-only history when both local and cloud writes fail', async ({ page }) => {
+  const points = curriculumV2Bundle.lessons[0].tasks.slice(0, 2).reduce((sum, task) => sum + task.points, 0)
   await setup(page)
   await page.goto('/?mode=full')
   await signIn(page)
@@ -805,7 +808,7 @@ test('switching accounts preserves session-only history when both local and clou
   })
   await openLearning(page)
   await completeLearningTasks(page, 2)
-  await expect(page.getByTestId('learning-status')).toContainText('10 points')
+  await expect(page.getByTestId('learning-status')).toContainText(`${points} points`)
   await page.getByTestId('practice-workspace-bar').getByRole('button', { name: 'Return to my design', exact: true }).click()
   await page.getByRole('button', { name: 'Cloud account', exact: true }).click()
   await expect(page.getByTestId('cloud-progress-status')).toContainText('Not synced')
@@ -830,7 +833,7 @@ test('switching accounts preserves session-only history when both local and clou
   await page.evaluate(() => sessionStorage.setItem('mock-cloud-user', 'alice'))
   await page.getByRole('button', { name: 'Sign in again / switch account', exact: true }).click()
   await expect(page.getByTestId('learning-status')).toContainText('Test Alice')
-  await expect(page.getByTestId('learning-status')).toContainText('10 points')
+  await expect(page.getByTestId('learning-status')).toContainText(`${points} points`)
 })
 
 test('real curriculum completions, offline resets and enrollment changes synchronize automatically', async ({ page }) => {
@@ -844,6 +847,7 @@ test('real curriculum completions, offline resets and enrollment changes synchro
   await completeLearningTasks(page, 2)
   const key = `users/${testOwner('alice')}/progress.json`
   await expect.poll(() => JSON.parse(service.data.get(key)?.raw ?? '{}').completions?.length).toBe(2)
+  expect(JSON.parse(service.data.get(key)!.raw).completions.every((entry: { courseId: string }) => entry.courseId === curriculumV2Bundle.course.id)).toBe(true)
   await page.getByTestId('practice-workspace-bar').getByRole('button', { name: 'Return to my design', exact: true }).click()
   const offline = async (route: import('@playwright/test').Route) => {
     if (route.request().method() === 'PUT') await route.abort()

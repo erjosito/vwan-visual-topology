@@ -1,7 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './packet-messages-ja'
 import { t } from './i18n'
 import { guidanceAnchor } from './learning/guidance'
+import { packetObservationKey } from './learning/task-guidance'
+import { LearningInspection } from './learning/LearningInspection'
+import type { LearningObservation } from './learning/runner'
+import { useWorkspaceSession } from './workspace-context'
 import type { InventoryTopology } from './inventory'
 import type { Simulation } from './routing'
 import type { AzSimulationResult } from './azure-net/engine'
@@ -12,6 +16,7 @@ const tupleText = (tuple: FiveTuple) => `${tuple.protocol.toUpperCase()} ${tuple
 export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVnetId }: {
   topology: InventoryTopology; simulation: Simulation | AzSimulationResult; onHighlight?: (id: string) => void; guidanceVnetId?: string
 }) {
+  const session = useWorkspaceSession(), resultElement = useRef<HTMLDivElement>(null)
   const options = packetEndpointOptions(topology, t('Address unknown'))
   const [source, setSource] = useState('')
   const [target, setTarget] = useState('')
@@ -20,10 +25,13 @@ export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVne
   const [sourcePort, setSourcePort] = useState('49152')
   const [destinationPort, setDestinationPort] = useState('443')
   const [search, setSearch] = useState('')
-  const [submitted, setSubmitted] = useState<{ key: string; result: PacketResult }>()
+  const [submitted, setSubmitted] = useState<{ key: string; result: PacketResult; observation?: LearningObservation }>()
   const [error, setError] = useState('')
   const currentKey = JSON.stringify([topology, source, target, externalAddress, protocol, sourcePort, destinationPort])
   const result = submitted?.key === currentKey ? submitted.result : undefined
+  useEffect(() => {
+    if (result && submitted?.observation) resultElement.current?.scrollIntoView({ block: 'start' })
+  }, [result, submitted])
   const visible = options.filter((option) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())).slice(0, 100)
   const lbOptions = (topology.inventory?.loadBalancers ?? []).flatMap((lb) => lb.frontends.filter((frontend) => frontend.kind === 'private')
     .map((frontend) => ({ key: JSON.stringify(['lb', lb.id, frontend.id]), ref: { kind: 'load-balancer' as const, loadBalancerId: lb.id, frontendId: frontend.id },
@@ -55,9 +63,12 @@ export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVne
       try {
         const from = resolve(source), to = resolve(target)
         if (!from || !to) throw new Error(t('Select both packet endpoints.'))
-        setSubmitted({ key: currentKey, result: tracePacket(topology, {
+        const packet = {
           source: from, target: to, protocol, sourcePort: Number(sourcePort), destinationPort: Number(destinationPort),
-        }, simulation) })
+        }
+        const observation = session?.learningState?.observation
+        setSubmitted({ key: currentKey, result: tracePacket(topology, packet, simulation),
+          observation: observation?.vnetId === guidanceVnetId && observation?.prefix === packetObservationKey(packet) ? { ...observation } : undefined })
         setError('')
       } catch (error) { setError(error instanceof Error ? error.message : t('Packet probe failed.')) }
     }}>
@@ -72,7 +83,12 @@ export function PacketFlowPanel({ topology, simulation, onHighlight, guidanceVne
     </form>
     {error && <p role="alert">{error}</p>}
     {submitted && !result && <p role="status">{t('The topology or probe changed. Run the probe again for current evidence.')}</p>}
-    {result && <div data-testid="packet-flow-result">
+    {result && <div ref={resultElement} data-testid="packet-flow-result"
+      data-learning-anchor={submitted?.observation?.vnetId
+        ? guidanceAnchor('packet-result', submitted.observation.vnetId, submitted.observation.prefix) : undefined}>
+      {submitted?.observation && session?.learningView?.open && session.learningState?.automatic && !session.learningState.reviewId
+        && session.learningState.observation?.token === submitted.observation.token
+        && <LearningInspection observation={submitted.observation} prefixPresent={false} onObserve={session.reportLearningObservation} />}
       {result.haPorts && <section data-testid="packet-ha-ports-result" aria-label={t('HA ports steering')}>
         <h4>{t('HA ports steering')}: {t(result.haPorts.symmetry)}</h4>
         <p>{t('Original packet addresses and ports are preserved. Backend selection is illustrative; return routing is checked independently. This is not live failover or session continuity.')}</p>

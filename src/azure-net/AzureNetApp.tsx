@@ -155,10 +155,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setNvaCreationVnetId(undefined)
   }, () => setGuidanceNavigation(false))
   const [detailOwner, setDetailOwner] = useWorkspaceEditorState<string>('aznet.detail')
+  const [detailLoadBalancer, setDetailLoadBalancer] = useState<string>()
   const [snatHubId, setSnatHubId] = useState<string>()
   const [detailReturnFocus, setDetailReturnFocus] = useState<Element | null>(null)
   const [contextReturnFocus, setContextReturnFocus] = useState<Element | null>(null)
   const openDetail = (id: string) => {
+    setDetailLoadBalancer(undefined)
     setDetailReturnFocus(document.activeElement?.closest('[role="menu"]') ? contextReturnFocus : document.activeElement)
     setContextReturnFocus(null)
     setDetailOwner(id)
@@ -762,15 +764,16 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [inspectedSubnetTable, testIpQuery])
 
   // Resolve control-plane RIB if a Gateway, Route Server, vWAN Hub, ER Location, or Site is selected
-  const inspectedControlRib = useMemo<{ title: string; entries: AzBgpRibEntry[]; available: boolean } | null>(() => {
+  const inspectedControlRib = useMemo<{ title: string; entries: AzBgpRibEntry[]; available: boolean; staticRouting?: boolean } | null>(() => {
     const selected = routeSelection
     if (selected.kind === 'gateway') {
       const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
       const gw = vnet?.gateways.find((g) => g.id === selected.gatewayId)
       return {
-        title: `${translate(language, 'Virtual Network Gateway BGP table')} · ${gw?.name ?? selected.gatewayId}`,
+        title: `${translate(language, gw?.kind === 'Vpn' && gw.bgpEnabled === false ? 'Effective routes' : 'Virtual Network Gateway BGP table')} · ${gw?.name ?? selected.gatewayId}`,
         entries: simulation.gatewayRibs[selected.gatewayId] ?? [],
         available: Boolean(gw) && !scenario.affected[selected.gatewayId],
+        staticRouting: gw?.kind === 'Vpn' && gw.bgpEnabled === false,
       }
     }
     if (selected.kind === 'route-server') {
@@ -2488,6 +2491,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         name={topology.vwanHubs.find((hub) => hub.id === snatHubId)?.name ?? snatHubId}
         commit={(mutate) => commitTopology((next) => mutate(next))} onClose={() => setSnatHubId(undefined)} /></Suspense>}
       {detailOwner && <Suspense fallback={null}><NetworkDetail topology={topology} owner={{ kind: 'vnet', id: detailOwner }} simulation={simulation} returnFocus={detailReturnFocus}
+        initialLoadBalancerId={detailLoadBalancer}
         selectedId={inventorySelection} onSelect={setInventorySelection} commit={(mutate) => commitTopology((next) => mutate(next))}
         selectedTargetId={canvasSelection && ('subnetId' in canvasSelection ? canvasSelection.subnetId
           : 'applianceId' in canvasSelection ? canvasSelection.applianceId : 'gatewayId' in canvasSelection ? canvasSelection.gatewayId
@@ -2515,7 +2519,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           ...(!singleFlowForCustomIp && pairAnalysis?.reverse ? [{ direction: 'reply' as const, destination: pairAnalysis.reverse.destinationIp,
             evidence: pairAnalysis.reverse.summaryReason, subnetIds: pairAnalysis.reverse.hops.flatMap((hop) => hop.subnetId ? [hop.subnetId] : []) }] : []),
         ]}
-        onClose={() => { setDetailOwner(undefined); setDetailReturnFocus(null) }} /></Suspense>}
+        onClose={() => { setDetailOwner(undefined); setDetailReturnFocus(null); setDetailLoadBalancer(undefined) }} /></Suspense>}
       {!recoveryAcknowledged && <div role="alert" data-testid="aznet-recovery-notice">
         <strong>Saved input could not be loaded. Originals have not been overwritten.</strong>
         {recoveryEntries.map((entry, index) => <div key={index}>
@@ -2583,14 +2587,24 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 setActiveTab('editor')
               } else if (cue.action === 'site-routes.open') {
                 if (!inspectRoutes({ kind: 'site', siteId: cue.params.siteId })) return
+              } else if (cue.action === 'gateway-routes.open') {
+                if (!inspectRoutes({ kind: 'gateway', vnetId: cue.params.vnetId, gatewayId: cue.params.gatewayId })) return
+              } else if (cue.action === 'er-routes.open') {
+                if (!inspectRoutes({ kind: 'er-location', locationId: cue.params.locationId })) return
               } else if (cue.action === 'packet-probe.open') {
                 openDetail(cue.params.vnetId)
+              } else if (cue.action === 'load-balancer.configure') {
+                openDetail(cue.params.vnetId)
+                setDetailLoadBalancer(cue.params.loadBalancerId)
               } else if (cue.action === 'hub.configure') {
                 if (!setSelected({ kind: 'vwan-hub', hubId: cue.params.hubId })) return
                 setActiveTab('editor')
               } else if (cue.action === 'hub-routes.open') {
                 if (!inspectRoutes({ kind: 'vwan-hub', hubId: cue.params.hubId })) return
                 setHubTableInspection({ ...cue.params })
+              } else if (cue.action === 'peering.configure') {
+                if (!setSelected({ kind: 'peering', peeringId: cue.params.peeringId })) return
+                setActiveTab('editor')
               } else if (cue.action === 'network.configure') {
                 if (!setSelected({ kind: 'vnet', vnetId: cue.params.vnetId })) return
                 setActiveTab('editor')
@@ -3029,7 +3043,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           key={guidanceRevision}
           focusOnOpen={!guidanceNavigation}
           title={{
-            routes: t(inspectedControlRib ? 'BGP table' : 'Effective routes'),
+            routes: t(inspectedControlRib && !inspectedControlRib.staticRouting ? 'BGP table' : 'Effective routes'),
             tracer: 'Path explorer',
             diagnostics: 'Topology analysis',
             editor: 'Configure selected object',
@@ -3045,7 +3059,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               data-testid="aznet-tab-routes"
               onClick={() => setActiveTab('routes')}
             >
-              {t(inspectedControlRib ? 'BGP table' : 'Effective routes')}
+              {t(inspectedControlRib && !inspectedControlRib.staticRouting ? 'BGP table' : 'Effective routes')}
             </button>
             <button
               type="button"
@@ -3336,7 +3350,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   <div className="aznet-card" data-testid="aznet-control-rib-card"
                     data-learning-anchor={routeSelection.kind === 'vwan-hub' && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
                       ? guidanceAnchor('hub-effective-table', routeSelection.hubId, hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
-                      : routeSelection.kind === 'site' ? guidanceAnchor('site-effective-table', routeSelection.siteId) : undefined}>
+                      : routeSelection.kind === 'site' ? guidanceAnchor('site-effective-table', routeSelection.siteId)
+                      : routeSelection.kind === 'gateway' ? guidanceAnchor('gateway-effective-table', routeSelection.vnetId, routeSelection.gatewayId)
+                      : routeSelection.kind === 'er-location' ? guidanceAnchor('er-effective-table', routeSelection.locationId) : undefined}>
                     <h3>{inspectedControlRib.title}</h3>
                     {routeSelection.kind === 'vwan-hub' && (() => {
                       const hub = topology.vwanHubs.find((hub) => hub.id === routeSelection.hubId)
@@ -3352,6 +3368,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                     })()}
                     <Suspense fallback={null}><BgpRouteTable key={JSON.stringify([routeSelection, hubTableInspection, guidanceRevision])}
                       entries={inspectedControlRib.entries} available={inspectedControlRib.available}
+                      staticRouting={inspectedControlRib.staticRouting}
                       learningScope={routeSelection.kind === 'vwan-hub' && !hubTableInspection?.firewall ? {
                         hubId: routeSelection.hubId,
                         tableId: hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE,
@@ -3360,10 +3377,21 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                         siteId: routeSelection.siteId,
                         prefix: workspaceSession?.learningState?.observation?.siteId === routeSelection.siteId
                           ? workspaceSession.learningState.observation.prefix : undefined,
+                      } : routeSelection.kind === 'gateway' ? {
+                        vnetId: routeSelection.vnetId, gatewayId: routeSelection.gatewayId,
+                        prefix: workspaceSession?.learningState?.observation?.gatewayId === routeSelection.gatewayId
+                          ? workspaceSession.learningState.observation.prefix : undefined,
+                      } : routeSelection.kind === 'er-location' ? {
+                        locationId: routeSelection.locationId,
+                        prefix: workspaceSession?.learningState?.observation?.locationId === routeSelection.locationId
+                          ? workspaceSession.learningState.observation.prefix : undefined,
                       } : undefined} />
                     {workspaceSession?.learningView?.open && workspaceSession.learningState?.automatic && !workspaceSession.learningState.reviewId
                       && workspaceSession.learningState?.observation && inspectedControlRib.available
                       && ((routeSelection.kind === 'site' && routeSelection.siteId === workspaceSession.learningState.observation.siteId)
+                        || (routeSelection.kind === 'gateway' && routeSelection.vnetId === workspaceSession.learningState.observation.vnetId
+                          && routeSelection.gatewayId === workspaceSession.learningState.observation.gatewayId)
+                        || (routeSelection.kind === 'er-location' && routeSelection.locationId === workspaceSession.learningState.observation.locationId)
                         || (routeSelection.kind === 'vwan-hub' && routeSelection.hubId === workspaceSession.learningState.observation.hubId
                           && !(hubTableInspection?.hubId === routeSelection.hubId && hubTableInspection.firewall)
                           && (hubTableInspection?.hubId === routeSelection.hubId ? hubTableInspection.tableId : DEFAULT_HUB_TABLE)
@@ -3881,8 +3909,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               </>
               )
               const peeringEditor = showPeeringEditor && (
-                <InspectorSection key="peerings" title={t('VNet peerings')}
-                  summary={t('{0} peerings', filteredPeerings.length)} initialOpen={false}>
+                <InspectorSection key={guidanceNavigation && selected.kind === 'peering' ? `peerings-${guidanceRevision}` : 'peerings'} title={t('VNet peerings')}
+                  summary={t('{0} peerings', filteredPeerings.length)} initialOpen={guidanceNavigation && selected.kind === 'peering'}>
                 <div className="aznet-card" data-testid="aznet-peering-editor">
                   <div
                     style={{
@@ -4081,6 +4109,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                           <div
                             key={activePeering.id}
                             data-testid={`aznet-peering-card-${activePeering.id}`}
+                            data-learning-anchor={guidanceAnchor('peering-editor', activePeering.id)}
                             style={{
                               padding: 10,
                               background: 'var(--surface)',

@@ -5,9 +5,12 @@ import { guidedProgressKey, legacyProgressKey } from '../src/learning/progress-l
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { practiceLockName } from '../src/learning/practice-ownership'
 import { scenarioBundle } from '../src/learning/scenario-course'
+import { curriculumV2Bundle } from '../src/learning/curriculum-v2'
 import { orderedTasks } from '../src/learning/runner'
-import { openLearning, learningAdvancedOptions, completeLearningTasks, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { archivedScenarioStorageState, openLearning, learningAdvancedOptions, completeLearningTasks, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
 import { runnerLabels } from '../src/learning/runner-content'
+
+test.use({ storageState: archivedScenarioStorageState() })
 
 for (const language of ['en', 'ja'] as const) {
   test(`${language}: a newly earned belt celebrates its topics without advancing the debrief or replaying on reload and edition changes`, async ({ page }) => {
@@ -215,11 +218,12 @@ test('quota-failed points are explicitly session-only, can be saved later, and s
     if (!localStorage.getItem(legacy)) localStorage.setItem(legacy, 'unchanged previous practice bytes')
   }, { guided: guidedProgressKey, legacy: legacyProgressKey })
   await open(page)
+  const original = await saved(page, guidedProgressKey)
   await loadLearningNetwork(page)
   await learningSidebar(page).getByTestId('learning-guide-private-link.local-guide').click()
   await expect(learningSidebar(page).getByTestId('learning-debrief')).toBeVisible()
   await expect(status(page)).toContainText('5 points · Session only')
-  expect(await saved(page, guidedProgressKey)).toBeNull()
+  expect(await saved(page, guidedProgressKey)).toBe(original)
   await status(page).click()
   await expect(details(page).getByRole('status')).toContainText('progress could not be saved')
   expect(JSON.parse(await backup(page)).completions).toHaveLength(1)
@@ -248,7 +252,7 @@ test('damaged guided data is not zero credit, cannot be overwritten by completio
   await open(page)
   await expect(status(page)).toContainText('Learning progress unavailable')
   await loadLearningNetwork(page)
-  await learningSidebar(page).getByTestId('learning-guide-private-link.local-guide').click()
+  await learningSidebar(page).getByTestId(`learning-guide-${curriculumV2Bundle.lessons[0].tasks[0].guidanceIds[0]}`).click()
   await expect(learningSidebar(page).getByTestId('learning-feedback')).toContainText('Completion could not be recorded')
   expect(await saved(page, guidedProgressKey)).toBe('damaged guided original')
   await status(page).click()
@@ -298,6 +302,8 @@ test('actual competing tabs cannot write practice or farm points, and recover th
 
 test('missing exclusive locking fails closed without persisting or opening a practice canvas', async ({ page }) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'locks', { value: undefined }))
+  await page.goto('/?mode=full')
+  await page.evaluate((key) => localStorage.removeItem(key), guidedProgressKey)
   await open(page)
   await learningSidebar(page).getByRole('button', { name: 'Load practice network', exact: true }).click()
   await learningSidebar(page).getByRole('button', { name: 'Open protected practice workspace', exact: true }).click()

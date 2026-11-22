@@ -1,4 +1,4 @@
-import { cidr } from '../validation'
+import { cidr, contains, ipv4 } from '../validation'
 import { hubRouteTables } from '../hub-routing'
 import { admitJson, executePlatform, validateRequest } from '../platform/service'
 import type { PlatformDocument } from '../platform/contract'
@@ -21,6 +21,12 @@ function unique<T extends { id: string }>(entries: T[], label: string): Map<stri
 function order(ids: string[], entries: Map<string, unknown>, label: string) {
   requireContent(new Set(ids).size === ids.length, `duplicate ${label} order reference`)
   requireContent(ids.length === entries.size && ids.every((id) => entries.has(id)), `invalid ${label} order references`)
+}
+
+function selectedDestination(scope: { prefix: string; destinationAddress?: string }) {
+  if (scope.destinationAddress === undefined) return true
+  const address = ipv4(scope.destinationAddress)
+  return address !== undefined && contains(scope.prefix, address)
 }
 
 function checkScope(
@@ -55,7 +61,7 @@ function checkScope(
       && new Set(params.connections.map((state) => `${state.kind}:${state.connectionId}`)).size === params.connections.length
       && params.connections.every((state) => (state.kind === 'er-link' ? document.topology.erLinks : document.topology.vpnConnections)
         .some((connection) => connection.id === state.connectionId))
-      && params.selectedRoutes.every((scope) => !!cidr(scope.prefix)
+      && params.selectedRoutes.every((scope) => !!cidr(scope.prefix) && selectedDestination(scope)
         && document.topology.vnets.some((vnet) => vnet.id === scope.vnetId && vnet.subnets.some((subnet) => subnet.id === scope.subnetId))
         && document.topology.vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.id === scope.nextHopResourceId))),
     `${definition.id} needs distinct original connections and owned selected-route scopes`)
@@ -63,6 +69,37 @@ function checkScope(
     requireContent(document.mode !== 'vwan'
       && (params.kind === 'er-link' ? document.topology.erLinks : document.topology.vpnConnections)
         .some((connection) => connection.id === params.connectionId), `${definition.id} needs an owned connection`)
+  } else if ('gatewayId' in params) {
+    requireContent(document.mode !== 'vwan' && !!cidr(params.prefix)
+      && document.topology.vnets.some((vnet) => vnet.id === params.vnetId
+        && vnet.gateways.some((gateway) => gateway.id === params.gatewayId)),
+    `${definition.id} needs an owned gateway and exact prefix`)
+  } else if ('locationId' in params) {
+    requireContent(document.mode !== 'vwan' && !!cidr(params.prefix)
+      && document.topology.erLocations.some((location) => location.id === params.locationId),
+    `${definition.id} needs an owned ExpressRoute location and exact prefix`)
+  } else if ('peeringId' in params) {
+    requireContent(document.mode !== 'vwan' && document.topology.vnetPeerings.some((peering) => peering.id === params.peeringId),
+      `${definition.id} needs an original VNet peering`)
+  } else if ('loadBalancerId' in params) {
+    requireContent(document.mode !== 'vwan' && document.topology.inventory?.loadBalancers?.some((lb) =>
+      lb.id === params.loadBalancerId && lb.owner.kind === 'vnet' && lb.owner.id === params.vnetId),
+    `${definition.id} needs an original Load Balancer and its owned VNet`)
+  } else if ('packet' in params) {
+    requireContent(document.mode !== 'vwan' && document.topology.vnets.some((vnet) => vnet.id === params.vnetId),
+      `${definition.id} needs an owned native packet inspection view`)
+    validateRequest({ contractVersion: 1, operation: 'simulate', document, packet: params.packet })
+  } else if ('expected' in params) {
+    requireContent(document.mode !== 'vwan'
+      && Object.keys(params.expected).every((key) => Object.hasOwn(document.topology, key)),
+    `${definition.id} needs native topology configuration fields`)
+    for (const scope of params.selectedRoutes ?? []) {
+      requireContent(!!cidr(scope.prefix) && selectedDestination(scope)
+        && document.topology.vnets.some((vnet) => vnet.id === scope.vnetId
+          && vnet.subnets.some((subnet) => subnet.id === scope.subnetId))
+        && document.topology.vnets.some((vnet) => vnet.gateways.some((gateway) => gateway.id === scope.nextHopResourceId)),
+      `${definition.id} needs original subnet and gateway selection scopes`)
+    }
   } else if ('siteId' in params) {
     requireContent(document.mode !== 'vwan' && !!cidr(params.prefix)
       && document.topology.sites.some((site) => site.id === params.siteId), `${definition.id} needs an owned site and exact prefix`)
@@ -93,7 +130,7 @@ function checkScope(
   } else if (!('requirements' in params)) {
     requireContent(kind === 'quiz.answered', `unsupported check ${definition.id}`)
   }
-  if ('requirements' in params) {
+  if ('requirements' in params && params.requirements) {
     validateRequest({ contractVersion: 1, operation: 'evaluate', document, requirements: params.requirements })
     const result = executePlatform({ contractVersion: 1, operation: 'evaluate', document, requirements: params.requirements })
     requireContent(result.status === 'complete' && result.assessments.length === params.requirements.length
@@ -151,11 +188,14 @@ export function validateCourse(input: unknown): CourseBundle {
     const localTasks = unique(lesson.tasks, 'task')
     order(lesson.taskOrder, localTasks, `task in ${lesson.id}`)
     const first = localTasks.get(lesson.taskOrder[0])!
-    requireContent(checks.get(first.checkId)?.kind === 'scenario.loaded', `${lesson.id} must start with explicit scenario loading`)
+    requireContent(bundle.course.preparation === 'ungraded' || checks.get(first.checkId)?.kind === 'scenario.loaded',
+      `${lesson.id} must start with explicit scenario loading`)
     for (const taskId of lesson.taskOrder) {
       const task = localTasks.get(taskId)!
       const check = checks.get(task.checkId)
       requireContent(check, `unknown check for ${task.id}`)
+      requireContent(bundle.course.preparation !== 'ungraded' || check.kind !== 'scenario.loaded',
+        `${task.id} cannot award points for ungraded preparation`)
       requireContent(task.debrief, `missing teaching debrief for ${task.id}`)
       requireContent(!awards.has(task.awardId), `duplicate award ${task.awardId}`)
       awards.add(task.awardId)
@@ -174,10 +214,14 @@ export function validateCourse(input: unknown): CourseBundle {
         usedGuidance.add(target.id)
         if (inspection || check.kind === 'vnet.peered') {
           const action = check.kind === 'vnet.peered' ? 'peering.command'
+            : check.kind === 'packet.inspected' ? 'packet-probe.open'
+            : inspection && 'gatewayId' in inspection ? 'gateway-routes.open'
+            : inspection && 'locationId' in inspection ? 'er-routes.open'
             : inspection && 'vnetId' in inspection ? 'routes.open'
             : inspection && 'siteId' in inspection ? 'site-routes.open' : 'hub-routes.open'
+          const scope = check.kind === 'packet.inspected' ? { vnetId: check.params.vnetId } : inspection ?? check.params
           requireContent(target.action === action
-            && Object.entries(inspection ?? check.params).filter(([key]) => key !== 'requirements').every(([key, value]) =>
+            && Object.entries(scope).filter(([key]) => key !== 'requirements').every(([key, value]) =>
               Object.entries(target.params).some(([targetKey, targetValue]) => targetKey === key && targetValue === value)),
           `mismatched guidance scope for ${task.id}`)
         }

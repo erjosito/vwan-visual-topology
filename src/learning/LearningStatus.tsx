@@ -8,6 +8,7 @@ import './learning-status.css'
 import { useCloudSession } from '../cloud/useCloudSession'
 import { progressStatusLabel } from '../cloud/progress-status'
 import { nextBeltLabel } from './belt-progress-label'
+import { BeltIcon } from './BeltIcon'
 
 export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean }) {
   const cloud = useCloudSession()
@@ -43,12 +44,12 @@ export function LearningStatus({ showIdentity = true }: { showIdentity?: boolean
       {session?.presentationPreview ? <>
         {showIdentity && <span className="learning-status-identity">{identity}</span>}
         {highest ? <span className="learning-status-belt">
-          <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={highest.belt.color} stroke="currentColor" /></svg>
+          <BeltIcon belt={highest.belt} />
           {beltLabel}
         </span> : unknown}
       </> : <>{identity} · {course.title[language]} · {name[language]} - </>}{progress ? <>
         {!session?.presentationPreview && <>
-        <svg aria-hidden="true" width="24" height="20" viewBox="0 0 24 20"><path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={progress.belt.color} stroke="currentColor" /></svg>
+        <BeltIcon belt={progress.belt} />
         {progress.belt.name[language]} · {progress.points} {pointsUnit}
         </>}
         {localWarning && <> · {localWarning}</>}

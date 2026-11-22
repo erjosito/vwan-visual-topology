@@ -19,6 +19,14 @@ export function LearningInspection({ observation, prefixPresent, onObserve }: {
         : observation.siteId
           ? prefixPresent ? guidanceAnchor('site-effective-prefix', observation.siteId, observation.prefix)
             : guidanceAnchor('site-effective-table', observation.siteId)
+          : observation.vnetId && observation.gatewayId
+            ? prefixPresent ? guidanceAnchor('gateway-effective-prefix', observation.vnetId, observation.gatewayId, observation.prefix)
+              : guidanceAnchor('gateway-effective-table', observation.vnetId, observation.gatewayId)
+            : observation.locationId
+              ? prefixPresent ? guidanceAnchor('er-effective-prefix', observation.locationId, observation.prefix)
+                : guidanceAnchor('er-effective-table', observation.locationId)
+              : observation.vnetId
+                ? guidanceAnchor('packet-result', observation.vnetId, observation.prefix)
           : undefined
     let visibleSince: number | undefined
     const timer = setInterval(() => {

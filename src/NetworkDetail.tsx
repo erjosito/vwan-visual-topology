@@ -21,15 +21,17 @@ import { networkDetailProjection, type DetailEntity, type DetailTarget } from '.
 import { NetworkDetailAttachments } from './NetworkDetailAttachments'
 import subnetIcon from './assets/azure/subnet.svg'
 import virtualNetworkIcon from './assets/azure/virtual-network.svg'
+import { guidanceAnchor } from './learning/guidance'
 
 export interface DetailBoundary { direction: 'forward' | 'reply'; destination: string; evidence: string; subnetIds: string[] }
 
-export function NetworkDetail({ topology, owner, simulation, selectedId, selectedTargetId, boundaries = [], returnFocus, onSelect, onSelectTarget, onApplianceAction, getContextActions, commit, onClose }: {
+export function NetworkDetail({ topology, owner, simulation, selectedId, selectedTargetId, initialLoadBalancerId, boundaries = [], returnFocus, onSelect, onSelectTarget, onApplianceAction, getContextActions, commit, onClose }: {
   topology: InventoryTopology
   owner: InventoryOwner
   simulation: Simulation | AzSimulationResult
   selectedId?: string
   selectedTargetId?: string
+  initialLoadBalancerId?: string
   boundaries?: DetailBoundary[]
   returnFocus?: Element | null
   onSelect: (id: string) => void
@@ -128,6 +130,9 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
       if (action) queueMicrotask(action)
     }
   }, [returnFocus])
+  useEffect(() => {
+    if (initialLoadBalancerId) focusEditor(`[data-learning-anchor=${JSON.stringify(guidanceAnchor('load-balancer-health', owner.id, initialLoadBalancerId))}]`)
+  }, [initialLoadBalancerId, owner.id])
   const close = () => dialog.current?.close()
   const leaveFor = (action: () => void) => { pendingAction.current = action; close() }
   const selectWorkload = (id: string) => {
@@ -327,7 +332,8 @@ export function NetworkDetail({ topology, owner, simulation, selectedId, selecte
         </section>
       <ApplicationFlowPanel key={revisionOf(topology)} topology={topology} owner={owner} result={applicationResult}
         onResult={(result) => setApplicationEvidence({ topology, result })} />
-      <LoadBalancerEditor topology={topology} owner={owner} change={change} onSelect={(id) => { setQuery(''); onSelect(id) }} />
+      <LoadBalancerEditor key={initialLoadBalancerId ?? ''} initialSelectedId={initialLoadBalancerId}
+        topology={topology} owner={owner} change={change} onSelect={(id) => { setQuery(''); onSelect(id) }} />
       {selected && <form data-testid="selected-workload-form" key={JSON.stringify([selected, nics.filter((nic) => selected.nicIds.includes(nic.id)), topology.inventory?.publicIps])} onSubmit={(event) => {
         event.preventDefault()
         const data = new FormData(event.currentTarget)

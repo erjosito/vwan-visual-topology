@@ -10,6 +10,7 @@ const VnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((modul
 const VnetCommunityEditor = lazy(() => import('../VnetCommunityEditor'))
 
 registerJapaneseMessages({
+  'Virtual WAN VNet connection enabled': 'Virtual WAN VNet 接続を有効化',
   'The subnet has no available usable IPv4 addresses.': 'サブネットに使用可能な空き IPv4 アドレスがありません。',
   'VNet no longer exists.': 'VNet は存在しません。',
   'Select a non-service, non-delegated subnet for the NVA.': 'NVA 用にサービス専用でも委任済みでもないサブネットを選択してください。',
@@ -280,6 +281,14 @@ export default function VnetRoutingSettings({ topology, vnet, preview, usesRemot
       style={{ marginBottom: 8, padding: '5px 8px', background: 'var(--surface-muted)', border: '1px solid var(--warning)', borderRadius: 6, fontSize: 11, color: 'var(--warning)' }}>
       ⚠️ This VNet has <strong>Use Remote Gateways</strong> enabled on a peering. Local VNet Gateways and Route Server cannot be deployed unless <code>useRemoteGateways</code> is disabled first.
     </div>}
+    {vnet.vwanHubAttachment && <label className="aznet-checkbox-row">
+      <input type="checkbox" data-testid={`aznet-vwan-connection-enabled-${vnet.id}`}
+        checked={vnet.vwanHubAttachment.enabled} onChange={(event) => {
+          const enabled = event.target.checked
+          onChange((target) => { if (target.vwanHubAttachment) target.vwanHubAttachment.enabled = enabled })
+        }} />
+      <span>{t('Virtual WAN VNet connection enabled')}</span>
+    </label>}
     <InspectorSection title={t('Add or remove routing devices')}
       summary={t('Gateways: {0}; appliances: {1}; Route Server: {2}', vnet.gateways.length, vnet.appliances.length, vnet.routeServer ? 1 : 0)}
       initialOpen={!!(vnet.gateways.length || vnet.appliances.length || vnet.routeServer)}>

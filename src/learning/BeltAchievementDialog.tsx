@@ -4,6 +4,7 @@ import { useLanguage } from '../i18n'
 import type { BeltAchievement } from './belt-achievement'
 import { achievedStages } from './belt-stages'
 import { editions } from './editions'
+import { BeltIcon } from './BeltIcon'
 import './belt-achievement.css'
 
 export function BeltAchievementDialog({ achievement, onClose }: { achievement: BeltAchievement; onClose: () => void }) {
@@ -32,9 +33,7 @@ export function BeltAchievementDialog({ achievement, onClose }: { achievement: B
     }}
     onCancel={(event) => { event.preventDefault(); onClose() }}>
     <div className="belt-confetti" aria-hidden="true">{Array.from({ length: 12 }, (_, index) => <i key={index} />)}</div>
-    <svg aria-hidden="true" width="96" height="80" viewBox="0 0 24 20">
-      <path d="M2 5h20v6H2zM10 10l-3 8 5-2 2-6 3 8 4-2-5-7" fill={belt.color} stroke="currentColor" strokeWidth=".5" />
-    </svg>
+    <BeltIcon belt={belt} width={96} height={80} />
     <h2 id="belt-achievement-title">{language === 'ja' ? `${belt.name.ja}を獲得！` : `${belt.name.en} earned!`}</h2>
     <p>{edition.course.title[language]} · {edition.name[language]}</p>
     <p id="belt-achievement-summary">{language === 'ja' ? '前の帯からここまでに練習したトピック：' : 'Topics you practiced since your previous belt:'}</p>

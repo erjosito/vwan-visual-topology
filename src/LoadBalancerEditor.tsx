@@ -3,11 +3,12 @@ import './packet-messages-ja'
 import { t } from './i18n'
 import { inventoryOwners, namedEndpoints, sameInventoryOwner, workloadEndpointKey, type InventoryOwner, type InventoryTopology,
   type LoadBalancerFrontend, type LoadBalancerRule, type NetworkLoadBalancer, type WorkloadIpReference } from './inventory'
+import { guidanceAnchor } from './learning/guidance'
 
-export function LoadBalancerEditor({ topology, owner, change, onSelect }: {
-  topology: InventoryTopology; owner: InventoryOwner; change: (update: (draft: InventoryTopology) => void) => boolean; onSelect: (id: string) => void
+export function LoadBalancerEditor({ topology, owner, change, onSelect, initialSelectedId }: {
+  topology: InventoryTopology; owner: InventoryOwner; change: (update: (draft: InventoryTopology) => void) => boolean; onSelect: (id: string) => void; initialSelectedId?: string
 }) {
-  const [selectedId, setSelectedId] = useState('')
+  const [selectedId, setSelectedId] = useState(initialSelectedId ?? '')
   const [kind, setKind] = useState<'public' | 'private'>('public')
   const [query, setQuery] = useState('')
   const [serviceQuery, setServiceQuery] = useState('')
@@ -174,7 +175,8 @@ export function LoadBalancerEditor({ topology, owner, change, onSelect }: {
           if (update((lb) => { lb.pools.push({ id: `lb-pool-${crypto.randomUUID()}`, name: String(data.get('name')), members: [] }) })) form.reset()
         }}><label>{t('New LB pool name')}<input name="name" required maxLength={120} /></label><button type="submit">{t('Add backend pool')}</button></form>
       </details>
-      <details><summary>{t('Independent LB health probes')} ({lb.probes.length})</summary>
+      <details data-learning-anchor={guidanceAnchor('load-balancer-health', owner.id, lb.id)}>
+        <summary>{t('Independent LB health probes')} ({lb.probes.length})</summary>
         {lb.probes.map((probe) => <fieldset key={probe.id}>
           <legend>{probe.name} · {probe.protocol.toUpperCase()}:{probe.port}</legend>
           <button type="button" onClick={() => setProbeId(probe.id)}>{t('Edit probe')}</button>

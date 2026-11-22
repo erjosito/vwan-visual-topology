@@ -9,6 +9,20 @@ export type GuidancePlan = { anchors: string[]; reason?: undefined } | { reason:
 export function resolveGuidance(document: PlatformDocument, cue: CourseGuidance): GuidancePlan {
   if (document.mode === 'vwan') return { reason: 'provider' }
   const topology = document.topology
+  if (cue.action === 'peering.configure') return topology.vnetPeerings.some((peering) => peering.id === cue.params.peeringId)
+    ? { anchors: [guidanceAnchor('peering-editor', cue.params.peeringId)] } : { reason: 'entity' }
+  if (cue.action === 'load-balancer.configure') return topology.inventory?.loadBalancers?.some((lb) =>
+    lb.id === cue.params.loadBalancerId && lb.owner.kind === 'vnet' && lb.owner.id === cue.params.vnetId)
+    ? { anchors: [guidanceAnchor('load-balancer-health', cue.params.vnetId, cue.params.loadBalancerId)] } : { reason: 'entity' }
+  if (cue.action === 'gateway-routes.open') {
+    const { vnetId, gatewayId, prefix } = cue.params
+    return topology.vnets.some((vnet) => vnet.id === vnetId && vnet.gateways.some((gateway) => gateway.id === gatewayId))
+      ? { anchors: [guidanceAnchor('gateway-effective-prefix', vnetId, gatewayId, prefix), guidanceAnchor('gateway-effective-table', vnetId, gatewayId)] }
+      : { reason: 'entity' }
+  }
+  if (cue.action === 'er-routes.open') return topology.erLocations.some((location) => location.id === cue.params.locationId)
+    ? { anchors: [guidanceAnchor('er-effective-prefix', cue.params.locationId, cue.params.prefix), guidanceAnchor('er-effective-table', cue.params.locationId)] }
+    : { reason: 'entity' }
   if (cue.action === 'connection.configure') {
     const connections = cue.params.kind === 'er-link' ? topology.erLinks : topology.vpnConnections
     return connections.some((connection) => connection.id === cue.params.connectionId)
