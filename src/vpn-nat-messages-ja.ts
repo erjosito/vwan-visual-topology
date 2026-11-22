@@ -13,6 +13,8 @@ registerJapaneseMessages({
   'VPN overlap NAT only: no Internet breakout, NAT64, P2S, VNet-to-VNet, policy-based selectors, port-specific rules or pool exhaustion prediction.': '重複アドレスの VPN NAT のみ対応します。インターネット出口、NAT64、P2S、VNet 間、ポリシーベースのセレクター、ポート指定ルール、プール枯渇予測は非対応です。',
   'VPN NAT authoring and packet assessment require the Azure/Full Hybrid workspace; legacy VWAN saves remain unchanged.': 'VPN NAT の編集とパケット評価には Azure / Full Hybrid ワークスペースが必要です。従来の VWAN 保存データは変更しません。',
   'Classic VPN NAT SKU': '従来型 VPN NAT の SKU',
+  'VPN NAT requires VpnGw2–5 or their AZ variants; VpnGw1 and VpnGw1AZ do not support NAT. Saving this capability also sets the actual gateway SKU above.': 'VPN NAT には VpnGw2～5 または AZ 版が必要です。VpnGw1 と VpnGw1AZ は NAT 非対応です。この機能を保存すると、上記の実際のゲートウェイ SKU も設定されます。',
+  'The actual gateway SKU differs from the declared NAT capability. Select a supported NAT SKU and save the capability to align them.': '実際のゲートウェイ SKU が宣言された NAT 機能と異なります。対応する NAT SKU を選択し、機能を保存して一致させてください。',
   'Enable gateway BGP route translation': 'ゲートウェイの BGP ルート変換を有効化',
   'Gateway-wide setting; only exact prefixes with matching connection-owned NAT rules are translated. Unmatched connections and prefixes stay unchanged. Static routing requires explicit post-NAT routes.': 'ゲートウェイ全体の設定です。接続所有 NAT ルールと完全一致するプレフィックスのみ変換します。一致しない接続とプレフィックスは変更しません。静的ルーティングには明示的な変換後ルートが必要です。',
   'Save VPN NAT gateway capability': 'VPN NAT ゲートウェイ機能を保存',
