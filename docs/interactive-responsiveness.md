@@ -93,10 +93,61 @@ peak. Comparisons require the same workload hashes, UI state, hardware/browser
 class, build method, and sample count; inspect raw variability, not only one
 summary number.
 
-## Follow-up scope
+## Reference baseline and follow-up targets
 
-Use the saved reference baseline to choose the dominant phases and explicit
-edit/trace/undo targets before implementing changes. Worker candidates must
+The [raw reference report](benchmarks/interactive-baseline.json) contains all
+225 measured actions across nine workloads, from clean source
+`45037bee715a2b33b55d4a5cecdfe659c768e358`. Hardware was an Intel Core Ultra 7
+165H with 22 logical CPUs and 34.0 GB total memory, Windows, Node 22.23.5,
+and Chromium 156.0.8078.4. Available memory was only 0.89 GB before and
+3.90 GB after the run: **this shared-machine baseline includes memory pressure
+and changing ambient load**, not a controlled idle-machine qualification.
+
+Values below are median / coarse p95 in milliseconds. Display Undo and every
+raw sample, phase span, and invocation count remain in the report.
+
+| Mode / tier | Display edit | Semantic edit | Semantic Undo | Trace |
+|---|---:|---:|---:|---:|
+| VWAN / small | 28 / 32 | 31 / 41 | 19 / 24 | 21 / 23 |
+| VWAN / dense | 384 / 490 | 316 / 325 | 268 / 283 | 219 / 298 |
+| VWAN / near-limit | 962 / 1,166 | 894 / 926 | 809 / 974 | 810 / 946 |
+| H&S / small | 36 / 39 | 41 / 43 | 37 / 45 | 39 / 43 |
+| H&S / dense | 323 / 497 | 1,355 / 1,634 | 1,445 / 1,486 | 107 / 191 |
+| H&S / near-limit sparse | 427 / 491 | 756 / 929 | 800 / 963 | 466 / 539 |
+| Full / small | 37 / 40 | 40 / 49 | 36 / 46 | 27 / 34 |
+| Full / dense | 284 / 320 | 1,346 / 1,425 | 1,158 / 1,363 | 112 / 124 |
+| Full / near-limit sparse | 367 / 511 | 541 / 1,048 | 681 / 771 | 399 / 486 |
+
+The demonstrated priority is **mixed dense semantic edit/Undo**, not a blanket
+worker migration: semantic edits invoke simulation once (median about 665 ms)
+and synchronous diagnostics once (262-268 ms). Mutation, history cloning,
+projection and persistence are each about 1-3 ms. The inclusive render-to-layout
+span is about 1,320 ms and overlaps those engine spans; it must not be added
+to them. Mixed display edits invoke neither simulation nor trace, but their
+render-to-layout medians remain 258-294 ms, indicating separate rendering work.
+
+VWAN display edits do rerun simulation once per measured action (dense median
+190 ms), even though routing projections omit presentation-only names. This
+is evidence for a cache investigation, not permission to reuse stale display
+names or route results. Native near-limit retention passed without truncation;
+the sparse mixed case does not establish worst-case dense transit latency.
+
+Provisional follow-up acceptance targets, to be evaluated using paired
+before/after runs under comparable load with at least 20 samples:
+
+1. Reduce dense mixed semantic edit **and Undo** median by at least 50% and
+   coarse p95 by at least 30%, in both modes. Relative to this reference,
+   median ceilings are about 677/722 ms for H&S edit/Undo and 673/579 ms for
+   Full. First investigate simulation and synchronous diagnostics.
+2. Make name-only VWAN edits avoid simulation/trace recomputation while still
+   refreshing names and preserving IDs; aim for dense display-edit median
+   at most 200 ms and p95 at most 300 ms, versus 384/490 ms here.
+3. Keep all five small-workload operations at p95 below 100 ms and avoid more
+   than 10% median trace or near-limit regressions in paired comparisons.
+   Recheck variable-load results rather than treating one five-sample run as
+   a CI timing gate.
+
+These are selected targets, **not delivered improvements**. Worker candidates must
 preserve native/provider semantics, original IDs, admission and startup bounds,
 and include document/generation ownership, cancellation, pending-state honesty,
 and tab/account/practice stale-result tests. No improvement or lifecycle
