@@ -1,41 +1,10 @@
 import type { HttpRequest, HttpResponseInit } from '@azure/functions'
 import { cloudLimits, parseCloudTopology, parseProgressLedger } from '../../src/cloud/contracts'
 import { createSharingHandler } from './sharing'
-
-export interface StoredValue { raw: string; etag: string; generation?: string }
-export interface CloudStore {
-  get(key: string): Promise<StoredValue | undefined>
-  put(key: string, raw: string, etag: string | null, name?: string): Promise<string>
-  delete(key: string, etag: string): Promise<void>
-  list(prefix: string): Promise<{ id: string; name: string; etag: string; updatedAt: string }[]>
-}
-export class CloudError extends Error {
-  constructor(public status: number, message: string) { super(message) }
-}
+import { body, CloudError, type CloudStore } from './http'
+export { body, CloudError, type CloudStore, type StoredValue } from './http'
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const validEtag = (value: string | null) => !!value && /^"[\x21\x23-\x7e]{1,160}"$/.test(value)
-
-export async function body(request: HttpRequest, limit = cloudLimits.bytes) {
-  if (!request.headers.get('content-type')?.toLowerCase().startsWith('application/json')) throw new CloudError(415, 'JSON required.')
-  const reader = request.body?.getReader()
-  if (!reader) throw new CloudError(400, 'JSON required.')
-  const decoder = new TextDecoder('utf-8', { fatal: true })
-  let bytes = 0, raw = ''
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      bytes += value.byteLength
-      if (bytes > limit) { await reader.cancel(); throw new CloudError(413, 'Cloud document size limit exceeded.') }
-      raw += decoder.decode(value, { stream: true })
-    }
-    raw += decoder.decode()
-    return JSON.parse(raw)
-  } catch (error) {
-    if (error instanceof CloudError) throw error
-    throw new CloudError(400, 'Invalid JSON document.')
-  } finally { reader.releaseLock() }
-}
 
 export function createCloudHandler(options: {
   authenticate: (authorization: string | null) => Promise<string>

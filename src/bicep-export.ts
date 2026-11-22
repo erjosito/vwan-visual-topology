@@ -2,6 +2,8 @@ import type { Topology } from './model'
 import { cidr, contains, validateTopology } from './validation'
 import { DEFAULT_HUB_TABLE, NONE_HUB_TABLE, attachmentHubRouting, hubRouteTables } from './hub-routing'
 import { generateConnectivityBicep } from './connectivity-bicep'
+import { canonicalLocation } from './deployment-location'
+export { canonicalLocation } from './deployment-location'
 
 export interface HubDeployment {
   hubId: string
@@ -31,16 +33,6 @@ export interface BicepExport { text: string; warnings: string[]; resourceCount: 
 const apiVersion = '2024-10-01'
 const vnetArmPattern = /^\/subscriptions\/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\/resourceGroups\/[^/?#\r\n]+\/providers\/Microsoft\.Network\/virtualNetworks\/[^/?#\r\n]+$/i
 const firewallPolicyArmPattern = /^\/subscriptions\/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\/resourceGroups\/[^/?#\r\n]+\/providers\/Microsoft\.Network\/firewallPolicies\/[^/?#\r\n]+$/i
-const knownLocations: Record<string, string> = {
-  'West Europe': 'westeurope', 'North Europe': 'northeurope', 'East US': 'eastus', 'East US 2': 'eastus2',
-  'West US': 'westus', 'West US 2': 'westus2', 'West US 3': 'westus3', 'Central US': 'centralus',
-  'South Central US': 'southcentralus', 'North Central US': 'northcentralus', 'UK South': 'uksouth', 'UK West': 'ukwest',
-  'France Central': 'francecentral', 'Germany West Central': 'germanywestcentral', 'Sweden Central': 'swedencentral',
-  'Switzerland North': 'switzerlandnorth', 'Canada Central': 'canadacentral', 'Australia East': 'australiaeast',
-  'Southeast Asia': 'southeastasia', 'East Asia': 'eastasia', 'Japan East': 'japaneast', 'Central India': 'centralindia',
-  'South Africa North': 'southafricanorth', 'Brazil South': 'brazilsouth', 'UAE North': 'uaenorth',
-}
-export const canonicalLocation = (value: string) => knownLocations[value] ?? (/^[a-z][a-z0-9]{1,39}$/.test(value) ? value : '')
 const suggestName = (value: string) => value.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 45).replace(/-+$/g, '') || 'vwan'
 
 export function bicepDefaults(topology: Topology): BicepSettings {

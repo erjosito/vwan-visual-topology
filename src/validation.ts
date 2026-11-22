@@ -6,32 +6,11 @@ import { validateInventory, type InventorySubnet, type NetworkInventory } from '
 import { validateApplicationInventory } from './application-inventory'
 import type { ApplicationInventory } from './application'
 import { VWAN_LARGE_MAX_PREFIXES, VWAN_LEGACY_SPOKES, VWAN_MAX_LAYOUT_POSITIONS, VWAN_MAX_SPOKES } from './topology-limits'
+import { ipv4, cidr, contains, formatIpv4 } from './ipv4'
+export { ipv4, cidr, contains, formatIpv4 } from './ipv4'
 
 const canonicalHubTable = (value: string) => value.toLowerCase() === 'defaultroutetable' ? 'defaultRouteTable'
   : value.toLowerCase() === 'noneroutetable' ? 'noneRouteTable' : value
-
-export function ipv4(value: string): number | undefined {
-  if (!/^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/.test(value)) return undefined
-  const octets = value.split('.').map(Number)
-  if (octets.some((n) => n > 255)) return undefined
-  return octets.reduce((result, n) => result * 256 + n, 0)
-}
-
-export function cidr(value: string): { network: number; length: number } | undefined {
-  const parts = value.split('/')
-  if (parts.length !== 2 || !/^(0|[1-9]\d?)$/.test(parts[1])) return undefined
-  const address = ipv4(parts[0])
-  const length = Number(parts[1])
-  if (address === undefined || length > 32) return undefined
-  const block = 2 ** (32 - length)
-  const network = Math.floor(address / block) * block
-  if (address !== network) return undefined
-  return { network, length }
-}
-
-export function formatIpv4(address: number): string {
-  return [24, 16, 8, 0].map((shift) => Math.floor(address / 2 ** shift) % 256).join('.')
-}
 
 export function defaultSpokeNvaPeerIp(prefixes: string[], existingPeerIps: string[] = []): string | undefined {
   const first = prefixes.map(cidr).find((parsed) => parsed !== undefined)
@@ -48,11 +27,6 @@ export function defaultSpokeNvaPeerIp(prefixes: string[], existingPeerIps: strin
     if (contains(prefixes[0], first.network + offset) && !used.has(candidate)) return candidate
   }
   return undefined
-}
-
-export function contains(prefix: string, address: number): boolean {
-  const parsed = cidr(prefix)
-  return !!parsed && Math.floor(address / 2 ** (32 - parsed.length)) * 2 ** (32 - parsed.length) === parsed.network
 }
 
 export function isVwanNvaAsn(asn: number): boolean {

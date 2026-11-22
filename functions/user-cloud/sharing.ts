@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import type { HttpRequest, HttpResponseInit } from '@azure/functions'
 import { parseCloudTopology, type CloudShare } from '../../src/cloud/contracts'
-import { body, CloudError, type CloudStore } from './handler'
+import { body, CloudError, type CloudStore } from './http'
 
 interface ShareRecord extends Omit<CloudShare, 'etag'> { owner: string; generation: string }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/

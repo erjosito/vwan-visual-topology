@@ -1,4 +1,4 @@
-import { cidr, contains, formatIpv4, ipv4 } from './validation'
+import { cidr, contains, formatIpv4, ipv4 } from './ipv4'
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 
