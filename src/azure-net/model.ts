@@ -174,6 +174,30 @@ export interface AzVnetPeering {
   bToA: AzPeeringDirectionFlags
 }
 
+export function defaultPeeringFlags(local: AzVNet, remote: AzVNet): AzPeeringDirectionFlags {
+  const localHasGateway = local.gateways.length > 0 || Boolean(local.routeServer)
+  const remoteHasGateway = remote.gateways.length > 0 || Boolean(remote.routeServer)
+  return {
+    allowVirtualNetworkAccess: true,
+    allowForwardedTraffic: true,
+    allowGatewayTransit: localHasGateway && !remoteHasGateway,
+    useRemoteGateways: remoteHasGateway && !localHasGateway,
+  }
+}
+
+export function peeringFlagUnavailableReason(local: AzVNet | undefined, remote: AzVNet | undefined,
+  remoteFlags: AzPeeringDirectionFlags, flag: keyof AzPeeringDirectionFlags): string | undefined {
+  const localHasGateway = Boolean(local?.gateways.length || local?.routeServer)
+  const remoteHasGateway = Boolean(remote?.gateways.length || remote?.routeServer)
+  if (flag === 'allowGatewayTransit' && !localHasGateway) return 'Requires a VNet Gateway or Route Server in the local VNet'
+  if (flag === 'useRemoteGateways') {
+    if (localHasGateway) return 'Cannot enable Use Remote Gateways on a VNet that has its own Gateway or Route Server'
+    if (!remoteHasGateway) return 'Remote VNet has no Gateway or Route Server'
+    if (!remoteFlags.allowGatewayTransit) return 'Requires Allow Gateway Transit on the remote peering direction'
+  }
+  return undefined
+}
+
 export interface AzVwanHub {
   vpnNat?: VwanVpnNatGateway
   firewall?: { id: string; name: string }

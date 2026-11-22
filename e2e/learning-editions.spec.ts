@@ -8,7 +8,7 @@ import { sidebarLabels } from '../src/learning/sidebar-content'
 import { runnerLabels } from '../src/learning/runner-content'
 import { statusLabels } from '../src/learning/status-content'
 import AxeBuilder from '@axe-core/playwright'
-import { createEmptyAzNetTopology } from '../src/azure-net/model'
+import { createEmptyAzNetTopology, type AzVnetPeering } from '../src/azure-net/model'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
@@ -242,8 +242,23 @@ for (const language of ['en', 'ja'] as const) {
       await learningAnchor(page, 'peer-menu', vnetId).click()
       await learningAnchor(page, 'peer-target', vnetId, 'hub').click()
     }
+    const hubPeerings: AzVnetPeering[] = await page.evaluate((key) =>
+      JSON.parse(localStorage.getItem(key)!).document.topology.vnetPeerings
+        .filter((peering: AzVnetPeering) => peering.vnetAId === 'hub' || peering.vnetBId === 'hub'), practiceWorkspaceKey)
+    expect(hubPeerings).toHaveLength(2)
+    for (const peering of hubPeerings) {
+      expect(peering.aToB).toMatchObject({ allowGatewayTransit: false, useRemoteGateways: false })
+      expect(peering.bToA).toMatchObject({ allowGatewayTransit: false, useRemoteGateways: false })
+    }
     await expect(debrief).toContainText(language === 'en' ? 'this intermediate network is not ready to deploy' : 'この中間構成はデプロイの準備ができた状態ではなく')
     await advanceLearningTask(page, language)
+    await page.getByTestId('ui-preview-toggle').click()
+    await page.getByTestId('aznet-subnet-rt-badge-a-work').hover({ force: true })
+    await page.getByTestId('aznet-rt-hover-card').getByRole('button', { name: 'Edit Route Table…', exact: true }).click()
+    await expect(page.getByTestId('aznet-udr-editor').locator('..')).toHaveJSProperty('open', true)
+    await expect(page.getByTestId('aznet-subnet-security-editor').locator('..')).toHaveJSProperty('open', false)
+    await expect(page.getByTestId('aznet-rt-card-application-policy')).toBeVisible()
+    await page.getByRole('dialog', { name: 'Configure selected object', exact: true }).press('Escape')
     const applicationPolicy = await openTable(page, 'inspection-bypass.summary', 'application-policy', language)
     await applicationPolicy.getByRole('button', { name: '+ Add UDR Row', exact: true }).click()
     const inputs = applicationPolicy.locator('tbody tr').last().locator('input[type="text"]')

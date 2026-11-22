@@ -21,6 +21,7 @@ import { azFindingFlows, type AzDiagnosticFinding } from './diagnostics'
 import { subnetAddressError, vnetAddressError } from './addressing'
 import type { AzFlowTrace, AzSimulationResult } from './engine'
 import type { AzNetTopology, AzPeeringDirectionFlags, AzUdrTable, AzVNet } from './model'
+import { peeringFlagUnavailableReason } from './model'
 
 const zoomLimits = { minZoom: 0.65, maxZoom: 1.6, zoomStep: 0.15 }
 
@@ -84,7 +85,7 @@ interface AzureNetDiagramProps {
     subnetId: string,
     routeTableId: string | undefined,
   ) => void
-  onOpenEditorForEntity?: (entity: AzSelectedEntity) => void
+  onOpenEditorForEntity?: (entity: AzSelectedEntity, section?: 'routes') => void
   onShowRouteMapRules?: (selection: AzRouteMapSelection) => void
   forwardTrace?: AzFlowTrace | null
   reverseTrace?: AzFlowTrace | null
@@ -2087,12 +2088,6 @@ export function AzureNetDiagram({
         if (!peering) return null
         const vnetA = topology.vnets.find((v) => v.id === peering.vnetAId)
         const vnetB = topology.vnets.find((v) => v.id === peering.vnetBId)
-        const vnetAHasGwOrArs = Boolean(
-          vnetA && (vnetA.gateways.some((g) => g.enabled) || vnetA.routeServer?.enabled),
-        )
-        const vnetBHasGwOrArs = Boolean(
-          vnetB && (vnetB.gateways.some((g) => g.enabled) || vnetB.routeServer?.enabled),
-        )
         return (
           <div
             className="aznet-hover-popover"
@@ -2126,12 +2121,7 @@ export function AzureNetDiagram({
                     ['useRemoteGateways', 'Use Remote GW'],
                   ] as const
                 ).map(([flag, label]) => {
-                  const disabledReason =
-                    flag === 'useRemoteGateways' && !peering.aToB.useRemoteGateways && vnetAHasGwOrArs
-                      ? `${vnetA?.name} already has a local Gateway or Route Server`
-                      : flag === 'allowGatewayTransit' && !peering.aToB.allowGatewayTransit && !vnetAHasGwOrArs
-                        ? `${vnetA?.name} has no enabled Gateway or Route Server`
-                        : undefined
+                  const disabledReason = peeringFlagUnavailableReason(vnetA, vnetB, peering.bToA, flag)
                   return (
                     <label
                       key={flag}
@@ -2142,7 +2132,7 @@ export function AzureNetDiagram({
                       <input
                         type="checkbox"
                         checked={peering.aToB[flag]}
-                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason)}
+                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason && !peering.aToB[flag])}
                         onChange={(e) =>
                           onUpdatePeeringFlag?.(peering.id, 'aToB', flag, e.target.checked)
                         }
@@ -2164,12 +2154,7 @@ export function AzureNetDiagram({
                     ['useRemoteGateways', 'Use Remote GW'],
                   ] as const
                 ).map(([flag, label]) => {
-                  const disabledReason =
-                    flag === 'useRemoteGateways' && !peering.bToA.useRemoteGateways && vnetBHasGwOrArs
-                      ? `${vnetB?.name} already has a local Gateway or Route Server`
-                      : flag === 'allowGatewayTransit' && !peering.bToA.allowGatewayTransit && !vnetBHasGwOrArs
-                        ? `${vnetB?.name} has no enabled Gateway or Route Server`
-                        : undefined
+                  const disabledReason = peeringFlagUnavailableReason(vnetB, vnetA, peering.aToB, flag)
                   return (
                     <label
                       key={flag}
@@ -2180,7 +2165,7 @@ export function AzureNetDiagram({
                       <input
                         type="checkbox"
                         checked={peering.bToA[flag]}
-                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason)}
+                        disabled={!onUpdatePeeringFlag || Boolean(disabledReason && !peering.bToA[flag])}
                         onChange={(e) =>
                           onUpdatePeeringFlag?.(peering.id, 'bToA', flag, e.target.checked)
                         }
@@ -2294,8 +2279,7 @@ export function AzureNetDiagram({
                     vnetId: vnet.id,
                     subnetId: subnet.id,
                   }
-                  onSelect(entity)
-                  onOpenEditorForEntity?.(entity)
+                  onOpenEditorForEntity?.(entity, 'routes')
                   setHoverPopover(null)
                 }}
               >
