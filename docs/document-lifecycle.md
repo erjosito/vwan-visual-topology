@@ -25,6 +25,14 @@ ordinary document artifact commands.
 
 ## Destinations and closing
 
+Live simulation requests use `createPlatformRequest` to omit absent typed
+envelope and budget options. Native topology and requirement data must remain
+unchanged for admission; never stringify/parse a request to erase invalid
+values. Native producers delete cleared optional fields rather than assign
+`undefined`. Browser and Node workers validate returned contract/provider
+identity and assessment completeness; malformed replies settle as unassessed,
+not successful evidence.
+
 First Save requests a destination; subsequent Save uses the last confirmed
 destination. Save As changes that destination only after acknowledged success.
 Cancellation, denied permission, ETag conflict and unconfirmed downloads retain

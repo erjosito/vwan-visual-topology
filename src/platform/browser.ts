@@ -1,6 +1,7 @@
 import { incompletePlatformResult, validateRequest } from './service'
 import { platformLimits } from './contract'
 import type { PlatformResult } from './contract'
+import { validatePlatformResult } from './result'
 
 export async function runBrowserSimulation(input: unknown, signal?: AbortSignal): Promise<PlatformResult> {
   const request = validateRequest(input)
@@ -18,9 +19,12 @@ export async function runBrowserSimulation(input: unknown, signal?: AbortSignal)
     }
     const cancel = () => finish(stopped('CANCELLED'))
     const timer = setTimeout(() => finish(stopped('TIME_LIMIT')), request.budget?.maxMillis ?? platformLimits.maxMillis)
-    worker.onmessage = ({ data }: MessageEvent<PlatformResult>) => {
-      const bytes = new TextEncoder().encode(JSON.stringify(data)).length
-      finish(bytes > (request.budget?.maxOutputBytes ?? platformLimits.maxOutputBytes) ? stopped('OUTPUT_LIMIT') : data)
+    worker.onmessage = ({ data }: MessageEvent<unknown>) => {
+      try {
+        const bytes = new TextEncoder().encode(JSON.stringify(data)).length
+        finish(bytes > (request.budget?.maxOutputBytes ?? platformLimits.maxOutputBytes)
+          ? stopped('OUTPUT_LIMIT') : validatePlatformResult(data, request))
+      } catch { finish(stopped('INVALID_WORKER_RESULT')) }
     }
     worker.onerror = () => finish(stopped('WORKER_FAILURE'))
     if (signal?.aborted) cancel()

@@ -61,17 +61,20 @@ export function projectVwanFailures(baseline: Topology, faults: FailureDomain[] 
   const alive = (item: { id: string }) => !affected[item.id]
   const active = structuredClone(baseline)
   active.hubs = active.hubs.filter(alive)
-  active.spokes = active.spokes.filter(alive).map((spoke) => ({
-    ...spoke,
-    hubId: active.hubs.some((h) => h.id === spoke.hubId) ? spoke.hubId : undefined,
-    nvaSpokeIds: spoke.nvaSpokeIds?.filter((id) => !affected[id]),
-  }))
+  active.spokes = active.spokes.filter(alive).map((spoke) => {
+    if (!active.hubs.some((h) => h.id === spoke.hubId)) delete spoke.hubId
+    if (spoke.nvaSpokeIds !== undefined) spoke.nvaSpokeIds = spoke.nvaSpokeIds.filter((id) => !affected[id])
+    return spoke
+  })
   active.sites = active.sites.filter(alive)
   active.connections = active.connections.filter(alive)
   active.siteLinks = active.siteLinks.filter(alive)
-  active.erLocations = active.erLocations?.filter(alive).map((l) => ({ ...l, globalReachLocationIds: l.globalReachLocationIds?.filter((id) => !affected[id]) }))
-  active.erLinks = active.erLinks?.filter(alive)
-  active.interWanVpns = active.interWanVpns?.filter(alive)
+  if (active.erLocations !== undefined) active.erLocations = active.erLocations.filter(alive).map((location) => {
+    if (location.globalReachLocationIds !== undefined) location.globalReachLocationIds = location.globalReachLocationIds.filter((id) => !affected[id])
+    return location
+  })
+  if (active.erLinks !== undefined) active.erLinks = active.erLinks.filter(alive)
+  if (active.interWanVpns !== undefined) active.interWanVpns = active.interWanVpns.filter(alive)
   return { active, affected, unassessed, domains: domainList([...regions.values()], baseline.sites.filter((s) => !embedded.has(s.id)), baseline.erLocations ?? []) }
 }
 
@@ -94,16 +97,16 @@ export function projectAzFailures(baseline: AzNetTopology, faults: FailureDomain
   for (const l of baseline.siteLinks) inherit(l.id, [l.siteAId, l.siteBId])
   const alive = (item: { id: string }) => !affected[item.id]
   const active = structuredClone(baseline)
-  active.vnets = active.vnets.filter(alive).map((vnet) => ({
-    ...vnet,
-    vwanHubAttachment: vnet.vwanHubAttachment && !affected[vnet.vwanHubAttachment.hubId] ? vnet.vwanHubAttachment : undefined,
-  }))
+  active.vnets = active.vnets.filter(alive).map((vnet) => {
+    if (vnet.vwanHubAttachment && affected[vnet.vwanHubAttachment.hubId]) delete vnet.vwanHubAttachment
+    return vnet
+  })
   active.vwanHubs = active.vwanHubs.filter(alive)
   active.sites = active.sites.filter(alive)
   active.erLocations = active.erLocations.filter(alive)
   active.vnetPeerings = active.vnetPeerings.filter(alive)
   active.erLinks = active.erLinks.filter(alive)
-  active.erGlobalReachLinks = active.erGlobalReachLinks?.filter(alive)
+  if (active.erGlobalReachLinks !== undefined) active.erGlobalReachLinks = active.erGlobalReachLinks.filter(alive)
   active.vpnConnections = active.vpnConnections.filter(alive)
   active.siteLinks = active.siteLinks.filter(alive)
   return { active, affected, unassessed, domains: domainList([...baseline.vnets, ...baseline.vwanHubs].map((n) => n.region), baseline.sites, baseline.erLocations) }
