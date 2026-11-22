@@ -14,7 +14,7 @@ import type { FormEvent } from 'react'
 import { example, objectLabels, topologyObject } from './model'
 import type { LayoutMode, ObjectSelection, RouteMapDirection, RouterSelection, Topology } from './model'
 import { simulate } from './routing'
-import { vwanDisplayResult, vwanRoutingInput } from './vwan-routing-input'
+import { vwanDisplayResult, vwanDisplaySimulation, vwanRoutingInput } from './vwan-routing-input'
 import { ipv4, validateTopology } from './validation'
 import { TopologyDiagram } from './TopologyDiagram'
 import type { DiagramContextMenu } from './TopologyDiagram'
@@ -270,7 +270,7 @@ function App() {
   const routingTopology = useMemo(() => JSON.parse(routingInput.revision) as Topology, [routingInput.revision])
   const displayNames = useMemo(() => JSON.parse(routingInput.nameRevision) as string[], [routingInput.nameRevision])
   const rawSimulation = useMemo(() => measureAzWork('simulation', () => simulate(routingTopology)), [routingTopology])
-  const simulation = useMemo(() => vwanDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
+  const simulation = useMemo(() => measureAzWork('display-binding', () => vwanDisplaySimulation(rawSimulation, displayNames)), [rawSimulation, displayNames])
   const nvaSiteIds = useMemo(() => embeddedSpokeNvaSiteIds(topology), [topology])
   const nodes: (PathNode & { name: string })[] = [
     ...topology.hubs.map((n) => ({ kind: 'hub' as const, id: n.id, name: n.name })),

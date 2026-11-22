@@ -1,4 +1,5 @@
 import type { Topology } from './model'
+import type { Simulation } from './routing'
 import { routingDisplayResult } from './routing-display'
 
 export function vwanRoutingInput(topology: Topology) {
@@ -8,6 +9,7 @@ export function vwanRoutingInput(topology: Topology) {
   }
   const names: string[] = []
   const name = (entity: { name: string }) => {
+    if (!entity.name.trim()) return
     entity.name = `\0aznet-name:${names.push(entity.name) - 1}\0`
   }
   const node = (entity: { name: string; label?: string }) => {
@@ -35,4 +37,10 @@ export function vwanRoutingInput(topology: Topology) {
 
 export function vwanDisplayResult<T>(value: T, names: string[]): T {
   return names.length ? routingDisplayResult(value, names) : value
+}
+
+export function vwanDisplaySimulation(simulation: Simulation, names: string[]): Simulation {
+  // Route DAGs contain IDs and semantic static-route names; only warning prose needs display binding.
+  const warnings = vwanDisplayResult(simulation.warnings, names)
+  return warnings === simulation.warnings ? simulation : { ...simulation, warnings }
 }

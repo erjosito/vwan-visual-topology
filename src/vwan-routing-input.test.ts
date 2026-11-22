@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { example, type Topology } from './model'
 import { traceNodePath } from './paths'
 import { simulate } from './routing'
-import { vwanDisplayResult, vwanRoutingInput } from './vwan-routing-input'
+import { vwanDisplayResult, vwanDisplaySimulation, vwanRoutingInput } from './vwan-routing-input'
 
 it('reuses semantic input on rename while refreshing native route warnings and trace prose without changing IDs', () => {
   const original = structuredClone(example)
@@ -19,7 +19,16 @@ it('reuses semantic input on rename while refreshing native route warnings and t
   const names = JSON.parse(next.nameRevision) as string[]
   expect(next.revision).toBe(input.revision)
   const fresh = simulate(renamed)
-  expect(vwanDisplayResult(cached, names)).toEqual(fresh)
+  const decision = Object.values(cached.bgpTables)[0][0]
+  const descriptor = Object.getOwnPropertyDescriptor(decision, 'candidates')!
+  const candidates = decision.candidates
+  let candidateReads = 0
+  Object.defineProperty(decision, 'candidates', { configurable: true, enumerable: true,
+    get: () => { candidateReads++; return candidates } })
+  const displayed = vwanDisplaySimulation(cached, names)
+  expect(candidateReads).toBe(0)
+  Object.defineProperty(decision, 'candidates', descriptor)
+  expect(displayed).toEqual(fresh)
   const source = { kind: 'spoke' as const, id: original.spokes[0].id }
   const destination = original.spokes.at(-1)!.prefixes[0].split('/')[0]
   expect(vwanDisplayResult(traceNodePath(routing, cached, source, destination), names))
@@ -77,4 +86,22 @@ it('retains unknown native fields as semantic inputs', () => {
   const initial = vwanRoutingInput(topology)
   topology.futureRouting.policy = 'changed'
   expect(vwanRoutingInput(topology).revision).not.toBe(initial.revision)
+})
+
+it('retains blank-name modeling eligibility instead of creating a modeled firewall through display tokens', () => {
+  const topology: Topology = { version: 1, name: 'Static route eligibility',
+    hubs: [{ id: 'hub', name: 'Hub', region: 'West Europe', preference: 'ASPath',
+      routingIntent: { private: false, internet: false, privatePrefixes: [] },
+      firewall: { id: 'firewall', name: ' ' },
+      routeTables: [{ id: 'defaultRouteTable', name: 'Default', labels: [],
+        staticRoutes: [{ name: 'Static identity', destinationType: 'CIDR', destinations: ['10.0.0.0/8'],
+          nextHopType: 'ResourceId', nextHop: 'firewall' }] }] }],
+    spokes: [], sites: [], connections: [], siteLinks: [] }
+  const input = vwanRoutingInput(topology)
+  const projected = JSON.parse(input.revision) as Topology
+  expect(vwanDisplaySimulation(simulate(projected), JSON.parse(input.nameRevision))).toEqual(simulate(topology))
+  topology.hubs[0].firewall!.name = 'Modeled firewall'
+  const changed = vwanRoutingInput(topology)
+  expect(changed.revision).not.toBe(input.revision)
+  expect(vwanDisplaySimulation(simulate(JSON.parse(changed.revision)), JSON.parse(changed.nameRevision))).toEqual(simulate(topology))
 })
