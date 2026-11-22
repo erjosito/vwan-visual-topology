@@ -73,6 +73,7 @@ export function createDocumentRuntime(getCloud: () => CloudSessionValue | undefi
       }
       document.commands = createDocumentCommands({
         documentId: document.id, getTopology: topology, getAccountId: () => getCloud()?.account?.id,
+        hasPendingConfiguration: document.hasPendingConfiguration,
         confirmed: (destination, submitted) => {
           if (destination.kind === 'cloud') document.save.linkArtifact(destination, submitted, document.provider)
         },

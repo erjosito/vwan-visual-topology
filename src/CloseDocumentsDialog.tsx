@@ -23,6 +23,11 @@ export function CloseDocumentsDialog({ documents, onClose, onDiscard }: {
   const save = async () => {
     setBusy(true); setNotice('')
     try {
+      if (documents.some(document => document.hasPendingConfiguration())) {
+        setNotice(text('Apply pending configuration changes in their tab before saving, or explicitly discard them.',
+          '保存する前に各タブで保留中の設定を適用するか、明示的に破棄してください。'))
+        return
+      }
       for (const document of documents) {
         if (document.commands?.canClose()) continue
         const result = await document.commands?.save()
@@ -33,6 +38,11 @@ export function CloseDocumentsDialog({ documents, onClose, onDiscard }: {
             '最新の編集の保存を確認できません。もう一度保存するか、明示的に破棄してください。'))
           return
         }
+      }
+      if (documents.some(document => !document.commands?.canClose())) {
+        setNotice(text('The latest edits are not confirmed saved. Save again or explicitly discard them.',
+          '最新の編集の保存を確認できません。もう一度保存するか、明示的に破棄してください。'))
+        return
       }
       onDiscard()
     } finally { setBusy(false) }

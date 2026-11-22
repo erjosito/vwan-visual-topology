@@ -12,6 +12,8 @@ export interface WorkspaceDocument {
   commands?: ReturnType<typeof createDocumentCommands>
   association: WorkspaceStorage
   editorState: Map<string, unknown>
+  configurationPending: Map<string, boolean>
+  hasPendingConfiguration: () => boolean
   history?: WorkspaceEditorHistory
   capture?: unknown
   remember: (history: WorkspaceEditorHistory) => boolean
@@ -48,6 +50,8 @@ export function createWorkspaceDocuments(storage: WorkspaceStorage, persistent =
     const save = { ...state, reset: () => { if (owned()) state.reset() } }
     document = {
       id: tab.id, provider: tab.provider, storage: scoped, association, save, editorState: new Map(),
+      configurationPending: new Map(),
+      hasPendingConfiguration: () => [...document.configurationPending.values()].some(Boolean),
       remember(history) {
         if (!owned() || history.provider !== tab.provider) return false
         document.history = history

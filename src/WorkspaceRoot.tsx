@@ -412,7 +412,6 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       setNotice(text('Wait for the save to finish before closing its tab.', '保存が完了してからタブを閉じてください。'))
       return
     }
-    if (targets.some(tab => tab.id === active?.id) && !confirmConfigurationSwitch('.object-editor, .aznet-inspector-window')) return
     if (targets.some(tab => !documents.get(tab).commands?.canClose())) { setClosing({ tabs: targets, after }); return }
     finishClose(targets, after)
   }
@@ -682,6 +681,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       },
     } : undefined,
     editorState: practicing ? practiceEditorState.current : design?.editorState,
+    configurationPending: practicing ? undefined : design?.configurationPending,
     capture: practicing ? undefined : design?.capture,
     consumeCapture: () => { if (design && documents.active() === design) design.capture = undefined },
     openPractice, practice: practicing ? practice : undefined,

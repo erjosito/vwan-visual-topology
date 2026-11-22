@@ -1,4 +1,4 @@
-import { createContext, useContext, useLayoutEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from 'react'
+import { createContext, useContext, useId, useLayoutEffect, useState, useSyncExternalStore, type Dispatch, type SetStateAction } from 'react'
 import type { Topology } from './model'
 import type { AzNetTopology } from './azure-net/model'
 import type { PlatformDocument } from './platform/contract'
@@ -27,6 +27,7 @@ export const WorkspaceSessionContext = createContext<{
   documentSave?: DocumentSaveState
   storage?: WorkspaceStorage
   editorState?: Map<string, unknown>
+  configurationPending?: Map<string, boolean>
   getRequestVersion: () => number
   capture?: unknown
   consumeCapture?: () => void
@@ -57,6 +58,16 @@ export const WorkspaceSessionContext = createContext<{
 } | undefined>(undefined)
 
 export const useWorkspaceSession = () => useContext(WorkspaceSessionContext)
+
+export function useWorkspaceConfigurationPending(pending: boolean) {
+  const session = useWorkspaceSession()
+  const [owner] = useState(() => session?.configurationPending)
+  const key = useId()
+  useLayoutEffect(() => {
+    owner?.set(key, pending)
+    return () => { owner?.delete(key) }
+  }, [owner, key, pending])
+}
 
 const browserStorage: WorkspaceStorage = {
   getItem: key => localStorage.getItem(key),

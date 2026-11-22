@@ -155,6 +155,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:BgpNeighborsPanel|bgp-neighbors|ResilienceResults)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/ConfigurationEditStatus-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/RouteMapsPanel-/.test(path))).toBe(false)
+    expect(graph.files.some(({ path }: { path: string }) => /\/VpnRoutingWizard-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:UdrTableManager|UdrTableEditor)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:microsoft-auth|CloudPanel)-/.test(path))).toBe(false)
     expect(graph.files.some(({ path }: { path: string }) => /\/(?:progress-sync|FlowExportControls|CloneVnetDialog|AddressPrefixEditors|subnet-allocation|VnetRoutingSettings)-/.test(path))).toBe(false)

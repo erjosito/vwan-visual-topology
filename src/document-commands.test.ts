@@ -15,6 +15,32 @@ function setup(write = vi.fn<ArtifactWriter>(async () => ({ confirmed: true, des
 }
 
 describe('document artifact commands', () => {
+  it.each(['closed', 'account-cycle'] as const)('revokes %s completions while the saved revision is being checked', async reason => {
+    let finish!: (value: string) => void
+    let accountId = 'alice', calls = 0
+    const confirmed = vi.fn()
+    const topology = { name: 'Lab' }
+    const commands = createDocumentCommands({
+      documentId: 'document-a', getTopology: () => topology, getAccountId: () => accountId,
+      retain: () => true, confirmed,
+      write: async () => ({ confirmed: true, destination: reason === 'closed' ? file : cloud }),
+      digest: async value => ++calls === 2 ? new Promise<string>(resolve => { finish = resolve }) : JSON.stringify(value),
+    })
+    const saving = commands.saveAs(reason === 'closed' ? file : cloud)
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    let disposal: Promise<void> | undefined
+    if (reason === 'closed') disposal = commands.dispose()
+    else {
+      accountId = 'bob'; commands.accountChanged()
+      accountId = 'alice'; commands.accountChanged()
+    }
+    finish(JSON.stringify(topology))
+    expect(await saving).toBe(reason === 'closed' ? 'revoked' : 'failed')
+    await disposal
+    expect(confirmed).not.toHaveBeenCalled()
+    expect(commands.getSnapshot().notice).toBeUndefined()
+  })
+
   it('freezes edits before renewing exact file permission and keeps newer edits unsaved', async () => {
     let finish!: (value: Extract<ArtifactDestination, { kind: 'file' }>) => void
     let topology = { name: 'Submitted' }

@@ -1,11 +1,32 @@
 import { t } from './i18n'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
+import { hasPendingConfiguration } from './configuration-selection'
+import { useWorkspaceSession } from './workspace-context'
 
 export function CanvasOverlay({ title, children, onClose, className = '', focusOnOpen = true }: {
   title: string; children: ReactNode; onClose: () => void; className?: string; focusOnOpen?: boolean
 }) {
   const panel = useRef<HTMLDivElement>(null)
+  const session = useWorkspaceSession()
+  const [configurationOwner] = useState(() => session?.configurationPending)
+  const configurationKey = useId()
+  useLayoutEffect(() => {
+    const element = panel.current
+    if (!element || !configurationOwner) return
+    const update = () => configurationOwner.set(configurationKey, hasPendingConfiguration(element))
+    const observer = new MutationObserver(update)
+    observer.observe(element, { subtree: true, childList: true, attributes: true,
+      attributeFilter: ['data-configuration-pending', 'data-configuration-saved', 'value', 'checked', 'selected'] })
+    const events = ['input', 'change', 'focusout', 'reset']
+    for (const event of events) element.addEventListener(event, update, true)
+    update()
+    return () => {
+      observer.disconnect()
+      for (const event of events) element.removeEventListener(event, update, true)
+      configurationOwner.delete(configurationKey)
+    }
+  }, [configurationOwner, configurationKey])
   const [position, setPosition] = useState<{ x: number; y: number }>()
   const drag = useRef<{ x: number; y: number; left: number; top: number } | undefined>(undefined)
   useEffect(() => {

@@ -29,7 +29,6 @@ import { RouteMapInspector } from './RouteMapInspector'
 import { StaticRoutingPanel } from './StaticRoutingPanel'
 import type { RouteMode } from './route-views'
 import { erLocationBgpTable } from './route-views'
-import { VpnRoutingWizard } from './VpnRoutingWizard'
 import { AzureComparisonPanel } from './AzureComparisonPanel'
 import type { ComparisonSession } from './AzureComparisonPanel'
 import { DiagnosticsPanel } from './DiagnosticsPanel'
@@ -54,6 +53,7 @@ import { pruneDeletedInventory } from './inventory'
 import { measureAzWork, useMeasuredRender } from './azure-net/performance'
 
 const NetworkDetail = lazy(() => import('./NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const VpnRoutingWizard = lazy(() => import('./VpnRoutingWizard').then((module) => ({ default: module.VpnRoutingWizard })))
 const RouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => ({ default: module.RouteMapsPanel })))
 const BgpNeighborsPanel = lazy(() => import('./BgpNeighborsPanel'))
 const FlowExportControls = lazy(() => import('./FlowExportControls').then(module => ({ default: module.FlowExportControls })))
@@ -825,7 +825,7 @@ function App() {
           {panel === 'maps' && <Suspense fallback={null}><RouteMapsPanel key={mapRouter ? nodeKey(mapRouter) : 'resources'} topology={topology} simulation={simulation} router={mapRouter} connectionId={mapConnectionId} onRouter={(value) => { setMapRouter(value); setMapConnectionId(undefined) }} onSave={save} onClose={closePanel} /></Suspense>}
           {panel === 'rules' && mapRouter && <RouteMapInspector topology={topology} router={mapRouter} direction={mapDirection} connectionId={mapConnectionId} onDirection={setMapDirection} onConnection={setMapConnectionId} onConfigure={openRouteMaps} onClose={closePanel} />}
           {panel === 'static' && mapRouter && <StaticRoutingPanel key={nodeKey(mapRouter)} topology={topology} router={mapRouter} onSave={save} onClose={closePanel} />}
-          {panel === 'vpnWizard' && vpnConversion && <VpnRoutingWizard key={`${vpnConversion.connectionId}:${vpnConversion.mode}`} topology={topology} connectionId={vpnConversion.connectionId} mode={vpnConversion.mode} onSave={save} onClose={closePanel} />}
+          {panel === 'vpnWizard' && vpnConversion && <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><VpnRoutingWizard key={`${vpnConversion.connectionId}:${vpnConversion.mode}`} topology={topology} connectionId={vpnConversion.connectionId} mode={vpnConversion.mode} onSave={save} onClose={closePanel} /></Suspense>}
           {panel === 'paths' && <CanvasOverlay title={t("Path explorer")} className="path-panel" onClose={closePanel}>
             {tracing && groupTrace && <p><strong>{groupSummary}</strong>{t(". Each source is traced independently to the destination prefixes; reverse-path symmetry is not assumed.")}</p>}
             <p className="muted">{t("Longest-prefix forwarding and preferred BGP paths, not shortest graphical distance. ECMP paths remain highlighted together. Hub destinations use attached-spoke prefixes. Sites without assigned prefixes offer explicit connection advertisements as destination choices; these can be transit prefixes.")}</p>
