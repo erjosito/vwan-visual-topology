@@ -58,6 +58,7 @@ describe('browser-free platform contract', () => {
     const input = request()
     const result = executePlatform(input)
     expect(validatePlatformResult(result, input)).toBe(result)
+    expect(() => validatePlatformResult({ ...result, simulation: undefined }, input)).toThrow('simulation evidence')
     expect(() => validatePlatformResult({ ...result, contractVersion: 2 }, input)).toThrow()
     expect(() => validatePlatformResult({ ...result, document: { ...result.document, mode: 'full' } }, input)).toThrow('provider')
     expect(() => validatePlatformResult({ ...result, simulation: { subnetTables: {}, warnings: [] } }, input)).toThrow('provider')

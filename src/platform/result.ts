@@ -26,6 +26,8 @@ export function validatePlatformResult(input: unknown, request: PlatformRequest)
     if (input.status === 'complete' && (input.errors.length || !object(input.document) || !input.revision)) {
       throw new Error('Complete worker result lacks admitted document evidence.')
     }
+    if (input.status === 'complete' && (request.operation === 'simulate' || request.operation === 'evaluate')
+      && input.simulation === undefined) throw new Error('Complete worker result lacks simulation evidence.')
     if (input.document !== undefined && (!object(input.document) || input.document.mode !== request.document.mode
       || !object(input.document.topology) || input.document.topology.version !== (request.document.mode === 'vwan' ? 1 : 2))) {
       throw new Error('Worker result provider mismatch.')
