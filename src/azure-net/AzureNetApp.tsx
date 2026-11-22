@@ -5,10 +5,14 @@ import { analyzeAzResilience, resilienceMarkers, type ResilienceReport } from '.
 import { FailurePanel } from '../FailurePanel'
 import './azure-net.css'
 import { AZNET_MAX_JSON_LENGTH, parseAzNetJson, parseAzNetTopology } from './admission'
-import { AZNET_STORAGE_KEY, consumeAzSnapshotUrl, downloadAzText, loadAzWorkspace, workspaceError } from './workspace'
+import { downloadAzText, workspaceError } from './workspace'
+import { useAzDocument } from './useAzDocument'
+import { useAzTraceSession } from './useAzTraceSession'
+import { useAzDiagnosisSession } from './useAzDiagnosisSession'
+import { defaultSelected, useAzSelection } from './useAzSelection'
 import { azDisplayResult, azRoutingInput } from './routing-input'
 import { canAcknowledgeWarning, orderWarningFindings, setWarningAcknowledgement } from '../warning-acknowledgements'
-import { measureAzWork, recordAzWork, useMeasuredRender } from './performance'
+import { measureAzWork, useMeasuredRender } from './performance'
 import { t, translate, useLanguage, documentTitles, localizeDiagnostic } from '../i18n'
 import { LearningTools } from '../learning/LearningTools'
 import { AZURE_NET_SAMPLE_GALLERY, resolveSampleIdAlias } from '../sample-catalog'
@@ -17,15 +21,14 @@ import type { SimulatorMode } from '../SimulatorModeSwitch'
 import { WorkspaceAccountStatus, WorkspaceMenu } from '../WorkspaceSession'
 import { ConfigurationEditStatus, InspectorSection, PresentationGroup, PresentationToggle } from '../WorkspacePresentation'
 import { previewSubnetActions, previewVnetActions } from '../context-actions'
-import { useWorkspaceEditorState, useWorkspaceSession, useWorkspaceStorage } from '../workspace-context'
+import { useWorkspaceEditorState, useWorkspaceSession } from '../workspace-context'
 import { DocumentActions } from '../DocumentActions'
 import { WorkspaceTabPanel } from '../WorkspaceTabs'
 import type { ContextAction } from '../TopologyContextMenu'
 import type { DetailTarget } from '../network-detail-projection'
 import { WorkspaceTools } from '../WorkspaceTools'
 import { azWorkspaceIdentity, azWorkspaceObjects, workspaceIdentityKey } from '../workspace-objects'
-import { confirmConfigurationSwitch } from '../configuration-selection'
-import { udrAssociationError, validateUdrRegionEdit } from './udr-regions'
+import { udrAssociationError } from './udr-regions'
 import type { UdrManagerRequest } from './UdrTableManager'
 import { CanvasOverlay } from '../CanvasOverlay'
 import { azHubGatewayConnections } from '../hub-gateways'
@@ -45,30 +48,22 @@ import type {
   AzCapturedObservations,
   AzNetComparisonReport,
 } from './azure-import'
-import { validateVpnNat } from '../vpn-nat'
-import { pruneDeletedInventory, validateInventory } from '../inventory'
-import { validateApplicationInventory } from '../application-inventory'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
-
-import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
+
 import {
   AZ_NET_PAIR_LIMIT,
   azFindingImpact,
   groupAzNetFindings,
   runAzNetStaticDiagnostics,
-  type AzConnectivityScope,
-  type AzConnectivityReport,
   type AzDiagnosticFinding,
 } from './diagnostics'
-import { azEndpointKey, getAzNetEndpoints, type AzEndpointOption } from './endpoints'
+import { azEndpointKey, type AzEndpointOption } from './endpoints'
 import { cidr, contains, ipv4 } from '../validation'
 import {
   checkErLocationAzureRegionAccess,
   lookupSubnetEffectiveRoute,
   simulateAzNet,
-  traceAzNetFlow,
-  traceAzNetPair,
   type AzBgpRibEntry,
 } from './engine'
 import {
@@ -81,51 +76,9 @@ import {
   type AzPeeringDirectionFlags,
 } from './model'
 
-type InspectorTab = 'routes' | 'tracer' | 'diagnostics' | 'editor' | 'azure'
-
-function resolveInitialUrlSample() {
-  if (typeof window === 'undefined') return null
-  const requested = resolveSampleIdAlias(new URLSearchParams(window.location.search).get('sample') ?? '')
-  if (!requested) return null
-  return AZURE_NET_SAMPLES.find((s) => s.id === requested) ?? null
-}
-
 interface AzureNetAppProps {
   simulatorMode?: SimulatorMode
   onChangeSimulatorMode?: (mode: SimulatorMode) => void
-}
-
-function defaultSelected(topology: AzNetTopology): AzSelectedEntity {
-  const firstVnet = topology.vnets[1] ?? topology.vnets[0]
-  if (firstVnet && firstVnet.subnets[0]) {
-    return {
-      kind: 'subnet',
-      vnetId: firstVnet.id,
-      subnetId: firstVnet.subnets[0].id,
-    }
-  }
-  if (firstVnet) {
-    return {
-      kind: 'vnet',
-      vnetId: firstVnet.id,
-    }
-  }
-  if (topology.erLocations[0]) {
-    return {
-      kind: 'er-location',
-      locationId: topology.erLocations[0].id,
-    }
-  }
-  if (topology.sites[0]) {
-    return {
-      kind: 'site',
-      siteId: topology.sites[0].id,
-    }
-  }
-  return {
-    kind: 'vnet',
-    vnetId: 'vnet-1',
-  }
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
@@ -180,59 +133,26 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   useMeasuredRender()
   const language = useLanguage()
   const workspaceSession = useWorkspaceSession()
-  const workspaceStorage = useWorkspaceStorage()
   const [toolsOpenRequest, setToolsOpenRequest] = useState(0)
   const [toolsDismissRequest, setToolsDismissRequest] = useState(0)
-  const [cachedHistory] = useState(() => workspaceSession?.getEditorHistory?.())
-  const [initialResolved] = useState(() => {
-    if (cachedHistory?.provider === 'azure-net') return {
-      sampleId: cachedHistory.sampleId, topology: cachedHistory.topology,
-      snapshotImported: false, recovery: cachedHistory.recovery,
-    }
-    if (workspaceSession?.practice && workspaceSession.practice.document.mode !== 'vwan') return {
-      sampleId: '', topology: workspaceSession.practice.document.topology, snapshotImported: false, recovery: [],
-    }
-    const stored = loadAzWorkspace(workspaceStorage, window.location.hash)
-    if (stored.snapshotImported) return stored
-    const urlSample = resolveInitialUrlSample()
-    if (urlSample) {
-      return { ...stored, sampleId: urlSample.id, topology: parseAzNetTopology(urlSample.topology) }
-    }
-    return stored
-  })
-
-  const [sampleId, setSampleId] = useState<string>(initialResolved.sampleId)
-  const [topology, setTopology] = useState<AzNetTopology>(initialResolved.topology)
-  const [history, setHistory] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.past : [])
-  const [future, setFuture] = useState<AzNetTopology[]>(() => cachedHistory?.provider === 'azure-net' ? cachedHistory.future : [])
-  const [recoveryEntries] = useState(initialResolved.recovery)
-  const [recoveryAcknowledged, setRecoveryAcknowledged] = useState(() =>
-    cachedHistory?.provider === 'azure-net' ? cachedHistory.recoveryAcknowledged : initialResolved.recovery.length === 0)
-  const [saveError, setSaveError] = useState('')
   const [workspaceNotice, setWorkspaceNotice] = useState('')
-  const [pendingUrlSample, setPendingUrlSample] = useState(() => {
-    if (workspaceSession?.practice) return ''
-    if (cachedHistory?.provider === 'azure-net') return cachedHistory.pendingUrlSample
-    const requested = resolveSampleIdAlias(new URLSearchParams(window.location.search).get('sample') ?? '')
-    return !initialResolved.snapshotImported && /^[a-z0-9-]+$/.test(requested) && !resolveInitialUrlSample() ? requested : ''
-  })
-  useLayoutEffect(() => {
-    workspaceSession?.rememberEditorHistory?.({
-      provider: 'azure-net', topology, sampleId, past: history, future, recovery: recoveryEntries,
-      recoveryAcknowledged, pendingUrlSample,
-    })
-  }, [workspaceSession, topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, pendingUrlSample])
-  const [activeTab, setActiveTab] = useWorkspaceEditorState<InspectorTab | null>('aznet.inspector', null)
+  const {
+    topology, sampleId, history, future, recoveryEntries, recoveryAcknowledged, setRecoveryAcknowledged,
+    saveError, pendingUrlSample, setPendingUrlSample, commitTopology, handleUndo, handleRedo, replaceTopology,
+  } = useAzDocument(setWorkspaceNotice, onTopologyChange)
   const [vnraCreationVnetId, setVnraCreationVnetId] = useState<string>()
   const [nvaCreationVnetId, setNvaCreationVnetId] = useState<string>()
   const [guidanceNavigation, setGuidanceNavigation] = useState(false)
   const [guidanceRevision, setGuidanceRevision] = useState(0)
   const [frameRequest, setFrameRequest] = useState<{ vnetId: string; revision: number }>()
   const guidanceRoot = useRef<HTMLDivElement>(null)
-  const [selected, setInspectedEntity] = useWorkspaceEditorState<AzSelectedEntity>('aznet.selected', () =>
-    defaultSelected(initialResolved.topology),
-  )
-  const [canvasSelection, setCanvasSelection] = useWorkspaceEditorState<AzSelectedEntity>('aznet.canvasSelection')
+  const {
+    activeTab, setActiveTab, selected, setSelected, canvasSelection, setCanvasSelection,
+    routeInspection, routeSelection, selectCanvasObject, inspectRoutes, selectCreatedEntity, selectedExists,
+  } = useAzSelection(topology, () => {
+    setVnraCreationVnetId(undefined)
+    setNvaCreationVnetId(undefined)
+  }, () => setGuidanceNavigation(false))
   const [detailOwner, setDetailOwner] = useWorkspaceEditorState<string>('aznet.detail')
   const [snatHubId, setSnatHubId] = useState<string>()
   const [detailReturnFocus, setDetailReturnFocus] = useState<Element | null>(null)
@@ -249,60 +169,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [udrManager, setUdrManager] = useState<UdrManagerRequest>()
   const [capabilitiesHubId, setCapabilitiesHubId] = useState<string>()
   const [firewallEditorHubId, setFirewallEditorHubId] = useState<string>()
-  const [routeInspection, setRouteInspection] = useWorkspaceEditorState<AzSelectedEntity | null>('aznet.routeInspection', null)
   const [routeMapSiteId, setRouteMapSiteId] = useState<string>()
   const [routeMapArsId, setRouteMapArsId] = useState<string>()
   const [routeMapHubId, setRouteMapHubId] = useState<string>()
   const [routeMapInspection, setRouteMapInspection] = useState<AzRouteMapSelection>()
   const [nvaBgpInspection, setNvaBgpInspection] = useState<{ vnetId: string; applianceId: string }>()
   const [bgpInspection, setBgpInspection] = useState<{ resource?: import('../bgp-neighbors').BgpResourceRef; revision: number }>()
-  const routeSelection = routeInspection ?? selected
-  const setSelected = (entity: AzSelectedEntity) => {
-    if (activeTab === 'editor' && workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))
-      && !confirmConfigurationSwitch('.aznet-app .aznet-inspector-window')) return false
-    if (workspaceIdentityKey(azWorkspaceIdentity(entity)) !== workspaceIdentityKey(azWorkspaceIdentity(selected))) {
-      setVnraCreationVnetId(undefined)
-      setNvaCreationVnetId(undefined)
-    }
-    setInspectedEntity(entity)
-    setCanvasSelection(entity)
-    return true
-  }
-  const selectCanvasObject = (entity: AzSelectedEntity) => {
-    if (activeTab === 'editor' && entity.kind !== 'site-link' && entity.kind !== 'er-global-reach-link') return setSelected(entity)
-    setCanvasSelection(entity)
-    return true
-  }
-  const inspectRoutes = (entity: AzSelectedEntity) => {
-    setGuidanceNavigation(false)
-    if (!setSelected(entity)) return false
-    setRouteInspection(entity)
-    setActiveTab('routes')
-    return true
-  }
-  const selectedExists = (() => {
-    if ('vnetId' in selected) {
-      const vnet = topology.vnets.find((v) => v.id === selected.vnetId)
-      if (!vnet) return false
-      switch (selected.kind) {
-        case 'subnet': return vnet.subnets.some((s) => s.id === selected.subnetId)
-        case 'gateway': return vnet.gateways.some((g) => g.id === selected.gatewayId)
-        case 'appliance': return vnet.appliances.some((a) => a.id === selected.applianceId)
-        case 'route-server': return vnet.routeServer?.id === selected.routeServerId
-        default: return true
-      }
-    }
-    switch (selected.kind) {
-      case 'site': return topology.sites.some((s) => s.id === selected.siteId)
-      case 'er-location': return topology.erLocations.some((l) => l.id === selected.locationId)
-      case 'vwan-hub': return topology.vwanHubs.some((h) => h.id === selected.hubId)
-      case 'peering': return topology.vnetPeerings.some((p) => p.id === selected.peeringId)
-      case 'er-link': return topology.erLinks.some((l) => l.id === selected.linkId)
-      case 'er-global-reach-link': return topology.erGlobalReachLinks?.some((l) => l.id === selected.linkId)
-      case 'vpn-connection': return topology.vpnConnections.some((c) => c.id === selected.connectionId)
-      case 'site-link': return topology.siteLinks.some((l) => l.id === selected.siteLinkId)
-    }
-  })()
   const [erLocationModalState, setErLocationModalState] = useState<{
     open: boolean
     hasOpened?: boolean
@@ -310,35 +182,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     sku?: AzErCircuitSku
     targetLocationId?: string
   }>({ open: false })
-
-  const persistCurrentWorkspace = useEffectEvent(() => {
-    if (!recoveryAcknowledged || pendingUrlSample) {
-      workspaceSession?.documentSave?.local(topology, 'unavailable')
-      return
-    }
-    try {
-      parseAzNetTopology(topology)
-      if (workspaceSession?.practice && workspaceSession.savePractice) {
-        workspaceSession.savePractice({ mode: workspaceSession.practice.document.mode === 'hub-spoke' ? 'hub-spoke' : 'full', topology })
-      } else {
-        measureAzWork('persist', () => workspaceStorage.setItem(
-          AZNET_STORAGE_KEY,
-          JSON.stringify({ sampleId, topology }),
-        ))
-      }
-      setSaveError('')
-      workspaceSession?.documentSave?.local(topology, 'saved')
-      if (!workspaceSession?.practice) consumeAzSnapshotUrl()
-    } catch (error) {
-      workspaceSession?.documentSave?.local(topology, 'unavailable')
-      setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Use Save As to preserve this design; saved originals and URL snapshots have not been overwritten.`)
-    }
-  })
-  useEffect(() => {
-    // Report the outcome of synchronizing external browser storage, including quota failures.
-    // oxlint-disable-next-line react/set-state-in-effect
-    persistCurrentWorkspace()
-  }, [sampleId, topology, recoveryAcknowledged, pendingUrlSample])
 
   const [testIpQuery, setTestIpQuery] = useWorkspaceEditorState('aznet.testIp', '')
   const [hubTableInspection, setHubTableInspection] = useWorkspaceEditorState<{ hubId: string; tableId: string; prefix?: string; firewall?: boolean }>('aznet.hubTable')
@@ -377,33 +220,18 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const simulation = useMemo(() => azDisplayResult(rawSimulation, displayNames), [rawSimulation, displayNames])
   const validationErrors = useMemo(() => validateAzNetTopology(topology), [topology])
 
-  const rawEndpointOptions = useMemo(() => getAzNetEndpoints(routingTopology), [routingTopology])
-  const endpointOptions = useMemo(() => azDisplayResult(rawEndpointOptions, displayNames), [rawEndpointOptions, displayNames])
-
-  const [traceSourceKey, setTraceSourceKey] = useWorkspaceEditorState('aznet.traceSource', '')
-  const [traceDestKey, setTraceDestKey] = useWorkspaceEditorState('aznet.traceDestination', '')
-  const [customDestIp, setCustomDestIp] = useWorkspaceEditorState('aznet.traceIp', '')
-  const [traceActive, setTraceActive] = useWorkspaceEditorState('aznet.traceActive', false)
-  const [groupTrace, setGroupTrace] = useWorkspaceEditorState<{
-    anchorKey: string
-    direction: 'to' | 'from'
-    group: 'workload' | 'site'
-  } | null>('aznet.groupTrace', null)
-  const [analysisScope, setAnalysisScope] = useWorkspaceEditorState<AzConnectivityScope['scope']>('aznet.analysisScope', 'pair')
-  const [analysisRequest, setAnalysisRequestState] = useWorkspaceEditorState<AzConnectivityScope | null>('aznet.analysisRequest', null)
-  const [analysisEnabled, setAnalysisEnabled] = useState(false)
-  const setAnalysisRequest = (value: AzConnectivityScope | null) => {
-    setAnalysisEnabled(!!value)
-    setAnalysisRequestState(value)
-    if (value) setAnalysisRun({ revision: activeRevision, request: value, status: 'running' })
+  const {
+    endpointOptions, setTraceSourceKey, setTraceDestKey,
+    customDestIp, setCustomDestIp, setTraceActive, groupTrace, setGroupTrace,
+    resolvedSourceOpt, resolvedDestOpt, hasInvalidCustomIp, pairAnalysis, singleFlowForCustomIp, groupedPaths,
+  } = useAzTraceSession(routingTopology, activeTopology, rawSimulation, displayNames)
+  const {
+    analysisScope, setAnalysisScope, analysisRequest, setAnalysisRequest, setAnalysisEnabled,
+    currentAnalysisRun, rawAnalysis, analysisRunning, continueAnalysis, cancelAnalysis, analysis,
+  } = useAzDiagnosisSession(activeTopology, activeRevision, displayNames)
+  function onTopologyChange(next: AzNetTopology) {
+    if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
   }
-  const [analysisRun, setAnalysisRun] = useWorkspaceEditorState<{
-    revision: string; request: AzConnectivityScope
-    status: 'running' | 'ready' | 'cancelled' | 'failed'; report?: AzConnectivityReport
-  } | undefined>('aznet.analysisRun', undefined, value => value && (value.status === 'running' || value.report?.continuation.status === 'paused')
-    ? { ...value, status: 'cancelled', report: value.report ? { ...value.report, complete: false,
-      continuation: { ...value.report.continuation, status: 'cancelled' } } : undefined } : value)
-  const analysisWorker = useRef<Worker | undefined>(undefined)
   const [reviewFindingIds, setReviewFindingIds] = useWorkspaceEditorState<string[] | null>('aznet.reviewFindings', null)
   const [sampleGalleryOpen, setSampleGalleryOpen] = useState<boolean>(false)
   const sampleRequest = useRef(0)
@@ -414,48 +242,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }, [])
   const [contextMenu, setContextMenu] = useState<AzContextMenuTarget | null>(null)
 
-  const commitTopology = (updater: (draft: AzNetTopology) => void) => {
-    let next: AzNetTopology
-    try {
-      next = measureAzWork('commit', () => {
-        const draft = cloneAzNetTopology(topology)
-        updater(draft)
-        validateUdrRegionEdit(topology, draft)
-        pruneAzSiteRouteMaps(draft)
-        pruneAzArsRouteMaps(draft)
-        pruneDeletedInventory(draft, topology)
-        validateInventory(draft)
-        validateApplicationInventory(draft)
-        validateVpnNat(draft)
-        return draft
-      })
-    } catch (error) {
-      setWorkspaceNotice(error instanceof Error ? error.message : 'Inventory edit rejected.')
-      return false
-    }
-    setHistory((prev) => [...prev.slice(-24), measureAzWork('history-clone', () => cloneAzNetTopology(topology))])
-    setFuture([])
-    if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
-    setTopology(next)
-    return true
-  }
   const editSubnetAddresses = useSubnetAddressEditing(commitTopology, setWorkspaceNotice)
-  const handleUndo = () => measureAzWork('undo', () => {
-    if (!history.length) return
-    const previous = history[history.length - 1]
-    setFuture((f) => [measureAzWork('history-clone', () => cloneAzNetTopology(topology)), ...f])
-    setHistory((h) => h.slice(0, -1))
-    if (analysisRequest && azRoutingInput(previous).revision !== routingInput.revision) setAnalysisEnabled(true)
-    setTopology(previous)
-  })
-  const handleRedo = () => measureAzWork('redo', () => {
-    if (!future.length) return
-    const next = future[0]
-    setHistory((h) => [...h, measureAzWork('history-clone', () => cloneAzNetTopology(topology))])
-    setFuture((f) => f.slice(1))
-    if (analysisRequest && azRoutingInput(next).revision !== routingInput.revision) setAnalysisEnabled(true)
-    setTopology(next)
-  })
 
   const handleShareUrl = () => {
     if (window.desktopSimulator) return
@@ -465,102 +252,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       : 'Create shared links from a cloud save: sign in through Cloud account, then Share saved version. If sign-in is unavailable in this build, use Save As to download a copy instead. Unsaved edits are not shared.')
   }
 
-  const rawSourceOpt =
-    traceSourceKey ? rawEndpointOptions.find((o) => o.key === traceSourceKey) : rawEndpointOptions.find((o) => o.group === 'workload') ?? rawEndpointOptions[0]
-  const rawDestOpt =
-    traceDestKey ? rawEndpointOptions.find((o) => o.key === traceDestKey) :
-    rawEndpointOptions[rawEndpointOptions.length - 1] ?? rawEndpointOptions[0]
-  const resolvedSourceOpt = endpointOptions.find((o) => o.key === rawSourceOpt?.key)
-  const resolvedDestOpt = endpointOptions.find((o) => o.key === rawDestOpt?.key)
-
-  const customIpNumber = customDestIp.trim() ? ipv4(customDestIp.trim()) : undefined
-  const hasInvalidCustomIp = Boolean(customDestIp.trim()) && customIpNumber === undefined
-  const customIpInEndpoint = Boolean(resolvedDestOpt && customIpNumber !== undefined &&
-    contains(resolvedDestOpt.prefix, customIpNumber))
-
-  const rawPairAnalysis = useMemo(() => {
-    if (!traceActive || groupTrace || hasInvalidCustomIp || !rawSourceOpt || !rawDestOpt) return null
-    const destIp = customDestIp.trim() || rawDestOpt.defaultIp
-    return measureAzWork('trace', () => traceAzNetPair(
-      activeTopology,
-      rawSimulation,
-      rawSourceOpt.ref,
-      rawSourceOpt.defaultIp,
-      rawDestOpt.ref,
-      destIp,
-    ))
-  }, [traceActive, groupTrace, hasInvalidCustomIp, rawSourceOpt, rawDestOpt, customDestIp, activeTopology, rawSimulation])
-  const pairAnalysis = useMemo(() => azDisplayResult(rawPairAnalysis, displayNames), [rawPairAnalysis, displayNames])
-
-  const rawSingleFlow = useMemo(() => {
-    if (!traceActive || groupTrace || hasInvalidCustomIp || !rawSourceOpt || !rawDestOpt || !customDestIp.trim() || customIpInEndpoint) return null
-    return measureAzWork('trace', () => traceAzNetFlow(activeTopology, rawSimulation, rawSourceOpt.ref, customDestIp.trim()))
-  }, [traceActive, groupTrace, hasInvalidCustomIp, rawSourceOpt, rawDestOpt, customDestIp, customIpInEndpoint, activeTopology, rawSimulation])
-  const singleFlowForCustomIp = useMemo(() => azDisplayResult(rawSingleFlow, displayNames), [rawSingleFlow, displayNames])
-
-  const rawGroupedPaths = useMemo(() => {
-    if (!traceActive || !groupTrace) return null
-    const anchor = rawEndpointOptions.find((e) => e.key === groupTrace.anchorKey)
-    if (!anchor) return { paths: [], total: 0 }
-    const others = rawEndpointOptions.filter((e) => e.group === groupTrace.group &&
-      azEndpointKey(e.ref) !== azEndpointKey(anchor.ref))
-    return {
-      total: others.length,
-      paths: others.slice(0, AZ_NET_PAIR_LIMIT).map((other) => {
-        const source = groupTrace.direction === 'to' ? anchor : other
-        const destination = groupTrace.direction === 'to' ? other : anchor
-        return { source, destination, pair: measureAzWork('trace', () => traceAzNetPair(activeTopology, rawSimulation, source.ref, source.defaultIp, destination.ref, destination.defaultIp)) }
-      }),
-    }
-  }, [traceActive, groupTrace, rawEndpointOptions, activeTopology, rawSimulation])
-  const groupedPaths = useMemo(() => azDisplayResult(rawGroupedPaths, displayNames), [rawGroupedPaths, displayNames])
-
-  useEffect(() => {
-    if (!analysisEnabled || !analysisRequest) return
-    let next: Worker | undefined
-    let disposed = false
-    const failed = () => {
-      if (disposed || (next && analysisWorker.current !== next)) return
-      setAnalysisRun({ revision: activeRevision, request: analysisRequest, status: 'failed' })
-      next?.terminate(); analysisWorker.current = undefined
-    }
-    try {
-      next = new Worker(new URL('./diagnostics-worker.ts', import.meta.url), { type: 'module' })
-      const current = next
-      analysisWorker.current = current
-      current.onmessage = ({ data }: MessageEvent<{ report?: AzConnectivityReport; elapsedMillis?: number }>) => {
-        if (analysisWorker.current !== current) return
-        if (!data.report) { failed(); return }
-        if (typeof data.elapsedMillis === 'number') recordAzWork('connectivity', data.elapsedMillis)
-        setAnalysisRun({ revision: activeRevision, request: analysisRequest, status: 'ready', report: data.report })
-        if (data.report.continuation.status !== 'paused') { current.terminate(); analysisWorker.current = undefined }
-      }
-      current.onerror = failed
-      current.postMessage({ type: 'start', topology: activeTopology, scope: analysisRequest })
-    } catch { queueMicrotask(failed) }
-    return () => {
-      disposed = true
-      next?.terminate()
-      if (analysisWorker.current === next) analysisWorker.current = undefined
-    }
-  }, [analysisRequest, analysisEnabled, activeTopology, activeRevision, setAnalysisRun])
-  const currentAnalysisRun = analysisRun?.revision === activeRevision && analysisRun.request === analysisRequest ? analysisRun : undefined
-  const rawAnalysis = currentAnalysisRun?.report ?? null
-  const analysisRunning = Boolean(analysisEnabled && analysisRequest && (!currentAnalysisRun || currentAnalysisRun.status === 'running'))
-  const continueAnalysis = () => {
-    if (!analysisWorker.current || !currentAnalysisRun || analysisRunning || rawAnalysis?.continuation.status !== 'paused') return
-    setAnalysisRun({ ...currentAnalysisRun, status: 'running' })
-    analysisWorker.current.postMessage({ type: 'continue' })
-  }
-  const cancelAnalysis = () => {
-    analysisWorker.current?.terminate(); analysisWorker.current = undefined
-    if (!analysisRequest) return
-    setAnalysisRun({
-      revision: activeRevision, request: analysisRequest, status: 'cancelled',
-      report: rawAnalysis ? { ...rawAnalysis, complete: false, continuation: { ...rawAnalysis.continuation, status: 'cancelled' } } : undefined,
-    })
-  }
-  const analysis = useMemo(() => azDisplayResult(rawAnalysis, displayNames), [rawAnalysis, displayNames])
   const rawDiagnostics = useMemo(() => {
     const staticFindings = measureAzWork('diagnostics', () => runAzNetStaticDiagnostics(activeTopology, rawSimulation))
     const flowFindings = rawAnalysis?.findings ?? []
@@ -645,14 +336,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   }
 
   const applyLoadedTopology = (id: string, nextTopology: AzNetTopology) => {
-    nextTopology = parseAzNetTopology(nextTopology)
-    workspaceSession?.documentSave?.reset()
+    nextTopology = replaceTopology(id, nextTopology)
     setCaptureObservations(null)
     sampleRequest.current++
-    setSampleId(id)
-    setTopology(nextTopology)
-    setHistory([])
-    setFuture([])
     setTraceActive(false)
     setGroupTrace(null)
     setAnalysisRequest(null)
@@ -764,7 +450,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
       })
       .finally(() => { if (!controller.signal.aborted) setPendingUrlSample('') })
     return () => { controller.abort(); urlSampleLoaded.current = false }
-  }, [pendingUrlSample])
+  }, [pendingUrlSample, setPendingUrlSample])
 
   // One-click Auto-Remediation for diagnostic findings
   const applyAutoFix = (finding: AzDiagnosticFinding) => {
@@ -4168,16 +3854,14 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   topology={topology} vnetId={nvaCreationVnetId} commit={commitTopology}
                   onCancel={() => setNvaCreationVnetId(undefined)} onSaved={(applianceId) => {
                     const entity = { kind: 'appliance' as const, vnetId: nvaCreationVnetId, applianceId }
-                    setInspectedEntity(entity)
-                    setCanvasSelection(entity)
+                    selectCreatedEntity(entity)
                     setNvaCreationVnetId(undefined)
                   }} />}
                 {vnraCreationVnetId && selectedVnetId === vnraCreationVnetId && <ManagedVnraEditor key={`create-${vnraCreationVnetId}`}
                   topology={topology} vnetId={vnraCreationVnetId} commit={commitTopology}
                   onCancel={() => setVnraCreationVnetId(undefined)} onSaved={(applianceId) => {
                     const entity = { kind: 'appliance' as const, vnetId: vnraCreationVnetId, applianceId }
-                    setInspectedEntity(entity)
-                    setCanvasSelection(entity)
+                    selectCreatedEntity(entity)
                     setVnraCreationVnetId(undefined)
                   }} />}
                 </Suspense>

@@ -71,3 +71,27 @@ document finishes saving. Explicit Discard remains a separate user decision.
 This is an incremental integration of the existing tabs and Save contracts,
 not another document implementation. Human usability feedback in #301/#299
 and responsiveness optimization in #384 remain separate work.
+
+## Mixed-provider controllers
+
+`AzureNetApp` composes provider hooks rather than implementing their lifecycles:
+
+- `useAzDocument` owns native initialization/recovery, the sole editable topology,
+  bounded undo/redo, validated commits and profile/practice persistence. Its
+  replacement command admits native data and resets the existing save authority;
+  artifact Save commands remain in the shared document layer.
+- `useAzSelection` owns inspected/canvas/route identities and the existing
+  dirty-configuration switch guard. Creation completion has a distinct command
+  because its configuration has already been applied.
+- `useAzTraceSession` owns document-scoped endpoints and pair, custom-IP and
+  bounded group traces. Routing projections retain original IDs; display names
+  do not select routes.
+- `useAzDiagnosisSession` owns worker creation/disposal, revision/request matching,
+  continuation and cancellation. Restored interrupted runs are cancelled, not
+  restarted or certified; queued replies lose authority on disposal.
+
+These hooks reuse the existing captured-owner editor state and history APIs.
+They do not introduce a global store, second document graph or new wire format.
+The page retains feature composition and shared action wiring. Optional feature
+editors stay in their existing lazy modules; unrelated context concerns are not
+split without independent subscription/ownership semantics.
