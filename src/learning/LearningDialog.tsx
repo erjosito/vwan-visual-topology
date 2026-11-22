@@ -22,6 +22,7 @@ import { editions } from './editions'
 import { prepareCourseScenario, scenarioTransitionConflict } from './course-transition'
 import { BeltProgressSummary } from './BeltProgressSummary'
 import { BeltAchievementDialog } from './BeltAchievementDialog'
+import { BeltIcon } from './BeltIcon'
 import './learning.css'
 
 type PanelProps = {
@@ -51,7 +52,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const following = instructions[index + 1]
   const check = bundle.checks.find((item) => item.id === task.checkId)!
   const primaryGuide = selectPrimaryGuidance(workspace, check, task.guidanceIds.map((id) => bundle.guidance.find((entry) => entry.id === id)!))
-  const requirements = 'requirements' in check.params ? check.params.requirements : []
+  const requirements = 'requirements' in check.params ? check.params.requirements ?? [] : []
   const [answerId, setAnswerId] = useState<string>()
   const [replayConfirm, setReplayConfirm] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -129,12 +130,14 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
   const loadAutomatically = useEffectEvent(() => { void load(true) })
   useEffect(() => {
     if (foreground && !done && !reviewing && !state.awaitingNext && !inPractice
-      && check.kind === 'scenario.loaded' && session?.practice?.active && session.practice.courseId === bundle.course.id) {
+      && (check.kind === 'scenario.loaded' || bundle.course.preparation === 'ungraded' && task.id === lesson.taskOrder[0])
+      && session?.practice?.active && session.practice.courseId === bundle.course.id) {
       let controller: AbortController | undefined
       const timer = setTimeout(() => { loadAutomatically(); controller = job.current }, 0)
       return () => { clearTimeout(timer); controller?.abort() }
     }
-  }, [foreground, done, reviewing, state.awaitingNext, inPractice, check.kind, session?.practice?.active, session?.practice?.courseId, bundle.course.id])
+  }, [foreground, done, reviewing, state.awaitingNext, inPractice, check.kind, task.id, lesson.taskOrder, bundle.course.preparation,
+    session?.practice?.active, session?.practice?.courseId, bundle.course.id])
   const guideButton = (id: string, primary = false) => {
     const guidance = bundle.guidance.find((item) => item.id === id)!
     return <span className="learning-guide" key={id}
@@ -156,7 +159,8 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
     </span>
   }
   return createPortal(<>
-    {!reviewing && state.awaitingNext && state.celebration?.belt && !state.celebration.beltDismissed && <BeltAchievementDialog
+    {!reviewing && state.awaitingNext && state.celebration?.belt && !state.celebration.beltDismissed
+      && !bundle.course.belts.find((belt) => belt.id === state.celebration?.belt?.beltId)?.secondaryColor && <BeltAchievementDialog
       achievement={state.celebration.belt} onClose={() => runner.dismissBelt()} />}
     <aside ref={panel} id="learning-sidebar" className="learning-sidebar" aria-labelledby="learning-title" data-testid="learning-sidebar" onKeyDown={(event) => {
       if (event.key === 'Escape') { event.stopPropagation(); onPause() }
@@ -192,6 +196,7 @@ function LearningPanel({ document: workspace, onGuide, onPause }: PanelProps) {
             <strong>{text(runnerText.success, language)}{state.celebration.points > 0 && ` +${state.celebration.points} ${text(runnerText.points, language)}`}</strong>
           </p>}
           {!reviewing && state.celebration?.belt && <p className="learning-success" data-testid="learning-belt-earned">
+            <BeltIcon belt={bundle.course.belts.find((belt) => belt.id === state.celebration!.belt!.beltId)!} />
             {text(bundle.course.belts.find((belt) => belt.id === state.celebration!.belt!.beltId)!.name, language)}
             {language === 'ja' ? 'を獲得！' : ' earned!'}
           </p>}

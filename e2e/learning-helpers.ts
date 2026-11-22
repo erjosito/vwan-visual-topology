@@ -1,6 +1,8 @@
 import { expect, type Page } from '@playwright/test'
 import { exampleCourse } from '../src/learning/course-examples'
 import { scenarioBundle } from '../src/learning/scenario-course'
+import { curriculumV2Bundle } from '../src/learning/curriculum-v2'
+import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
 import { guidanceAnchor } from '../src/learning/guidance'
 import { runnerLabels } from '../src/learning/runner-content'
@@ -12,6 +14,16 @@ import { openWorkspaceActions } from './document-action-helpers'
 export const learningSidebar = (page: Page) => page.getByTestId('learning-sidebar')
 export const learningAnchor = (page: Page, ...scope: string[]) =>
   page.locator(`[data-learning-anchor=${JSON.stringify(guidanceAnchor(...scope))}]`)
+
+export function archivedScenarioStorageState() {
+  return { cookies: [], origins: [{ origin: new URL(process.env.PLAYWRIGHT_BASE_URL ?? 'http://127.0.0.1:4173').origin,
+    localStorage: [
+      { name: 'aznet-ui-preview:v1', value: 'false' },
+      { name: guidedProgressKey, value: JSON.stringify({ version: 1, policyVersion: 1,
+        enrollment: scenarioBundle.course.id, completions: [] }) },
+    ],
+  }] }
+}
 
 export async function openLearning(page: Page) {
   await openWorkspaceActions(page)
@@ -55,10 +67,10 @@ export async function loadLearningNetwork(page: Page, language: 'en' | 'ja' = 'e
   await expect(sidebar.locator('[data-learning-confirm]')).toHaveCount(0)
 }
 
-export async function createLessonPeering(page: Page, language: 'en' | 'ja' = 'en') {
+export async function createLessonPeering(page: Page, language: 'en' | 'ja' = 'en', vnetAId = 'a', vnetBId = 'b') {
   await learningSidebar(page).getByRole('button', { name: sidebarLabels.show[language], exact: true }).first().click()
-  await learningAnchor(page, 'peer-menu', 'a').click()
-  await learningAnchor(page, 'peer-target', 'a', 'b').click()
+  await learningAnchor(page, 'peer-menu', vnetAId).click()
+  await learningAnchor(page, 'peer-target', vnetAId, vnetBId).click()
 }
 
 /** Drive real controls and checks, never mutate browser progress or inject completion. */
@@ -67,7 +79,8 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
   const sidebar = learningSidebar(page)
   for (let index = 0; index < count; index++) {
     const taskId = await sidebar.getByTestId('learning-task').getAttribute('data-task-id')
-    const bundle = exampleCourse.lessons.some((item) => item.tasks.some((task) => task.id === taskId)) ? exampleCourse : scenarioBundle
+    const bundle = [exampleCourse, scenarioBundle, curriculumV2Bundle]
+      .find((bundle) => bundle.lessons.some((item) => item.tasks.some((task) => task.id === taskId)))!
     const lesson = bundle.lessons.find((item) => item.tasks.some((task) => task.id === taskId))!
     const task = lesson.tasks.find((item) => item.id === taskId)!
     const check = bundle.checks.find((item) => item.id === task.checkId)!
@@ -76,10 +89,15 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
       await expect(sidebar.locator(`[data-task-id="${taskId}"]`)).toHaveCount(0)
       continue
     }
+    if (bundle.course.preparation === 'ungraded'
+      && await sidebar.getByRole('button', { name: sidebarLabels.load[language], exact: true }).isVisible()) {
+      await loadLearningNetwork(page, language)
+    }
     if (check.kind === 'scenario.loaded') {
       const current = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null'), practiceWorkspaceKey)
       if (!current?.active || current.courseId !== bundle.course.id) await loadLearningNetwork(page, language)
-      else await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null')?.scenarioId, practiceWorkspaceKey)).toBe(lesson.scenarioId)
+      else await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? 'null')?.scenarioId, practiceWorkspaceKey),
+        { timeout: 15_000 }).toBe(lesson.scenarioId)
     }
     if (check.kind === 'quiz.answered') {
       const choice = check.params.choices.find((item) => item.id === check.params.correctChoiceId)!
@@ -89,7 +107,7 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
     if (inspectionScope(check)) {
       await sidebar.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
     }
-    if (check.kind === 'vnet.peered') await createLessonPeering(page, language)
+    if (check.kind === 'vnet.peered') await createLessonPeering(page, language, check.params.vnetAId, check.params.vnetBId)
     if (taskId === 'private-link.repair') {
       const current = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), practiceWorkspaceKey)
       if (!current.document.topology.vnetPeerings.some((peer: { vnetAId: string; vnetBId: string }) =>

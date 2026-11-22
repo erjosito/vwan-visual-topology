@@ -8,6 +8,7 @@ import { learningTracks } from './tracks'
 import { editions, highestTrackBelt, scenarioAssessments, scenarioCourse, selectedEdition } from './editions'
 import { nextBeltLabel } from './belt-progress-label'
 import { loadLanguage } from '../messages'
+import { curriculumV2Assessments, curriculumV2Course } from './curriculum-v2-profile'
 
 const empty = (): ProgressLedger => ({ version: 1, policyVersion: 1, completions: [] })
 const completion = (index = 0, changes: Partial<TaskCompletion> = {}): TaskCompletion => {
@@ -35,8 +36,8 @@ describe('versioned completion and first-award ledger', () => {
     expect(highestTrackBelt({ ...empty(), completions: [completion(0, { courseId: 'future-dns', points: 9999 })] }))
       .toMatchObject({ belt: { id: 'white' }, trackCount: 1 })
   })
-  it('defaults new learners to scenarios but preserves original-edition enrollment and historical black belts', () => {
-    expect(selectedEdition(empty()).course.id).toBe(scenarioCourse.id)
+  it('defaults new learners to v2 but preserves explicit/historical edition enrollment and black belts', () => {
+    expect(selectedEdition(empty()).course.id).toBe(curriculumV2Course.id)
     const historical = { ...empty(), completions: orderedTasks(exampleCourse).map((_, index) => completion(index)) }
     const raw = storage()
     raw.setItem(guidedProgressKey, JSON.stringify(historical))
@@ -51,6 +52,40 @@ describe('versioned completion and first-award ledger', () => {
     expect(beltProgress(store.getSnapshot().ledger!, previewCourse, checkpointAssessments)).toMatchObject({ points: 1325, belt: { id: 'black' } })
     expect(store.enroll(previewCourse.id, true)).toBe(true)
     expect(store.getSnapshot().ledger!.completions).toEqual(previous)
+  })
+  it('accepts v2 enrollment without rewriting prior prices or granting new competency', () => {
+    const raw = storage()
+    const historical = { ...empty(), completions: orderedTasks(exampleCourse).map((_, index) => completion(index)) }
+    raw.setItem(guidedProgressKey, JSON.stringify(historical))
+    const store = createProgressLedger(() => raw)
+    expect(store.enroll(curriculumV2Course.id, true)).toBe(true)
+    expect(selectedEdition(store.getSnapshot().ledger).course.id).toBe(curriculumV2Course.id)
+    expect(store.getSnapshot().ledger!.completions).toEqual(historical.completions)
+    expect(highestTrackBelt(store.getSnapshot().ledger!)).toMatchObject({ belt: { id: 'black' }, trackCount: 1 })
+    expect(beltProgress(store.getSnapshot().ledger!, curriculumV2Course, curriculumV2Assessments))
+      .toMatchObject({ points: 0, belt: { id: 'white' } })
+    expect(createProgressLedger(() => raw).getSnapshot().ledger).toEqual(store.getSnapshot().ledger)
+  })
+  it('restores revised activity from a mixed backup without overriding explicit historical enrollment', () => {
+    const ledger = { ...empty(), completions: [completion(), completion(0, { courseId: curriculumV2Course.id })] }
+    const before = structuredClone(ledger)
+    expect(selectedEdition(ledger).course.id).toBe(curriculumV2Course.id)
+    expect(selectedEdition({ ...ledger, enrollment: previewCourse.id }).course.id).toBe(previewCourse.id)
+    expect(ledger).toEqual(before)
+  })
+  it.each(['yellow', 'green', 'black'])('compares mixed/full milestones by color, not ladder index, preserving historical %s', (color) => {
+    const fullIndex = previewCourse.belts.findIndex((belt) => belt.id === color)
+    const v2Index = fullIndex * 2
+    const price = curriculumV2Course.belts[v2Index].pointsRequired
+    const v2 = curriculumV2Assessments.slice(0, v2Index).map((entry, index) =>
+      completion(0, { ...entry, courseId: curriculumV2Course.id, lessonId: curriculumV2Course.lessonOrder[index],
+        awardId: entry.taskId, points: index === 0 ? price : 1 }))
+    const old = orderedTasks(exampleCourse).map((_, index) => completion(index))
+      .filter((entry) => exampleCourse.course.lessonOrder.indexOf(entry.lessonId) < fullIndex)
+    const ledger = { ...empty(), completions: [...old, ...v2] }
+    expect(highestTrackBelt(ledger)).toMatchObject({ belt: { id: color }, trackCount: 1 })
+    ledger.completions = [...old, ...v2.slice(0, -1)]
+    expect(highestTrackBelt(ledger)).toMatchObject({ belt: { id: color } })
   })
   it('does not enroll on corrupt data, conflicting writes or unknown edition identities', () => {
     const raw = storage()

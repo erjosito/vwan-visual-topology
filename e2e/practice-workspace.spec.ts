@@ -2,7 +2,9 @@ import { expect, test, type Page } from '@playwright/test'
 import { exercises } from '../src/learning/exercises'
 import { practiceWorkspaceKey, type PracticeWorkspace } from '../src/learning/practice-workspace'
 import { progressKey } from '../src/learning/progress'
-import { openLearning, learningOptions } from './learning-helpers'
+import { archivedScenarioStorageState, openLearning, learningOptions } from './learning-helpers'
+
+test.use({ storageState: archivedScenarioStorageState() })
 
 const normalKeys = ['vwan-visual-topology:v1', 'aznet-visual-topology:v1']
 const stored = (page: Page) => page.evaluate((keys) => keys.map((key) => localStorage.getItem(key)), normalKeys)

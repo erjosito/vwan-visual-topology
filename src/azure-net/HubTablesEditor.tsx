@@ -1,12 +1,14 @@
 import { DEFAULT_HUB_TABLE, NONE_HUB_TABLE, hubRouteTables } from '../hub-routing'
 import type { HubRoutingConfiguration } from '../model'
 import { t } from '../i18n'
+import { registerJapaneseMessages } from '../messages'
 import type { AzNetTopology, AzVwanHub } from './model'
 import { azHubRouting } from './hub-routing'
 import { HubStaticRoutesEditor } from '../HubStaticRoutesEditor'
 import { ConnectionStaticRoutesEditor } from './ConnectionStaticRoutesEditor'
 
 const words = (value: string) => [...new Set(value.split(',').map((word) => word.trim()).filter(Boolean))]
+registerJapaneseMessages({ 'Private Traffic Routing Intent': 'プライベート トラフィックのルーティング意図' })
 
 export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall }: {
   hub: AzVwanHub
@@ -29,6 +31,15 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
   ]
   return <section aria-label={t('Hub routing tables')} data-testid="aznet-hub-tables-editor">
     <h4>{t('Hub routing tables')}</h4>
+    <label className="aznet-toggle-row">
+      <input type="checkbox" data-testid={`aznet-private-routing-intent-${hub.id}`}
+        checked={hub.routingIntent.private} disabled={!hub.firewall && !hub.routingIntent.private}
+        onChange={(event) => {
+          const enabled = event.target.checked
+          commit((draft) => { draft.vwanHubs.find((entry) => entry.id === hub.id)!.routingIntent.private = enabled })
+        }} />
+      {t('Private Traffic Routing Intent')}
+    </label>
     <p>{t('Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.')}</p>
     <p>{t('Custom tables with routing intent and arbitrary hub next hops are not assessed. Static inspection requires a declared local Azure Firewall in a single hub.')}</p>
     <HubStaticRoutesEditor hub={hub} focusFirewall={focusFirewall} onChange={(owner) => commit((draft) => {

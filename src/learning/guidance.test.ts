@@ -4,8 +4,51 @@ import { guidanceAnchor, resolveGuidance } from './guidance'
 import { selectPrimaryGuidance } from './task-guidance'
 import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
+import { hybridLessonTopology } from './hybrid-scenario'
+import { haLessonTopology } from './ha-scenario'
 
 describe('semantic guidance admission', () => {
+  it('reveals only the original peering without changing directional gateway settings', () => {
+    const input = { mode: 'full' as const, topology: hybridLessonTopology() }
+    const before = structuredClone(input)
+    const peeringId = input.topology.vnetPeerings[0].id
+    const cue: CourseGuidance = { id: 'peering-guide', action: 'peering.configure', params: { peeringId },
+      instruction: { en: 'Inspect the original peering', ja: '元のピアリングを確認' } }
+    expect(resolveGuidance(input, cue)).toEqual({ anchors: [guidanceAnchor('peering-editor', peeringId)] })
+    expect(input).toEqual(before)
+    expect(resolveGuidance(input, { ...cue, params: { peeringId: 'missing' } })).toEqual({ reason: 'entity' })
+  })
+  it('reveals the original Load Balancer health editor only in its owned VNet', () => {
+    const input = { mode: 'full' as const, topology: haLessonTopology() }
+    const before = structuredClone(input)
+    const cue: CourseGuidance = { id: 'ha-health-guide', action: 'load-balancer.configure',
+      params: { vnetId: 'hub', loadBalancerId: 'transit-lb' },
+      instruction: { en: 'Edit declared health for the prepared NVAs', ja: '準備済み NVA の宣言された正常性を編集' } }
+    expect(resolveGuidance(input, cue)).toEqual({ anchors: [guidanceAnchor('load-balancer-health', 'hub', 'transit-lb')] })
+    expect(input).toEqual(before)
+    expect(resolveGuidance(input, { ...cue, params: { ...cue.params, vnetId: 'application' } })).toEqual({ reason: 'entity' })
+  })
+  it('scopes gateway and aggregate MSEE navigation to their original owners without changing routing', () => {
+    const input = { mode: 'full' as const, topology: hybridLessonTopology() }
+    const before = structuredClone(input)
+    const gateway: CourseGuidance = { id: 'gateway-guide', action: 'gateway-routes.open',
+      params: { vnetId: 'hybrid-hub', gatewayId: 'primary-er', prefix: '172.28.0.0/16' },
+      instruction: { en: 'Inspect the gateway routes', ja: 'ゲートウェイのルートを確認' } }
+    const msee: CourseGuidance = { id: 'msee-guide', action: 'er-routes.open',
+      params: { locationId: 'hybrid-location', prefix: '10.91.0.0/16' },
+      instruction: { en: 'Inspect aggregate location routes', ja: '拠点の集約ルートを確認' } }
+    expect(resolveGuidance(input, gateway)).toEqual({ anchors: [
+      guidanceAnchor('gateway-effective-prefix', 'hybrid-hub', 'primary-er', '172.28.0.0/16'),
+      guidanceAnchor('gateway-effective-table', 'hybrid-hub', 'primary-er'),
+    ] })
+    expect(resolveGuidance(input, msee)).toEqual({ anchors: [
+      guidanceAnchor('er-effective-prefix', 'hybrid-location', '10.91.0.0/16'),
+      guidanceAnchor('er-effective-table', 'hybrid-location'),
+    ] })
+    expect(input).toEqual(before)
+    expect(resolveGuidance(input, { ...gateway, params: { ...gateway.params, vnetId: 'hybrid-app' } })).toEqual({ reason: 'entity' })
+    expect(resolveGuidance(input, { ...msee, params: { ...msee.params, locationId: 'missing' } })).toEqual({ reason: 'entity' })
+  })
   it('moves staged peering guidance to the next unfinished pair without editing or granting evidence', () => {
     const input = structuredClone(scenarioBundle.scenarios.find((scenario) => scenario.id === 'inspection-bypass')!.document)
     if (input.mode === 'vwan') throw new Error('Mixed topology required')

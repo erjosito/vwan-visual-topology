@@ -20,6 +20,7 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
   const [editionConfirm, setEditionConfirm] = useState<string>()
   const label = (value: { en: string; ja: string }) => value[language]
   const { course, assessments, name } = selectedEdition(state?.ledger, session?.practice?.courseId)
+  const latest = editions.at(-1)!
   const progress = state?.ledger ? beltProgress(state.ledger, course, assessments) : undefined
   const started = session?.learningView?.open || session?.practice?.courseId === course.id || (progress?.points ?? 0) > 0
   const start = useRef<HTMLButtonElement>(null)
@@ -63,6 +64,18 @@ export function LearningStatusDetails({ onClose }: { onClose: () => void }) {
             session?.setLearningView?.({ open: true })
           }}>{label(started ? labels.continueLearning : labels.startLearning)}</button>
       </div>
+      {course.id !== latest.course.id && <div className="learning-status-entry" data-testid="learning-curriculum-update">
+        <p>{language === 'ja'
+          ? '新しいガイド付きカリキュラムがあります。基本・セキュア Virtual WAN、静的 VPN、BGP、ExpressRoute を段階的に学びます。過去のポイントと帯は保持され、新しい課題の修了とは区別されます。'
+          : 'The revised guided curriculum is available: early basic and secured Virtual WAN, static VPN, BGP and ExpressRoute. Historical points and belts remain saved separately from new assessments.'}</p>
+        <button type="button" disabled={busy || !state?.ledger || !session?.selectLearningEdition} onClick={() => {
+          setBusy(true); setFailed(false)
+          void session?.selectLearningEdition?.(latest.course.id).then((success) => {
+            if (success) { onClose(); session?.setLearningView?.({ open: true }) }
+            else setFailed(true)
+          }).catch(() => setFailed(true)).finally(() => setBusy(false))
+        }}>{language === 'ja' ? '新しいカリキュラムを開始' : 'Start the revised curriculum'}</button>
+      </div>}
       {(!cloud || state?.status !== 'saved') && <p role="status">{label(state ? labels[state.status] : labels.unavailable)}</p>}
       {cloud && <p role="status" data-testid="learning-cloud-status">{progressStatusLabel(cloud.status, language)}</p>}
       {progress && <>

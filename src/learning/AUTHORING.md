@@ -18,6 +18,46 @@ derives first-earned points, checkpoint-gated belts and the header status.
 The curriculum is authored under #184. No legacy JSON draft, raw requirements or
 engine payload is shown; legacy storage stays untouched.
 
+## Revised Azure networking journey
+
+`curriculum-v2.ts` publishes `azure-routing-v2`: 72 assessed tasks in twelve
+linear chapters, 1,345 XP and a checkpoint after every chapter. The order is
+private peering, Azure Firewall/UDRs, introductory Standard Virtual WAN,
+secured private Virtual WAN, static VPN, VPN BGP, ExpressRoute foundations,
+ExpressRoute location resilience, ER/VPN backup, two-snapshot NVA HA,
+multi-hub segmentation and an independent-fault handover.
+Azure Route Server is an ungraded architectural comparison in the HA chapter.
+
+Preparation is explicitly `ungraded`: loading and consent cannot earn XP.
+After explicit Next, the same-course protected workspace prepares the next
+chapter and presents its first substantive task. Native actions and fresh,
+visible inspections supply evidence; quizzes still require explicit submission.
+Verification inspections can also require the complete live-engine assertion
+set, so an already repaired topology alone does not earn a separate viewing award.
+
+The small eager `curriculum-v2-profile.ts` owns identity, checkpoints and XP
+thresholds. Teaching, native starters and stage narratives stay lazy in the
+other `curriculum-v2-*` files. Reusable checks contain declarative native-field
+expectations, original resource scopes and explicit engine requirements, never
+per-lesson grading callbacks. Selected transport checks can bind an original
+destination address; it must belong to the declared prefix and its native
+lookup must select the expected original gateway.
+
+The milestone ladder alternates mixed and full colors: White/yellow, Yellow,
+Yellow/orange, Orange, Orange/green, Green, Green/blue, Blue, Blue/brown,
+Brown, Brown/black and Black. Mixed milestones celebrate inline; full colors
+retain the bounded, reduced-motion-aware dialog. Historical highest belts use
+normalized color ranks, not incomparable edition-specific array indices.
+Opting into v2 retains archived XP, first-award prices and earned belts without
+granting any v2 VPN, ExpressRoute or HA competence.
+
+Gateway and aggregate ExpressRoute-location tables are distinct evidence
+scopes. Static VPN routes do not imply a BGP session. C06 prepares gateway BGP
+capability and changes the exposed connection toggle. C10 requires the same
+original packet and VIP steering in both declared health snapshots, not live
+health probes, measured failover or stateful session continuity. All exercises
+assess modeled routing, not firewall policy enforcement or application delivery.
+
 ## Track scope and compatibility
 
 The playable track is displayed as **Routing foundations**. Its historical
@@ -101,7 +141,8 @@ Normal saved designs remain protected. This is an explicit beta exception to the
 published-threshold policy above, not a general migration policy.
 
 `editions.ts` is the lightweight edition catalog. Fresh learners start
-`azure-routing-scenarios` version 7. Historical original-course completions
+`azure-routing-v2`; the original and scenario editions remain playable archives.
+Historical original-course completions
 retain the original edition unless the learner explicitly opts in through
 **Progress, review & options** or header status details. A retained original practice
 canvas also retains its edition when no enrollment/history selects otherwise.
@@ -109,7 +150,7 @@ The optional `enrollment` field extends the existing v1 ledger; old backups
 remain readable. Enrollment uses the same exclusive writer/CAS protection as
 awards. Switching editions neither loads a starter nor rewrites achievements.
 The original belt and points remain visible separately after opting in, and
-switching back restores the original journey. Reset explicitly clears both
+switching back restores the original journey. Reset explicitly clears all
 editions' progress; it is not an edition-switch mechanism.
 
 `runner.ts` is the single progression authority. Supported check kinds dispatch

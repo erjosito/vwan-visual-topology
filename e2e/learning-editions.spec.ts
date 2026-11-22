@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { scenarioBundle } from '../src/learning/scenario-course'
 import { exampleCourse } from '../src/learning/course-examples'
+import { curriculumV2Bundle } from '../src/learning/curriculum-v2'
 import { orderedTasks } from '../src/learning/runner'
 import { guidedProgressKey } from '../src/learning/progress-ledger'
 import { practiceWorkspaceKey } from '../src/learning/practice-workspace'
@@ -12,8 +13,10 @@ import { createEmptyAzNetTopology } from '../src/azure-net/model'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
-import { openLearning, learningAdvancedOptions, advanceLearningTask, completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
+import { archivedScenarioStorageState, openLearning, learningAdvancedOptions, advanceLearningTask, completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork } from './learning-helpers'
 import { openWorkspaceActions } from './document-action-helpers'
+
+test.use({ storageState: archivedScenarioStorageState() })
 
 async function show(page: Page, taskId: string, guidanceId: string, language: 'en' | 'ja') {
   const task = scenarioBundle.lessons.flatMap((lesson) => lesson.tasks).find((task) => task.id === taskId)!
@@ -266,7 +269,9 @@ for (const language of ['en', 'ja'] as const) {
         completedAt: '2026-11-19T10:00:00.000Z',
       }))
     await page.addInitScript(({ key, completions }) => {
-      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+      if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+        localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+      }
     }, { key: guidedProgressKey, completions })
     await page.goto('/?mode=full')
     await page.locator('header [data-language-selector]').selectOption(language)
@@ -443,7 +448,9 @@ test('default mobile workspace reveals the scoped HA packet form without changin
     }))
   await page.addInitScript(({ key, completions }) => {
     localStorage.setItem('aznet-ui-preview:v1', 'true')
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
@@ -467,7 +474,9 @@ test('default mobile table guidance preserves practice and requires each exact m
     }))
   await page.addInitScript(({ key, completions }) => {
     localStorage.setItem('aznet-ui-preview:v1', 'true')
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
@@ -519,7 +528,9 @@ test('default mobile connection guidance never configures the assessed hybrid ba
     }))
   await page.addInitScript(({ key, completions }) => {
     localStorage.setItem('aznet-ui-preview:v1', 'true')
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.setViewportSize({ width: 390, height: 1000 })
   await page.goto('/?mode=full')
@@ -547,7 +558,9 @@ test('historical black belt stays intact across explicit edition opt-in, reload 
     completedAt: '2026-11-16T12:00:00.000Z',
   }))
   await page.addInitScript(({ key, completions }) => {
-    if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, completions }))
+    }
   }, { key: guidedProgressKey, completions })
   await page.goto('/?mode=full')
   await expect(page.getByTestId('learning-status')).toContainText('Original edition - Black belt · 1325 points')
@@ -571,6 +584,52 @@ test('historical black belt stays intact across explicit edition opt-in, reload 
   await expect(page.getByTestId('learning-status')).toContainText('Original edition - Black belt · 1325 points')
   const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
   expect(saved.completions).toEqual(completions)
+})
+
+test('revised curriculum opt-in preserves historical awards and practice until starter confirmation', async ({ page }) => {
+  test.setTimeout(90_000)
+  const completions = orderedTasks(exampleCourse).map(({ lesson, task }, revision) => ({
+    courseId: exampleCourse.course.id, contentVersion: 4, lessonId: lesson.id, taskId: task.id,
+    assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+    title: task.title, sessionId: 'historical-session', revision, scope: 1, engineVersion: 'historical',
+    completedAt: '2026-11-16T12:00:00.000Z',
+  }))
+  await page.addInitScript(({ key, completions, enrollment }) => {
+    if (!JSON.parse(localStorage.getItem(key) ?? '{"completions":[]}').completions.length) {
+      localStorage.setItem(key, JSON.stringify({ version: 1, policyVersion: 1, enrollment, completions }))
+    }
+  }, { key: guidedProgressKey, completions, enrollment: scenarioBundle.course.id })
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBeTruthy()
+  const normal = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await openLearning(page)
+  await completeLearningTasks(page, 2)
+  const practice = await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)
+  const previous = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
+  await page.getByTestId('learning-status').click()
+  await page.getByTestId('learning-curriculum-update').getByRole('button', { name: 'Start the revised curriculum', exact: true }).click()
+  const sidebar = learningSidebar(page)
+  await expect(sidebar.getByTestId('learning-task')).toHaveAttribute('data-task-id', curriculumV2Bundle.lessons[0].tasks[0].id)
+  await expect(page.getByTestId('learning-status')).toContainText('White belt · 0 points')
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+  await sidebar.getByRole('button', { name: sidebarLabels.load.en, exact: true }).click()
+  await sidebar.getByRole('button', { name: sidebarLabels.cancel.en, exact: true }).click()
+  expect(await page.evaluate((key) => localStorage.getItem(key), practiceWorkspaceKey)).toBe(practice)
+  await loadLearningNetwork(page)
+  await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
+  await expect(page.getByTestId('learning-status')).toContainText('White belt · 0 points')
+  const saved = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
+  expect(saved.enrollment).toBe(curriculumV2Bundle.course.id)
+  expect(saved.completions).toEqual(previous.completions)
+  expect(saved.completions.filter((entry: { courseId: string }) => entry.courseId === exampleCourse.course.id)).toEqual(completions)
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(normal)
+  await page.getByTestId('learning-status').click()
+  await learningAdvancedOptions(page)
+  await expect(page.getByTestId('learning-status-details')).toContainText('Original edition: 1325 points · Black belt')
+  await page.reload()
+  await expect(page.getByTestId('learning-status')).toContainText('White belt · 0 points')
+  expect((await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)).completions).toEqual(previous.completions)
 })
 
 test('sidebar edition switching preserves an active practice canvas and separate progress', async ({ page }) => {
