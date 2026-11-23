@@ -6,6 +6,46 @@ import { workspaceArchiveKey, workspaceSessionKey, workspaceStorageKeys } from '
 import { observationFixture } from '../tests/azure-observation-fixture'
 import { exercises } from '../src/learning/exercises'
 
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: New topology opens an empty unified document without changing the saved native topology`, async ({ page }) => {
+    await page.addInitScript(({ language, topology }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+      localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(topology))
+    }, { language, topology: example })
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.goto('/')
+    await expect(page.getByRole('tab', { name: example.name, exact: true })).toBeVisible()
+    const original = await page.evaluate(() => {
+      const session = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!)
+      return { id: session.activeId, raw: localStorage.getItem(`network-simulator:workspace-tab:v1:${session.activeId}:topology`) }
+    })
+    const workspace = page.getByTestId('workspace-library-open')
+    if (!await workspace.isVisible()) await page.locator('.workspace-header-toggle').click()
+    await workspace.click()
+    const library = page.getByRole('dialog', { name: language === 'ja' ? 'ワークスペース' : 'Workspace', exact: true })
+    const create = library.getByRole('button', { name: language === 'ja' ? '新しいトポロジ' : 'New topology', exact: true })
+    await expect(create).toBeVisible()
+    await expect(library).not.toContainText(/mixed-network workspace|混在ネットワーク ワークスペース|dedicated VWAN workspace/)
+    await expect(library.getByRole('button', { name: `${language === 'ja' ? '保存済みトポロジを開く' : 'Open saved topology'}: ${example.name}`, exact: true })).toBeVisible()
+    expect((await new AxeBuilder({ page }).include('dialog').analyze()).violations).toEqual([])
+    await create.focus()
+    await page.keyboard.press('Enter')
+    await expect(library).toHaveCount(0)
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
+    await expect(page.getByRole('tab')).toHaveCount(2)
+    const saved = await page.evaluate(id => ({
+      original: localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`),
+      activeId: JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId,
+      topology: JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology,
+    }), original.id)
+    expect(saved.original).toBe(original.raw)
+    expect(saved.activeId).not.toBe(original.id)
+    expect(Object.values(saved.topology).filter(Array.isArray).every(values => values.length === 0)).toBe(true)
+  })
+}
+
 for (const profile of [
   { vwan: true, language: 'en', width: 1440, zoom: 1 },
   { vwan: false, language: 'en', width: 390, zoom: 1 },
@@ -492,7 +532,7 @@ test('damaged selection requires recovery and storage failure never replaces a s
   await page.goto('/')
   const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
   await expect(library).toBeVisible()
-  await library.getByRole('button', { name: 'New mixed-network workspace', exact: true }).click()
+  await library.getByRole('button', { name: 'New topology', exact: true }).click()
   await expect(page.getByRole('alert')).toContainText('could not be selected or preserved')
   await expect(library).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('network-simulator:workspace:v1'))).toBe('{"version":99,"provider":"vwan"}')
@@ -507,7 +547,7 @@ test('workspace library fits narrow dark Japanese view and returns keyboard focu
   const opener = page.getByTestId('workspace-library-open')
   await opener.click()
   const library = page.getByRole('dialog', { name: 'ワークスペース', exact: true })
-  await expect(library).toContainText('新しい混在ネットワーク')
+  await expect(library.getByRole('button', { name: '新しいトポロジ', exact: true })).toBeVisible()
   const box = await library.boundingBox()
   expect(box!.x).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(391)
@@ -529,11 +569,11 @@ test('ambiguous legacy saves require a choice and preserve both native originals
   }, { v1, v2 })
   await page.goto('/?keep=original#retained')
   const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
-  await expect(library).toContainText('Neither saved family has been selected')
+  await expect(library).toContainText('Saved topologies are not opened or overwritten automatically')
   expect(await page.evaluate(() => localStorage.getItem('network-simulator:workspace:v1'))).toBeNull()
   await page.keyboard.press('Escape')
   await expect(library).toBeVisible()
-  await library.getByRole('button', { name: `Open saved design: ${native.name}`, exact: true }).click()
+  await library.getByRole('button', { name: `Open saved topology: ${native.name}`, exact: true }).click()
   await expect(page.getByTestId('vwan-app')).toBeVisible()
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue(native.name)
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), workspaceStorageKeys.vwan)).toEqual(native)
@@ -546,7 +586,7 @@ test('ambiguous legacy saves require a choice and preserve both native originals
   expect(new URL(page.url()).searchParams.get('keep')).toBe('original')
   expect(new URL(page.url()).hash).toBe('#retained')
   await page.getByTestId('workspace-library-open').click()
-  await library.getByRole('button', { name: `Open saved design: ${sampleHybridVwanAndHubSpoke.name}`, exact: true }).click()
+  await library.getByRole('button', { name: `Open saved topology: ${sampleHybridVwanAndHubSpoke.name}`, exact: true }).click()
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), workspaceSessionKey)).toEqual({ version: 1, provider: 'azure-net' })
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), workspaceArchiveKey)).toEqual(expect.arrayContaining([
@@ -589,7 +629,7 @@ for (const provider of ['vwan', 'full']) {
     })
     await expect.poll(() => page.evaluate(() => typeof Reflect.get(window, 'releaseDelayedRead'))).toBe('function')
     await page.getByTestId('workspace-library-open').click()
-    await page.getByRole('button', { name: 'New mixed-network workspace', exact: true }).click()
+    await page.getByRole('button', { name: 'New topology', exact: true }).click()
     await expect(page.getByTestId('aznet-app')).toBeVisible()
     await page.evaluate(() => Reflect.get(window, 'releaseDelayedRead')())
     await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))))
@@ -636,7 +676,7 @@ for (const operation of ['openDocument', 'collect'] as const) {
       await page.getByRole('button', { name: 'Collect and review locally', exact: true }).click()
     }
     await page.getByTestId('workspace-library-open').click()
-    await page.getByRole('button', { name: 'New mixed-network workspace', exact: true }).click()
+    await page.getByRole('button', { name: 'New topology', exact: true }).click()
     await expect(page.getByTestId('aznet-app')).toBeVisible()
     const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
     await page.evaluate(async () => {

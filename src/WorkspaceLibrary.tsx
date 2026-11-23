@@ -71,10 +71,10 @@ export function WorkspaceLibrary({ required, notice, onOpen, onNew, onClose, onR
     onCancel={(event) => { if (required) event.preventDefault(); else onClose() }} onClose={() => { if (!required) onClose() }}>
     <header className="row dialog-heading"><h2 id="workspace-library-title">{text('Workspace', 'ワークスペース')}</h2>
       {!required && <button type="button" onClick={onClose}>{text('Close', '閉じる')}</button>}</header>
-    <p>{text('Open designs in separate tabs; your existing designs stay open. New workspaces support Virtual WAN and classic networking together. Saved native designs keep their original editor and routing provider without conversion.', 'デザインは別々のタブで開き、既存のデザインはそのまま保持します。新しいワークスペースでは Virtual WAN と従来のネットワークを併用できます。既存のデザインは変換せず、元のエディターとルーティング処理で開きます。')}</p>
+    <p>{text('Open topologies in separate tabs; your existing topologies stay open. New topologies can combine Virtual WAN and VNet-based networking. Saved topologies keep their original data format and routing behavior.', 'トポロジは別々のタブで開き、既存のトポロジはそのまま保持します。新しいトポロジでは Virtual WAN と VNet ベースのネットワークを組み合わせられます。保存済みトポロジの元のデータ形式とルーティング動作は維持されます。')}</p>
     {notice && <p role="alert">{t(notice)}</p>}
-    {required && <p role="status">{text('Choose a saved design or start empty. Neither saved family has been selected or overwritten automatically.', '保存済みデザインを選択するか、空の状態で開始してください。保存済みデータは自動で選択・上書きされていません。')}</p>}
-    <button type="button" onClick={onNew}>{text('New mixed-network workspace', '新しい混在ネットワーク ワークスペース')}</button>
+    {required && <p role="status">{text('Open a saved topology or create a new one. Saved topologies are not opened or overwritten automatically.', '保存済みトポロジを開くか、新しいトポロジを作成してください。保存済みトポロジは自動で開いたり上書きしたりしません。')}</p>}
+    <button type="button" onClick={onNew}>{text('New topology', '新しいトポロジ')}</button>
     {onCloseAll && <button type="button" onClick={onCloseAll}>{text('Close all topology tabs', 'すべてのトポロジ タブを閉じる')}</button>}
     {onResetTabs && <section>
       <p>{text('Reset only the damaged tab list. Stored topology records remain available below.', '破損したタブ一覧のみをリセットします。保存済みのトポロジは下から復元できます。')}</p>
@@ -84,8 +84,8 @@ export function WorkspaceLibrary({ required, notice, onOpen, onNew, onClose, onR
     {onResumePractice && <button type="button" onClick={onResumePractice}>{text('Resume practice', '練習を再開')}</button>}
     {choices.map((choice) => <section key={choice.provider}>
       <h3>{choice.name}</h3>
-      <p>{choice.provider === 'vwan' ? text('Original Virtual WAN design · compatible native editor', '元の Virtual WAN デザイン・互換ネイティブ エディター') : text('Mixed-network design', '混在ネットワーク デザイン')}</p>
-      <button type="button" onClick={() => onOpen(choice.provider)}>{text('Open saved design', '保存済みデザインを開く')}: {choice.name}</button>
+      <p>{choice.provider === 'vwan' ? text('Virtual WAN topology · original format retained', 'Virtual WAN トポロジ・元の形式を維持') : text('Saved topology · original format retained', '保存済みトポロジ・元の形式を維持')}</p>
+      <button type="button" onClick={() => onOpen(choice.provider)}>{text('Open saved topology', '保存済みトポロジを開く')}: {choice.name}</button>
       <button type="button" onClick={() => download(choice.raw, `${choice.provider}-saved-original.json`)}>{text('Export saved original', '保存済みの原本をエクスポート')}: {choice.name}</button>
     </section>)}
     {!!recovery.length && <details open><summary>{text('Closed & recovered designs', '閉じたデザイン・復元用デザイン')} ({recovery.length})</summary>
