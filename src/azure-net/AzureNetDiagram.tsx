@@ -7,6 +7,7 @@ import { centerOfBox, connectionBend, fitDiagram, reverseCurve } from '../connec
 import { NetworkNodeIcon } from '../NetworkNodeIcon'
 import { DiagramNodeBadge, DiagramNodeText } from '../DiagramNodeLabels'
 import { DiagramButton } from '../DiagramButton'
+import { normalizeAzureRegionName } from '../er-locations-catalog'
 import { azHubGatewayConnections, hubGatewayLabel } from '../hub-gateways'
 import { useCanvasPresentation } from '../useCanvasPresentation'
 import { useCanvasZoom } from '../useCanvasZoom'
@@ -1816,7 +1817,10 @@ export function AzureNetDiagram({
               <title>{inspected ? t('Selected route traverses the local Firewall; this is not delivery or policy proof.') : hub.name}</title>
               <NetworkNodeIcon kind="hub" secured={Boolean(hub.firewall) || hub.routingIntent.private || hub.routingIntent.internet} x={box.x + 25} y={box.y + 20} size={24} />
               <DiagramNodeText text={hub.name} x={box.x + 43} y={box.y + 24} width={box.width - 55} weight={700} />
-              <DiagramNodeText text={`vWAN Hub${hub.prefix ? ` (${hub.prefix})` : ''} · Pref: ${hub.preference}`} x={box.x + 14} y={box.y + 42} width={box.width - 28} fontSize={10.5} weight={400} />
+              <DiagramNodeText className="aznet-hub-region"
+                text={`${normalizeAzureRegionName(hub.region) || t('Unknown region')}${hub.prefix ? ` · ${hub.prefix}` : ''}`}
+                title={`${t('Azure Region')}: ${normalizeAzureRegionName(hub.region) || t('Unknown region')}${hub.prefix ? ` · ${hub.prefix}` : ''}`}
+                x={box.x + 14} y={box.y + 42} width={box.width - 28} fontSize={10.5} weight={500} />
               <DiagramNodeText text={`Private: ${hub.routingIntent.private ? 'On' : 'Off'} · Internet: ${hub.routingIntent.internet ? 'On' : 'Off'}`} title={`Routing Intent: Private ${hub.routingIntent.private ? 'On' : 'Off'} / Internet ${hub.routingIntent.internet ? 'On' : 'Off'}`} x={box.x + 14} y={box.y + 60} width={box.width - 28} fontSize={10} fill="var(--info)" />
               <DiagramNodeText text={hubGatewayLabel(azHubGatewayConnections(topology, hub.id))} title={t('Enabled/defined modeled connections')} x={box.x + 14} y={box.y + 75} width={box.width - 28} fontSize={9} weight={400} />
               {hub.label?.trim() ? (
