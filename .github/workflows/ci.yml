@@ -317,6 +317,9 @@ jobs:
       - run: npm run build:desktop
         env:
           VITE_APP_REVISION: ${{ github.sha }}
+          AZNET_DESKTOP_CLOUD_CLIENT_ID: ${{ vars.AZNET_DESKTOP_CLOUD_CLIENT_ID }}
+          AZNET_DESKTOP_CLOUD_API_SCOPE: ${{ vars.VITE_CLOUD_API_SCOPE }}
+          AZNET_DESKTOP_CLOUD_API_BASE_URL: ${{ vars.AZNET_DESKTOP_CLOUD_API_BASE_URL }}
       - run: npm run test:desktop
       - run: npm run test:desktop-network
       - name: Smoke packaged offline application

@@ -7,6 +7,8 @@ supported. Work/school accounts and Entra External ID external tenants are not
 configured by this implementation.
 
 The browser uses Microsoft's hosted sign-in and PKCE through MSAL Browser.
+Configured Windows builds use the system browser and MSAL Node in Electron's
+main process; tokens never enter the canvas renderer.
 An Azure Functions v4 API validates delegated access tokens and accesses a
 private Blob Storage container through managed identity. Users do not grant
 Microsoft Graph permissions or access to their Azure subscriptions.
@@ -112,8 +114,8 @@ not the latest saved version. Its UI warns that old links cannot expire or be
 revoked; it never replaces the workspace or auto-uploads. New full-payload URL
 generation has been removed. Cloud-link creation/resolution needs configured web
 cloud support and connectivity; unavailable, expired and revoked views preserve
-the local design. Electron does not issue/resolve cloud links or launch an
-external integration. Local JSON files remain its sharing alternative; legacy
+the local design. Electron does not create/manage or resolve cloud sharing links.
+Local JSON files remain its sharing alternative; legacy
 snapshots can still be viewed locally without uploading.
 
 These are source changes, not deployment instructions being executed. Deploy
@@ -162,7 +164,8 @@ Register it for personal Microsoft accounts, grant the same API's delegated
 the desktop client. Do not broaden the account audience or accept arbitrary
 client IDs. A matching verified issuer/subject retains the same storage owner
 across clients; real personal-account web/desktop interoperability still needs
-live qualification. This backend capability alone does not enable Electron login.
+live qualification. This backend capability alone does not enable Electron login; the Windows build
+also needs the desktop configuration below.
 
 See Microsoft's [supported account types](https://learn.microsoft.com/en-us/entra/identity-platform/v2-supported-account-types)
 and [MSAL v5 redirect bridge](https://learn.microsoft.com/en-us/entra/msal/javascript/browser/redirect-bridge).
@@ -197,6 +200,81 @@ MSAL's silent renewal; the main app still denies framing. Do not add a
 reverse proxy, because it breaks the MSAL v5 response channel. Browsers blocking
 third-party cookies or requiring fresh consent may still require
 **Sign in again / switch account**.
+
+## Configure Windows cloud sign-in
+
+Create a separate **Personal Microsoft accounts only** public-client registration.
+Under **Mobile and desktop applications**, register `http://localhost` as the
+redirect URI (not an SPA or confidential Web redirect). Grant the existing API's
+delegated `Cloud.Access` permission and obtain any required administrator consent.
+Do not add a secret, implicit grants, Graph permissions or Azure subscription
+permissions. The application uses authorization code + S256 PKCE, a random OAuth
+state and an ephemeral loopback port bound only to `127.0.0.1`. Microsoft ignores
+the port for the registered localhost desktop redirect.
+
+Set `CLOUD_DESKTOP_CLIENT_ID` on the matching Function (or the Bicep
+`desktopClientId` parameter), leaving `CLOUD_CLIENT_ID` unchanged. Deploy the
+backend allowlist support before testing desktop API access.
+
+These are public, **build-time** Windows settings:
+
+```powershell
+$env:AZNET_DESKTOP_CLOUD_CLIENT_ID = '<desktop-public-client-ID>'
+$env:AZNET_DESKTOP_CLOUD_API_SCOPE = 'api://<existing-API-client-ID>/Cloud.Access'
+$env:AZNET_DESKTOP_CLOUD_API_BASE_URL = 'https://<function-host>/api/cloud'
+npm run build:desktop
+```
+
+The API base must be an absolute HTTPS URL, not the web build's optional relative
+`/api/cloud`. CI uses repository variables `AZNET_DESKTOP_CLOUD_CLIENT_ID`,
+`AZNET_DESKTOP_CLOUD_API_BASE_URL` and the existing `VITE_CLOUD_API_SCOPE`.
+Missing/invalid configuration leaves sign-in unavailable without disabling local
+simulation. The build embeds these settings in the main bundle; changing
+environment variables after installation cannot redirect the app's cloud API.
+Never put credentials in any of these variables.
+
+Sign-in opens the system browser, not an Electron login window. **Cancel sign-in**,
+sign-out, a two-minute callback timeout and quitting the app close the listener.
+Only fixed, schema-checked library/progress/sharing-management operations cross
+guarded IPC; there is no renderer HTTP proxy, raw token or arbitrary URL API.
+The canvas keeps its existing CSP, blocked external network, sandbox and
+context isolation. Main-process API calls omit cookies, reject redirects, bound
+responses to 4 MiB and retain conditional ETags and account-generation checks.
+They do not require a new browser CORS origin.
+
+Tokens and the selected account are stored only in the current desktop profile's
+`desktop-cloud-cache.v1.bin`, encrypted using Electron `safeStorage` (Windows
+DPAPI). Unavailable OS encryption fails closed; there is no plaintext fallback.
+An unreadable cache leaves the app signed out with explicit sign-in available.
+Unavailable OS encryption prevents opening the sign-in browser.
+Configured builds allow one instance per profile to avoid competing credential
+writers. Startup restores only the deliberately selected cached account; it
+does not launch a browser or automatically upload designs. API access renews
+tokens silently when possible. Expired consent requires explicit sign-in.
+**Sign out of this app** cancels old requests and removes the app's credential
+cache; it does not sign out the system browser, revoke existing shares or erase
+local topology/progress data. Export backups before removing an entire profile.
+Switching accounts invalidates old library handles and pending replies.
+
+Cloud library CRUD and learning progress use the existing account workflows.
+Creating/managing sharing links and resolving links remain web-only in the UI;
+desktop must not generate unusable `app://` sharing URLs. Azure resource collection
+still uses its separate, explicitly chosen local Azure CLI session.
+
+### Rollout qualification
+
+Source integration and mocked tests do not establish successful production sign-in.
+Before enabling/publishing a configured installer, verify an installed Windows
+build with a real personal Microsoft account: consent, cancel/retry, restart and
+silent renewal, account switch, sign-out, offline launch and failed API access.
+Check that an existing web-created save and curriculum history appear in desktop,
+and a desktop-created save/update appears on web with the same account. Verify a
+different account cannot see either library and stale ETags still return 412.
+The backend's unchanged issuer/subject owner derivation must be qualified with
+real web/desktop access tokens; synthetic equal-claim tests are not proof that
+the registrations produce the same owner. If they differ, stop rollout and plan
+an explicit identity migration rather than silently creating a second library.
+Do not log/copy tokens or cache plaintext while diagnosing this.
 
 ## Configure the Function and storage
 
@@ -311,7 +389,8 @@ Configure these **repository variables** before the selected CI build:
 | `VITE_CLOUD_API_SCOPE` | `api://<API-client-ID>/Cloud.Access` |
 | `VITE_CLOUD_API_BASE_URL` | Deployment output `apiBaseUrl` |
 
-CI injects them into the web build only, not the Electron build. Update the main
+The web build uses these variables. Windows uses the separate public-client ID
+and absolute API URL described above, with the same API scope. Update the main
 SWA CSP's exact `connect-src` API origin if provisioning another Function host.
 Changing variables does not change an already-built candidate or the live site.
 
