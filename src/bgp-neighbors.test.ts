@@ -56,3 +56,30 @@ it('preserves standalone configured ASNs, instance scopes and disabled gateway B
   expect(inspection.managedRelationships.find((relationship) => relationship.connectionId === 'er-azure'))
     .toMatchObject({ name: 'Azure ER', kind: 'express-route', enabled: true })
 })
+
+it('keeps Full Hybrid managed static VPN configuration available without inventing BGP sessions', () => {
+  const topology = bgpNeighborTopology()
+  topology.vwanHubs = [{
+    id: 'static-hub', name: 'Static VPN hub', region: 'westeurope', prefix: '10.60.0.0/23',
+    preference: 'ExpressRoute', routingIntent: { private: false, internet: false },
+  }]
+  topology.vpnConnections = [{
+    id: 'static-vpn', name: 'Static branch VPN', siteId: 'branch',
+    targetKind: 'vwan-hub', targetId: 'static-hub', enabled: true, bgpEnabled: false,
+  }]
+  const before = JSON.stringify(topology)
+  const relationship = (unavailableIds: string[] = []) => inspectAzBgp(topology, undefined, unavailableIds)
+    .managedRelationships.find((entry) => entry.connectionId === 'static-vpn')!
+
+  expect(relationship()).toMatchObject({ kind: 'vpn-static', enabled: true })
+  expect(relationship().reason).toContain('Static VPN routing')
+  expect(inspectAzBgp(topology).neighbors.some((entry) => entry.connectionId === 'static-vpn')).toBe(false)
+  expect(relationship(['static-hub']).enabled).toBe(false)
+  expect(JSON.stringify(topology)).toBe(before)
+
+  topology.vpnConnections[0].enabled = false
+  expect(relationship()).toMatchObject({ kind: 'vpn-static', enabled: false })
+  topology.vpnConnections[0].enabled = true
+  topology.vpnConnections[0].bgpEnabled = true
+  expect(relationship()).toMatchObject({ kind: 'vpn', enabled: true })
+})

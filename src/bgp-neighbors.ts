@@ -211,10 +211,12 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
     const underlay = conn.underlay || conn.useLocalAzureIpAddress
       ? simulation?.vpnUnderlays?.[conn.id] ?? { state: 'not-assessed', reason: 'Private VPN underlay has not been assessed.' } : undefined
     if (!target.instances.length) {
-      managed(identity('vpn', conn.id), conn.id, target, site, conn.enabled && conn.bgpEnabled && targetBgpEnabled && (!underlay || underlay.state === 'available'),
+      const staticVpn = !conn.bgpEnabled && conn.targetKind !== 'appliance' && conn.transport !== 'SDWAN'
+      managed(identity('vpn', conn.id), conn.id, target, site, conn.enabled && (staticVpn || conn.bgpEnabled && targetBgpEnabled) && (!underlay || underlay.state === 'available'),
         underlay && underlay.state !== 'available' ? underlay.reason
+          : staticVpn ? 'Static VPN routing; no BGP peering is configured on this connection.'
           : !conn.bgpEnabled || !targetBgpEnabled ? 'BGP is disabled on this connection or gateway; static routes do not establish BGP neighbors.' : opaqueMapping,
-        { name: conn.name, kind: conn.targetKind === 'appliance' || conn.transport === 'SDWAN' ? 'nva' : 'vpn' })
+        { name: conn.name, kind: staticVpn ? 'vpn-static' : conn.targetKind === 'appliance' || conn.transport === 'SDWAN' ? 'nva' : 'vpn' })
       continue
     }
     const availability = conn.enabled && conn.bgpEnabled && targetBgpEnabled && site.enabled && target.enabled ? underlay?.state ?? 'available' : 'unavailable'
