@@ -766,7 +766,11 @@ for (const operation of ['openDocument', 'collect'] as const) {
     }, { operation, content: JSON.stringify(operation === 'openDocument' ? example : { ...observationFixture(), version: 1 }) })
     await page.goto('/')
     await expect(page.getByTestId('aznet-app')).toBeVisible()
-    if (operation === 'openDocument') await page.getByRole('button', { name: 'Load file', exact: true }).click()
+    if (operation === 'openDocument') {
+      await page.getByRole('button', { name: 'Load', exact: true }).click()
+      await page.getByRole('dialog', { name: 'Load topology', exact: true })
+        .getByRole('button', { name: 'Load file', exact: true }).click()
+    }
     else {
       await page.getByTestId('workspace-azure-button').click()
       await page.getByRole('button', { name: 'Read existing Azure session', exact: true }).click()
@@ -776,6 +780,7 @@ for (const operation of ['openDocument', 'collect'] as const) {
       await page.getByRole('checkbox', { name: /Confirm read-only capture scope/ }).check()
       await page.getByRole('button', { name: 'Capture → Compare current design', exact: true }).click()
     }
+    await expect.poll(() => page.evaluate(() => typeof Reflect.get(window, 'releaseDesktopResult'))).toBe('function')
     await page.getByTestId('workspace-library-open').click()
     await page.getByRole('button', { name: 'New topology', exact: true }).click()
     await expect(page.getByTestId('aznet-app')).toBeVisible()
