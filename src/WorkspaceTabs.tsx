@@ -51,6 +51,7 @@ function TabButton({ tab, selected, save, commands, onActivate }: {
     aria-label={name}
     aria-describedby={`workspace-tab-state-${tab.id}`} aria-selected={selected} tabIndex={selected ? 0 : -1}
     title={tooltip}
+    onFocus={event => event.currentTarget.parentElement?.scrollIntoView({ block: 'nearest', inline: 'nearest' })}
     onClick={() => onActivate(tab)}>
     <span className="workspace-tab-name">{name}</span>
   </button><small id={`workspace-tab-state-${tab.id}`} title={tooltip}>{status}</small></>
@@ -69,12 +70,11 @@ export function WorkspaceTabs({ tabs, activeId, temporary, getSave, getCommands,
   const language = useLanguage()
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
   const list = useRef<HTMLDivElement>(null)
-  const selected = tabs.find(tab => tab.id === activeId)
   return <nav className="workspace-tabs" aria-label={text('Open topologies', '開いているトポロジ')}>
     {temporary && <span role="status" title={text('Temporary copies: profile storage is unavailable or another window owns it. Save a file or cloud copy before closing. Reload after the other window closes to restore profile editing.',
       '一時コピー: プロファイルを利用できないか、別のウィンドウが使用中です。閉じる前にファイルまたはクラウドに保存してください。別のウィンドウを閉じて再読み込みすると、プロファイルの編集を再開できます。')}>
       {text('Temporary', '一時コピー')}</span>}
-    <div ref={list} className="workspace-tabs-list" role="tablist" aria-label={text('Designs', 'デザイン')}
+    <div ref={list} className="workspace-tabs-list"
       onKeyDown={event => {
         if (!(event.target instanceof HTMLElement) || event.target.getAttribute('role') !== 'tab') return
         const buttons = Array.from(list.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? [])
@@ -86,14 +86,19 @@ export function WorkspaceTabs({ tabs, activeId, temporary, getSave, getCommands,
         event.preventDefault()
         buttons[next]?.focus()
       }}>
-      {tabs.map(tab => <div className="workspace-tab" key={tab.id}>
-        <TabButton tab={tab} selected={tab.id === activeId} save={getSave(tab)} commands={getCommands?.(tab)} onActivate={onActivate} />
-      </div>)}
+      <div className="workspace-tab-semantics" role="tablist" aria-label={text('Designs', 'デザイン')}>
+        {tabs.map((tab, index) => <div className="workspace-tab" key={tab.id} style={{ gridColumn: index + 1 }}>
+          <TabButton tab={tab} selected={tab.id === activeId} save={getSave(tab)} commands={getCommands?.(tab)} onActivate={onActivate} />
+        </div>)}
+      </div>
+      {onClose && tabs.map((tab, index) => {
+        const name = tab.name || text('Untitled topology', '名称未設定のトポロジ')
+        const suffix = tabs.filter(other => other.name === tab.name).length > 1 ? text(` (tab ${index + 1})`, ` (タブ ${index + 1})`) : ''
+        const closeLabel = text(`Close topology: ${name}${suffix}`, `トポロジを閉じる: ${name}${suffix}`)
+        return <button type="button" className="workspace-tab-close" key={tab.id} style={{ gridColumn: index + 1 }}
+          aria-label={closeLabel} title={closeLabel} onClick={() => onClose(tab)}>&#215;</button>
+      })}
     </div>
-    {onClose && selected && <button type="button" className="workspace-tab-close"
-      aria-label={text(`Close topology: ${selected.name}`, `トポロジを閉じる: ${selected.name}`)}
-      title={text(`Close topology: ${selected.name}`, `トポロジを閉じる: ${selected.name}`)}
-      onClick={() => onClose(selected)}>&#215;</button>}
     <button type="button" className="workspace-tab-new" onClick={onNew} disabled={tabs.length >= workspaceTabsLimit}
       title={tabs.length >= workspaceTabsLimit ? text('Close a tab to open another (maximum 16). Closed designs remain in recovery.', '別のタブを開くにはタブを閉じてください (最大16)。閉じたデザインは復元用に保持します。') : undefined}
       aria-label={text('New topology tab', '新しいトポロジ タブ')}>+</button>
