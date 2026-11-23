@@ -4,6 +4,7 @@ import { registerJapaneseMessages } from '../messages'
 import { cidr } from '../validation'
 import type { AzNetTopology, AzVNet } from './model'
 import { connectionStaticLimitations } from './vnet-connection-routes'
+import '../RoutingIntentNotice'
 
 registerJapaneseMessages({
   'Connection static routes': '接続の静的ルート',
@@ -38,7 +39,8 @@ export function ConnectionStaticRoutesEditor({ vnet, topology, commit }: {
       onChange={(event) => {
         const checked = event.target.checked
         commit((draft) => { draft.vnets.find((entry) => entry.id === vnet.id)!.vwanHubAttachment!.propagateStaticRoutes = checked })
-      }} />{t('Propagate static route')}</label>
+      }} />{t('Propagate connection static routes into BGP')}</label>
+    <p>{t('Advertises configured connection static prefixes through hub routing. This does not control receipt of 0.0.0.0/0 into the VNet.')}</p>
     {routes.length ? <ul>{routes.map((route) => <li key={route.name}>
       <code>{route.addressPrefixes.join(', ')} → {route.nextHopIpAddress}</code>{' '}
       <button type="button" className="aznet-btn" aria-label={t('Remove connection static route {0}', route.name)}

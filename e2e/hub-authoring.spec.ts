@@ -4,6 +4,7 @@ import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hu
 import { loadLanguage, translate } from '../src/messages'
 import '../src/hub-dialog-messages-ja'
 import '../src/VwanVnetConnectionPanel'
+import '../src/RoutingIntentNotice'
 import '../src/vpn-nat-messages-ja'
 import '../src/route-map-messages-ja'
 import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
@@ -143,6 +144,73 @@ async function saved(page: Page, mode: string) {
     const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1')!)
     return mode === 'vwan' ? value : value.topology
   }, mode)
+}
+
+for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
+  test(`${mode} ${language}: routing intent owns connection tables but not default or static propagation`, async ({ page }) => {
+    await loadLanguage(language)
+    const text = (value: string) => translate(language, value)
+    const native = hubFirewallTopology()
+    native.hubs[0].routeTables = []
+    native.spokes.forEach((spoke) => { delete spoke.hubRouting })
+    native.connections.forEach((connection) => { delete connection.hubRouting })
+    const mixed = azHubFirewallTopology()
+    mixed.vwanHubs = structuredClone(native.hubs)
+    mixed.vnets.forEach((vnet) => { delete vnet.vwanHubAttachment!.hubRouting })
+    mixed.vpnConnections.forEach((connection) => { delete connection.hubRouting })
+    await page.addInitScript((language) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+    }, language)
+    await page.setViewportSize(language === 'ja' ? { width: 390, height: 1100 } : { width: 1440, height: 1100 })
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'routing-intent.json', mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(mode === 'vwan' ? native : mixed)),
+    })
+    await expect.poll(async () => (await saved(page, mode))?.name).toContain('Selective Firewall')
+    const hub = mode === 'vwan' ? page.locator('[data-node-id="hub-local"]') : page.getByTestId('aznet-vwanhub-hub-local')
+    const setIntent = async (enabled: boolean) => {
+      await hub.focus()
+      await page.keyboard.press('Shift+F10')
+      if (mode === 'full') {
+        await page.getByRole('menuitem', { name: enabled ? 'Enable Private Traffic Routing Intent' : 'Disable Private Traffic Routing Intent', exact: true }).click()
+      } else {
+        await page.getByRole('menuitem', { name: text('Edit configuration'), exact: true }).click()
+        await page.getByRole('dialog').getByLabel(text('Private traffic routing intent'), { exact: true }).setChecked(enabled)
+        await page.getByRole('button', { name: text('Save changes'), exact: true }).click()
+      }
+    }
+    await setIntent(true)
+    const current = await saved(page, mode)
+    const config = mode === 'vwan' ? current.spokes[0].hubRouting : current.vnets[0].vwanHubAttachment.hubRouting
+    expect(config).toMatchObject({ associatedTableId: 'defaultRouteTable', propagatedTableIds: ['noneRouteTable'] })
+    const edge = page.getByTestId(`${mode === 'vwan' ? 'spoke' : 'aznet-vnet'}-connection-trusted-a`)
+    await edge.focus()
+    await page.keyboard.press('Enter')
+    const panel = page.getByTestId('vwan-vnet-connection-panel')
+    await expect(panel).toContainText(text('Managed by routing intent'))
+    await expect(panel.getByLabel(text('Associated table'), { exact: true })).toBeDisabled()
+    await expect(panel.getByLabel(text('Propagation labels'), { exact: true })).toBeDisabled()
+    await panel.getByLabel(text('Propagate default route (0.0.0.0/0)'), { exact: true }).check()
+    if (mode === 'full') {
+      await panel.getByLabel(text('Propagate connection static routes into BGP'), { exact: true }).check()
+      await expect(panel.getByLabel(text('Propagate default route (0.0.0.0/0)'), { exact: true })).toBeChecked()
+    }
+    expect((await new AxeBuilder({ page }).include('[data-testid="vwan-vnet-connection-panel"]').analyze()).violations).toEqual([])
+    await page.keyboard.press('Escape')
+    await setIntent(false)
+    const removed = await saved(page, mode)
+    expect(mode === 'vwan' ? removed.spokes[0].hubRouting.labels : removed.vnets[0].vwanHubAttachment.hubRouting.labels).toEqual(['default'])
+    await page.setViewportSize({ width: 1440, height: 1100 })
+    await page.getByRole('button', { name: new RegExp(`Undo|${text('Undo')}`) }).click()
+    const undone = await saved(page, mode)
+    expect(mode === 'vwan' ? undone.hubs[0].routingIntent.private : undone.vwanHubs[0].routingIntent.private).toBe(true)
+    expect(mode === 'vwan' ? undone.spokes[0].hubRouting.propagatedTableIds : undone.vnets[0].vwanHubAttachment.hubRouting.propagatedTableIds).toEqual(['noneRouteTable'])
+    await page.reload()
+    await expect(edge).toBeVisible()
+    expect(await saved(page, mode)).toEqual(undone)
+  })
 }
 
 test('full: hub VPN NAT explains missing IPsec connections instead of offering SD-WAN rules', async ({ page }) => {

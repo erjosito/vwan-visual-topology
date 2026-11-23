@@ -44,6 +44,8 @@ import type { GroupPath, NodePath, PathDirection, PathGroup, PathNode } from './
 import { embeddedSpokeNvaSiteIds } from './topology-graph'
 import { assignSitePrefixes } from './topology-mutations'
 import { useTopologyHistory } from './useTopologyHistory'
+import { routingIntentConfiguration, routingIntentManaged } from './routing-intent'
+import { applyRoutingIntentEdit } from './native-routing-intent'
 import { useDeleteShortcut } from './useDeleteShortcut'
 import './App.css'
 import { projectVwanFailures, regionKey, failureKey, failureLabel, type FailureDomain } from './failures'
@@ -339,6 +341,7 @@ function App() {
         const draft = structuredClone(topology)
         mutate(draft)
         pruneDeletedInventory(draft, topology)
+        applyRoutingIntentEdit(topology, draft)
         return validateTopology(draft)
       })
       save(next)
@@ -881,6 +884,7 @@ function App() {
             if (!spoke || !hub) return null
             return <Suspense fallback={null}><VwanVnetConnectionPanel key={spoke.id}
               vnetName={spoke.name} hubName={hub.name} tables={hubRouteTables(hub)}
+              managedConfig={routingIntentManaged(hub) ? routingIntentConfiguration(hub) : undefined}
               config={attachmentHubRouting(topology, spoke.id)} propagateDefaultRoute={spoke.propagateDefaultRoute === true}
               onRoutingChange={(config) => update((next) => { next.spokes.find((entry) => entry.id === spoke.id)!.hubRouting = config })}
               onDefaultRouteChange={(enabled) => update((next) => { next.spokes.find((entry) => entry.id === spoke.id)!.propagateDefaultRoute = enabled })}

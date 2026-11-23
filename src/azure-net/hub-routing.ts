@@ -2,6 +2,7 @@ import { DEFAULT_HUB_TABLE, hubRouteTables, hubTableCoverage, propagatesLocally 
 import type { HubRoutingConfiguration, Topology } from '../model'
 import type { AzNetTopology, AzVwanHub } from './model'
 import { connectionStaticLimitations, connectionStaticRoutes } from './vnet-connection-routes'
+import { routingIntentForwarding } from '../routing-intent'
 
 export const legacyAzHubRouting: HubRoutingConfiguration = {
   status: 'configured', associatedTableId: DEFAULT_HUB_TABLE,
@@ -40,7 +41,7 @@ export function azHubVnetExports(topology: AzNetTopology, hub: AzVwanHub, config
   if (!table || azHubRouting(config).status === 'unknown') return []
   return topology.vnets.filter((vnet) => vnet.vwanHubAttachment?.enabled
     && vnet.vwanHubAttachment.hubId === hub.id
-    && propagatesLocally(azHubRouting(vnet.vwanHubAttachment.hubRouting), table))
+    && propagatesLocally(routingIntentForwarding(hub, azHubRouting(vnet.vwanHubAttachment.hubRouting)), table))
 }
 
 export function azHubTableCoverage(topology: AzNetTopology) {

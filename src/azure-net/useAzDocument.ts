@@ -11,6 +11,7 @@ import { validateUdrRegionEdit } from './udr-regions'
 import { pruneAzSiteRouteMaps } from './route-maps'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
 import { measureAzWork } from './performance'
+import { applyAzRoutingIntentEdit } from './routing-intent'
 
 function resolveInitialUrlSample() {
   if (typeof window === 'undefined') return null
@@ -97,6 +98,7 @@ export function useAzDocument(onError: (message: string) => void, onChange: (nex
       next = measureAzWork('commit', () => {
         const draft = cloneAzNetTopology(topology)
         updater(draft)
+        applyAzRoutingIntentEdit(topology, draft)
         validateUdrRegionEdit(topology, draft)
         pruneAzSiteRouteMaps(draft)
         pruneAzArsRouteMaps(draft)

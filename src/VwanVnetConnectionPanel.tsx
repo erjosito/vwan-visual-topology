@@ -3,6 +3,7 @@ import { CanvasOverlay } from './CanvasOverlay'
 import { t } from './i18n'
 import { registerJapaneseMessages } from './messages'
 import type { HubRouteTable, HubRoutingConfiguration } from './model'
+import './RoutingIntentNotice'
 
 registerJapaneseMessages({
   'Virtual WAN VNet connection': 'Virtual WAN VNet 接続',
@@ -14,7 +15,7 @@ registerJapaneseMessages({
 })
 
 export default function VwanVnetConnectionPanel({ vnetName, hubName, tables, config, propagateDefaultRoute,
-  enabled, conflict, onRoutingChange, onDefaultRouteChange, onEnabledChange, onClose, children }: {
+  enabled, conflict, managedConfig, onRoutingChange, onDefaultRouteChange, onEnabledChange, onClose, children }: {
   vnetName: string
   hubName: string
   tables: HubRouteTable[]
@@ -22,6 +23,7 @@ export default function VwanVnetConnectionPanel({ vnetName, hubName, tables, con
   propagateDefaultRoute: boolean
   enabled?: boolean
   conflict?: boolean
+  managedConfig?: HubRoutingConfiguration
   onRoutingChange: (config: HubRoutingConfiguration) => void
   onDefaultRouteChange: (enabled: boolean) => void
   onEnabledChange?: (enabled: boolean) => void
@@ -41,7 +43,11 @@ export default function VwanVnetConnectionPanel({ vnetName, hubName, tables, con
         onChange={(event) => onEnabledChange(event.target.checked)} />{t('Enabled')}</label>}
       <label className="aznet-toggle-row"><input type="checkbox" checked={propagateDefaultRoute}
         onChange={(event) => onDefaultRouteChange(event.target.checked)} />{t('Propagate default route (0.0.0.0/0)')}</label>
+      <p>{t('Receives an available hub default route into this VNet. This does not create a default route or enable Internet routing intent.')}</p>
+      {managedConfig && <p role="status"><strong>{t('Managed by routing intent')}</strong>.{' '}
+        {t('Routing intent manages association and propagation for every connection. Default-route receipt and connection static-route advertisement remain independent.')}</p>}
       <p>{t('Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.')}</p>
+      <fieldset disabled={!!managedConfig}><legend>{t('Hub routing tables')}</legend>
       <label>{t('Associated table')} <select aria-label={t('Associated table')} value={config.associatedTableId ?? ''}
         onChange={(event) => change({ associatedTableId: event.target.value })}>
         <option value="" disabled>{t('Unknown')}</option>
@@ -67,6 +73,11 @@ export default function VwanVnetConnectionPanel({ vnetName, hubName, tables, con
       {config.limitations?.map((limitation) => <p role="status" key={limitation}>{limitation}</p>)}
       {config.status !== 'configured' && <button type="button" disabled={!config.associatedTableId}
         onClick={() => change({ status: 'configured', limitations: [] })}>{t('Use edited configuration')}</button>}
+      </fieldset>
+      {managedConfig && JSON.stringify(config) !== JSON.stringify(managedConfig) && <>
+        <p role="status">{t('Saved connection settings differ from routing intent. Apply the managed settings explicitly; captured or unknown evidence is not silently rewritten.')}</p>
+        <button type="button" onClick={() => onRoutingChange(managedConfig)}>{t('Apply routing-intent settings')}</button>
+      </>}
       {children}
     </section>
   </CanvasOverlay>

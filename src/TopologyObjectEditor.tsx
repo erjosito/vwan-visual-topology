@@ -13,6 +13,8 @@ import { CanvasOverlay } from './CanvasOverlay'
 import { ConfigurationEditStatus } from './WorkspacePresentation'
 import { measureAzWork } from './azure-net/performance'
 import { useWorkspaceConfigurationPending } from './workspace-context'
+import { applyRoutingIntentEdit } from './native-routing-intent'
+import { RoutingIntentNotice } from './RoutingIntentNotice'
 const HubStaticRoutesEditor = lazy(() => import('./HubStaticRoutesEditor').then((module) => ({ default: module.HubStaticRoutesEditor })))
 
 export interface EditorRequest { kind: ObjectKind; id?: string; hubId?: string; siteId?: string; locationId?: string; spokeId?: string; nvaSpokeId?: string; deleting?: boolean; focusFirewall?: boolean }
@@ -31,6 +33,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
   useWorkspaceConfigurationPending(dirty)
   const item = request.id ? topologyObject(topology, { kind: request.kind, id: request.id }) : undefined
   const hub = topology.hubs.find((h) => h.id === request.id)
+  const [hubIntent, setHubIntent] = useState(hub?.routingIntent ?? { private: false, internet: false, privatePrefixes: [] })
   const [hubStatic, setHubStatic] = useState(() => ({ id: hub?.id ?? crypto.randomUUID(), firewall: hub?.firewall, routeTables: hub?.routeTables }))
   const spoke = topology.spokes.find((s) => s.id === request.id)
   const site = topology.sites.find((s) => s.id === request.id)
@@ -231,6 +234,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           else next.siteLinks.push(value)
         }
       }
+      applyRoutingIntentEdit(topology, next)
       onSave(validateTopology(next), savedSelection)
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid input.') }
   })
@@ -350,12 +354,15 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
           <Field title={t("Region")}><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
           <Field title={t("Routing preference")}><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{t(name)}</option>)}</select></Field>
           <fieldset><legend>{t("Routing intent")}</legend>
-            <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label={t("Private traffic routing intent")} defaultChecked={hub?.routingIntent.private ?? false} />{t("Private traffic via Azure Firewall")}</label>
-            <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label={t("Internet traffic routing intent")} defaultChecked={hub?.routingIntent.internet ?? false} />{t("Internet traffic via Azure Firewall")}</label>
+            <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label={t("Private traffic routing intent")} checked={hubIntent.private}
+              onChange={(event) => setHubIntent({ ...hubIntent, private: event.target.checked })} />{t("Private traffic via Azure Firewall")}</label>
+            <label className="checkbox-field"><input type="checkbox" name="internetIntent" aria-label={t("Internet traffic routing intent")} checked={hubIntent.internet}
+              onChange={(event) => setHubIntent({ ...hubIntent, internet: event.target.checked })} />{t("Internet traffic via Azure Firewall")}</label>
             <Field title={t("Additional private traffic prefixes")}><input name="privatePrefixes" defaultValue={hub?.routingIntent.privatePrefixes.join(', ') ?? ''} placeholder="100.64.0.0/10" /></Field>
             <p className="muted">{t("RFC1918 prefixes are included automatically with private intent. Firewall nodes and route views update when you save.")}</p>
           </fieldset>
-          <Suspense fallback={null}><HubStaticRoutesEditor hub={hubStatic} focusFirewall={request.focusFirewall} onChange={(owner) => {
+          <RoutingIntentNotice hub={{ ...hubStatic, name: hub?.name ?? '', routingIntent: hubIntent }} />
+          <Suspense fallback={null}><HubStaticRoutesEditor hub={{ ...hubStatic, routingIntent: hubIntent }} focusFirewall={request.focusFirewall} onChange={(owner) => {
             setDirty(true)
             setHubStatic({ id: owner.id, firewall: owner.firewall, routeTables: owner.routeTables })
           }} /></Suspense>

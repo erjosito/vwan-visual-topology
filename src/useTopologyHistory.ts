@@ -3,6 +3,7 @@ import type { Topology } from './model'
 import { validateTopology } from './validation'
 import { useWorkspaceSession, useWorkspaceStorage } from './workspace-context'
 import { measureAzWork } from './azure-net/performance'
+import { applyRoutingIntentEdit } from './native-routing-intent'
 
 export interface UseTopologyHistoryOptions {
   storageKey: string
@@ -74,6 +75,7 @@ export function useTopologyHistory({
   }
 
   const save = (next: Topology, recordHistory = true) => {
+    if (recordHistory) applyRoutingIntentEdit(topology, next)
     if (recordHistory && measureAzWork('history-compare', () => JSON.stringify(next) !== JSON.stringify(topology))) {
       const snapshot = measureAzWork('history-clone', () => structuredClone(topology))
       setHistory((current) => ({ past: [...current.past.slice(-(maxHistory - 1)), snapshot], future: [] }))

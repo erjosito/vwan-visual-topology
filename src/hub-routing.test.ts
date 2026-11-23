@@ -8,6 +8,9 @@ import { analyzeRouting } from './diagnostics'
 import { bicepDefaults, generateBicep } from './bicep-export'
 import { importAzureCapture } from './azure-import'
 import { contextObservationFixture } from '../tests/azure-observation-fixture'
+import { routingIntentConfiguration, routingIntentConflicts } from './routing-intent'
+import { applyRoutingIntentEdit } from './native-routing-intent'
+import { hubFirewallTopology } from '../tests/fixtures/hub-firewall'
 
 const routing = (associatedTableId: string, label: string): HubRoutingConfiguration => ({
   status: 'configured', associatedTableId, propagatedTableIds: [], labels: [label],
@@ -33,6 +36,78 @@ function fixture(): Topology {
 }
 
 describe('hub route-table contexts', () => {
+  it.each([[false, false], [false, true], [true, false], [true, true]])(
+    'manages all native attachment settings without losing forwarding with private=%s internet=%s', (privatePolicy, internet) => {
+      const before = fixture()
+      before.hubs.forEach((hub) => { delete hub.routeTables })
+      before.spokes.forEach((spoke) => { delete spoke.hubRouting })
+      before.sites = [{ id: 'site', name: 'Site', asn: 65001, prefixes: ['172.20.0.0/16'] }]
+      before.connections = ['VPN', 'SDWAN'].map((transport, index) => ({
+        id: `branch-${index}`, name: transport, hubId: 'a', siteId: 'site', transport: transport as 'VPN' | 'SDWAN',
+        enabled: true, learnSiteRoutes: true, inbound: [], outbound: [],
+      }))
+      before.erLinks = [{ id: 'er', name: 'ER', hubId: 'a', locationId: 'msee', enabled: true, learnSiteRoutes: false }]
+      before.erLocations = [{ id: 'msee', name: 'MSEE' }]
+      const next = structuredClone(before)
+      next.hubs.forEach((hub) => { hub.routingIntent.private = privatePolicy; hub.routingIntent.internet = internet })
+      next.spokes[0].propagateDefaultRoute = true
+      applyRoutingIntentEdit(before, next)
+      if (privatePolicy || internet) {
+        for (const owner of [...next.spokes, ...next.connections, ...next.erLinks!]) {
+          expect(owner.hubRouting).toEqual(routingIntentConfiguration(next.hubs.find((hub) => hub.id === owner.hubId)!))
+        }
+      } else expect(next.spokes.every((spoke) => spoke.hubRouting === undefined)).toBe(true)
+      const simulation = simulate(next)
+      expect(simulation.hubTableCoverage?.a.defaultRouteTable.complete).toBe(true)
+      expect(simulation.firewallTables.a.some((route) => route.prefix === '10.2.0.0/16')).toBe(true)
+      expect(simulation.outbound['red-a'].some((route) => route.prefix === '0.0.0.0/0')).toBe(internet)
+      expect(simulation.hubTables?.b.defaultRouteTable.some((route) => route.prefix === '0.0.0.0/0')).toBe(false)
+    })
+
+  it('applies intent to new attachments, guards alternate edits, and removes intent to default rather than restoring old settings', () => {
+    const before = fixture()
+    before.hubs.forEach((hub) => { delete hub.routeTables })
+    before.spokes.forEach((spoke) => { delete spoke.hubRouting })
+    const privateTopology = structuredClone(before)
+    privateTopology.hubs[0].routingIntent.private = true
+    applyRoutingIntentEdit(before, privateTopology)
+    const edited = structuredClone(privateTopology)
+    edited.spokes.push({ id: 'new', name: 'New', hubId: 'a', prefixes: ['10.8.0.0/16'] })
+    edited.spokes[0].hubRouting = routing('noneRouteTable', 'none')
+    applyRoutingIntentEdit(privateTopology, edited)
+    expect(edited.spokes.at(-1)?.hubRouting).toEqual(routingIntentConfiguration(edited.hubs[0]))
+    expect(edited.spokes[0].hubRouting).toEqual(edited.spokes.at(-1)?.hubRouting)
+    const internetOnly = structuredClone(edited)
+    internetOnly.hubs[0].routingIntent = { private: false, internet: true, privatePrefixes: [] }
+    applyRoutingIntentEdit(edited, internetOnly)
+    expect(internetOnly.spokes[0].hubRouting).toMatchObject({ propagatedTableIds: ['defaultRouteTable'], labels: ['default'] })
+    const removed = structuredClone(edited)
+    removed.hubs[0].routingIntent.private = false
+    applyRoutingIntentEdit(edited, removed)
+    expect(removed.spokes[0].hubRouting).toMatchObject({ propagatedTableIds: ['defaultRouteTable'], labels: ['default'] })
+    expect(privateTopology.spokes[0].hubRouting?.propagatedTableIds).toEqual(['noneRouteTable'])
+  })
+
+  it('blocks incompatible activation without deleting configuration, while allowing local Firewall routes', () => {
+    const before = hubFirewallTopology()
+    const next = structuredClone(before)
+    next.hubs[0].routingIntent.private = true
+    expect(() => applyRoutingIntentEdit(before, next)).toThrow(/Custom hub table.*No tables or routes were deleted/)
+    expect(next.hubs[0].routeTables).toEqual(before.hubs[0].routeTables)
+    next.hubs[0].routeTables = next.hubs[0].routeTables!.filter((table) => table.id === 'defaultRouteTable')
+    applyRoutingIntentEdit(before, next)
+    expect(routingIntentConflicts(next.hubs[0])).toEqual([])
+    expect(simulate(next).hubTableCoverage?.['hub-local'].defaultRouteTable.complete).toBe(true)
+    const invalid = structuredClone(next)
+    invalid.hubs[0].routeTables![0].staticRoutes![0].nextHop = 'vnet-connection'
+    expect(() => applyRoutingIntentEdit(next, invalid)).toThrow(/Incompatible hub static route/)
+    const imported = structuredClone(next)
+    imported.hubs[0].routeTables!.push({ id: 'custom', name: 'Custom', labels: [] })
+    const original = JSON.stringify(imported)
+    expect(simulate(imported).hubTableCoverage?.['hub-local'].defaultRouteTable.complete).toBe(false)
+    expect(JSON.stringify(imported)).toBe(original)
+  })
+
   it('replays live table-context VNet origins without certifying opaque branch scope', () => {
     for (const name of ['custom-baseline', 'empty-ne', 'none-ne', 'origin-label-absent', 'shared-source']) {
       const topology = importAzureCapture(JSON.parse(readFileSync(
