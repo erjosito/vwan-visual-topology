@@ -176,6 +176,9 @@ describe('document save provenance', () => {
     await unavailable.confirmed(unavailable.begin(source.id, 'alice')!, source, design, 'azure-net')
     await vi.waitFor(() => expect(unavailable.getSnapshot().cloud?.state).toBe('unknown'))
     expect(unavailable.getSnapshot().operation).toBe('idle')
+    expect(unavailable.metadataUpdated('alice', source.id, source.etag, 'Metadata without digest', '"next"')).toBe(true)
+    expect(unavailable.getSnapshot().retained).toBe(false)
+    expect(cache.getItem(cloudDocumentKey)).toBeNull()
   })
 })
 
