@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { createCloudClient } from '../../src/cloud/client'
-import { cloudLimits, parseCloudTopology, parseProgressLedger } from '../../src/cloud/contracts'
+import { cloudLimits, parseCloudMetadata, parseCloudTopology, parseProgressLedger } from '../../src/cloud/contracts'
 import { desktopCloudOperations, type DesktopCloudRequest, type DesktopCloudState } from '../../src/cloud/desktop-contract'
 import type { CloudConfiguration } from '../../src/cloud/configuration'
 import type { DesktopCloudAuth } from './cloud-auth'
@@ -24,6 +24,8 @@ function admit(input: unknown): DesktopCloudRequest {
         return args.length === 2 && (args[1] === null || etag(args[1])) && !!parseProgressLedger(JSON.stringify(args[0]))
       case 'saveTopology':
         return args.length === 3 && id(args[0]) && (args[2] === null || etag(args[2])) && !!parseCloudTopology(args[1])
+      case 'updateTopologyMetadata':
+        return args.length === 3 && id(args[0]) && etag(args[2]) && !!parseCloudMetadata(args[1])
     }
   })()
   if (!valid) throw new Error('Invalid cloud arguments.')

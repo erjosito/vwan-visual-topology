@@ -1,4 +1,4 @@
-import type { CloudEntry, CloudShare, CloudTopology, CloudValue, ProgressLedger } from './contracts'
+import type { CloudEntry, CloudMetadata, CloudShare, CloudTopology, CloudValue, ProgressLedger } from './contracts'
 
 export class CloudHttpError extends Error {
   status: number
@@ -35,6 +35,8 @@ export function createCloudClient(base: string, token: () => Promise<string>, si
     getTopology: (id: string) => request<CloudTopology>(`/topologies/${encodeURIComponent(id)}`),
     saveTopology: (id: string, value: CloudTopology, etag: string | null) =>
       request(`/topologies/${encodeURIComponent(id)}`, 'PUT', value, etag).then(result => result!.etag),
+    updateTopologyMetadata: (id: string, value: CloudMetadata, etag: string) =>
+      request(`/topologies/${encodeURIComponent(id)}`, 'PATCH', value, etag).then(result => result!.etag),
     deleteTopology: (id: string, etag: string) => request(`/topologies/${encodeURIComponent(id)}`, 'DELETE', undefined, etag),
     listShares: () => request<{ entries: CloudShare[] }>('/shares').then(result => result?.value.entries ?? []),
     createShare: (id: string, topologyId: string, sourceEtag: string) =>

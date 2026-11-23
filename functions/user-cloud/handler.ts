@@ -1,5 +1,5 @@
 import type { HttpRequest, HttpResponseInit } from '@azure/functions'
-import { cloudLimits, parseCloudTopology, parseProgressLedger } from '../../src/cloud/contracts'
+import { cloudLimits, parseCloudMetadata, parseCloudTopology, parseProgressLedger } from '../../src/cloud/contracts'
 import { createSharingHandler } from './sharing'
 import { body, CloudError, type CloudStore } from './http'
 export { body, CloudError, type CloudStore, type StoredValue } from './http'
@@ -28,7 +28,7 @@ export function createCloudHandler(options: {
       headers['Access-Control-Expose-Headers'] = 'ETag'
     }
     if (request.method === 'OPTIONS') return { status: 204, headers: { ...headers,
-      'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type,If-Match,If-None-Match' } }
+      'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS', 'Access-Control-Allow-Headers': 'Authorization,Content-Type,If-Match,If-None-Match' } }
     if (request.params.resource === 'shared') {
       try { return await sharing.resolve(request, headers) } catch (error) { return failure(error, headers) }
     }
@@ -55,6 +55,24 @@ export function createCloudHandler(options: {
       }
       const match = request.headers.get('if-match')
       const create = request.headers.get('if-none-match') === '*'
+      if (request.method === 'PATCH' && resource === 'topologies') {
+        if (!validEtag(match) || create) throw new CloudError(428, 'An exact cloud version is required.')
+        let metadata
+        try { metadata = parseCloudMetadata(await body(request, 16 * 1024)) }
+        catch (error) {
+          if (error instanceof CloudError) throw error
+          throw new CloudError(400, 'Invalid cloud save name or description.')
+        }
+        const found = await options.store.get(key)
+        if (!found) throw new CloudError(404, 'Cloud item not found.')
+        if (found.etag !== match) throw new CloudError(412, 'This cloud version changed. Refresh before editing it.')
+        const value = { ...JSON.parse(found.raw), ...metadata }
+        if (!metadata.description) delete value.description
+        const raw = JSON.stringify(value)
+        if (new TextEncoder().encode(raw).length > cloudLimits.bytes) throw new CloudError(413, 'Cloud topology size limit exceeded.')
+        const etag = await options.store.put(key, raw, match!, metadata.name, metadata.description ?? '')
+        return { status: 200, headers: { ...headers, ETag: etag }, jsonBody: { saved: true } }
+      }
       if (request.method === 'DELETE') {
         if (!validEtag(match) || create) throw new CloudError(428, 'An exact cloud version is required.')
         await options.store.delete(key, match!)
@@ -63,15 +81,15 @@ export function createCloudHandler(options: {
       if (request.method !== 'PUT') throw new CloudError(405, 'Method not allowed.')
       if (create ? !!match : !validEtag(match)) throw new CloudError(428, 'An exact cloud version or create-only condition is required.')
       const input = await body(request)
-      let value: unknown, name: string | undefined
+      let value: unknown, name: string | undefined, description: string | undefined
       try {
         if (resource === 'progress') value = parseProgressLedger(JSON.stringify(input))
-        else { const topology = parseCloudTopology(input); value = topology; name = topology.name }
+        else { const topology = parseCloudTopology(input); value = topology; name = topology.name; description = topology.description ?? '' }
       } catch { throw new CloudError(400, 'Unsupported or invalid cloud document. Your local data is unchanged.') }
       if (resource === 'topologies' && create && (await options.store.list(prefix)).length >= cloudLimits.records) {
         throw new CloudError(413, 'Cloud library is full. Delete an unused topology first.')
       }
-      const etag = await options.store.put(key, JSON.stringify(value), create ? null : match!, name)
+      const etag = await options.store.put(key, JSON.stringify(value), create ? null : match!, name, description)
       return { status: 200, headers: { ...headers, ETag: etag }, jsonBody: { saved: true } }
     } catch (error) {
       return failure(error, headers)

@@ -208,6 +208,9 @@ describe('main-process cloud operation broker', () => {
       { operation: 'getProgress', args: ['extra'] },
       { operation: 'saveProgress', args: [{ version: 999 }, null] },
       { operation: 'saveTopology', args: [topologyId, { version: 1, name: 'x', topology: {} }, null] },
+      { operation: 'updateTopologyMetadata', args: [topologyId, { name: 'x' }, null] },
+      { operation: 'updateTopologyMetadata', args: [topologyId, { name: 'x', topology: {} }, '"previous"'] },
+      { operation: 'updateTopologyMetadata', args: [topologyId, { name: 'x', description: 'x'.repeat(1025) }, '"previous"'] },
       { operation: 'getProgress', args: [], url: 'https://untrusted.test' },
     ]) await expect(broker.request({ session, ...request })).rejects.toThrow()
     expect(auth.token).not.toHaveBeenCalled()
@@ -223,6 +226,20 @@ describe('main-process cloud operation broker', () => {
     const { session } = await broker.signIn()
     await expect(broker.request({ session, operation: 'deleteTopology', args: [topologyId, '"previous"'] }))
       .rejects.toMatchObject({ status: 412 })
+  })
+  it('admits bounded metadata-only edits and keeps exact conditions on the native PATCH transport', async () => {
+    const fetcher = vi.fn(async (_input, init: RequestInit) => {
+      expect(init.method).toBe('PATCH')
+      expect(init.headers).toMatchObject({ 'If-Match': '"previous"' })
+      expect(JSON.parse(init.body as string)).toEqual({ name: 'Saved metadata', description: '説明' })
+      return new Response('{"saved":true}', { headers: { ETag: '"next"' } })
+    }) as unknown as typeof fetch
+    const broker = new DesktopCloudBroker(config, nativeAuth(), fetcher)
+    cleanup.push(() => broker.close())
+    const { session } = await broker.signIn()
+    expect(await broker.request({ session, operation: 'updateTopologyMetadata',
+      args: [topologyId, { name: 'Saved metadata', description: '説明' }, '"previous"'] })).toBe('"next"')
+    expect(fetcher).toHaveBeenCalledWith(`${config.base}/topologies/${topologyId}`, expect.any(Object))
   })
   it('rejects stale handles before network access and cancels in-flight calls on sign-out', async () => {
     let requestSignal: AbortSignal | undefined
