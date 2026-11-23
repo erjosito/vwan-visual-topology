@@ -5,7 +5,7 @@ import { CloudContext } from './useCloudSession'
 import { createDesktopCloudSession } from './desktop-session'
 
 function useSession() {
-  const [session] = useState(() => window.desktopSimulator ? createDesktopCloudSession(window.desktopSimulator) : createCloudSession(
+  const [session] = useState(() => typeof window.desktopSimulator?.cloudStatus === 'function' ? createDesktopCloudSession(window.desktopSimulator) : createCloudSession(
     readCloudConfiguration(), { storage: () => sessionStorage },
   ))
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot)

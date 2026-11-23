@@ -125,7 +125,7 @@ try {
     await expect(accountDialog.getByText('Sign-in opens your system browser.', { exact: false })).toBeVisible()
     await accountDialog.getByRole('button', { name: 'Close', exact: true }).click()
   } else {
-    await expect(page.getByText('Sign-in unavailable', { exact: true }).first()).toBeVisible()
+    await expect(page.getByTestId('cloud-account-open')).toHaveCount(0)
   }
   const protectedCredentials = await application.evaluate(({ safeStorage }) => {
     if (process.platform !== 'win32') return true
