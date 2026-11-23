@@ -7,6 +7,7 @@ import { azureRoutesAtSites } from './site-routing'
 import { downstreamSpokesForNvaSpoke, downstreamVnetForAddress, resolveAttachment } from './topology-graph'
 import { evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
 import { attachmentHubRouting, DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, hubTableCoverage, propagatesLocally, propagatesRemotely } from './hub-routing'
+import { routingIntentForwarding } from './routing-intent'
 import { sameWan, wanBranchTransit } from './wan-scopes'
 
 export function checkErHubLinkCompatibility(topology: Topology, hubLink: ErLink) {
@@ -186,7 +187,13 @@ function simulateHubRoutes(topology: Topology, siteExportsOverride?: SiteRouting
   const routingConfigs = new Map<string, ReturnType<typeof attachmentHubRouting>>()
   const routingFor = (id: string) => {
     let config = routingConfigs.get(id)
-    if (!config) { config = attachmentHubRouting(topology, id); routingConfigs.set(id, config) }
+    if (!config) {
+      config = attachmentHubRouting(topology, id)
+      const attachment = [...topology.spokes, ...topology.connections, ...(topology.erLinks ?? [])].find((entry) => entry.id === id)
+      const hub = topology.hubs.find((hub) => hub.id === attachment?.hubId)
+      if (hub) config = routingIntentForwarding(hub, config)
+      routingConfigs.set(id, config)
+    }
     return config
   }
   const siteRouting = propagateSites(topology)

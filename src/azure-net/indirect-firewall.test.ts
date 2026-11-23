@@ -2,6 +2,7 @@ import { expect, it } from 'vitest'
 import { indirectFirewallTopology } from './indirect-firewall-sample'
 import { parseAzNetTopology } from './admission'
 import { simulateAzNet, traceAzNetFlow } from './engine'
+import { applyAzRoutingIntentEdit } from './routing-intent'
 
 const direct = { kind: 'subnet', vnetId: 'direct', subnetId: 'direct-work' } as const
 const indirect = { kind: 'subnet', vnetId: 'indirect', subnetId: 'indirect-work' } as const
@@ -20,6 +21,23 @@ it('routes both directions over the original VNet connection, spoke Firewall and
   }
   expect(topology.vnets[2].vwanHubAttachment).toBeUndefined()
   expect(JSON.parse(JSON.stringify(topology))).toEqual(topology)
+})
+
+it.each([[false, true], [true, false], [true, true]])('retains supported propagated connection statics with intent private=%s internet=%s', (privatePolicy, internet) => {
+  const before = indirectFirewallTopology()
+  const topology = structuredClone(before)
+  Object.assign(topology.vwanHubs[0].routingIntent, { private: privatePolicy, internet })
+  applyAzRoutingIntentEdit(before, topology)
+  const result = simulateAzNet(topology)
+  expect(result.vwanHubTableCoverage.wan.defaultRouteTable.complete).toBe(true)
+  expect(result.vwanHubRibs.wan).toContainEqual(expect.objectContaining({
+    prefix: '10.2.0.0/16', nextHopId: 'fw', originProtocol: 'Static', preferred: true,
+  }))
+  for (const flow of [traceAzNetFlow(topology, result, direct, '10.2.1.4'), traceAzNetFlow(topology, result, indirect, '10.1.1.4')]) {
+    expect(flow.status, flow.summaryReason).toBe('delivered')
+    expect(flow.traversedApplianceIds).toContain('fw')
+    expect(flow.traversedEdgeIds).toContain('indirect-peering')
+  }
 })
 
 it('does not make the peering transitive or a one-way route into bidirectional connectivity', () => {
@@ -107,14 +125,13 @@ it('validates newly recognized route shapes and bounds rather than merely retain
 })
 
 it('keeps unsupported or unknown static-next-hop configurations explicitly unassessed', () => {
-  for (const variant of ['unknown-hop', 'overlap', 'default', 'not-propagated', 'intent'] as const) {
+  for (const variant of ['unknown-hop', 'overlap', 'default', 'not-propagated'] as const) {
     const topology = indirectFirewallTopology()
     const attachment = topology.vnets[0].vwanHubAttachment!
     if (variant === 'unknown-hop') attachment.staticRoutes![0].nextHopIpAddress = '10.0.0.99'
     if (variant === 'overlap') attachment.staticRoutes![0].addressPrefixes = ['10.0.0.0/8']
     if (variant === 'default') attachment.staticRoutes![0].addressPrefixes = ['0.0.0.0/0']
     if (variant === 'not-propagated') attachment.propagateStaticRoutes = false
-    if (variant === 'intent') topology.vwanHubs[0].routingIntent.private = true
     const result = simulateAzNet(topology)
     expect(result.vwanHubTableCoverage.wan.defaultRouteTable.complete, variant).toBe(false)
     expect(traceAzNetFlow(topology, result, direct, '10.2.1.4').status, variant).toBe('not-assessed')

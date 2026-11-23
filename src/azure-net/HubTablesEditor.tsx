@@ -8,6 +8,8 @@ import { azHubRouting } from './hub-routing'
 import { HubStaticRoutesEditor } from '../HubStaticRoutesEditor'
 import { ConnectionStaticRoutesEditor } from './ConnectionStaticRoutesEditor'
 import { InspectorSection } from '../WorkspacePresentation'
+import { RoutingIntentNotice } from '../RoutingIntentNotice'
+import { routingIntentConfiguration, routingIntentConfigurationMatches, routingIntentConflicts, routingIntentManaged } from '../routing-intent'
 
 const words = (value: string) => [...new Set(value.split(',').map((word) => word.trim()).filter(Boolean))]
 registerJapaneseMessages({ 'Private Traffic Routing Intent': 'プライベート トラフィックのルーティング意図' })
@@ -22,6 +24,8 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
   children?: ReactNode
 }) {
   const tables = hubRouteTables(hub)
+  const managed = routingIntentManaged(hub)
+  const conflicts = routingIntentConflicts(hub)
   const attachments = [
     ...topology.vnets.filter((vnet) => vnet.vwanHubAttachment?.hubId === hub.id).map((vnet) => ({
       id: vnet.id, name: vnet.name, config: vnet.vwanHubAttachment!.hubRouting, branch: false,
@@ -37,17 +41,26 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
     <InspectorSection title={t('Hub routing tables')} summary={hub.name} initialOpen={initialOpen || !!focusFirewall}>
     <section aria-label={t('Hub routing tables')}>
     <h4>{t('Hub routing tables')}</h4>
+    <RoutingIntentNotice hub={hub} />
     <label className="aznet-hover-toggle">
       <input type="checkbox" data-testid={`aznet-private-routing-intent-${hub.id}`}
-        checked={hub.routingIntent.private} disabled={!hub.firewall && !hub.routingIntent.private}
+        checked={hub.routingIntent.private} disabled={!hub.routingIntent.private && (!hub.firewall || conflicts.length > 0)}
         onChange={(event) => {
           const enabled = event.target.checked
           commit((draft) => { draft.vwanHubs.find((entry) => entry.id === hub.id)!.routingIntent.private = enabled })
         }} />
       {t('Private Traffic Routing Intent')}
     </label>
+    <label className="aznet-hover-toggle">
+      <input type="checkbox" data-testid={`aznet-internet-routing-intent-${hub.id}`}
+        checked={hub.routingIntent.internet} disabled={!hub.routingIntent.internet && (!hub.firewall || conflicts.length > 0)}
+        onChange={(event) => {
+          const enabled = event.target.checked
+          commit((draft) => { draft.vwanHubs.find((entry) => entry.id === hub.id)!.routingIntent.internet = enabled })
+        }} />
+      {t('Internet traffic routing intent')}
+    </label>
     <p>{t('Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.')}</p>
-    <p>{t('Custom tables with routing intent and arbitrary hub next hops are not assessed. Static inspection requires a declared local Azure Firewall in a single hub.')}</p>
     <HubStaticRoutesEditor hub={hub} focusFirewall={focusFirewall} onChange={(owner) => commit((draft) => {
       const target = draft.vwanHubs.find((entry) => entry.id === hub.id)!
       target.firewall = owner.firewall
@@ -62,21 +75,28 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
     {tables.map((table) => <div key={table.id} className="aznet-toggle-row">
       <code>{table.id}</code>
       <label>{t('Name')}<input className="aznet-input" aria-label={`${t('Table name')} ${table.id}`} value={table.name}
-        disabled={table.id === DEFAULT_HUB_TABLE || table.id === NONE_HUB_TABLE}
+        disabled={managed || table.id === DEFAULT_HUB_TABLE || table.id === NONE_HUB_TABLE}
         onChange={(event) => {
           const value = event.target.value
           commit((draft) => { draft.vwanHubs.find((entry) => entry.id === hub.id)!.routeTables!.find((entry) => entry.id === table.id)!.name = value })
         }} /></label>
       <label>{t('Labels')}<input key={JSON.stringify(table.labels)} className="aznet-input"
         aria-label={`${t('Table labels')} ${table.id}`} defaultValue={table.labels.join(', ')} data-configuration-saved={table.labels.join(', ')}
-        disabled={table.id === DEFAULT_HUB_TABLE || table.id === NONE_HUB_TABLE}
+        disabled={managed || table.id === DEFAULT_HUB_TABLE || table.id === NONE_HUB_TABLE}
         onBlur={(event) => {
           const labels = words(event.target.value)
           if (JSON.stringify(labels) === JSON.stringify(table.labels)) return
           commit((draft) => { draft.vwanHubs.find((entry) => entry.id === hub.id)!.routeTables!.find((entry) => entry.id === table.id)!.labels = labels })
         }} /><small className="configuration-save-hint">{t('Save on blur')}</small></label>
+      {![DEFAULT_HUB_TABLE, NONE_HUB_TABLE].includes(table.id) && <button type="button" className="aznet-btn"
+        disabled={attachments.some((attachment) => attachment.config?.associatedTableId === table.id ||
+          attachment.config?.propagatedTableIds.includes(table.id))}
+        onClick={() => commit((draft) => {
+          const owner = draft.vwanHubs.find((entry) => entry.id === hub.id)!
+          owner.routeTables = owner.routeTables?.filter((entry) => entry.id !== table.id)
+        })}>{t('Remove hub table')}</button>}
     </div>)}
-    <button type="button" className="aznet-btn" onClick={() => commit((draft) => {
+    <button type="button" className="aznet-btn" disabled={managed} onClick={() => commit((draft) => {
       const owner = draft.vwanHubs.find((entry) => entry.id === hub.id)!
       const id = `table-${crypto.randomUUID()}`
       ;(owner.routeTables ??= []).push({ id, name: t('Custom table'), labels: [] })
@@ -103,6 +123,14 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
       })
       return <fieldset key={attachment.id}>
         <legend>{attachment.name}</legend>
+        {!attachment.branch && <label className="aznet-toggle-row"><input type="checkbox"
+          checked={topology.vnets.find((entry) => entry.id === attachment.id)!.vwanHubAttachment!.propagateDefaultRoute === true}
+          onChange={(event) => {
+            const enabled = event.target.checked
+            commit((draft) => { draft.vnets.find((entry) => entry.id === attachment.id)!.vwanHubAttachment!.propagateDefaultRoute = enabled })
+          }} />{t('Propagate default route (0.0.0.0/0)')}</label>}
+        {!attachment.branch && <p>{t('Receives an available hub default route into this VNet. This does not create a default route or enable Internet routing intent.')}</p>}
+        <fieldset disabled={managed}><legend>{t(managed ? 'Managed by routing intent' : 'Hub routing tables')}</legend>
         <label>{t('Associated table')} <select className="aznet-select" aria-label={`${t('Associated table')} ${attachment.name}`}
           value={config.associatedTableId ?? ''} onChange={(event) => change({ associatedTableId: event.target.value })}>
           <option value="" disabled>{t('Unknown')}</option>
@@ -120,10 +148,15 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
             if (JSON.stringify(labels) !== JSON.stringify(config.labels)) change({ labels })
           }} /><small className="configuration-save-hint">{t('Save on blur')}</small></label>
         <p>{t('Configuration status')}: {config.status}</p>
-        {!attachment.branch && <ConnectionStaticRoutesEditor
-          vnet={topology.vnets.find((vnet) => vnet.id === attachment.id)!} topology={topology} commit={commit} />}
         {config.status !== 'configured' && <button type="button" className="aznet-btn" disabled={!config.associatedTableId}
           onClick={() => change({ status: 'configured', limitations: [] })}>{t('Use edited configuration')}</button>}
+        </fieldset>
+        {managed && !routingIntentConfigurationMatches(hub, config) && <>
+          <p role="status">{t('Saved connection settings differ from routing intent. Apply the managed settings explicitly; captured or unknown evidence is not silently rewritten.')}</p>
+          <button type="button" onClick={() => change(routingIntentConfiguration(hub))}>{t('Apply routing-intent settings')}</button>
+        </>}
+        {!attachment.branch && <ConnectionStaticRoutesEditor
+          vnet={topology.vnets.find((vnet) => vnet.id === attachment.id)!} topology={topology} commit={commit} />}
       </fieldset>
     })}
     </section>
