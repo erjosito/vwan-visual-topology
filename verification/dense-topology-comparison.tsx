@@ -56,14 +56,17 @@ export function Comparison() {
         {visualizationVariants.map(v => <option key={v}>{v}</option>)}
       </select></label>
       <label>Theme<select aria-label="Theme" value={theme} onChange={e => setTheme(e.target.value)}><option>light</option><option>dark</option></select></label>
-      <label>Focus scope<select aria-label="Focus scope" value={scope} onChange={e => setScope(e.target.value)}>
-        <option value="hub">Hub 1 neighborhood</option><option value="chain">Connection chain: spoke 1 - hub 1 - hub 2 - spoke 2</option>
+      <label>Focus scope<select aria-label="Focus scope" aria-describedby="research-focus-help" disabled={variant !== 'focus'} value={scope} onChange={e => setScope(e.target.value)}>
+        <option value="hub">Hub 1 direct connections</option><option value="chain">Connection chain: spoke 1 - hub 1 - hub 2 - spoke 2</option>
       </select></label>
       <button onClick={() => { setVariant('saved'); setScope('hub') }}>Restore saved overview</button>
     </div>
+    <p id="research-focus-help">{variant === 'focus'
+      ? 'Focus scope changes connection emphasis, not node positions. The connection chain uses dashed strokes; unrelated connections become translucent.'
+      : 'Choose the focus alternative to enable Focus scope. This control does not change saved, geographic, lanes or neighborhood layouts.'}</p>
     <p role="status" data-testid="research-view-status">{summaryView
       ? `${total} original connection records retained. ${variant === 'matrix' ? 'The matrix displays only the selected relationship type; other transport and policy detail is not drawn here.' : 'Regional cards summarize devices, transport and policies; individual detail requires disclosure.'} Restore the original canvas in one action.`
-      : `${total} connections retained; ${strong} emphasized; ${total - strong} dimmed; 0 hidden. ${variant === 'neighborhood' ? 'Viewport focus can place other objects offscreen; restore the saved-coordinate canvas to inspect other objects.' : 'One administratively OFF ER link remains prominent. Dimmed links regain full emphasis on hover or keyboard focus.'}`}</p>
+      : `${variant === 'focus' ? `Focus scope: ${scope === 'chain' ? 'Connection chain' : 'Hub 1 direct connections'}. ` : ''}${total} connections retained; ${strong} emphasized; ${total - strong} dimmed; 0 hidden. ${variant === 'neighborhood' ? 'Viewport focus can place other objects offscreen; restore the saved-coordinate canvas to inspect other objects.' : 'One administratively OFF ER link remains prominent. Dimmed links regain full emphasis on hover or keyboard focus.'}`}</p>
     <p>Chain emphasis is a connection-inspection aid, not an assessed forwarding path. Policy IN/OUT direction and all devices remain available.</p>
     {summaryView && <p data-testid="research-view-selection">Original selection: {JSON.stringify(selected ?? null)}; policy: {JSON.stringify(policy ?? null)}</p>}
     {variant === 'matrix' && <RelationshipMatrix topology={original} onSelect={setSelected} onPolicy={setPolicy} />}

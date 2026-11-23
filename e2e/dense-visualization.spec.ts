@@ -51,6 +51,28 @@ for (const theme of ['light', 'dark']) {
   })
 }
 
+test('research focus scope is available only for focus and visibly changes original connection emphasis', async ({ page }) => {
+  await page.goto('/verification/dense-topology-comparison.html')
+  const before = await page.getByTestId('research-original').textContent()
+  const scope = page.getByLabel('Focus scope', { exact: true })
+  await expect(scope).toBeDisabled()
+  await expect(page.locator('#research-focus-help')).toContainText('Choose the focus alternative')
+  await page.getByLabel('Alternative', { exact: true }).selectOption('focus')
+  await expect(scope).toBeEnabled()
+  const peer = page.getByTestId('aznet-peering-mesh-0-2').locator('> .aznet-edge-path')
+  await page.mouse.move(0, 0)
+  await expect(peer).toHaveCSS('opacity', '1')
+  await scope.selectOption('chain')
+  await expect(peer).toHaveCSS('opacity', '0.2')
+  await expect(page.getByTestId('aznet-peering-mesh-0-1').locator('> .aznet-edge-path')).toHaveCSS('stroke-dasharray', /^12px,?\s+4px$/)
+  await expect(page.getByTestId('research-view-status')).toContainText('Focus scope: Connection chain')
+  await scope.selectOption('hub')
+  await expect(peer).toHaveCSS('opacity', '1')
+  await page.getByRole('button', { name: 'Restore saved overview', exact: true }).click()
+  await expect(scope).toBeDisabled()
+  expect(await page.getByTestId('research-original').textContent()).toBe(before)
+})
+
 for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
   test(`${count} regions: ${theme} comparative geometry and inspection`, async ({ page }, info) => {
     test.setTimeout(120_000)

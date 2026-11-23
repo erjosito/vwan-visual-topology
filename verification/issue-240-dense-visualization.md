@@ -340,3 +340,27 @@ the VWAN case exhausts the unchanged 30-second whole-test deadline after slow
 initial navigation, then passes in 10 seconds on an unchanged-artifact,
 zero-retry rerun. The trace does not establish the cause of that slow navigation.
 No production source fix, timeout increase or byte-budget relaxation is retained.
+
+## Maintainer formative review (2026-11-23)
+
+This review supersedes the provisional matrix/regional production-candidate
+ranking above. One maintainer reviewed the live prototype: matrix and regions
+are rejected because the representation should remain a conventional diagram.
+Geographic and neighborhood views are acceptable but look close to saved;
+lanes currently look cleanest. Any follow-up should therefore prioritize an
+**opt-in lane-based diagram**, not replace the saved-coordinate default.
+The measured overlapping lane strokes remain a material caveat: individual
+connections, policy direction and OFF/unknown context must remain inspectable.
+Visual preference alone does not demonstrate task efficiency.
+
+This is one formative reviewer, not a structured participant study. No measured
+completion rates, task times or perceived-complexity scores were collected.
+Historical zero-participant measurements and screenshots remain unchanged.
+
+The review also found that Focus scope did nothing in other alternatives.
+It is now disabled outside `focus`, with an explanation; in focus, status names
+the scope and the chain changes stroke dashing/opacity without moving nodes.
+Manual zoom's 65% floor versus Fit view's roughly 31%, and browser scrolling
+in the main app, are tracked in #450 and fixed separately in production.
+The maintainer explicitly deprioritized comparison-page scrolling; its layout
+is not changed by this feedback update.

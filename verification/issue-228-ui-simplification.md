@@ -1,5 +1,17 @@
 # UI simplification comparison and inspector follow-up
 
+## Maintainer review follow-up (2026-11-23)
+
+One formative maintainer review identified browser scrolling in the main app:
+the top menu and bottom zoom controls should be visible together. #450 handles
+viewport containment and fit-aware manual zoom separately from this research.
+Saved-coordinate diagrams remain the default; the dense-view review currently
+prefers lanes as an opt-in follow-up and rejects matrix/regional replacements.
+Focus scope now explains its effect and is disabled in inapplicable alternatives.
+Comparison-page viewport changes were explicitly deprioritized and are not made.
+This is qualitative feedback, not a structured task-time/participant study;
+the earlier audit observations below remain historical.
+
 ## Current status
 
 The initial evaluation below describes the opt-in preview delivered in #252.
