@@ -6,7 +6,7 @@ Azure Network Simulator (**AzNetSim**) is a local-first topology designer and **
 
 **Privacy:** [Privacy policy](PRIVACY.md) covers local storage, website hosting, optional Azure collection, feedback, sharing, and MCP/AI clients.
 
-**Live app:** https://aznet-simulator.com. The existing https://vwan-simulator.com address remains supported. Both websites and Windows desktop start with one empty mixed-network workspace when there is no saved design. There is no architecture-mode selector. Browser-saved designs remain separate per origin; changing websites does not migrate saved work.
+**Live app:** https://aznet-simulator.com. The existing https://vwan-simulator.com address remains supported. Both websites and Windows desktop start with an empty topology in a unified workspace when there is no saved design. There is no architecture-mode selector. Browser-saved designs remain separate per origin; changing websites does not migrate saved work.
 
 **Name and compatibility:** AzNetSim grew from a Virtual WAN-only tool into a broader Azure network simulator. The repository/clone URL (`erjosito/vwan-visual-topology`), private npm package name, saved-data keys, native formats, MCP identifiers, and desktop application identity remain unchanged for compatibility. Virtual WAN is a supported architecture, not the product's scope.
 

@@ -57,6 +57,32 @@ async function move(page: Page, vwan: boolean) {
 }
 
 for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} final design closure preserves protected practice and its independent return document`, async ({ page }) => {
+    await seed(page, vwan)
+    const original = await page.evaluate(() => {
+      const id = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId
+      return { id, raw: localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`) }
+    })
+    await confirmStart(page, vwan ? 'vwan-connect' : 'peering-connect')
+    await move(page, vwan)
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    const protectedCopy = await practice(page)
+    await page.getByRole('button', { name: 'Close topology: My original design', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Save changes before closing?', exact: true }).getByRole('button', { name: 'Discard and close', exact: true }).click()
+    await expect(page.getByRole('tab')).toHaveCount(1)
+    const replacementId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
+    expect(replacementId).not.toBe(original.id)
+    expect(await practice(page)).toEqual(protectedCopy)
+    await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
+    expect((await practice(page)).document).toEqual(protectedCopy.document)
+    await page.reload()
+    await expect(bar(page)).toContainText('your normal design is kept separately')
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(node(page, vwan)).toHaveCount(0)
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).toBe(replacementId)
+    expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), original.id)).toBe(original.raw)
+  })
+
   test(`${vwan ? 'VWAN' : 'mixed'} connection edits and undo remain in the protected practice document`, async ({ page }) => {
     await seed(page, vwan)
     const original = await stored(page)
@@ -370,12 +396,12 @@ test('practice can resume from an ambiguous design library and return to a safe 
   }, { saved, normal: exercises[1].starter })
   await page.goto('/')
   const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
-  await expect(library).toContainText('Neither saved family has been selected')
+  await expect(library).toContainText('Saved topologies are not opened or overwritten automatically')
   const originals = await stored(page)
   await library.getByRole('button', { name: 'Resume practice', exact: true }).click()
   await expect(node(page, true)).toBeVisible()
   await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
-  await expect(library).toContainText('Neither saved family has been selected')
+  await expect(library).toContainText('Saved topologies are not opened or overwritten automatically')
   expect(await stored(page)).toEqual(originals)
 })
 
@@ -385,7 +411,7 @@ test('resuming after a normal provider change remembers the current return desig
   await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
   await page.getByTestId('workspace-library-open').click()
   await page.getByRole('dialog', { name: 'Workspace', exact: true })
-    .getByRole('button', { name: 'New mixed-network workspace', exact: true }).click()
+    .getByRole('button', { name: 'New topology', exact: true }).click()
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   const originals = await stored(page)
   await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
