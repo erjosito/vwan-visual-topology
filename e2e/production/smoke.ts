@@ -228,7 +228,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) {
     await page.locator('input[data-desktop-import]').setInputFiles({ name: 'compatible.json', mimeType: 'application/json', buffer: await readFile(file) })
     await ready(page, nextMode)
     await page.getByTestId('workspace-library-open').click()
-    await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: /^Open saved design:/ }).filter({
+    await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: /^Open saved topology:/ }).filter({
       hasText: mode === 'vwan' ? 'Preserved production design' : 'Empty Topology',
     }).click()
     await ready(page, mode)
@@ -362,7 +362,7 @@ test('a delayed or failed inactive workspace retains loading/recovery controls a
   await expect(page.getByRole('button', { name: 'Reload workspace', exact: true })).toBeVisible()
   expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
   await page.getByRole('button', { name: 'Workspace', exact: true }).click()
-  await page.getByRole('button', { name: 'Open saved design: Saved recovery design', exact: true }).click()
+  await page.getByRole('button', { name: 'Open saved topology: Saved recovery design', exact: true }).click()
   await ready(page, 'vwan')
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Saved recovery design')
 })
