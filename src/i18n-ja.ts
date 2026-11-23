@@ -108,6 +108,7 @@ export const ja: Record<string, string> = {
   'Not opened': '未表示',
   'Draft': '下書き',
   'Local save not confirmed': 'ローカルの保存を確認できません',
+  'Profile recovery unavailable. Confirmed file and cloud saves are unaffected.': 'プロファイルの復元用コピーを保存できません。確認済みのファイルとクラウドの保存には影響しません。',
   'Not saved locally yet': 'ローカルに未保存',
   'Local means this browser or desktop profile, not a JSON backup.': 'ローカルはブラウザーまたはデスクトップのプロファイルを指し、JSON バックアップではありません。',
   'Selected subnet peering': '選択したサブネットのピアリング',

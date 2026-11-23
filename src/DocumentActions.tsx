@@ -44,7 +44,7 @@ export function DocumentArtifactStatus() {
       : state.revision === 'matches' ? text('Saved', '保存済み') : text('Unsaved changes', '未保存の変更')
   const destination = state.destination?.kind === 'file' ? state.destination.location : state.destination?.name
   const label = t(documentSaveLabel(saveState, state))
-  const tooltip = `${detailLabel}${destination ? ` · ${destination}` : ''}${state.notice?.kind === 'downloaded' ? ` · ${text('Download unconfirmed', 'ダウンロード未確認')}` : ''}${state.error ? ` · ${state.error}` : ''}`
+  const tooltip = `${detailLabel}${destination ? ` · ${destination}` : ''}${state.notice?.kind === 'downloaded' ? ` · ${text('Download unconfirmed', 'ダウンロード未確認')}` : ''}${state.error ? ` · ${state.error}` : ''}${saveState?.local === 'unavailable' ? ` · ${t('Profile recovery unavailable. Confirmed file and cloud saves are unaffected.')}` : ''}`
   return <details className="presentation-group document-artifact-details">
     <summary title={tooltip} aria-label={`${text('Document save status', 'ドキュメントの保存状態')}: ${label}`}>
       <span className="document-artifact-status" aria-live="polite">{label}</span></summary>

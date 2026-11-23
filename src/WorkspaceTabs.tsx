@@ -46,7 +46,7 @@ function TabButton({ tab, selected, save, commands, onActivate }: {
               : 'Draft')
   const name = tab.name || text('Untitled topology', '名称未設定のトポロジ')
   const status = t(documentSaveLabel(state, artifact))
-  const tooltip = `${name} · ${tab.provider === 'vwan' ? 'Virtual WAN' : text('Mixed networking', '混在ネットワーク')} · ${detailStatus}${state.cloud ? `: ${state.cloud.name}` : ''}${artifact?.destination?.kind === 'file' ? `: ${artifact.destination.location}` : ''}${artifact?.error ? ` · ${artifact.error}` : ''}`
+  const tooltip = `${name} · ${tab.provider === 'vwan' ? 'Virtual WAN' : text('Mixed networking', '混在ネットワーク')} · ${detailStatus}${state.cloud ? `: ${state.cloud.name}` : ''}${artifact?.destination?.kind === 'file' ? `: ${artifact.destination.location}` : ''}${artifact?.error ? ` · ${artifact.error}` : ''}${state.local === 'unavailable' ? ` · ${t('Profile recovery unavailable. Confirmed file and cloud saves are unaffected.')}` : ''}`
   return <><button type="button" role="tab" id={`workspace-tab-${tab.id}`} aria-controls="workspace-design-panel"
     aria-label={name}
     aria-describedby={`workspace-tab-state-${tab.id}`} aria-selected={selected} tabIndex={selected ? 0 : -1}
