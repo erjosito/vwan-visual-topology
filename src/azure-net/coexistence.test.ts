@@ -4,7 +4,8 @@ import { inspectAzBgp } from '../bgp-neighbors'
 import { parseAzNetTopology } from './admission'
 import { importAzNetCapture } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
-import { basicGatewayFix, coexistenceFindings } from './coexistence'
+import { coexistenceFindings } from './coexistence'
+import { basicGatewayFix } from './basic-gateway-fix'
 import { lookupSubnetEffectiveRoute, simulateAzNet, traceAzNetPair } from './engine'
 
 it.each([true, false])('exchanges ER and VPN site routes through same-VNet ARS with VPN BGP=%s', (bgpEnabled) => {

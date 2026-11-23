@@ -1,4 +1,4 @@
-import { basicGatewayFix } from './coexistence'
+import { basicGatewayFix } from './basic-gateway-fix'
 import type { AzDiagnosticFinding } from './diagnostics'
 import type { AzNetTopology } from './model'
 
