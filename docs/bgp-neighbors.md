@@ -110,6 +110,72 @@ reference with active/active VPN, an isolated active/standby VNet, a site and
 opaque ER relationships. It contains no supplied private design, Azure
 resource identifiers or captured endpoint addresses.
 
+## Peered-VNet ARS/NVA reflection (#447)
+
+[Issue #447](https://github.com/erjosito/vwan-visual-topology/issues/447)
+records a [reviewed, public Azure-only lab report](https://github.com/erjosito/azure-lab-ars-nva-bgp-20261123) for
+[#259](https://github.com/erjosito/vwan-visual-topology/issues/259):
+two Standard ARS resources, one local source NVA each, and one shared reader
+in a VNet directly peered to both. Gateway-transit/use-remote-gateways flags
+were false. Eight actual endpoint sessions were Established and their
+local/remote identities were independently checked.
+
+With both ARS B2B flags off, native ARS learning and local NIC routes retained
+the source prefixes, but both native advertisements to the reader and its
+BIRD RIB contained only VNet prefixes. Enabling **west only** advertised west
+source prefixes from both west endpoints while east remained negative.
+The revised **both-B2B-on** suite independently checked baseline duplicate
+prefixes, west source export filtering to the common prefix, west withdrawal
+with sessions retained, and restoration; east remained a positive control.
+The original failed baseline is not relabeled as a passing test.
+Both original ARS flags were restored and verified false. Final
+ownership-verified resource cleanup belongs to the lab's `results.json` and
+#259, not this code change.
+
+West native learned attributes were path `65010`, next hop `10.70.1.4`.
+Native advertised and BIRD received attributes were path `65515 65010`,
+next hop the **actual advertising ARS endpoint** (`10.70.0.5` or `.4`).
+Native API AS-path strings use hyphens; BIRD uses spaces. This is wire
+metadata, **not an ARS data-plane forwarding hop**.
+
+The deterministic application fixture uses different synthetic addresses,
+ASNs and documentation prefixes; it is not a dump of that lab. Both fixture
+ARS resources explicitly enable B2B for positive shared-reader assertions.
+The engine/inspector contract is:
+
+- Different-VNet NVA reflection is gated per exporting ARS; sessions,
+  source inbound routes, local NIC routes and VNet advertisements are not.
+  The west-only regression preserves an independent east negative control.
+- `nvaBgpPeers[].routes` is the receiver-side projection. Different-VNet
+  NVA paths prepend `65515` **after** supported outbound policies. Each
+  `sourceRoute` is a detached copy of the ARS-learned candidate **before**
+  outbound policy, with its original source VNet/NVA/path/next hop.
+- `wireAttributes.nextHop=not-assessed`, and wire `nextHopIp` is absent.
+  The topology has no managed ARS endpoint bindings. Native captured
+  endpoints/paths remain in their original observation scopes; they are
+  neither fabricated nor mapped by capture-array order to modeled roles.
+- An available peer can have zero lab prefixes while retaining VNet
+  advertisements. Missing/incomplete evidence is not an assessed empty set,
+  and unavailable peers do not acquire fabricated empty observations.
+- `routeServerOutbound` remains the source-side policy/SDN projection,
+  **not receiver wire attributes**. A spoke's SDN export is not blanket-gated
+  by the NVA reflection rule; policy-assignment scope remains unchanged.
+- Same-VNet prefix eligibility retains legacy behavior, explicitly
+  **not assessed** for B2B applicability. Its wire AS path, and gateway-source
+  wire AS paths, are omitted rather than presenting source paths as measured
+  receiver attributes. Existing forwarding reasoning remains separate.
+
+Only local-source to peered-reader reflection was live-qualified. Reverse
+reader-origin reflections in the synthetic fixture exercise the scoped
+different-VNet model, not another live certification. Same-VNet behavior,
+native route maps, gateway-summary reception, physical ER/MSEE identity,
+packet/kernel delivery, ECMP, timing/convergence and failure orchestration
+are not certified by these results. Stable modeled endpoint-role identities
+and logical counts are preserved through B2B edits and source filter/withdraw/
+restore; they are not independent measured per-instance counters.
+
+## Expected adjacency matrix
+
 | Selected local resource + role | Expected remote resource + role | Evidence |
 | --- | --- | --- |
 | `reader` + logical router | `west-ars` + ARS 1 and ARS 2; `east-ars` + ARS 1 and ARS 2 | Four separate modeled neighbors; shared logical candidates, not four observed native Adj-RIBs |

@@ -27,7 +27,7 @@ export interface CompactBgpRow {
   status: '*' | '=' | '-' | '?'
   statusLabel: string
   nextHop: string
-  asPath: number[]
+  asPath?: number[]
   neighbor?: string
   details: ReactNode
   textEvidence?: string
@@ -49,7 +49,7 @@ export function CompactBgpTable({ rows, label, legend, testId, neighborLabel }: 
     legend,
     ['Status', 'Network', ...(neighborLabel ? [neighborLabel] : []), 'Next hop', 'AS path', 'Evidence'].map(t).join('\t'),
     ...rows.map((row) => [row.status, row.prefix, ...(neighborLabel ? [row.neighbor ?? '—'] : []),
-      row.nextHop, row.asPath.join(' ') || '—', row.textEvidence ?? row.id].join('\t')),
+      row.nextHop, row.asPath?.join(' ') || (row.asPath ? '—' : t('Not assessed')), row.textEvidence ?? row.id].join('\t')),
   ].join('\n')
   return <div className="compact-bgp">
     <p className="route-legend">{legend}</p>
@@ -65,7 +65,7 @@ export function CompactBgpTable({ rows, label, legend, testId, neighborLabel }: 
           <td className="route-state" aria-label={row.statusLabel}><span aria-hidden="true">{row.status}</span></td>
           <th scope="row">{row.network ?? <code>{row.prefix}</code>}</th>
           {neighborLabel && <td>{row.neighbor}</td>}
-          <td>{row.nextHop}</td><td className="as-path">{row.asPath.join(' ') || '—'}</td>
+          <td>{row.nextHop}</td><td className="as-path">{row.asPath?.join(' ') || (row.asPath ? '—' : t('Not assessed'))}</td>
           <td>{row.warning}<details><summary aria-label={`${t('Evidence')} · ${row.prefix} · ${row.id}`}>{t('Evidence')}</summary>
             <div className="compact-bgp-evidence">{row.details}</div>
           </details></td>

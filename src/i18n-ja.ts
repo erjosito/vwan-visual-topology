@@ -432,7 +432,6 @@ export const ja: Record<string, string> = {
   'COVERAGE PARTIAL ({0} matched)': '観測範囲不完全（一致 {0} 件）',
   'unassessed': '未評価',
   'Local desktop tools': 'ローカルのデスクトップ ツール',
-  'Desktop · offline modeling · optional cloud sync': 'デスクトップ · オフラインのモデル作成 · 任意のクラウド同期',
   'Load file': 'ファイルを読み込み',
   'Read-only local Azure collection': 'ローカルでの読み取り専用 Azure データ取得',
   'Azure': 'Azure',

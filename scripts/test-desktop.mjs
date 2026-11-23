@@ -47,6 +47,7 @@ try {
   page.on('request', (request) => { if (/^https?:/.test(request.url())) outbound.push(request.url()) })
   page.on('pageerror', (error) => failures.push(error.message))
   await page.locator('[data-testid="vwan-app"], [data-testid="aznet-app"], dialog[aria-labelledby="workspace-library-title"]').waitFor()
+  await expect(page.locator('.desktop-tools')).toHaveCount(0)
   await page.evaluate(() => {
     for (const key of ['aznet-ui-preview:v1', 'network-simulator:workspace:v1', 'network-simulator:workspace-tabs:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'network-simulator:learning-progress:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
   })
@@ -202,7 +203,8 @@ try {
     await application.evaluate(({ dialog }, filePath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
     }, localFile)
-    await page.getByRole('button', { name: 'Load file', exact: true }).click()
+    await page.getByRole('button', { name: 'Load', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
     await expect(page.locator('.document-artifact-status')).toHaveText('Locally saved')
     await expect(page.locator('.document-artifact-details summary')).toHaveAttribute('title', new RegExp(`^Saved .*roundtrip-${mode}\\.json$`))
     const readSaved = () => page.evaluate((mode) => {
