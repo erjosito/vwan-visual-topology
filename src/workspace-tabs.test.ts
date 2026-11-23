@@ -20,6 +20,51 @@ function memory() {
 }
 
 describe('workspace tab persistence', () => {
+  it('atomically replaces a full closing session with one fresh document without inherited save destinations', () => {
+    const { storage } = memory()
+    let session = empty
+    for (let index = 0; index < workspaceTabsLimit; index++) {
+      session = addWorkspaceTab(storage, session, { ...first, id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}` }, `original ${index}`)
+    }
+    const original = session.tabs[0]
+    storage.setItem(workspaceTabKey(original, 'cloud'), 'confirmed cloud destination')
+    storage.setItem(workspaceTabKey(original, 'artifact'), 'confirmed file destination')
+    const replacement = { tab: second, raw: 'fresh empty native bytes' }
+    const next = closeWorkspaceTabs(storage, session, session.tabs.map(tab => tab.id), replacement)
+    expect(readWorkspaceTabs(storage)).toEqual({ session: next })
+    expect(next).toEqual({ version: 1, activeId: second.id, tabs: [second] })
+    expect(storage.getItem(workspaceTabKey(second, 'topology'))).toBe(replacement.raw)
+    expect(storage.getItem(workspaceTabKey(second, 'cloud'))).toBeNull()
+    expect(storage.getItem(workspaceTabKey(second, 'artifact'))).toBeNull()
+    expect(storage.getItem(workspaceTabKey(original, 'topology'))).toBe('original 0')
+    expect(storage.getItem(workspaceTabKey(original, 'cloud'))).toBe('confirmed cloud destination')
+    expect(storage.getItem(workspaceTabKey(original, 'artifact'))).toBe('confirmed file destination')
+  })
+
+  it.each(['topology', 'manifest'])('keeps the original tab open when replacement %s persistence fails', field => {
+    const { storage, values } = memory()
+    const session = addWorkspaceTab(storage, empty, first, 'original')
+    const before = new Map(values)
+    const failing = { ...storage, setItem: (key: string, value: string) => {
+      if (key === (field === 'manifest' ? workspaceTabsKey : workspaceTabKey(second, 'topology'))) throw new Error('Full')
+      storage.setItem(key, value)
+    } }
+    expect(() => closeWorkspaceTabs(failing, session, [first.id], { tab: second, raw: 'empty' })).toThrow('Full')
+    expect(values).toEqual(before)
+  })
+
+  it('rejects partial, stale or colliding replacements without changing the saved session', () => {
+    const { storage } = memory()
+    const session = addWorkspaceTab(storage, empty, first, 'original')
+    const replacement = { tab: second, raw: 'empty' }
+    expect(() => closeWorkspaceTabs(storage, session, [], replacement)).toThrow('final close')
+    expect(() => closeWorkspaceTabs(storage, empty, [first.id], replacement)).toThrow('changed')
+    storage.setItem(workspaceTabKey(second, 'topology'), 'preserved orphan')
+    expect(() => closeWorkspaceTabs(storage, session, [first.id], replacement)).toThrow('already exists')
+    expect(readWorkspaceTabs(storage)).toEqual({ session })
+    expect(storage.getItem(workspaceTabKey(second, 'topology'))).toBe('preserved orphan')
+  })
+
   it('closes tabs without deleting native recovery bytes or cloud associations and reopens the same identity', () => {
     const { storage } = memory()
     let session = addWorkspaceTab(storage, empty, first, 'first native bytes')
