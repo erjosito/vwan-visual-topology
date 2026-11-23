@@ -35,6 +35,12 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const width of [1366, 390
     }
     const canvas = await page.locator(mode === 'vwan' ? '.diagram-scroll' : '[data-testid="aznet-diagram-svg"]').boundingBox()
     expect(canvas!.height).toBeGreaterThan(100)
+    if (mode === 'vwan' && width === 390) {
+      const legend = page.locator('.legend')
+      await legend.focus()
+      await page.keyboard.press('End')
+      await expect.poll(() => legend.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+    }
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0)).toBe(true)
     expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(original)
   })
