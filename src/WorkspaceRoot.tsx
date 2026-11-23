@@ -422,14 +422,12 @@ function Workspace({ visible = true }: { visible?: boolean }) {
     try {
       const next = closeWorkspaceTabs(storage, tabsRef.current, targets.map(tab => tab.id))
       request.current++
+      tabFocusRequest.current = next.activeId
       tabsRef.current = next; setTabs(next)
       for (const tab of targets) documents.forget(tab.id)
       if (targets.some(tab => tab.id === active?.id)) {
         const remaining = next.tabs.find(tab => tab.id === next.activeId)
-        if (remaining) {
-          activateTab(remaining, false)
-          requestAnimationFrame(() => document.getElementById(`workspace-tab-${remaining.id}`)?.focus())
-        }
+        if (remaining) activateTab(remaining, false)
         else { setActive(undefined); setLibraryOpen(true) }
       }
       setClosing(undefined)
