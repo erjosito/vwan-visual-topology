@@ -960,7 +960,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
 
     await expect(page.getByTestId('aznet-app')).toBeVisible()
     await page.getByTestId('workspace-library-open').click()
-    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('Open designs in separate tabs')
+    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('Open topologies in separate tabs')
     await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
 
     await expect(page.getByTestId('aznet-subnet-sub-app-web')).not.toContainText('GWroutes:OFF')
