@@ -29,7 +29,7 @@ import type {
 
 export function checkErLocationAzureRegionAccess(
   loc: AzErLocation,
-  azureRegion: string,
+  azureRegion: string | undefined,
 ): ErSkuCompatibilityResult {
   return evaluateErSkuRegionalCompatibility(
     loc.sku ?? 'Standard',

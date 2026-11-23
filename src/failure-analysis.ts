@@ -94,7 +94,7 @@ export function resilienceMarkers(report?: ResilienceReport): Record<string, num
   for (const finding of groupResilienceGaps(report?.gaps ?? [])) for (const id of finding.endpointIds) markers[id] = (markers[id] ?? 0) + 1
   return markers
 }
-function independentPathGuidance(fault: FailureDomain, attachments: { name: string; region: string }[], locations: { id: string; name: string }[]): string {
+function independentPathGuidance(fault: FailureDomain, attachments: { name: string; region?: string }[], locations: { id: string; name: string }[]): string {
   const surviving = attachments.filter((n) => regionKey(n.region) && (fault.kind !== 'region' || regionKey(n.region) !== fault.id))
   const targets = surviving.map((n) => `${n.name} (${n.region})`).join(', ') || 'none currently modeled; add an attachment in another assessed region'
   if (fault.kind === 'er-location') {

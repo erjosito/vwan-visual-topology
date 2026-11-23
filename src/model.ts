@@ -17,7 +17,7 @@ export interface Hub {
   wanId?: string
   name: string
   label?: string
-  region: string
+  region?: string
   preference: Preference
   routingIntent: { private: boolean; internet: boolean; privatePrefixes: string[] }
   routeMapAssignments?: RouteMapAssignment[]

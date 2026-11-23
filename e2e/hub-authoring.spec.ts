@@ -8,6 +8,136 @@ import '../src/RoutingIntentNotice'
 import '../src/vpn-nat-messages-ja'
 import '../src/route-map-messages-ja'
 import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
+import { ALL_KNOWN_AZURE_REGIONS } from '../src/er-locations-catalog'
+import { projectAzFailures, projectVwanFailures } from '../src/failures'
+
+async function openRegionEditor(page: Page, mode: string, text: (value: string) => string) {
+  const node = mode === 'vwan' ? page.locator('[data-node-id="hub-local"]') : page.getByTestId('aznet-vwanhub-hub-local')
+  await (await node.getAttribute('role') === 'group' ? node.locator(':scope > .network-node') : node).focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: mode === 'vwan' ? text('Edit configuration') : 'Configure Hub & Labels', exact: true }).click()
+  return mode === 'vwan' ? page.locator('.object-editor') : page.getByTestId('aznet-vwanhub-config-hub-local')
+}
+
+for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
+  test(`${mode} ${language}: hub region selection preserves aliases and updates saved regional failure domains`, async ({ page }) => {
+    await loadLanguage(language)
+    const text = (value: string) => translate(language, value)
+    const topology = mode === 'vwan' ? hubFirewallTopology() : azHubFirewallTopology()
+    const hubs = 'hubs' in topology ? topology.hubs : topology.vwanHubs
+    hubs[0].region = 'westeurope'
+    hubs.push({ id: 'other-hub', name: 'Other geographically distant hub', region: 'West Europe',
+      preference: 'VPN', routingIntent: { private: false, internet: false, privatePrefixes: [] } })
+    const key = mode === 'vwan' ? 'hubs' : 'vwanHubs'
+    await page.addInitScript(({ topology, mode, language }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', String(language === 'en'))
+      localStorage.setItem('aznet-theme', language === 'ja' ? 'dark' : 'light')
+      const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology }))
+    }, { topology, mode, language })
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.goto(`/?mode=${mode}`)
+    if (mode === 'full') {
+      for (const id of ['hub-local', 'other-hub']) {
+        const label = page.getByTestId(`aznet-vwanhub-${id}`).locator('.aznet-hub-region')
+        await expect(label).toContainText('West Europe')
+        await expect(label.locator('title')).toContainText('West Europe')
+        const name = await page.getByTestId(`aznet-vwanhub-${id}`).locator('.network-node-label').first().locator('text').boundingBox()
+        const region = await label.locator('text').boundingBox()
+        expect(region!.y).toBeGreaterThanOrEqual(name!.y + name!.height)
+      }
+    } else await expect(page.locator('[data-node-id="hub-local"]')).toContainText('westeurope')
+    const original = await saved(page, mode)
+    const project = mode === 'vwan' ? projectVwanFailures : projectAzFailures
+    const fault = { kind: 'region' as const, id: 'westeurope', name: 'West Europe' }
+    expect(Object.keys(project(original, [fault]).affected)).toEqual(expect.arrayContaining(['hub-local', 'other-hub']))
+    let editor = await openRegionEditor(page, mode, text)
+    let region = editor.getByRole('combobox', { name: text(mode === 'vwan' ? 'Region' : 'Azure Region'), exact: true })
+    await expect(region).toHaveValue('westeurope')
+    expect(await region.locator('option').allTextContents()).toEqual(ALL_KNOWN_AZURE_REGIONS)
+    await region.focus()
+    expect(await saved(page, mode)).toEqual(original)
+    expect((await new AxeBuilder({ page }).include(mode === 'vwan' ? '.object-editor select[name="region"]' : '[data-testid="aznet-vwanhub-config-hub-local"]').analyze()).violations).toEqual([])
+    await editor.getByRole('textbox', { name: text(mode === 'vwan' ? 'Name' : 'Hub name'), exact: true }).fill('Renamed regional hub')
+    if (mode === 'vwan') await editor.getByRole('button', { name: text('Save changes'), exact: true }).click()
+    await expect.poll(async () => (await saved(page, mode))[key][0].name).toBe('Renamed regional hub')
+    expect((await saved(page, mode))[key][0].region).toBe('westeurope')
+    if (mode === 'vwan') editor = await openRegionEditor(page, mode, text)
+    region = editor.getByRole('combobox', { name: text(mode === 'vwan' ? 'Region' : 'Azure Region'), exact: true })
+    await region.focus()
+    await page.keyboard.press('End')
+    await expect(region).toHaveValue(ALL_KNOWN_AZURE_REGIONS.at(-1)!)
+    const previousRegion = mode === 'vwan' ? 'westeurope' : ALL_KNOWN_AZURE_REGIONS.at(-1)!
+    await region.selectOption('North Europe')
+    if (mode === 'vwan') await editor.getByRole('button', { name: text('Save changes'), exact: true }).click()
+    else await page.keyboard.press('Escape')
+    await expect.poll(async () => (await saved(page, mode))[key][0].region).toBe('North Europe')
+    const changed = await saved(page, mode)
+    expect(project(changed, [fault]).affected['hub-local']).toBeUndefined()
+    expect(project(changed, [fault]).affected['other-hub']).toEqual([fault])
+    const history = async (name: string) => {
+      const action = mode === 'vwan' ? page.getByRole('button', { name: text(name), exact: true }) : page.getByTitle(name, { exact: true })
+      if (!await action.isVisible()) await page.getByRole('button', { name: text('Workspace menu'), exact: true }).click()
+      await action.click()
+    }
+    await history('Undo')
+    await expect.poll(async () => (await saved(page, mode))[key][0].region).toBe(previousRegion)
+    await history('Redo')
+    await expect.poll(async () => (await saved(page, mode))[key][0].region).toBe('North Europe')
+    await page.reload()
+    await expect.poll(async () => (await saved(page, mode))[key][0].region).toBe('North Europe')
+    expect((await saved(page, mode))[key][1]).toEqual(original[key][1])
+  })
+}
+
+for (const mode of ['vwan', 'full'] as const) {
+  test(`${mode}: unknown and missing hub regions stay current until explicitly replaced`, async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('aznet-ui-preview:v1', 'true'))
+    await page.goto(`/?mode=${mode}`)
+    for (const current of ['Future Azure Region 2099', '', undefined]) {
+      const topology = mode === 'vwan' ? hubFirewallTopology() : azHubFirewallTopology()
+      const hub = ('hubs' in topology ? topology.hubs : topology.vwanHubs)[0]
+      if (current === undefined) delete (hub as Partial<typeof hub>).region
+      else hub.region = current
+      await page.locator('input[type="file"]').first().setInputFiles({
+        name: 'legacy-hub-region.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+      })
+      const key = mode === 'vwan' ? 'hubs' : 'vwanHubs'
+      await expect.poll(async () => (await saved(page, mode))?.[key]?.[0]?.region).toBe(current)
+      let editor = await openRegionEditor(page, mode, (value) => value)
+      let region = editor.getByRole('combobox', { name: mode === 'vwan' ? 'Region' : 'Azure Region', exact: true })
+      await expect(region).toHaveValue(current ?? '')
+      await expect(region.locator('option:checked')).toContainText(current ? `${current} (Unknown region)` : 'Not specified')
+      await editor.getByRole('textbox', { name: mode === 'vwan' ? 'Name' : 'Hub name', exact: true }).fill('Unrelated name change')
+      if (mode === 'vwan') await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+      await expect.poll(async () => (await saved(page, mode))[key][0].name).toBe('Unrelated name change')
+      expect((await saved(page, mode))[key][0].region).toBe(current)
+      expect(Object.hasOwn((await saved(page, mode))[key][0], 'region')).toBe(current !== undefined)
+      await page.reload()
+      editor = await openRegionEditor(page, mode, (value) => value)
+      region = editor.getByRole('combobox', { name: mode === 'vwan' ? 'Region' : 'Azure Region', exact: true })
+      await expect(region).toHaveValue(current ?? '')
+      await region.selectOption('West Europe')
+      if (mode === 'vwan') await editor.getByRole('button', { name: 'Save changes', exact: true }).click()
+      else await page.keyboard.press('Escape')
+      await expect.poll(async () => (await saved(page, mode))[key][0].region).toBe('West Europe')
+    }
+  })
+}
+
+test('full: creating a hub immediately offers its labeled region dropdown', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('aznet-ui-preview:v1', 'true'))
+  await page.goto('/?mode=full')
+  await page.getByTestId('aznet-add-vwan-hub-btn').click()
+  const editor = page.getByTestId('aznet-vwanhub-config-vhub-custom-1')
+  const region = editor.getByRole('combobox', { name: 'Azure Region', exact: true })
+  await expect(region).toHaveValue('West Europe')
+  await region.selectOption('Japan East')
+  await expect.poll(async () => (await saved(page, 'full')).vwanHubs[0].region).toBe('Japan East')
+  await page.reload()
+  await expect(page.getByTestId('aznet-vwanhub-vhub-custom-1').locator('.aznet-hub-region')).toContainText('Japan East')
+})
 
 for (const profile of [
   { preview: true, language: 'en', width: 1440 },
