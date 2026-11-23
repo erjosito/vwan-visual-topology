@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { t } from './i18n'
+import { confirmConfigurationSwitch } from './configuration-selection'
 import './vpn-nat-messages-ja'
 import type { AzNetTopology, AzVpnConnection } from './azure-net/model'
 import { VpnGatewaySettings } from './azure-net/VnetRoutingSettings'
@@ -73,7 +74,29 @@ export function VpnNatGatewayEditor({ topology, targetKind, targetId, commit, sh
   </section>
 }
 
-export function VpnNatConnectionEditor({ topology, connectionId, commit }: Props & { connectionId: string }) {
+export function VpnNatHubEditor({ topology, hubId, commit }: Props & { hubId: string }) {
+  const [selectedId, setSelectedId] = useState('')
+  const connections = topology.vpnConnections.filter((connection) =>
+    connection.targetKind === 'vwan-hub' && connection.targetId === hubId && connection.transport !== 'SDWAN')
+  const selected = connections.find((connection) => connection.id === selectedId) ?? connections[0]
+  return <section aria-label={t('VPN NAT')}>
+    <VpnNatGatewayEditor topology={topology} targetKind="vwan-hub" targetId={hubId} commit={commit} />
+    <p>{t('Gateway BGP route translation changes route advertisements; it does not create mapping rules or enable NAT on every connection.')}</p>
+    <p>{t('Rules belong to the selected original VPN connection. Saving a rule associates it with that connection; there is no separate hub-wide NAT enable switch.')}</p>
+    {!selected ? <p role="status">{t('No IPsec VPN connections target this hub. Create a VPN connection from an on-premises site to this hub first. SD-WAN connections do not support overlap NAT.')}</p> : <>
+      <label className="field">{t('VPN NAT connection')}<select value={selected.id} onChange={(event) => {
+        if (confirmConfigurationSwitch('[data-testid="vpn-nat-connection-editor"]')) setSelectedId(event.target.value)
+      }}>
+        {connections.map((connection) => <option key={connection.id} value={connection.id}>
+          {connection.name} · {topology.sites.find((site) => site.id === connection.siteId)?.name ?? connection.siteId}
+        </option>)}
+      </select></label>
+      <VpnNatConnectionEditor key={selected.id} topology={topology} connectionId={selected.id} commit={commit} showGateway={false} />
+    </>}
+  </section>
+}
+
+export function VpnNatConnectionEditor({ topology, connectionId, commit, showGateway = true }: Props & { connectionId: string; showGateway?: boolean }) {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState('')
   const connection = topology.vpnConnections.find((connection) => connection.id === connectionId)
@@ -87,7 +110,7 @@ export function VpnNatConnectionEditor({ topology, connectionId, commit }: Props
     } catch (error) { setError(error instanceof Error ? error.message : String(error)); return false }
   }
   return <>
-    <VpnNatGatewayEditor topology={topology} targetKind={connection.targetKind} targetId={connection.targetId} commit={commit} />
+    {showGateway && <VpnNatGatewayEditor topology={topology} targetKind={connection.targetKind} targetId={connection.targetId} commit={commit} />}
     <section className="aznet-card" data-testid="vpn-nat-connection-editor">
       <h3>{t('Connection-owned VPN overlap NAT')}</h3>
       <p><code>{connection.id}</code></p>
