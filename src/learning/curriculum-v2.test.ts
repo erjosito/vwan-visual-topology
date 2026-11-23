@@ -66,7 +66,7 @@ export const curriculumV2Repairs: Record<CurriculumV2LessonId, CurriculumV2Repai
       health[0].status = 'unhealthy'; health[1].status = 'healthy' } },
   ],
   'v2-segmentation': [publish('west-local', 'propagatedTableIds', ['local-services', 'workloads'], 'publish-local'),
-    { task: 'regional-label', apply: (t) => { t.vwanHubs[0].routeTables![0].labels = ['shared'] } }],
+    { task: 'regional-label', apply: (t) => { t.vwanHubs[0].routeTables![0].labels.push('shared') } }],
   'v2-handover': [publish('east-service', 'labels', ['shared'], 'repair-forward'), publish('west-app', 'labels', ['shared'], 'repair-reply')],
 }
 export function curriculumV2Reference(id: CurriculumV2LessonId, throughTask?: string): AzNetTopology {
@@ -80,6 +80,32 @@ export function curriculumV2Reference(id: CurriculumV2LessonId, throughTask?: st
 }
 
 describe('curriculum v2 native routing references', () => {
+  it('cannot clear every quiz by always choosing one position or alternating positions', () => {
+    const quizzes = curriculumV2Bundle.checks.filter((check) => check.kind === 'quiz.answered')
+    for (const position of [() => 0, () => 1, (index: number) => index % 2, (index: number) => (index + 1) % 2]) {
+      expect(quizzes.every((check, index) => check.params.choices[position(index)].id === check.params.correctChoiceId))
+        .toBe(false)
+    }
+  })
+
+  it('uses a covering private-intent route and preserves local labels during regional repair', () => {
+    const secured = simulateAzNet(curriculumV2Reference('v2-secured-wan', 'private-intent'))
+    expect(lookupSubnetEffectiveRoute(secured.subnetTables['app-work'], '10.22.1.10'))
+      .toMatchObject({ prefix: '10.0.0.0/8', nextHopResourceId: 'wan-hub' })
+    const original = simulateAzNet(curriculumV2Topologies['v2-segmentation'])
+    expect(original.vwanHubTables['west-hub']['workloads'].map((route) => route.prefix))
+      .not.toContain('10.103.0.0/16')
+    expect(original.vwanHubTables['east-hub']['regional-services'].map((route) => route.prefix))
+      .toContain('10.101.0.0/16')
+    const repaired = curriculumV2Reference('v2-segmentation')
+    expect(repaired.vwanHubs[0].routeTables![0].labels).toEqual(['workloads-local', 'shared'])
+    const check = curriculumV2Bundle.checks.find((check) => check.id === 'v2-segmentation.regional-label.check')!
+    if (check.kind !== 'topology.configured') throw new Error('Configuration required')
+    expect(matchesConfiguration(repaired, check.params.expected)).toBe(true)
+    expect(simulateAzNet(repaired).vwanHubTables['west-hub']['workloads'].map((route) => route.prefix))
+      .toEqual(expect.arrayContaining(['10.102.0.0/16', '10.103.0.0/16']))
+  })
+
   it('requires a fresh exact C04 inspection before evaluating the already-working private paths', async () => {
     const taskId = 'v2-secured-wan.verify-original', tasks = orderedTasks(curriculumV2Bundle)
     const position = tasks.findIndex(({ task }) => task.id === taskId)

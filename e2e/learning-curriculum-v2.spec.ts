@@ -58,7 +58,8 @@ async function configure(page: Page, task: CourseTask, check: Extract<CourseChec
     if (hub.routingIntent?.private !== undefined) await page.getByTestId(`aznet-private-routing-intent-${hub.id}`).setChecked(hub.routingIntent.private)
     for (const table of hub.routeTables ?? []) {
       const labels = page.getByTestId('aznet-hub-tables-editor').getByLabel(`${translate(language, 'Table labels')} ${table.id}`, { exact: true })
-      await labels.fill(table.labels!.join(', '))
+      const original = before.vwanHubs.find((item) => item.id === hub.id)!.routeTables!.find((item) => item.id === table.id)!
+      await labels.fill([...new Set([...original.labels, ...table.labels!])].join(', '))
       await labels.press('Tab')
     }
   }
@@ -168,6 +169,12 @@ for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [tr
     await loadLearningNetwork(page, language)
     await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? '0 points' : '0 ポイント')
     await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
+    const hint = sidebar.getByTestId('learning-hint-1')
+    await hint.locator('summary').click()
+    await expect(hint.locator('p')).toHaveText(curriculumV2Bundle.lessons[0].tasks[0].hints[0][language])
+    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? '0 points' : '0 ポイント')
+    await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
+    await hint.locator('summary').click()
     let points = 0
     if (firstChapterOnly) {
       await completeLearningTasks(page, curriculumV2Bundle.lessons[0].tasks.length, language)
@@ -181,6 +188,13 @@ for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [tr
         await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!).scenarioId, practiceWorkspaceKey)).toBe(lesson.scenarioId)
         const check = curriculumV2Bundle.checks.find((check) => check.id === task.checkId)!
         if (check.kind === 'quiz.answered') {
+          if (task.guidanceIds.some((id) => curriculumV2Bundle.guidance.find((cue) => cue.id === id)?.action === 'routes.open')) {
+            const cue = await show(page, task, language, (cue) => cue.action === 'routes.open')
+            if (cue.action !== 'routes.open') throw new Error('Subnet route guidance required')
+            await expect(learningAnchor(page, 'effective-table', cue.params.vnetId, cue.params.subnetId)).toBeVisible()
+            await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
+            await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? `${points} points` : `${points} ポイント`)
+          }
           const choice = check.params.choices.find((choice) => choice.id === check.params.correctChoiceId)!
           await sidebar.getByRole('radio', { name: choice.text[language], exact: true }).check()
           await sidebar.getByRole('button', { name: runnerLabels.submit[language], exact: true }).click()

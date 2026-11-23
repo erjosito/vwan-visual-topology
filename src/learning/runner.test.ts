@@ -78,6 +78,55 @@ function checkHarness(check: CourseCheck, document: PlatformDocument, count = 1)
 }
 
 describe('evidence-gated course runner', () => {
+  it.each([
+    ['v2-peering.address', 'choice-a'], ['v2-peering.predict', 'choice-b'], ['v2-peering.checkpoint', 'choice-a'],
+    ['v2-firewall.role', 'choice-b'], ['v2-firewall.predict-prefix', 'choice-a'], ['v2-firewall.checkpoint', 'choice-b'],
+    ['v2-wan.transit', 'choice-a'], ['v2-secured-wan.placement', 'choice-b'], ['v2-secured-wan.checkpoint', 'choice-a'],
+    ['v2-static-vpn.roles', 'choice-b'], ['v2-static-vpn.checkpoint', 'choice-a'], ['v2-bgp.diagnose', 'choice-b'],
+    ['v2-bgp.checkpoint', 'choice-a'], ['v2-expressroute.architecture', 'choice-b'], ['v2-expressroute.checkpoint', 'choice-a'],
+    ['v2-er-locations.checkpoint', 'choice-b'], ['v2-vpn-backup.checkpoint', 'choice-a'],
+    ['v2-nva-ha.responsibilities', 'choice-b'], ['v2-nva-ha.predict-reply', 'choice-a'], ['v2-nva-ha.diagnose', 'choice-b'],
+    ['v2-nva-ha.checkpoint', 'choice-a'], ['v2-segmentation.lookup-export', 'choice-b'],
+    ['v2-segmentation.checkpoint', 'choice-a'], ['v2-handover.diagnose', 'choice-b'], ['v2-handover.checkpoint', 'choice-a'],
+  ])('grades the historical answer identity and current feedback for %s', async (taskId, originalCorrectId) => {
+    const completions = beforeTask(curriculumV2Bundle, taskId).map((entry) => ({ ...entry, contentVersion: 2 }))
+    const history = structuredClone(completions)
+    const h = harness({ completions }, curriculumV2Bundle)
+    const { lesson, task } = orderedTasks(h.bundle).find(({ task }) => task.id === taskId)!
+    const check = h.bundle.checks.find((check) => check.id === task.checkId)!
+    if (check.kind !== 'quiz.answered') throw new Error('Quiz required')
+    h.load(h.bundle.scenarios.findIndex((scenario) => scenario.id === lesson.scenarioId))
+    expect(h.state().taskId).toBe(taskId)
+    expect(check.params.correctChoiceId).toBe(originalCorrectId)
+    const wrong = check.params.choices.find((choice) => choice.id !== originalCorrectId)!
+    await h.runner.assess(wrong.id)
+    expect(h.state()).toMatchObject({ feedback: 'incorrect', explanation: wrong.feedback })
+    expect(h.completed).not.toHaveBeenCalled()
+    await h.runner.assess(originalCorrectId)
+    expect(h.state()).toMatchObject({ feedback: 'passed',
+      explanation: check.params.choices.find((choice) => choice.id === originalCorrectId)!.feedback })
+    expect(h.runner.advance()).toBe(true)
+    expect(h.completed).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      taskId, assessmentVersion: task.assessmentVersion, awardId: task.awardId, points: task.points,
+    }))
+    expect(completions).toEqual(history)
+  })
+
+  it('retains a completed content-version-2 course and its black belt without repeating awards', () => {
+    const completions = orderedTasks(curriculumV2Bundle).map(({ task, lesson }) => ({
+      courseId: curriculumV2Bundle.course.id, contentVersion: 2, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: task.assessmentVersion, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'earlier', revision: 1, scope: 1, engineVersion: 'earlier', completedAt: '2026-11-18T12:00:00Z',
+    }))
+    const history = structuredClone(completions), h = harness({ completions }, curriculumV2Bundle)
+    expect(h.state().taskId).toBeUndefined()
+    expect(h.state().completions).toHaveLength(72)
+    expect(beltProgress({ version: 1, policyVersion: 1, completions }, h.bundle.course, curriculumV2Assessments))
+      .toMatchObject({ points: 1345, belt: { id: 'black' } })
+    expect(h.completed).not.toHaveBeenCalled()
+    expect(completions).toEqual(history)
+  })
+
   it('requires the real peering chain and fresh Application inspection without revoking historical belts or re-awarding XP', async () => {
     const completions = orderedTasks(curriculumV2Bundle).map(({ task, lesson }) => ({
       courseId: curriculumV2Bundle.course.id, contentVersion: 1, lessonId: lesson.id, taskId: task.id,
