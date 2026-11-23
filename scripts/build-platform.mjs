@@ -18,6 +18,9 @@ for (const [name, entry] of Object.entries(entries)) {
   const result = await build({
     entryPoints: [entry], outfile: `platform-dist/${name}.cjs`,
     bundle: true, platform: 'node', target: 'node22', format: 'cjs', metafile: true, external: ['electron', '@resvg/resvg-js'],
+    define: name === 'electron/main' ? Object.fromEntries([
+      'CLIENT_ID', 'API_SCOPE', 'API_BASE_URL',
+    ].map(key => [`process.env.AZNET_DESKTOP_CLOUD_${key}`, JSON.stringify(process.env[`AZNET_DESKTOP_CLOUD_${key}`] ?? '')])) : {},
   })
   if (Object.keys(result.metafile.inputs).some((input) => /(?:^|\/)(?:react|react-dom|i18n\.ts|.*-worker\.ts)(?:\/|$)/.test(input.replaceAll('\\', '/')))) {
     throw new Error(`Browser/React dependency leaked into ${name}`)

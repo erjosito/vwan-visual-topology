@@ -43,7 +43,7 @@ export function DesktopTools({ mode }: { mode: SimulatorMode }) {
     finally { if (mount.active && ticket === operation.current) setBusy(false) }
   }
   return <section className="desktop-tools" aria-label={t('Local desktop tools')}>
-    <strong>{t('Desktop · offline modeling · no automatic uploads')}</strong>
+    <strong>{t('Desktop · offline modeling · optional cloud sync')}</strong>
     <button disabled={busy} onClick={() => { void perform(async (current) => {
       if (workspace?.loadFile) { await workspace.loadFile(); return }
       const result = await bridge.openTopology()

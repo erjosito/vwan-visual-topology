@@ -26,6 +26,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState('updated')
   const [sharing, setSharing] = useState<{ entry?: CloudEntry }>()
+  const desktop = !!window.desktopSimulator
   const search = useRef<HTMLInputElement>(null)
   const refreshButton = useRef<HTMLButtonElement>(null)
   const restoreFocus = useRef(false)
@@ -163,6 +164,11 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
     <button type="button" disabled={busy || cloud.status === 'connecting' || !!session?.practice} onClick={() => { void cloud.connect() }}>
       {cloud.account ? text('Sign in again / switch account', '再サインイン / アカウントの切り替え') : text('Sign in with Microsoft', 'Microsoft でサインイン')}
     </button>
+    {desktop && cloud.status === 'connecting' && <button type="button" onClick={() => { void cloud.disconnect() }}>
+      {text('Cancel sign-in', 'サインインをキャンセル')}
+    </button>}
+    {desktop && <p>{text('Sign-in opens your system browser. Credentials stay in Windows-protected storage, not in this canvas.',
+      'サインインはシステム ブラウザーで行います。資格情報はキャンバスではなく Windows で保護されたストレージに保持します。')}</p>}
     {cloud.account && <button type="button" disabled={!!session?.practice} onClick={() => { void cloud.disconnect() }}>
       {text('Sign out of this app', 'このアプリからサインアウト')}
     </button>}
@@ -241,7 +247,7 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
                     onClick={() => { void run(() => load(entry)) }}>{text('Load in new tab', '新しいタブに読み込む')}</button>
                   <button type="button" aria-label={`${text('Overwrite cloud save', 'クラウドの保存を上書き')} ${entry.name} (${entry.id})`} disabled={saving || !!session?.practice}
                     onClick={() => overwrite(entry)}>{text('Overwrite cloud save', 'クラウドの保存を上書き')}</button>
-                  <button type="button" aria-label={`${text('Share saved version', '保存したバージョンを共有')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice}
+                  <button type="button" aria-label={`${text('Share saved version', '保存したバージョンを共有')} ${entry.name} (${entry.id})`} disabled={desktop || busy || !!session?.practice}
                     onClick={() => setSharing({ entry })}>{text('Share saved version', '保存したバージョンを共有')}</button>
                   <button type="button" aria-label={`${text('Delete', '削除')} ${entry.name} (${entry.id})`} disabled={busy || !!session?.practice} onClick={() => {
                     if (window.confirm(text(`Permanently delete cloud save "${entry.name}" (${entry.id})? Your current local design is kept.`,
@@ -256,8 +262,10 @@ export function CloudPanel({ onClose, returnFocus }: { onClose: () => void; retu
           </div>}
         </>}
       </section>
-      <button type="button" disabled={busy || !!session?.practice} onClick={() => setSharing({})}>{text('Manage shared links', '共有リンクを管理')}</button>
-      {sharing && <CloudSharing api={api} entries={entries} entry={sharing.entry && entries.find(value => value.id === sharing.entry!.id)} refreshed={refresh} />}
+      <button type="button" disabled={desktop || busy || !!session?.practice} onClick={() => setSharing({})}>{text('Manage shared links', '共有リンクを管理')}</button>
+      {desktop && <p>{text('Create and manage sharing links in the web app. Cloud saves and learning progress are available here.',
+        '共有リンクの作成と管理には Web アプリを使用してください。クラウドの保存と学習の進捗はこのアプリでも使用できます。')}</p>}
+      {!desktop && sharing && <CloudSharing api={api} entries={entries} entry={sharing.entry && entries.find(value => value.id === sharing.entry!.id)} refreshed={refresh} />}
     </>}
     {notice && <p role="status">{notice}</p>}
   </dialog>

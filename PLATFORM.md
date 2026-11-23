@@ -10,8 +10,10 @@ The existing React UI, native JSON formats, validators and TypeScript engines
 remain the source of routing behavior. There is no separate desktop engine.
 #114 tracks P0, #115 P1, #116 P2A, and #106 desktop/P2B.
 #119/P3A and #120/P3B add on-demand explanations and local practice.
-Identity, cloud progress, verified awards and resource-deployment APIs remain
-outside this implementation.
+Identity and cloud progress are separate optional UI services, not part of the
+local simulation contract. Windows cloud sign-in is configured separately under
+[cloud accounts](docs/cloud-accounts.md#configure-windows-cloud-sign-in).
+Verified awards and resource-deployment APIs remain outside this implementation.
 
 Both websites and Windows start with an empty mixed-network topology when there
 is no saved workspace; explicit samples/imports and saved work still load normally.
@@ -480,7 +482,7 @@ Reference: [HA ports and configuration-specific symmetry](https://learn.microsof
 | --- | --- | --- |
 | Web | Existing UI/engines and diagnostics workers remain browser-local. `src/platform/browser.ts` adds a separately tested worker contract adapter for new consumers; the existing UI is not wholesale migrated to that facade. Native saves remain per browser origin. | Static-site loading and deliberately selected existing web integrations retain their current behavior. No Azure credentials or new backend. |
 | Local MCP | `platform-dist/mcp.cjs`, Node workers, process-local jobs/evidence. No file, Azure, shell or UI mutation tools. | Stdio only; no HTTP listener. Your selected AI provider can receive tool inputs/results. Local MCP does **not** make hosted Copilot offline. |
-| Windows desktop | Packaged React UI/assets in Electron; isolated Node workers and deliberate file dialogs. Same native JSON and existing capture review. | Renderer has no Node, filesystem or generic IPC/process API. No automatic HTTP(S) requests, updates, telemetry or crash uploads. Feedback and share-link features are disabled. Deliberate Azure collection alone invokes the local read-only CLI broker. |
+| Windows desktop | Packaged React UI/assets in Electron; isolated Node workers and deliberate file dialogs. Same native JSON and existing capture review. | Renderer has no Node, filesystem or generic IPC/process API. Anonymous startup/local modeling make no automatic HTTP(S) requests. Optional signed-in cloud access uses the main-process API broker; the renderer stays network-locked. No updates, telemetry or crash uploads. Feedback/share-link features are disabled. Azure collection uses its separate local read-only CLI broker. |
 
 Core/Node bundle import guards reject React, browser locale state and browser
 worker dependencies. Presentation helpers accept a renderer rather than reading
@@ -865,8 +867,18 @@ Documentation windows have no preload/bridge. External navigation/windows,
 webviews and renderer HTTP(S) fetches are blocked. Local docs, samples,
 JSON/Bicep/collector exports and existing diagnostics remain available.
 
-The five renderer methods are `openTopology`, `accounts`, `targets`,
-`collect`, `simulate`; there is no generic invoke, shell string or event bus.
+Configured Windows builds support optional personal Microsoft cloud accounts:
+MSAL Node opens only a validated Microsoft sign-in URL in the system browser,
+uses PKCE and a bounded loopback callback, and encrypts the credential cache
+with Windows DPAPI. Access/refresh tokens stay in the main process. Cloud library
+and learning-progress requests use fixed, schema-checked IPC operations and
+the embedded HTTPS API endpoint, not renderer networking. Configuration,
+account switching, sign-out and live interoperability qualification are documented
+in [cloud accounts](docs/cloud-accounts.md#configure-windows-cloud-sign-in).
+
+The renderer bridge exposes fixed local-file, Azure collection, simulation and
+cloud methods declared in `src/platform/desktop.ts`; there is no generic invoke,
+shell string or event bus.
 CLI reads use a fixed PowerShell wrapper with explicit tenant/subscription.
 Collection requires a native confirmation (default Cancel), chosen WAN or
 resource group, and read-only existing collectors. Authentication/scope/cloud

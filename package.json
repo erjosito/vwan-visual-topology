@@ -36,6 +36,7 @@
   },
   "dependencies": {
     "@azure/msal-browser": "5.29.1",
+    "@azure/msal-node": "7.2.2",
     "@resvg/resvg-js": "2.6.2",
     "gifenc": "1.0.3",
     "react": "^19.3.1",

@@ -112,8 +112,29 @@ try {
   await page.reload()
   await page.evaluate(() => localStorage.removeItem('aznet-simulator:practice:v1'))
   expect(await page.evaluate(() => ({ node: typeof window.require, ipc: Object.keys(window.desktopSimulator) }))).toEqual({
-    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate', 'openDocument', 'saveDocument', 'releaseDocument'],
+    node: 'undefined', ipc: ['openTopology', 'accounts', 'targets', 'collect', 'simulate', 'openDocument', 'saveDocument', 'releaseDocument',
+      'cloudStatus', 'cloudSignIn', 'cloudSignOut', 'cloudRequest'],
   })
+  const cloudStatus = await page.evaluate(() => window.desktopSimulator.cloudStatus())
+  expect(cloudStatus.ok).toBe(true)
+  expect(cloudStatus.value).toEqual({ configured: expect.any(Boolean) })
+  if (cloudStatus.value.configured) {
+    await page.getByTestId('cloud-account-open').first().click()
+    const accountDialog = page.getByRole('dialog', { name: 'Cloud account', exact: true })
+    await expect(accountDialog.getByRole('button', { name: 'Sign in with Microsoft', exact: true })).toBeEnabled()
+    await expect(accountDialog.getByText('Sign-in opens your system browser.', { exact: false })).toBeVisible()
+    await accountDialog.getByRole('button', { name: 'Close', exact: true }).click()
+  } else {
+    await expect(page.getByText('Sign-in unavailable', { exact: true }).first()).toBeVisible()
+  }
+  const protectedCredentials = await application.evaluate(({ safeStorage }) => {
+    if (process.platform !== 'win32') return true
+    if (!safeStorage.isEncryptionAvailable()) return false
+    const synthetic = 'aznetsim-synthetic-credential-check'
+    const encrypted = safeStorage.encryptString(synthetic)
+    return !encrypted.includes(Buffer.from(synthetic)) && safeStorage.decryptString(encrypted) === synthetic
+  })
+  expect(protectedCredentials).toBe(true)
   for (const [mode, file] of [
     ['vwan', 'hub-routing-preferences.json'],
     ['hub-spoke', 'azure-net/hub-spoke-firewall-udr.json'],
