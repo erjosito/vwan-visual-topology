@@ -21,7 +21,7 @@ export function nvaBgpTopology() {
       }],
       routeServer: {
         id: `${region}-ars`, name: `${region} Route Server`, subnetId: `${region}-ars-subnet`,
-        enabled: true, branchToBranchTraffic: false, hubRoutingPreference: 'ASPath' as const,
+        enabled: true, branchToBranchTraffic: true, hubRoutingPreference: 'ASPath' as const,
         peerApplianceIds: [`${region}-source`, 'reader'],
       },
     })),

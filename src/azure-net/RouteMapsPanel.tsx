@@ -9,6 +9,11 @@ import { azHubPolicyLinks, azSitePolicyLinks, pruneAzSiteRouteMaps, validateAzSi
 import { ARS_MAX_BGP_PEERS, azArsPeerHosts, azArsPolicyLinks, parseArsPrependAsPath, parseBgpCommunities, pruneAzArsRouteMaps, validateAzArsRouteMaps } from './ars-route-maps'
 import { BgpRouteTable } from './BgpRouteTable'
 import type { AzBgpRibEntry } from './engine'
+import { registerJapaneseMessages } from '../messages'
+
+registerJapaneseMessages({
+  'Source-side policy / SDN candidates, not NVA receiver wire attributes. Inspect NVA learned BGP routes or BGP neighbors for ARS-to-NVA exports.': '送信元側のポリシー / SDN 候補であり、NVA 受信側のワイヤ属性ではありません。ARS から NVA への広告は NVA 学習 BGP ルートまたは BGP ネイバーで確認します。',
+})
 
 export function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave: (attributes: AzAppliance['advertisedRouteAttributes']) => void }) {
   const [error, setError] = useState('')
@@ -159,6 +164,7 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
       <BgpRouteTable key={link.id} entries={inbound[link.id] ?? []} available={ars.enabled} />
     </details>}
     {ars && link && outbound && <details open data-testid="aznet-policy-outbound"><summary>{t('Outbound advertisements after route maps')}</summary>
+      <p className="muted">{t('Source-side policy / SDN candidates, not NVA receiver wire attributes. Inspect NVA learned BGP routes or BGP neighbors for ARS-to-NVA exports.')}</p>
       <BgpRouteTable key={link.id} entries={outbound[link.id] ?? []} available={ars.enabled} />
     </details>}
     <p className="muted">{t('Policies change route advertisements, not packet ACLs. Summaries do not make aggregate holes reachable.')}</p>

@@ -62,3 +62,22 @@ it('keeps NVA duplicates scoped to original ARS and leaves per-peer unassessed w
   expect(hostedHtml).not.toContain('data-prefix="203.0.113.0/24"')
   expect({ topology, simulation }).toEqual(before)
 })
+
+it('renders unqualified same-VNet wire attributes as not assessed, preserving learned-source evidence separately', () => {
+  const topology = nvaBgpTopology()
+  const west = topology.vnets[0]
+  west.appliances.push({
+    ...topology.vnets[2].appliances[0], id: 'local-reader', name: 'Local reader',
+    subnetId: 'west-nvas', privateIp: '10.10.1.5', advertisedPrefixes: [],
+  })
+  west.routeServer!.peerApplianceIds.push('local-reader')
+  west.routeServer!.branchToBranchTraffic = false
+  const simulation = simulateAzNet(topology)
+  const html = renderToStaticMarkup(createElement(NvaBgpPanel, {
+    topology, simulation, vnetId: 'west', applianceId: 'local-reader', onPeerChange() {}, onClose() {},
+  }))
+  expect(html).toContain('<td>Wire next-hop IP not assessed</td><td class="as-path">Not assessed</td>')
+  expect(html).toContain('ARS-learned source route (not receiver wire attributes)')
+  expect(html).toContain('10.10.1.4')
+  expect(html).toContain('Same-VNet flag behavior and wire attributes are not assessed')
+})
