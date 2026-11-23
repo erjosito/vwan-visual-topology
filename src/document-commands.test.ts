@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDocumentCommands, type ArtifactDestination, type ArtifactReceipt, type ArtifactWriter } from './document-commands'
+import type { DocumentSaveSnapshot } from './cloud/document-state'
+import { documentSaveLabel } from './workspace-context'
 
 const file: ArtifactDestination = { kind: 'file', platform: 'desktop', name: 'original.json',
   location: 'C:\\Labs\\original.json', revision: 'original-bytes', authority: 'opaque-main-token' }
@@ -15,6 +17,32 @@ function setup(write = vi.fn<ArtifactWriter>(async () => ({ confirmed: true, des
 }
 
 describe('document artifact commands', () => {
+  it('reports confirmed file saves separately from later unsaved edits and profile recovery', async () => {
+    const { commands, edit } = setup()
+    const state: DocumentSaveSnapshot = { ready: true, local: 'unavailable', operation: 'idle', retained: false }
+    expect(documentSaveLabel(state, commands.getSnapshot())).toBe('Not saved')
+    await commands.saveAs({ kind: 'choose-file', name: 'original.json' })
+    expect(documentSaveLabel(state, commands.getSnapshot())).toBe('Locally saved')
+    edit('New edits')
+    await commands.observe()
+    expect(documentSaveLabel(state, commands.getSnapshot())).toBe('Not saved')
+    expect(documentSaveLabel({ ...state, local: 'saved' }, commands.getSnapshot())).toBe('Locally saved')
+  })
+
+  it('only reports cloud saved for a matching current revision, preserving uncertain cloud details', async () => {
+    const { commands } = setup(vi.fn(async () => ({ confirmed: true as const, destination: cloud })))
+    await commands.saveAs(cloud)
+    const state: DocumentSaveSnapshot = { ready: true, local: 'unavailable', operation: 'idle', retained: false,
+      cloud: { accountId: 'alice', id: cloud.id, name: cloud.name, etag: cloud.etag, state: 'matches' } }
+    expect(documentSaveLabel(state, commands.getSnapshot())).toBe('Cloud saved')
+    for (const status of ['checking', 'modified', 'changed', 'missing', 'unavailable', 'unknown'] as const) {
+      const uncertain = { ...state, cloud: { ...state.cloud!, state: status } }
+      expect(documentSaveLabel(uncertain, commands.getSnapshot())).toBe('Not saved')
+      expect(documentSaveLabel({ ...uncertain, local: 'saved' }, commands.getSnapshot())).toBe('Locally saved')
+    }
+    expect(documentSaveLabel({ ...state, cloud: undefined }, { ...commands.getSnapshot(), destination: undefined })).toBe('Not saved')
+  })
+
   it.each(['closed', 'account-cycle'] as const)('revokes %s completions while the saved revision is being checked', async reason => {
     let finish!: (value: string) => void
     let accountId = 'alice', calls = 0

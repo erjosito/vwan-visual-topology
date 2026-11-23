@@ -6,9 +6,9 @@ import type { PracticeRequest, PracticeWorkspace } from './learning/practice-wor
 import type { CourseRunner, LearningObservation, RunnerState } from './learning/runner'
 import type { LedgerState } from './learning/progress-ledger'
 import type { SyncStatus } from './cloud/progress-sync'
-import type { CloudDocumentSource, DocumentSaveState } from './cloud/document-state'
+import type { CloudDocumentSource, DocumentSaveSnapshot, DocumentSaveState } from './cloud/document-state'
 import type { WorkspaceStorage } from './workspace-session'
-import type { createDocumentCommands, ArtifactDestination } from './document-commands'
+import type { createDocumentCommands, ArtifactDestination, ArtifactSnapshot } from './document-commands'
 
 export type WorkspaceEditorHistory =
   | { provider: 'vwan'; topology: Topology; past: Topology[]; future: Topology[]; error: string; saveError: string; backup: string }
@@ -92,6 +92,14 @@ export function useWorkspaceEditorState<T>(key: string, initial?: T | (() => T),
 
 const noSubscribe = () => () => {}
 const noSnapshot = () => undefined
+export function documentSaveLabel(state?: DocumentSaveSnapshot, artifact?: ArtifactSnapshot) {
+  if (state?.cloud?.state === 'matches'
+    || !state?.cloud && artifact?.destination?.kind === 'cloud' && artifact.revision === 'matches') return 'Cloud saved'
+  if (state?.local === 'saved'
+    || artifact?.destination?.kind === 'file' && artifact.revision === 'matches') return 'Locally saved'
+  return 'Not saved'
+}
+
 export function useDocumentSaveState() {
   const state = useWorkspaceSession()?.documentSave
   return useSyncExternalStore(state?.subscribe ?? noSubscribe, state?.getSnapshot ?? noSnapshot)
