@@ -277,7 +277,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
   }
   const openPractice = async (input: PracticeRequest, signal?: AbortSignal) => {
     const ticket = ++request.current
-    if (!active) throw new Error('Choose a design workspace before starting practice.')
+    if (!active) throw new Error(text('Open a topology before starting practice.', '練習を開始する前にトポロジを開いてください。'))
     const session = await loadPractice()
     await session.open(input, active.provider, () => ticket === request.current, signal)
     if (ticket !== request.current || signal?.aborted) return

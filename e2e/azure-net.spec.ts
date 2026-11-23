@@ -941,7 +941,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
     // Switch to vWAN-Only mode and set a custom diagram label on Europe hub
     await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
     await page.getByTestId('workspace-library-open').click()
-    await page.getByRole('button', { name: 'Open saved design: Global branch network', exact: true }).click()
+    await page.getByRole('button', { name: 'Open saved topology: Global branch network', exact: true }).click()
     await page.getByLabel('Select hub Europe hub', { exact: true }).focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menu').getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
