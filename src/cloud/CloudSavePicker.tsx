@@ -12,7 +12,7 @@ export interface CloudSaveSelection {
   full: boolean
 }
 
-export function CloudSavePicker({ api, accountId, disabled, onSelect }: {
+export default function CloudSavePicker({ api, accountId, disabled, onSelect }: {
   api: CloudClient; accountId: string; disabled: boolean; onSelect: (value: CloudSaveSelection | undefined) => void
 }) {
   const language = useLanguage(), text = (en: string, ja: string) => language === 'ja' ? ja : en

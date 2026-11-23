@@ -1,10 +1,12 @@
-import { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from './i18n'
 import { useCloudSession } from './cloud/useCloudSession'
 import { cloudLimits } from './cloud/contracts'
-import { CloudSavePicker, type CloudSaveSelection } from './cloud/CloudSavePicker'
+import type { CloudSaveSelection } from './cloud/CloudSavePicker'
 import type { createDocumentCommands, CommandResult } from './document-commands'
+
+const CloudSavePicker = lazy(() => import('./cloud/CloudSavePicker'))
 
 export function DestinationDialog({ commands, name: initialName, onClose, onResult }: {
   commands: ReturnType<typeof createDocumentCommands>; name: string; onClose: () => void; onResult?: (result: CommandResult) => void
@@ -64,8 +66,9 @@ export function DestinationDialog({ commands, name: initialName, onClose, onResu
         </button>
         {cloud?.status === 'error' && <p role="alert">{text('Sign-in did not complete. Retry or save a local copy.',
           'サインインが完了しませんでした。再試行するか、ローカルのコピーを保存してください。')}</p>}
-        {cloud?.api && cloud.account && <CloudSavePicker key={cloud.account.id} api={cloud.api} accountId={cloud.account.id}
-          disabled={busy} onSelect={setSelection} />}
+        {cloud?.api && cloud.account && <Suspense fallback={<p role="status">{text('Loading cloud saves...', 'クラウドの保存を読み込み中...')}</p>}>
+          <CloudSavePicker key={cloud.account.id} api={cloud.api} accountId={cloud.account.id} disabled={busy} onSelect={setSelection} />
+        </Suspense>}
       </>}
       {!existing && <>
         <label>{text('Name', '名前')} <input value={name} maxLength={120} required disabled={busy}
