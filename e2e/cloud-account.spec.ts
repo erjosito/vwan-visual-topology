@@ -62,6 +62,233 @@ async function signIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
 }
 
+async function startCloudPicker(page: Page, language: 'en' | 'ja' = 'en') {
+  await page.addInitScript(({ language, topology, key }) => {
+    localStorage.setItem('vwan-visual-topology:language:v1', language)
+    localStorage.setItem('aznet-ui-preview:v1', 'true')
+    localStorage.setItem(key, JSON.stringify(topology))
+  }, { language, topology: example, key: workspaceStorageKeys.vwan })
+  await page.goto('/?mode=vwan')
+  await expect(page.locator('.document-artifact-status')).toBeVisible()
+  await page.keyboard.press('Control+Shift+s')
+  await expect(page.locator('dialog[open]')).toBeVisible()
+  const chooser = page.getByRole('dialog', { name: language === 'ja' ? '名前を付けて保存' : 'Save As', exact: true })
+  await chooser.getByRole('combobox', { name: language === 'ja' ? '保存先' : 'Destination', exact: true }).selectOption('cloud')
+  await chooser.getByRole('button', { name: language === 'ja' ? 'Microsoft でサインイン' : 'Sign in with Microsoft', exact: true }).click()
+  return chooser
+}
+
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: cloud destination picker signs in, saves a new description and then uses direct Save`, async ({ page }) => {
+    const service = await setup(page), text = (en: string, ja: string) => language === 'ja' ? ja : en
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1280, height: 950 })
+    const chooser = await startCloudPicker(page, language)
+    await expect(chooser.getByRole('radio', { name: text('Save new cloud topology', '新しいクラウドのトポロジとして保存'), exact: true })).toBeChecked()
+    expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(0)
+    await chooser.getByLabel(text('Name', '名前'), { exact: true }).fill('Picker new save')
+    await chooser.getByLabel(text('Description (optional)', '説明 (省略可)'), { exact: true }).fill('Saved description\n説明')
+    expect((await new AxeBuilder({ page }).include('.document-command-dialog').analyze()).violations).toEqual([])
+    expect(await chooser.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await chooser.getByRole('button', { name: text('Save', '保存'), exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(chooser).toHaveCount(0)
+    const [key, record] = [...service.data].find(([key]) => key.includes('/topologies/'))!
+    expect(JSON.parse(record.raw)).toMatchObject({ name: 'Picker new save', description: 'Saved description\n説明', topology: example })
+    await expect.poll(() => documentCloudMetadata(page)).not.toBeNull()
+    const id = key.split('/').at(-1)!.replace('.json', '')
+    expect(JSON.parse((await documentCloudMetadata(page))!)).toMatchObject({ id, accountId: 'alice' })
+    await openWorkspaceActions(page)
+    await page.locator('.topology-name').fill('New native edits')
+    await page.keyboard.press('Control+s')
+    await expect.poll(() => JSON.parse(service.data.get(key)!.raw).topology.name).toBe('New native edits')
+    await expect(chooser).toHaveCount(0)
+    expect(JSON.parse(service.data.get(key)!.raw)).toMatchObject({ name: 'Picker new save', description: 'Saved description\n説明' })
+    expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(1)
+  })
+
+  test(`${language}: cloud destination picker identifies duplicate saves and both cancelled confirmations leave them untouched`, async ({ page }) => {
+    const service = await setup(page), text = (en: string, ja: string) => language === 'ja' ? ja : en
+    const ids = [crypto.randomUUID(), crypto.randomUUID()], prefix = `users/${testOwner('alice')}/topologies/`
+    for (const [index, id] of ids.entries()) await service.store.put(`${prefix}${id}.json`, JSON.stringify({
+      version: 1, name: 'Duplicate destination', description: `Description ${index}`, topology: { ...example, name: `Remote ${index}` },
+    }), null, 'Duplicate destination', `Description ${index}`)
+    const original = [...service.data].map(([key, value]) => [key, value.raw])
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1280, height: 950 })
+    const chooser = await startCloudPicker(page, language)
+    await chooser.getByRole('searchbox', { name: text('Find cloud saves', 'クラウドの保存を検索'), exact: true }).fill('Duplicate')
+    await chooser.getByRole('combobox', { name: text('Sort cloud saves', 'クラウドの保存の並べ替え'), exact: true }).selectOption('name')
+    const selected = chooser.locator(`[data-cloud-save-id="${ids[1]}"]`).getByRole('radio')
+    await selected.focus()
+    await page.keyboard.press('Space')
+    await expect(selected).toBeChecked()
+    const local = await page.evaluate(key => localStorage.getItem(key), workspaceStorageKeys.vwan)
+    const binding = await documentCloudMetadata(page)
+    expect((await new AxeBuilder({ page }).include('.document-command-dialog').analyze()).violations).toEqual([])
+    page.removeAllListeners('dialog')
+    for (const rejected of [0, 1]) {
+      let count = 0
+      const decide = (dialog: import('@playwright/test').Dialog) => { void (count++ === rejected ? dialog.dismiss() : dialog.accept()) }
+      page.on('dialog', decide)
+      await chooser.getByRole('button', { name: text('Save', '保存'), exact: true }).click()
+      await expect(chooser.getByRole('button', { name: text('Save', '保存'), exact: true })).toBeEnabled()
+      page.off('dialog', decide)
+      expect(count).toBe(rejected + 1)
+      expect([...service.data].map(([key, value]) => [key, value.raw])).toEqual(original)
+      expect(await documentCloudMetadata(page)).toBe(binding)
+    }
+    page.on('dialog', dialog => { void dialog.accept() })
+    await chooser.getByRole('button', { name: text('Cancel', 'キャンセル'), exact: true }).click()
+    await expect(chooser).toHaveCount(0)
+    expect(await documentCloudMetadata(page)).toBe(binding)
+    await page.keyboard.press('Control+Shift+s')
+    await chooser.getByRole('combobox', { name: text('Destination', '保存先'), exact: true }).selectOption('cloud')
+    await chooser.locator(`[data-cloud-save-id="${ids[1]}"]`).getByRole('radio').check()
+    await chooser.getByRole('button', { name: text('Save', '保存'), exact: true }).click()
+    await expect(chooser).toHaveCount(0)
+    expect(JSON.parse(service.data.get(`${prefix}${ids[1]}.json`)!.raw)).toMatchObject({
+      name: 'Duplicate destination', description: 'Description 1', topology: example,
+    })
+    expect(service.data.get(`${prefix}${ids[0]}.json`)!.raw).toBe(original[0][1])
+    expect(await page.evaluate(key => localStorage.getItem(key), workspaceStorageKeys.vwan)).toBe(local)
+    expect(JSON.parse((await documentCloudMetadata(page))!).id).toBe(ids[1])
+  })
+}
+
+test('cloud destination picker rejects stale versions and requires reselecting after refresh or changing destination type', async ({ page }) => {
+  const service = await setup(page), id = crypto.randomUUID(), key = `users/${testOwner('alice')}/topologies/${id}.json`
+  await service.store.put(key, JSON.stringify({ version: 1, name: 'Reviewed save', topology: example }), null, 'Reviewed save')
+  const chooser = await startCloudPicker(page)
+  await chooser.locator(`[data-cloud-save-id="${id}"]`).getByRole('radio').check()
+  const before = service.data.get(key)!
+  await service.store.put(key, JSON.stringify({ version: 1, name: 'Changed elsewhere', description: 'Reviewed later', topology: example }),
+    before.etag, 'Changed elsewhere', 'Reviewed later')
+  const changed = service.data.get(key)!.raw
+  await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(chooser.getByRole('alert')).toContainText('The selected cloud save changed')
+  expect(service.data.get(key)!.raw).toBe(changed)
+  expect(await documentCloudMetadata(page)).toBeNull()
+  await chooser.getByRole('button', { name: 'Refresh cloud destinations', exact: true }).click()
+  await expect(chooser.getByRole('radio', { name: /^Overwrite cloud save Changed elsewhere / })).toBeVisible()
+  await expect(chooser.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  await chooser.locator(`[data-cloud-save-id="${id}"]`).getByRole('radio').check()
+  await chooser.getByRole('combobox', { name: 'Destination', exact: true }).selectOption('file')
+  let release!: () => void
+  const pending = new Promise<void>(resolve => { release = resolve })
+  const delayed = async (route: import('@playwright/test').Route) => { await pending; await route.fallback() }
+  await page.route('**/api/cloud/topologies', delayed)
+  try {
+    await chooser.getByRole('combobox', { name: 'Destination', exact: true }).selectOption('cloud')
+    await expect(chooser.getByText('Loading cloud saves...', { exact: true })).toBeVisible()
+    await expect(chooser.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+    release()
+    await expect(chooser.locator(`[data-cloud-save-id="${id}"]`)).toBeVisible()
+    await chooser.locator(`[data-cloud-save-id="${id}"]`).getByRole('radio').check()
+    await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(chooser).toHaveCount(0)
+    expect(JSON.parse(service.data.get(key)!.raw)).toMatchObject({ name: 'Changed elsewhere', description: 'Reviewed later' })
+  } finally { release() }
+})
+
+for (const nextAccount of ['alice', 'bob']) {
+  test(`cloud destination picker ignores a pending old response after reconnecting as ${nextAccount}`, async ({ page }) => {
+    const service = await setup(page), ids = [crypto.randomUUID(), crypto.randomUUID()]
+    for (const [index, owner] of ['alice', 'bob'].entries()) await service.store.put(
+      `users/${testOwner(owner)}/topologies/${ids[index]}.json`,
+      JSON.stringify({ version: 1, name: `${owner} destination`, topology: example }), null, `${owner} destination`)
+    const chooser = await startCloudPicker(page)
+    await chooser.locator(`[data-cloud-save-id="${ids[0]}"]`).getByRole('radio').check()
+    let release!: () => void, requests = 0
+    const pending = new Promise<void>(resolve => { release = resolve })
+    const delayed = async (route: import('@playwright/test').Route) => {
+      if (requests++) return route.fallback()
+      const request = route.request(), result = await service.request(request.url(), { headers: request.headers() })
+      await pending
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(result.jsonBody) })
+    }
+    await page.route('**/api/cloud/topologies', delayed)
+    try {
+      await chooser.getByRole('button', { name: 'Refresh cloud destinations', exact: true }).click()
+      await expect(chooser.getByText('Loading cloud saves...', { exact: true })).toBeVisible()
+      await page.evaluate(owner => sessionStorage.setItem('mock-cloud-user', owner), nextAccount)
+      await chooser.getByRole('button', { name: 'Sign in again / switch account', exact: true }).click()
+      const index = nextAccount === 'alice' ? 0 : 1
+      await expect(chooser.locator(`[data-cloud-save-id="${ids[index]}"]`)).toBeVisible()
+      release()
+      await expect(chooser.getByRole('radio', { name: 'Save new cloud topology', exact: true })).toBeChecked()
+      if (nextAccount === 'bob') await expect(chooser.locator(`[data-cloud-save-id="${ids[0]}"]`)).toHaveCount(0)
+      await chooser.locator(`[data-cloud-save-id="${ids[index]}"]`).getByRole('radio').check()
+      await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+      await expect(chooser).toHaveCount(0)
+      expect(JSON.parse((await documentCloudMetadata(page))!)).toMatchObject({ id: ids[index], accountId: nextAccount })
+    } finally { release() }
+  })
+}
+
+for (const status of [401, 503]) {
+  test(`cloud destination picker distinguishes a ${status} list failure from an empty library and recovers`, async ({ page }) => {
+    const service = await setup(page)
+    const unavailable = async (route: import('@playwright/test').Route) => route.fulfill({ status, body: '{}' })
+    await page.route('**/api/cloud/topologies', unavailable)
+    const chooser = await startCloudPicker(page)
+    await expect(chooser.getByRole('alert')).toContainText(status === 401 ? 'Sign in again' : 'not an empty library')
+    await expect(chooser.getByText('No cloud saves yet. Choose Save new.', { exact: true })).toHaveCount(0)
+    const newSave = chooser.getByRole('radio', { name: 'Save new cloud topology', exact: true })
+    if (status === 401) {
+      await expect(newSave).toBeDisabled()
+      await expect(chooser.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+    } else await expect(newSave).toBeChecked()
+    expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(0)
+    await page.unroute('**/api/cloud/topologies', unavailable)
+    await chooser.getByRole('button', { name: 'Refresh cloud destinations', exact: true }).click()
+    await expect(chooser.getByText('No cloud saves yet. Choose Save new.', { exact: true })).toBeVisible()
+    await expect(chooser.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+    await newSave.check()
+    await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(chooser).toHaveCount(0)
+    expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(1)
+  })
+}
+
+test('cloud destination picker supports overwrite at the fifty-save limit without pretending filtering frees space', async ({ page }) => {
+  const service = await setup(page), ids: string[] = []
+  for (let index = 0; index < 50; index++) {
+    const id = crypto.randomUUID(); ids.push(id)
+    await service.store.put(`users/${testOwner('alice')}/topologies/${id}.json`,
+      JSON.stringify({ version: 1, name: `Destination ${index}`, topology: example }), null, `Destination ${index}`)
+  }
+  const chooser = await startCloudPicker(page)
+  await expect(chooser.getByRole('radio', { name: 'Save new cloud topology', exact: true })).toBeDisabled()
+  await chooser.getByRole('searchbox', { name: 'Find cloud saves', exact: true }).fill('Destination 49')
+  await expect(chooser.getByRole('radio', { name: 'Save new cloud topology', exact: true })).toBeDisabled()
+  await chooser.locator(`[data-cloud-save-id="${ids[49]}"]`).getByRole('radio').check()
+  await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(chooser).toHaveCount(0)
+  expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(50)
+  expect(JSON.parse((await documentCloudMetadata(page))!).id).toBe(ids[49])
+})
+
+test('cloud destination picker retries a lost new-save acknowledgement without duplicating the destination', async ({ page }) => {
+  const service = await setup(page), chooser = await startCloudPicker(page)
+  await chooser.getByLabel('Name', { exact: true }).fill('Lost picker acknowledgement')
+  const interrupted = async (route: import('@playwright/test').Route) => {
+    const request = route.request()
+    if (request.method() !== 'PUT') return route.fallback()
+    await service.request(request.url(), { method: 'PUT', headers: request.headers(), body: request.postData()! })
+    await route.abort()
+  }
+  await page.route('**/api/cloud/topologies/*', interrupted)
+  await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(chooser.getByRole('alert')).toBeVisible()
+  expect(await documentCloudMetadata(page)).toBeNull()
+  const [key, record] = [...service.data].find(([key]) => key.includes('/topologies/'))!
+  await page.unroute('**/api/cloud/topologies/*', interrupted)
+  await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(chooser).toHaveCount(0)
+  expect([...service.data.keys()].filter(key => key.includes('/topologies/'))).toHaveLength(1)
+  expect(service.data.get(key)!.raw).toBe(record.raw)
+  expect(JSON.parse((await documentCloudMetadata(page))!).id).toBe(key.split('/').at(-1)!.replace('.json', ''))
+})
+
 for (const mode of ['vwan', 'full'] as const) {
   test(`${mode}: a clean final cloud tab closes into an unlinked empty editor with its cloud library still reachable`, async ({ page }) => {
     const service = await setup(page)

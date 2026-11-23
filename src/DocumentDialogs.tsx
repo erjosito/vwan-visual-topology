@@ -30,7 +30,7 @@ export function DestinationDialog({ commands, name: initialName, onClose, onResu
     dialog.current?.showModal()
     return () => { if (previous instanceof HTMLElement && previous.isConnected) previous.focus() }
   }, [])
-  return createPortal(<dialog ref={dialog} className="object-dialog document-command-dialog" aria-labelledby="document-destination-title" onClose={onClose}
+  return createPortal(<dialog ref={dialog} className={`object-dialog document-command-dialog${target === 'cloud' ? ' cloud-destination-dialog' : ''}`} aria-label={text('Save As', '名前を付けて保存')} onClose={onClose}
     onCancel={event => { if (state.operation === 'saving') event.preventDefault() }}>
     <form onSubmit={event => {
       event.preventDefault()
@@ -49,9 +49,9 @@ export function DestinationDialog({ commands, name: initialName, onClose, onResu
         if (result === 'saved' || result === 'downloaded') onClose()
       })
     }}>
-      <h2 id="document-destination-title">{text('Save As', '名前を付けて保存')}</h2>
+      <h2>{text('Save As', '名前を付けて保存')}</h2>
       <label>{text('Destination', '保存先')} <select value={target} disabled={state.operation === 'saving'}
-        onChange={event => setTarget(event.target.value as 'file' | 'cloud' | 'download')}>
+        onChange={event => { setSelection(undefined); setTarget(event.target.value as 'file' | 'cloud' | 'download') }}>
         <option value="file">{text('File', 'ファイル')}</option>
         <option value="cloud" disabled={!cloud?.configured}>{text('Private cloud library', '自分のクラウド ライブラリ')}</option>
         <option value="download">{text('Download copy (unconfirmed)', 'コピーをダウンロード (未確認)')}</option>
