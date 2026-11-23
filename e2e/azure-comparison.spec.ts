@@ -9,7 +9,7 @@ async function open(page: Page) {
   await page.getByRole('button', { name: 'Compare with Azure capture', exact: true }).click()
 }
 async function setup(page: Page, capture = observationFixture()) {
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'design.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(comparisonDesign())) })
   await open(page)
   await page.getByLabel('Azure comparison capture file').setInputFiles({ name: 'capture-v2.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(capture)) })
@@ -19,7 +19,7 @@ async function setup(page: Page, capture = observationFixture()) {
 }
 test('custom-table comparison stays table-scoped, local and translated when the scope changes', async ({ page }) => {
   const capture = contextObservationFixture(), design = importAzureCapture({ ...capture, version: 1 })
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'contexts.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(design)) })
   const saved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
   await open(page)
@@ -43,7 +43,7 @@ test('custom-table comparison stays table-scoped, local and translated when the 
 
 test('custom route inspection never substitutes Default and explains unknown contexts in both languages', async ({ page }) => {
   const design = importAzureCapture({ ...contextObservationFixture(), version: 1 })
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   const upload = () => page.getByLabel('Import topology file').setInputFiles({
     name: 'contexts.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(design)),
   })
