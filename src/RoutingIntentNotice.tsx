@@ -14,7 +14,7 @@ registerJapaneseMessages({
   'Propagate connection static routes into BGP': '接続の静的ルートを BGP に伝達',
   'Advertises configured connection static prefixes through hub routing. This does not control receipt of 0.0.0.0/0 into the VNet.': '構成済みの接続の静的プレフィックスをハブ ルーティング経由で広告します。VNet への 0.0.0.0/0 の受信は制御しません。',
   'Remove hub table': 'ハブ テーブルを削除',
-  'Single hub only. Declare the original local Firewall identity. With routing intent, only default-table routes to that Firewall are supported here; policy-generated routes are managed. This does not establish Firewall permission or application delivery.': '単一ハブのみです。元のローカル Firewall の識別情報を宣言してください。ルーティング意図では、その Firewall を指す既定テーブルのルートのみをここでサポートします。ポリシー生成ルートは管理対象です。Firewall の許可やアプリケーションの配信を保証するものではありません。',
+  'Single hub only. Declare the original local Firewall identity. With routing intent, only default-table routes to that Firewall are supported here; policy-generated routes are managed. This does not establish Firewall permission or application delivery.': '単一ハブのみです。元のローカル Firewall の識別情報を宣言してください。ルーティング意図では、その Firewall を指す既定テーブルのルートのみをここでサポートします。ポリシー生成ルートは管理対象です。Firewall の許可やアプリケーションの配信を保証しません。',
 })
 
 export function RoutingIntentNotice({ hub }: { hub: IntentHub }) {
