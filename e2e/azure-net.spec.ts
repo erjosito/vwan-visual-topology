@@ -29,6 +29,22 @@ async function loadTopology(page: Page, topology: AzNetTopology, mode = 'hub-spo
   await page.goto(`/?mode=${mode}`)
 }
 
+test('loads Azure capture tools only on request without changing the open design', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => requests.push(request.url()))
+  await page.goto('/?mode=full')
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await page.waitForLoadState('networkidle')
+  expect(requests.some(url => url.includes('AzureCapturePanel'))).toBe(false)
+  const saved = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  await page.getByTestId('aznet-open-azure-tab-btn').click()
+  await expect(page.getByTestId('aznet-azure-capture-card')).toBeVisible()
+  expect(requests.some(url => url.includes('AzureCapturePanel'))).toBe(true)
+  await expect(page.getByRole('link', { name: '⬇ Download Collector Script (.ps1)', exact: true })).toHaveAttribute('download', 'collect-azure-network.ps1')
+  await expect(page.getByRole('button', { name: '🔍 Compare Capture Against Current Topology', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(saved)
+})
+
 test('shows routing-intent policy routes, default precedence and withdrawal in the spoke inspector', async ({ page }) => {
   const topology = createEmptyAzNetTopology()
   topology.vwanHubs = [{ id: 'wan', name: 'Secured WAN', region: 'westeurope', preference: 'ExpressRoute',
