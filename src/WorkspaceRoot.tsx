@@ -765,7 +765,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       {!practiceReady && <p role="status">{t('Loading workspace…')}</p>}
       {visible && practiceReady && (active || practicing) && provider && <>
         {window.desktopSimulator && <Suspense fallback={null}>
-          <DesktopTools key={`tools:${provider}:${practicing}`} mode={provider === 'vwan' ? 'vwan' : 'full'} />
+          <DesktopTools key={`tools:${provider}:${practicing}`} />
         </Suspense>}
         <WorkspaceBoundary key={editorKey} onRecover={() => { leavePractice(); setLibraryOpen(true) }}>
           <Suspense fallback={<section aria-label={t('Workspace loading')}><p role="status">{t('Loading workspace…')}</p></section>}>

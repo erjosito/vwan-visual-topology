@@ -8,7 +8,7 @@ export interface DesktopDocumentRequest { documentId: string; language?: 'en' | 
 export interface DesktopSaveRequest extends DesktopDocumentRequest { content: string; destinationToken?: string; suggestedName?: string }
 export type LocalFile = { name: string; content: string; destination?: DesktopFileDestination; readOnly?: true } | null
 export type DesktopScope = { subscriptionId: string; tenantId: string }
-export type DesktopAccounts = { cloud: { name: string; resourceManager: string }; accounts: { id: string; name: string; tenantId: string; state: string }[] }
+export type DesktopAccounts = { cloud: { name: string; resourceManager: string }; accounts: { id: string; name: string; tenantId: string; state: string; isDefault?: boolean }[] }
 export type DesktopTargets = { groups: { id: string; name: string }[]; wans: { id: string; name: string }[] }
 export interface DesktopBridge extends DesktopCloudBridge {
   openTopology(): Promise<Reply<LocalFile>>

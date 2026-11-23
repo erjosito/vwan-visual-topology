@@ -3,13 +3,13 @@ import type { Page } from '@playwright/test'
 import { comparisonDesign, contextObservationFixture, observationFixture } from '../tests/azure-observation-fixture'
 import { importAzureCapture } from '../src/azure-import'
 
-const panel = (page: Page) => page.getByRole('dialog', { name: 'Compare with Azure capture', exact: true })
+const panel = (page: Page) => page.getByRole('dialog', { name: 'Azure files', exact: true })
 async function open(page: Page) {
   await page.getByRole('button', { name: 'Azure files', exact: true }).click()
   await page.getByRole('button', { name: 'Compare with Azure capture', exact: true }).click()
 }
 async function setup(page: Page, capture = observationFixture()) {
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'design.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(comparisonDesign())) })
   await open(page)
   await page.getByLabel('Azure comparison capture file').setInputFiles({ name: 'capture-v2.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(capture)) })
@@ -19,7 +19,7 @@ async function setup(page: Page, capture = observationFixture()) {
 }
 test('custom-table comparison stays table-scoped, local and translated when the scope changes', async ({ page }) => {
   const capture = contextObservationFixture(), design = importAzureCapture({ ...capture, version: 1 })
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   await page.getByLabel('Import topology file').setInputFiles({ name: 'contexts.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(design)) })
   const saved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
   await open(page)
@@ -30,7 +30,7 @@ test('custom-table comparison stays table-scoped, local and translated when the 
   await expect(panel(page).locator('.comparison-finding.match').filter({ has: page.getByRole('button', { name: '10.1.0.0/24', exact: true }) })).toHaveCount(1)
   await expect(panel(page).locator('.comparison-finding.match').filter({ has: page.getByRole('button', { name: '10.2.0.0/24', exact: true }) })).toHaveCount(1)
   await page.locator('header [data-language-selector]').selectOption('ja')
-  const japanese = page.getByRole('dialog', { name: 'Azure の取得データと比較', exact: true })
+  const japanese = page.getByRole('dialog', { name: 'Azure ファイル', exact: true })
   await expect(japanese.getByLabel('比較するハブのルート テーブル')).toHaveValue('business')
   await expect(japanese.getByRole('link', { name: '#22', exact: true })).toBeVisible()
   await japanese.getByLabel('比較するハブのルート テーブル').selectOption('defaultRouteTable')
@@ -43,7 +43,7 @@ test('custom-table comparison stays table-scoped, local and translated when the 
 
 test('custom route inspection never substitutes Default and explains unknown contexts in both languages', async ({ page }) => {
   const design = importAzureCapture({ ...contextObservationFixture(), version: 1 })
-  await page.goto('/')
+  await page.goto('/?mode=vwan')
   const upload = () => page.getByLabel('Import topology file').setInputFiles({
     name: 'contexts.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(design)),
   })
@@ -110,7 +110,7 @@ test('missing and additional routes retain evidence, Japanese interaction, bound
   expect(report.report.rows.some((row: { status: string }) => row.status === 'design-only')).toBe(true)
   expect(report.report.observedRows.some((row: { addressPrefixes: string[] }) => row.addressPrefixes.includes('10.88.0.0/24'))).toBe(true)
   await page.locator('header [data-language-selector]').selectOption('ja')
-  const japanese = page.getByRole('dialog', { name: 'Azure の取得データと比較', exact: true })
+  const japanese = page.getByRole('dialog', { name: 'Azure ファイル', exact: true })
   await expect(japanese.locator('.comparison-finding.design-only')).toContainText('設計にのみ存在するルート')
   await page.getByLabel('Azure 比較用の取得ファイル').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from('{"version":2}') })
   await expect(japanese.getByRole('alert')).toContainText('以前の観測データと設計は保持されました')
@@ -132,7 +132,7 @@ test('denied observations never become missing routes and routing edits invalida
   await panel(page).getByRole('button', { name: 'Compare captured fields', exact: true }).click()
   await expect(panel(page).locator('.comparison-finding.design-only')).toHaveCount(0)
   await expect(panel(page).locator('.comparison-finding.unknown')).toContainText('Missing routes are not inferred')
-  await panel(page).getByRole('button', { name: 'Close Compare with Azure capture', exact: true }).click()
+  await panel(page).getByRole('button', { name: 'Close Azure files', exact: true }).click()
   await page.getByLabel('Select hub Desired hub', { exact: true }).focus()
   await page.keyboard.press('Shift+F10')
   await page.getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()

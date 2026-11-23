@@ -91,6 +91,6 @@
   .simulator-shell[data-ui-preview] .unified-topbar-left,
   .simulator-shell.canvas-maximized .unified-topbar-left { grid-column: 1 / -1; grid-row: 2; }
   .simulator-shell[data-ui-preview] .unified-brand { display: none; }
-  .simulator-shell[data-ui-preview]:not([data-header-actions]) .unified-topbar-left > :not(.workspace-header-toggle, .document-artifact-details, [data-testid="workspace-library-open"]) { display: none; }
+  .simulator-shell[data-ui-preview]:not([data-header-actions]) .unified-topbar-left > :not(.workspace-header-toggle, .document-artifact-details, [data-testid="workspace-library-open"], [data-testid="workspace-azure-button"]) { display: none; }
   .simulator-shell[data-ui-preview]:not([data-header-actions]) :is(.aznet-topbar-controls, .unified-topbar-controls) { display: none; }
 }

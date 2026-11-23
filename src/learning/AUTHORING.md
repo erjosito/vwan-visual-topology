@@ -538,7 +538,11 @@ claim; those human evidence gates remain tracked under #160/#219.
 
 Quiz options use authored order, comparable detail and grammatical structure,
 and answer-specific explanations. Preserving old choice IDs preserves old
-award/answer identities. Automated qualification is not an answer-blind SME
+award/answer identities. In `curriculum-v2.ts`, each `quiz()` call explicitly
+specifies the original correct choice `id` and its `position`; never derive
+either from a global counter or another question's order. Hints are optional,
+task-specific conceptual help, separate from native navigation instructions.
+Automated qualification is not an answer-blind SME
 review and does not establish learning effectiveness.
 
 ## HA routing qualification (#222)

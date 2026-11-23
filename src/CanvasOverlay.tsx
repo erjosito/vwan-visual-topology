@@ -4,8 +4,9 @@ import type { ReactNode } from 'react'
 import { hasPendingConfiguration } from './configuration-selection'
 import { useWorkspaceSession } from './workspace-context'
 
-export function CanvasOverlay({ title, children, onClose, className = '', focusOnOpen = true }: {
+export function CanvasOverlay({ title, children, onClose, className = '', focusOnOpen = true, restoreFocus = false }: {
   title: string; children: ReactNode; onClose: () => void; className?: string; focusOnOpen?: boolean
+  restoreFocus?: boolean
 }) {
   const panel = useRef<HTMLDivElement>(null)
   const session = useWorkspaceSession()
@@ -29,6 +30,11 @@ export function CanvasOverlay({ title, children, onClose, className = '', focusO
   }, [configurationOwner, configurationKey])
   const [position, setPosition] = useState<{ x: number; y: number }>()
   const drag = useRef<{ x: number; y: number; left: number; top: number } | undefined>(undefined)
+  useLayoutEffect(() => {
+    if (!restoreFocus) return
+    const opener = document.activeElement
+    return () => { if (opener instanceof HTMLElement && opener.isConnected) opener.focus({ preventScroll: true }) }
+  }, [restoreFocus])
   useEffect(() => {
     const element = panel.current!
     if (focusOnOpen && !element.contains(document.activeElement)) element.focus({ preventScroll: true })

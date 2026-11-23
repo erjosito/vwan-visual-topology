@@ -83,7 +83,7 @@ interface AzureNetAppProps {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
-const AzureCapturePanel = lazy(() => import('./AzureCapturePanel'))
+const AzurePanel = lazy(() => import('./AzurePanel').then((module) => ({ default: module.AzurePanel })))
 const Explain = lazy(() => import('../learning/Explain').then((module) => ({ default: module.Explain })))
 const WarningAcknowledgement = lazy(() => import('../WarningAcknowledgement').then((module) => ({ default: module.WarningAcknowledgement })))
 const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls }))
@@ -92,7 +92,6 @@ const VpnNatGatewayEditor = lazy(() => import('../VpnNatEditor').then((module) =
 const BgpRouteTable = lazy(() => import('./BgpRouteTable').then((module) => ({ default: module.BgpRouteTable })))
 const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ default: module.SampleGallery })))
 const ErLocationInfoModal = lazy(() => import('../ErLocationInfoModal').then((module) => ({ default: module.ErLocationInfoModal })))
-const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const VnetConnectionEditor = lazy(() => import('./VnetConnectionEditor'))
 const GatewayCoexistenceAutoFix = lazy(() => import('./GatewayCoexistenceAutoFix'))
@@ -111,8 +110,6 @@ const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => 
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
-const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
-const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VnetRoutingSettings = lazy(() => import('./VnetRoutingSettings'))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
 const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
@@ -194,6 +191,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [hubTableInspection, setHubTableInspection] = useWorkspaceEditorState<{ hubId: string; tableId: string; prefix?: string; firewall?: boolean }>('aznet.hubTable')
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useWorkspaceEditorState('aznet.diagnosticBadges', true)
   const [captureComparison, setCaptureComparison] = useWorkspaceEditorState<AzNetComparisonReport | null>('aznet.captureComparison', null)
+  const [captureRevision, setCaptureRevision] = useWorkspaceEditorState<string>('aznet.captureRevision')
   const [captureNotices, setCaptureNotices] = useWorkspaceEditorState<string[]>('aznet.captureNotices', [])
   const [captureObservations, setCaptureObservations] = useWorkspaceEditorState<AzCapturedObservations | null>('aznet.captureObservations', null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -370,6 +368,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     applyLoadedTopology('', admitted)
     setCaptureNotices(imported.warnings)
     setCaptureComparison(importedComparison)
+    setCaptureRevision(azRoutingInput(imported.topology).revision)
     setCaptureObservations(imported.observations ?? null)
     setWorkspaceNotice('')
     setActiveTab('azure')
@@ -2554,6 +2553,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           </div>
 
           <WorkspaceMenu />
+          <button type="button" className="aznet-btn" data-testid="workspace-azure-button" onClick={() => setActiveTab('azure')}>{t('Azure')}</button>
         </div>
 
         <div className="aznet-topbar-controls">
@@ -2815,6 +2815,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       imported.observations,
                     )
                     setCaptureComparison(report)
+                    setCaptureRevision(baselineRevision)
                     setActiveTab('azure')
                   }
                 }
@@ -3044,7 +3045,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
         {vnetConnectionId && <Suspense fallback={null}><VnetConnectionEditor key={vnetConnectionId}
           topology={topology} vnetId={vnetConnectionId} commit={commitTopology} onClose={() => setVnetConnectionId(undefined)} /></Suspense>}
-        {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
+        {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay restoreFocus={activeTab === 'azure'}
           key={guidanceRevision}
           focusOnOpen={!guidanceNavigation}
           title={{
@@ -4977,19 +4978,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
             {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
             {activeTab === 'azure' && (
-              <>
-                {(captureObservations?.vngBgpPeerStatus || captureObservations?.vngLearnedRoutes || captureObservations?.vngAdvertisedRoutes || captureObservations?.vngBgpEndpoints) && <Suspense fallback={null}>
-                  <GatewayBgpNeighborsPanel observations={captureObservations} />
-                </Suspense>}
-                {(captureObservations?.arsLearnedRoutes || captureObservations?.arsAdvertisedRoutes) && <Suspense fallback={null}>
-                  <CapturedArsRoutesPanel observations={captureObservations!} />
-                </Suspense>}
-                <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureCapturePanel
-                  notices={captureNotices} comparison={captureComparison}
-                  onImport={() => fileInputRef.current?.click()} onCompare={() => compareFileInputRef.current?.click()} /></Suspense>
-
-                <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzBicepExport topology={topology} /></Suspense>
-              </>
+              <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzurePanel
+                topology={topology} simulation={simulation} observations={captureObservations} comparison={captureComparison}
+                notices={captureNotices} stale={captureRevision !== baselineRevision}
+                onCaptured={(observations, comparison, warnings) => {
+                  setCaptureObservations(observations); setCaptureComparison(comparison); setCaptureNotices(warnings); setCaptureRevision(baselineRevision)
+                }} onComparison={(report) => { setCaptureComparison(report); setCaptureRevision(baselineRevision) }}
+                onImportFile={() => fileInputRef.current?.click()} onCompareFile={() => compareFileInputRef.current?.click()} /></Suspense>
             )}
           </div>
         </CanvasOverlay>}

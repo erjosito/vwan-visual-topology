@@ -160,6 +160,47 @@ revocation checks, DNS or enterprise proxies have no other network behavior.
 
 ## Authenticated read-only capture and endpoint acceptance
 
+### Unified Azure panel (#425, first increment only)
+
+The dedicated **Azure** toolbar button opens the canvas-context panel in both
+network modes. The existing File menu entry remains available. Web and Windows
+retain collector downloads, capture-file comparison and scoped Bicep starter
+export; web shows disabled local-session controls with an always-visible
+Windows-only explanation.
+
+On Windows, deliberately request **Read existing Azure session**. The displayed
+current subscription is a suggestion only: select the tenant/subscription, read
+targets, select the WAN (VWAN design) or resource group (mixed-network design),
+and confirm the displayed scope before **Capture → Compare current design**.
+The existing native broker confirmation remains required. Every resource read
+uses the explicitly selected subscription; no global CLI default is changed.
+Changing scope or completing/failing collection clears confirmation.
+
+The fixed, read-only broker now requests effective-route evidence from the same
+collectors used by the manual workflow. This can require action permissions
+beyond Reader; denied, missing and unsupported evidence remains partial/unknown,
+not healthy-empty routing. Credentials stay in the CLI process, never topology
+JSON or the renderer; session results expose only cloud and account identity.
+No arbitrary command, login, installation, elevation, deployment, deletion or
+binding/persistence capability is added. Re-reading session clears previous
+scope, and late collection results cannot attach to another workspace.
+
+Direct capture attaches timestamped observations to the existing comparison
+workflow without resetting the open design or undo history. VWAN comparison
+separates captured structural fields from route evidence; mixed-network comparison
+is explicitly NIC-route-only, not configuration-drift detection. Observations
+and mappings remain transient and are not saved as deployment bindings.
+**Import Azure as a new design** is a separate, explicit import/review action;
+it is never the result of the direct Capture → Compare operation.
+
+The reported v0.7.0 `┬╖` banner is not reproduced by source/browser fixture
+qualification: the source contains Unicode middle dots and the desktop-renderer
+regression checks for the corrupt sequence. This is not qualification of an old
+installed package or a claim that its packaging/encoding cause was resolved.
+Deployment, bindings and cleanup remain outside this first increment of #425.
+Old-installer encoding investigation is tracked independently in
+[#430](https://github.com/erjosito/vwan-visual-topology/issues/430).
+
 **2026-11-16 gate:** #106/comments and this work request do not supply an
 explicitly approved tenant/subscription and WAN/resource-group target.
 Consequently no cached account inventory, login, token request or live Azure

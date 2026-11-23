@@ -124,7 +124,11 @@ test('synthetic 200-VNet capture remains selectable, bounded and lossless throug
   const download = page.waitForEvent('download')
   await downloadTopologyCopy(page)
   const native = JSON.parse((await contents(await download)).toString()) as Topology
+  const tabs = page.getByRole('tablist', { name: 'Designs', exact: true }).getByRole('tab')
+  const tabCount = await tabs.count()
   await upload(page, native)
+  await expect(tabs).toHaveCount(tabCount + 1)
+  await expect.poll(() => saved(page)).toEqual(native)
   await page.reload()
   await expect(svg.locator('.spoke-node')).toHaveCount(200)
   expect(await saved(page)).toEqual(native)
