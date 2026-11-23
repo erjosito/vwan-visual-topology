@@ -444,9 +444,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       for (const tab of targets) documents.forget(tab.id)
       if (targets.some(tab => tab.id === active?.id)) {
         const remaining = next.tabs.find(tab => tab.id === next.activeId)
-        if (remaining) {
-          activateTab(remaining, false)
-        }
+        if (remaining) activateTab(remaining, false)
         else { setActive(undefined); setLibraryOpen(true) }
       }
       setClosing(undefined)

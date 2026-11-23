@@ -6,6 +6,78 @@ import { workspaceArchiveKey, workspaceSessionKey, workspaceStorageKeys } from '
 import { observationFixture } from '../tests/azure-observation-fixture'
 import { exercises } from '../src/learning/exercises'
 
+for (const profile of [
+  { vwan: true, language: 'en', width: 1440, zoom: 1 },
+  { vwan: false, language: 'en', width: 390, zoom: 1 },
+  { vwan: true, language: 'ja', width: 390, zoom: 1.5 },
+  { vwan: false, language: 'ja', width: 1440, zoom: 1.5 },
+] as const) {
+  test(`${profile.vwan ? 'VWAN' : 'mixed'} ${profile.language}: every tab has an independent pointer-close target at ${profile.width}/${profile.zoom}`, async ({ page }) => {
+    const topology = structuredClone(exercises[profile.vwan ? 0 : 1].starter.topology)
+    topology.name = 'Duplicate long topology label that must not cover an adjacent close action'
+    await page.addInitScript(({ topology, profile }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', profile.language)
+      localStorage.setItem('aznet-theme', profile.language === 'ja' ? 'dark' : 'light')
+      localStorage.setItem('aznet-ui-preview:v1', String(profile.language === 'en'))
+      localStorage.setItem(profile.vwan ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1',
+        JSON.stringify(profile.vwan ? topology : { sampleId: '', topology }))
+    }, { topology, profile })
+    await page.setViewportSize({ width: profile.width, height: 1000 })
+    await page.goto(`/?mode=${profile.vwan ? 'vwan' : 'full'}`)
+    await page.evaluate(zoom => { document.documentElement.style.zoom = String(zoom) }, profile.zoom)
+    const navigation = page.locator('.workspace-tabs')
+    const tabs = navigation.getByRole('tab')
+    const add = async (name: string) => {
+      await page.locator('input[type="file"]').first()
+        .setInputFiles({ name: 'close-target.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...topology, name })) })
+    }
+    await add(topology.name)
+    await add('Third topology')
+    await expect(navigation.locator('.workspace-tab-close')).toHaveCount(3)
+    expect((await new AxeBuilder({ page }).include('.workspace-tabs').analyze()).violations).toEqual([])
+    await expect(navigation.getByRole('tablist').getByRole('tab')).toHaveCount(3)
+    const manifest = () => page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!))
+    const close = async (index: number, active: boolean, cancel = false) => {
+      if (active) await tabs.nth(index).click()
+      const before = await manifest()
+      const target = before.tabs[index]
+      const button = navigation.locator('.workspace-tab-close').nth(index)
+      await button.scrollIntoViewIfNeeded()
+      const bounds = await button.boundingBox()
+      expect(bounds!.width).toBeGreaterThanOrEqual(24)
+      expect(bounds!.height).toBeGreaterThanOrEqual(24)
+      await button.click()
+      const dialog = page.getByRole('dialog', { name: profile.language === 'ja' ? '閉じる前に変更を保存しますか?' : 'Save changes before closing?', exact: true })
+      if (cancel) {
+        await dialog.getByRole('button', { name: profile.language === 'ja' ? 'キャンセル' : 'Cancel', exact: true }).click()
+        expect(await manifest()).toEqual(before)
+        await button.click()
+      }
+      await dialog.getByRole('button', { name: profile.language === 'ja' ? '破棄して閉じる' : 'Discard and close', exact: true }).click()
+      const after = await manifest()
+      expect(after.tabs.map((tab: { id: string }) => tab.id)).toEqual(before.tabs.filter((tab: { id: string }) => tab.id !== target.id).map((tab: { id: string }) => tab.id))
+      if (!active) expect(after.activeId).toBe(before.activeId)
+      await expect(page.locator(`[id="workspace-tab-${after.activeId}"]`)).toBeFocused()
+      expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), target.id)).not.toBeNull()
+    }
+    await close(0, profile.vwan, true)
+    await add('Fourth topology')
+    await close(1, !profile.vwan)
+    await add('Fifth topology')
+    await tabs.first().click()
+    await close(2, profile.vwan)
+    await expect(tabs).toHaveCount(2)
+    await tabs.first().focus()
+    await page.keyboard.press('End')
+    await expect(tabs.last()).toBeFocused()
+    const keyboardClose = navigation.locator('.workspace-tab-close').last()
+    await keyboardClose.focus()
+    await page.keyboard.press('Enter')
+    await page.getByRole('dialog').getByRole('button', { name: profile.language === 'ja' ? 'キャンセル' : 'Cancel', exact: true }).click()
+    await expect(keyboardClose).toBeFocused()
+  })
+}
+
 for (const vwan of [true, false]) {
   test(`${vwan ? 'VWAN' : 'mixed'} final close creates one fresh editable document after cancellation and unsuccessful save`, async ({ page }) => {
     const topology = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
@@ -177,7 +249,7 @@ for (const vwan of [true, false]) {
       localStorage.setItem(key, JSON.stringify(vwan ? topology : { sampleId: '', topology }))
     }, { topology, vwan })
     await page.goto(`/?mode=${vwan ? 'vwan' : 'full'}`)
-    const tabs = page.getByRole('tablist', { name: 'Designs', exact: true })
+    const tabs = page.locator('.workspace-tabs-list')
     await expect(tabs.getByRole('tab', { name: topology.name, exact: true })).toBeVisible()
     for (const name of ['Second design', 'Third design']) {
       await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
