@@ -1,7 +1,7 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Locator, type Page } from '@playwright/test'
 import { nvaBgpTopology } from '../tests/fixtures/nva-bgp'
 import { bgpNeighborTopology, bgpNeighborVwanTopology } from '../tests/fixtures/bgp-neighbors'
-import { bgpResourceKey } from '../src/bgp-neighbors'
+import { bgpResourceKey, type BgpResourceRef } from '../src/bgp-neighbors'
 import AxeBuilder from '@axe-core/playwright'
 import { resolve } from 'node:path'
 
@@ -14,14 +14,70 @@ async function load(page: Page, mode: string, topology = nvaBgpTopology()) {
   await page.goto(`/?mode=${mode}`)
 }
 
-async function open(page: Page, chip: string, action: string) {
-  await page.getByTestId(`aznet-chip-${chip}`).focus()
+async function open(page: Page, target: string | Locator, action: string) {
+  const node = typeof target === 'string' ? page.getByTestId(`aznet-chip-${target}`) : target
+  await (await node.getAttribute('role') === 'group' ? node.locator(':scope > .network-node') : node).focus()
   await page.keyboard.press('Shift+F10')
   await page.getByRole('menuitem', { name: action, exact: true }).click()
 }
 
 async function saved(page: Page) {
   return page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+}
+
+for (const profile of [
+  { mode: 'vwan', preview: true, language: 'en', width: 1440 },
+  { mode: 'hub-spoke', preview: false, language: 'en', width: 1440 },
+  { mode: 'full', preview: true, language: 'ja', width: 390 },
+] as const) {
+  test(`${profile.mode}: contextual BGP inspection carries each supported resource without a generic top-bar action`, async ({ page }) => {
+    const native = bgpNeighborVwanTopology()
+    native.spokes.push({ id: 'plain-vnet', name: 'Plain VNet', hubId: 'managed-hub', prefixes: ['10.80.0.0/16'] })
+    const topology = profile.mode === 'vwan' ? native : bgpNeighborTopology()
+    if (profile.mode === 'full' && 'vwanHubs' in topology) topology.vwanHubs = native.hubs
+    const key = profile.mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    const original = profile.mode === 'vwan' ? topology : { sampleId: '', topology }
+    await page.addInitScript(({ profile, key, original }) => {
+      localStorage.setItem('aznet-ui-preview:v1', String(profile.preview))
+      localStorage.setItem('vwan-visual-topology:language:v1', profile.language)
+      localStorage.setItem('aznet-theme', profile.language === 'ja' ? 'dark' : 'light')
+      localStorage.setItem(key, JSON.stringify(original))
+    }, { profile, key, original })
+    await page.setViewportSize({ width: profile.width, height: 1000 })
+    await page.goto(`/?mode=${profile.mode}`)
+    await expect(page.getByTestId(profile.mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+    const label = profile.language === 'ja' ? 'BGP ネイバー' : 'BGP neighbors'
+    await expect(page.getByRole('banner').getByRole('button', { name: label, exact: true })).toHaveCount(0)
+    const targets: BgpResourceRef[] = profile.mode === 'vwan' ? [
+      { kind: 'vwan-hub', id: 'managed-hub' }, { kind: 'site', id: 'branch' }, { kind: 'er-location', id: 'edge-location' },
+    ] : [
+      { kind: 'gateway', id: 'vpn-aa' }, { kind: 'gateway', id: 'vpn-as' }, { kind: 'gateway', id: 'er-gateway' },
+      { kind: 'appliance', id: 'reader' }, { kind: 'route-server', id: 'west-ars' },
+      { kind: 'site', id: 'branch' }, { kind: 'er-location', id: 'edge-location' },
+      ...(profile.mode === 'full' ? [{ kind: 'vwan-hub' as const, id: 'managed-hub' }] : []),
+    ]
+    for (const resource of targets) {
+      const node = profile.mode === 'vwan' ? page.locator(`[data-node-id="${resource.id}"]`)
+        : page.getByTestId(resource.kind === 'site' ? `aznet-site-${resource.id}`
+          : resource.kind === 'er-location' ? `aznet-erloc-${resource.id}`
+            : resource.kind === 'vwan-hub' ? `aznet-vwanhub-${resource.id}` : `aznet-chip-${resource.id}`)
+      await open(page, node, label)
+      const dialog = page.getByRole('dialog', { name: label, exact: true })
+      await expect(dialog.getByRole('combobox', {
+        name: profile.language === 'ja' ? 'ローカル BGP リソース' : 'Local BGP resource', exact: true,
+      })).toHaveValue(bgpResourceKey(resource))
+      await page.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+    }
+    const unsupported = profile.mode === 'vwan' ? page.locator('[data-node-id="plain-vnet"]')
+      : page.getByTestId(`aznet-vnet-${'vnets' in topology ? topology.vnets[0].id : ''}`)
+    await (await unsupported.getAttribute('role') === 'group' ? unsupported.locator(':scope > .network-node') : unsupported).focus()
+    await page.keyboard.press('Shift+F10')
+    await expect(page.getByRole('menu')).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: label, exact: true })).toHaveCount(0)
+    await page.keyboard.press('Escape')
+    expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key)).toEqual(original)
+  })
 }
 
 for (const mode of ['hub-spoke', 'full']) {
@@ -72,11 +128,11 @@ for (const mode of ['hub-spoke', 'full']) {
   test(`${mode} simulated BGP neighbors separate AA, AS and unmapped ER relationships and never substitute a deleted resource`, async ({ page }) => {
     const topology = bgpNeighborTopology()
     await load(page, mode, topology)
-    await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
+    await open(page, 'vpn-aa', 'BGP neighbors')
     const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
     const resource = dialog.getByLabel('Local BGP resource')
     const rows = dialog.getByTestId('bgp-neighbor-rows').locator('tbody tr')
-    await resource.selectOption(bgpResourceKey({ kind: 'gateway', id: 'vpn-aa' }))
+    await expect(resource).toHaveValue(bgpResourceKey({ kind: 'gateway', id: 'vpn-aa' }))
     await expect(dialog.getByLabel('Local BGP instance').locator('option')).toHaveCount(2)
     await expect(rows).toHaveCount(1)
     await resource.selectOption(bgpResourceKey({ kind: 'gateway', id: 'vpn-as' }))
@@ -289,9 +345,9 @@ for (const mode of ['vwan', 'full']) test(`${mode} managed BGP relationships sho
   await page.addInitScript(({ key, topology, mode }) => localStorage.setItem(key,
     JSON.stringify(mode === 'vwan' ? topology : { sampleId: '', topology })), { key, topology, mode })
   await page.goto(`/?mode=${mode}`)
-  await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
+  await open(page, mode === 'vwan' ? page.locator('[data-node-id="managed-hub"]') : page.getByTestId('aznet-vwanhub-managed-hub'), 'BGP neighbors')
   const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
-  await dialog.getByLabel('Local BGP resource').selectOption(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
+  await expect(dialog.getByLabel('Local BGP resource')).toHaveValue(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
   await expect(dialog.getByLabel('Local BGP instance')).toHaveCount(0)
   const rows = dialog.getByTestId('bgp-managed-rows').locator('tbody tr')
   await expect(rows).toHaveCount(3)
@@ -332,9 +388,9 @@ test('static VWAN routing and disabled ER remain visible without implying BGP se
   topology.erLinks![1].enabled = false
   await page.addInitScript((value) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(value)), topology)
   await page.goto('/?mode=vwan')
-  await page.getByRole('button', { name: 'BGP neighbors', exact: true }).click()
+  await open(page, page.locator('[data-node-id="managed-hub"]'), 'BGP neighbors')
   const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
-  await dialog.getByLabel('Local BGP resource').selectOption(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
+  await expect(dialog.getByLabel('Local BGP resource')).toHaveValue(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
   const rows = dialog.getByTestId('bgp-managed-rows').locator('tbody tr')
   await expect(rows.filter({ hasText: 'managed-vpn' })).toContainText('Not applicable (static routing)')
   await expect(rows.filter({ has: page.getByText('er-hub', { exact: true }) })).toContainText('Disabled / unavailable')

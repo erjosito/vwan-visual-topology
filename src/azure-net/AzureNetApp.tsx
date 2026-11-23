@@ -2576,7 +2576,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
             selected: canvasSelection ? azWorkspaceIdentity(canvasSelection) : undefined,
             onSelect: selectCanvasObject,
           }} />
-          <button type="button" className="aznet-btn" onClick={() => openBgpNeighbors(canvasSelection)}>{t('BGP neighbors')}</button>
           <LearningTools key={simulatorMode} document={{ mode: simulatorMode === 'hub-spoke' ? 'hub-spoke' : 'full', topology }}
             onGuide={(cue) => {
               if (resolveGuidance({ mode: 'full', topology }, cue).reason) return
