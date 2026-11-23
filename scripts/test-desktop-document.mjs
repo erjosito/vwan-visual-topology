@@ -112,6 +112,30 @@ try {
   expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved after reload')
   expect(await readFile(third, 'utf8')).toBe(content('UI saved after reload'))
   await application.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1) })
+  await application.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1440, 1000) })
+  await page.getByTestId('workspace-library-open').click()
+  await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: 'Close all topology tabs', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Save changes before closing?', exact: true }).getByRole('button', { name: 'Discard and close', exact: true }).click()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toHaveCount(0)
+  const replacementId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId)
+  const replacement = await page.evaluate(id => {
+    const raw = JSON.parse(localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`))
+    return { topology: raw.topology ?? raw,
+      cloud: localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:cloud`),
+      artifact: localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:artifact`) }
+  }, replacementId)
+  expect(Object.values(replacement.topology).filter(Array.isArray).every(values => values.length === 0)).toBe(true)
+  expect(replacement.cloud).toBeNull()
+  expect(replacement.artifact).toBeNull()
+  await page.keyboard.press('Control+s')
+  const freshSave = page.getByRole('dialog', { name: 'Save As', exact: true })
+  await expect(freshSave).toBeVisible()
+  await freshSave.getByRole('button', { name: 'Cancel', exact: true }).click()
+  expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved after reload')
+  await page.reload()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')).activeId)).toBe(replacementId)
   await page.goto('app://simulator/docs/index.html')
   const untrusted = await page.evaluate(async () => {
     try {
