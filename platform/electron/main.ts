@@ -121,7 +121,7 @@ void app.whenReady().then(async () => {
     const approved = await dialog.showMessageBox(window, {
       type: 'question', buttons: ['Cancel', 'Collect read-only'], defaultId: 0, cancelId: 0,
       message: 'Read Azure networking configuration using your existing local CLI session?',
-      detail: 'The explicitly selected public-Azure tenant/subscription and WAN/resource group will be read. No login or resource changes. The capture stays local and may contain sensitive network data. Review it before import.',
+      detail: 'The explicitly selected public-Azure tenant/subscription and WAN/resource group will be read, including effective routes (additional action permissions may be required). No login or resource changes. The capture stays local and may contain sensitive network data. Compare it without replacing the open design, or review it before a separate import.',
     })
     return approved.response === 1 ? broker.collect(request as Collection) : null
   })

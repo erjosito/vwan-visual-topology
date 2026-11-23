@@ -7,6 +7,18 @@ import { tmpdir } from 'node:os'
 const subscriptionId = '00000000-0000-4000-8000-000000000002', tenantId = '00000000-0000-4000-8000-000000000001'
 const target = `/subscriptions/${subscriptionId}/resourceGroups/fixture-network/providers/Microsoft.Network/virtualWans/fixture-wan`
 
+it('returns only session identity and an explicitly non-authoritative default suggestion', async () => {
+  const broker = new AzureBroker('internal', 'collectors', async () => JSON.stringify({
+    cloud: { name: 'AzureCloud', resourceManager: 'https://management.azure.com/', accessToken: 'secret' },
+    accounts: [{ id: subscriptionId, name: 'Suggested', tenantId, state: 'Enabled', isDefault: true, refreshToken: 'secret' }],
+  }))
+  const session = await broker.accounts()
+  expect(session.accounts[0]).toEqual({ id: subscriptionId, name: 'Suggested', tenantId, state: 'Enabled', isDefault: true })
+  expect(JSON.stringify(session)).not.toContain('secret')
+  const invalid = new AzureBroker('internal', 'collectors', async () => JSON.stringify({ cloud: { name: 'AzureCloud' }, accounts: [null] }))
+  await expect(invalid.accounts()).rejects.toThrow('Unreadable account inventory')
+})
+
 it('overrides inherited telemetry and file logging settings in the actual PowerShell child without changing its parent', async () => {
   const root = resolve('test-artifacts', 'desktop')
   await mkdir(root, { recursive: true })

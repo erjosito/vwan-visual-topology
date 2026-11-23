@@ -91,7 +91,12 @@ export class AzureBroker {
   accounts() { return this.track(async () => {
     const result = JSON.parse(await this.execute([join(this.scriptRoot, 'azure-read.ps1'), '-Operation', 'accounts'], 60_000, this.controller.signal))
     if (result.cloud?.name !== 'AzureCloud' || !Array.isArray(result.accounts)) throw new Error('Unsupported cloud or no readable account inventory. Public Azure only; no login attempted.')
-    return result as { cloud: { name: string; resourceManager: string }; accounts: { id: string; name: string; tenantId: string; state: string }[] }
+    const accounts = result.accounts.map((account: Record<string, unknown>) => {
+      if (!account || ['id', 'name', 'tenantId', 'state'].some((key) => typeof account[key] !== 'string')) throw new Error('Unreadable account inventory. Read the existing Azure CLI session again.')
+      return { id: account.id as string, name: account.name as string, tenantId: account.tenantId as string,
+        state: account.state as string, isDefault: account.isDefault === true }
+    })
+    return { cloud: { name: result.cloud.name as string, resourceManager: result.cloud.resourceManager as string }, accounts }
   }) }
 
   targets(scope: Scope) { return this.track(async () => {

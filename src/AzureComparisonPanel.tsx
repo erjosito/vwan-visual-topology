@@ -5,15 +5,17 @@ import type { ObjectSelection, Topology } from './model'
 import { routingRevision } from './diagnostics'
 import { armKey, parseAzureObservation } from './azure-observation'
 import type { AzureObservation } from './azure-observation'
+import type { ReactNode } from 'react'
 import { compareAzure, comparisonHopChoices, comparisonProfileKey, comparisonStatuses, defaultComparisonProfile } from './azure-comparison'
 import type { ComparisonProfile, ComparisonReport, ComparisonRow } from './azure-comparison'
 import collectorUrl from './collect-azure-vwan.ps1?url'
 import { DEFAULT_HUB_TABLE } from './hub-routing'
 
 export interface ComparisonSession { observation: AzureObservation; profile: ComparisonProfile; report?: ComparisonReport }
-export function AzureComparisonPanel({ topology, session, onSession, onSelect, onClose }: {
+export function AzureComparisonPanel({ topology, session, onSession, onSelect, onClose, embedded = false }: {
   topology: Topology; session?: ComparisonSession; onSession: (session?: ComparisonSession) => void
   onSelect: (selection?: ObjectSelection) => void; onClose: () => void
+  embedded?: boolean
 }) {
   const [error, setError] = useState('')
   const [view, setView] = useState('differences')
@@ -76,7 +78,7 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
       </>}
     </details>
   </article>
-  return <CanvasOverlay title={t('Compare with Azure capture')} className="azure-comparison" onClose={onClose}>
+  const contents: ReactNode = <>
     <p className="muted">{t('Attach an offline observation without replacing the design. This browser never reads your Azure CLI credentials or calls Azure.')}</p>
     <p><a className="button-link" href={collectorUrl} download="collect-azure-vwan.ps1">{t('Download Azure collector')}</a> <a className="button-link" href="https://github.com/erjosito/vwan-visual-topology/blob/main/public/scripts/collect-azure-vwan.ps1" target="_blank" rel="noopener noreferrer">{t('View script on GitHub')}</a> <button onClick={() => input.current?.click()}>{t('Load comparison capture')}</button></p>
     <pre className="azure-code">{`Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/erjosito/vwan-visual-topology/main/public/scripts/collect-azure-vwan.ps1' -OutFile ./collect-azure-vwan.ps1\n./collect-azure-vwan.ps1 -VirtualWanId '/subscriptions/SUB/resourceGroups/RG/providers/Microsoft.Network/virtualWans/WAN' -IncludeEffectiveRoutes -OutputFile ./vwan-observation.json`}</pre>
@@ -140,5 +142,7 @@ export function AzureComparisonPanel({ topology, session, onSession, onSelect, o
         <button onClick={exportReport}>{t('Export local comparison report')}</button>
       </section>}
     </>}
-  </CanvasOverlay>
+  </>
+  return embedded ? <section className="azure-comparison">{contents}</section>
+    : <CanvasOverlay title={t('Compare with Azure capture')} className="azure-comparison" onClose={onClose}>{contents}</CanvasOverlay>
 }
