@@ -8,7 +8,6 @@ import '../RoutingIntentNotice'
 
 registerJapaneseMessages({
   'Connection static routes': '接続の静的ルート',
-  'Propagate static route': '静的ルートを伝達',
   'Indirect spoke prefixes': '間接スポークのプレフィックス',
   'Spoke Firewall/NVA next hop': 'スポーク Firewall/NVA の次ホップ',
   'Add connection static route': '接続の静的ルートを追加',

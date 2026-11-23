@@ -7,8 +7,9 @@ function scope(topology: AzNetTopology) {
     attachments: [
       ...topology.vnets.filter((vnet) => vnet.vwanHubAttachment).map((vnet) =>
         ({ key: `vnet:${vnet.id}`, hubId: vnet.vwanHubAttachment!.hubId, owner: vnet.vwanHubAttachment! })),
-      ...[...topology.erLinks, ...topology.vpnConnections].filter((link) => link.targetKind === 'vwan-hub')
-        .map((owner) => ({ key: owner.id, hubId: owner.targetId, owner })),
+      ...(['erLinks', 'vpnConnections'] as const).flatMap((kind) =>
+        topology[kind].filter((link) => link.targetKind === 'vwan-hub')
+          .map((owner) => ({ key: `${kind}:${owner.id}`, hubId: owner.targetId, owner }))),
     ],
   }
 }

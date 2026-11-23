@@ -4,6 +4,7 @@ import { routingIntentConflicts, routingIntentManaged, type IntentHub } from './
 
 registerJapaneseMessages({
   'Managed by routing intent': 'ルーティング意図により管理',
+  'Private routing intent uses None for connection propagation while Azure programs the security appliance routing domain. This is not manual connection isolation.': 'プライベート ルーティング意図では、接続の伝達に None を使用し、Azure がセキュリティ アプライアンスのルーティング ドメインを構成します。これは接続の手動分離ではありません。',
   'Routing intent manages association and propagation for every connection. Default-route receipt and connection static-route advertisement remain independent.': 'ルーティング意図はすべての接続の関連付けと伝達を管理します。既定のルートの受信と接続の静的ルートの広告は独立しています。',
   'Removing all routing policies sets propagation to the default label; Azure does not restore the previous settings. Simulator Undo restores the previous document.': 'すべてのルーティング ポリシーを削除すると、伝達は default ラベルに設定されます。Azure は以前の設定を復元しません。シミュレーターの元に戻す操作は以前のドキュメントを復元します。',
   'Resolve incompatible hub tables and static routes before enabling routing intent. Existing configuration is not deleted automatically.': 'ルーティング意図を有効にする前に、互換性のないハブ テーブルと静的ルートを解消してください。既存の構成は自動的に削除されません。',
@@ -21,6 +22,7 @@ export function RoutingIntentNotice({ hub }: { hub: IntentHub }) {
   return <>
     {routingIntentManaged(hub) && <p role="status"><strong>{t('Managed by routing intent')}</strong>.{' '}
       {t('Routing intent manages association and propagation for every connection. Default-route receipt and connection static-route advertisement remain independent.')}</p>}
+    {hub.routingIntent.private && <p>{t('Private routing intent uses None for connection propagation while Azure programs the security appliance routing domain. This is not manual connection isolation.')}</p>}
     <p>{t('Removing all routing policies sets propagation to the default label; Azure does not restore the previous settings. Simulator Undo restores the previous document.')}</p>
     {conflicts.length > 0 && <div role="alert">
       <p>{t('Resolve incompatible hub tables and static routes before enabling routing intent. Existing configuration is not deleted automatically.')}</p>

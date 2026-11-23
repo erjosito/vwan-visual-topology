@@ -88,6 +88,25 @@ describe('hub route-table contexts', () => {
     expect(privateTopology.spokes[0].hubRouting?.propagatedTableIds).toEqual(['noneRouteTable'])
   })
 
+  it('keeps spoke NVA routing owned by its hosting VNet when intent changes', () => {
+    const before = fixture()
+    before.hubs.forEach((hub) => { delete hub.routeTables })
+    before.spokes.forEach((spoke) => { delete spoke.hubRouting })
+    before.sites = [{ id: 'nva', name: 'NVA', asn: 65002, prefixes: ['172.20.0.0/16'] }]
+    before.connections = [{
+      id: 'nva-peer', name: 'NVA', hubId: 'a', siteId: 'nva', transport: 'SpokeNVA', enabled: true, learnSiteRoutes: true,
+      spokeId: 'default-a', peerIp: '10.4.0.4', inbound: [], outbound: [],
+    }]
+    const next = structuredClone(before)
+    next.hubs[0].routingIntent.private = true
+    applyRoutingIntentEdit(before, next)
+    expect(next.connections[0].hubRouting).toBeUndefined()
+    expect(next.spokes.find((spoke) => spoke.id === 'default-a')!.hubRouting).toEqual(routingIntentConfiguration(next.hubs[0]))
+    const simulation = simulate(validateTopology(next))
+    expect(simulation.firewallTables.a.some((row) => row.prefix === '172.20.0.0/16')).toBe(true)
+    expect(simulation.hubTableCoverage?.a.defaultRouteTable.complete).toBe(true)
+  })
+
   it('blocks incompatible activation without deleting configuration, while allowing local Firewall routes', () => {
     const before = hubFirewallTopology()
     const next = structuredClone(before)
@@ -106,6 +125,26 @@ describe('hub route-table contexts', () => {
     const original = JSON.stringify(imported)
     expect(simulate(imported).hubTableCoverage?.['hub-local'].defaultRouteTable.complete).toBe(false)
     expect(JSON.stringify(imported)).toBe(original)
+  })
+
+  it('protects policy-generated routes from alternate mutations without blocking custom Firewall routes', () => {
+    const before = hubFirewallTopology()
+    before.hubs[0].routeTables = before.hubs[0].routeTables!.filter((table) => table.id === 'defaultRouteTable')
+    before.hubs[0].routingIntent.private = true
+    before.hubs[0].routeTables[0].staticRoutes![0].name = 'private_traffic'
+    const edited = structuredClone(before)
+    edited.hubs[0].routeTables![0].staticRoutes![0].destinations = ['192.168.0.0/16']
+    expect(() => applyRoutingIntentEdit(before, edited)).toThrow(/policy routes are managed by Azure/)
+    const removed = structuredClone(before)
+    removed.hubs[0].routeTables![0].staticRoutes = []
+    expect(() => applyRoutingIntentEdit(before, removed)).toThrow(/policy routes are managed by Azure/)
+    edited.hubs[0].routingIntent.private = false
+    expect(() => applyRoutingIntentEdit(before, edited)).not.toThrow()
+    const custom = structuredClone(before)
+    custom.hubs[0].routeTables![0].staticRoutes!.push({
+      ...structuredClone(custom.hubs[0].routeTables![0].staticRoutes![0]), name: 'custom-firewall', destinations: ['192.168.0.0/16'],
+    })
+    expect(() => applyRoutingIntentEdit(before, custom)).not.toThrow()
   })
 
   it('replays live table-context VNet origins without certifying opaque branch scope', () => {

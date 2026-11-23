@@ -12,6 +12,9 @@ export function routingIntentManaged(hub: Pick<IntentHub, 'routingIntent'>): boo
   return hub.routingIntent.private || hub.routingIntent.internet
 }
 
+export const isRoutingIntentPolicyRoute = (name: string): boolean =>
+  ['private_traffic', 'internet_traffic', 'all_traffic'].includes(name)
+
 export function routingIntentConfiguration(hub: Pick<IntentHub, 'routingIntent'>): HubRoutingConfiguration {
   return hub.routingIntent.private
     ? { status: 'configured', associatedTableId: 'defaultRouteTable', propagatedTableIds: ['noneRouteTable'], labels: [] }
@@ -48,6 +51,7 @@ export interface RoutingIntentScope {
 }
 
 export function applyHubRoutingIntentEdit(before: RoutingIntentScope, after: RoutingIntentScope): void {
+  const previousAttachments = new Map(before.attachments.map((entry) => [entry.key, entry]))
   for (const hub of after.hubs) {
     const oldHub = before.hubs.find((entry) => entry.id === hub.id)
     const changed = oldHub?.routingIntent.private !== hub.routingIntent.private ||
@@ -56,9 +60,16 @@ export function applyHubRoutingIntentEdit(before: RoutingIntentScope, after: Rou
       const oldConflicts = oldHub ? routingIntentConflicts(oldHub) : []
       const conflicts = routingIntentConflicts(hub).filter((conflict) => changed || !oldConflicts.includes(conflict))
       if (conflicts.length) throw new Error(`Routing intent cannot be enabled or extended on ${hub.name}. Resolve these conflicts first: ${conflicts.join('; ')}. No tables or routes were deleted.`)
+      const policyRoutes = (owner: IntentHub) => (owner.routeTables ?? []).flatMap((table) =>
+        (table.staticRoutes ?? []).filter((route) => isRoutingIntentPolicyRoute(route.name))
+          .map((route) => JSON.stringify([table.id, route]))).sort()
+      if (oldHub && routingIntentManaged(oldHub) && JSON.stringify(policyRoutes(oldHub)) !== JSON.stringify(policyRoutes(hub))) {
+        throw new Error('Routing-intent policy routes are managed by Azure. Change the routing policy or additional private prefixes instead.')
+      }
     }
     for (const attachment of after.attachments.filter((entry) => entry.hubId === hub.id)) {
-      const old = before.attachments.find((entry) => entry.key === attachment.key && entry.hubId === hub.id)
+      const previous = previousAttachments.get(attachment.key)
+      const old = previous?.hubId === hub.id ? previous : undefined
       if (routingIntentManaged(hub) && (changed || !old ||
         JSON.stringify(old.owner.hubRouting) !== JSON.stringify(attachment.owner.hubRouting))) {
         attachment.owner.hubRouting = routingIntentConfiguration(hub)

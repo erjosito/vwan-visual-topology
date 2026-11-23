@@ -4,8 +4,9 @@ import { applyHubRoutingIntentEdit } from './routing-intent'
 function scope(topology: Topology) {
   return {
     hubs: topology.hubs,
-    attachments: [...topology.spokes, ...topology.connections, ...(topology.erLinks ?? [])]
-      .filter((entry) => entry.hubId).map((owner) => ({ key: owner.id, hubId: owner.hubId!, owner })),
+    attachments: (['spokes', 'connections', 'erLinks'] as const).flatMap((kind) =>
+      (topology[kind] ?? []).filter((entry) => entry.hubId && (!('transport' in entry) || entry.transport !== 'SpokeNVA'))
+        .map((owner) => ({ key: `${kind}:${owner.id}`, hubId: owner.hubId!, owner }))),
   }
 }
 

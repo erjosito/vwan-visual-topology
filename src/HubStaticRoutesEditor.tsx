@@ -3,7 +3,7 @@ import type { Hub } from './model'
 import { hubRouteTables, NONE_HUB_TABLE } from './hub-routing'
 import { cidr } from './validation'
 import { t } from './i18n'
-import { routingIntentManaged, type IntentHub } from './routing-intent'
+import { isRoutingIntentPolicyRoute, routingIntentManaged, type IntentHub } from './routing-intent'
 import './RoutingIntentNotice'
 
 type Owner = Pick<Hub, 'id' | 'firewall' | 'routeTables'> & Partial<Pick<IntentHub, 'routingIntent'>>
@@ -52,7 +52,7 @@ export function HubStaticRoutesEditor({ hub, onChange, focusFirewall = false }: 
     {hubRouteTables(hub).filter((table) => table.id !== NONE_HUB_TABLE || table.staticRoutes?.length).map((table) =>
       <fieldset key={table.id}><legend>{table.name} · {table.id}</legend>
         {(table.staticRoutes ?? []).map((route, index) => <fieldset key={`${table.id}:${index}`}
-          disabled={managed && ['private_traffic', 'internet_traffic', 'all_traffic'].includes(route.name)}>
+          disabled={managed && isRoutingIntentPolicyRoute(route.name)}>
           <legend>{route.name}</legend>
           <label className="field"><span>{t('Static route name')}</span><input aria-label={`${t('Static route name')} ${table.id} ${index + 1}`}
             key={route.name} defaultValue={route.name} maxLength={120} onBlur={(event) => {

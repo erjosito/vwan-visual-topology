@@ -46,6 +46,7 @@ export default function VwanVnetConnectionPanel({ vnetName, hubName, tables, con
       <p>{t('Receives an available hub default route into this VNet. This does not create a default route or enable Internet routing intent.')}</p>
       {managedConfig && <p role="status"><strong>{t('Managed by routing intent')}</strong>.{' '}
         {t('Routing intent manages association and propagation for every connection. Default-route receipt and connection static-route advertisement remain independent.')}</p>}
+      {managedConfig?.propagatedTableIds.includes('noneRouteTable') && <p>{t('Private routing intent uses None for connection propagation while Azure programs the security appliance routing domain. This is not manual connection isolation.')}</p>}
       <p>{t('Association selects the ingress lookup table. Propagation controls where routes are advertised. Labels are case-sensitive; None suppresses propagation.')}</p>
       <fieldset disabled={!!managedConfig}><legend>{t('Hub routing tables')}</legend>
       <label>{t('Associated table')} <select aria-label={t('Associated table')} value={config.associatedTableId ?? ''}
