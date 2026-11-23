@@ -52,8 +52,19 @@ async function configure(page: Page, task: CourseTask, check: Extract<CourseChec
     if (connection.staticPrefixes) await editor.locator('textarea[name="prefixes"]').fill(connection.staticPrefixes.join('\n'))
     await editor.getByRole('button', { name: translate(language, 'Save connection routing'), exact: true }).click()
   }
+  for (const hub of expected.vwanHubs ?? []) {
+    if (matchesConfiguration(before.vwanHubs.find((item) => item.id === hub.id), hub)) continue
+    await show(page, task, language, (cue) => cue.action === 'hub.configure' && cue.params.hubId === hub.id)
+    if (hub.routingIntent?.private !== undefined) await page.getByTestId(`aznet-private-routing-intent-${hub.id}`).setChecked(hub.routingIntent.private)
+    for (const table of hub.routeTables ?? []) {
+      const labels = page.getByTestId('aznet-hub-tables-editor').getByLabel(`${translate(language, 'Table labels')} ${table.id}`, { exact: true })
+      const original = before.vwanHubs.find((item) => item.id === hub.id)!.routeTables!.find((item) => item.id === table.id)!
+      await labels.fill([...new Set([...original.labels, ...table.labels!])].join(', '))
+      await labels.press('Tab')
+    }
+  }
   for (const vnet of expected.vnets ?? []) {
-    const original = before.vnets.find((item) => item.id === vnet.id)!
+    const original = (await topology(page)).vnets.find((item) => item.id === vnet.id)!
     if (matchesConfiguration(original, vnet)) continue
     const attachment = vnet.vwanHubAttachment
     if (attachment?.enabled !== undefined && attachment.enabled !== original.vwanHubAttachment?.enabled) {
@@ -73,17 +84,6 @@ async function configure(page: Page, task: CourseTask, check: Extract<CourseChec
         await labels.fill(attachment.hubRouting.labels.join(', '))
         await labels.press('Tab')
       }
-    }
-  }
-  for (const hub of expected.vwanHubs ?? []) {
-    if (matchesConfiguration(before.vwanHubs.find((item) => item.id === hub.id), hub)) continue
-    await show(page, task, language, (cue) => cue.action === 'hub.configure' && cue.params.hubId === hub.id)
-    if (hub.routingIntent?.private !== undefined) await page.getByTestId(`aznet-private-routing-intent-${hub.id}`).setChecked(hub.routingIntent.private)
-    for (const table of hub.routeTables ?? []) {
-      const labels = page.getByTestId('aznet-hub-tables-editor').getByLabel(`${translate(language, 'Table labels')} ${table.id}`, { exact: true })
-      const original = before.vwanHubs.find((item) => item.id === hub.id)!.routeTables!.find((item) => item.id === table.id)!
-      await labels.fill([...new Set([...original.labels, ...table.labels!])].join(', '))
-      await labels.press('Tab')
     }
   }
   for (const peering of expected.vnetPeerings ?? []) {

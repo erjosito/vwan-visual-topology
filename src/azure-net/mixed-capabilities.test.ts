@@ -5,6 +5,8 @@ import { parseAzNetTopology } from './admission'
 import { applyAzHubRouteMap, pruneAzSiteRouteMaps } from './route-maps'
 import type { RouteMapRule } from '../model'
 import { validateRequest } from '../platform/service'
+import { routingIntentConfiguration } from '../routing-intent'
+import { applyAzRoutingIntentEdit } from './routing-intent'
 
 function mixedTopology() {
   const topology = createEmptyAzNetTopology()
@@ -37,6 +39,31 @@ const rule = (values: Partial<RouteMapRule> = {}): RouteMapRule => ({
 })
 
 describe('Mixed native capability bridge', () => {
+  it.each([[false, true], [true, false], [true, true]])('preserves Full Hybrid routes and classic owners with intent private=%s internet=%s', (privatePolicy, internet) => {
+    const before = mixedTopology()
+    const next = structuredClone(before)
+    Object.assign(next.vwanHubs[0].routingIntent, { private: privatePolicy, internet })
+    applyAzRoutingIntentEdit(before, next)
+    const expected = routingIntentConfiguration(next.vwanHubs[0])
+    expect(next.vnets[1].vwanHubAttachment?.hubRouting).toEqual(expected)
+    expect(next.vpnConnections[0].hubRouting).toEqual(expected)
+    expect(next.erLinks[1].hubRouting).toEqual(expected)
+    expect(next.vnets[0]).toEqual(before.vnets[0])
+    expect(next.erLinks[0]).toEqual(before.erLinks[0])
+    const simulation = simulateAzNet(next)
+    expect(simulation.vwanHubTableCoverage.wan.defaultRouteTable.complete).toBe(true)
+    expect(simulation.vwanHubRibs.wan.some((route) => route.prefix === '172.16.0.0/24')).toBe(true)
+    expect(lookupSubnetEffectiveRoute(simulation.subnetTables['wan-work'], '8.8.8.8')?.source).toBe('System')
+    const withDefault = structuredClone(next)
+    withDefault.vnets[1].vwanHubAttachment!.propagateDefaultRoute = true
+    const route = lookupSubnetEffectiveRoute(simulateAzNet(withDefault).subnetTables['wan-work'], '8.8.8.8')
+    expect(route?.source).toBe(internet ? 'VirtualNetworkGateway' : 'System')
+    const removed = structuredClone(next)
+    Object.assign(removed.vwanHubs[0].routingIntent, { private: false, internet: false })
+    applyAzRoutingIntentEdit(next, removed)
+    expect(removed.vpnConnections[0].hubRouting?.labels).toEqual(['default'])
+  })
+
   it('keeps one-direction site and hub assignments valid plain JSON after native edits prune them', () => {
     const topology = mixedTopology()
     topology.routeMaps = [

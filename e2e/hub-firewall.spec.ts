@@ -117,6 +117,7 @@ for (const mode of ['vwan', 'full'] as const) {
     await page.reload()
     expect(await saved()).toEqual(topology)
     await page.getByRole('combobox', { name: 'Language / 言語', exact: true }).selectOption('ja')
+    await expect(page.getByRole('combobox', { name: '言語 / Language', exact: true })).toBeVisible()
     if (mode === 'vwan') {
       await page.locator('[data-node-id="hub-local"]').focus()
       await page.keyboard.press('Shift+F10')

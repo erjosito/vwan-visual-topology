@@ -6,8 +6,7 @@ export function connectionStaticLimitations(topology: AzNetTopology, vnet: AzVNe
   if (!attachment?.enabled || !attachment.staticRoutes?.length) return []
   const hub = topology.vwanHubs.find((hub) => hub.id === attachment.hubId)
   const reasons = new Set<string>()
-  if (attachment.propagateStaticRoutes !== true) reasons.add('Connection static routes require explicit Propagate static route=true; the non-propagating model is not assessed.')
-  if (hub?.routingIntent.private || hub?.routingIntent.internet) reasons.add('Connection static routes combined with routing intent are not assessed.')
+  if (attachment.propagateStaticRoutes !== true) reasons.add('Connection static routes require explicit propagation into BGP; the non-propagating model is not assessed.')
   if (hub?.routeMapAssignments?.some((assignment) => assignment.connectionId === vnet.id && (assignment.inboundMapId || assignment.outboundMapId))) {
     reasons.add('Route maps on a connection with static routes are not assessed.')
   }

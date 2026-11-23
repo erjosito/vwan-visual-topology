@@ -22,7 +22,7 @@ export const workspaceCapabilities = [
 export const workspaceCapabilityLimits = [
   'Supported means within the documented native model, not verified Azure packet delivery.',
   'VPN over ER requires explicit classic active/standby Standard-IP private endpoints and independent outer ER context; static, active/active, NAT and VWAN/NVA/SD-WAN private overlays remain unassessed.',
-  'Static hub Firewall routing requires one hub and a declared local Firewall. Arbitrary next hops, static branch-to-branch inspection and combinations with routing intent remain unassessed.',
+  'Static hub Firewall routing requires one hub and a declared local Firewall. Routing intent permits only default-table Firewall statics. Arbitrary next hops and static branch-to-branch inspection remain unassessed.',
   'Hub route maps are unsupported on integrated SD-WAN. Spoke NVA policies use the hosting VNet connection. Static VPN bypasses BGP policies.',
   'Incomplete or non-converged routing cannot certify reachability or isolation. Aggregate advertisements do not fill holes.',
   'Internet ingress, translator/session behavior, load balancers and NSGs require their separate bounded packet assessment; application delivery is not certified.',
