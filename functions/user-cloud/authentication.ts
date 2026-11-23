@@ -7,15 +7,16 @@ const microsoftKeys = createRemoteJWKSet(new URL('https://login.microsoftonline.
   timeoutDuration: 5000,
 })
 
-export function createAuthenticator(audience: string, clientId: string, keys: JWTVerifyGetKey = microsoftKeys) {
-  if (![audience, clientId].every(value => /^[0-9a-f-]{36}$/i.test(value))) throw new Error('Configure both cloud API and SPA client IDs.')
+export function createAuthenticator(audience: string, clientId: string | string[], keys: JWTVerifyGetKey = microsoftKeys) {
+  const clients = new Set(typeof clientId === 'string' ? [clientId] : clientId)
+  if (!clients.size || ![audience, ...clients].every(value => /^[0-9a-f-]{36}$/i.test(value))) throw new Error('Configure cloud API and authorized client IDs.')
   return async (authorization: string | null) => {
     if (!authorization?.startsWith('Bearer ') || authorization.length > 20000) throw new Error('Authentication required.')
     const { payload } = await jwtVerify(authorization.slice(7), keys, {
       algorithms: ['RS256'], issuer: consumerIssuer, audience, requiredClaims: ['sub', 'exp', 'iat', 'nbf', 'tid', 'scp', 'azp'],
       clockTolerance: 30,
     })
-    if (payload.tid !== consumerTenant || payload.azp !== clientId || payload.ver !== '2.0'
+    if (payload.tid !== consumerTenant || typeof payload.azp !== 'string' || !clients.has(payload.azp) || payload.ver !== '2.0'
       || typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 255
       || typeof payload.scp !== 'string' || !payload.scp.split(' ').includes('Cloud.Access')) {
       throw new Error('Personal Microsoft cloud access required.')

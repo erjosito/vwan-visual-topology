@@ -50,7 +50,7 @@ import type {
 } from './azure-import'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
-import { basicGatewayFix } from './coexistence'
+import { confirmConfigurationSwitch } from '../configuration-selection'
 
 import {
   AZ_NET_PAIR_LIMIT,
@@ -93,6 +93,8 @@ const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ 
 const ErLocationInfoModal = lazy(() => import('../ErLocationInfoModal').then((module) => ({ default: module.ErLocationInfoModal })))
 const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
+const VnetConnectionEditor = lazy(() => import('./VnetConnectionEditor'))
+const GatewayCoexistenceAutoFix = lazy(() => import('./GatewayCoexistenceAutoFix'))
 const HubConfiguration = lazy(() => import('./HubConfiguration').then((module) => ({ default: module.HubConfiguration })))
 const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
@@ -166,6 +168,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setDetailOwner(id)
   }
   const [inventorySelection, setInventorySelection] = useWorkspaceEditorState<string>('aznet.inventory')
+  const [vnetConnectionId, setVnetConnectionId] = useWorkspaceEditorState<string>('aznet.vnetConnection')
   const [deleteTarget, setDeleteTarget] = useState<AzSelectedEntity | null>(null)
   const [clearRequested, setClearRequested] = useState(false)
   const [cloneVnetId, setCloneVnetId] = useState<string>()
@@ -458,15 +461,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   // One-click Auto-Remediation for diagnostic findings
   const applyAutoFix = (finding: AzDiagnosticFinding) => {
     commitTopology((draft) => {
-      if (finding.category === 'gateway-coexistence') {
-        const fix = basicGatewayFix(draft, finding)
-        if (fix) {
-          fix.gateway.sku = fix.sku
-          if (fix.sku === 'VpnGw1AZ') fix.gateway.vpnGatewayGeneration = 'Generation1'
-          else if (/^VpnGw[45](AZ)?$/.test(fix.sku)) fix.gateway.vpnGatewayGeneration = 'Generation2'
-        }
-        return
-      }
       if (finding.category === 'gateway-subnet-missing-udr' && finding.vnetId) {
         const hubVnet = draft.vnets.find((v) => v.id === finding.vnetId)
         const gwSubnet = hubVnet?.subnets.find((s) => s.name === 'GatewaySubnet')
@@ -1189,6 +1183,12 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setSelected({ kind: 'vwan-hub', hubId })
     setActiveTab('editor')
   }
+  const openVnetConnection = (vnetId: string) => {
+    if (!confirmConfigurationSwitch('.aznet-app .object-editor')) return
+    if (!setSelected({ kind: 'vnet', vnetId })) return
+    setActiveTab(null)
+    setVnetConnectionId(vnetId)
+  }
   const getOrdinaryContextMenuSpec = (
     target: AzSelectedEntity | { kind: 'canvas'; svgX: number; svgY: number },
   ): { title: string; actions: ContextAction[] } | null => {
@@ -1269,7 +1269,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           ...(vnet.vwanHubAttachment ? [{
             label: t('Configure virtual hub connection'),
             previewPrimary: true,
-            onSelect: () => openHubConnections(vnet.vwanHubAttachment!.hubId),
+            onSelect: () => openVnetConnection(vnet.id),
           }] : [{
             label: t('Connect to virtual hub'), previewPrimary: true, allowDisabledChildren: true,
             children: topology.vwanHubs.length ? topology.vwanHubs.map((hub) => ({
@@ -2978,6 +2978,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
               setSelected(entity)
               setActiveTab('editor')
             }}
+            onOpenVnetConnection={openVnetConnection}
           />
 
           {contextMenu && contextMenuSpec && (
@@ -3039,6 +3040,8 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           siteId={routeMapSiteId} hubId={routeMapHubId} routeServerId={routeMapArsId} outbound={routeMapArsId ? simulation.routeServerOutbound?.[routeMapArsId] : undefined}
           inbound={routeMapArsId ? simulation.routeServerInbound?.[routeMapArsId] : undefined}
           onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
+        {vnetConnectionId && <Suspense fallback={null}><VnetConnectionEditor key={vnetConnectionId}
+          topology={topology} vnetId={vnetConnectionId} commit={commitTopology} onClose={() => setVnetConnectionId(undefined)} /></Suspense>}
         {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
           key={guidanceRevision}
           focusOnOpen={!guidanceNavigation}
@@ -3749,8 +3752,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 🔍 Trace Flow
                               </button>
                             )}
+                            {finding.severity !== 'info' && finding.category === 'gateway-coexistence' &&
+                              <Suspense fallback={null}><GatewayCoexistenceAutoFix topology={topology} finding={finding} commit={commitTopology} /></Suspense>}
                             {finding.severity !== 'info' &&
-                              (finding.category !== 'gateway-coexistence' || basicGatewayFix(topology, finding)) &&
+                              finding.category !== 'gateway-coexistence' &&
                               finding.category !== 'connectivity-failure' &&
                               finding.category !== 'private-endpoint-udr-bypass' &&
                               finding.category !== 'peering-non-transitive-next-hop' &&

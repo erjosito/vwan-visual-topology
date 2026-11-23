@@ -72,7 +72,10 @@ app.http('userCloud', {
         const service = new BlobServiceClient(url, new ManagedIdentityCredential(process.env.CLOUD_RUNTIME_CLIENT_ID
           ? { clientId: process.env.CLOUD_RUNTIME_CLIENT_ID } : {}), { retryOptions: { maxTries: 3, tryTimeoutInMs: 10000 } })
         handler = createCloudHandler({
-          authenticate: createAuthenticator(process.env.CLOUD_API_AUDIENCE ?? '', process.env.CLOUD_CLIENT_ID ?? ''),
+          authenticate: createAuthenticator(process.env.CLOUD_API_AUDIENCE ?? '', [
+            process.env.CLOUD_CLIENT_ID ?? '',
+            ...(process.env.CLOUD_DESKTOP_CLIENT_ID ? [process.env.CLOUD_DESKTOP_CLIENT_ID] : []),
+          ]),
           store: blobStore(service.getContainerClient('user-cloud')), origins,
         })
       }
