@@ -2,6 +2,7 @@ targetScope = 'resourceGroup'
 
 param location string = resourceGroup().location
 param spaClientId string
+param desktopClientId string = ''
 param apiClientId string
 param allowedOrigins array = [
   'https://aznet-simulator.com'
@@ -240,6 +241,7 @@ resource functionApp 'Microsoft.Web/sites@2024-04-01' = {
         { name: 'CLOUD_RUNTIME_CLIENT_ID', value: runtime.properties.clientId }
         { name: 'CLOUD_STORAGE_ACCOUNT_URL', value: storage.properties.primaryEndpoints.blob }
         { name: 'CLOUD_CLIENT_ID', value: spaClientId }
+        { name: 'CLOUD_DESKTOP_CLIENT_ID', value: desktopClientId }
         { name: 'CLOUD_API_AUDIENCE', value: apiClientId }
         { name: 'CLOUD_ALLOWED_ORIGINS', value: join(allowedOrigins, ',') }
         { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', value: insights.properties.ConnectionString }

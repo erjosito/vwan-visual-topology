@@ -152,8 +152,17 @@ workforce tenant; do not broaden their supported account types to work around th
 The authority is fixed to `https://login.microsoftonline.com/consumers`.
 The API accepts v2 tokens only, for the personal-account tenant
 `9188040d-6c67-4c5b-b112-36a304b66dad`. It verifies signature, issuer, expiration,
-not-before time, API audience, the authorized SPA client ID and `Cloud.Access`.
+not-before time, API audience, an explicitly authorized client ID and `Cloud.Access`.
 An ID token or a token for Microsoft Graph is not an API access token.
+
+The optional `CLOUD_DESKTOP_CLIENT_ID` setting authorizes one additional desktop
+public client without changing the existing web client or storage owner derivation.
+Register it for personal Microsoft accounts, grant the same API's delegated
+`Cloud.Access` permission and configure its desktop redirect URI before enabling
+the desktop client. Do not broaden the account audience or accept arbitrary
+client IDs. A matching verified issuer/subject retains the same storage owner
+across clients; real personal-account web/desktop interoperability still needs
+live qualification. This backend capability alone does not enable Electron login.
 
 See Microsoft's [supported account types](https://learn.microsoft.com/en-us/entra/identity-platform/v2-supported-account-types)
 and [MSAL v5 redirect bridge](https://learn.microsoft.com/en-us/entra/msal/javascript/browser/redirect-bridge).
@@ -205,6 +214,7 @@ this container. Allow for RBAC propagation before testing.
 | `CLOUD_RUNTIME_CLIENT_ID` | Optional user-assigned managed-identity client ID. Omit for system-assigned identity. |
 | `CLOUD_API_AUDIENCE` | API application/client ID, the GUID, not `api://...`. |
 | `CLOUD_CLIENT_ID` | Authorized SPA application/client ID. |
+| `CLOUD_DESKTOP_CLIENT_ID` | Optional additional authorized desktop public-client ID; omit to keep web-only authorization. Never a wildcard or API audience. |
 | `CLOUD_ALLOWED_ORIGINS` | Comma-separated exact browser origins, with scheme and port, without paths or trailing slashes. |
 
 Also configure the Function host's own required storage and hosting settings.
