@@ -11,11 +11,13 @@ import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
 import { DocumentArtifactStatus } from './DocumentActions'
 
 const FeedbackDialog = lazy(() => import('./FeedbackDialog').then((module) => ({ default: module.FeedbackDialog })))
+const OtherPlatformsDialog = lazy(() => import('./OtherPlatformsDialog').then(module => ({ default: module.OtherPlatformsDialog })))
 
 export function WorkspaceMenu() {
   const session = useWorkspaceSession()
   const language = useLanguage()
   const [feedbackOpen, setFeedbackOpen] = useState(() => !window.desktopSimulator && new URLSearchParams(location.search).get('feedback') === '1')
+  const [platformsOpen, setPlatformsOpen] = useState(false)
   return <>
     <WorkspaceActionsToggle />
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
@@ -29,11 +31,15 @@ export function WorkspaceMenu() {
     <PresentationGroup label={t('Help & feedback')}>
       {session?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>}
       <button disabled={!!window.desktopSimulator} onClick={() => setFeedbackOpen(true)}>{t('Feedback')}</button>
+      {!window.desktopSimulator && <button type="button" onClick={() => setPlatformsOpen(true)}>
+        {language === 'ja' ? 'ほかの環境で AzNetSim を使う' : 'Use AzNetSim elsewhere'}
+      </button>}
       <small className="muted" data-testid="app-version">AzNetSim {import.meta.env.VITE_APP_VERSION}</small>
     </PresentationGroup>
     {!session?.presentationPreview && <LearningStatus />}
     {!session?.presentationPreview && <CloudMenu />}
     {feedbackOpen && <Suspense fallback={null}><FeedbackDialog onClose={() => setFeedbackOpen(false)} /></Suspense>}
+    {platformsOpen && <Suspense fallback={null}><OtherPlatformsDialog onClose={() => setPlatformsOpen(false)} /></Suspense>}
   </>
 }
 

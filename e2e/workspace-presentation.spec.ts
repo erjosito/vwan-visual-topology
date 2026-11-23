@@ -10,6 +10,57 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
+for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
+  test(`${language} ${theme}: Help discovers Windows and MCP only after deliberate activation`, async ({ page }, info) => {
+    const text = (en: string, ja: string) => language === 'ja' ? ja : en
+    const requests: string[] = [], downloads: string[] = []
+    page.on('request', request => requests.push(request.url()))
+    page.on('download', download => downloads.push(download.suggestedFilename()))
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 900 })
+    await page.addInitScript(({ language, theme, topology }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-theme', theme)
+      localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+      const calls: unknown[][] = []
+      Reflect.set(window, 'platformOpenCalls', calls)
+      window.open = (...args) => { calls.push(args); return null }
+    }, { language, theme, topology: sampleHubSpokeFirewallUdr })
+    await page.goto('/?mode=full')
+    await expect(page.getByTestId('aznet-app')).toBeVisible()
+    const original = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+    const url = page.url()
+    await openWorkspaceActions(page)
+    const help = page.locator('.presentation-group').filter({
+      has: page.locator('summary', { hasText: language === 'ja' ? /^ヘルプとフィードバック$/ : /^Help & feedback$/ }),
+    })
+    await help.locator('summary').focus()
+    await page.keyboard.press('Enter')
+    expect(requests.some(url => url.includes('OtherPlatformsDialog'))).toBe(false)
+    await help.getByRole('button', { name: text('Use AzNetSim elsewhere', 'ほかの環境で AzNetSim を使う'), exact: true }).press('Enter')
+    const panel = page.getByRole('dialog', { name: text('Use AzNetSim elsewhere', 'ほかの環境で AzNetSim を使う'), exact: true })
+    await expect(panel).toBeVisible()
+    await expect(panel.getByRole('button', { name: text('Close', '閉じる'), exact: true })).toBeFocused()
+    expect(await page.evaluate(() => Reflect.get(window, 'platformOpenCalls'))).toEqual([])
+    expect(downloads).toEqual([])
+    expect(requests.some(url => url.startsWith('https://github.com/'))).toBe(false)
+    expect((await new AxeBuilder({ page }).include('dialog[open]').analyze()).violations).toEqual([])
+    expect(await panel.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true)
+    await panel.screenshot({ path: info.outputPath(`other-platforms-${language}-${theme}.png`) })
+    await panel.getByRole('button', { name: text('Windows app - downloads', 'Windows アプリ - ダウンロード'), exact: true }).press('Enter')
+    await panel.getByRole('button', { name: text('MCP server - install and use', 'MCP サーバー - 導入と使い方'), exact: true }).press('Enter')
+    expect(await page.evaluate(() => Reflect.get(window, 'platformOpenCalls'))).toEqual([
+      ['https://github.com/erjosito/vwan-visual-topology/releases/latest', '_blank', 'noopener,noreferrer'],
+      ['https://github.com/erjosito/vwan-visual-topology/blob/main/PLATFORM.md#local-mcp--copilot-skill', '_blank', 'noopener,noreferrer'],
+    ])
+    expect(page.url()).toBe(url)
+    expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
+    expect(downloads).toEqual([])
+    await page.keyboard.press('Escape')
+    await expect(panel).toHaveCount(0)
+    await expect(help.locator('summary')).toBeFocused()
+  })
+}
+
 for (const mode of ['vwan', 'hub-spoke', 'full']) {
   test(`${mode}: AzNetSim brand fits wide and narrow headers`, async ({ page }) => {
     await page.goto(`/?mode=${mode}`)
