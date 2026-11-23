@@ -63,6 +63,38 @@ async function signIn(page: Page) {
 }
 
 for (const mode of ['vwan', 'full'] as const) {
+  test(`${mode}: a clean final cloud tab closes into an unlinked empty editor with its cloud library still reachable`, async ({ page }) => {
+    const service = await setup(page)
+    await page.addInitScript(() => localStorage.setItem('aznet-ui-preview:v1', 'true'))
+    await page.goto(`/?mode=${mode}`)
+    await signIn(page)
+    await page.getByLabel('Cloud topology name', { exact: true }).fill('Closed cloud original')
+    await page.getByRole('button', { name: 'Save as new cloud copy', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Closed cloud original', exact: true })).toBeVisible()
+    const before = [...service.data].find(([key]) => key.includes('/topologies/'))![1].raw
+    const originalId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
+    const metadata = await documentCloudMetadata(page)
+    const account = page.getByRole('dialog', { name: 'Cloud account', exact: true })
+    await account.getByRole('button', { name: 'Close', exact: true }).click()
+    await page.locator('.workspace-tab-close').click()
+    await expect(page.getByRole('tab')).toHaveCount(1)
+    await expect(page.getByRole('dialog', { name: 'Save changes before closing?', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).not.toBe(originalId)
+    expect(await documentCloudMetadata(page)).toBeNull()
+    expect(await documentCloudMetadata(page, originalId)).toBe(metadata)
+    await page.getByTestId('cloud-account-open').click()
+    await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
+    await expect(page.getByRole('heading', { name: 'Closed cloud original', exact: true })).toBeVisible()
+    await account.getByRole('button', { name: 'Close', exact: true }).click()
+    await page.keyboard.press('Control+s')
+    const chooser = page.getByRole('dialog', { name: 'Save As', exact: true })
+    await expect(chooser).toBeVisible()
+    await expect(chooser.getByRole('option', { name: 'Private cloud library', exact: true })).toBeEnabled()
+    expect([...service.data].find(([key]) => key.includes('/topologies/'))![1].raw).toBe(before)
+    await chooser.getByRole('button', { name: 'Cancel', exact: true }).click()
+  })
+
   for (const failure of ['quota', 'other-window'] as const) {
     test(`${mode} ${failure}: profile recovery failure stays in save details after a confirmed cloud save`, async ({ page, context }) => {
       let service = await setup(page)

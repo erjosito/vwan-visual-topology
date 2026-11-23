@@ -91,7 +91,11 @@ export function workspaceTabStorage(storage: WorkspaceStorage, tab: WorkspaceTab
 }
 
 export function addWorkspaceTab(storage: WorkspaceStorage, session: WorkspaceTabs, tab: WorkspaceTab, raw: string): WorkspaceTabs {
-  const next = parseSession({ version: 1, activeId: tab.id, tabs: [...session.tabs, tab] })
+  return writeNewWorkspaceTab(storage, session, tab, raw, { version: 1, activeId: tab.id, tabs: [...session.tabs, tab] })
+}
+
+function writeNewWorkspaceTab(storage: WorkspaceStorage, session: WorkspaceTabs, tab: WorkspaceTab, raw: string, requested: WorkspaceTabs): WorkspaceTabs {
+  const next = parseSession(requested)
   checkSession(storage, session)
   const key = workspaceTabKey(tab, 'topology')
   if (storage.getItem(key) !== null) throw new Error('Workspace tab storage already exists.')
@@ -105,13 +109,15 @@ export function addWorkspaceTab(storage: WorkspaceStorage, session: WorkspaceTab
   return next
 }
 
-export function closeWorkspaceTabs(storage: WorkspaceStorage, session: WorkspaceTabs, ids: string[]): WorkspaceTabs {
+export function closeWorkspaceTabs(storage: WorkspaceStorage, session: WorkspaceTabs, ids: string[], replacement?: { tab: WorkspaceTab; raw: string }): WorkspaceTabs {
   const remaining = session.tabs.filter(tab => !ids.includes(tab.id))
+  if (replacement && remaining.length) throw new Error('Only the final close can replace the tab session.')
   const previous = session.tabs.findIndex(tab => tab.id === session.activeId)
-  const next: WorkspaceTabs = { version: 1, tabs: remaining,
+  const next: WorkspaceTabs = replacement ? { version: 1, tabs: [replacement.tab], activeId: replacement.tab.id } : { version: 1, tabs: remaining,
     ...(remaining.length ? { activeId: remaining.some(tab => tab.id === session.activeId) ? session.activeId
       : remaining[Math.min(Math.max(previous, 0), remaining.length - 1)].id } : {}) }
-  writeWorkspaceTabs(storage, next, session)
+  if (replacement) writeNewWorkspaceTab(storage, session, replacement.tab, replacement.raw, next)
+  else writeWorkspaceTabs(storage, next, session)
   for (const tab of session.tabs.filter(tab => ids.includes(tab.id))) {
     try { storage.setItem(workspaceTabKey(tab, 'closed'), String(Date.now())) } catch {}
   }
