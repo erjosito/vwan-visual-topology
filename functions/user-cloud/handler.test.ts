@@ -14,6 +14,82 @@ const headers = (user = 'alice', version?: string) => ({
   ...(version ? { 'If-Match': version } : { 'If-None-Match': '*' }),
 })
 
+describe('saved topology metadata', () => {
+  const topology = { ...createEmptyAzNetTopology(), name: 'Native topology name stays separate' }
+  async function seed(description?: string) {
+    const cloud = cloudFixture(), value = { version: 1, name: 'Original saved name', ...(description ? { description } : {}), topology }
+    const response = await cloud.request(path, { method: 'PUT', headers: headers(), body: JSON.stringify(value) })
+    expect(response.status).toBe(200)
+    return { cloud, value, etag: (response.headers as Record<string, string>).ETag }
+  }
+  it('creates, lists, renames and clears plain-text metadata without changing the saved ID or topology payload', async () => {
+    const { cloud, value, etag } = await seed('Initial multiline\n説明')
+    const updated = await cloud.request(path, { method: 'PATCH', headers: headers('alice', etag),
+      body: JSON.stringify({ name: '  Renamed cloud save  ', description: '  <b>Plain text</b>\n説明  ' }) })
+    expect(updated.status).toBe(200)
+    const next = (updated.headers as Record<string, string>).ETag
+    expect(next).not.toBe(etag)
+    expect((await cloud.request(path, { headers: headers() })).jsonBody).toEqual({
+      ...value, name: 'Renamed cloud save', description: '<b>Plain text</b>\n説明',
+    })
+    expect((await cloud.request('/api/cloud/topologies', { headers: headers() })).jsonBody).toMatchObject({
+      entries: [{ id, name: 'Renamed cloud save', description: '<b>Plain text</b>\n説明', etag: next }],
+    })
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers('alice', next),
+      body: JSON.stringify({ name: 'Without description', description: ' \n ' }) })).status).toBe(200)
+    expect((await cloud.request(path, { headers: headers() })).jsonBody).toEqual({
+      version: 1, name: 'Without description', topology: value.topology,
+    })
+    const entries = (await cloud.request('/api/cloud/topologies', { headers: headers() })).jsonBody as { entries: object[] }
+    expect(entries.entries[0]).not.toHaveProperty('description')
+    expect(cloud.data.size).toBe(1)
+  })
+  it('requires an authenticated owner and exact ETag; metadata and content updates conflict in both directions', async () => {
+    const { cloud, value, etag } = await seed()
+    const body = JSON.stringify({ name: 'Metadata update', description: 'New description' })
+    expect((await cloud.request(path, { method: 'PATCH', body })).status).toBe(401)
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers('bob', etag), body })).status).toBe(404)
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers(), body })).status).toBe(428)
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers('alice', '"stale"'), body })).status).toBe(412)
+    const changed = await cloud.request(path, { method: 'PUT', headers: headers('alice', etag), body: JSON.stringify(value) })
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers('alice', etag), body })).status).toBe(412)
+    const update = await cloud.request(path, { method: 'PATCH',
+      headers: headers('alice', (changed.headers as Record<string, string>).ETag), body })
+    expect(update.status).toBe(200)
+    expect((await cloud.request(path, { method: 'PUT', headers: headers('alice', (changed.headers as Record<string, string>).ETag),
+      body: JSON.stringify(value) })).status).toBe(412)
+    expect((await cloud.request(path, { headers: headers() })).jsonBody).toMatchObject({ name: 'Metadata update', topology })
+  })
+  it('does not lose a content update racing between the metadata read and conditional write', async () => {
+    const { cloud, value, etag } = await seed()
+    const put = cloud.store.put
+    cloud.store.put = async (...args) => {
+      await put(args[0], JSON.stringify({ ...value, topology: { ...topology, name: 'Concurrent content' } }), etag, value.name)
+      return put(...args)
+    }
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers('alice', etag),
+      body: JSON.stringify({ name: 'Racing metadata' }) })).status).toBe(412)
+    expect((await cloud.request(path, { headers: headers() })).jsonBody).toMatchObject({
+      name: value.name, topology: { name: 'Concurrent content' },
+    })
+  })
+  it('rejects invalid metadata, topology injection and excessive text without replacing old saves', async () => {
+    const { cloud, value, etag } = await seed()
+    for (const input of [null, [], { name: '' }, { name: ' '.repeat(5) }, { name: 'x'.repeat(121) },
+      { name: 'x', description: false }, { name: 'x', description: '界'.repeat(1025) },
+      { name: 'x', topology: { name: 'Injected' } }, { name: 'x', owner: 'bob' }]) {
+      expect((await cloud.request(path, { method: 'PATCH', headers: headers('alice', etag), body: JSON.stringify(input) })).status).toBe(400)
+    }
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers('alice', etag), body: ' '.repeat(16385) })).status).toBe(413)
+    expect((await cloud.request(path, { headers: headers() })).jsonBody).toEqual(value)
+    const original = JSON.stringify({ ...value, topology: { ...topology, extension: 'x'.repeat(4 * 1024 * 1024 - 400) } })
+    const next = await cloud.store.put(`users/${testOwner('alice')}/topologies/${id}.json`, original, etag, value.name)
+    expect((await cloud.request(path, { method: 'PATCH', headers: headers('alice', next),
+      body: JSON.stringify({ name: value.name, description: '界'.repeat(1024) }) })).status).toBe(413)
+    expect(cloud.data.get(`users/${testOwner('alice')}/topologies/${id}.json`)!.raw).toBe(original)
+  })
+})
+
 describe('explicit latest-saved, revocable sharing', () => {
   const sharePath = '/api/cloud/shares/22222222-2222-4222-8222-222222222222'
   const value = { version: 1, name: 'Owner saved version', topology: createEmptyAzNetTopology() }
@@ -51,7 +127,8 @@ describe('explicit latest-saved, revocable sharing', () => {
   it('follows confirmed updates/renames, never resurrects after deletion and same-ID recreation', async () => {
     const { cloud, create, input } = await seed()
     const share = (await create()).jsonBody as CloudShare
-    const changed = { ...value, name: 'Renamed latest save', topology: { ...value.topology, name: 'Changed topology' } }
+    const changed = { ...value, name: 'Renamed latest save', description: 'Shared saved description',
+      topology: { ...value.topology, name: 'Changed topology' } }
     const updated = await cloud.request(path, { method: 'PUT', headers: headers('alice', input.sourceEtag), body: JSON.stringify(changed) })
     expect(updated.status).toBe(200)
     expect((await resolve(cloud, share.token)).jsonBody).toMatchObject({ document: changed })
@@ -141,12 +218,20 @@ describe('explicit latest-saved, revocable sharing', () => {
         expect(options.conditions.ifMatch).toBe(value!.etag); value = undefined
       },
     }
-    const store = blobStore({ getBlockBlobClient: () => blob } as unknown as ContainerClient)
-    let etag = await store.put('source', '{}', null, 'Original')
+    const store = blobStore({ getBlockBlobClient: () => blob, async *listBlobsFlat() {
+      yield { name: `topologies/${id}.json`, metadata: value!.metadata, properties: { etag: value!.etag } }
+    } } as unknown as ContainerClient)
+    const description = '界'.repeat(1024)
+    let etag = await store.put('source', '{}', null, 'Original', description)
+    expect((await store.list('topologies/'))[0].description).toBe(description)
+    expect(Buffer.byteLength(JSON.stringify(value!.metadata))).toBeLessThan(8192)
     const generation = (await store.get('source'))!.generation
     expect(generation).toBeTruthy()
     etag = await store.put('source', '{"updated":true}', etag, 'Renamed')
     expect((await store.get('source'))!.generation).toBe(generation)
+    expect((await store.list('topologies/'))[0].description).toBe(description)
+    etag = await store.put('source', '{"updated":true}', etag, 'Renamed', '')
+    expect((await store.list('topologies/'))[0]).not.toHaveProperty('description')
     await store.delete('source', etag)
     await store.put('source', '{}', null, 'Recreated')
     expect((await store.get('source'))!.generation).not.toBe(generation)

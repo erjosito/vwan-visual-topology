@@ -28,6 +28,25 @@ describe('document save provenance', () => {
     await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('matches'))
     return { cache, state }
   }
+  it('retains edited cloud metadata with the original content digest and dirty state across reload', async () => {
+    const { cache, state } = await linked()
+    const digest = JSON.parse(cache.getItem(cloudDocumentKey)!).digest
+    const edited = { ...design, name: 'Unsaved local edits' }
+    state.observe(edited, 'azure-net')
+    await vi.waitFor(() => expect(state.getSnapshot().cloud?.state).toBe('modified'))
+    expect(state.metadataUpdated('bob', source.id, source.etag, 'Wrong owner', '"next"')).toBe(false)
+    expect(state.metadataUpdated('alice', source.id, '"stale"', 'Wrong version', '"next"')).toBe(false)
+    expect(state.metadataUpdated('alice', source.id, source.etag, 'Saved metadata only', '"next"')).toBe(true)
+    expect(state.getSnapshot().cloud).toMatchObject({ name: 'Saved metadata only', etag: '"next"', state: 'modified' })
+    expect(JSON.parse(cache.getItem(cloudDocumentKey)!).digest).toBe(digest)
+    const restored = createDocumentSaveState(() => cache)
+    restored.observe(edited, 'azure-net'); restored.setAccount('alice')
+    await vi.waitFor(() => expect(restored.getSnapshot().cloud?.state).toBe('modified'))
+    restored.observe(design, 'azure-net')
+    await vi.waitFor(() => expect(restored.getSnapshot().cloud?.state).toBe('matches'))
+    state.setAccount('bob')
+    expect(state.metadataUpdated('alice', source.id, '"next"', 'Late update', '"later"')).toBe(false)
+  })
   it('reports only acknowledged local writes, including a write reported before the editor commits', () => {
     const state = createDocumentSaveState(storage)
     state.observe(design, 'vwan')

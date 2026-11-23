@@ -1,12 +1,12 @@
 import type { HttpRequest } from '@azure/functions'
-import { cloudLimits } from '../../src/cloud/contracts'
+import { cloudLimits, type CloudEntry } from '../../src/cloud/contracts'
 
 export interface StoredValue { raw: string; etag: string; generation?: string }
 export interface CloudStore {
   get(key: string): Promise<StoredValue | undefined>
-  put(key: string, raw: string, etag: string | null, name?: string): Promise<string>
+  put(key: string, raw: string, etag: string | null, name?: string, description?: string): Promise<string>
   delete(key: string, etag: string): Promise<void>
-  list(prefix: string): Promise<{ id: string; name: string; etag: string; updatedAt: string }[]>
+  list(prefix: string): Promise<CloudEntry[]>
 }
 export class CloudError extends Error {
   constructor(public status: number, message: string) { super(message) }

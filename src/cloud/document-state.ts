@@ -150,6 +150,16 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       const ticket = { epoch, sequence: ++sequence }
       void this.confirmed(ticket, source, value, kind)
     },
+    metadataUpdated(owner: string, id: string, previousEtag: string, name: string, etag: string) {
+      if (revoked || pending || owner !== accountId || binding?.accountId !== owner
+        || binding.id !== id || binding.etag !== previousEtag) return false
+      binding = { ...binding, name, etag }
+      verification = 'confirmed'
+      try { storage().setItem(cloudDocumentKey, JSON.stringify(binding)); retained = true }
+      catch { remove(); retained = false }
+      publish()
+      return true
+    },
     failed(ticket: { epoch: number; sequence: number; id: string }, conflict: boolean) {
       if (!valid(ticket)) return
       pending = undefined; operation = 'failed'
