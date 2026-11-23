@@ -331,11 +331,6 @@ export function AzureNetDiagram({
   const [preview, setPreview] = useState<{ kind: 'vnet' | 'vwan-hub' | 'er-location' | 'site'; id: string; x: number; y: number } | null>(null)
   const dragPointerId = useRef<number | null>(null)
   const suppressBackgroundClick = useRef(false)
-  useCanvasZoom({
-    svgRef, zoom, onZoom: (next) => { closePolicyPreview(); setHoverPopover(null); setZoom(next) }, ...zoomLimits,
-    onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
-    isDragging: () => dragPointerId.current !== null,
-  })
   const clearDrag = (event?: { pointerId: number }) => {
     if (event && event.pointerId !== dragPointerId.current) return
     dragPointerId.current = null
@@ -499,6 +494,14 @@ export function AzureNetDiagram({
     ...Object.entries(positions.erLocations).map(([id, box]) => [`er-location:${id}`, box] as const),
     ...Object.entries(positions.sites).map(([id, box]) => [`site:${id}`, box] as const),
   ])
+  const fitBounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
+  const fitZoom = 1180 / fitBounds.width
+  const availableZoomLimits = { ...zoomLimits, minZoom: Math.min(zoomLimits.minZoom, fitZoom, zoom) }
+  useCanvasZoom({
+    svgRef, zoom, onZoom: (next) => { closePolicyPreview(); setHoverPopover(null); setZoom(next) }, ...availableZoomLimits,
+    onPan: (delta) => setPan((value) => ({ x: value.x + delta.x, y: value.y + delta.y })),
+    isDragging: () => dragPointerId.current !== null,
+  })
   const deviceOwners = new Map(topology.vnets.flatMap((vnet) =>
     [...vnet.gateways, ...vnet.appliances].map((device) => [device.id, `vnet:${vnet.id}`] as const),
   ))
@@ -2340,7 +2343,7 @@ export function AzureNetDiagram({
         )
       })()}
 
-      <CanvasControls zoom={zoom} onZoom={setZoom} {...zoomLimits}
+      <CanvasControls zoom={zoom} onZoom={setZoom} {...availableZoomLimits}
         status={focusSelection && <div className="connection-focus-status" role="status" data-testid="connection-focus-status">
           <p>{focusTarget
             ? t('Focus: {0}. {1} rendered connections: {2} emphasized, {3} dimmed, 0 hidden.',
@@ -2349,8 +2352,7 @@ export function AzureNetDiagram({
           <p>{t('View only, not a routed path. Inactive, failed and highlighted links stay prominent. Labels and policies stay visible; hover or focus a dimmed link to emphasize it.')}</p>
         </div>}
         onFitView={() => {
-          const bounds = fitDiagram([...motionBoxes.values()], 1180 / 790)
-          setZoom(1180 / bounds.width); setPan({ x: bounds.x, y: bounds.y })
+          setZoom(fitZoom); setPan({ x: fitBounds.x, y: fitBounds.y })
         }}
         onResetView={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>
         <button type="button" disabled={!focusCandidate} onClick={() => setFocusSelection(selected)}
