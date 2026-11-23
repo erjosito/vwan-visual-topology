@@ -95,7 +95,7 @@ export function WorkspaceTabs({ tabs, activeId, temporary, getSave, getCommands,
         const name = tab.name || text('Untitled topology', '名称未設定のトポロジ')
         const suffix = tabs.filter(other => other.name === tab.name).length > 1 ? text(` (tab ${index + 1})`, ` (タブ ${index + 1})`) : ''
         const closeLabel = text(`Close topology: ${name}${suffix}`, `トポロジを閉じる: ${name}${suffix}`)
-        return <button type="button" className="workspace-tab-close" key={tab.id} style={{ gridColumn: index + 1 }}
+        return <button type="button" className="workspace-tab-close" id={`workspace-tab-close-${tab.id}`} key={tab.id} style={{ gridColumn: index + 1 }}
           aria-label={closeLabel} title={closeLabel} onClick={() => onClose(tab)}>&#215;</button>
       })}
     </div>

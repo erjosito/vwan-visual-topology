@@ -1020,7 +1020,7 @@ test('a cloud upload stays busy and confirms only its original live tab after sw
     const otherId = await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)
     await page.locator(`#workspace-tab-${originalId}`).click()
     await expect(page.getByTestId('document-cloud-state')).toHaveAttribute('title', /Uploading a snapshot…/)
-    await page.getByRole('button', { name: 'Close topology: Empty Topology', exact: true }).click()
+    await page.locator(`#workspace-tab-close-${originalId}`).click()
     await expect(page.getByText('Wait for the save to finish before closing its tab.', { exact: true })).toBeVisible()
     await page.getByTestId('cloud-account-open').click()
     await expect(account.getByRole('button', { name: 'Save as new cloud copy', exact: true })).toBeDisabled()
