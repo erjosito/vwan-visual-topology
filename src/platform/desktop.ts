@@ -1,4 +1,5 @@
 import type { PlatformResult } from './contract'
+import type { DesktopCloudBridge } from '../cloud/desktop-contract'
 
 export type DesktopFileFailure = 'invalid' | 'busy' | 'revoked' | 'conflict' | 'permission' | 'failed'
 type Reply<T> = { ok: true; value: T } | { ok: false; error: string; code?: DesktopFileFailure }
@@ -9,7 +10,7 @@ export type LocalFile = { name: string; content: string; destination?: DesktopFi
 export type DesktopScope = { subscriptionId: string; tenantId: string }
 export type DesktopAccounts = { cloud: { name: string; resourceManager: string }; accounts: { id: string; name: string; tenantId: string; state: string }[] }
 export type DesktopTargets = { groups: { id: string; name: string }[]; wans: { id: string; name: string }[] }
-export interface DesktopBridge {
+export interface DesktopBridge extends DesktopCloudBridge {
   openTopology(): Promise<Reply<LocalFile>>
   accounts(): Promise<Reply<DesktopAccounts>>
   targets(scope: DesktopScope): Promise<Reply<DesktopTargets>>

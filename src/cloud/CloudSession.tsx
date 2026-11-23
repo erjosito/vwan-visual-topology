@@ -2,9 +2,10 @@ import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react
 import { createCloudSession } from './session'
 import { readCloudConfiguration } from './configuration'
 import { CloudContext } from './useCloudSession'
+import { createDesktopCloudSession } from './desktop-session'
 
 function useSession() {
-  const [session] = useState(() => createCloudSession(
+  const [session] = useState(() => typeof window.desktopSimulator?.cloudStatus === 'function' ? createDesktopCloudSession(window.desktopSimulator) : createCloudSession(
     readCloudConfiguration(), { storage: () => sessionStorage },
   ))
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot)
