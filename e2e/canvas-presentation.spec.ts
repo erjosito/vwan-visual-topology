@@ -9,6 +9,74 @@ import '../src/route-map-messages-ja'
 
 const styleKey = 'aznet-canvas-style:v1'
 
+for (const mode of ['vwan', 'hub-spoke', 'full']) for (const width of [1366, 390]) for (const language of ['en', 'ja']) {
+  test(`${mode}: ${language} menu and zoom controls remain in the main-app viewport at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 768 })
+    await page.addInitScript(({ mode, language, classic, native }) => {
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1',
+        JSON.stringify(mode === 'vwan' ? classic : { sampleId: '', topology: native }))
+    }, { mode, language, classic: example, native: sampleHybridVwanAndHubSpoke })
+    await page.goto(`/?mode=${mode}`)
+    await expect(page.locator('.document-artifact-status')).toBeVisible()
+    const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+    const original = await page.evaluate(key => localStorage.getItem(key), key)
+    for (const selector of ['header.unified-topbar, header.aznet-topbar', '.canvas-controls']) {
+      const box = await page.locator(selector).boundingBox()
+      expect(box).not.toBeNull()
+      expect(box!.y).toBeGreaterThanOrEqual(0)
+      expect(box!.y + box!.height).toBeLessThanOrEqual(768)
+      expect(await page.locator(selector).evaluate(element => {
+        const r = element.getBoundingClientRect()
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+        return !!hit && element.contains(hit)
+      })).toBe(true)
+    }
+    const canvas = await page.locator(mode === 'vwan' ? '.diagram-scroll' : '[data-testid="aznet-diagram-svg"]').boundingBox()
+    expect(canvas!.height).toBeGreaterThan(100)
+    if (mode === 'vwan' && width === 390) {
+      const legend = page.locator('.legend')
+      await legend.focus()
+      await page.keyboard.press('End')
+      await expect.poll(() => legend.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0)).toBe(true)
+    expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(original)
+  })
+}
+
+test('native manual zoom reaches the fitted dense overview without requiring Fit view', async ({ page }) => {
+  await page.addInitScript(topology => {
+    localStorage.setItem('aznet-ui-preview:v1', 'true')
+    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, denseVisualizationTopology())
+  await page.goto('/?mode=full')
+  const zoom = page.getByRole('combobox', { name: 'Canvas zoom', exact: true })
+  await expect(zoom).toBeVisible()
+  const original = await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))
+  const minimum = Math.min(...await zoom.locator('option').evaluateAll(options => options.map(option => Number((option as HTMLOptionElement).value))))
+  expect(minimum).toBeLessThan(0.65)
+  for (let i = 0; i < 8 && await page.getByRole('button', { name: 'Zoom out', exact: true }).isEnabled(); i++) {
+    await page.getByRole('button', { name: 'Zoom out', exact: true }).click()
+  }
+  await expect(zoom).toHaveValue(String(minimum))
+  await page.getByRole('button', { name: 'Fit view', exact: true }).click()
+  await expect(zoom).toHaveValue(String(minimum))
+  await page.getByRole('button', { name: 'Reset view', exact: true }).click()
+  const svg = page.getByTestId('aznet-diagram-svg')
+  await svg.focus()
+  for (let i = 0; i < 6; i++) await page.keyboard.press('Control+-')
+  await expect(zoom).toHaveValue(String(minimum))
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click()
+  await zoom.selectOption(String(minimum))
+  const box = await svg.boundingBox()
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
+  await page.mouse.wheel(0, 240)
+  await expect(zoom).toHaveValue(String(minimum))
+  expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(original)
+})
+
 for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja'] as const) {
   for (const [width, height] of [[1366, 768], [1920, 1080], [390, 844]]) {
     test(`${mode}: ${language} compact header preserves the document and reclaims usable canvas at ${width}px`, async ({ page }, info) => {
@@ -27,7 +95,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 
       const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
       const original = await page.evaluate(key => localStorage.getItem(key), key)
       const svg = page.locator(mode === 'vwan' ? 'svg.diagram' : '[data-testid="aznet-diagram-svg"]')
-      const node = svg.locator('g[role="button"]').first()
+      const node = svg.locator(mode === 'vwan' ? 'g.hub-node[role="button"]' : '[data-testid^="aznet-select-vnet-"]').first()
       await node.click()
       const selection = await node.getAttribute('aria-pressed')
       await page.getByRole('combobox', { name: text('Canvas zoom'), exact: true }).selectOption('1.25')

@@ -22,6 +22,10 @@ async function desktop(page: Page, capture: unknown, failure = '') {
         Reflect.get(window, 'azureCalls').push({ operation: 'collect', scope })
         return failure ? { ok: false, error: failure } : { ok: true, value: { name: 'capture.json', content: JSON.stringify(capture) } }
       },
+      openDocument: async (request: unknown) => {
+        Reflect.get(window, 'azureCalls').push({ operation: 'openDocument', request })
+        return { ok: true }
+      },
       releaseDocument: async () => ({ ok: true }),
     } })
   }, { capture, failure, subscriptionId, tenantId, wanId })
@@ -84,8 +88,27 @@ test('default session is only a suggestion; each local capture requires fresh ex
     { operation: 'targets', scope: { subscriptionId, tenantId } },
     { operation: 'collect', scope: { subscriptionId, tenantId, mode: 'vwan', target: wanId } },
   ])
-  await expect(page.getByRole('region', { name: 'Local desktop tools' })).not.toContainText('┬')
+  await expect(page.getByRole('region', { name: 'Local desktop tools' })).toHaveCount(0)
 })
+
+for (const mode of ['vwan', 'full']) {
+  for (const language of ['en', 'ja']) {
+    test(`desktop ${mode} ${language} has no persistent banner and retains native file loading`, async ({ page }) => {
+      await desktop(page, null)
+      await page.addInitScript(language => localStorage.setItem('vwan-visual-topology:language:v1', language), language)
+      await page.setViewportSize({ width: 640, height: 900 })
+      await page.goto(`/?mode=${mode}`)
+      await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+      await expect(page.locator('.desktop-tools')).toHaveCount(0)
+      await page.getByRole('button', { name: language === 'ja' ? '読み込み' : 'Load', exact: true }).click()
+      await page.getByRole('button', { name: language === 'ja' ? 'ファイルを読み込み' : 'Load file', exact: true }).click()
+      await expect.poll(() => page.evaluate(() => Reflect.get(window, 'azureCalls'))).toEqual([
+        { operation: 'openDocument', request: { documentId: expect.any(String), language } },
+      ])
+      await expect(page.getByTestId(mode === 'vwan' ? 'vwan-app' : 'aznet-app')).toBeVisible()
+    })
+  }
+}
 
 test('failed local collection leaves the design intact and requires reconfirmation', async ({ page }) => {
   await desktop(page, null, 'Existing session expired or read permission denied. Sign in outside the app and read the session again.')
