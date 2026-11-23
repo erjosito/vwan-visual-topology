@@ -196,7 +196,13 @@ export function curriculumV2SegmentRequirements(capstone = false): Requirement[]
   ]
 }
 export const curriculumV2Requirements: Record<CurriculumV2LessonId, Requirement[]> = {
-  'v2-peering': basic(), 'v2-firewall': basic({ applianceChain: { forward: ['azure-firewall'], reverse: ['azure-firewall'] } }),
+  'v2-peering': [
+    ...basic(),
+    flow('partner-to-tenant', subnet('partner'), subnet('tenant'), '10.22.1.10', '10.23.1.10'),
+    flow('tenant-to-partner', subnet('tenant'), subnet('partner'), '10.23.1.10', '10.22.1.10'),
+    { id: 'no-transitive-tenant-route', kind: 'route', table: 'app-work', prefix: '10.23.0.0/16', expectation: 'absent' },
+    { id: 'direct-partner-tenant-route', kind: 'route', table: 'partner-work', prefix: '10.23.0.0/16', expectation: 'present' },
+  ], 'v2-firewall': basic({ applianceChain: { forward: ['azure-firewall'], reverse: ['azure-firewall'] } }),
   'v2-wan': [...basic(), flow('new-shared-service', subnet('app'), subnet('shared'), '10.21.1.10', '10.24.1.10')],
   'v2-secured-wan': [...basic({ requiredFirewallHubId: 'wan-hub' }),
     flow('new-shared-inspection', subnet('app'), subnet('shared'), '10.21.1.10', '10.24.1.10', 'allow', { requiredFirewallHubId: 'wan-hub' })],
