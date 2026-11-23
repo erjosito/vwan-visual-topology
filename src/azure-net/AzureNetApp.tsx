@@ -60,7 +60,7 @@ import {
   type AzDiagnosticFinding,
 } from './diagnostics'
 import { azEndpointKey, type AzEndpointOption } from './endpoints'
-import { cidr, contains, ipv4 } from '../validation'
+import { contains, ipv4 } from '../validation'
 import {
   checkErLocationAzureRegionAccess,
   lookupSubnetEffectiveRoute,
@@ -93,7 +93,7 @@ const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ 
 const ErLocationInfoModal = lazy(() => import('../ErLocationInfoModal').then((module) => ({ default: module.ErLocationInfoModal })))
 const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
-const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
+const HubConfiguration = lazy(() => import('./HubConfiguration').then((module) => ({ default: module.HubConfiguration })))
 const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
 const CloneVnetDialog = lazy(() => import('../CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
@@ -3887,7 +3887,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
                 <Suspense fallback={null}>
                 {selected.kind === 'gateway' && <VpnNatGatewayEditor key={selected.gatewayId} topology={topology} targetKind="vnet-gateway" targetId={selected.gatewayId} commit={commitTopology} showGatewaySettings={false} />}
-                {selected.kind === 'vwan-hub' && <VpnNatGatewayEditor key={selected.hubId} topology={topology} targetKind="vwan-hub" targetId={selected.hubId} commit={commitTopology} />}
                 {selected.kind === 'vpn-connection' && <HybridConnectionEditor key={selected.connectionId} topology={topology} simulation={simulation} connectionId={selected.connectionId} commit={commitTopology} />}
                 {selected.kind === 'er-link' && <HybridConnectionEditor key={selected.linkId} topology={topology} connectionId={selected.linkId} commit={commitTopology} />}
                 {selected.kind === 'appliance' && <HybridNvaEditor key={selected.applianceId} topology={topology} applianceId={selected.applianceId} commit={commitTopology} />}
@@ -4898,89 +4897,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                   topology.vwanHubs
                     .filter((h) => selected.kind !== 'vwan-hub' || h.id === selected.hubId)
                     .map((hub) => (
-                      <InspectorSection key={hub.id} title={t('Virtual WAN hub configuration')} summary={`${hub.name} · ${hub.prefix}`} initialOpen={guidanceNavigation}>
-                      <div className="aznet-card" data-testid={`aznet-vwanhub-config-${hub.id}`} data-learning-anchor={guidanceAnchor('hub-editor', hub.id)}>
-                        <h3 hidden={workspaceSession?.presentationPreview}>Virtual WAN Hub: {hub.name}</h3>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <input
-                            type="text"
-                            className="aznet-input"
-                            value={hub.name}
-                            onChange={(e) => {
-                              const val = e.target.value
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.name = val
-                              })
-                            }}
-                            style={{ fontWeight: 700, width: 155 }}
-                          />
-                          <input
-                            type="text"
-                            className="aznet-input"
-                            value={hub.region}
-                            title="Azure Region"
-                            onChange={(e) => {
-                              const val = e.target.value
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.region = val
-                              })
-                            }}
-                            style={{ width: 130, fontSize: 11.5 }}
-                          />
-                          <input
-                            type="text"
-                            className="aznet-input"
-                            value={hub.prefix}
-                            title="Hub address prefix"
-                            onChange={(e) => {
-                              const val = e.target.value
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.prefix = val
-                              })
-                            }}
-                            style={{ width: 130, fontSize: 11.5 }}
-                          />
-                          <select
-                            className="aznet-select"
-                            value={hub.preference}
-                            onChange={(e) => {
-                              const pref = e.target.value as 'ExpressRoute' | 'VPN' | 'ASPath'
-                              commitTopology((draft) => {
-                                const target = draft.vwanHubs.find((x) => x.id === hub.id)
-                                if (target) target.preference = pref
-                              })
-                            }}
-                          >
-                            <option value="ExpressRoute">ExpressRoute Preference</option>
-                            <option value="VPN">VPN Preference</option>
-                            <option value="ASPath">ASPath Preference</option>
-                          </select>
-                        </div>
-                        <Suspense fallback={null}><HubTablesEditor hub={hub} topology={topology} commit={commitTopology} onAttach={(vnetId) => attachVnetToHub(vnetId, hub.id)} focusFirewall={firewallEditorHubId === hub.id} /></Suspense>
-                        <button type="button" onClick={() => setSnatHubId(hub.id)}>{t('Firewall SNAT')}</button>
-                        <form onSubmit={(event) => {
-                          event.preventDefault()
-                          const prefixes = String(new FormData(event.currentTarget).get('prefixes') ?? '').split(/[,\s]+/).filter(Boolean)
-                          if (prefixes.some((prefix) => !cidr(prefix))) { setWorkspaceNotice(t('Enter valid IPv4 CIDR prefixes.')); return }
-                          commitTopology((draft) => { draft.vwanHubs.find((target) => target.id === hub.id)!.routingIntent.privatePrefixes = prefixes })
-                        }}>
-                          <label className="field"><span>{t('Private routing intent prefixes')}</span><input name="prefixes" defaultValue={hub.routingIntent.privatePrefixes?.join(', ') ?? ''}
-                            data-configuration-saved={hub.routingIntent.privatePrefixes?.join(', ') ?? ''} /></label>
-                          <button type="submit">{t('Save private routing prefixes')}</button>
-                        </form>
-                        <label className="aznet-hover-toggle"><input type="checkbox" checked={topology.allowBranchToBranchTraffic !== false} onChange={(event) => {
-                          const enabled = event.target.checked
-                          commitTopology((draft) => { draft.allowBranchToBranchTraffic = enabled })
-                        }} />{t('WAN branch-to-branch route propagation')}</label>
-                        <p className="muted">{t('Disabling branch propagation does not disable hub learning, VNet connectivity, site links or ExpressRoute Global Reach. This is not a packet-filtering guarantee.')}</p>
-                        <button type="button" className="aznet-btn" onClick={() => {
-                          setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(hub.id)
-                        }}>{t('Edit Hub Route Maps')}</button>
-                      </div>
-                      </InspectorSection>
+                      <Suspense key={hub.id} fallback={null}><HubConfiguration hub={hub} topology={topology}
+                        commit={commitTopology} onAttach={(vnetId) => attachVnetToHub(vnetId, hub.id)}
+                        focusFirewall={firewallEditorHubId === hub.id} initialOpen={guidanceNavigation}
+                        learningAnchor={guidanceAnchor('hub-editor', hub.id)} onFirewallSnat={() => setSnatHubId(hub.id)}
+                        onError={setWorkspaceNotice} onClose={() => setActiveTab(null)} /></Suspense>
                     ))}
 
                 {/* Node Labels & Annotations (scoped to selected node #47) */}

@@ -3,6 +3,139 @@ import AxeBuilder from '@axe-core/playwright'
 import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/hub-dialog-messages-ja'
+import '../src/vpn-nat-messages-ja'
+import '../src/route-map-messages-ja'
+import { vpnNatFixture } from '../tests/fixtures/vpn-nat'
+
+for (const profile of [
+  { preview: true, language: 'en', width: 1440 },
+  { preview: false, language: 'en', width: 1440 },
+  { preview: true, language: 'ja', width: 390 },
+] as const) {
+  test(`full ${profile.language} ${profile.preview}: hub sections author scoped route maps and VPN NAT without changing ownership`, async ({ page }, testInfo) => {
+    await loadLanguage(profile.language)
+    const text = (value: string) => translate(profile.language, value)
+    const topology = vpnNatFixture('vwan')
+    delete topology.vpnConnections[0].nat
+    delete topology.vwanHubs[0].vpnNat
+    topology.vwanHubs.push({ ...structuredClone(topology.vwanHubs[0]), id: 'other', name: 'Other hub' })
+    topology.vpnConnections.push(
+      { ...structuredClone(topology.vpnConnections[0]), id: 'second', name: 'Second VPN' },
+      { ...structuredClone(topology.vpnConnections[0]), id: 'remote', name: 'Other hub VPN', targetId: 'other' },
+      { ...structuredClone(topology.vpnConnections[0]), id: 'sdwan', name: 'SD-WAN link', transport: 'SDWAN' },
+    )
+    topology.vnets.push({ id: 'spare', name: 'Spare', region: 'westeurope', role: 'spoke',
+      prefixes: ['10.4.0.0/16'], subnets: [], gateways: [], appliances: [] })
+    await page.addInitScript(({ topology, profile }) => {
+      if (!localStorage.getItem('aznet-visual-topology:v1')) localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+      localStorage.setItem('aznet-ui-preview:v1', String(profile.preview))
+      localStorage.setItem('vwan-visual-topology:language:v1', profile.language)
+      localStorage.setItem('aznet-theme', profile.language === 'ja' ? 'dark' : 'light')
+    }, { topology, profile })
+    await page.setViewportSize({ width: profile.width, height: 1000 })
+    await page.goto('/?mode=full')
+    const read = () => saved(page, 'full')
+    const open = async () => {
+      await page.getByTestId('aznet-vwanhub-hub').focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'Configure Hub & Labels', exact: true }).click()
+    }
+    await open()
+    const config = page.getByTestId('aznet-vwanhub-config-hub')
+    const disclosure = (title: string) => config.locator('.presentation-inspector-section > summary').filter({ hasText: text(title) }).first().locator('..')
+    const expand = async (title: string) => {
+      const group = disclosure(title)
+      if (await group.getAttribute('open') === null) {
+        await group.locator(':scope > summary').focus()
+        await page.keyboard.press('Enter')
+      }
+    }
+    if (profile.preview) {
+      await expect(disclosure('Virtual WAN hub configuration')).toHaveAttribute('open', '')
+      await expect(disclosure('VPN NAT')).not.toHaveAttribute('open', '')
+      await expect(disclosure('Hub routing tables')).not.toHaveAttribute('open', '')
+    }
+    expect(await read()).toEqual(topology)
+    await expand('VNet connections')
+    const vnets = config.getByRole('region', { name: text('VNet connections'), exact: true })
+    await expect(vnets.getByRole('group', { name: 'Azure', exact: true })).toBeVisible()
+    await expect(vnets.getByRole('group', { name: 'VPN link', exact: true })).toHaveCount(0)
+    await vnets.getByRole('button', { name: translate(profile.language, 'Connect {0}', 'Spare'), exact: true }).click()
+    await expect.poll(async () => (await read()).vnets[1].vwanHubAttachment?.hubId).toBe('hub')
+    await expand('Branch connections')
+    await expect(config.getByRole('region', { name: text('Branch connections'), exact: true }).getByRole('group', { name: 'VPN link', exact: true })).toBeVisible()
+    await expand('VPN NAT')
+    const gateway = config.getByTestId('vpn-nat-gateway-editor')
+    await gateway.getByLabel(text('Enable gateway BGP route translation'), { exact: true }).check()
+    await gateway.getByRole('button', { name: text('Save VPN NAT gateway capability'), exact: true }).click()
+    await expect.poll(async () => (await read()).vwanHubs[0].vpnNat?.bgpRouteTranslation).toBe(true)
+    expect((await read()).vpnConnections.every((connection: { nat?: unknown }) => !connection.nat)).toBe(true)
+    const connection = config.getByRole('combobox', { name: text('VPN NAT connection'), exact: true })
+    await expect(connection.locator('option')).toHaveCount(2)
+    const nat = config.getByTestId('vpn-nat-connection-editor')
+    await nat.getByLabel(text('VPN NAT rule name'), { exact: true }).fill('Scoped ingress')
+    page.once('dialog', (dialog) => dialog.dismiss())
+    await connection.selectOption('second')
+    await expect(connection).toHaveValue('vpn')
+    await expect(nat.getByLabel(text('VPN NAT rule name'), { exact: true })).toHaveValue('Scoped ingress')
+    await nat.getByLabel(text('Internal mapping (pre-NAT IPv4 CIDR)'), { exact: true }).fill('10.0.0.0/24')
+    await nat.getByLabel(text('External mapping (post-NAT IPv4 CIDR)'), { exact: true }).fill('10.0.0.0/24')
+    for (const label of ['Original on-premises BGP peer IPv4', 'Configured post-NAT BGP peer IPv4']) {
+      await nat.getByLabel(text(label), { exact: true }).fill('172.20.0.1')
+    }
+    await nat.getByRole('button', { name: text('Save VPN NAT rule'), exact: true }).click()
+    await expect(nat.getByRole('alert')).toBeVisible()
+    expect((await read()).vpnConnections[0].nat).toBeUndefined()
+    await nat.getByLabel(text('External mapping (post-NAT IPv4 CIDR)'), { exact: true }).fill('192.168.10.0/24')
+    await nat.getByRole('button', { name: text('Save VPN NAT rule'), exact: true }).click()
+    await expect(nat.getByRole('alert')).toHaveCount(0)
+    const mapped = await read()
+    expect(mapped.vpnConnections[0].nat.rules[0].externalMapping).toBe('192.168.10.0/24')
+    expect(mapped.vpnConnections.slice(1)).toEqual(topology.vpnConnections.slice(1))
+    expect(mapped.vwanHubs[1]).toEqual(topology.vwanHubs[1])
+    await connection.selectOption('second')
+    await expect(nat.getByLabel(text('VPN NAT rule name'), { exact: true })).toHaveValue('')
+    await connection.selectOption('vpn')
+    const history = async (name: string) => {
+      const action = page.getByTitle(name, { exact: true })
+      if (!await action.isVisible()) await page.getByRole('button', {
+        name: profile.language === 'ja' ? 'ワークスペース メニュー' : 'Workspace menu', exact: true,
+      }).click()
+      await action.click()
+    }
+    await history('Undo')
+    expect((await read()).vpnConnections[0].nat).toBeUndefined()
+    await history('Redo')
+    expect((await read()).vpnConnections[0].nat).toEqual(mapped.vpnConnections[0].nat)
+    await expand('Route maps')
+    const maps = config.getByRole('region', { name: translate(profile.language, 'Route maps · {0}', 'Hub'), exact: true })
+    await maps.getByRole('button', { name: text('Create route map'), exact: true }).click()
+    await maps.getByRole('textbox', { name: text('Route map name'), exact: true }).fill('Hub-only policy')
+    await maps.getByRole('button', { name: text('Add rule'), exact: true }).click()
+    await maps.getByRole('combobox', { name: translate(profile.language, 'Rule {0} action', 1), exact: true }).selectOption('drop')
+    await maps.getByRole('button', { name: text('Save route map'), exact: true }).click()
+    const map = (await read()).routeMaps[0]
+    expect(map.hubId).toBe('hub')
+    await maps.getByRole('combobox', { name: text('Route map connection'), exact: true }).selectOption('vpn')
+    await maps.getByRole('combobox', { name: text('Inbound route map'), exact: true }).selectOption(map.id)
+    const result = await read()
+    expect(result.vwanHubs[0].routeMapAssignments).toEqual([{ connectionId: 'vpn', inboundMapId: map.id }])
+    expect(result.vwanHubs[1]).toEqual(topology.vwanHubs[1])
+    expect(result.vpnConnections).toEqual(mapped.vpnConnections)
+    expect((await new AxeBuilder({ page }).include('[data-testid="aznet-vwanhub-config-hub"]').analyze()).violations).toEqual([])
+    expect(await config.evaluate((element) => [...element.querySelectorAll<HTMLElement>('*')]
+      .filter((child) => child.getBoundingClientRect().right > element.getBoundingClientRect().right + 1)
+      .map((child) => `${child.tagName}.${child.className}: ${child.textContent?.slice(0, 60)}`).slice(0, 10))).toEqual([])
+    await page.screenshot({ path: testInfo.outputPath('hub-sections.png') })
+    await page.reload()
+    await expect(page.getByTestId('aznet-vwanhub-hub')).toBeVisible()
+    expect(await read()).toEqual(result)
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'hub-sections-roundtrip.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(result)),
+    })
+    await expect.poll(read).toEqual(result)
+  })
+}
 
 async function saved(page: Page, mode: string) {
   return page.evaluate((mode) => {
@@ -10,6 +143,32 @@ async function saved(page: Page, mode: string) {
     return mode === 'vwan' ? value : value.topology
   }, mode)
 }
+
+test('full: hub VPN NAT explains missing IPsec connections instead of offering SD-WAN rules', async ({ page }) => {
+  const topology = vpnNatFixture('vwan')
+  delete topology.vpnConnections[0].nat
+  topology.vpnConnections[0].transport = 'SDWAN'
+  delete topology.vwanHubs[0].vpnNat
+  await page.addInitScript((topology) => {
+    localStorage.setItem('aznet-ui-preview:v1', 'true')
+    localStorage.setItem('aznet-visual-topology:v1', JSON.stringify({ sampleId: '', topology }))
+  }, topology)
+  await page.goto('/?mode=full')
+  await page.getByTestId('aznet-vwanhub-hub').focus()
+  await page.keyboard.press('Shift+F10')
+  await page.getByRole('menuitem', { name: 'Configure Hub & Labels', exact: true }).click()
+  const config = page.getByTestId('aznet-vwanhub-config-hub')
+  await config.locator('.presentation-inspector-section > summary').filter({ hasText: 'VPN NAT' }).click()
+  await expect(config.getByRole('combobox', { name: 'VPN NAT connection', exact: true })).toHaveCount(0)
+  const status = config.getByRole('region', { name: 'VPN NAT', exact: true }).getByRole('status')
+  await expect(status).toContainText('No IPsec VPN connections target this hub.')
+  await expect(status).toContainText('SD-WAN connections do not support overlap NAT.')
+  expect(await saved(page, 'full')).toEqual(topology)
+  await config.getByRole('button', { name: 'Save VPN NAT gateway capability', exact: true }).click()
+  const result = await saved(page, 'full')
+  expect(result.vwanHubs[0].vpnNat).toEqual({ bgpRouteTranslation: false })
+  expect(result.vpnConnections).toEqual(topology.vpnConnections)
+})
 
 for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
   test(`${mode} ${language}: discover Firewall without intent and inspect honest derived gateway capabilities`, async ({ page }, testInfo) => {
