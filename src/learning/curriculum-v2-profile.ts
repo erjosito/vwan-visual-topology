@@ -7,7 +7,7 @@ export const curriculumV2Assessments = lessons.map((id) => ({
 }))
 const thresholds = [80, 225, 300, 390, 505, 625, 735, 845, 930, 1080, 1190, 1345]
 export const curriculumV2Course: CourseBundle['course'] = {
-  id: 'azure-routing-v2', contentVersion: 1, publication: 'complete', preparation: 'ungraded',
+  id: 'azure-routing-v2', contentVersion: 2, publication: 'complete', preparation: 'ungraded',
   title: { en: 'Azure routing: foundations to handover', ja: 'Azure ルーティング：基礎から引き継ぎまで' },
   lessonOrder: lessons,
   belts: [previewCourse.belts[0], ...thresholds.map((pointsRequired, index) => {

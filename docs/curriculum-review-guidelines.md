@@ -70,6 +70,13 @@ guided scenarios, not how to operate the simulator.**
 
 ## 3. Meaningful scenarios and assessments
 
+- **When a concept can be demonstrated with relatively little effort, showing
+  beats telling.** Let learners make the change, inspect its effects and then
+  explain their evidence, rather than asking about a hypothetical topology.
+  For example, create Application-Partner and Partner-Restricted tenant peerings,
+  inspect Application's effective routes for Restricted tenant, then explain
+  why the peering chain does not provide transit. Do not equate this with a
+  requirement to build expensive or unsupported demonstrations.
 - Prefer practical, varied architectures and troubleshooting over a sequence
   of theoretical route-table questions.
 - Mix closed inspections, open repairs and interpretation/design quizzes.
@@ -216,6 +223,8 @@ and any follow-up issue. Inspect the actual learner UI as well as authored text.
 - [ ] Is each new concept explained before it is assessed?
 - [ ] Are VNet/subnet names, prefixes and inspection scopes unambiguous?
 - [ ] Does every task assess a distinct, useful objective rather than repetition?
+- [ ] Where a low-effort native demonstration is possible, does the learner
+      perform and inspect it instead of only answering a hypothetical question?
 - [ ] Do quizzes require reasoning, with plausible and balanced alternatives?
 - [ ] Can navigation help reveal the correct native control without doing the work?
 - [ ] Are preparation and completion separate, with no loading-only XP?

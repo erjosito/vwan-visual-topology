@@ -302,8 +302,8 @@ function chapter(id: CurriculumV2LessonId, title: Localized, objective: Localize
 }
 
 {
-  const id = 'v2-peering', t = (suffix: string, points: number, title: Localized, instruction: Localized, debrief: Localized, check: CheckSpec, anchors: NativeGuidance[] = []) =>
-    task(id, suffix, points, title, instruction, debrief, check, anchors)
+  const id = 'v2-peering', t = (suffix: string, points: number, title: Localized, instruction: Localized, debrief: Localized, check: CheckSpec, anchors: NativeGuidance[] = [], assessmentVersion = 1) =>
+    ({ ...task(id, suffix, points, title, instruction, debrief, check, anchors), assessmentVersion })
   chapter(id, l('C01 · Two services, two VNets', 'C01 · 2 つのサービスと VNet'),
     l('Identify address ownership and establish ordinary private VNet peering.', 'アドレスの所有範囲を確認し、通常のプライベート VNet ピアリングを確立します。'),
     l('The retailer has Application 10.21.0.0/16 and Partner 10.22.0.0/16 in the same region. Application Operations is 10.21.2.0/24; Restricted tenant 10.23.0.0/16 is separate. This fresh comparison starts without peerings. Preparing it earns no XP.',
@@ -326,18 +326,23 @@ function chapter(id: CurriculumV2LessonId, title: Localized, objective: Localize
         quiz(l('What provides the missing private connection?', '不足しているプライベート接続を提供するものは？'),
           l('An explicit connection, such as VNet peering', 'VNet ピアリングなどの明示的な接続'), l('Same-region placement alone', '同一リージョンへの配置だけ'),
           l('Non-overlapping ownership is necessary but is not a connection.', '重複しない所有範囲は必要ですが、それ自体は接続ではありません。'), l('Region placement does not create routes between VNets.', 'リージョンへの配置だけでは VNet 間のルートは作成されません。'))),
-      t('connect', 25, l('Connect the original services', '元のサービスを接続'),
-        l('Create whole-VNet Application–Partner peering using the native peering command. Keep tenant separate. Verify the original 10.21.1.10 ↔ 10.22.1.10 conversation and Operations.', 'ネイティブのピアリング操作で Application–Partner の VNet 全体のピアリングを作成してください。テナントは分離したまま、元の 10.21.1.10 ↔ 10.22.1.10 と Operations を検証します。'),
-        l('The original service pair now has independent delivered request and reply paths. Operations still works; neither tenant initiation has gained a route.', '元のサービス間で要求と応答の経路をそれぞれ確認できました。Operations は正常で、テナントからもテナントへも開始経路は追加されていません。'),
-        { kind: 'vnet.peered', params: { vnetAId: 'app', vnetBId: 'partner', requirements: curriculumV2Requirements[id] } },
-        [g('peering.command', { vnetAId: 'app', vnetBId: 'partner' }, 'Create Application–Partner peering.', 'Application–Partner のピアリングを作成します。')]),
+      t('connect', 25, l('Build a peering chain and inspect its limit', 'ピアリングの連鎖を作成し限界を確認'),
+        l('First peer VNet Application with VNet Partner. Then peer Partner with Restricted tenant, without peering Application directly to Restricted tenant. Finally open effective routes for subnet Workload in Application and look for 10.23.0.0/16. Does connecting both VNets to Partner give Application a route to Restricted tenant? Show me where guides each action in order.',
+          'まず VNet Application と VNet Partner をピアリングし、次に Partner と Restricted tenant をピアリングしてください。Application と Restricted tenant は直接接続しないでください。最後に Application の Workload サブネットの実効ルートを開き、10.23.0.0/16 を探します。両方を Partner に接続すると Application に Restricted tenant へのルートは追加されますか？「場所を表示」が各操作を順に案内します。'),
+        l('Partner has a direct peering to each VNet, but Application has no peering route for Restricted tenant 10.23.0.0/16. Ordinary VNet peering is not transitive: Partner does not relay routes or traffic between its peers. Application–Partner and Partner–Restricted tenant work independently; Application–Restricted tenant still has no working path. Operations remains reachable.',
+          'Partner は各 VNet と直接ピアリングされていますが、Application に Restricted tenant の 10.23.0.0/16 へのピアリング ルートはありません。通常の VNet ピアリングは推移的ではなく、Partner はピア間のルートやトラフィックを中継しません。Application–Partner と Partner–Restricted tenant は個別に接続できますが、Application–Restricted tenant の経路は依然として利用できません。Operations への接続は維持されています。'),
+        inspect('app', 'app-work', '10.23.0.0/16', curriculumV2Requirements[id]),
+        [g('peering.command', { vnetAId: 'app', vnetBId: 'partner' }, 'Create Application–Partner peering.', 'Application–Partner のピアリングを作成します。'),
+          g('peering.command', { vnetAId: 'partner', vnetBId: 'tenant' }, 'Create Partner–Restricted tenant peering.', 'Partner–Restricted tenant のピアリングを作成します。'),
+          routes('app', 'app-work', '10.23.0.0/16')], 2),
       t('checkpoint', 15, l('Explain peering scope', 'ピアリングの範囲を説明'),
-        l('Partner later peers to another VNet. Explain what the current whole-VNet peering grants and what it does not.', 'Partner が別の VNet とピアリングするとき、現在の VNet 全体のピアリングが提供する範囲と提供しない範囲を説明してください。'),
-        l('Ordinary whole-VNet peering connects the two address spaces, including their participating workloads. It is not automatic third-VNet transit and is not the Azure Private Link service.', '通常の VNet 全体のピアリングは 2 つのアドレス空間を接続します。3 つ目の VNet への自動転送ではなく、Azure Private Link サービスでもありません。'),
-        quiz(l('Does this peering make a third VNet automatically reachable?', 'このピアリングで 3 つ目の VNet に自動的に到達できますか？'),
-          l('No; peering is not transitive, and this whole-VNet connection covers Application and Partner.', 'いいえ。ピアリングは推移的ではなく、この接続は Application と Partner を対象にします。'),
-          l('Yes; every VNet connected to Partner becomes a direct peer of Application.', 'はい。Partner に接続したすべての VNet が Application の直接のピアになります。'),
-          l('Transit needs a separate supported design.', '転送には別の対応した設計が必要です。'), l('A chain of ordinary peerings is not a managed transit hub.', '通常のピアリングの連鎖はマネージド転送ハブではありません。'))),
+        l('Use the Application effective routes you just inspected after creating Application–Partner and Partner–Restricted tenant peerings. Explain why Restricted tenant is still not reachable from Application.', 'Application–Partner と Partner–Restricted tenant のピアリング作成後に確認した Application の実効ルートを使い、Application から Restricted tenant に依然として到達できない理由を説明してください。'),
+        l('Each whole-VNet peering connects its two address spaces, not every VNet connected to either peer. The missing 10.23.0.0/16 peering route in Application demonstrates that chaining ordinary peerings does not provide transit.', 'VNet 全体のピアリングはその両端のアドレス空間を接続し、ピアに接続したすべての VNet を接続するものではありません。Application に 10.23.0.0/16 のピアリング ルートがないことから、通常ピアリングの連鎖では転送が提供されないと分かります。'),
+        quiz(l('Does the peering chain you built make Restricted tenant reachable from Application?', '作成したピアリングの連鎖で Application から Restricted tenant に到達できますか？'),
+          l('No; ordinary peering does not carry Restricted tenant routes through Partner to Application.', 'いいえ。通常のピアリングでは Restricted tenant のルートは Partner 経由で Application に伝わりません。'),
+          l('Yes; Partner relays Restricted tenant routes between its two peerings.', 'はい。Partner は 2 つのピアリング間で Restricted tenant のルートを中継します。'),
+          l('Your Application table has no 10.23.0.0/16 peering route. Transit needs a separate supported design.', 'Application のテーブルに 10.23.0.0/16 のピアリング ルートはありません。転送には別の対応した設計が必要です。'),
+          l('Both direct peerings work, but Partner does not provide transit between them. The Application table has no Restricted tenant peering route.', '両方の直接ピアリングは正常でも、Partner はその間の転送を提供しません。Application のテーブルに Restricted tenant へのピアリング ルートはありません。'))),
     ])
 }
 

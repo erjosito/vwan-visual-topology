@@ -6,6 +6,8 @@ import type { CourseGuidance } from './course-contract'
 import { scenarioBundle } from './scenario-course'
 import { hybridLessonTopology } from './hybrid-scenario'
 import { haLessonTopology } from './ha-scenario'
+import { curriculumV2Bundle } from './curriculum-v2'
+import { curriculumV2Topologies } from './curriculum-v2-topologies'
 
 describe('semantic guidance admission', () => {
   it('reveals only the original peering without changing directional gateway settings', () => {
@@ -61,6 +63,25 @@ describe('semantic guidance admission', () => {
     expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[1])
     expect(input).toEqual(before)
     input.topology.vnetPeerings.at(-1)!.bToA.allowVirtualNetworkAccess = false
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
+  })
+  it('guides both direct peerings before the original Application route inspection, including after undo', () => {
+    const input = { mode: 'full' as const, topology: structuredClone(curriculumV2Topologies['v2-peering']) }
+    const task = curriculumV2Bundle.lessons[0].tasks.find((task) => task.id === 'v2-peering.connect')!
+    const check = curriculumV2Bundle.checks.find((check) => check.id === task.checkId)!
+    const cues = task.guidanceIds.map((id) => curriculumV2Bundle.guidance.find((cue) => cue.id === id)!)
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    for (const [index, [a, b]] of [['app', 'partner'], ['tenant', 'partner']].entries()) {
+      expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[index])
+      input.topology.vnetPeerings.push({ id: `native-${index}`, name: 'Learner', vnetAId: a, vnetBId: b,
+        enabled: true, aToB: { ...flags }, bToA: { ...flags } })
+    }
+    const before = structuredClone(input)
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[2])
+    expect(input).toEqual(before)
+    input.topology.vnetPeerings.pop()
+    expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[1])
+    input.topology.vnetPeerings[0].aToB.allowVirtualNetworkAccess = false
     expect(selectPrimaryGuidance(input, check, cues)).toBe(cues[0])
   })
   it('moves staged UDR guidance only for an enabled matching rule on the actual subnet table', () => {

@@ -207,11 +207,16 @@ export function validateCourse(input: unknown): CourseBundle {
       if (inspection || check.kind === 'vnet.peered') {
         requireContent(task.guidanceIds.length > 0, `missing navigation guidance for ${task.id}`)
       }
+      if (check.kind === 'routes.inspected') {
+        requireContent(task.guidanceIds.some((id) => guidance.get(id)?.action === 'routes.open'),
+          `missing inspection guidance for ${task.id}`)
+      }
       for (const targetId of task.guidanceIds) {
         const target = guidance.get(targetId)
         requireContent(target, `unknown guidance target for ${task.id}`)
         checkScope(target, scenario.document, scenario.id)
         usedGuidance.add(target.id)
+        if (check.kind === 'routes.inspected' && target.action === 'peering.command') continue
         if (inspection || check.kind === 'vnet.peered') {
           const action = check.kind === 'vnet.peered' ? 'peering.command'
             : check.kind === 'packet.inspected' ? 'packet-probe.open'
