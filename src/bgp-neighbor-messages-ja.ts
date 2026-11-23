@@ -27,6 +27,8 @@ registerJapaneseMessages({
   'Static VPN routing; no BGP peering is configured on this connection.': '静的 VPN ルーティングです。この接続に BGP ピアリングは構成されていません。',
   'MSEE ASN 12076; the original site remains the routing endpoint, not a direct BGP peer.': 'MSEE ASN は 12076 です。元のサイトはルーティング エンドポイントであり、直接 BGP ピアではありません。',
   'BGP neighbors': 'BGP ネイバー',
+  'Different-VNet NVA reflection requires branch-to-branch exchange. Same-VNet flag behavior and wire attributes are not assessed. Source learning and local NIC routes are separate.': '異なる VNet 間の NVA ルート反映にはブランチ間の交換が必要です。同一 VNet のフラグ動作とワイヤ属性は未評価です。送信元の学習とローカル NIC ルートは別です。',
+  'ARS wire next-hop IP is not assessed; captured endpoints remain separate observations and are not assigned to modeled speaker roles.': 'ARS のワイヤ上のネクスト ホップ IP は未評価です。取得済みエンドポイントは別の観測情報であり、モデルのスピーカーには割り当てません。',
   'BGP neighbor summary': 'BGP ネイバー概要',
   'Simulated BGP: availability is not Established. Counts are logical, not native per-instance counters.': 'BGP モデル: 利用可能は Established を意味しません。数値は論理値で、ネイティブのインスタンス別カウンターではありません。',
   'Scope and limitations': 'スコープと制約',

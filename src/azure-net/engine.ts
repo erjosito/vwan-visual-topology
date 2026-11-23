@@ -112,9 +112,21 @@ export interface AzSubnetRouteTableResult {
   suppressedPeeringRoutes: AzEffectiveRoute[]
 }
 
-export type AzNvaReceivedRoute = Omit<AzBgpRibEntry, 'preferred'> & { selectedByArs: boolean }
+// Wire metadata only; this projection never feeds subnet or packet forwarding.
+export type AzNvaReceivedRoute = Omit<AzBgpRibEntry, 'preferred' | 'asPath' | 'nextHopKind'> & {
+  selectedByArs: boolean
+  asPath?: number[]
+  nextHopKind: 'route-server'
+  wireAttributes: { asPath: 'modeled' | 'not-assessed'; nextHop: 'not-assessed' }
+  sourceRoute: AzBgpRibEntry
+}
 
 export interface AzNvaBgpPeer {
+  nvaReflection?: {
+    branchToBranch: boolean
+    scope: 'different-vnets'
+    sameVnet: 'not-assessed'
+  }
   gatewaySummaryAssessment?: {
     status: 'not-assessed'
     configuredPrefixes: string[]
@@ -936,6 +948,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         applianceId: id, applianceVnetId: owner.id, routeServerId: ars.id, routeServerVnetId: vnet.id,
         connectionId, ...(policyLinks.some((link) => link.id === connectionId) ? { policyConnectionId: connectionId } : {}),
         state, routes: [],
+        nvaReflection: { branchToBranch: ars.branchToBranchTraffic, scope: 'different-vnets', sameVnet: 'not-assessed' },
         ...(vnet.summarizedGatewayPrefixes?.length ? { gatewaySummaryAssessment: {
           status: 'not-assessed' as const,
           configuredPrefixes: [...vnet.summarizedGatewayPrefixes],
@@ -1001,13 +1014,26 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       const { peer, host } = resolvedPeers.find(({ peer }) => peer.id === view.applianceId)!
       const candidates = [
         ...connected.filter((route) => host.id === vnet.id || !host.prefixes.includes(route.prefix)),
-        ...routeServerRibs[ars.id].filter((route) => route.preferred && route.originProtocol !== 'VNet' && route.nextHopId !== peer.id),
+        ...routeServerRibs[ars.id].filter((route) => route.preferred && route.originProtocol !== 'VNet' && route.nextHopId !== peer.id &&
+          (route.originProtocol !== 'BGP-NVA' || route.sourceVnetId === host.id || ars.branchToBranchTraffic)),
       ]
       // BGP eligibility does not grant a new policy-assignment scope or inject subnet routes.
       const exported = view.policyConnectionId
         ? applyAzArsRouteMap(ars, view.policyConnectionId, 'outbound', candidates) : candidates
       view.routes = exported.filter((route) => !route.asPath.includes(peer.asn ?? 65501))
-        .map(({ preferred, ...route }) => ({ ...route, selectedByArs: preferred }))
+        .map(({ preferred, asPath, nextHopIp: _sourceIp, ...route }) => {
+          const modeledPath = route.originProtocol === 'VNet' ||
+            route.originProtocol === 'BGP-NVA' && route.sourceVnetId !== host.id
+          return {
+            ...route, selectedByArs: preferred,
+            ...(modeledPath ? { asPath: route.originProtocol === 'VNet' ? [...asPath] : [65515, ...asPath] } : {}),
+            nextHopKind: 'route-server', nextHopId: ars.id, nextHopName: ars.name,
+            wireAttributes: { asPath: modeledPath ? 'modeled' : 'not-assessed', nextHop: 'not-assessed' },
+            sourceRoute: structuredClone(candidates.find((candidate) => candidate.id === route.id) ??
+              { ...route, asPath, nextHopIp: _sourceIp, preferred }),
+            explanation: `Advertised by ${ars.name}; managed wire next-hop IP is not assessed. Source learning is recorded separately.`,
+          }
+        })
     }
     for (const link of policyLinks) {
       const isGateway = link.id.startsWith('gateway:')
@@ -1017,6 +1043,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
       if (isGateway && (!ars.branchToBranchTraffic || !targetGateway)) continue
       if (isSpoke ? !link.bgp : !isGateway && (!peer?.bgpEnabled || !peer.enableIpForwarding || peer.asn === 65515 || peer.asn === 12076)) continue
       const candidates = routeServerRibs[ars.id].filter((route) => route.preferred && route.originProtocol !== 'VNet' && route.nextHopId !== link.targetId && (!isSpoke || route.sourceVnetId !== link.targetId) &&
+        (isSpoke || isGateway || route.originProtocol !== 'BGP-NVA' || route.sourceVnetId === vnet.id || ars.branchToBranchTraffic) &&
         (!isGateway || route.nextHopKind === 'appliance' || route.nextHopKind === 'vnet-gateway' &&
           vnet.gateways.some((source) => source.id === route.nextHopId && source.kind !== targetGateway!.kind && gatewayArsExchange(source))))
       const advertised = applyAzArsRouteMap(ars, link.id, 'outbound', [...connected.filter((route) => !isSpoke || !topology.vnets.find((spoke) => spoke.id === link.targetId)?.prefixes.includes(route.prefix)), ...candidates])

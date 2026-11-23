@@ -24,7 +24,7 @@ export interface BgpResource extends BgpResourceRef {
 export interface BgpNeighborRoute {
   id: string
   prefix: string
-  asPath: number[]
+  asPath?: number[]
   nextHop?: string
   evidence: AzBgpRibEntry | AzNvaReceivedRoute
 }
@@ -96,7 +96,8 @@ const evidence = (scope: BgpRouteEvidence['scope'], routes: (AzBgpRibEntry | AzN
   routes === undefined ? undefined : {
     scope, routes: routes.map((route) => ({
       id: route.id, prefix: route.prefix, asPath: route.asPath,
-      nextHop: route.nextHopIp ?? route.nextHopName, evidence: route,
+      nextHop: 'wireAttributes' in route && route.wireAttributes.nextHop === 'not-assessed'
+        ? undefined : route.nextHopIp ?? route.nextHopName, evidence: route,
     })),
   }
 
@@ -191,6 +192,10 @@ export function inspectAzBgp(topology: AzNetTopology, simulation?: AzSimulationR
       const limitations = peer?.gatewaySummaryAssessment ? [
         'Gateway summary impact on ARS-to-NVA exports is not assessed. Shown candidates do not prove presence or absence of configured gateway summaries.',
       ] : []
+      if (peer?.nvaReflection) limitations.push(
+        'Different-VNet NVA reflection requires branch-to-branch exchange. Same-VNet flag behavior and wire attributes are not assessed. Source learning and local NIC routes are separate.',
+        'ARS wire next-hop IP is not assessed; captured endpoints remain separate observations and are not assigned to modeled speaker roles.',
+      )
       for (const instance of local.instances) pair(identity('ars-nva', ars.id, appId), connectionId,
         local, instance, remote, remote.instances[0], availability, reason, received, exported, peerReceived, sent, limitations)
     }
