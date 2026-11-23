@@ -381,21 +381,29 @@ for (const mode of ['vwan', 'full']) test(`${mode} managed BGP relationships sho
     .toEqual(mode === 'vwan' ? topology : { sampleId: '', topology })
 })
 
-test('static VWAN routing and disabled ER remain visible without implying BGP sessions', async ({ page }) => {
-  const topology = bgpNeighborVwanTopology()
-  topology.connections[0].learnSiteRoutes = false
-  topology.sites[0].vpnStaticRoutes = [{ id: 'static', prefix: '203.0.113.0/24', connectionId: 'managed-vpn' }]
-  topology.erLinks![1].enabled = false
-  await page.addInitScript((value) => localStorage.setItem('vwan-visual-topology:v1', JSON.stringify(value)), topology)
-  await page.goto('/?mode=vwan')
-  await open(page, page.locator('[data-node-id="managed-hub"]'), 'BGP neighbors')
+for (const mode of ['vwan', 'full']) test(`${mode} static VWAN routing and disabled ER remain visible without implying BGP sessions`, async ({ page }) => {
+  const vwan = bgpNeighborVwanTopology()
+  vwan.connections[0].learnSiteRoutes = false
+  vwan.sites[0].vpnStaticRoutes = [{ id: 'static', prefix: '203.0.113.0/24', connectionId: 'managed-vpn' }]
+  vwan.erLinks![1].enabled = false
+  const full = bgpNeighborTopology()
+  full.vwanHubs = vwan.hubs
+  full.erLinks.push({ id: 'er-hub', name: 'Hub ER', locationId: 'edge-location', targetKind: 'vwan-hub', targetId: 'managed-hub', enabled: false })
+  full.vpnConnections.push({ id: 'managed-vpn', name: 'Managed VPN', siteId: 'branch', targetKind: 'vwan-hub', targetId: 'managed-hub', enabled: true, bgpEnabled: false })
+  const topology = mode === 'vwan' ? vwan : full
+  const key = mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+  const original = mode === 'vwan' ? topology : { sampleId: '', topology }
+  await page.addInitScript(({ key, original }) => localStorage.setItem(key, JSON.stringify(original)), { key, original })
+  await page.goto(`/?mode=${mode}`)
+  await open(page, mode === 'vwan' ? page.locator('[data-node-id="managed-hub"]') : page.getByTestId('aznet-vwanhub-managed-hub'), 'BGP neighbors')
   const dialog = page.getByRole('dialog', { name: 'BGP neighbors', exact: true })
   await expect(dialog.getByLabel('Local BGP resource')).toHaveValue(bgpResourceKey({ kind: 'vwan-hub', id: 'managed-hub' }))
   const rows = dialog.getByTestId('bgp-managed-rows').locator('tbody tr')
   await expect(rows.filter({ hasText: 'managed-vpn' })).toContainText('Not applicable (static routing)')
+  await expect(rows.filter({ hasText: 'managed-vpn' })).toContainText('Enabled')
   await expect(rows.filter({ has: page.getByText('er-hub', { exact: true }) })).toContainText('Disabled / unavailable')
   await expect(dialog.getByLabel('Local BGP instance')).toHaveCount(0)
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('vwan-visual-topology:v1')!))).toEqual(topology)
+  expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), key)).toEqual(original)
 })
 
 test('localizes the NVA inspector on a narrow dark workspace and enforces the ARS peer limit', async ({ page }) => {
