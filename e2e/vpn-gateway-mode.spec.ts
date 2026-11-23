@@ -4,10 +4,59 @@ import { vpnGatewayModeTopology } from '../tests/fixtures/vpn-gateway-mode'
 import { coexistenceTopology } from '../tests/fixtures/coexistence'
 
 for (const mode of ['hub-spoke', 'full']) {
+  test(`${mode} selects gateway SKUs by keyboard and clears only the corrected coexistence warning`, async ({ page }) => {
+    const topology = coexistenceTopology()
+    Object.assign(topology.vnets[0].gateways[0], { sku: 'Basic', vpnGatewayGeneration: 'Generation2' })
+    delete topology.vnets[0].gateways[1].sku
+    await page.addInitScript(() => localStorage.setItem('aznet-ui-preview:v1', 'true'))
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[data-desktop-import]').setInputFiles({
+      name: 'gateway-skus.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    const configure = async (id: string) => {
+      await page.getByTestId(`aznet-chip-${id}`).focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: 'Configure Gateway & Peerings', exact: true }).click()
+    }
+    const inspect = async () => {
+      await page.locator('summary').filter({ hasText: /^Routing checks$/ }).click()
+      await page.getByTestId('aznet-run-diagnostics-btn').click()
+    }
+    await configure('vpn')
+    const vpn = page.getByTestId('vpn-gateway-settings-vpn')
+    const sku = vpn.getByRole('combobox', { name: 'Gateway SKU', exact: true })
+    await expect(sku).toHaveValue('Basic')
+    await sku.focus()
+    await page.keyboard.press('Home')
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Enter')
+    await expect(sku).toHaveValue('VpnGw1AZ')
+    await expect(vpn.getByRole('combobox', { name: 'VPN gateway generation', exact: true })).toHaveValue('Generation1')
+    await inspect()
+    await expect(page.locator('[data-finding-id="coexistence:hub:sku:vpn"]')).toHaveCount(0)
+    const erFinding = page.locator('[data-finding-id="coexistence:hub:sku:er-gw"]')
+    await expect(erFinding).toContainText('SKU is unknown')
+    await configure('er-gw')
+    const erSku = page.getByTestId('vpn-gateway-settings-er-gw').getByRole('combobox', { name: 'Gateway SKU', exact: true })
+    await expect(erSku).toHaveValue('')
+    await erSku.selectOption('ErGw1AZ')
+    await inspect()
+    await expect(erFinding).toHaveCount(0)
+    await page.getByRole('button', { name: '↶ Undo', exact: true }).click()
+    await expect(erFinding).toContainText('SKU is unknown')
+    await page.getByRole('button', { name: '↷ Redo', exact: true }).click()
+    await expect(erFinding).toHaveCount(0)
+    await page.reload()
+    const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    expect(saved.vnets[0].gateways[0]).toMatchObject({ sku: 'VpnGw1AZ', vpnGatewayGeneration: 'Generation1' })
+    expect(saved.vnets[0].gateways[1]).toMatchObject({ sku: 'ErGw1AZ' })
+    expect(saved.vpnConnections).toEqual(topology.vpnConnections)
+  })
   test(`${mode} retains unknown coexistence metadata and authors routing type, SKU and generation`, async ({ page }) => {
     const topology = coexistenceTopology()
     delete topology.vnets[0].gateways[0].vpnType
     delete topology.vnets[0].gateways[0].sku
+    topology.vnets[0].gateways[1].sku = 'ImportedFutureSku'
     await page.goto(`/?mode=${mode}`)
     await page.locator('input[data-desktop-import]').setInputFiles({
       name: 'coexistence.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
@@ -20,19 +69,21 @@ for (const mode of ['hub-spoke', 'full']) {
     const sku = settings.getByRole('combobox', { name: 'Gateway SKU', exact: true })
     await expect(type).toHaveValue('')
     await expect(sku).toHaveValue('')
+    await expect(page.getByTestId('vpn-gateway-settings-er-gw').getByRole('combobox', { name: 'Gateway SKU', exact: true }))
+      .toHaveValue('ImportedFutureSku')
     await expect(settings).toContainText('Missing settings do not prove compatibility')
     await expect(settings).toContainText('selectors are not a PolicyBased gateway')
     await expect(settings).toContainText('not Microsoft peering')
     await type.selectOption('PolicyBased')
-    await sku.fill('Basic')
+    await sku.selectOption('Basic')
     await expect(type).toHaveAttribute('aria-invalid', 'true')
     await expect(sku).toHaveAttribute('aria-invalid', 'true')
     await type.selectOption('RouteBased')
-    await expect(settings.locator('datalist option[value="VpnGw1"]')).toHaveCount(1)
-    await expect(settings.locator('datalist option[value="VpnGw1AZ"]')).toHaveCount(1)
-    await sku.fill('VpnGw1AZ')
+    await expect(sku.locator('option[value="VpnGw1"]')).toHaveCount(1)
+    await expect(sku.locator('option[value="VpnGw1AZ"]')).toHaveCount(1)
+    await sku.selectOption('VpnGw1AZ')
     await expect(settings.getByRole('combobox', { name: 'VPN gateway generation', exact: true })).toHaveValue('Generation1')
-    await sku.fill('VpnGw5AZ')
+    await sku.selectOption('VpnGw5AZ')
     await settings.getByRole('combobox', { name: 'VPN gateway generation', exact: true }).selectOption('Generation2')
     await expect(type).toHaveAttribute('aria-invalid', 'false')
     const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
