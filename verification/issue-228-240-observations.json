@@ -1,0 +1,260 @@
+{
+  "recordedAt": "2026-11-23T19:58:11.607Z",
+  "sourceBase": "026b29f9b1b8b268426f8b5d2087e19c89f94ab4",
+  "humanParticipants": 0,
+  "semanticViewport": {
+    "width": 1600,
+    "height": 1100,
+    "scrollY": 0
+  },
+  "limitations": [
+    "Synthetic, independently authored native topology; no private design or live Azure data.",
+    "Sampled SVG text and HTML headers/buttons/region headings/summaries expose different quantities of detail.",
+    "Collapsed HTML is excluded; SVG fonts account for the screen transform.",
+    "12px is descriptive, not an accepted usability or accessibility threshold.",
+    "Single scripted dev/browser switch samples are not human time or production performance.",
+    "Current UI audits use English, known labels and shortcuts; no human discovery, touch or manual screen-reader outcome."
+  ],
+  "semanticComparisons": [
+    {
+      "count": 8,
+      "theme": "light",
+      "observations": [
+        {
+          "variant": "saved",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 1149,
+          "viewportLabels": 255,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1023922364258376,
+          "pageOverflow": false
+        },
+        {
+          "variant": "focus",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 1505,
+          "viewportLabels": 255,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1023922364258376,
+          "pageOverflow": false
+        },
+        {
+          "variant": "matrix",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 797,
+          "viewportLabels": 73,
+          "labelsAtLeast12px": 73,
+          "medianScreenFontPx": 13,
+          "pageOverflow": false
+        },
+        {
+          "variant": "regions",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 611,
+          "viewportLabels": 18,
+          "labelsAtLeast12px": 18,
+          "medianScreenFontPx": 16,
+          "pageOverflow": false
+        },
+        {
+          "variant": "neighborhood",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 1040,
+          "viewportLabels": 68,
+          "labelsAtLeast12px": 4,
+          "medianScreenFontPx": 9.89873417721519,
+          "pageOverflow": false
+        }
+      ]
+    },
+    {
+      "count": 8,
+      "theme": "dark",
+      "observations": [
+        {
+          "variant": "saved",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 946,
+          "viewportLabels": 255,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1023922364258376,
+          "pageOverflow": false
+        },
+        {
+          "variant": "focus",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 1855,
+          "viewportLabels": 255,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1023922364258376,
+          "pageOverflow": false
+        },
+        {
+          "variant": "matrix",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 408,
+          "viewportLabels": 73,
+          "labelsAtLeast12px": 73,
+          "medianScreenFontPx": 13,
+          "pageOverflow": false
+        },
+        {
+          "variant": "regions",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 600,
+          "viewportLabels": 18,
+          "labelsAtLeast12px": 18,
+          "medianScreenFontPx": 16,
+          "pageOverflow": false
+        },
+        {
+          "variant": "neighborhood",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 947,
+          "viewportLabels": 68,
+          "labelsAtLeast12px": 4,
+          "medianScreenFontPx": 9.89873417721519,
+          "pageOverflow": false
+        }
+      ]
+    },
+    {
+      "count": 2,
+      "theme": "light",
+      "observations": [
+        {
+          "variant": "saved",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 352,
+          "viewportLabels": 60,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1456154465004023,
+          "pageOverflow": false
+        },
+        {
+          "variant": "focus",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 715,
+          "viewportLabels": 60,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1456154465004023,
+          "pageOverflow": false
+        },
+        {
+          "variant": "matrix",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 442,
+          "viewportLabels": 7,
+          "labelsAtLeast12px": 7,
+          "medianScreenFontPx": 13,
+          "pageOverflow": false
+        },
+        {
+          "variant": "regions",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 200,
+          "viewportLabels": 6,
+          "labelsAtLeast12px": 6,
+          "medianScreenFontPx": 16,
+          "pageOverflow": false
+        },
+        {
+          "variant": "neighborhood",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 334,
+          "viewportLabels": 30,
+          "labelsAtLeast12px": 2,
+          "medianScreenFontPx": 9.89873417721519,
+          "pageOverflow": false
+        }
+      ]
+    },
+    {
+      "count": 2,
+      "theme": "dark",
+      "observations": [
+        {
+          "variant": "saved",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 433,
+          "viewportLabels": 60,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1456154465004023,
+          "pageOverflow": false
+        },
+        {
+          "variant": "focus",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 672,
+          "viewportLabels": 60,
+          "labelsAtLeast12px": 0,
+          "medianScreenFontPx": 3.1456154465004023,
+          "pageOverflow": false
+        },
+        {
+          "variant": "matrix",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 444,
+          "viewportLabels": 7,
+          "labelsAtLeast12px": 7,
+          "medianScreenFontPx": 13,
+          "pageOverflow": false
+        },
+        {
+          "variant": "regions",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 371,
+          "viewportLabels": 6,
+          "labelsAtLeast12px": 6,
+          "medianScreenFontPx": 16,
+          "pageOverflow": false
+        },
+        {
+          "variant": "neighborhood",
+          "scrollY": 0,
+          "scriptedSwitchAndSettleMs": 647,
+          "viewportLabels": 30,
+          "labelsAtLeast12px": 2,
+          "medianScreenFontPx": 9.89873417721519,
+          "pageOverflow": false
+        }
+      ]
+    }
+  ],
+  "currentUiTaskAudits": [
+    {
+      "width": 1440,
+      "height": 89,
+      "visibleControls": 13,
+      "paletteOpenActions": 0,
+      "headerDisclosureActions": 0,
+      "scriptedActions": {
+        "create": "two palette searches plus two create clicks; palette openings counted separately",
+        "connect": "context menu, Peer with VNet, target (three activations)",
+        "inspect": "context menu, Inspect Effective Routes (two activations)",
+        "check": "Routing checks, Check routing (two activations)",
+        "export": "Save As shortcut, destination change, Save (three activations)"
+      },
+      "observedRouteTable": "StateSourcePrefixNext HopAS pathOrigin / Tie-BreakerActiveSystem10.51.0.0/16VnetLocalSpoke-VNet-1—System · Local VNet address space (Spoke-VNet-1)ActiveSystem10.52.0.0/16VNetPeeringSpoke-VNet-2—System · VNet Peering (Spoke-VNet-1-to-Spoke-VNet-2)ActiveSystem192.168.0.0/16NoneDiscard—System · Reserved address spaceActiveSystem198.18.0.0/15NoneDiscard—System · Reserved address spaceActiveSystem172.16.0.0/12NoneDiscard—System · Reserved address spaceActiveSystem100.64.0.0/10NoneDiscard—System · Reserved address spaceActiveSystem10.0.0.0/8NoneDiscard—System · Reserved address spaceActiveSystem127.0.0.0/8NoneDiscard—System · Reserved address spaceActiveSystem0.0.0.0/0Internet—System · Default Internet egress",
+      "humanParticipants": 0,
+      "timing": "No human discovery/completion time measured"
+    },
+    {
+      "width": 390,
+      "height": 94,
+      "visibleControls": 4,
+      "paletteOpenActions": 2,
+      "headerDisclosureActions": 1,
+      "scriptedActions": {
+        "create": "two palette searches plus two create clicks; palette openings counted separately",
+        "connect": "context menu, Peer with VNet, target (three activations)",
+        "inspect": "context menu, Inspect Effective Routes (two activations)",
+        "check": "Routing checks, Check routing (two activations)",
+        "export": "Save As shortcut, destination change, Save (three activations)"
+      },
+      "observedRouteTable": "StateSourcePrefixNext HopAS pathOrigin / Tie-BreakerActiveSystem10.51.0.0/16VnetLocalSpoke-VNet-1—System · Local VNet address space (Spoke-VNet-1)ActiveSystem10.52.0.0/16VNetPeeringSpoke-VNet-2—System · VNet Peering (Spoke-VNet-1-to-Spoke-VNet-2)ActiveSystem192.168.0.0/16NoneDiscard—System · Reserved address spaceActiveSystem198.18.0.0/15NoneDiscard—System · Reserved address spaceActiveSystem172.16.0.0/12NoneDiscard—System · Reserved address spaceActiveSystem100.64.0.0/10NoneDiscard—System · Reserved address spaceActiveSystem10.0.0.0/8NoneDiscard—System · Reserved address spaceActiveSystem127.0.0.0/8NoneDiscard—System · Reserved address spaceActiveSystem0.0.0.0/0Internet—System · Default Internet egress",
+      "humanParticipants": 0,
+      "timing": "No human discovery/completion time measured"
+    }
+  ]
+}

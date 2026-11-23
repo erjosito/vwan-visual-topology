@@ -317,3 +317,62 @@ Revise the mobile layout if its height harms the tasks. If accepted, promote in 
 separate reviewed change, retain a seven-day rollback window, then remove the
 temporary flag and old presentation. If not accepted, revise or remove this
 preview instead of allowing two permanent interfaces. #228 remains open.
+
+## Current-default task audit and critique (2026-11-23)
+
+This follow-up evaluates the current default, not the historical opt-in preview.
+It first challenged the proposed solutions: another toolbar rearrangement would
+not establish which task is difficult, and a permanent basic/advanced mode or
+new wizard would duplicate navigation without evidence of better discovery.
+The dense-view experiments in `issue-240-dense-visualization.md` are a separate,
+dev-only comparison, not a new capability mode in the application.
+
+Two reproducible English walkthroughs use a fresh mixed/full workspace:
+1440 x 1000/light and 390 x 1000/dark. They create two VNets with the existing
+searchable Workspace controls, use **Peer with VNet**, inspect the actual
+effective-route table, run **Routing checks > Check routing**, then download
+through **Save As**. The downloaded JSON matches the current topology; export
+does not mutate the stored design. Keyboard context-menu activation uses the
+same original object and existing handlers.
+
+At 390 px, Workspace controls is deliberately behind **Workspace actions**.
+The first creation requires opening that disclosure, then the controls panel;
+the panel must be reopened for the second creation. Desktop starts with the
+existing controls panel visible. This is an observed scripted access cost, not
+proof that a novice cannot discover the controls.
+
+| Possible response | Critique and next decision |
+| --- | --- |
+| Keep Workspace controls permanently exposed on narrow screens | Removes a disclosure but adds persistent chrome; compare the same create task and remaining canvas space before choosing |
+| Empty-canvas create/example entry using existing handlers | Contextual and temporary, but could compete with import/cloud recovery or imply a mandatory wizard; compare against the current entry before implementing |
+| Another basic/advanced mode or onboarding wizard | Adds capability/switching state without locating the problem; reject for this slice |
+| Task-specific dense views | May help inventory or configured-peer lookup, but do not address first-create discovery and cannot replace routing evidence |
+
+The bounded recommendation is to test the current creation entry against an
+empty-canvas affordance, rather than redesign every menu or promote a new mode.
+No additional production affordance is implemented by this research.
+
+The audit measures initial header geometry and viewport-intersecting buttons,
+selects and summaries, excluding the fixed Workspace controls panel and
+CSS-invisible/collapsed content. Counts are not total capabilities, usable hit
+targets or participant discovery results. Raw current observations are retained
+in `issue-228-240-observations.json`; historical figures above are not rewritten.
+
+| Current baseline | Header height | Sampled visible header controls | Panel openings for two creations | Header disclosure openings |
+| --- | ---: | ---: | ---: | ---: |
+| 1440 px, English/light | 89 px | 13 | 0 | 0 |
+| 390 px, English/dark | 94 px | 4 | 2 | 1 |
+
+Reproduce only this audit:
+
+```powershell
+npx playwright test workspace-presentation.spec.ts -g "current UI task audit" --workers=1 --retries=0
+```
+
+**Human participants remain zero.** The walkthrough knows labels and uses search
+and a Save As shortcut; it does not measure unaided discovery, human completion
+time, perceived complexity, manual screen-reader use or real touch interaction.
+It also does not establish failed/unknown-path classification, first-time
+advanced-setting discovery, Japanese task completion or cloud interoperability.
+Use the participant protocol above before claiming those outcomes. #228 remains
+open; the current audit is a reproducible baseline, not a completed human study.

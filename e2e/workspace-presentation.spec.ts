@@ -10,6 +10,72 @@ const { version } = JSON.parse(readFileSync(new URL('../package.json', import.me
 
 test.use({ storageState: { cookies: [], origins: [] } })
 
+for (const width of [1440, 390]) {
+  test(`${width}px: current UI task audit creates, connects, inspects, checks and exports without a new mode`, async ({ page }, info) => {
+    await page.setViewportSize({ width, height: 1000 })
+    await page.addInitScript(width => {
+      localStorage.setItem('aznet-theme', width === 390 ? 'dark' : 'light')
+    }, width)
+    await page.goto('/?mode=full')
+    await expect(page.locator('.document-artifact-status')).toBeVisible()
+    const measurements = await page.locator('header.aznet-topbar').evaluate(header => ({
+      height: header.getBoundingClientRect().height,
+      visibleControls: [...header.querySelectorAll('button, select, summary')].filter(element => {
+        if (!element.checkVisibility({ checkVisibilityCSS: true }) || element.closest('.workspace-tools-panel')) return false
+        const box = element.getBoundingClientRect()
+        return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth
+      }).length,
+    }))
+    await info.attach('current-ui-before', { body: await page.screenshot(), contentType: 'image/png' })
+    const tools = page.getByRole('complementary', { name: 'Workspace controls', exact: true })
+    let paletteOpenActions = 0
+    let headerDisclosureActions = 0
+    for (let i = 0; i < 2; i++) {
+      if (!await tools.isVisible()) {
+        if (!await page.getByRole('button', { name: 'Workspace controls', exact: true }).isVisible()) {
+          await page.getByRole('button', { name: 'Workspace actions', exact: true }).click()
+          headerDisclosureActions++
+        }
+        await page.getByRole('button', { name: 'Workspace controls', exact: true }).click()
+        paletteOpenActions++
+      }
+      await tools.getByRole('searchbox').fill('+ VNet')
+      await page.getByTestId('aznet-add-vnet-btn').click()
+    }
+    if (await tools.isVisible()) await tools.press('Escape')
+    const node = page.getByTestId('aznet-select-vnet-vnet-custom-1')
+    await node.focus()
+    await node.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Peer with VNet', exact: true }).click()
+    await page.getByRole('menuitem', { name: 'Spoke-VNet-2 (West Europe)', exact: true }).click()
+    await node.focus()
+    await node.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Inspect Effective Routes', exact: true }).click()
+    await expect(page.getByTestId('aznet-effective-route-table')).toBeVisible()
+    const routes = await page.getByTestId('aznet-effective-route-table').textContent()
+    const checks = page.locator('.presentation-group').filter({ has: page.getByTestId('aznet-check-routing-btn') })
+    await checks.locator('summary').click()
+    await page.getByTestId('aznet-check-routing-btn').click()
+    await expect(page.getByTestId('aznet-routing-check-status')).toBeVisible()
+    const original = await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)
+    await page.keyboard.press('Control+Shift+s')
+    const dialog = page.getByRole('dialog', { name: 'Save As', exact: true })
+    await dialog.getByRole('combobox', { name: 'Destination', exact: true }).selectOption('download')
+    const download = page.waitForEvent('download')
+    await dialog.getByRole('button', { name: 'Save', exact: true }).click()
+    const file = await download
+    expect(JSON.parse(readFileSync((await file.path())!, 'utf8'))).toMatchObject(original)
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('aznet-visual-topology:v1')!).topology)).toEqual(original)
+    await info.attach('current-ui-task-audit', { body: JSON.stringify({ width, ...measurements, paletteOpenActions, headerDisclosureActions,
+      scriptedActions: { create: 'two palette searches plus two create clicks; palette openings counted separately',
+        connect: 'context menu, Peer with VNet, target (three activations)',
+        inspect: 'context menu, Inspect Effective Routes (two activations)',
+        check: 'Routing checks, Check routing (two activations)',
+        export: 'Save As shortcut, destination change, Save (three activations)' },
+      observedRouteTable: routes, humanParticipants: 0, timing: 'No human discovery/completion time measured' }, null, 2), contentType: 'application/json' })
+  })
+}
+
 for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
   test(`${language} ${theme}: Help discovers Windows and MCP only after deliberate activation`, async ({ page }, info) => {
     const text = (en: string, ja: string) => language === 'ja' ? ja : en
