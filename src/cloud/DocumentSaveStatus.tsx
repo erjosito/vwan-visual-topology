@@ -24,7 +24,7 @@ export function DocumentSaveStatus({ detail = false }: { detail?: boolean }) {
     {t('Practice canvas')}</span>
   if (!state?.ready) return null
   const local = t(state.local === 'saved' ? 'Saved locally'
-    : state.local === 'unavailable' ? 'Local save not confirmed' : 'Not saved locally yet')
+    : state.local === 'unavailable' ? 'Profile recovery unavailable. Confirmed file and cloud saves are unaffected.' : 'Not saved locally yet')
   const label = t(documentSaveLabel(cloud?.configured
     ? { ...state, cloud: state.cloud?.accountId === cloud.account?.id ? state.cloud : undefined } : state, artifact))
   const localStatus = <span className="document-save-state" data-testid={detail ? undefined : 'document-save-state'}

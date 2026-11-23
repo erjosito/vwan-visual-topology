@@ -65,6 +65,12 @@ export function useAzDocument(onError: (message: string) => void, onChange: (nex
     }
     try {
       parseAzNetTopology(topology)
+    } catch (error) {
+      workspaceSession?.documentSave?.local(topology, 'unavailable')
+      setSaveError(`Workspace recovery could not be updated because the design is invalid: ${workspaceError(error)}. Saved originals and URL snapshots have not been overwritten.`)
+      return
+    }
+    try {
       if (workspaceSession?.practice && workspaceSession.savePractice) {
         workspaceSession.savePractice({ mode: workspaceSession.practice.document.mode === 'hub-spoke' ? 'hub-spoke' : 'full', topology })
       } else {
@@ -75,7 +81,8 @@ export function useAzDocument(onError: (message: string) => void, onChange: (nex
       if (!workspaceSession?.practice) consumeAzSnapshotUrl()
     } catch (error) {
       workspaceSession?.documentSave?.local(topology, 'unavailable')
-      setSaveError(`Workspace could not be saved (storage unavailable/full or invalid design): ${workspaceError(error)}. Use Save As to preserve this design; saved originals and URL snapshots have not been overwritten.`)
+      setSaveError(workspaceSession?.documentSave ? ''
+        : `Workspace could not be saved: ${workspaceError(error)}. Use Save As to preserve this design; saved originals and URL snapshots have not been overwritten.`)
     }
   })
   useEffect(() => {

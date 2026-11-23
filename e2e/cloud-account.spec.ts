@@ -62,6 +62,63 @@ async function signIn(page: Page) {
   await expect(page.getByRole('button', { name: 'Refresh cloud topologies', exact: true })).toBeEnabled()
 }
 
+for (const mode of ['vwan', 'full'] as const) {
+  for (const failure of ['quota', 'other-window'] as const) {
+    test(`${mode} ${failure}: profile recovery failure stays in save details after a confirmed cloud save`, async ({ page, context }) => {
+      let service = await setup(page)
+      await page.goto(`/?mode=${mode}`)
+      const edit = async (target: Page, name: string) => {
+        if (mode === 'vwan') await target.getByLabel('Topology name', { exact: true }).fill(name)
+        else await target.getByTestId('aznet-add-vnet-btn').click()
+      }
+      await edit(page, 'Owned design')
+      await expect(page.getByTestId('document-cloud-state')).toHaveText('Locally saved')
+      const key = workspaceStorageKeys[mode === 'vwan' ? 'vwan' : 'azure-net']
+      const original = await page.evaluate(key => localStorage.getItem(key), key)
+      const target = failure === 'other-window' ? await context.newPage() : page
+      try {
+        if (target !== page) {
+          service = await setup(target)
+          await target.goto(`/?mode=${mode}`)
+          await expect(target.getByText('Temporary', { exact: true })).toBeVisible()
+        } else {
+          await target.evaluate(() => {
+            const set = Storage.prototype.setItem
+            Storage.prototype.setItem = function (key, value) {
+              if (/^network-simulator:workspace-tab:v1:.*:topology$/.test(key)) throw new DOMException('Test quota exhausted', 'QuotaExceededError')
+              return set.call(this, key, value)
+            }
+          })
+        }
+        await edit(target, 'Cloud-only design')
+        const status = target.getByTestId('document-save-state')
+        await expect(status).toHaveText('Not saved')
+        await expect(target.getByTestId('aznet-save-error')).toHaveCount(0)
+        await expect(target.getByText('Browser storage is unavailable or full. Use Save As to preserve your topology.', { exact: true })).toHaveCount(0)
+        await signIn(target)
+        await target.getByLabel('Cloud topology name', { exact: true }).fill('Confirmed without profile recovery')
+        await target.getByRole('button', { name: 'Save as new cloud copy', exact: true }).click()
+        await expect(target.getByRole('heading', { name: 'Confirmed without profile recovery', exact: true })).toBeVisible()
+        const account = target.getByRole('dialog', { name: 'Cloud account', exact: true })
+        await account.getByRole('button', { name: 'Close', exact: true }).click()
+        await expect(status).toHaveText('Cloud saved')
+        await expect(status).toHaveAttribute('title', /Profile recovery unavailable/)
+        await expect(target.locator('.document-artifact-details summary')).toHaveAttribute('title', /Profile recovery unavailable/)
+        await expect(target.getByRole('tab', { selected: true }).locator('..').locator('small')).toHaveText('Cloud saved')
+        await expect(target.getByRole('tab', { selected: true })).toHaveAttribute('title', /Profile recovery unavailable/)
+        const saved = [...service.data].find(([key]) => key.includes('/topologies/'))![1].raw
+        await edit(target, 'New unsaved edits')
+        await expect(status).toHaveText('Not saved')
+        await expect(target.getByTestId('aznet-save-error')).toHaveCount(0)
+        expect([...service.data].find(([key]) => key.includes('/topologies/'))![1].raw).toBe(saved)
+        expect(await target.evaluate(key => localStorage.getItem(key), key)).toBe(original)
+      } finally {
+        if (target !== page) await target.close()
+      }
+    })
+  }
+}
+
 for (const language of ['en', 'ja'] as const) {
   test(`${language}: learning status follows actual pending, failed, synced and conflicting cloud progress`, async ({ page }) => {
     const service = await setup(page)

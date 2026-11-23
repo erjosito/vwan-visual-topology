@@ -139,7 +139,9 @@ test('competing browser windows edit temporary copies without overwriting the ow
     await expect(other.getByText('Temporary', { exact: true })).toBeVisible()
     await expect(other.getByLabel('Topology name', { exact: true })).toHaveValue('Owner design')
     await other.getByLabel('Topology name', { exact: true }).fill('Temporary design')
-    await expect(other.getByText('Browser storage is unavailable or full. Use Save As to preserve your topology.', { exact: true })).toBeVisible()
+    await expect(other.getByTestId('document-save-state')).toHaveText('Not saved')
+    await expect(other.getByTestId('document-save-state')).toHaveAttribute('title', /Profile recovery unavailable/)
+    await expect(other.getByText('Browser storage is unavailable or full. Use Save As to preserve your topology.', { exact: true })).toHaveCount(0)
     expect(await other.evaluate(() => ({
       topology: localStorage.getItem('vwan-visual-topology:v1'),
       tabs: localStorage.getItem('network-simulator:workspace-tabs:v1'),

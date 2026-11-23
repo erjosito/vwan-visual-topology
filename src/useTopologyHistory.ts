@@ -69,7 +69,7 @@ export function useTopologyHistory({
       setSaveError('')
     } catch {
       session?.documentSave?.local(next, 'unavailable')
-      setSaveError('Browser storage is unavailable or full. Use Save As to preserve your topology.')
+      setSaveError(session?.documentSave ? '' : 'Browser storage is unavailable or full. Use Save As to preserve your topology.')
     }
   }
 
