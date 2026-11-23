@@ -1,8 +1,10 @@
 # Simulated BGP neighbors
 
-Choose **BGP neighbors** in the top bar, or use that action on an original
-ARS, NVA, gateway, on-premises router, ExpressRoute location or Virtual WAN
-hub. The inspector is available in both native workspace providers, on the
+Choose **BGP neighbors** in the context menu of an original ARS, NVA, gateway,
+on-premises router, ExpressRoute location or Virtual WAN hub. Use right-click
+or focus the element and press **Shift+F10**; the inspector opens with that
+resource selected. Elements without BGP inspection do not offer the action.
+The inspector is available in both native workspace providers, on the
 web and in offline Electron. Inspection never edits topology or coordinates.
 
 Select one **Local BGP resource**, then one **Local BGP instance**. The summary

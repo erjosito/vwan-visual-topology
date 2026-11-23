@@ -749,7 +749,6 @@ function App() {
           selected: selection ? vwanWorkspaceIdentity(selection) : undefined,
           onSelect: selectObject,
         }} />
-        <button type="button" onClick={() => openBgpNeighbors(selection)}>{t('BGP neighbors')}</button>
         <LearningTools document={{ mode: 'vwan', topology }} />
         {selection?.kind === 'spoke' && <button type="button" onClick={() => setDetailOwner(selection.id)}>{t('VNet detail')}</button>}
         {selection?.kind === 'hub' && <button type="button" onClick={() => setSnatHubId(selection.id)}>{t('Firewall SNAT')}</button>}
