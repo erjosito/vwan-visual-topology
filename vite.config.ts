@@ -18,6 +18,11 @@ export default defineConfig({
     },
   ],
   build: {
+    modulePreload: {
+      // Dynamic ESM imports load their JavaScript; preserve CSS preloads for first-open styles.
+      resolveDependencies: (_filename, dependencies, { hostType }) =>
+        hostType === 'html' ? dependencies : dependencies.filter(path => path.endsWith('.css')),
+    },
     rollupOptions: {
       input: { main: resolve('index.html'), 'auth-redirect': resolve('auth-redirect.html') },
       output: {

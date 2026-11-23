@@ -144,6 +144,7 @@ export const ja: Record<string, string> = {
   'Settings & help': '設定とヘルプ',
   'Settings': '設定',
   'Help & feedback': 'ヘルプとフィードバック',
+  'Use AzNetSim elsewhere': 'ほかの環境で AzNetSim を使う',
   'Routing checks': 'ルーティングの確認',
   'VNet configuration': 'VNet の構成',
   'Subnet configuration': 'サブネットの構成',

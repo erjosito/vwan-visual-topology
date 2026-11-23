@@ -137,6 +137,9 @@ about the others. Release them independently and inspect each run's result.
 MCP publication uses `mcp-v<version>` and a portable
 `Azure-Network-Simulator-MCP-<version>.zip` download, not Azure hosting or npm
 registry publication. It never replaces the latest Windows installer release.
+The web Help menu therefore links Windows downloads to GitHub's
+`releases/latest` page. Keep Windows as the only target that advances latest;
+MCP releases and promotion receipts must not replace that destination.
 The zip contains the Node bundles, workers, application/dependency licenses and
 a locked portable native-renderer dependency manifest. With Node 22+ installed,
 extract it into a new directory and run `npm ci --omit=dev --ignore-scripts`.
