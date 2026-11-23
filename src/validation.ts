@@ -180,7 +180,7 @@ export function validateTopology(input: unknown): Topology {
     return { ...hub, id: id(hub.id), name: text(hub.name, 'Hub name'),
       ...(hub.wanId === undefined ? {} : { wanId: text(hub.wanId, 'Hub WAN') }),
       ...(label === undefined ? {} : { label }),
-      region: text(hub.region, 'Region'), preference: hub.preference,
+      ...(hub.region === undefined ? {} : { region: hub.region === '' ? '' : text(hub.region, 'Region') }), preference: hub.preference,
       routingIntent: { private: intent.private, internet: intent.internet, privatePrefixes: prefixes(intent.privatePrefixes, 'Private traffic prefixes') },
       ...(routeTables === undefined ? {} : { routeTables }),
       ...(hub.firewall === undefined ? {} : { firewall: (() => {

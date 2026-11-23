@@ -5,6 +5,7 @@ import type { FormEvent, ReactElement } from 'react'
 import { objectLabels, preferenceLabels, siteLabel, topologyObject, transportLabels } from './model'
 import type { ObjectKind, ObjectSelection, Preference, RouterSelection, Topology, Transport } from './model'
 import { ER_PEERING_LOCATIONS_CATALOG, evaluateErSkuRegionalCompatibility } from './er-locations-catalog'
+import { AzureRegionSelect } from './AzureRegionSelect'
 import type { ErCircuitSku } from './er-locations-catalog'
 import { spokeNvaConnectionForSite, spokeNvaConnectionForSpoke } from './topology-graph'
 import { createExpressRouteAttachment, deleteTopologyObject, syncNvaDownstreamLinks, syncSiteNvaSpokeLinks } from './topology-mutations'
@@ -72,7 +73,8 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
         const customLabel = text('label') || undefined
         if (request.kind === 'hub') {
           const value = {
-            ...hub, id, name, label: customLabel, region: text('region'), preference: text('preference') as Preference,
+            ...hub, id, name, label: customLabel, preference: text('preference') as Preference,
+            ...(text('region') || hub?.region !== undefined ? { region: text('region') } : {}),
             ...(topology.wans ? { wanId: text('wan') } : {}),
             firewall: hubStatic.firewall, routeTables: hubStatic.routeTables,
             routingIntent: { private: data.has('privateIntent'), internet: data.has('internetIntent'), privatePrefixes: prefixes(text('privatePrefixes')) },
@@ -347,7 +349,7 @@ export function TopologyObjectEditor({ topology, request, onSave, onClose, onRou
             <Field title="B to A IPv4 export prefixes"><input name={`vpn-b-${vpn.id}`} aria-label="B to A IPv4 export prefixes" defaultValue={vpn.bToA.join(', ')} /></Field>
             <p className="muted">Exports selected Default-table routes contained in these prefixes. Empty means no export. P2S clients, authentication and gateway BGP sessions are unsupported.</p>
           </fieldset>)}
-          <Field title={t("Region")}><input name="region" required maxLength={120} defaultValue={hub?.region ?? ''} placeholder="West Europe" /></Field>
+          <Field title={t("Region")}><AzureRegionSelect name="region" required={!hub} defaultValue={hub?.region ?? ''} /></Field>
           <Field title={t("Routing preference")}><select name="preference" defaultValue={hub?.preference ?? 'ExpressRoute'}>{Object.entries(preferenceLabels).map(([value, name]) => <option key={value} value={value}>{t(name)}</option>)}</select></Field>
           <fieldset><legend>{t("Routing intent")}</legend>
             <label className="checkbox-field"><input type="checkbox" name="privateIntent" aria-label={t("Private traffic routing intent")} defaultChecked={hub?.routingIntent.private ?? false} />{t("Private traffic via Azure Firewall")}</label>
