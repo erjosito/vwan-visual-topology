@@ -203,7 +203,8 @@ try {
     await application.evaluate(({ dialog }, filePath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [filePath] })
     }, localFile)
-    await page.getByRole('button', { name: 'Load file', exact: true }).click()
+    await page.getByRole('button', { name: 'Load', exact: true }).click()
+    await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
     await expect(page.locator('.document-artifact-status')).toHaveText('Locally saved')
     await expect(page.locator('.document-artifact-details summary')).toHaveAttribute('title', new RegExp(`^Saved .*roundtrip-${mode}\\.json$`))
     const readSaved = () => page.evaluate((mode) => {
