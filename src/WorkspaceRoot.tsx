@@ -75,6 +75,11 @@ const rootStorage: WorkspaceStorage = {
 }
 const emptyVwan = '{"version":1,"name":"New topology","hubs":[],"sites":[],"spokes":[],"connections":[],"siteLinks":[],"routeMaps":[]}'
 
+async function createEmptyDocument(provider: WorkspaceProvider) {
+  return provider === 'vwan' ? emptyVwan
+    : JSON.stringify({ sampleId: '', topology: (await import('./azure-net/model')).createEmptyAzNetTopology() })
+}
+
 function Workspace({ visible = true }: { visible?: boolean }) {
   const visibleRef = useRef(visible)
   const language = useLanguage()
@@ -414,21 +419,33 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       return
     }
     if (targets.some(tab => !documents.get(tab).commands?.canClose())) { setClosing({ tabs: targets, after }); return }
-    finishClose(targets, after)
+    void finishClose(targets, after)
   }
-  const finishClose = (targets: WorkspaceTab[], after?: () => void) => {
-    if (targets.some(tab => !tabsRef.current.tabs.some(current => current.id === tab.id)
-      || documents.get(tab).commands?.getSnapshot().operation === 'saving')) return
+  const finishClose = async (targets: WorkspaceTab[], after?: () => void) => {
+    const blocked = () => !targets.length || targets.some(tab => !tabsRef.current.tabs.some(current => current.id === tab.id)
+      || documents.get(tab).capture !== undefined
+      || documents.get(tab).save.getSnapshot().operation === 'saving'
+      || documents.get(tab).commands?.getSnapshot().operation === 'saving')
+    if (blocked()) return
+    const previous = tabsRef.current
+    const ticket = ++request.current
     try {
-      const next = closeWorkspaceTabs(storage, tabsRef.current, targets.map(tab => tab.id))
-      request.current++
+      let replacement: { tab: WorkspaceTab; raw: string } | undefined
+      if (!after && previous.tabs.every(tab => targets.some(target => target.id === tab.id))) {
+        const provider = active?.provider ?? targets[0].provider
+        const raw = await createEmptyDocument(provider)
+        const parsed = JSON.parse(raw)
+        replacement = { tab: { id: randomUUID(), provider, name: (parsed.topology ?? parsed).name }, raw }
+      }
+      if (ticket !== request.current || previous !== tabsRef.current || !visibleRef.current || blocked()) return
+      const next = closeWorkspaceTabs(storage, previous, targets.map(tab => tab.id), replacement)
+      tabFocusRequest.current = next.activeId
       tabsRef.current = next; setTabs(next)
       for (const tab of targets) documents.forget(tab.id)
       if (targets.some(tab => tab.id === active?.id)) {
         const remaining = next.tabs.find(tab => tab.id === next.activeId)
         if (remaining) {
           activateTab(remaining, false)
-          requestAnimationFrame(() => document.getElementById(`workspace-tab-${remaining.id}`)?.focus())
         }
         else { setActive(undefined); setLibraryOpen(true) }
       }
@@ -518,8 +535,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
     if (initialProvider) {
       try {
         let raw = storage.getItem(workspaceStorageKeys[initialProvider])
-        if (raw === null) raw = initialProvider === 'vwan' ? emptyVwan
-          : JSON.stringify({ sampleId: '', topology: (await import('./azure-net/model')).createEmptyAzNetTopology() })
+        if (raw === null) raw = await createEmptyDocument(initialProvider)
         if (ticket !== request.current) return
         initialized.current = open(initialProvider, raw, undefined, true)
         if (!initialized.current) setLibraryOpen(true)
@@ -625,8 +641,8 @@ function Workspace({ visible = true }: { visible?: boolean }) {
   const newWorkspace = async () => {
     const ticket = ++request.current
     try {
-      const { createEmptyAzNetTopology } = await import('./azure-net/model')
-      if (ticket === request.current) open('azure-net', JSON.stringify({ sampleId: '', topology: createEmptyAzNetTopology() }))
+      const raw = await createEmptyDocument('azure-net')
+      if (ticket === request.current) open('azure-net', raw)
     } catch { if (ticket === request.current) setNotice('Workspace could not load. Your saved design has not been replaced.') }
   }
   const practicing = practice?.active === true
@@ -767,7 +783,7 @@ function Workspace({ visible = true }: { visible?: boolean }) {
           onResumePractice={practice && !practicing ? resumePractice : undefined} onClose={() => setLibraryOpen(false)} />
       </Suspense>}
       {closing && <Suspense fallback={null}><CloseDocumentsDialog documents={closing.tabs.map(tab => documents.get(tab))}
-        onClose={() => setClosing(undefined)} onDiscard={() => finishClose(closing.tabs, closing.after)} /></Suspense>}
+        onClose={() => setClosing(undefined)} onDiscard={() => { void finishClose(closing.tabs, closing.after) }} /></Suspense>}
     </div>
     </WorkspaceTabsContext>
   </WorkspaceSessionContext>

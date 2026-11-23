@@ -7,6 +7,100 @@ import { observationFixture } from '../tests/azure-observation-fixture'
 import { exercises } from '../src/learning/exercises'
 
 for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} final close creates one fresh editable document after cancellation and unsuccessful save`, async ({ page }) => {
+    const topology = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
+    topology.name = 'Original final document'
+    await page.addInitScript(({ topology, vwan }) => {
+      const key = vwan ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+      if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(vwan ? topology : { sampleId: '', topology }))
+      Object.defineProperty(window, 'showSaveFilePicker', { value: async () => {
+        throw vwan ? new DOMException('Cancelled', 'AbortError') : new Error('Test picker failure')
+      } })
+    }, { topology, vwan })
+    await page.goto(`/?mode=${vwan ? 'vwan' : 'full'}`)
+    await expect(page.getByRole('tab', { name: topology.name, exact: true })).toBeVisible()
+    const original = await page.evaluate(() => {
+      const manifest = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!)
+      return { manifest, raw: localStorage.getItem(`network-simulator:workspace-tab:v1:${manifest.activeId}:topology`) }
+    })
+    const close = page.getByRole('button', { name: `Close topology: ${topology.name}`, exact: true })
+    const closing = page.getByRole('dialog', { name: 'Save changes before closing?', exact: true })
+    await close.focus()
+    await page.keyboard.press('Enter')
+    await closing.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(close).toBeFocused()
+    await close.click()
+    await closing.getByRole('button', { name: 'Save and close', exact: true }).click()
+    const chooser = page.getByRole('dialog', { name: 'Save As', exact: true })
+    await chooser.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect(chooser.getByRole('button', { name: 'Save', exact: true })).toBeEnabled()
+    if (!vwan) await expect(chooser.getByRole('alert')).toContainText('Test picker failure')
+    await chooser.getByRole('button', { name: 'Cancel', exact: true }).click()
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!))).toEqual(original.manifest)
+    await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
+    await expect(page.getByRole('tab')).toHaveCount(1)
+    await expect(page.getByRole('tab', { selected: true })).toBeFocused()
+    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toHaveCount(0)
+    const replacement = await page.evaluate(() => {
+      const manifest = JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!)
+      const raw = JSON.parse(localStorage.getItem(`network-simulator:workspace-tab:v1:${manifest.activeId}:topology`)!)
+      return { manifest, topology: raw.topology ?? raw,
+        cloud: localStorage.getItem(`network-simulator:workspace-tab:v1:${manifest.activeId}:cloud`),
+        artifact: localStorage.getItem(`network-simulator:workspace-tab:v1:${manifest.activeId}:artifact`) }
+    })
+    expect(replacement.manifest.activeId).not.toBe(original.manifest.activeId)
+    expect(replacement.manifest.tabs).toHaveLength(1)
+    expect(replacement.cloud).toBeNull()
+    expect(replacement.artifact).toBeNull()
+    expect(Object.values(replacement.topology).filter(Array.isArray).every(values => values.length === 0)).toBe(true)
+    await page.keyboard.press('Control+s')
+    await expect(chooser).toBeVisible()
+    await chooser.getByRole('button', { name: 'Cancel', exact: true }).click()
+    if (vwan) await page.getByLabel('Topology name', { exact: true }).fill('Edited replacement')
+    else await page.getByTestId('aznet-add-vnet-btn').click()
+    await page.reload()
+    await expect(page.getByRole('tab')).toHaveCount(1)
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).toBe(replacement.manifest.activeId)
+    expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), original.manifest.activeId)).toBe(original.raw)
+    if (vwan) await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Edited replacement')
+    else await expect(page.getByTestId('aznet-diagram-svg').getByRole('button', { name: /^VNet / })).toHaveCount(1)
+    await page.locator('.workspace-tab-close').click()
+    await closing.getByRole('button', { name: 'Discard and close', exact: true }).dblclick()
+    await expect(closing).toHaveCount(0)
+    await expect(page.getByRole('tab')).toHaveCount(1)
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('network-simulator:workspace-tabs:v1')!).activeId)).not.toBe(replacement.manifest.activeId)
+  })
+}
+
+test('a failed final-tab replacement keeps the original editable and permits a deliberate retry', async ({ page }) => {
+  await page.goto('/?mode=full')
+  await page.getByTestId('aznet-add-vnet-btn').click()
+  const original = await page.evaluate(() => localStorage.getItem('network-simulator:workspace-tabs:v1'))
+  await page.evaluate(() => {
+    const set = Storage.prototype.setItem
+    Reflect.set(window, 'blockReplacement', true)
+    Storage.prototype.setItem = function(key, value) {
+      if (Reflect.get(window, 'blockReplacement') && key === 'network-simulator:workspace-tabs:v1') throw new DOMException('Full', 'QuotaExceededError')
+      return set.call(this, key, value)
+    }
+  })
+  await page.locator('.workspace-tab-close').click()
+  const closing = page.getByRole('dialog', { name: 'Save changes before closing?', exact: true })
+  await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
+  await expect(page.getByRole('alert')).toContainText('Tabs could not be closed')
+  expect(await page.evaluate(() => localStorage.getItem('network-simulator:workspace-tabs:v1'))).toBe(original)
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await closing.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page.getByTestId('aznet-diagram-svg').getByRole('button', { name: /^VNet / })).toHaveCount(1)
+  await page.evaluate(() => { Reflect.set(window, 'blockReplacement', false) })
+  await page.locator('.workspace-tab-close').click()
+  await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
+  await expect(closing).toHaveCount(0)
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByTestId('aznet-diagram-svg').getByRole('button', { name: /^VNet / })).toHaveCount(0)
+})
+
+for (const vwan of [true, false]) {
   test(`${vwan ? 'VWAN' : 'mixed'} topology tabs preserve independent edits, view, history and restart`, async ({ page }, info) => {
     const first = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
     first.name = 'First tab design'
@@ -183,6 +277,9 @@ test('closing, cancelling, reopening and close-all keep recovery data and do not
   await page.getByRole('button', { name: 'Close topology: Recoverable design', exact: true }).click()
   await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
   const library = page.getByRole('dialog', { name: 'Workspace', exact: true })
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(library).toHaveCount(0)
+  await page.getByTestId('workspace-library-open').click()
   await expect(library).toBeVisible()
   await library.getByRole('button', { name: 'Reopen topology: Recoverable design', exact: true }).click()
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Recoverable design')
@@ -196,10 +293,14 @@ test('closing, cancelling, reopening and close-all keep recovery data and do not
   await page.getByTestId('workspace-library-open').click()
   await library.getByRole('button', { name: 'Close all topology tabs', exact: true }).click()
   await closing.getByRole('button', { name: 'Discard and close', exact: true }).click()
-  await expect(page.getByRole('tablist', { name: 'Designs', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(library).toHaveCount(0)
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
   await page.reload()
-  await expect(library).toBeVisible()
-  await expect(page.getByTestId('aznet-app')).toHaveCount(0)
+  await expect(library).toHaveCount(0)
+  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await expect(page.getByRole('tab')).toHaveCount(1)
+  await expect(page.getByRole('tab', { name: 'Recoverable design', exact: true })).toHaveCount(0)
   expect(await page.evaluate(id => localStorage.getItem(`network-simulator:workspace-tab:v1:${id}:topology`), id)).toContain('Recoverable design')
 })
 
