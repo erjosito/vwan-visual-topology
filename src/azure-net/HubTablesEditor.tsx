@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { DEFAULT_HUB_TABLE, NONE_HUB_TABLE, hubRouteTables } from '../hub-routing'
 import type { HubRoutingConfiguration } from '../model'
 import { t } from '../i18n'
@@ -6,16 +7,19 @@ import type { AzNetTopology, AzVwanHub } from './model'
 import { azHubRouting } from './hub-routing'
 import { HubStaticRoutesEditor } from '../HubStaticRoutesEditor'
 import { ConnectionStaticRoutesEditor } from './ConnectionStaticRoutesEditor'
+import { InspectorSection } from '../WorkspacePresentation'
 
 const words = (value: string) => [...new Set(value.split(',').map((word) => word.trim()).filter(Boolean))]
 registerJapaneseMessages({ 'Private Traffic Routing Intent': 'プライベート トラフィックのルーティング意図' })
 
-export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall }: {
+export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall, initialOpen = false, children }: {
   hub: AzVwanHub
   topology: AzNetTopology
   commit: (update: (draft: AzNetTopology) => void) => void
   onAttach: (vnetId: string) => void
   focusFirewall?: boolean
+  initialOpen?: boolean
+  children?: ReactNode
 }) {
   const tables = hubRouteTables(hub)
   const attachments = [
@@ -29,9 +33,11 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
         update: (draft: AzNetTopology, config: HubRoutingConfiguration) => { draft[kind].find((entry) => entry.id === link.id)!.hubRouting = config },
       }))),
   ]
-  return <section aria-label={t('Hub routing tables')} data-testid="aznet-hub-tables-editor">
+  return <div data-testid="aznet-hub-tables-editor">
+    <InspectorSection title={t('Hub routing tables')} summary={hub.name} initialOpen={initialOpen || !!focusFirewall}>
+    <section aria-label={t('Hub routing tables')}>
     <h4>{t('Hub routing tables')}</h4>
-    <label className="aznet-toggle-row">
+    <label className="aznet-hover-toggle">
       <input type="checkbox" data-testid={`aznet-private-routing-intent-${hub.id}`}
         checked={hub.routingIntent.private} disabled={!hub.firewall && !hub.routingIntent.private}
         onChange={(event) => {
@@ -75,10 +81,16 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
       const id = `table-${crypto.randomUUID()}`
       ;(owner.routeTables ??= []).push({ id, name: t('Custom table'), labels: [] })
     })}>{t('Add hub table')}</button>
-    <h4>{t('VNet attachments')}</h4>
-    {topology.vnets.filter((vnet) => !vnet.vwanHubAttachment).map((vnet) =>
-      <button key={vnet.id} type="button" className="aznet-btn" onClick={() => onAttach(vnet.id)}>{t('Attach {0}', vnet.name)}</button>)}
-    {attachments.map((attachment) => {
+    {children}
+    </section>
+    </InspectorSection>
+    {[false, true].map((branch) => <InspectorSection key={String(branch)}
+      title={t(branch ? 'Branch connections' : 'VNet connections')} summary={hub.name} initialOpen={initialOpen}>
+    <section aria-label={t(branch ? 'Branch connections' : 'VNet connections')}>
+    <h4>{t(branch ? 'Branch connections' : 'VNet connections')}</h4>
+    {!branch && topology.vnets.filter((vnet) => !vnet.vwanHubAttachment).map((vnet) =>
+      <button key={vnet.id} type="button" className="aznet-btn" onClick={() => onAttach(vnet.id)}>{t('Connect {0}', vnet.name)}</button>)}
+    {attachments.filter((attachment) => attachment.branch === branch).map((attachment) => {
       const config = azHubRouting(attachment.config)
       const change = (patch: Partial<HubRoutingConfiguration>) => commit((draft) => {
         attachment.update(draft, { ...structuredClone(config), ...patch })
@@ -114,5 +126,7 @@ export function HubTablesEditor({ hub, topology, commit, onAttach, focusFirewall
           onClick={() => change({ status: 'configured', limitations: [] })}>{t('Use edited configuration')}</button>}
       </fieldset>
     })}
-  </section>
+    </section>
+    </InspectorSection>)}
+  </div>
 }

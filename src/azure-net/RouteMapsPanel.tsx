@@ -39,11 +39,12 @@ export function PeerRouteAttributes({ app, onSave }: { app: AzAppliance; onSave:
   </details>
 }
 
-export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbound, outbound, initialConnectionId, initialDirection, onSave, onClose }: {
+export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbound, outbound, initialConnectionId, initialDirection, onSave, onClose, embedded = false }: {
   topology: AzNetTopology; siteId?: string; hubId?: string; routeServerId?: string;
   inbound?: Record<string, AzBgpRibEntry[]>; outbound?: Record<string, AzBgpRibEntry[]>;
   initialConnectionId?: string; initialDirection?: RouteMapDirection;
   onSave: (topology: AzNetTopology) => boolean | void; onClose: () => void
+  embedded?: boolean
 }) {
   const arsVnet = topology.vnets.find((vnet) => vnet.routeServer?.id === routeServerId)
   const ars = routeServerId ? arsVnet?.routeServer : undefined
@@ -82,7 +83,7 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
       commit(next)
     } catch (error) { setError(error instanceof Error ? error.message : 'Invalid assignment.') }
   }
-  return <CanvasOverlay title={t('Route maps · {0}', site.name)} className="route-map-panel" onClose={onClose}>
+  const content = <>
     <p className="muted">{t('Policies belong to this {0}, with independent assignments on each connection. Inbound means learned by {1}; outbound means advertised by it. Unmatched routes are allowed.', t(ars ? 'Azure Route Server' : hub ? 'Virtual WAN hub' : 'site'), site.name)}</p>
     {ars && arsVnet && <details><summary>{t('BGP peers (local or directly peered VNets)')}</summary>
       <p className="muted">{t('BGP peering requires VNet access, not gateway transit. Injecting routes into spokes still requires gateway-transit settings. Remote policy assignments remain limited to eligible spoke virtual network connections. Enabling a BGP peer here does not create VNet peering or packet connectivity.')}</p>
@@ -167,5 +168,7 @@ export function AzRouteMapsPanel({ topology, siteId, hubId, routeServerId, inbou
       : 'Uses the same ordered prefix matching, permit, drop, summarize and AS-path prepend rules as VWAN site policies. Site policies accept private and 32-bit ASNs. Summaries do not create reachability in aggregate holes.')}
       {ars && <> <a href="https://learn.microsoft.com/azure/route-server/route-maps-about" target="_blank" rel="noreferrer">{t('Microsoft ARS route-map capabilities and limits')}</a></>}
     </p></details>
-  </CanvasOverlay>
+  </>
+  return embedded ? <section aria-label={t('Route maps · {0}', site.name)}>{content}</section>
+    : <CanvasOverlay title={t('Route maps · {0}', site.name)} className="route-map-panel" onClose={onClose}>{content}</CanvasOverlay>
 }

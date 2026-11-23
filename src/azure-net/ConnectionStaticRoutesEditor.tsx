@@ -30,7 +30,7 @@ export function ConnectionStaticRoutesEditor({ vnet, topology, commit }: {
     routes.reduce((count, route) => count + route.addressPrefixes.length, parsed.length) <= 256 &&
     vnet.appliances.some((app) => app.privateIp === nextHop && app.kind !== 'vnra')
   const limitations = connectionStaticLimitations(topology, vnet)
-  return <section aria-label={t('Connection static routes')} data-testid={`connection-static-${vnet.id}`}>
+  return <section aria-label={`${t('Connection static routes')} · ${vnet.name}`} data-testid={`connection-static-${vnet.id}`}>
     <h5>{t('Connection static routes')}</h5>
     <p>{t('Peer indirect spokes to this VNet and add return UDRs pointing to this Firewall/NVA. Do not attach the indirect spokes to the virtual hub.')}</p>
     <label className="aznet-toggle-row"><input type="checkbox"
