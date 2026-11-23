@@ -256,5 +256,10 @@
       "humanParticipants": 0,
       "timing": "No human discovery/completion time measured"
     }
-  ]
+  ],
+  "captureEnvironment": {
+    "platform": "win32",
+    "browserProject": "chromium",
+    "humanParticipants": 0
+  }
 }

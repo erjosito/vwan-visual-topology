@@ -327,7 +327,8 @@ new wizard would duplicate navigation without evidence of better discovery.
 The dense-view experiments in `issue-240-dense-visualization.md` are a separate,
 dev-only comparison, not a new capability mode in the application.
 
-Two reproducible English walkthroughs use a fresh mixed/full workspace:
+Two reproducible English walkthroughs use local Windows/Chromium and a fresh
+mixed/full workspace:
 1440 x 1000/light and 390 x 1000/dark. They create two VNets with the existing
 searchable Workspace controls, use **Peer with VNet**, inspect the actual
 effective-route table, run **Routing checks > Check routing**, then download
@@ -376,3 +377,8 @@ It also does not establish failed/unknown-path classification, first-time
 advanced-setting discovery, Japanese task completion or cloud interoperability.
 Use the participant protocol above before claiming those outcomes. #228 remains
 open; the current audit is a reproducible baseline, not a completed human study.
+
+After integrating main `2c6a959`, the native graph-preservation case and both
+current-UI walkthroughs pass again. Both raw walkthrough records, including
+header measurements, action counts and visible effective routes, exactly match
+the committed observations.

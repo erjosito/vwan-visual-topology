@@ -244,8 +244,9 @@ zoom state. Existing production connection-focus behavior is unchanged.
 
 ### Reproducible comparison and limits
 
-Use the same dev-only page and synthetic fixtures described above. Four new
-cases compare saved/focus/matrix/regions/neighborhood at 1600 x 1100, both themes
+Use the same dev-only page and synthetic fixtures described above, captured
+locally on Windows/Chromium. Four new cases compare
+saved/focus/matrix/regions/neighborhood at 1600 x 1100, both themes
 and both fixture sizes. Each measurement resets page scrolling to the top;
 collapsed HTML content is excluded rather than counted from cached boxes.
 SVG font sizes account for the screen transform. HTML samples are table headers,
@@ -331,3 +332,11 @@ asset checks and all three production startup/optional-panel/first-switch cases
 pass. Lint retains one existing `ErLocationInfoModal` warning. Research entry/
 component strings are absent from production output; startup ceilings remain
 300,000 local gzip bytes and 1,200,000 raw bytes.
+
+After integrating main `2c6a959`, native preservation and both current-UI
+walkthroughs pass with exactly matching observations. The combined configured
+build and four static checks pass. Hub-spoke/full startup cases pass initially;
+the VWAN case exhausts the unchanged 30-second whole-test deadline after slow
+initial navigation, then passes in 10 seconds on an unchanged-artifact,
+zero-retry rerun. The trace does not establish the cause of that slow navigation.
+No production source fix, timeout increase or byte-budget relaxation is retained.
