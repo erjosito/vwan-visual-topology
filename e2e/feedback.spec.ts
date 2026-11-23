@@ -4,6 +4,20 @@ import type { Page } from '@playwright/test'
 const storageKey = 'vwan-feedback-draft:v1'
 const publicFeedbackRepoUrl = 'https://github.com/erjosito/vwan-visual-topology'
 
+test('feedback deep links open only the requested Help dialog and preserve the design when dismissed', async ({ page }) => {
+  const requests: string[] = []
+  page.on('request', request => requests.push(request.url()))
+  await page.goto('/?feedback=1')
+  await expect(page.getByLabel('Summary', { exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog')).toHaveCount(1)
+  await expect(page).not.toHaveURL(/[?&]feedback=/)
+  expect(requests.some(url => url.includes('OtherPlatformsDialog'))).toBe(false)
+  const topology = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(topology)
+})
+
 async function fill(page: Page) {
   await page.getByLabel('Summary', { exact: true }).fill('Improve route table display')
   await page.getByLabel('Description', { exact: true }).fill('A sufficiently detailed controlled report without any network information.')

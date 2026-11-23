@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useLanguage } from './i18n'
 import { platformLinks } from './platform-links'
 
-export function OtherPlatformsDialog({ onClose }: { onClose: () => void }) {
+export default function OtherPlatformsDialog({ onClose }: { onClose: () => void }) {
   const language = useLanguage(), text = (en: string, ja: string) => language === 'ja' ? ja : en
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
