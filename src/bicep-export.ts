@@ -50,7 +50,7 @@ export function bicepDefaults(topology: Topology): BicepSettings {
         hubId: hub.id,
         selected: true,
         name,
-        location: canonicalLocation(hub.region),
+        location: canonicalLocation(hub.region ?? ''),
         addressPrefix: topology.azureImport?.hubs.find((source) => source.hubId === hub.id)?.addressPrefix ?? '',
         ...(isSecured ? { firewallName: `${name.slice(0, 42)}-fw`, firewallTier: 'Standard' as const, firewallPolicyId: '', publicIpCount: 1 } : {}),
       }

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { t } from '../i18n'
 import { InspectorSection } from '../WorkspacePresentation'
+import { AzureRegionSelect } from '../AzureRegionSelect'
 import { cidr } from '../validation'
 import type { AzNetTopology, AzVwanHub } from './model'
 import { HubTablesEditor } from './HubTablesEditor'
@@ -31,7 +32,7 @@ export function HubConfiguration({ hub, topology, commit, onAttach, onFirewallSn
         <div className="aznet-field-grid">
           <label className="field">{t('Hub name')}<input className="aznet-input" value={hub.name} maxLength={120}
             onChange={(event) => update({ name: event.target.value })} /></label>
-          <label className="field">{t('Azure Region')}<input className="aznet-input" value={hub.region}
+          <label className="field">{t('Azure Region')}<AzureRegionSelect className="aznet-select" value={hub.region ?? ''}
             onChange={(event) => update({ region: event.target.value })} /></label>
           <label className="field">{t('Hub address prefix')}<input className="aznet-input" value={hub.prefix ?? ''}
             onChange={(event) => update({ prefix: event.target.value })} /></label>

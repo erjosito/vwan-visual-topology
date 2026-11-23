@@ -1157,10 +1157,11 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     setSelected({ kind: 'vnet', vnetId: newId })
   }
   const addVwanHub = (x?: number, y?: number) => {
-    commitTopology((draft) => {
+    const id = `vhub-custom-${topology.vwanHubs.length + 1}`
+    const created = commitTopology((draft) => {
       const idx = draft.vwanHubs.length + 1
       draft.vwanHubs.push({
-        id: `vhub-custom-${idx}`,
+        id,
         name: `vWAN-Hub-${idx}`,
         region: 'West Europe',
         prefix: `10.${190 + idx}.0.0/23`,
@@ -1169,6 +1170,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
         ...(x === undefined || y === undefined ? {} : { x, y }),
       })
     })
+    if (created && setSelected({ kind: 'vwan-hub', hubId: id })) setActiveTab('editor')
   }
   const attachVnetToHub = (vnetId: string, hubId: string) => {
     commitTopology((draft) => {

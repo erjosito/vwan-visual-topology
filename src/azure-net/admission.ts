@@ -105,8 +105,8 @@ const schema = object({
     routes: array(object({ ...named, prefix: text, nextHopType: choice('VirtualAppliance', 'VirtualNetworkGateway', 'VnetLocal', 'Internet', 'None'), enabled: bool }, { nextHopIp: text })),
   }, { region: text, disablePeeringRoutePropagation: bool })),
   vwanHubs: array(object({
-    ...named, region: text, preference: choice('ExpressRoute', 'VPN', 'ASPath'), routingIntent: object({ private: bool, internet: bool }, { privatePrefixes: strings }),
-  }, { ...positioned, prefix: text, firewall: object({ id: (v, p) => {
+    ...named, preference: choice('ExpressRoute', 'VPN', 'ASPath'), routingIntent: object({ private: bool, internet: bool }, { privatePrefixes: strings }),
+  }, { ...positioned, region: text, prefix: text, firewall: object({ id: (v, p) => {
     text(v, p)
     if (!(v as string).trim() || (v as string).length > 2048) fail(p, 'expected a nonempty local Firewall ID of at most 2048 characters')
   }, name: text }), routeTables: hubTables, routeTablesStatus: choice('captured', 'unknown'), routeMapAssignments: array(assignment) })),
