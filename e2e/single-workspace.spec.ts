@@ -614,7 +614,7 @@ for (const operation of ['openDocument', 'collect'] as const) {
           cloud: { name: 'AzureCloud', resourceManager: 'https://management.azure.com/' },
           accounts: [{ id: 'subscription', tenantId: 'tenant', name: 'Test subscription', state: 'Enabled' }],
         } }),
-        targets: async () => ({ ok: true, value: { wans: [{ id: 'wan-id', name: 'Test WAN' }], groups: [] } }),
+        targets: async () => ({ ok: true, value: { wans: [{ id: 'wan-id', name: 'Test WAN' }], groups: [{ id: 'rg-id', name: 'Test resource group' }] } }),
       } })
       Reflect.set(window, 'desktopImportEvents', 0)
       document.addEventListener('change', (event) => {
@@ -627,13 +627,13 @@ for (const operation of ['openDocument', 'collect'] as const) {
     await expect(page.getByTestId('aznet-app')).toBeVisible()
     if (operation === 'openDocument') await page.getByRole('button', { name: 'Load file', exact: true }).click()
     else {
-      await page.getByText('Read-only local Azure collection', { exact: true }).click()
-      await page.getByRole('combobox', { name: 'Capture type', exact: true }).selectOption('vwan')
+      await page.getByTestId('workspace-azure-button').click()
       await page.getByRole('button', { name: 'Read existing Azure session', exact: true }).click()
       await page.getByRole('combobox', { name: 'Select subscription and tenant', exact: true }).selectOption('subscription')
       await page.getByRole('button', { name: 'Read available collection targets', exact: true }).click()
-      await page.getByRole('combobox', { name: 'Virtual WAN', exact: true }).selectOption('wan-id')
-      await page.getByRole('button', { name: 'Collect and review locally', exact: true }).click()
+      await page.getByRole('combobox', { name: 'Resource group', exact: true }).selectOption('Test resource group')
+      await page.getByRole('checkbox', { name: /Confirm read-only capture scope/ }).check()
+      await page.getByRole('button', { name: 'Capture → Compare current design', exact: true }).click()
     }
     await page.getByTestId('workspace-library-open').click()
     await page.getByRole('button', { name: 'New mixed-network workspace', exact: true }).click()
@@ -650,7 +650,7 @@ for (const operation of ['openDocument', 'collect'] as const) {
   })
 }
 
-test('fresh desktop offers both capture families without changing the editable workspace', async ({ page }) => {
+test('desktop captures directly into comparison without replacing the editable workspace', async ({ page }) => {
   await page.addInitScript((capture) => Object.defineProperty(window, 'desktopSimulator', { value: {
     accounts: async () => ({ ok: true, value: {
       cloud: { name: 'AzureCloud', resourceManager: 'https://management.azure.com/' },
@@ -661,17 +661,19 @@ test('fresh desktop offers both capture families without changing the editable w
       Reflect.set(window, 'capturedRequest', request)
       return { ok: true, value: { name: 'wan.json', content: JSON.stringify(capture) } }
     },
-  } }), { ...observationFixture(), version: 1 })
+  } }), observationFixture())
   await page.goto('/')
-  await expect(page.getByTestId('aznet-app')).toBeVisible()
-  await page.getByText('Read-only local Azure collection', { exact: true }).click()
-  await page.getByRole('combobox', { name: 'Capture type', exact: true }).selectOption('vwan')
-  await expect(page.getByTestId('aznet-app')).toBeVisible()
+  await page.locator('input[data-desktop-import]').setInputFiles({ name: 'design.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(example)) })
+  await expect(page.getByTestId('vwan-app')).toBeVisible()
+  const saved = await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))
+  await page.getByTestId('workspace-azure-button').click()
   await page.getByRole('button', { name: 'Read existing Azure session', exact: true }).click()
   await page.getByRole('combobox', { name: 'Select subscription and tenant', exact: true }).selectOption('subscription')
   await page.getByRole('button', { name: 'Read available collection targets', exact: true }).click()
   await page.getByRole('combobox', { name: 'Virtual WAN', exact: true }).selectOption('wan-id')
-  await page.getByRole('button', { name: 'Collect and review locally', exact: true }).click()
-  await expect(page.getByRole('heading', { name: 'Review Azure capture', exact: true })).toBeVisible()
+  await page.getByRole('checkbox', { name: /Confirm read-only capture scope/ }).check()
+  await page.getByRole('button', { name: 'Capture → Compare current design', exact: true }).click()
+  await expect(page.getByRole('heading', { name: 'Observation scope and mappings', exact: true })).toBeVisible()
+  expect(await page.evaluate(() => localStorage.getItem('vwan-visual-topology:v1'))).toBe(saved)
   expect(await page.evaluate(() => Reflect.get(window, 'capturedRequest'))).toEqual({ subscriptionId: 'subscription', tenantId: 'tenant', mode: 'vwan', target: 'wan-id' })
 })

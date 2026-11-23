@@ -123,8 +123,9 @@ test('the wide palette leaves native desktop file and read-only collection contr
   await expect(page.getByTestId('aznet-app')).toBeVisible()
   const native = page.getByRole('region', { name: 'Local desktop tools', exact: true })
   await native.getByRole('button', { name: 'Load file', exact: true }).click({ trial: true })
-  await native.getByText('Read-only local Azure collection', { exact: true }).click()
-  await native.getByRole('button', { name: 'Read existing Azure session', exact: true }).click({ trial: true })
+  await page.getByTestId('workspace-azure-button').click()
+  await page.getByRole('region', { name: 'Read-only local Azure collection', exact: true })
+    .getByRole('button', { name: 'Read existing Azure session', exact: true }).click({ trial: true })
 })
 
 test('nested capability controls mount on demand and dispatch to the selected VNet', async ({ page }) => {

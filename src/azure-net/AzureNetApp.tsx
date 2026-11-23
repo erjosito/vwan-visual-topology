@@ -83,6 +83,7 @@ interface AzureNetAppProps {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const AzurePanel = lazy(() => import('./AzurePanel').then((module) => ({ default: module.AzurePanel })))
 const Explain = lazy(() => import('../learning/Explain').then((module) => ({ default: module.Explain })))
 const WarningAcknowledgement = lazy(() => import('../WarningAcknowledgement').then((module) => ({ default: module.WarningAcknowledgement })))
 const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls }))
@@ -91,7 +92,6 @@ const VpnNatGatewayEditor = lazy(() => import('../VpnNatEditor').then((module) =
 const BgpRouteTable = lazy(() => import('./BgpRouteTable').then((module) => ({ default: module.BgpRouteTable })))
 const SampleGallery = lazy(() => import('../SampleGallery').then((module) => ({ default: module.SampleGallery })))
 const ErLocationInfoModal = lazy(() => import('../ErLocationInfoModal').then((module) => ({ default: module.ErLocationInfoModal })))
-const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ default: module.AzBicepExport })))
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const VnetConnectionEditor = lazy(() => import('./VnetConnectionEditor'))
 const GatewayCoexistenceAutoFix = lazy(() => import('./GatewayCoexistenceAutoFix'))
@@ -110,8 +110,6 @@ const AzRouteMapsPanel = lazy(() => import('./RouteMapsPanel').then((module) => 
 const NvaBgpPanel = lazy(() => import('./NvaBgpPanel'))
 const BgpNeighborsPanel = lazy(() => import('../BgpNeighborsPanel'))
 const PeeringScopeEditor = lazy(() => import('./PeeringScopeEditor'))
-const GatewayBgpNeighborsPanel = lazy(() => import('./GatewayBgpNeighborsPanel'))
-const CapturedArsRoutesPanel = lazy(() => import('./CapturedArsRoutesPanel'))
 const VnetRoutingSettings = lazy(() => import('./VnetRoutingSettings'))
 const SubnetPrefixEditor = lazy(() => import('./AddressPrefixEditors').then((module) => ({ default: module.SubnetPrefixEditor })))
 const LearningInspection = lazy(() => import('../learning/LearningInspection').then(module => ({ default: module.LearningInspection })))
@@ -193,6 +191,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   const [hubTableInspection, setHubTableInspection] = useWorkspaceEditorState<{ hubId: string; tableId: string; prefix?: string; firewall?: boolean }>('aznet.hubTable')
   const [showDiagnosticBadges, setShowDiagnosticBadges] = useWorkspaceEditorState('aznet.diagnosticBadges', true)
   const [captureComparison, setCaptureComparison] = useWorkspaceEditorState<AzNetComparisonReport | null>('aznet.captureComparison', null)
+  const [captureRevision, setCaptureRevision] = useWorkspaceEditorState<string>('aznet.captureRevision')
   const [captureNotices, setCaptureNotices] = useWorkspaceEditorState<string[]>('aznet.captureNotices', [])
   const [captureObservations, setCaptureObservations] = useWorkspaceEditorState<AzCapturedObservations | null>('aznet.captureObservations', null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -369,6 +368,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
     applyLoadedTopology('', admitted)
     setCaptureNotices(imported.warnings)
     setCaptureComparison(importedComparison)
+    setCaptureRevision(azRoutingInput(imported.topology).revision)
     setCaptureObservations(imported.observations ?? null)
     setWorkspaceNotice('')
     setActiveTab('azure')
@@ -2551,6 +2551,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           </div>
 
           <WorkspaceMenu />
+          <button type="button" className="aznet-btn" data-testid="workspace-azure-button" onClick={() => setActiveTab('azure')}>{t('Azure')}</button>
         </div>
 
         <div className="aznet-topbar-controls">
@@ -2813,6 +2814,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                       imported.observations,
                     )
                     setCaptureComparison(report)
+                    setCaptureRevision(baselineRevision)
                     setActiveTab('azure')
                   }
                 }
@@ -3042,7 +3044,7 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
           onSave={(next) => commitTopology((draft) => Object.assign(draft, next))} onClose={() => { setRouteMapSiteId(undefined); setRouteMapArsId(undefined); setRouteMapHubId(undefined) }} /></Suspense>}
         {vnetConnectionId && <Suspense fallback={null}><VnetConnectionEditor key={vnetConnectionId}
           topology={topology} vnetId={vnetConnectionId} commit={commitTopology} onClose={() => setVnetConnectionId(undefined)} /></Suspense>}
-        {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay
+        {activeTab && (selectedExists || activeTab === 'routes' && routeInspection || activeTab === 'diagnostics' || activeTab === 'tracer' || activeTab === 'azure') && <CanvasOverlay restoreFocus={activeTab === 'azure'}
           key={guidanceRevision}
           focusOnOpen={!guidanceNavigation}
           title={{
@@ -4975,173 +4977,13 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
 
             {/* TAB 5: AZURE CAPTURE IMPORT, EFFECTIVE-ROUTE COMPARISON & BICEP EXPORT */}
             {activeTab === 'azure' && (
-              <>
-                {(captureObservations?.vngBgpPeerStatus || captureObservations?.vngLearnedRoutes || captureObservations?.vngAdvertisedRoutes || captureObservations?.vngBgpEndpoints) && <Suspense fallback={null}>
-                  <GatewayBgpNeighborsPanel observations={captureObservations} />
-                </Suspense>}
-                {(captureObservations?.arsLearnedRoutes || captureObservations?.arsAdvertisedRoutes) && <Suspense fallback={null}>
-                  <CapturedArsRoutesPanel observations={captureObservations!} />
-                </Suspense>}
-                <div className="aznet-card" data-testid="aznet-azure-capture-card">
-                  <h3>1. Azure Live Capture & Effective-Route Comparison</h3>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>
-                    Capture a live Azure resource group (VNets, Subnets, Peerings, UDRs, Route
-                    Server, Gateways, and NIC Effective Routes — including a proxy subnet sharing{' '}
-                    <code>GatewaySubnet</code>&apos;s route table) using the read-only PowerShell
-                    collector:
-                  </p>
-                  <pre
-                    style={{
-                      margin: '0 0 8px 0',
-                      padding: 8,
-                      background: 'var(--surface-muted)',
-                      color: 'var(--text-muted)',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      overflowX: 'auto',
-                    }}
-                  >
-                    {`pwsh ./scripts/collect-azure-network.ps1 -ResourceGroupName <rg> -IncludeEffectiveRoutes -OutputFile azure-network-capture.json`}
-                  </pre>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <a
-                      className="aznet-btn"
-                      href="/scripts/collect-azure-network.ps1"
-                      download="collect-azure-network.ps1"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      ⬇ Download Collector Script (.ps1)
-                    </a>
-                    <button
-                      type="button"
-                      className="aznet-btn aznet-btn-primary"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      ⬆ Import Capture as Topology + Compare
-                    </button>
-                    <button
-                      type="button"
-                      className="aznet-btn"
-                      onClick={() => compareFileInputRef.current?.click()}
-                    >
-                      🔍 Compare Capture Against Current Topology
-                    </button>
-                  </div>
-
-                  {captureNotices.length > 0 && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        padding: 8,
-                        background: 'var(--surface)',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        fontSize: 11.5,
-                      }}
-                    >
-                      <strong>Import Notices:</strong>
-                      <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                        {captureNotices.map((n, idx) => (
-                          <li key={idx}>{n}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {captureComparison && (
-                    <div style={{ marginTop: 10 }} data-testid="aznet-comparison-report">
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: 6,
-                        }}
-                      >
-                        <strong>
-                          NIC Effective Route Comparison ({captureComparison.totalMatchedRoutes}{' '}
-                          matched, {captureComparison.totalMismatchedRoutes} mismatched
-                          {captureComparison.totalUnknownRoutes > 0 && `, ${captureComparison.totalUnknownRoutes} unassessed`})
-                        </strong>
-                      </div>
-                      {captureComparison.subnetComparisons.map((nic) => (
-                        <div
-                          key={nic.nicName}
-                          style={{
-                            marginBottom: 8,
-                            padding: 8,
-                            background: 'var(--surface)',
-                            borderRadius: 6,
-                            border: `1px solid ${nic.coverage === 'complete' && nic.mismatchCount === 0 ? 'var(--success)' : 'var(--border)'}`,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginBottom: 4,
-                              fontSize: 12,
-                            }}
-                          >
-                            <span>
-                              <strong>{nic.nicName}</strong> · {nic.vnetName}/{nic.subnetName}{' '}
-                              {nic.proxyForGatewaySubnet && (
-                                <span className="aznet-badge info">GatewaySubnet Proxy</span>
-                              )}
-                            </span>
-                            <span
-                              className={`aznet-badge ${nic.coverage !== 'complete' ? 'info' : nic.mismatchCount === 0 ? 'ok' : 'error'}`}
-                            >
-                              {nic.coverage !== 'complete'
-                                ? `COVERAGE ${nic.coverage.toUpperCase()} (${nic.matchedCount} matched)`
-                                : nic.mismatchCount === 0
-                                ? `MATCHED (${nic.matchedCount})`
-                                : `${nic.mismatchCount} DIFF`}
-                            </span>
-                          </div>
-                          <table className="aznet-route-table">
-                            <thead>
-                              <tr>
-                                <th>Status</th>
-                                <th>Prefix</th>
-                                <th>Azure Observed</th>
-                                <th>Simulator Predicted</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {nic.rows.map((d, idx) => (
-                                <tr key={idx}>
-                                  <td>
-                                    <span className={`aznet-badge ${d.assessment === 'unknown' ? 'info' : d.matched ? 'ok' : 'error'}`}>
-                                      {d.assessment === 'unknown' ? 'unassessed' : d.matched ? 'match' : 'diff'}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <code>{d.prefix}</code>
-                                  </td>
-                                  <td>
-                                    {`${d.azureSource} → ${d.azureNextHopType}${
-                                      d.azureNextHopIp ? ` (${d.azureNextHopIp})` : ''
-                                    } [${d.azureState}]`}
-                                  </td>
-                                  <td>
-                                    {`${d.simSource} → ${d.simNextHopType}${
-                                      d.simNextHopIp ? ` (${d.simNextHopIp})` : ''
-                                    } [${d.simState}]`}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzBicepExport topology={topology} /></Suspense>
-              </>
+              <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzurePanel
+                topology={topology} simulation={simulation} observations={captureObservations} comparison={captureComparison}
+                notices={captureNotices} stale={captureRevision !== baselineRevision}
+                onCaptured={(observations, comparison, warnings) => {
+                  setCaptureObservations(observations); setCaptureComparison(comparison); setCaptureNotices(warnings); setCaptureRevision(baselineRevision)
+                }} onComparison={(report) => { setCaptureComparison(report); setCaptureRevision(baselineRevision) }}
+                onImportFile={() => fileInputRef.current?.click()} onCompareFile={() => compareFileInputRef.current?.click()} /></Suspense>
             )}
           </div>
         </CanvasOverlay>}
