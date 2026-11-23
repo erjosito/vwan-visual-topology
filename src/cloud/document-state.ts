@@ -1,7 +1,6 @@
 import type { WorkspaceProvider } from '../workspace-session'
 import type { CloudEntry } from './contracts'
 import { randomUUID } from '../random-id'
-import type { ArtifactSnapshot } from '../document-commands'
 
 export const cloudDocumentKey = 'network-simulator:cloud-document:v1'
 export interface CloudDocumentSource { accountId: string; id: string; name: string; etag: string }
@@ -13,14 +12,6 @@ export interface DocumentSaveSnapshot {
   operation: 'idle' | 'saving' | 'failed'
   retained: boolean
   cloud?: CloudDocumentSource & { state: 'checking' | 'matches' | 'modified' | 'changed' | 'missing' | 'unavailable' | 'unknown' }
-}
-
-export function documentSaveLabel(state?: DocumentSaveSnapshot, artifact?: ArtifactSnapshot) {
-  if (state?.cloud?.state === 'matches'
-    || !state?.cloud && artifact?.destination?.kind === 'cloud' && artifact.revision === 'matches') return 'Cloud saved'
-  if (state?.local === 'saved'
-    || artifact?.destination?.kind === 'file' && artifact.revision === 'matches') return 'Locally saved'
-  return 'Not saved'
 }
 
 export async function fingerprint(value: unknown) {

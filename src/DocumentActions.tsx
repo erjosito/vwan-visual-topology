@@ -1,9 +1,8 @@
 import { Component, lazy, Suspense, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { t, useLanguage } from './i18n'
-import { useDocumentSaveState, useWorkspaceSession } from './workspace-context'
+import { documentSaveLabel, useDocumentSaveState, useWorkspaceSession } from './workspace-context'
 import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
-import { documentSaveLabel } from './cloud/document-state'
 import './document-actions.css'
 
 const CloudPanel = lazy(() => import('./cloud/CloudPanel').then(module => ({ default: module.CloudPanel })))

@@ -1,8 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { t, useLanguage } from '../i18n'
-import { useDocumentSaveState, useWorkspaceSession } from '../workspace-context'
+import { documentSaveLabel, useDocumentSaveState, useWorkspaceSession } from '../workspace-context'
 import { useCloudSession } from './useCloudSession'
-import { documentSaveLabel } from './document-state'
 
 const noSubscribe = () => () => {}
 const noSnapshot = () => undefined

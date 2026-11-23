@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createDocumentCommands, type ArtifactDestination, type ArtifactReceipt, type ArtifactWriter } from './document-commands'
-import { documentSaveLabel, type DocumentSaveSnapshot } from './cloud/document-state'
+import type { DocumentSaveSnapshot } from './cloud/document-state'
+import { documentSaveLabel } from './workspace-context'
 
 const file: ArtifactDestination = { kind: 'file', platform: 'desktop', name: 'original.json',
   location: 'C:\\Labs\\original.json', revision: 'original-bytes', authority: 'opaque-main-token' }

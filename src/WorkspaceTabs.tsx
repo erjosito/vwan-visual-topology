@@ -1,8 +1,8 @@
 import { useContext, useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { t, useLanguage } from './i18n'
-import { WorkspaceTabsContext, useWorkspaceSession } from './workspace-context'
+import { documentSaveLabel, WorkspaceTabsContext, useWorkspaceSession } from './workspace-context'
 import { workspaceTabsLimit, type WorkspaceTab } from './workspace-tabs'
-import { documentSaveLabel, type DocumentSaveState } from './cloud/document-state'
+import type { DocumentSaveState } from './cloud/document-state'
 import type { createDocumentCommands } from './document-commands'
 import './workspace-tabs.css'
 const noSubscribe = () => () => {}
@@ -31,19 +31,19 @@ function TabButton({ tab, selected, save, commands, onActivate }: {
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
   const state = useSyncExternalStore(save.subscribe, save.getSnapshot)
   const artifact = useSyncExternalStore(commands?.subscribe ?? noSubscribe, commands?.getSnapshot ?? noSnapshot)
-  const detailStatus = artifact?.operation === 'saving' ? text('Saving', '保存中')
-    : artifact?.operation === 'failed' ? text('Save failed', '保存失敗')
-      : artifact?.destination?.kind === 'file' ? artifact.revision === 'matches' ? text('File saved', 'ファイル保存済み')
-        : text('File modified', 'ファイル未保存')
-        : state.operation === 'saving' ? text('Saving', '保存中')
-    : state.operation === 'failed' ? text('Save failed', '保存失敗')
-      : state.cloud ? state.cloud.state === 'matches' ? text('Cloud saved', 'クラウド保存済み')
-        : state.cloud.state === 'modified' ? text('Cloud modified', 'クラウド未保存')
-          : text('Cloud unverified', 'クラウド未確認')
-        : state.local === 'unavailable' ? text('Not in profile', 'プロファイル未保存')
-          : state.local === 'saved' ? text('Profile saved', 'プロファイル保存済み')
-            : !state.ready ? text('Not opened', '未表示')
-              : text('Draft', '下書き')
+  const detailStatus = t(artifact?.operation === 'saving' ? 'Saving'
+    : artifact?.operation === 'failed' ? 'Save failed'
+      : artifact?.destination?.kind === 'file' ? artifact.revision === 'matches' ? 'File saved'
+        : 'File modified'
+        : state.operation === 'saving' ? 'Saving'
+    : state.operation === 'failed' ? 'Save failed'
+      : state.cloud ? state.cloud.state === 'matches' ? 'Cloud saved'
+        : state.cloud.state === 'modified' ? 'Cloud modified'
+          : 'Cloud unverified'
+        : state.local === 'unavailable' ? 'Not in profile'
+          : state.local === 'saved' ? 'Profile saved'
+            : !state.ready ? 'Not opened'
+              : 'Draft')
   const name = tab.name || text('Untitled topology', '名称未設定のトポロジ')
   const status = t(documentSaveLabel(state, artifact))
   const tooltip = `${name} · ${tab.provider === 'vwan' ? 'Virtual WAN' : text('Mixed networking', '混在ネットワーク')} · ${detailStatus}${state.cloud ? `: ${state.cloud.name}` : ''}${artifact?.destination?.kind === 'file' ? `: ${artifact.destination.location}` : ''}${artifact?.error ? ` · ${artifact.error}` : ''}`
