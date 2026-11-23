@@ -162,11 +162,11 @@ export const capabilities = {
       'additional backend NAT policies', 'Internet egress', 'live probes/convergence', 'guest OS readiness', 'session replication/continuity'],
   },
   staticHubFirewall: {
-    scope: 'Single hub, declared original hub.firewall ID/name, routing intent disabled, CIDR/ResourceId routes to that ID only.',
+    scope: 'Single hub, declared original hub.firewall ID/name, CIDR/ResourceId routes to that ID only. With routing intent, only defaultRouteTable Firewall statics are supported.',
     forwarding: 'Longest prefix, then static over learned for equal prefixes; independent local-connection Firewall onward and return lookups.',
     assertions: 'flow firewallPolicy: {hubId, forward: required|bypassed, reverse: required|bypassed}, with expectation allow.',
     excluded: ['multi-hub static inspection', 'static branch-to-branch inspection', 'arbitrary IP/resource next hops and spoke NVAs',
-      'routing intent combined with hub statics', 'unobserved capture reconstruction', 'Firewall policy, sessions, packet/application delivery'],
+      'routing intent with custom tables or VNet-connection hub next hops', 'unobserved capture reconstruction', 'Firewall policy, sessions, packet/application delivery'],
   },
   workspace: { capabilities: workspaceCapabilities, limitations: workspaceCapabilityLimits },
   vpnOverEr: {

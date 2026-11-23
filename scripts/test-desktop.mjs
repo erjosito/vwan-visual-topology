@@ -116,6 +116,7 @@ try {
       'cloudStatus', 'cloudSignIn', 'cloudSignOut', 'cloudRequest'],
   })
   const cloudStatus = await page.evaluate(() => window.desktopSimulator.cloudStatus())
+  await expect(page.getByRole('button', { name: 'Use AzNetSim elsewhere', exact: true })).toHaveCount(0)
   expect(cloudStatus.ok).toBe(true)
   expect(cloudStatus.value).toEqual({ configured: expect.any(Boolean) })
   if (cloudStatus.value.configured) {

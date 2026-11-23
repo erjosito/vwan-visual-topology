@@ -42,8 +42,8 @@ export function CloudSharing({ api, entry, entries, refreshed }: { api: CloudCli
   }
   return <section aria-label={text('Shared links', '共有リンク')} className="cloud-sharing">
     <h3 ref={heading} tabIndex={-1}>{text('Shared links', '共有リンク')}</h3>
-    <p>{text('Links show the latest cloud-saved version, including later updates and renames, for 30 days. Unsaved edits are not shared. Anyone with the link can read the design; do not share secrets or confidential data. Viewers cannot change your save. Signed-in viewers can export or save their own copy.',
-      'リンクは、以後の更新や名前変更を含むクラウドの最新の保存を 30 日間表示します。未保存の編集は共有しません。リンクを持つ全員が設計を閲覧できます。機密情報を共有しないでください。閲覧者は元の保存を変更できません。サインインした閲覧者はエクスポートや自分のコピーの保存が可能です。')}</p>
+    <p>{text('Links show the latest cloud-saved version, including the saved name, description and later updates, for 30 days. Unsaved edits are not shared. Anyone with the link can read the design; do not share secrets or confidential data. Viewers cannot change your save. Signed-in viewers can export or save their own copy.',
+      'リンクは、保存名、説明、以後の更新を含むクラウドの最新の保存を 30 日間表示します。未保存の編集は共有しません。リンクを持つ全員が設計を閲覧できます。機密情報を共有しないでください。閲覧者は元の保存を変更できません。サインインした閲覧者はエクスポートや自分のコピーの保存が可能です。')}</p>
     <p>{text('Revoking a link or deleting its cloud save stops future access, not copies already obtained. Recreating a deleted save does not restore old links. Sign-out does not revoke links; revoke them here before deleting your account.',
       'リンクの取り消しやクラウドの保存の削除で以後のアクセスを停止しますが、取得済みのコピーは削除できません。削除した保存を作り直しても古いリンクは復活しません。サインアウトではリンクを取り消しません。アカウント削除の前にここで取り消してください。')}</p>
     {entry && <button type="button" disabled={busy || !loaded} onClick={() => {

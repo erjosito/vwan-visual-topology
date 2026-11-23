@@ -180,7 +180,7 @@ export interface AzVwanHub {
   id: string
   name: string
   label?: string
-  region: string
+  region?: string
   prefix?: string
   preference: Preference
   routeTables?: HubRouteTable[]

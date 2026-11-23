@@ -757,18 +757,58 @@ References: [NSG processing and statefulness](https://learn.microsoft.com/en-us/
 
 ## Local MCP / Copilot skill
 
-Prerequisites: Node 22 and a trusted checkout; dependencies are restored with
-`npm ci`, then `npm run build:platform`. `npm run mcp` starts the standalone
-stdio server. `.github/mcp.json` declares the repository-local server, launched
-from this repository root after building. Review/enable it through your client's
-trust flow; the configuration does not grant blanket permissions.
+Prerequisites: **Node 22+** and an MCP-compatible AI client. Choose one installation:
 
-The [independent release pipeline](docs/releasing.md) can also publish a portable
-`mcp-v<version>` download without building the web app or Windows installer.
+- **Portable package:** download a published **Local MCP server** release
+  (`mcp-v<version>`) from [GitHub releases](https://github.com/erjosito/vwan-visual-topology/releases?q=mcp-v).
+  This is the MCP package, not the Windows installer or a promotion receipt.
+- **Source checkout:** use a trusted checkout, restore dependencies with `npm ci`,
+  then run `npm run build:platform`. `npm run mcp` starts the standalone stdio
+  server from the repository root. `.github/mcp.json` declares that local server.
+
+The [independent release pipeline](docs/releasing.md) publishes the portable
+package without building the web app or Windows installer.
 Extract into a new directory, run `npm ci --omit=dev --ignore-scripts`, and
 configure the client to launch `node` with the absolute path to `mcp.cjs`.
+For example, merge this entry into your client's MCP-server configuration
+(the surrounding property name can differ by client):
+
+```json
+{
+  "mcpServers": {
+    "azure-network-simulator": {
+      "command": "node",
+      "args": ["C:\\Tools\\AzNetSim-MCP\\mcp.cjs"]
+    }
+  }
+}
+```
+
+For source builds, use the absolute path to `platform-dist/mcp.cjs` instead.
+Review/enable the server through your client's trust flow; configuration does
+not grant blanket permissions. Node must be on the client's PATH, or `command`
+must be the absolute path to its executable. The server uses stdio, not a URL
+or hosted endpoint.
+
 Restart the client/server to use the new package; web and Windows releases do
-not replace an already-running MCP process.
+not replace an already-running MCP process. To update, extract the new package
+into a separate directory, restore its dependencies, update the configured path
+and restart. Do not mix files from different versions.
+
+For a first simulation, ask the connected client to:
+
+1. Read `get_capabilities` and `get_schema` for the intended topology mode, using
+   the schema's native example rather than inventing fields.
+2. Run `start_simulation` with `operation: "validate"`, then read `get_job`.
+   Correct admission errors before interpreting routing results.
+3. Run `operation: "evaluate"` with explicit supported flow or exact-route
+   assertions. Read the job and bounded evidence, distinguishing pass, fail
+   and unassessed requirements. Results model steady-state configuration, not
+   live Azure delivery or convergence.
+
+The tools do not deploy Azure resources or edit an open canvas. Although the
+server runs locally, tool inputs and results may reach your selected AI provider;
+local MCP does not make hosted Copilot offline. Follow your data policy.
 
 The simulation tools are `get_capabilities`, `get_schema`, `start_simulation`,
 `get_job`, `get_evidence`, `cancel_job`. They provide native examples,

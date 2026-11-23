@@ -3,11 +3,14 @@ import type { Hub } from './model'
 import { hubRouteTables, NONE_HUB_TABLE } from './hub-routing'
 import { cidr } from './validation'
 import { t } from './i18n'
+import { isRoutingIntentPolicyRoute, routingIntentManaged, type IntentHub } from './routing-intent'
+import './RoutingIntentNotice'
 
-type Owner = Pick<Hub, 'id' | 'firewall' | 'routeTables'>
+type Owner = Pick<Hub, 'id' | 'firewall' | 'routeTables'> & Partial<Pick<IntentHub, 'routingIntent'>>
 
 export function HubStaticRoutesEditor({ hub, onChange, focusFirewall = false }: { hub: Owner; onChange: (hub: Owner) => void; focusFirewall?: boolean }) {
   const [error, setError] = useState('')
+  const managed = !!hub.routingIntent && routingIntentManaged({ routingIntent: hub.routingIntent })
   const declaration = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (focusFirewall) {
@@ -23,7 +26,7 @@ export function HubStaticRoutesEditor({ hub, onChange, focusFirewall = false }: 
   }
   return <section aria-label={t('Static hub Firewall routing')}>
     <h4>{t('Static hub Firewall routing')}</h4>
-    <p>{t('Single hub only. Declare the original local Firewall identity; disable both routing intents. Static routes select inspection, not Firewall permission or application delivery.')}</p>
+    <p>{t('Single hub only. Declare the original local Firewall identity. With routing intent, only default-table routes to that Firewall are supported here; policy-generated routes are managed. This does not establish Firewall permission or application delivery.')}</p>
     <label className="checkbox-field"><input ref={declaration} type="checkbox" checked={!!hub.firewall} onChange={(event) => {
       const owner = { ...hub }
       if (event.target.checked) owner.firewall = { id: `fw-${hub.id}`, name: 'Azure Firewall' }
@@ -48,7 +51,8 @@ export function HubStaticRoutesEditor({ hub, onChange, focusFirewall = false }: 
     </>}
     {hubRouteTables(hub).filter((table) => table.id !== NONE_HUB_TABLE || table.staticRoutes?.length).map((table) =>
       <fieldset key={table.id}><legend>{table.name} · {table.id}</legend>
-        {(table.staticRoutes ?? []).map((route, index) => <fieldset key={`${table.id}:${index}`}>
+        {(table.staticRoutes ?? []).map((route, index) => <fieldset key={`${table.id}:${index}`}
+          disabled={managed && isRoutingIntentPolicyRoute(route.name)}>
           <legend>{route.name}</legend>
           <label className="field"><span>{t('Static route name')}</span><input aria-label={`${t('Static route name')} ${table.id} ${index + 1}`}
             key={route.name} defaultValue={route.name} maxLength={120} onBlur={(event) => {
@@ -77,7 +81,7 @@ export function HubStaticRoutesEditor({ hub, onChange, focusFirewall = false }: 
           </select></label>
           <button type="button" onClick={() => update(table.id, (owner) => { owner.staticRoutes!.splice(index, 1) })}>{t('Remove static route')}</button>
         </fieldset>)}
-        <button type="button" disabled={!hub.firewall || table.id === NONE_HUB_TABLE} onClick={() => update(table.id, (owner) => {
+        <button type="button" disabled={!hub.firewall || table.id === NONE_HUB_TABLE || managed && table.id !== 'defaultRouteTable'} onClick={() => update(table.id, (owner) => {
           ;(owner.staticRoutes ??= []).push({ name: `inspect-${crypto.randomUUID()}`, destinationType: 'CIDR',
             destinations: ['10.0.0.0/8'], nextHopType: 'ResourceId', nextHop: hub.firewall!.id })
         })}>{t('Add static hub route')}</button>

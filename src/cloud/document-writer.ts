@@ -11,7 +11,8 @@ export function createCloudDocumentWriter(getCloud: () => CloudSessionValue | un
     if (choice.kind !== 'cloud' && choice.kind !== 'choose-cloud') throw new Error('The selected destination is not a cloud entry.')
     const cloud = getCloud(), api = cloud?.api
     if (!api || cloud.account?.id !== choice.accountId) throw new Error('Sign in to the saved cloud account before saving.')
-    const value = parseCloudTopology({ version: 1, name: choice.name, topology: JSON.parse(content) })
+    let value = parseCloudTopology({ version: 1, name: choice.name,
+      description: choice.kind === 'choose-cloud' ? choice.description : undefined, topology: JSON.parse(content) })
     if (!window.confirm(language() === 'ja'
       ? 'このトポロジを自分のクラウドにアップロードしますか。許可のない機密データや秘密情報を保存しないでください。'
       : 'Upload this topology to your private cloud library? Do not upload secrets or confidential data without approval.')) return null
@@ -23,6 +24,11 @@ export function createCloudDocumentWriter(getCloud: () => CloudSessionValue | un
     if (!document || !ticket) throw new Error('The document closed or another cloud operation is pending.')
     let etag: string
     try {
+      if (choice.kind === 'cloud') {
+        const current = await api.getTopology(choice.id)
+        if (!current || current.etag !== choice.etag) throw new CloudHttpError(412, 'Cloud data changed. Refresh before overwriting it.')
+        value = parseCloudTopology({ ...value, name: current.value.name, description: current.value.description })
+      }
       try { etag = await api.saveTopology(id, value, choice.kind === 'cloud' ? choice.etag : null) }
       catch (error) {
         if (choice.kind !== 'choose-cloud' || !(error instanceof CloudHttpError) || error.status !== 412) throw error

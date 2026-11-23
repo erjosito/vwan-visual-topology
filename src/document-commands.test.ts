@@ -17,6 +17,26 @@ function setup(write = vi.fn<ArtifactWriter>(async () => ({ confirmed: true, des
 }
 
 describe('document artifact commands', () => {
+  it('updates only exact linked cloud metadata without confirming unsaved topology edits', async () => {
+    const { commands, edit, retain, account } = setup()
+    await commands.loaded(cloud, { version: 1, name: 'Original', hubs: [] })
+    edit('Unsaved local design')
+    await commands.observe()
+    const digest = retain.mock.calls.at(-1)![0]!.digest
+    expect(commands.cloudMetadataUpdated('bob', cloud.id, cloud.etag, 'Wrong owner', '"two"')).toBe(false)
+    expect(commands.cloudMetadataUpdated('alice', 'different-id', cloud.etag, 'Wrong ID', '"two"')).toBe(false)
+    expect(commands.cloudMetadataUpdated('alice', cloud.id, '"stale"', 'Wrong version', '"two"')).toBe(false)
+    expect(commands.cloudMetadataUpdated('alice', cloud.id, cloud.etag, 'Saved metadata only', '"two"')).toBe(true)
+    expect(commands.getSnapshot()).toMatchObject({ revision: 'modified',
+      destination: { ...cloud, name: 'Saved metadata only', etag: '"two"' } })
+    expect(retain.mock.calls.at(-1)![0]!.digest).toBe(digest)
+    expect(commands.canClose()).toBe(false)
+    edit('Original'); await commands.observe()
+    expect(commands.getSnapshot().revision).toBe('matches')
+    account('bob')
+    expect(commands.cloudMetadataUpdated('alice', cloud.id, '"two"', 'Late update', '"three"')).toBe(false)
+  })
+
   it('reports confirmed file saves separately from later unsaved edits and profile recovery', async () => {
     const { commands, edit } = setup()
     const state: DocumentSaveSnapshot = { ready: true, local: 'unavailable', operation: 'idle', retained: false }

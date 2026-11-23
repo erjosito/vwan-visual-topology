@@ -19,7 +19,7 @@ export const workspaceCapabilitiesJa: Record<string, string> = {
   'Diagnostics, failures, practice and capture comparison': '診断、障害、演習とキャプチャ比較',
   'Native JSON, share URLs and bounded Bicep starters': 'ネイティブ JSON、共有 URL と範囲を限定した Bicep スターター',
   'Supported means within the documented native model, not verified Azure packet delivery.': '対応とは文書化されたネイティブ モデル内での対応です。Azure でのパケット配信の検証ではありません。',
-  'Static hub Firewall routing requires one hub and a declared local Firewall. Arbitrary next hops, static branch-to-branch inspection and combinations with routing intent remain unassessed.': '静的ハブ Firewall ルーティングには、単一ハブと明示されたローカル Firewall が必要です。任意のネクスト ホップ、静的ルートによるブランチ間検査、ルーティング インテントとの併用は評価されません。',
+  'Static hub Firewall routing requires one hub and a declared local Firewall. Routing intent permits only default-table Firewall statics. Arbitrary next hops and static branch-to-branch inspection remain unassessed.': '静的ハブ Firewall ルーティングには、単一ハブと明示されたローカル Firewall が必要です。ルーティング意図では既定テーブルの Firewall 静的ルートのみを許可します。任意のネクスト ホップと静的ルートによるブランチ間検査は評価されません。',
   'Hub route maps are unsupported on integrated SD-WAN. Spoke NVA policies use the hosting VNet connection. Static VPN bypasses BGP policies.': '統合 SD-WAN ではハブ ルート マップは非対応です。スポーク NVA ポリシーはホスト VNet 接続を使用します。静的 VPN は BGP ポリシーを適用しません。',
   'Incomplete or non-converged routing cannot certify reachability or isolation. Aggregate advertisements do not fill holes.': '不完全または未収束のルーティングでは、到達性や分離を保証できません。集約広告は未到達範囲を補完しません。',
   'Internet ingress, translator/session behavior, load balancers and NSGs require their separate bounded packet assessment; application delivery is not certified.': 'インターネット受信、変換とセッション動作、ロード バランサー、NSG には専用の限定的パケット評価が必要です。アプリケーション配信は保証しません。',

@@ -5,7 +5,7 @@ export type ArtifactDestination =
   | { kind: 'cloud'; accountId: string; id: string; name: string; etag: string }
 
 export type ArtifactChoice = ArtifactDestination | { kind: 'choose-file'; name: string }
-  | { kind: 'choose-cloud'; accountId: string; name: string }
+  | { kind: 'choose-cloud'; accountId: string; name: string; description?: string }
   | { kind: 'download-copy'; name: string }
 export type ArtifactMetadata = {
   version: 1
@@ -193,6 +193,14 @@ export function createDocumentCommands({
     async loaded(value: ArtifactDestination, topology: unknown) {
       if (!live || pending || !owned(value)) return false
       return confirm(value, topology)
+    },
+    cloudMetadataUpdated(accountId: string, id: string, previousEtag: string, name: string, etag: string) {
+      if (!live || pending || destination?.kind !== 'cloud' || !owned(destination)
+        || destination.accountId !== accountId || destination.id !== id || destination.etag !== previousEtag) return false
+      destination = { ...destination, name, etag }
+      retained = retainSafely({ version: 1, destination: metadataDestination(destination), digest: savedDigest })
+      publish({ ...exposeDestination(), retained, notice: undefined })
+      return true
     },
     reset() {
       if (!live || pending) return false

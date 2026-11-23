@@ -264,8 +264,8 @@ function configured(id: CurriculumV2LessonId, expected: Record<string, unknown>,
 }
 const vpn = (state: Record<string, unknown>) => ({ vpnConnections: [{ id: 'warehouse-vpn', siteId: 'warehouse', targetKind: 'vnet-gateway', targetId: 'vpn-gateway', ...state }] })
 const erLink = (id: string, enabled: boolean) => ({ erLinks: [{ id, enabled }] })
-const wanAttachment = (id: string) => ({ vnets: [{ id, vwanHubAttachment: { hubId: 'wan-hub', enabled: true,
-  hubRouting: { status: 'configured', associatedTableId: 'defaultRouteTable', propagatedTableIds: ['defaultRouteTable'], labels: [] } } }] })
+const wanAttachment = (id: string, propagatedTableId = 'defaultRouteTable') => ({ vnets: [{ id, vwanHubAttachment: { hubId: 'wan-hub', enabled: true,
+  hubRouting: { status: 'configured', associatedTableId: 'defaultRouteTable', propagatedTableIds: [propagatedTableId], labels: [] } } }] })
 const enablePolicy = (table: string, route: string, prefix: string) => ({ udrTables: [{ id: table, routes: [
   { id: route, prefix, nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
 ] }] })
@@ -290,7 +290,8 @@ function task(lessonId: CurriculumV2LessonId, suffix: string, points: number, ti
     guidance.push({ id: guideId, ...anchor } as CourseGuidance)
     return guideId
   })
-  return { id, assessmentVersion: 1, awardId: `${id}.award`, points, title, instruction, checkId, guidanceIds,
+  return { id, assessmentVersion: lessonId === 'v2-secured-wan' && ['private-intent', 'attach-service'].includes(suffix) ? 2 : 1,
+    awardId: `${id}.award`, points, title, instruction, checkId, guidanceIds,
     hints: hints.length ? hints : [l('Use the named original scope and compare request and reply independently. Inspection and retries are free.',
       '指定された元の対象で、要求と応答を別々に比較します。確認と再試行は無料です。')],
     debrief: { paragraphs: [debrief], references: references[lessonId] } }
@@ -302,8 +303,8 @@ function chapter(id: CurriculumV2LessonId, title: Localized, objective: Localize
 }
 
 {
-  const id = 'v2-peering', t = (suffix: string, points: number, title: Localized, instruction: Localized, debrief: Localized, check: CheckSpec, anchors: NativeGuidance[] = []) =>
-    task(id, suffix, points, title, instruction, debrief, check, anchors)
+  const id = 'v2-peering', t = (suffix: string, points: number, title: Localized, instruction: Localized, debrief: Localized, check: CheckSpec, anchors: NativeGuidance[] = [], assessmentVersion = 1) =>
+    ({ ...task(id, suffix, points, title, instruction, debrief, check, anchors), assessmentVersion })
   chapter(id, l('C01 · Two services, two VNets', 'C01 · 2 つのサービスと VNet'),
     l('Identify address ownership and establish ordinary private VNet peering.', 'アドレスの所有範囲を確認し、通常のプライベート VNet ピアリングを確立します。'),
     l('The retailer has Application 10.21.0.0/16 and Partner 10.22.0.0/16 in the same region. Application Operations is 10.21.2.0/24; Restricted tenant 10.23.0.0/16 is separate. This fresh comparison starts without peerings. Preparing it earns no XP.',
@@ -312,30 +313,37 @@ function chapter(id: CurriculumV2LessonId, title: Localized, objective: Localize
         l('Inspect Application/app-work and select its 10.21.0.0/16 effective route. Which address space does this local row cover?', 'Application/app-work の実効ルート 10.21.0.0/16 を選択し、この行が対象とするアドレス空間を確認してください。'),
         l('You inspected the local VNet route. A local row covers Application address ownership, not every private address in the region.', 'ローカル VNet ルートを確認しました。この行は Application の所有範囲を示し、同一リージョンのすべてのプライベート アドレスを対象にするものではありません。'),
         inspect('app', 'app-work', '10.21.0.0/16'), [routes('app', 'app-work', '10.21.0.0/16')]),
-      t('address', 15, l('Place Partner correctly', 'Partner のアドレスを位置付ける'),
-        l('Partner uses 10.22.1.10. Choose its VNet and workload subnet from the declared ranges.', 'Partner のアドレスは 10.22.1.10 です。宣言された範囲から VNet とワークロード サブネットを選んでください。'),
-        l('10.22.1.10 belongs to Partner 10.22.0.0/16 and partner-work 10.22.1.0/24. Endpoint ownership is separate from connectivity.', '10.22.1.10 は Partner の 10.22.0.0/16 と partner-work の 10.22.1.0/24 に属します。所有範囲と接続性は別の概念です。'),
-        quiz(l('Where is 10.22.1.10 owned?', '10.22.1.10 の所有範囲はどこですか？'), l('Partner / partner-work', 'Partner / partner-work'),
-          l('Application / app-work because it is private', 'プライベート アドレスなので Application / app-work'),
-          l('Both the /16 and /24 contain this address.', '/16 と /24 の両方にこのアドレスが含まれます。'), l('Private addressing does not move ownership across VNets.', 'プライベート アドレスでも VNet 間で所有範囲は変わりません。'))),
+      t('address', 15, l('Check the local route’s scope', 'ローカル ルートの範囲を確認'),
+        l('Use the 10.21.0.0/16 local VNet route you inspected in Application. Compare its address range with destination 10.22.1.10.', 'Application で確認したローカル VNet ルート 10.21.0.0/16 を使い、そのアドレス範囲と宛先 10.22.1.10 を比較してください。'),
+        l('10.21.0.0/16 covers 10.21.0.0 through 10.21.255.255, so it does not cover 10.22.1.10. A private IP address is not automatically local to this VNet. Connecting the two VNets is a separate question.', '10.21.0.0/16 の範囲は 10.21.0.0 から 10.21.255.255 であり、10.22.1.10 は含まれません。プライベート IP アドレスでも、この VNet のローカル アドレスになるわけではありません。2 つの VNet の接続は別の問題です。'),
+        quiz(l('Application has a local VNet route for 10.21.0.0/16. Does that route cover destination 10.22.1.10?', 'Application には 10.21.0.0/16 のローカル VNet ルートがあります。このルートは宛先 10.22.1.10 を対象にしますか？'),
+          l('No. The destination is outside 10.21.0.0/16.', 'いいえ。宛先は 10.21.0.0/16 の範囲外です。'),
+          l('Yes. Both addresses are private, so the local route covers them.', 'はい。どちらもプライベート アドレスなので、ローカル ルートの対象です。'),
+          l('The route covers 10.21.0.0 through 10.21.255.255, not 10.22.1.10.', 'このルートの範囲は 10.21.0.0 から 10.21.255.255 であり、10.22.1.10 は含まれません。'),
+          l('A route matches its destination prefix, not every private IP address. 10.22.1.10 is outside 10.21.0.0/16.', 'ルートは宛先プレフィックスに一致するアドレスを対象とし、すべてのプライベート IP アドレスを対象にするものではありません。10.22.1.10 は 10.21.0.0/16 の範囲外です。'))),
       t('predict', 15, l('Predict the unconnected path', '未接続の経路を予測'),
         l('Before editing anything, predict whether Application can reach Partner just because both use private addresses in Sweden Central.', '編集前に、両者が Sweden Central のプライベート アドレスを使用しているだけで接続できるか予測してください。'),
         l('Separate VNets require an explicit connectivity design. A common Azure region does not join their private routing domains.', '別々の VNet には明示的な接続設計が必要です。同一 Azure リージョンでもプライベート ルーティング ドメインは結合されません。'),
         quiz(l('What provides the missing private connection?', '不足しているプライベート接続を提供するものは？'),
           l('An explicit connection, such as VNet peering', 'VNet ピアリングなどの明示的な接続'), l('Same-region placement alone', '同一リージョンへの配置だけ'),
           l('Non-overlapping ownership is necessary but is not a connection.', '重複しない所有範囲は必要ですが、それ自体は接続ではありません。'), l('Region placement does not create routes between VNets.', 'リージョンへの配置だけでは VNet 間のルートは作成されません。'))),
-      t('connect', 25, l('Connect the original services', '元のサービスを接続'),
-        l('Create whole-VNet Application–Partner peering using the native peering command. Keep tenant separate. Verify the original 10.21.1.10 ↔ 10.22.1.10 conversation and Operations.', 'ネイティブのピアリング操作で Application–Partner の VNet 全体のピアリングを作成してください。テナントは分離したまま、元の 10.21.1.10 ↔ 10.22.1.10 と Operations を検証します。'),
-        l('The original service pair now has independent delivered request and reply paths. Operations still works; neither tenant initiation has gained a route.', '元のサービス間で要求と応答の経路をそれぞれ確認できました。Operations は正常で、テナントからもテナントへも開始経路は追加されていません。'),
-        { kind: 'vnet.peered', params: { vnetAId: 'app', vnetBId: 'partner', requirements: curriculumV2Requirements[id] } },
-        [g('peering.command', { vnetAId: 'app', vnetBId: 'partner' }, 'Create Application–Partner peering.', 'Application–Partner のピアリングを作成します。')]),
+      t('connect', 25, l('Build a peering chain and inspect its limit', 'ピアリングの連鎖を作成し限界を確認'),
+        l('First peer VNet Application with VNet Partner. Then peer Partner with Restricted tenant, without peering Application directly to Restricted tenant. Finally open effective routes for subnet Workload in Application and look for 10.23.0.0/16. Does connecting both VNets to Partner give Application a route to Restricted tenant? Show me where guides each action in order.',
+          'まず VNet Application と VNet Partner をピアリングし、次に Partner と Restricted tenant をピアリングしてください。Application と Restricted tenant は直接接続しないでください。最後に Application の Workload サブネットの実効ルートを開き、10.23.0.0/16 を探します。両方を Partner に接続すると Application に Restricted tenant へのルートは追加されますか？「場所を表示」が各操作を順に案内します。'),
+        l('Partner has a direct peering to each VNet, but Application has no peering route for Restricted tenant 10.23.0.0/16. Ordinary VNet peering is not transitive: Partner does not relay routes or traffic between its peers. Application–Partner and Partner–Restricted tenant work independently; Application–Restricted tenant still has no working path. Operations remains reachable.',
+          'Partner は各 VNet と直接ピアリングされていますが、Application に Restricted tenant の 10.23.0.0/16 へのピアリング ルートはありません。通常の VNet ピアリングは推移的ではなく、Partner はピア間のルートやトラフィックを中継しません。Application–Partner と Partner–Restricted tenant は個別に接続できますが、Application–Restricted tenant の経路は依然として利用できません。Operations への接続は維持されています。'),
+        inspect('app', 'app-work', '10.23.0.0/16', curriculumV2Requirements[id]),
+        [g('peering.command', { vnetAId: 'app', vnetBId: 'partner' }, 'Create Application–Partner peering.', 'Application–Partner のピアリングを作成します。'),
+          g('peering.command', { vnetAId: 'partner', vnetBId: 'tenant' }, 'Create Partner–Restricted tenant peering.', 'Partner–Restricted tenant のピアリングを作成します。'),
+          routes('app', 'app-work', '10.23.0.0/16')], 2),
       t('checkpoint', 15, l('Explain peering scope', 'ピアリングの範囲を説明'),
-        l('Partner later peers to another VNet. Explain what the current whole-VNet peering grants and what it does not.', 'Partner が別の VNet とピアリングするとき、現在の VNet 全体のピアリングが提供する範囲と提供しない範囲を説明してください。'),
-        l('Ordinary whole-VNet peering connects the two address spaces, including their participating workloads. It is not automatic third-VNet transit and is not the Azure Private Link service.', '通常の VNet 全体のピアリングは 2 つのアドレス空間を接続します。3 つ目の VNet への自動転送ではなく、Azure Private Link サービスでもありません。'),
-        quiz(l('Does this peering make a third VNet automatically reachable?', 'このピアリングで 3 つ目の VNet に自動的に到達できますか？'),
-          l('No; peering is not transitive, and this whole-VNet connection covers Application and Partner.', 'いいえ。ピアリングは推移的ではなく、この接続は Application と Partner を対象にします。'),
-          l('Yes; every VNet connected to Partner becomes a direct peer of Application.', 'はい。Partner に接続したすべての VNet が Application の直接のピアになります。'),
-          l('Transit needs a separate supported design.', '転送には別の対応した設計が必要です。'), l('A chain of ordinary peerings is not a managed transit hub.', '通常のピアリングの連鎖はマネージド転送ハブではありません。'))),
+        l('Use the Application effective routes you just inspected after creating Application–Partner and Partner–Restricted tenant peerings. Explain why Restricted tenant is still not reachable from Application.', 'Application–Partner と Partner–Restricted tenant のピアリング作成後に確認した Application の実効ルートを使い、Application から Restricted tenant に依然として到達できない理由を説明してください。'),
+        l('Each whole-VNet peering connects its two address spaces, not every VNet connected to either peer. The missing 10.23.0.0/16 peering route in Application demonstrates that chaining ordinary peerings does not provide transit.', 'VNet 全体のピアリングはその両端のアドレス空間を接続し、ピアに接続したすべての VNet を接続するものではありません。Application に 10.23.0.0/16 のピアリング ルートがないことから、通常ピアリングの連鎖では転送が提供されないと分かります。'),
+        quiz(l('Does the peering chain you built make Restricted tenant reachable from Application?', '作成したピアリングの連鎖で Application から Restricted tenant に到達できますか？'),
+          l('No; ordinary peering does not carry Restricted tenant routes through Partner to Application.', 'いいえ。通常のピアリングでは Restricted tenant のルートは Partner 経由で Application に伝わりません。'),
+          l('Yes; Partner relays Restricted tenant routes between its two peerings.', 'はい。Partner は 2 つのピアリング間で Restricted tenant のルートを中継します。'),
+          l('Your Application table has no 10.23.0.0/16 peering route. Transit needs a separate supported design.', 'Application のテーブルに 10.23.0.0/16 のピアリング ルートはありません。転送には別の対応した設計が必要です。'),
+          l('Both direct peerings work, but Partner does not provide transit between them. The Application table has no Restricted tenant peering route.', '両方の直接ピアリングは正常でも、Partner はその間の転送を提供しません。Application のテーブルに Restricted tenant へのピアリング ルートはありません。'))),
     ])
 }
 
@@ -428,18 +436,21 @@ function chapter(id: CurriculumV2LessonId, title: Localized, objective: Localize
           l('Hub Azure Firewall is not a customer NVA VM.', 'ハブ Azure Firewall は顧客 NVA VM ではありません。'), l('Do not transfer NVA instance responsibilities to Azure Firewall.', 'NVA インスタンスの責任を Azure Firewall に当てはめないでください。')),
         [g('hub.configure', { hubId: 'wan-hub' }, 'Find the prepared hub Azure Firewall.', '準備済みのハブ Azure Firewall を確認します。')]),
       t('private-intent', 25, l('Enable private routing intent', 'プライベート ルーティング意図を有効化'),
-        l('Enable wan-hub’s private routing intent through hub-firewall. Keep Internet intent off and all connections on Default.', 'hub-firewall を使用する wan-hub のプライベート ルーティング意図を有効にします。インターネット意図は無効で、接続はすべて Default のままにしてください。'),
-        l('The original private conversation is now routed through the managed hub firewall in both directions. This is not a custom-table segmentation lesson.', '元のプライベート会話が両方向でマネージド ハブ ファイアウォール経由になります。これはカスタム テーブル分離の課題ではありません。'),
-        configured(id, { vwanHubs: [{ id: 'wan-hub', firewall: { id: 'hub-firewall' }, routingIntent: { private: true, internet: false } }] }, curriculumV2Requirements[id].slice(0, 4)),
+        l('Enable wan-hub’s private routing intent through hub-firewall. Keep Internet intent off. The policy manages Default association and None propagation; do not override those connection settings.', 'hub-firewall を使用する wan-hub のプライベート ルーティング意図を有効にし、インターネット意図は無効のままにします。ポリシーが関連付けを Default、伝達を None に管理します。接続設定を上書きしないでください。'),
+        l('The original private conversation now traverses the managed hub firewall in both directions. Managed None propagation uses the security appliance routing domain; it is not manual connection isolation.', '元のプライベート会話が両方向でマネージド ハブ ファイアウォールを通ります。管理された None 伝達はセキュリティ アプライアンスのルーティング ドメインを使用し、接続の手動分離ではありません。'),
+        configured(id, {
+          vwanHubs: [{ id: 'wan-hub', firewall: { id: 'hub-firewall' }, routingIntent: { private: true, internet: false } }],
+          vnets: ['app', 'partner'].flatMap((vnetId) => wanAttachment(vnetId, 'noneRouteTable').vnets),
+        }, curriculumV2Requirements[id].slice(0, 4)),
         [g('hub.configure', { hubId: 'wan-hub' }, 'Enable private routing intent only.', 'プライベート ルーティング意図のみを有効にします。')]),
       t('verify-original', 10, l('Check both original private legs', '元のプライベート経路を両方向で確認'),
         l('Freshly inspect app/app-work’s original Partner route 10.22.0.0/16. Then evaluate Application 10.21.1.10 ↔ Partner 10.22.1.10 and inspect independent request/reply traces for wan-hub’s firewall, retaining Operations and tenant boundaries.', 'app/app-work の元の Partner ルート 10.22.0.0/16 を新たに確認してください。続けて Application 10.21.1.10 ↔ Partner 10.22.1.10 を評価し、Operations とテナント境界を維持して wan-hub のファイアウォールを通る要求/応答トレースを独立して確認します。'),
         l('Both modeled private paths have the required hub firewall waypoint. Security policy, NAT and real sessions remain outside this routing assessment.', 'モデル化された両プライベート経路に必要なハブ ファイアウォール経由点があります。セキュリティ ポリシー、NAT、実セッションはこの評価の対象外です。'),
         inspect('app', 'app-work', '10.22.0.0/16', curriculumV2Requirements[id].slice(0, 4)), [routes('app', 'app-work', '10.22.0.0/16')]),
       t('attach-service', 25, l('Attach the new private spoke', '新しいプライベート スポークを接続'),
-        l('Enable Shared’s original Default connection. Do not add a workload firewall UDR or direct spoke peering.', 'Shared の元の Default 接続を有効にします。ワークロード ファイアウォール UDR や直接スポーク ピアリングは追加しないでください。'),
+        l('Enable Shared’s original connection, retaining policy-managed Default association and None propagation. Do not add a workload firewall UDR or direct spoke peering.', 'Shared の元の接続を有効にし、ポリシー管理の関連付け Default と伝達 None を維持します。ワークロード ファイアウォール UDR や直接スポーク ピアリングは追加しないでください。'),
         l('The new private spoke inherits managed private steering through the hub policy. No per-spoke UDR was needed for this Default-table pattern.', '新しいプライベート スポークがハブ ポリシーによるマネージド誘導を利用します。この Default 構成にはスポークごとの UDR は不要でした。'),
-        configured(id, { ...wanAttachment('shared'), udrTables: [], vnetPeerings: [] }, curriculumV2Requirements[id]), [network('shared')]),
+        configured(id, { ...wanAttachment('shared', 'noneRouteTable'), udrTables: [], vnetPeerings: [] }, curriculumV2Requirements[id]), [network('shared')]),
       t('checkpoint', 15, l('Explain policy scope', 'ポリシーの範囲を説明'),
         l('Explain why the newly attached Shared conversation is privately inspected and what this routing result does not say about Internet traffic.', '新たに接続した Shared との会話が検査される理由と、この結果がインターネット トラフィックについて説明しない点を述べてください。'),
         l('Private routing intent governs the declared private Default connections, including Shared. Internet policy is still off. Firewall/NSG permission checks are separate from routing evidence.', 'プライベート ルーティング意図は Shared を含む宣言済みのプライベート Default 接続に適用されます。インターネット ポリシーは無効のままで、ファイアウォール/NSG の許可はルーティング証拠とは別に確認します。'),

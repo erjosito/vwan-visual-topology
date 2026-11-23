@@ -9,6 +9,7 @@ import { applyAzHubRouteMap, applyAzSiteRouteMap } from './route-maps'
 import { peeringPrefixes, peeringSubnetIds, subnetPeeringLimitations, validateSubnetPeeringScopes } from './subnet-peering'
 import { ARS_MAX_BGP_PEERS, applyAzArsRouteMap, azArsPeers, azArsPolicyLinks, azArsSpokes, gatewayArsExchange } from './ars-route-maps'
 import { DEFAULT_HUB_TABLE, hubRouteTables, hubStaticPrefixes, propagatesLocally, propagatesRemotely } from '../hub-routing'
+import { routingIntentForwarding } from '../routing-intent'
 import { azHubAssociation, azHubAttachments, azHubRouting, azHubTableCoverage, azHubVnetExports, azInterHubId } from './hub-routing'
 import { connectionStaticRoutes } from './vnet-connection-routes'
 import type { RouteMapDirection, Transport } from '../model'
@@ -28,7 +29,7 @@ import type {
 
 export function checkErLocationAzureRegionAccess(
   loc: AzErLocation,
-  azureRegion: string,
+  azureRegion: string | undefined,
 ): ErSkuCompatibilityResult {
   return evaluateErSkuRegionalCompatibility(
     loc.sku ?? 'Standard',
@@ -1170,7 +1171,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
     vwanFirewallRibs[hub.id] = chooseHubWinners(hub, imported)
     vwanHubTables[hub.id] = Object.fromEntries(hubRouteTables(hub).map((table) => [
       table.id, chooseHubWinners(hub, imported.filter((route) =>
-        propagatesLocally(azHubRouting(attachments.find((attachment) => attachment.id === route.connectionId)?.hubRouting), table))),
+        propagatesLocally(routingIntentForwarding(hub, azHubRouting(attachments.find((attachment) => attachment.id === route.connectionId)?.hubRouting)), table))),
     ]))
   }
 
@@ -1182,7 +1183,7 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
         const originTables = hubRouteTables(origin)
         return originTables.flatMap((originTable) => (localHubTables[origin.id][originTable.id] ?? [])
           .filter((route) => route.preferred && !route.hubPath?.includes(hub.id) && route.prefix !== '0.0.0.0/0'
-            && propagatesRemotely(azHubRouting(attachments.find((attachment) => attachment.id === route.connectionId)?.hubRouting), originTable, table, originTables))
+            && propagatesRemotely(routingIntentForwarding(origin, azHubRouting(attachments.find((attachment) => attachment.id === route.connectionId)?.hubRouting)), originTable, table, originTables))
           .map((route): AzBgpRibEntry => ({
             ...route, id: JSON.stringify(['inter-hub', hub.id, table.id, origin.id, originTable.id, route.id]),
             originHubTableId: originTable.id, originHubRouteId: route.id, connectionId: undefined,

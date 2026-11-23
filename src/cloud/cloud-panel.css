@@ -13,8 +13,15 @@
 .cloud-library h4 { margin: 0 0 4px; font-size: 13px; }
 .cloud-library small { color: var(--text-muted); font-size: 11px; }
 .cloud-library time { white-space: nowrap; }
-.cloud-library-actions { display: flex; flex-wrap: wrap; gap: 4px; }
-.cloud-library-actions button { min-height: 36px; max-width: 100%; padding: 6px 8px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.cloud-library-actions { display: flex; flex-wrap: nowrap; gap: 4px; }
+.cloud-library-actions button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 36px; min-height: 36px; padding: 6px; }
+.cloud-library .cloud-entry-name { display: block; max-width: 100%; min-height: 36px; padding: 2px 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
+.cloud-library-hint { position: fixed; inset: auto; margin: 0; max-width: min(280px, calc(100vw - 32px)); max-height: calc(100dvh - 16px); overflow: auto; box-sizing: border-box; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: 0 4px 16px #0003; font-size: 13px; }
+.cloud-panel details label { display: grid; gap: 4px; }
+.cloud-panel textarea { width: 100%; box-sizing: border-box; }
+.cloud-metadata-editor { width: min(520px, calc(100vw - 32px)); }
+.cloud-metadata-editor label { display: grid; gap: 4px; margin: 12px 0; }
+.cloud-metadata-editor :is(input, textarea) { width: 100%; box-sizing: border-box; }
 @media (max-width: 640px) {
   .object-dialog.cloud-panel { padding: 12px; }
   .cloud-library thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
@@ -22,7 +29,17 @@
   .cloud-library tbody th { width: auto; border-bottom: 0; padding-bottom: 0; }
   .cloud-library td { border-bottom: 0; padding-top: 4px; }
   .cloud-library tr { border-bottom: 1px solid var(--border); }
-  .cloud-library-actions button { min-height: 44px; }
+  .cloud-library-actions button { flex-basis: 44px; min-height: 44px; }
 }
 .document-save-detail { overflow-wrap: anywhere; }
 .document-save-detail small { display: block; }
+.cloud-destination-dialog { width: min(900px, calc(100vw - 32px)); }
+.cloud-destination-dialog textarea { width: 100%; box-sizing: border-box; }
+.cloud-save-picker { margin: 12px 0; min-width: 0; border: 1px solid var(--border); }
+.cloud-save-picker .cloud-save-select { display: inline-flex; align-items: center; gap: 8px; min-width: 44px; min-height: 44px; }
+.cloud-save-picker input[type="radio"] { width: 24px; height: 24px; margin: 0; }
+.cloud-save-picker .cloud-library-scroll { max-height: 35dvh; margin: 8px 0; }
+.cloud-save-picker .cloud-library thead th:first-child { width: 56px; }
+.cloud-save-picker .cloud-library thead th:nth-child(2) { width: auto; }
+.cloud-save-picker .cloud-library thead th:nth-child(3) { width: 24%; }
+.cloud-save-picker .cloud-library tbody th { width: auto; }

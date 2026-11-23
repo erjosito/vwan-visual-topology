@@ -1,5 +1,10 @@
 # Guided course authoring contract
 
+For the consolidated product feedback, pedagogical requirements and reusable
+review checklist, see [Curriculum review guidelines](../../docs/curriculum-review-guidelines.md).
+Use that document for the current review baseline; edition-specific descriptions
+below also include historical implementation details.
+
 For curriculum readiness criteria and learner-experience guidelines, including
 requested changes that may not yet be implemented, see
 [Curriculum readiness](../../docs/curriculum-readiness.md).
@@ -34,6 +39,9 @@ chapter and presents its first substantive task. Native actions and fresh,
 visible inspections supply evidence; quizzes still require explicit submission.
 Verification inspections can also require the complete live-engine assertion
 set, so an already repaired topology alone does not earn a separate viewing award.
+C04's private-intent and attach-service assessments are version 2: they require
+policy-managed Default association and None propagation, not manual Default
+propagation. Existing award identities/prices and checkpoint versions are unchanged.
 
 The small eager `curriculum-v2-profile.ts` owns identity, checkpoints and XP
 thresholds. Teaching, native starters and stage narratives stay lazy in the
