@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { executePlatform } from '../platform/service'
 import type { AzNetTopology, AzVnetPeering } from '../azure-net/model'
 import { lookupSubnetEffectiveRoute, simulateAzNet } from '../azure-net/engine'
+import { applyAzRoutingIntentEdit } from '../azure-net/routing-intent'
 import { curriculumV2Bundle } from './curriculum-v2'
 import { curriculumV2Assessments } from './curriculum-v2-profile'
 import { curriculumV2Stages } from './curriculum-v2-stages'
@@ -43,7 +44,11 @@ export const curriculumV2Repairs: Record<CurriculumV2LessonId, CurriculumV2Repai
     policy('partner-policy', 'application-return', 'return'),
   ],
   'v2-wan': [attach('app', 'attach-application'), attach('shared', 'checkpoint')],
-  'v2-secured-wan': [{ task: 'private-intent', apply: (t) => { t.vwanHubs[0].routingIntent.private = true } }, attach('shared', 'attach-service')],
+  'v2-secured-wan': [{ task: 'private-intent', apply: (t) => {
+    const before = structuredClone(t)
+    t.vwanHubs[0].routingIntent.private = true
+    applyAzRoutingIntentEdit(before, t)
+  } }, attach('shared', 'attach-service')],
   'v2-static-vpn': [
     vpnState({ staticPrefixes: ['172.22.0.0/24'], bgpEnabled: false }, 'prefix'),
     vpnState({ enabled: true, bgpEnabled: false }, 'enable'),

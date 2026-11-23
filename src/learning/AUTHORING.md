@@ -34,6 +34,9 @@ chapter and presents its first substantive task. Native actions and fresh,
 visible inspections supply evidence; quizzes still require explicit submission.
 Verification inspections can also require the complete live-engine assertion
 set, so an already repaired topology alone does not earn a separate viewing award.
+C04's private-intent and attach-service assessments are version 2: they require
+policy-managed Default association and None propagation, not manual Default
+propagation. Existing award identities/prices and checkpoint versions are unchanged.
 
 The small eager `curriculum-v2-profile.ts` owns identity, checkpoints and XP
 thresholds. Teaching, native starters and stage narratives stay lazy in the

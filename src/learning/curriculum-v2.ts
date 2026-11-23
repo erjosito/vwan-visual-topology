@@ -264,8 +264,8 @@ function configured(id: CurriculumV2LessonId, expected: Record<string, unknown>,
 }
 const vpn = (state: Record<string, unknown>) => ({ vpnConnections: [{ id: 'warehouse-vpn', siteId: 'warehouse', targetKind: 'vnet-gateway', targetId: 'vpn-gateway', ...state }] })
 const erLink = (id: string, enabled: boolean) => ({ erLinks: [{ id, enabled }] })
-const wanAttachment = (id: string) => ({ vnets: [{ id, vwanHubAttachment: { hubId: 'wan-hub', enabled: true,
-  hubRouting: { status: 'configured', associatedTableId: 'defaultRouteTable', propagatedTableIds: ['defaultRouteTable'], labels: [] } } }] })
+const wanAttachment = (id: string, propagatedTableId = 'defaultRouteTable') => ({ vnets: [{ id, vwanHubAttachment: { hubId: 'wan-hub', enabled: true,
+  hubRouting: { status: 'configured', associatedTableId: 'defaultRouteTable', propagatedTableIds: [propagatedTableId], labels: [] } } }] })
 const enablePolicy = (table: string, route: string, prefix: string) => ({ udrTables: [{ id: table, routes: [
   { id: route, prefix, nextHopType: 'VirtualAppliance', nextHopIp: '10.20.1.4', enabled: true },
 ] }] })
@@ -290,7 +290,8 @@ function task(lessonId: CurriculumV2LessonId, suffix: string, points: number, ti
     guidance.push({ id: guideId, ...anchor } as CourseGuidance)
     return guideId
   })
-  return { id, assessmentVersion: 1, awardId: `${id}.award`, points, title, instruction, checkId, guidanceIds,
+  return { id, assessmentVersion: lessonId === 'v2-secured-wan' && ['private-intent', 'attach-service'].includes(suffix) ? 2 : 1,
+    awardId: `${id}.award`, points, title, instruction, checkId, guidanceIds,
     hints: hints.length ? hints : [l('Use the named original scope and compare request and reply independently. Inspection and retries are free.',
       '指定された元の対象で、要求と応答を別々に比較します。確認と再試行は無料です。')],
     debrief: { paragraphs: [debrief], references: references[lessonId] } }
@@ -428,18 +429,21 @@ function chapter(id: CurriculumV2LessonId, title: Localized, objective: Localize
           l('Hub Azure Firewall is not a customer NVA VM.', 'ハブ Azure Firewall は顧客 NVA VM ではありません。'), l('Do not transfer NVA instance responsibilities to Azure Firewall.', 'NVA インスタンスの責任を Azure Firewall に当てはめないでください。')),
         [g('hub.configure', { hubId: 'wan-hub' }, 'Find the prepared hub Azure Firewall.', '準備済みのハブ Azure Firewall を確認します。')]),
       t('private-intent', 25, l('Enable private routing intent', 'プライベート ルーティング意図を有効化'),
-        l('Enable wan-hub’s private routing intent through hub-firewall. Keep Internet intent off and all connections on Default.', 'hub-firewall を使用する wan-hub のプライベート ルーティング意図を有効にします。インターネット意図は無効で、接続はすべて Default のままにしてください。'),
-        l('The original private conversation is now routed through the managed hub firewall in both directions. This is not a custom-table segmentation lesson.', '元のプライベート会話が両方向でマネージド ハブ ファイアウォール経由になります。これはカスタム テーブル分離の課題ではありません。'),
-        configured(id, { vwanHubs: [{ id: 'wan-hub', firewall: { id: 'hub-firewall' }, routingIntent: { private: true, internet: false } }] }, curriculumV2Requirements[id].slice(0, 4)),
+        l('Enable wan-hub’s private routing intent through hub-firewall. Keep Internet intent off. The policy manages Default association and None propagation; do not override those connection settings.', 'hub-firewall を使用する wan-hub のプライベート ルーティング意図を有効にし、インターネット意図は無効のままにします。ポリシーが関連付けを Default、伝達を None に管理します。接続設定を上書きしないでください。'),
+        l('The original private conversation now traverses the managed hub firewall in both directions. Managed None propagation uses the security appliance routing domain; it is not manual connection isolation.', '元のプライベート会話が両方向でマネージド ハブ ファイアウォールを通ります。管理された None 伝達はセキュリティ アプライアンスのルーティング ドメインを使用し、接続の手動分離ではありません。'),
+        configured(id, {
+          vwanHubs: [{ id: 'wan-hub', firewall: { id: 'hub-firewall' }, routingIntent: { private: true, internet: false } }],
+          vnets: ['app', 'partner'].flatMap((vnetId) => wanAttachment(vnetId, 'noneRouteTable').vnets),
+        }, curriculumV2Requirements[id].slice(0, 4)),
         [g('hub.configure', { hubId: 'wan-hub' }, 'Enable private routing intent only.', 'プライベート ルーティング意図のみを有効にします。')]),
       t('verify-original', 10, l('Check both original private legs', '元のプライベート経路を両方向で確認'),
         l('Freshly inspect app/app-work’s original Partner route 10.22.0.0/16. Then evaluate Application 10.21.1.10 ↔ Partner 10.22.1.10 and inspect independent request/reply traces for wan-hub’s firewall, retaining Operations and tenant boundaries.', 'app/app-work の元の Partner ルート 10.22.0.0/16 を新たに確認してください。続けて Application 10.21.1.10 ↔ Partner 10.22.1.10 を評価し、Operations とテナント境界を維持して wan-hub のファイアウォールを通る要求/応答トレースを独立して確認します。'),
         l('Both modeled private paths have the required hub firewall waypoint. Security policy, NAT and real sessions remain outside this routing assessment.', 'モデル化された両プライベート経路に必要なハブ ファイアウォール経由点があります。セキュリティ ポリシー、NAT、実セッションはこの評価の対象外です。'),
         inspect('app', 'app-work', '10.22.0.0/16', curriculumV2Requirements[id].slice(0, 4)), [routes('app', 'app-work', '10.22.0.0/16')]),
       t('attach-service', 25, l('Attach the new private spoke', '新しいプライベート スポークを接続'),
-        l('Enable Shared’s original Default connection. Do not add a workload firewall UDR or direct spoke peering.', 'Shared の元の Default 接続を有効にします。ワークロード ファイアウォール UDR や直接スポーク ピアリングは追加しないでください。'),
+        l('Enable Shared’s original connection, retaining policy-managed Default association and None propagation. Do not add a workload firewall UDR or direct spoke peering.', 'Shared の元の接続を有効にし、ポリシー管理の関連付け Default と伝達 None を維持します。ワークロード ファイアウォール UDR や直接スポーク ピアリングは追加しないでください。'),
         l('The new private spoke inherits managed private steering through the hub policy. No per-spoke UDR was needed for this Default-table pattern.', '新しいプライベート スポークがハブ ポリシーによるマネージド誘導を利用します。この Default 構成にはスポークごとの UDR は不要でした。'),
-        configured(id, { ...wanAttachment('shared'), udrTables: [], vnetPeerings: [] }, curriculumV2Requirements[id]), [network('shared')]),
+        configured(id, { ...wanAttachment('shared', 'noneRouteTable'), udrTables: [], vnetPeerings: [] }, curriculumV2Requirements[id]), [network('shared')]),
       t('checkpoint', 15, l('Explain policy scope', 'ポリシーの範囲を説明'),
         l('Explain why the newly attached Shared conversation is privately inspected and what this routing result does not say about Internet traffic.', '新たに接続した Shared との会話が検査される理由と、この結果がインターネット トラフィックについて説明しない点を述べてください。'),
         l('Private routing intent governs the declared private Default connections, including Shared. Internet policy is still off. Firewall/NSG permission checks are separate from routing evidence.', 'プライベート ルーティング意図は Shared を含む宣言済みのプライベート Default 接続に適用されます。インターネット ポリシーは無効のままで、ファイアウォール/NSG の許可はルーティング証拠とは別に確認します。'),
