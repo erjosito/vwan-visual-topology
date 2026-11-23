@@ -13,6 +13,9 @@ import { achievedStages, beltStages } from './belt-stages'
 import { haLessonPacket, haLessonRequirements, haLessonTopology } from './ha-scenario'
 import { hybridLessonRequirements, hybridLessonTopology } from './hybrid-scenario'
 import { packetObservationKey } from './task-guidance'
+import { curriculumV2Bundle } from './curriculum-v2'
+import { curriculumV2Assessments } from './curriculum-v2-profile'
+import { beltProgress, earnedAwards } from './progress-ledger'
 
 function harness(overrides: Partial<RunnerOptions> = {}, course = exampleCourse) {
   const bundle = structuredClone(course)
@@ -75,6 +78,48 @@ function checkHarness(check: CourseCheck, document: PlatformDocument, count = 1)
 }
 
 describe('evidence-gated course runner', () => {
+  it('requires the real peering chain and fresh Application inspection without revoking historical belts or re-awarding XP', async () => {
+    const completions = orderedTasks(curriculumV2Bundle).map(({ task, lesson }) => ({
+      courseId: curriculumV2Bundle.course.id, contentVersion: 1, lessonId: lesson.id, taskId: task.id,
+      assessmentVersion: 1, checkId: task.checkId, awardId: task.awardId, points: task.points,
+      title: task.title, sessionId: 'earlier', revision: 1, scope: 1, engineVersion: 'earlier', completedAt: '2026-11-18T12:00:00Z',
+    }))
+    const historical = structuredClone(completions)
+    const ledger = { version: 1 as const, policyVersion: 1 as const, completions }
+    expect(beltProgress(ledger, curriculumV2Bundle.course, curriculumV2Assessments))
+      .toMatchObject({ points: 1345, belt: { id: 'black' } })
+    const h = harness({ completions }, curriculumV2Bundle)
+    h.load()
+    expect(h.state().taskId).toBe('v2-peering.connect')
+    const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
+    const peer = (a: string, b: string) => h.edit((document) => {
+      if (document.mode === 'vwan') throw new Error('Mixed topology required')
+      document.topology.vnetPeerings.push({ id: `${a}-${b}`, name: 'Learner', vnetAId: a, vnetBId: b,
+        enabled: true, aToB: { ...flags }, bToA: { ...flags } })
+    })
+    peer('app', 'partner')
+    h.runner.observe(h.state().observation!)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('requirements')
+    const stale = h.state().observation!
+    peer('partner', 'tenant')
+    h.runner.observe(stale)
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe({ ...h.state().observation!, vnetId: 'partner', subnetId: 'partner-work' })
+    await h.runner.assess()
+    expect(h.state().feedback).toBe('inspect')
+    h.runner.observe(h.state().observation!)
+    await h.runner.assess()
+    expect(h.state()).toMatchObject({ feedback: 'passed' })
+    expect(h.runner.advance()).toBe(true)
+    expect(h.state().celebration?.points).toBe(0)
+    const revised = h.completed.mock.calls[0][0] as TaskCompletion
+    expect(revised).toMatchObject({ taskId: 'v2-peering.connect', assessmentVersion: 2, awardId: 'v2-peering.connect.award' })
+    expect(earnedAwards({ ...ledger, completions: [...completions, revised] }, curriculumV2Bundle.course.id)
+      .reduce((sum, entry) => sum + entry.points, 0)).toBe(1345)
+    expect(completions).toEqual(historical)
+  })
   it('requires fresh native inspection and satisfied model requirements for a verification task', async () => {
     const h = checkHarness({ id: 'inspected-verification', kind: 'routes.inspected', params: {
       vnetId: 'hybrid-app', subnetId: 'work', prefix: '172.28.0.0/16',

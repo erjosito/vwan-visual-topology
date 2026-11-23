@@ -11,7 +11,7 @@ import { runnerLabels } from '../src/learning/runner-content'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/packet-messages-ja'
 import '../src/network-detail-messages-ja'
-import { advanceLearningTask, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork, openLearning } from './learning-helpers'
+import { advanceLearningTask, completeLearningTasks, createLessonPeering, learningAnchor, learningOptions, learningSidebar, loadLearningNetwork, openLearning } from './learning-helpers'
 
 type Language = 'en' | 'ja'
 type CourseTask = CourseBundle['lessons'][number]['tasks'][number]
@@ -147,8 +147,8 @@ async function inspectPacket(page: Page, task: CourseTask, check: Extract<Course
   await page.getByTestId('network-detail-dialog').getByRole('button', { name: translate(language, 'Close VNet detail'), exact: true }).click()
 }
 
-for (const language of ['en', 'ja'] as const) {
-  test(`${language}: all twelve revised chapters qualify through native actions and fresh evidence`, async ({ page }) => {
+for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [true, false]) {
+  test(`${language}: ${firstChapterOnly ? 'peering chain demonstrates non-transitivity' : 'all twelve revised chapters qualify'} through native actions and fresh evidence`, async ({ page }) => {
     test.setTimeout(900_000)
     await loadLanguage(language)
     if (language === 'ja') {
@@ -169,7 +169,12 @@ for (const language of ['en', 'ja'] as const) {
     await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? '0 points' : '0 ポイント')
     await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
     let points = 0
-    for (const [chapterIndex, lesson] of curriculumV2Bundle.lessons.entries()) {
+    if (firstChapterOnly) {
+      await completeLearningTasks(page, curriculumV2Bundle.lessons[0].tasks.length, language)
+      points = 80
+    }
+    const lessons = firstChapterOnly ? [] : curriculumV2Bundle.lessons
+    for (const [chapterIndex, lesson] of lessons.entries()) {
       for (const task of lesson.tasks) {
         console.info(`Native ${language}: ${task.id}`)
         await expect(sidebar.getByTestId('learning-task')).toHaveAttribute('data-task-id', task.id)
@@ -186,7 +191,11 @@ for (const language of ['en', 'ja'] as const) {
         } else if (check.kind === 'packet.inspected') {
           await inspectPacket(page, task, check, language)
         } else if (check.kind === 'routes.inspected' || check.kind === 'control-routes.inspected') {
-          await show(page, task, language, () => true)
+          for (const id of task.guidanceIds) {
+            const cue = curriculumV2Bundle.guidance.find((cue) => cue.id === id)!
+            if (cue.action === 'peering.command') await createLessonPeering(page, language, cue.params.vnetAId, cue.params.vnetBId)
+          }
+          await show(page, task, language, (cue) => cue.action !== 'peering.command')
         } else throw new Error(`No native journey action for ${task.id}: ${check.kind}`)
         await expect(sidebar.getByTestId('learning-debrief'), task.id).toBeVisible({ timeout: 15_000 })
         await expect(sidebar.getByTestId('learning-task-instruction')).toHaveText(task.instruction[language])
@@ -208,12 +217,13 @@ for (const language of ['en', 'ja'] as const) {
       }
     }
     const record = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), guidedProgressKey)
-    expect(record.completions).toHaveLength(72)
+    expect(record.completions).toHaveLength(firstChapterOnly ? 5 : 72)
     expect(record.completions.every((entry: { courseId: string }) => entry.courseId === curriculumV2Bundle.course.id)).toBe(true)
-    expect(points).toBe(1345)
+    expect(points).toBe(firstChapterOnly ? 80 : 1345)
+    await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? `${points} points` : `${points} ポイント`)
     expect(await page.evaluate(() => localStorage.getItem('aznet-visual-topology:v1'))).toBe(normal)
     await page.reload()
-    await expect(page.getByTestId('learning-status')).toContainText(curriculumV2Bundle.course.belts.at(-1)!.name[language])
+    await expect(page.getByTestId('learning-status')).toContainText(curriculumV2Bundle.course.belts[firstChapterOnly ? 1 : curriculumV2Bundle.course.belts.length - 1].name[language])
     await expect(page.getByTestId('learning-belt-dialog')).toHaveCount(0)
   })
 }

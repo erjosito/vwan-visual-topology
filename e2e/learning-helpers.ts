@@ -8,7 +8,7 @@ import { guidanceAnchor } from '../src/learning/guidance'
 import { runnerLabels } from '../src/learning/runner-content'
 import { sidebarLabels } from '../src/learning/sidebar-content'
 import { practiceLabels } from '../src/learning/practice-content'
-import { inspectionScope } from '../src/learning/task-guidance'
+import { inspectionScope, selectPrimaryGuidance } from '../src/learning/task-guidance'
 import { openWorkspaceActions } from './document-action-helpers'
 
 export const learningSidebar = (page: Page) => page.getByTestId('learning-sidebar')
@@ -105,6 +105,15 @@ export async function completeLearningTasks(page: Page, count = 1, language: 'en
       await sidebar.getByRole('button', { name: runnerLabels.submit[language], exact: true }).click()
     }
     if (inspectionScope(check)) {
+      if (check.kind === 'routes.inspected') {
+        const cues = task.guidanceIds.map((id) => bundle.guidance.find((cue) => cue.id === id)!)
+        for (let remaining = cues.length; remaining > 0; remaining--) {
+          const current = await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), practiceWorkspaceKey)
+          const cue = selectPrimaryGuidance(current.document, check, cues)
+          if (cue?.action !== 'peering.command') break
+          await createLessonPeering(page, language, cue.params.vnetAId, cue.params.vnetBId)
+        }
+      }
       await sidebar.getByRole('button', { name: sidebarLabels.show[language], exact: true }).click()
     }
     if (check.kind === 'vnet.peered') await createLessonPeering(page, language, check.params.vnetAId, check.params.vnetBId)

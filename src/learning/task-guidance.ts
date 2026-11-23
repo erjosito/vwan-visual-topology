@@ -17,8 +17,10 @@ export function inspectionScope(check?: CourseCheck) {
 export function selectPrimaryGuidance(document: PlatformDocument, check: CourseCheck, cues: CourseGuidance[]) {
   if (document.mode !== 'vwan') {
     const topology = document.topology
-    if (check.kind === 'peerings.configured') {
-      const pending = check.params.peerings.find((pair) => !topology.vnetPeerings.some((peering) =>
+    if (check.kind === 'peerings.configured' || check.kind === 'routes.inspected') {
+      const pairs = check.kind === 'peerings.configured' ? check.params.peerings
+        : cues.flatMap((cue) => cue.action === 'peering.command' ? [cue.params] : [])
+      const pending = pairs.find((pair) => !topology.vnetPeerings.some((peering) =>
         peering.enabled && peering.aToB.allowVirtualNetworkAccess && peering.bToA.allowVirtualNetworkAccess
         && ((peering.vnetAId === pair.vnetAId && peering.vnetBId === pair.vnetBId)
           || (peering.vnetBId === pair.vnetAId && peering.vnetAId === pair.vnetBId))))
@@ -26,6 +28,12 @@ export function selectPrimaryGuidance(document: PlatformDocument, check: CourseC
         && ((cue.params.vnetAId === pending.vnetAId && cue.params.vnetBId === pending.vnetBId)
           || (cue.params.vnetBId === pending.vnetAId && cue.params.vnetAId === pending.vnetBId)))
       if (cue) return cue
+      if (check.kind === 'routes.inspected') {
+        const inspection = cues.find((cue) => cue.action === 'routes.open'
+          && cue.params.vnetId === check.params.vnetId && cue.params.subnetId === check.params.subnetId
+          && cue.params.prefix === check.params.prefix)
+        if (inspection) return inspection
+      }
     }
     if (check.kind === 'udrs.configured') {
       const pending = check.params.routes.find((scope) => {
