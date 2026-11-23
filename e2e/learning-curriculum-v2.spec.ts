@@ -189,8 +189,11 @@ for (const language of ['en', 'ja'] as const) for (const firstChapterOnly of [tr
         const check = curriculumV2Bundle.checks.find((check) => check.id === task.checkId)!
         if (check.kind === 'quiz.answered') {
           if (task.guidanceIds.some((id) => curriculumV2Bundle.guidance.find((cue) => cue.id === id)?.action === 'routes.open')) {
-            await show(page, task, language, (cue) => cue.action === 'routes.open')
-            await page.getByTestId('network-detail-dialog').getByRole('button', { name: translate(language, 'Close VNet detail'), exact: true }).click()
+            const cue = await show(page, task, language, (cue) => cue.action === 'routes.open')
+            if (cue.action !== 'routes.open') throw new Error('Subnet route guidance required')
+            await expect(learningAnchor(page, 'effective-table', cue.params.vnetId, cue.params.subnetId)).toBeVisible()
+            await expect(sidebar.getByTestId('learning-debrief')).toHaveCount(0)
+            await expect(page.getByTestId('learning-status')).toContainText(language === 'en' ? `${points} points` : `${points} ポイント`)
           }
           const choice = check.params.choices.find((choice) => choice.id === check.params.correctChoiceId)!
           await sidebar.getByRole('radio', { name: choice.text[language], exact: true }).check()
