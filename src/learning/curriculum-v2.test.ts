@@ -36,7 +36,7 @@ const publish = (id: string, property: 'labels' | 'propagatedTableIds', values: 
   task, apply: (t) => { t.vnets.find((v) => v.id === id)!.vwanHubAttachment!.hubRouting![property] = [...values] },
 })
 export const curriculumV2Repairs: Record<CurriculumV2LessonId, CurriculumV2Repair[]> = {
-  'v2-peering': [{ task: 'connect', apply: (t) => { t.vnetPeerings.push(peer('app', 'partner')) } }],
+  'v2-peering': [{ task: 'connect', apply: (t) => { t.vnetPeerings.push(peer('app', 'partner'), peer('partner', 'tenant')) } }],
   'v2-firewall': [
     { task: 'connect-hub', apply: (t) => { t.vnetPeerings.push(peer('app', 'hub')) } },
     policy('app-policy', 'private-summary', 'summary'), policy('app-policy', 'partner-inspection', 'forward'),
@@ -179,6 +179,39 @@ describe('curriculum v2 native routing references', () => {
     expect(repaired.assessments.map((a) => [a.id, a.outcome])).toEqual(
       curriculumV2Requirements[id].map((r) => [r.id, 'satisfied']),
     )
+  })
+  it('rejects peering-only guidance or inspecting the wrong subnet for the peering-chain task', () => {
+    const bundle = structuredClone(curriculumV2Bundle)
+    const task = bundle.lessons[0].tasks.find((task) => task.id === 'v2-peering.connect')!
+    const cue = bundle.guidance.find((cue) => cue.id === task.guidanceIds.at(-1))!
+    if (cue.action !== 'routes.open') throw new Error('Expected route inspection guidance')
+    cue.params.vnetId = 'partner'
+    cue.params.subnetId = 'partner-work'
+    expect(() => validateCourse(bundle)).toThrow('mismatched guidance scope')
+    task.guidanceIds.pop()
+    expect(() => validateCourse(bundle)).toThrow('missing inspection guidance')
+  })
+  it('demonstrates non-transitivity only with both working direct peerings and preserved isolation', () => {
+    const topology = curriculumV2Reference('v2-peering')
+    const evaluate = () => executePlatform({ contractVersion: 1, operation: 'evaluate',
+      document: { mode: 'full', topology }, requirements: curriculumV2Requirements['v2-peering'] })
+    expect(evaluate().assessments.every((a) => a.outcome === 'satisfied')).toBe(true)
+    const routes = simulateAzNet(topology).subnetTables
+    expect(lookupSubnetEffectiveRoute(routes['app-work'], '10.22.1.10')).toMatchObject({
+      prefix: '10.22.0.0/16', nextHopType: 'VNetPeering',
+    })
+    expect(lookupSubnetEffectiveRoute(routes['partner-work'], '10.23.1.10')).toMatchObject({
+      prefix: '10.23.0.0/16', nextHopType: 'VNetPeering',
+    })
+    expect(lookupSubnetEffectiveRoute(routes['app-work'], '10.23.1.10')).toMatchObject({ nextHopType: 'None' })
+    topology.vnetPeerings[1].enabled = false
+    expect(evaluate().assessments.find((a) => a.id === 'partner-to-tenant')?.outcome).toBe('violated')
+    topology.vnetPeerings[1].enabled = true
+    topology.vnetPeerings.push(peer('app', 'tenant'))
+    const shortcut = evaluate()
+    for (const id of ['application-to-tenant', 'tenant-to-application', 'no-transitive-tenant-route']) {
+      expect(shortcut.assessments.find((a) => a.id === id)?.outcome, id).toBe('violated')
+    }
   })
   it('qualifies the primary HA state before changing health', () => {
     const primary = curriculumV2Reference('v2-nva-ha', 'repair-return'), standby = curriculumV2Reference('v2-nva-ha')
