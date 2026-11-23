@@ -90,6 +90,11 @@ try {
   await expect(page.getByRole('tab', { name: 'UI saved after reload', exact: true })).toHaveCount(2)
   const closes = page.locator('.workspace-tab-close')
   await expect(closes).toHaveCount(3)
+  await application.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0]
+    window.setSize(900, 900)
+    window.webContents.setZoomFactor(1.5)
+  })
   await closes.first().click()
   const closing = page.getByRole('dialog', { name: 'Save changes before closing?', exact: true })
   await closing.getByRole('button', { name: 'Cancel', exact: true }).click()
@@ -106,6 +111,7 @@ try {
   await expect(closes).toHaveCount(1)
   expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved after reload')
   expect(await readFile(third, 'utf8')).toBe(content('UI saved after reload'))
+  await application.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].webContents.setZoomFactor(1) })
   await page.goto('app://simulator/docs/index.html')
   const untrusted = await page.evaluate(async () => {
     try {
