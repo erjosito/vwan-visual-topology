@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright'
 import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
 import { loadLanguage, translate } from '../src/messages'
 import '../src/hub-dialog-messages-ja'
+import '../src/VwanVnetConnectionPanel'
 
 async function saved(page: Page, mode: string) {
   return page.evaluate((mode) => {
@@ -141,12 +142,13 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
     await menu('untrusted-a')
     await expect(page.getByRole('menuitem', { name: text('Connect to virtual hub'), exact: true })).toHaveCount(0)
     await page.getByRole('menuitem', { name: text('Configure virtual hub connection'), exact: true }).click()
+    await expect(page.getByTestId('vwan-vnet-connection-panel')).toBeVisible()
+    await page.keyboard.press('Escape')
     if (mode === 'vwan') {
-      await page.getByRole('button', { name: text('Save changes'), exact: true }).click()
       const current = (await saved(page, mode)).spokes[2]
       expect(current.hubRouting).toEqual(native.spokes[2].hubRouting)
       expect(current.subnets).toEqual(native.spokes[2].subnets)
-    } else await page.keyboard.press('Escape')
+    }
     await menu('hub-local', true)
     await page.getByRole('menuitem', { name: text(mode === 'vwan' ? 'BGP table' : 'Inspect Virtual WAN Hub BGP table'), exact: true }).click()
     await expect(page.getByRole('dialog').locator('tr[data-prefix="10.10.0.0/16"][data-preferred="true"]')).toContainText('trusted-a')
@@ -157,6 +159,129 @@ for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'
     expect(await saved(page, mode)).toEqual(result)
     await upload(result)
     await expect.poll(async () => await saved(page, mode)).toEqual(result)
+  })
+}
+
+for (const mode of ['vwan', 'full'] as const) for (const language of ['en', 'ja'] as const) {
+  test(`${mode} ${language}: selectable VNet connections edit original routing without authoring ordinary peerings`, async ({ page }) => {
+    await loadLanguage(language)
+    const text = (value: string) => translate(language, value)
+    const topology = mode === 'vwan' ? hubFirewallTopology() : azHubFirewallTopology()
+    const errors: string[] = []
+    page.on('pageerror', (error) => errors.push(error.message))
+    await page.addInitScript((language) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', String(language === 'en'))
+    }, language)
+    await page.setViewportSize({ width: 1440, height: 1100 })
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'selectable-vnet-connections.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(topology)),
+    })
+    await expect.poll(async () => (await saved(page, mode))?.name).toContain('Selective Firewall')
+    const original = await saved(page, mode)
+    const edge = page.getByTestId(`${mode === 'vwan' ? 'spoke' : 'aznet-vnet'}-connection-trusted-a`)
+    await edge.focus()
+    await page.keyboard.press('Enter')
+    const panel = page.getByTestId('vwan-vnet-connection-panel')
+    await expect(panel).toBeVisible()
+    await expect(panel).toContainText('trusted-a ↔ Local secure hub')
+    await expect(panel).toContainText(text('Microsoft-managed peering'))
+    await expect(panel).toContainText(text('Additional ordinary VNet peerings are allowed; they must not consume another remote gateway or Route Server. Peering alone does not extend Virtual WAN transit to an indirect VNet.'))
+    await expect(panel.getByLabel(/Use Remote Gateways|Allow Gateway Transit/)).toHaveCount(0)
+    expect(await saved(page, mode)).toEqual(original)
+    expect((await new AxeBuilder({ page }).include('[data-testid="vwan-vnet-connection-panel"]').analyze()).violations).toEqual([])
+    const flag = panel.getByLabel(text('Propagate default route (0.0.0.0/0)'), { exact: true })
+    await flag.check()
+    await page.getByRole('button', { name: new RegExp(`Undo|${text('Undo')}`) }).click()
+    await expect(flag).not.toBeChecked()
+    expect(await saved(page, mode)).toEqual(original)
+    await page.getByRole('button', { name: new RegExp(`Redo|${text('Redo')}`) }).click()
+    await expect(flag).toBeChecked()
+    await panel.getByLabel(text('Associated table'), { exact: true }).selectOption('untrusted')
+    await panel.getByLabel(text('Propagation labels'), { exact: true }).fill('trusted, CaseSensitive')
+    await panel.getByLabel(text('Propagation labels'), { exact: true }).press('Tab')
+    const current = await saved(page, mode)
+    const entries = mode === 'vwan' ? current.spokes : current.vnets
+    const originalEntries = mode === 'vwan' ? original.spokes : original.vnets
+    const attachment = mode === 'vwan' ? entries[0] : entries[0].vwanHubAttachment
+    expect(attachment.propagateDefaultRoute).toBe(true)
+    expect(attachment.hubRouting).toEqual({
+      ...(mode === 'vwan' ? originalEntries[0] : originalEntries[0].vwanHubAttachment).hubRouting,
+      associatedTableId: 'untrusted', labels: ['trusted', 'CaseSensitive'],
+    })
+    expect(entries.slice(1)).toEqual(originalEntries.slice(1))
+    if (mode === 'full') {
+      expect(current.vnetPeerings).toEqual(original.vnetPeerings)
+      await panel.getByLabel(text('Enabled'), { exact: true }).uncheck()
+      await page.keyboard.press('Escape')
+      await edge.focus()
+      await page.keyboard.press('Space')
+      await expect(panel.getByLabel(text('Enabled'), { exact: true })).not.toBeChecked()
+      await panel.getByLabel(text('Enabled'), { exact: true }).check()
+      await panel.getByTestId('connection-static-trusted-a').getByRole('checkbox').check()
+      expect((await saved(page, mode)).vnets[0].vwanHubAttachment.propagateStaticRoutes).toBe(true)
+    }
+    const edited = await saved(page, mode)
+    await page.keyboard.press('Escape')
+    // Click the visible edge badge, not an overlapping node or hitbox.
+    await edge.locator('text').click()
+    await expect(panel).toBeVisible()
+    await page.keyboard.press('Escape')
+    if (mode === 'full') {
+      await page.getByTestId('aznet-select-vnet-trusted-a').focus()
+      await page.keyboard.press('Shift+F10')
+      await page.getByRole('menuitem', { name: text('Peer with VNet'), exact: true }).click()
+      await page.getByRole('menuitem', { name: 'trusted-b (swedencentral)', exact: true }).click()
+      const peerings = (await saved(page, mode)).vnetPeerings
+      expect(peerings).toHaveLength(1)
+      expect(peerings[0]).toMatchObject({
+        vnetAId: 'trusted-a', vnetBId: 'trusted-b',
+        aToB: { useRemoteGateways: false }, bToA: { useRemoteGateways: false },
+      })
+      expect((await saved(page, mode)).vnets).toEqual(edited.vnets)
+    }
+    const persisted = await saved(page, mode)
+    await page.reload()
+    await expect(edge).toBeVisible()
+    expect(await saved(page, mode)).toEqual(persisted)
+    expect(errors).toEqual([])
+  })
+}
+
+for (const mode of ['vwan', 'full'] as const) {
+  test(`${mode}: opening imported VNet connections preserves unknown scopes and omitted legacy defaults`, async ({ page }) => {
+    const native = hubFirewallTopology()
+    const mixed = azHubFirewallTopology()
+    const unknown = { status: 'unknown' as const, associatedTableId: mode === 'vwan' ? 'external-table' : null,
+      propagatedTableIds: mode === 'vwan' ? ['external-propagation'] : [], labels: ['CaseSensitive'], limitations: ['Capture incomplete'] }
+    native.spokes[0].hubRouting = structuredClone(unknown)
+    mixed.vnets[0].vwanHubAttachment!.hubRouting = structuredClone(unknown)
+    delete native.spokes[1].hubRouting
+    delete mixed.vnets[1].vwanHubAttachment!.hubRouting
+    await page.goto(`/?mode=${mode}`)
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'unknown-connection-scope.json', mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(mode === 'vwan' ? native : mixed)),
+    })
+    await expect.poll(async () => (await saved(page, mode))?.name).toContain('Selective Firewall')
+    const original = await saved(page, mode)
+    const edge = (id: string) => page.getByTestId(`${mode === 'vwan' ? 'spoke' : 'aznet-vnet'}-connection-${id}`)
+    await edge('trusted-a').focus()
+    await page.keyboard.press('Enter')
+    const panel = page.getByTestId('vwan-vnet-connection-panel')
+    await expect(panel.getByLabel('Associated table', { exact: true })).toHaveValue(unknown.associatedTableId ?? '')
+    await expect(panel).toContainText('Capture incomplete')
+    expect(await saved(page, mode)).toEqual(original)
+    await panel.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true }).check()
+    const edited = await saved(page, mode)
+    expect((mode === 'vwan' ? edited.spokes[0] : edited.vnets[0].vwanHubAttachment).hubRouting).toEqual(unknown)
+    await page.keyboard.press('Escape')
+    await edge('trusted-b').focus()
+    await page.keyboard.press('Enter')
+    await expect(panel.getByLabel('Associated table', { exact: true })).toHaveValue('defaultRouteTable')
+    await page.keyboard.press('Escape')
+    expect(await saved(page, mode)).toEqual(edited)
   })
 }
 

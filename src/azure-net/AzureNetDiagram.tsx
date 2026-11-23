@@ -85,6 +85,7 @@ interface AzureNetDiagramProps {
     routeTableId: string | undefined,
   ) => void
   onOpenEditorForEntity?: (entity: AzSelectedEntity) => void
+  onOpenVnetConnection?: (vnetId: string) => void
   onShowRouteMapRules?: (selection: AzRouteMapSelection) => void
   forwardTrace?: AzFlowTrace | null
   reverseTrace?: AzFlowTrace | null
@@ -244,6 +245,7 @@ export function AzureNetDiagram({
   onUpdateRouteTable,
   onAssociateSubnetRouteTable,
   onOpenEditorForEntity,
+  onOpenVnetConnection,
   onShowRouteMapRules,
   forwardTrace,
   reverseTrace,
@@ -361,13 +363,13 @@ export function AzureNetDiagram({
     const collection = preview.kind === 'vnet' ? positions.vnets : preview.kind === 'vwan-hub' ? positions.vwanHubs : preview.kind === 'er-location' ? positions.erLocations : positions.sites
     if (collection[preview.id]) collection[preview.id] = { ...collection[preview.id], x: preview.x, y: preview.y }
   }
-  const openKeyboardContext = (event: KeyboardEvent<SVGGElement>, entity: AzSelectedEntity) => {
+  const openKeyboardContext = (event: KeyboardEvent<SVGGElement>, entity: AzSelectedEntity, onActivate?: () => void) => {
     if (event.key === 'Escape' && dragState) {
       event.preventDefault()
       clearDrag()
       return
     }
-    if (event.target === event.currentTarget && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
+    if (!onActivate && event.target === event.currentTarget && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) {
       if (readOnly) return
       const node = entity.kind === 'vnet' ? { kind: 'vnet' as const, id: entity.vnetId, box: positions.vnets[entity.vnetId] }
         : entity.kind === 'vwan-hub' ? { kind: 'vwan-hub' as const, id: entity.hubId, box: positions.vwanHubs[entity.hubId] }
@@ -385,7 +387,8 @@ export function AzureNetDiagram({
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault()
       event.stopPropagation()
-      onSelect(entity)
+      if (onActivate) onActivate()
+      else onSelect(entity)
       return
     }
     if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return
@@ -503,7 +506,7 @@ export function AzureNetDiagram({
   const connections = [
     ...azInterHubLinks(topology),
     ...topology.vnetPeerings.map((link) => ({ id: link.id, from: `vnet:${link.vnetAId}`, to: `vnet:${link.vnetBId}` })),
-    ...topology.vnets.flatMap((vnet) => vnet.vwanHubAttachment?.enabled ? [{
+    ...topology.vnets.flatMap((vnet) => vnet.vwanHubAttachment ? [{
       id: `vhub-attach:${vnet.id}:${vnet.vwanHubAttachment.hubId}`, from: `vnet:${vnet.id}`, to: `vwan-hub:${vnet.vwanHubAttachment.hubId}`,
     }] : []),
     ...topology.erLinks.map((link) => ({ id: link.id, from: `er-location:${link.locationId}`, to: targetKey(link.targetKind, link.targetId) })),
@@ -955,23 +958,39 @@ export function AzureNetDiagram({
         {/* 2. VNet-to-vWAN Hub Attachments */}
         {topology.vnets.map((vnet) => {
           const att = vnet.vwanHubAttachment
-          if (!att || !att.enabled) return null
-          const vBox = positions.vnets[vnet.id]
-          const hBox = positions.vwanHubs[att.hubId]
-          if (!vBox || !hBox) return null
+          if (!att) return null
           const edgeId = `vhub-attach:${vnet.id}:${att.hubId}`
-          const curve = connectionCurves.get(edgeId)!.curve
+          const curve = connectionCurves.get(edgeId)?.curve
+          if (!curve) return null
           const inForward = forwardEdges.has(edgeId)
           const inReverse = reverseEdges.has(edgeId)
-          return (
-            <g key={edgeId} {...focusAttributes(edgeId)}>
-              <path className="aznet-edge-path" d={curve.d} fill="none"
-                stroke={inForward ? 'var(--forward)' : inReverse ? 'var(--return)' : 'var(--info)'}
-                strokeWidth={inForward || inReverse ? 4 : 2.5}
-                strokeDasharray={inReverse && !inForward ? '7 4' : undefined}
-              />
-            </g>
-          )
+          const entity = { kind: 'vnet' as const, vnetId: vnet.id }
+          const activate = () => {
+            if (!readOnly && onOpenVnetConnection) onOpenVnetConnection(vnet.id)
+            else onSelect(entity)
+          }
+          return <DiagramButton key={edgeId} {...focusAttributes(edgeId)}
+            className="aznet-edge-group" data-testid={`aznet-vnet-connection-${vnet.id}`}
+            role="button" tabIndex={0} aria-label={t('Configure virtual hub connection') + ` ${vnet.name}`}
+            aria-pressed={selected?.kind === 'vnet' && selected.vnetId === vnet.id}
+            onClick={(event) => { event.stopPropagation(); activate() }}
+            onKeyDown={(event) => openKeyboardContext(event, entity, activate)}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              onContextMenu?.({ kind: 'entity', entity, x: event.clientX, y: event.clientY })
+            }}>
+            <CanvasEdgeSelection selected={selected?.kind === 'vnet' && selected.vnetId === vnet.id} path={curve.d} />
+            <path className="aznet-edge-path" d={curve.d} fill="none"
+              stroke={inForward ? 'var(--forward)' : inReverse ? 'var(--return)' : 'var(--info)'}
+              strokeWidth={inForward || inReverse ? 4 : 2.5}
+              strokeDasharray={!att.enabled ? '6 5' : inReverse && !inForward ? '7 4' : undefined} />
+            <rect x={curve.label.x - 62} y={curve.label.y - 11} width={124} height={22} rx={6}
+              fill="var(--surface)" stroke="var(--info)" />
+            <text x={curve.label.x} y={curve.label.y + 4} textAnchor="middle" fontSize={10} fill="var(--text)">
+              {t('VNet connection')}{!att.enabled ? t(' (down)') : ''}
+            </text>
+          </DiagramButton>
         })}
 
         {/* 3. ExpressRoute Links (via MSEE Locations) */}

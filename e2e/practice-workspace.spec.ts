@@ -3,6 +3,7 @@ import { exercises } from '../src/learning/exercises'
 import { practiceWorkspaceKey, type PracticeWorkspace } from '../src/learning/practice-workspace'
 import { progressKey } from '../src/learning/progress'
 import { archivedScenarioStorageState, openLearning, learningOptions } from './learning-helpers'
+import { hubFirewallTopology, azHubFirewallTopology } from '../tests/fixtures/hub-firewall'
 
 test.use({ storageState: archivedScenarioStorageState() })
 
@@ -53,6 +54,38 @@ async function move(page: Page, vwan: boolean) {
   await (vwan ? node(page, vwan) : page.getByTestId('aznet-select-vnet-a')).focus()
   await page.keyboard.press(vwan ? 'Alt+ArrowRight' : 'ArrowRight')
   await expect(undo(page)).toBeEnabled()
+}
+
+for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} connection edits and undo remain in the protected practice document`, async ({ page }) => {
+    await seed(page, vwan)
+    const original = await stored(page)
+    await confirmStart(page, vwan ? 'vwan-connect' : 'peering-connect')
+    await page.locator('input[type="file"]').first().setInputFiles({
+      name: 'practice-connections.json', mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(vwan ? hubFirewallTopology() : azHubFirewallTopology())),
+    })
+    const edge = page.getByTestId(`${vwan ? 'spoke' : 'aznet-vnet'}-connection-trusted-a`)
+    await edge.focus()
+    await page.keyboard.press('Enter')
+    const panel = page.getByTestId('vwan-vnet-connection-panel')
+    const flag = panel.getByLabel('Propagate default route (0.0.0.0/0)', { exact: true })
+    await flag.check()
+    const document = (await practice(page)).document
+    expect(document.mode === 'vwan' ? document.topology.spokes[0].propagateDefaultRoute
+      : document.topology.vnets[0].vwanHubAttachment!.propagateDefaultRoute).toBe(true)
+    expect(await stored(page)).toEqual(original)
+    await undo(page).click()
+    await expect(flag).not.toBeChecked()
+    await redo(page).click()
+    await expect(flag).toBeChecked()
+    await bar(page).getByRole('button', { name: 'Return to my design', exact: true }).click()
+    await expect(panel).toHaveCount(0)
+    expect(await stored(page)).toEqual(original)
+    await bar(page).getByRole('button', { name: 'Resume practice', exact: true }).click()
+    await expect(flag).toBeChecked()
+    expect(await stored(page)).toEqual(original)
+  })
 }
 
 for (const vwan of [true, false]) {

@@ -45,6 +45,7 @@ interface Props {
   sourceConnectionIds?: string[]; sourceSiteLinkIds?: string[]; sourceErLinkIds?: string[]; layout?: LayoutMode; zoom?: number
   paths: (NodePath | GroupPath)[]; tracing: boolean; sourceSpokeIds?: string[]; selection?: ObjectSelection
   onObjectClick: (selection: ObjectSelection) => void; onObjectContextMenu: (menu: DiagramContextMenu) => void
+  onVnetConnectionClick?: (spokeId: string) => void
   onNodeMove: (id: string, position: NodePosition) => void
   onShowRouteMapRules: (router: RouterSelection, direction: RouteMapDirection, connectionId: string) => void
   onZoom: (zoom: number) => void
@@ -60,7 +61,7 @@ function SpokeNvaIcon({ spokeId }: { spokeId: string }) {
   </g>
 }
 
-export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, onClearSelection, layoutControls, canvasStatus }: Props) {
+export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks = {}, onRisk, issues = [], onShowIssues, hubId, erLocationId, selected, selectedSiteRoutes, sourceSiteLinkIds = [], sourceConnectionIds = [], sourceErLinkIds = [], layout = 'layered', zoom = 1, paths, sourceSpokeIds = [], tracing, selection, onObjectClick, onVnetConnectionClick, onObjectContextMenu, onNodeMove, onShowRouteMapRules, onZoom, onClearSelection, layoutControls, canvasStatus }: Props) {
   const language = useLanguage()
   const { connectionStyle } = useCanvasPresentation()
   const diagramCurve = (a: NodePosition, b: NodePosition, aSize: NodePosition, bSize: NodePosition, bend = 0, index = 0, count = 1, reversed = false) =>
@@ -430,7 +431,11 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
         || (!tracing && spoke.hubId === hubId)
       const edge = diagramCurve(point(spoke.id), point(spoke.hubId), nodeSize, hubSize, 12)
       const nvaDown = nvas.length > 0 && nvas.every((connection) => !connection.enabled)
-      return <g key={spoke.id} className="clickable" {...selectable('spoke', spoke.id, t("Edit spoke connection {0}", spoke.name))}><path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${nvas.length ? 'SpokeNVA' : ''} ${active ? 'preferred-link' : ''} ${nvaDown ? 'disabled-link' : ''}`} d={edge.d} />{nvas.length > 0 && badge(`NVA BGP${nvaDown ? t(' (down)') : ''}`, edge.label)}</g>
+      return <g key={spoke.id} data-testid={`spoke-connection-${spoke.id}`} className="clickable"
+        {...selectable('spoke', spoke.id, t("Edit spoke connection {0}", spoke.name),
+          () => !readOnly && onVnetConnectionClick ? onVnetConnectionClick(spoke.id) : onObjectClick({ kind: 'spoke', id: spoke.id }))}>
+        <path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${nvas.length ? 'SpokeNVA' : ''} ${active ? 'preferred-link' : ''} ${nvaDown ? 'disabled-link' : ''}`} d={edge.d} />
+        {badge(t('VNet connection'), edge.label)}{nvas.length > 0 && badge(`NVA BGP${nvaDown ? t(' (down)') : ''}`, { ...edge.label, y: edge.label.y + 22 })}</g>
     })}
     {topology.spokes.flatMap((spoke) => (spoke.nvaSpokeIds ?? []).map((nvaSpokeId) => {
       if (!positions.has(spoke.id) || !positions.has(nvaSpokeId)) return null
