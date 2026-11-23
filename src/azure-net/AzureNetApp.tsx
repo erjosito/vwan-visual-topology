@@ -83,6 +83,7 @@ interface AzureNetAppProps {
 }
 
 const NetworkDetail = lazy(() => import('../NetworkDetail').then((module) => ({ default: module.NetworkDetail })))
+const AzureCapturePanel = lazy(() => import('./AzureCapturePanel'))
 const Explain = lazy(() => import('../learning/Explain').then((module) => ({ default: module.Explain })))
 const WarningAcknowledgement = lazy(() => import('../WarningAcknowledgement').then((module) => ({ default: module.WarningAcknowledgement })))
 const FlowExportControls = lazy(() => import('../FlowExportControls').then(module => ({ default: module.FlowExportControls }))
@@ -4983,163 +4984,9 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                 {(captureObservations?.arsLearnedRoutes || captureObservations?.arsAdvertisedRoutes) && <Suspense fallback={null}>
                   <CapturedArsRoutesPanel observations={captureObservations!} />
                 </Suspense>}
-                <div className="aznet-card" data-testid="aznet-azure-capture-card">
-                  <h3>1. Azure Live Capture & Effective-Route Comparison</h3>
-                  <p style={{ margin: '0 0 8px 0', fontSize: 12, color: 'var(--text)' }}>
-                    Capture a live Azure resource group (VNets, Subnets, Peerings, UDRs, Route
-                    Server, Gateways, and NIC Effective Routes — including a proxy subnet sharing{' '}
-                    <code>GatewaySubnet</code>&apos;s route table) using the read-only PowerShell
-                    collector:
-                  </p>
-                  <pre
-                    style={{
-                      margin: '0 0 8px 0',
-                      padding: 8,
-                      background: 'var(--surface-muted)',
-                      color: 'var(--text-muted)',
-                      borderRadius: 6,
-                      fontSize: 11,
-                      overflowX: 'auto',
-                    }}
-                  >
-                    {`pwsh ./scripts/collect-azure-network.ps1 -ResourceGroupName <rg> -IncludeEffectiveRoutes -OutputFile azure-network-capture.json`}
-                  </pre>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <a
-                      className="aznet-btn"
-                      href="/scripts/collect-azure-network.ps1"
-                      download="collect-azure-network.ps1"
-                      style={{ textDecoration: 'none' }}
-                    >
-                      ⬇ Download Collector Script (.ps1)
-                    </a>
-                    <button
-                      type="button"
-                      className="aznet-btn aznet-btn-primary"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      ⬆ Import Capture as Topology + Compare
-                    </button>
-                    <button
-                      type="button"
-                      className="aznet-btn"
-                      onClick={() => compareFileInputRef.current?.click()}
-                    >
-                      🔍 Compare Capture Against Current Topology
-                    </button>
-                  </div>
-
-                  {captureNotices.length > 0 && (
-                    <div
-                      style={{
-                        marginTop: 8,
-                        padding: 8,
-                        background: 'var(--surface)',
-                        borderRadius: 6,
-                        border: '1px solid var(--border)',
-                        fontSize: 11.5,
-                      }}
-                    >
-                      <strong>Import Notices:</strong>
-                      <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
-                        {captureNotices.map((n, idx) => (
-                          <li key={idx}>{n}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {captureComparison && (
-                    <div style={{ marginTop: 10 }} data-testid="aznet-comparison-report">
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          marginBottom: 6,
-                        }}
-                      >
-                        <strong>
-                          NIC Effective Route Comparison ({captureComparison.totalMatchedRoutes}{' '}
-                          matched, {captureComparison.totalMismatchedRoutes} mismatched
-                          {captureComparison.totalUnknownRoutes > 0 && `, ${captureComparison.totalUnknownRoutes} unassessed`})
-                        </strong>
-                      </div>
-                      {captureComparison.subnetComparisons.map((nic) => (
-                        <div
-                          key={nic.nicName}
-                          style={{
-                            marginBottom: 8,
-                            padding: 8,
-                            background: 'var(--surface)',
-                            borderRadius: 6,
-                            border: `1px solid ${nic.coverage === 'complete' && nic.mismatchCount === 0 ? 'var(--success)' : 'var(--border)'}`,
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              marginBottom: 4,
-                              fontSize: 12,
-                            }}
-                          >
-                            <span>
-                              <strong>{nic.nicName}</strong> · {nic.vnetName}/{nic.subnetName}{' '}
-                              {nic.proxyForGatewaySubnet && (
-                                <span className="aznet-badge info">GatewaySubnet Proxy</span>
-                              )}
-                            </span>
-                            <span
-                              className={`aznet-badge ${nic.coverage !== 'complete' ? 'info' : nic.mismatchCount === 0 ? 'ok' : 'error'}`}
-                            >
-                              {nic.coverage !== 'complete'
-                                ? `COVERAGE ${nic.coverage.toUpperCase()} (${nic.matchedCount} matched)`
-                                : nic.mismatchCount === 0
-                                ? `MATCHED (${nic.matchedCount})`
-                                : `${nic.mismatchCount} DIFF`}
-                            </span>
-                          </div>
-                          <table className="aznet-route-table">
-                            <thead>
-                              <tr>
-                                <th>Status</th>
-                                <th>Prefix</th>
-                                <th>Azure Observed</th>
-                                <th>Simulator Predicted</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {nic.rows.map((d, idx) => (
-                                <tr key={idx}>
-                                  <td>
-                                    <span className={`aznet-badge ${d.assessment === 'unknown' ? 'info' : d.matched ? 'ok' : 'error'}`}>
-                                      {d.assessment === 'unknown' ? 'unassessed' : d.matched ? 'match' : 'diff'}
-                                    </span>
-                                  </td>
-                                  <td>
-                                    <code>{d.prefix}</code>
-                                  </td>
-                                  <td>
-                                    {`${d.azureSource} → ${d.azureNextHopType}${
-                                      d.azureNextHopIp ? ` (${d.azureNextHopIp})` : ''
-                                    } [${d.azureState}]`}
-                                  </td>
-                                  <td>
-                                    {`${d.simSource} → ${d.simNextHopType}${
-                                      d.simNextHopIp ? ` (${d.simNextHopIp})` : ''
-                                    } [${d.simState}]`}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzureCapturePanel
+                  notices={captureNotices} comparison={captureComparison}
+                  onImport={() => fileInputRef.current?.click()} onCompare={() => compareFileInputRef.current?.click()} /></Suspense>
 
                 <Suspense fallback={<p role="status">{t('Loading workspace…')}</p>}><AzBicepExport topology={topology} /></Suspense>
               </>
