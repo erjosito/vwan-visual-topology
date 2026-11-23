@@ -941,7 +941,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
     // Switch to vWAN-Only mode and set a custom diagram label on Europe hub
     await page.getByRole('button', { name: 'Close Configure selected object', exact: true }).click()
     await page.getByTestId('workspace-library-open').click()
-    await page.getByRole('button', { name: 'Open saved design: Global branch network', exact: true }).click()
+    await page.getByRole('button', { name: 'Open saved topology: Global branch network', exact: true }).click()
     await page.getByLabel('Select hub Europe hub', { exact: true }).focus()
     await page.keyboard.press('Shift+F10')
     await page.getByRole('menu').getByRole('menuitem', { name: 'Edit configuration', exact: true }).click()
@@ -960,7 +960,7 @@ test.describe('AzNetSim native workspace compatibility', () => {
 
     await expect(page.getByTestId('aznet-app')).toBeVisible()
     await page.getByTestId('workspace-library-open').click()
-    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('Open designs in separate tabs')
+    await expect(page.getByRole('dialog', { name: 'Workspace', exact: true })).toContainText('Open topologies in separate tabs')
     await page.getByRole('dialog', { name: 'Workspace', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
 
     await expect(page.getByTestId('aznet-subnet-sub-app-web')).not.toContainText('GWroutes:OFF')
