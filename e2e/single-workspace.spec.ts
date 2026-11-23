@@ -74,6 +74,58 @@ for (const vwan of [true, false]) {
   })
 }
 
+for (const vwan of [true, false]) {
+  test(`${vwan ? 'VWAN' : 'mixed'} tab labels truncate without scrollbars and retain full tooltips`, async ({ page }, info) => {
+    const topology = structuredClone(exercises[vwan ? 0 : 1].starter.topology)
+    topology.name = 'A very long topology label with enough detail to exceed the available tab width'
+    await page.addInitScript(({ topology, vwan }) => {
+      const key = vwan ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'
+      localStorage.setItem(key, JSON.stringify(vwan ? topology : { sampleId: '', topology }))
+    }, { topology, vwan })
+    await page.goto(`/?mode=${vwan ? 'vwan' : 'full'}`)
+    const tabs = page.getByRole('tablist', { name: 'Designs', exact: true })
+    await expect(tabs.getByRole('tab', { name: topology.name, exact: true })).toBeVisible()
+    for (const name of ['Second design', 'Third design']) {
+      await page.getByLabel('Import topology file', { exact: true }).setInputFiles({
+        name: 'design.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({ ...topology, name })),
+      })
+    }
+    for (const width of [1366, 390]) {
+      await page.setViewportSize({ width, height: 844 })
+      await tabs.getByRole('tab').last().focus()
+      await page.keyboard.press('Home')
+      const first = tabs.getByRole('tab', { name: topology.name, exact: true })
+      await expect(first).toBeFocused()
+      const label = first.locator('.workspace-tab-name')
+      await expect(label).toHaveCSS('overflow-x', 'hidden')
+      await expect(label).toHaveCSS('overflow-y', 'hidden')
+      await expect(label).toHaveCSS('text-overflow', 'ellipsis')
+      expect(await label.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+      expect(await first.getAttribute('title')).toContain(topology.name)
+      const status = first.locator('..').locator('small')
+      await expect(status).toHaveAttribute('title', (await first.getAttribute('title'))!)
+      await expect(tabs).toHaveCSS('overflow-y', 'hidden')
+      expect(await tabs.evaluate(element => ({
+        horizontalScrollbar: element.offsetHeight - element.clientHeight,
+        verticalScrollbar: element.offsetWidth - element.clientWidth,
+      }))).toEqual({ horizontalScrollbar: 0, verticalScrollbar: 0 })
+      if (width === 390) {
+        expect(await tabs.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true)
+        await page.keyboard.press('End')
+        const last = tabs.getByRole('tab', { name: 'Third design', exact: true })
+        await expect(last).toBeFocused()
+        const listBounds = await tabs.boundingBox()
+        const lastBounds = await last.boundingBox()
+        expect(lastBounds!.x).toBeGreaterThanOrEqual(listBounds!.x - 1)
+        expect(lastBounds!.x + lastBounds!.width).toBeLessThanOrEqual(listBounds!.x + listBounds!.width + 1)
+        await page.keyboard.press('Enter')
+        await expect(last).toHaveAttribute('aria-selected', 'true')
+      }
+      await info.attach(`tab-labels-${width}`, { body: await page.screenshot(), contentType: 'image/png' })
+    }
+  })
+}
+
 test('competing browser windows edit temporary copies without overwriting the owned profile', async ({ page, context }) => {
   await page.goto('/?mode=vwan')
   await page.getByLabel('Topology name', { exact: true }).fill('Owner design')

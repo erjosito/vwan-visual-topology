@@ -2,8 +2,8 @@ import { useLanguage } from '../i18n'
 import type { DocumentSaveSnapshot } from './document-state'
 import { useCloudSession } from './useCloudSession'
 
-export function CloudDocumentSaveStatus({ detail, state, local }: {
-  detail: boolean; state: DocumentSaveSnapshot; local: string
+export function CloudDocumentSaveStatus({ detail, state, local, label }: {
+  detail: boolean; state: DocumentSaveSnapshot; local: string; label: string
 }) {
   const cloud = useCloudSession()
   const ja = useLanguage() === 'ja'
@@ -31,6 +31,8 @@ export function CloudDocumentSaveStatus({ detail, state, local }: {
     <p>{help}</p>
   </div>
   return <button type="button" className="document-save-state" data-testid="document-save-state"
-    title={help}
-    onClick={() => window.dispatchEvent(new Event('aznet-open-cloud-sharing'))}>{content}</button>
+    title={`${local} · ${cloudLabel} · ${help}`}
+    onClick={() => window.dispatchEvent(new Event('aznet-open-cloud-sharing'))}>
+    <span data-testid="document-cloud-state" title={`${local} · ${cloudLabel} · ${help}`}>{label}</span>
+  </button>
 }

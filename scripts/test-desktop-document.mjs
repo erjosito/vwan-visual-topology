@@ -64,18 +64,19 @@ try {
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('Saved')
   await page.getByLabel('Topology name', { exact: true }).fill('UI saved')
   await page.keyboard.press('Control+s')
-  await expect(page.locator('.document-artifact-status')).toContainText('Saved', { timeout: 30_000 })
+  await expect(page.locator('.document-artifact-details summary')).toHaveAttribute('title', /^Saved/, { timeout: 30_000 })
+  await expect(page.locator('.document-artifact-status')).toHaveText('Locally saved')
   expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved')
   expect(await application.evaluate(() => globalThis.documentDialogPicks)).toBe(2)
   await page.reload()
   await expect(page.getByLabel('Topology name', { exact: true })).toHaveValue('UI saved')
   await page.getByLabel('Topology name', { exact: true }).fill('UI saved after reload')
   await page.keyboard.press('Control+s')
-  await expect(page.locator('.document-artifact-status')).not.toContainText('Saving', { timeout: 30_000 })
-  if (await page.locator('.document-artifact-status').textContent().then(value => value.includes('failed'))) {
+  await expect(page.locator('.document-artifact-details summary')).not.toHaveAttribute('title', /^Saving/, { timeout: 30_000 })
+  if ((await page.locator('.document-artifact-details summary').getAttribute('title'))?.includes('failed')) {
     throw new Error(await page.locator('.document-artifact-details [role="alert"]').textContent())
   }
-  await expect(page.locator('.document-artifact-status')).toContainText('Saved', { timeout: 30_000 })
+  await expect(page.locator('.document-artifact-details summary')).toHaveAttribute('title', /^Saved/, { timeout: 30_000 })
   expect(JSON.parse(await readFile(source, 'utf8')).name).toBe('UI saved after reload')
   await page.goto('app://simulator/docs/index.html')
   const untrusted = await page.evaluate(async () => {

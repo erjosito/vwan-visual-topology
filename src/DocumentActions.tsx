@@ -1,8 +1,9 @@
 import { Component, lazy, Suspense, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { useLanguage } from './i18n'
-import { useWorkspaceSession } from './workspace-context'
+import { t, useLanguage } from './i18n'
+import { useDocumentSaveState, useWorkspaceSession } from './workspace-context'
 import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
+import { documentSaveLabel } from './cloud/document-state'
 import './document-actions.css'
 
 const CloudPanel = lazy(() => import('./cloud/CloudPanel').then(module => ({ default: module.CloudPanel })))
@@ -35,21 +36,22 @@ export class DocumentDialogBoundary extends Component<{
 
 export function DocumentArtifactStatus() {
   const commands = useWorkspaceSession()?.artifactCommands, language = useLanguage()
+  const saveState = useDocumentSaveState()
   const text = (en: string, ja: string) => language === 'ja' ? ja : en
   const state = useSyncExternalStore(commands?.subscribe ?? noSubscribe, commands?.getSnapshot ?? noSnapshot)
   if (!state) return null
-  const label = state.operation === 'saving' ? text('Saving…', '保存中…')
+  const detailLabel = state.operation === 'saving' ? text('Saving…', '保存中…')
     : state.operation === 'failed' ? text('Save failed', '保存に失敗')
       : state.revision === 'matches' ? text('Saved', '保存済み') : text('Unsaved changes', '未保存の変更')
   const destination = state.destination?.kind === 'file' ? state.destination.location : state.destination?.name
+  const label = t(documentSaveLabel(saveState, state))
+  const tooltip = `${detailLabel}${destination ? ` · ${destination}` : ''}${state.notice?.kind === 'downloaded' ? ` · ${text('Download unconfirmed', 'ダウンロード未確認')}` : ''}${state.error ? ` · ${state.error}` : ''}`
   return <details className="presentation-group document-artifact-details">
-    <summary title={destination} aria-label={`${text('Document save status', 'ドキュメントの保存状態')}: ${label}${state.destination ? ` · ${state.destination.name}` : ''}`}>
-      <span className="document-artifact-status" aria-live="polite">{label}
-      {state.destination && ` · ${state.destination.name}`}
-      {state.notice?.kind === 'downloaded' && ` · ${text('Download unconfirmed', 'ダウンロード未確認')}`}</span></summary>
+    <summary title={tooltip} aria-label={`${text('Document save status', 'ドキュメントの保存状態')}: ${label}`}>
+      <span className="document-artifact-status" aria-live="polite">{label}</span></summary>
     <div className="presentation-group-content">
       <DocumentSaveStatus detail />
-      <p>{label}{state.destination
+      <p>{detailLabel}{state.destination
         && ` · ${state.destination.kind === 'cloud' ? text('Cloud', 'クラウド') : text('File', 'ファイル')}: ${destination}`}</p>
       <p>{text('Profile recovery is separate from an explicitly saved file or cloud artifact.',
         'プロファイルの復元用コピーと、ファイルやクラウドへの明示的な保存は異なります。')}</p>
