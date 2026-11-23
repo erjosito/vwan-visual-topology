@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import { useLanguage } from './i18n'
 import { useCloudSession } from './cloud/useCloudSession'
+import { cloudLimits } from './cloud/contracts'
 import type { createDocumentCommands, CommandResult } from './document-commands'
 
 export function DestinationDialog({ commands, name: initialName, onClose, onResult }: {
@@ -12,6 +13,7 @@ export function DestinationDialog({ commands, name: initialName, onClose, onResu
   const dialog = useRef<HTMLDialogElement>(null)
   const returnFocus = useRef<Element | null>(null)
   const [name, setName] = useState(initialName)
+  const [description, setDescription] = useState('')
   const [target, setTarget] = useState<'file' | 'cloud' | 'download'>('file')
   const state = useSyncExternalStore(commands.subscribe, commands.getSnapshot)
   useEffect(() => {
@@ -29,7 +31,7 @@ export function DestinationDialog({ commands, name: initialName, onClose, onResu
         .join('').replace(/[\\/:*?"<>|]/g, '-').slice(0, 115).trim() || 'topology'
       const choice = target !== 'cloud' ? { kind: target === 'file' ? 'choose-file' as const : 'download-copy' as const,
         name: `${filename}.json` }
-        : { kind: 'choose-cloud' as const, name: name.trim() || initialName, accountId: cloud!.account!.id }
+        : { kind: 'choose-cloud' as const, name: name.trim() || initialName, description, accountId: cloud!.account!.id }
       void commands.saveAs(choice).then(result => {
         onResult?.(result)
         if (result === 'saved' || result === 'downloaded') onClose()
@@ -44,6 +46,9 @@ export function DestinationDialog({ commands, name: initialName, onClose, onResu
       </select></label>
       <label>{text('Name', '名前')} <input value={name} maxLength={120} required disabled={state.operation === 'saving'}
         onChange={event => setName(event.target.value)} /></label>
+      {target === 'cloud' && <label>{text('Description (optional)', '説明 (省略可)')} <textarea value={description}
+        maxLength={cloudLimits.description} rows={3} disabled={state.operation === 'saving'}
+        onChange={event => setDescription(event.target.value)} /></label>}
       <p>{target === 'cloud' ? text('Creates a new private cloud entry. Upload consent is requested before writing.',
         '自分のクラウドに新しい保存を作成します。書き込みの前にアップロードの同意を確認します。')
         : text('Choose a file. Unsupported browsers download a copy; its final location and overwrite cannot be confirmed.',

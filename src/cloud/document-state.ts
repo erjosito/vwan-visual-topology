@@ -44,6 +44,11 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       && /^[0-9a-f]{64}$/.test(value.digest)) restored = value
   } catch { /* Association recovery must never prevent access to the local design. */ }
   const remove = () => { try { storage().removeItem(cloudDocumentKey) } catch {} }
+  const persist = () => {
+    retained = false; remove()
+    if (!binding?.digest) return
+    try { storage().setItem(cloudDocumentKey, JSON.stringify(binding)); retained = true } catch { remove() }
+  }
   const publish = () => {
     const cloud = (active || documentOwned) && binding?.accountId === accountId && binding ? {
       accountId: binding.accountId, id: binding.id, name: binding.name, etag: binding.etag,
@@ -133,10 +138,7 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       binding = { ...source, version: 1, provider: kind, digest: hash }
       restored = undefined; verification = 'confirmed'; operation = 'idle'; pending = undefined
       if (source.id === draftId) draftId = randomUUID()
-      retained = false; remove()
-      if (hash) {
-        try { storage().setItem(cloudDocumentKey, JSON.stringify(binding)); retained = true } catch { remove() }
-      }
+      persist()
       check()
       return true
     },
@@ -149,6 +151,15 @@ export function createDocumentSaveState(storage: () => Pick<Storage, 'getItem' |
       if (revoked || !documentOwned || source.accountId !== accountId) return
       const ticket = { epoch, sequence: ++sequence }
       void this.confirmed(ticket, source, value, kind)
+    },
+    metadataUpdated(owner: string, id: string, previousEtag: string, name: string, etag: string) {
+      if (revoked || pending || owner !== accountId || binding?.accountId !== owner
+        || binding.id !== id || binding.etag !== previousEtag) return false
+      binding = { ...binding, name, etag }
+      verification = 'confirmed'
+      persist()
+      publish()
+      return true
     },
     failed(ticket: { epoch: number; sequence: number; id: string }, conflict: boolean) {
       if (!valid(ticket)) return

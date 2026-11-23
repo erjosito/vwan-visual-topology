@@ -554,6 +554,10 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     }))
     const original = new Map([...service.data].map(([key, value]) => [key, value.raw]))
     await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    if (language === 'en' && theme === 'dark') {
+      const browser = await page.context().newCDPSession(page)
+      await browser.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 500, deviceScaleFactor: 2, mobile: false })
+    }
     await page.addInitScript(({ language, theme }) => {
       localStorage.setItem('aznet-ui-preview:v1', 'true')
       localStorage.setItem('vwan-visual-topology:language:v1', language)
@@ -601,7 +605,8 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     await rows.getByRole('button', { name: /^Overwrite cloud save |^クラウドの保存を上書き / }).focus()
     await page.keyboard.press('Enter')
     const overwrittenKey = `users/${testOwner('alice')}/topologies/${ids[45]}.json`
-    await expect.poll(() => JSON.parse(service.data.get(overwrittenKey)!.raw).name).toBe('Updated cloud copy')
+    await expect.poll(() => JSON.parse(service.data.get(overwrittenKey)!.raw).topology.name).toBe(sampleHubSpokeFirewallUdr.name)
+    expect(JSON.parse(service.data.get(overwrittenKey)!.raw).name).toBe('Duplicate name')
     await expect(search).toBeFocused()
     for (const [key, raw] of original) {
       if (key !== deletedKey && key !== overwrittenKey) expect(service.data.get(key)?.raw).toBe(raw)
@@ -616,6 +621,122 @@ for (const language of ['en', 'ja']) for (const theme of ['light', 'dark']) {
     }
   })
 }
+
+for (const language of ['en', 'ja'] as const) {
+  test(`${language}: saved metadata edits preserve dirty designs and survive linked Save, reload and clearing`, async ({ page }) => {
+    const service = await setup(page), text = (en: string, ja: string) => language === 'ja' ? ja : en
+    const other = crypto.randomUUID(), prefix = `users/${testOwner('alice')}/topologies/`
+    await service.store.put(`${prefix}${other}.json`, JSON.stringify({
+      version: 1, name: 'Duplicate name', topology: example,
+    }), null, 'Duplicate name')
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1280, height: 1000 })
+    await page.addInitScript(({ language, initial, key }) => {
+      localStorage.setItem('vwan-visual-topology:language:v1', language)
+      localStorage.setItem('aznet-ui-preview:v1', 'true')
+      if (!sessionStorage.getItem('metadata-seeded')) {
+        localStorage.setItem(key, initial)
+        sessionStorage.setItem('metadata-seeded', 'true')
+      }
+    }, { language, initial: JSON.stringify(example), key: workspaceStorageKeys.vwan })
+    await page.goto('/?mode=vwan')
+    await page.getByTestId('cloud-account-open').click()
+    const account = page.getByRole('dialog', { name: text('Cloud account', 'クラウド アカウント'), exact: true })
+    await account.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
+    await account.getByLabel(text('Cloud topology name', 'クラウドのトポロジ名'), { exact: true }).fill('Duplicate name')
+    await account.getByText(text('New copy description (optional)', '新しいコピーの説明 (省略可)'), { exact: true }).click()
+    await account.getByLabel(text('Cloud save description', 'クラウドの保存の説明'), { exact: true }).fill('Original description\n説明')
+    await account.getByRole('button', { name: text('Save as new cloud copy', '新しいクラウドのコピーとして保存'), exact: true }).click()
+    await expect.poll(() => [...service.data.keys()].filter(key => key.includes('/topologies/')).length).toBe(2)
+    const [key, original] = [...service.data].find(([key]) => key.startsWith(prefix) && key !== `${prefix}${other}.json`)!
+    const id = key.slice(prefix.length).replace('.json', '')
+    const untouched = service.data.get(`${prefix}${other}.json`)!.raw
+    await expect(account.getByRole('button', { name: text('Save as new cloud copy', '新しいクラウドのコピーとして保存'), exact: true })).toBeEnabled()
+    await account.getByRole('button', { name: text('Close', '閉じる'), exact: true }).click()
+    await openWorkspaceActions(page)
+    await page.locator('.topology-name').fill('Unsaved native topology edits')
+    await page.getByTestId('cloud-account-open').click()
+    const local = await page.evaluate(key => localStorage.getItem(key), workspaceStorageKeys.vwan)
+    const search = account.getByRole('searchbox', { name: text('Find cloud saves', 'クラウドの保存を検索'), exact: true })
+    await search.fill('Duplicate name')
+    const row = account.locator(`[data-cloud-save-id="${id}"]`)
+    const details = row.getByRole('button', { name: /Cloud save details|クラウドの保存の詳細/ })
+    await details.focus()
+    await expect(page.getByRole('tooltip')).toContainText('Original description')
+    await details.click()
+    await expect(page.getByRole('tooltip')).toBeVisible()
+    const edit = row.getByRole('button', { name: /Edit cloud save|クラウドの保存を編集/ })
+    await edit.click()
+    const editor = page.getByRole('dialog', { name: text('Edit cloud save', 'クラウドの保存を編集'), exact: true })
+    await expect(editor.getByLabel(text('Saved name', '保存名'), { exact: true })).toHaveValue('Duplicate name')
+    await editor.getByLabel(text('Saved name', '保存名'), { exact: true }).fill('Cancelled name')
+    await page.keyboard.press('Escape')
+    await expect(editor).toHaveCount(0)
+    await expect(account).toBeVisible()
+    expect(service.data.get(key)!.raw).toBe(original.raw)
+    await expect(edit).toBeFocused()
+    await edit.press('Enter')
+    await editor.getByLabel(text('Saved name', '保存名'), { exact: true }).fill('Renamed cloud metadata')
+    const description = '<img src=x onerror=alert(1)> is plain text\n説明'
+    await editor.getByLabel(text('Description (optional)', '説明 (省略可)'), { exact: true }).fill(description)
+    await editor.getByRole('button', { name: text('Save metadata', '名前と説明を保存'), exact: true }).click()
+    await expect(editor).toHaveCount(0)
+    expect(JSON.parse(service.data.get(key)!.raw)).toEqual({
+      ...JSON.parse(original.raw), name: 'Renamed cloud metadata', description,
+    })
+    expect(service.data.get(`${prefix}${other}.json`)!.raw).toBe(untouched)
+    expect(await page.evaluate(key => localStorage.getItem(key), workspaceStorageKeys.vwan)).toBe(local)
+    await expect(page.getByTestId('document-cloud-state')).toHaveText(text('Locally saved', 'ローカルに保存済み'))
+    await search.fill('Renamed cloud metadata')
+    await details.focus()
+    await expect(page.getByRole('tooltip')).toContainText(description)
+    expect(await page.locator('.cloud-library-hint img').count()).toBe(0)
+    await account.getByRole('button', { name: text('Close', '閉じる'), exact: true }).click()
+    const beforeSave = service.data.get(key)!.etag
+    await page.keyboard.press('Control+s')
+    await expect.poll(() => service.data.get(key)!.etag).not.toBe(beforeSave)
+    expect(JSON.parse(service.data.get(key)!.raw)).toMatchObject({
+      name: 'Renamed cloud metadata', description, topology: { name: 'Unsaved native topology edits' },
+    })
+    await expect(page.getByTestId('document-cloud-state')).toHaveText(text('Cloud saved', 'クラウドに保存済み'))
+    await page.reload()
+    await page.getByTestId('cloud-account-open').click()
+    await row.getByRole('button', { name: /Edit cloud save|クラウドの保存を編集/ }).click()
+    await expect(editor.getByLabel(text('Description (optional)', '説明 (省略可)'), { exact: true })).toHaveValue(description)
+    await editor.getByLabel(text('Description (optional)', '説明 (省略可)'), { exact: true }).fill('')
+    await editor.getByRole('button', { name: text('Save metadata', '名前と説明を保存'), exact: true }).click()
+    await expect(editor).toHaveCount(0)
+    expect(JSON.parse(service.data.get(key)!.raw)).not.toHaveProperty('description')
+    await row.getByRole('button', { name: /Cloud save details|クラウドの保存の詳細/ }).focus()
+    await expect(page.getByRole('tooltip')).toContainText(text('No description', '説明なし'))
+    expect(service.data.get(`${prefix}${other}.json`)!.raw).toBe(untouched)
+  })
+}
+
+test('metadata failures keep the selected cloud record and local design unchanged', async ({ page }) => {
+  const service = await setup(page), id = crypto.randomUUID()
+  const key = `users/${testOwner('alice')}/topologies/${id}.json`
+  await service.store.put(key, JSON.stringify({ version: 1, name: 'Saved original', topology: example }), null, 'Saved original')
+  await page.goto('/?mode=vwan')
+  await signIn(page)
+  const original = service.data.get(key)!.raw
+  await page.getByRole('button', { name: /^Edit cloud save Saved original / }).click()
+  const editor = page.getByRole('dialog', { name: 'Edit cloud save', exact: true })
+  await editor.getByLabel('Saved name', { exact: true }).fill('Never committed')
+  let status = 503
+  await page.route('**/api/cloud/topologies/*', async route => {
+    if (route.request().method() !== 'PATCH') return route.fallback()
+    if (status === 0) return route.abort('internetdisconnected')
+    await route.fulfill({ status, contentType: 'application/json', body: '{"error":"Synthetic failure"}' })
+  })
+  for (status of [503, 401, 412, 0]) {
+    await editor.getByRole('button', { name: 'Save metadata', exact: true }).click()
+    await expect(editor.getByRole('alert')).toContainText(status === 412 ? 'changed' : 'could not be saved')
+    expect(service.data.get(key)!.raw).toBe(original)
+    await expect(editor.getByRole('button', { name: 'Save metadata', exact: true })).toBeEnabled()
+  }
+  await editor.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Cloud account', exact: true })).toBeVisible()
+})
 
 for (const language of ['en', 'ja'] as const) {
   test(`${language}: Close dismisses the cloud dialog without signing out or changing the design`, async ({ page }) => {
