@@ -434,8 +434,9 @@ export function TopologyDiagram({ readOnly = false, topology, faults = {}, risks
       const nvaLabel = `NVA BGP${nvaDown ? t(' (down)') : ''}`
       const connectionLabel = `${t('VNet connection')}${nvas.length ? ` ${nvaLabel}` : ''}`
       return <g key={spoke.id} data-testid={`spoke-connection-${spoke.id}`} className="clickable"
-        {...selectable('spoke', spoke.id, `${t("Edit spoke connection {0}", spoke.name)} · ${connectionLabel}`,
-          () => !readOnly && onVnetConnectionClick ? onVnetConnectionClick(spoke.id) : onObjectClick({ kind: 'spoke', id: spoke.id }))}>
+        {...selectable('spoke', spoke.id, t("Edit spoke connection {0}", spoke.name),
+          () => !readOnly && onVnetConnectionClick ? onVnetConnectionClick(spoke.id) : onObjectClick({ kind: 'spoke', id: spoke.id }))}
+        aria-label={`${t(readOnly ? 'View {0}' : 'Edit spoke connection {0}', spoke.name)} · ${connectionLabel}`}>
         <path className="link-hitbox" d={edge.d} /><path data-testid={`spoke-link-${spoke.id}`} className={`network-link spoke-link ${nvas.length ? 'SpokeNVA' : ''} ${active ? 'preferred-link' : ''} ${nvaDown ? 'disabled-link' : ''}`} d={edge.d} />
         {badge(t('VNet connection'), edge.label)}{nvas.length > 0 && badge(nvaLabel, { ...edge.label, y: edge.label.y + 22 })}</g>
     })}

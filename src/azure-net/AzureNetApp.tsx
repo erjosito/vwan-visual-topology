@@ -50,7 +50,6 @@ import type {
 } from './azure-import'
 import { DEFAULT_HUB_TABLE, hubRouteTables } from '../hub-routing'
 import { pruneAzArsRouteMaps } from './ars-route-maps'
-import { basicGatewayFix } from './coexistence'
 import { confirmConfigurationSwitch } from '../configuration-selection'
 
 import {
@@ -96,6 +95,7 @@ const AzBicepExport = lazy(() => import('./AzBicepExport').then((module) => ({ d
 const RouterSnatDialog = lazy(() => import('../RouterSnatEditor').then((module) => ({ default: module.RouterSnatDialog })))
 const HubTablesEditor = lazy(() => import('./HubTablesEditor').then((module) => ({ default: module.HubTablesEditor })))
 const VnetConnectionEditor = lazy(() => import('./VnetConnectionEditor'))
+const GatewayCoexistenceAutoFix = lazy(() => import('./GatewayCoexistenceAutoFix'))
 const HubCapabilitiesDialog = lazy(() => import('../HubCapabilitiesDialog'))
 const ClearTopologyDialog = lazy(() => import('../ClearTopologyDialog').then((module) => ({ default: module.ClearTopologyDialog })))
 const CloneVnetDialog = lazy(() => import('../CloneVnetDialog').then((module) => ({ default: module.CloneVnetDialog })))
@@ -461,15 +461,6 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
   // One-click Auto-Remediation for diagnostic findings
   const applyAutoFix = (finding: AzDiagnosticFinding) => {
     commitTopology((draft) => {
-      if (finding.category === 'gateway-coexistence') {
-        const fix = basicGatewayFix(draft, finding)
-        if (fix) {
-          fix.gateway.sku = fix.sku
-          if (fix.sku === 'VpnGw1AZ') fix.gateway.vpnGatewayGeneration = 'Generation1'
-          else if (/^VpnGw[45](AZ)?$/.test(fix.sku)) fix.gateway.vpnGatewayGeneration = 'Generation2'
-        }
-        return
-      }
       if (finding.category === 'gateway-subnet-missing-udr' && finding.vnetId) {
         const hubVnet = draft.vnets.find((v) => v.id === finding.vnetId)
         const gwSubnet = hubVnet?.subnets.find((s) => s.name === 'GatewaySubnet')
@@ -3761,8 +3752,10 @@ export function AzureNetApp({ simulatorMode = 'full' }: AzureNetAppProps = {}) {
                                 🔍 Trace Flow
                               </button>
                             )}
+                            {finding.severity !== 'info' && finding.category === 'gateway-coexistence' &&
+                              <Suspense fallback={null}><GatewayCoexistenceAutoFix topology={topology} finding={finding} commit={commitTopology} /></Suspense>}
                             {finding.severity !== 'info' &&
-                              (finding.category !== 'gateway-coexistence' || basicGatewayFix(topology, finding)) &&
+                              finding.category !== 'gateway-coexistence' &&
                               finding.category !== 'connectivity-failure' &&
                               finding.category !== 'private-endpoint-udr-bypass' &&
                               finding.category !== 'peering-non-transitive-next-hop' &&
