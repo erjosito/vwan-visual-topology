@@ -160,13 +160,37 @@ it('exposes original per-NVA received-route evidence through the freshly built s
     expect(simulation).toEqual(executePlatform(request).simulation)
     expect(simulation.nvaBgpPeers.reader).toHaveLength(2)
     expect(simulation.nvaBgpPeers.reader[0].gatewaySummaryAssessment).toMatchObject({
-      status: 'not-assessed', configuredPrefixes: ['10.0.0.0/12', '203.0.113.0/24'], gatewayIds: [], branchToBranch: false,
+      status: 'not-assessed', configuredPrefixes: ['10.0.0.0/12', '203.0.113.0/24'], gatewayIds: [], branchToBranch: true,
     })
     expect(simulation.nvaBgpPeers.reader[1].gatewaySummaryAssessment).toBeUndefined()
     expect(simulation.nvaBgpPeers.reader.flatMap((peer: any) => peer.routes.filter((route: any) => route.prefix === '198.18.0.0/24'))).toHaveLength(2)
+    expect(simulation.nvaBgpPeers.reader[0].routes.find((route: any) => route.prefix === '198.18.0.0/24')).toMatchObject({
+      asPath: [65515, 65020], nextHopId: 'west-ars', wireAttributes: { nextHop: 'not-assessed' },
+      sourceRoute: { nextHopId: 'west-source', nextHopIp: '10.10.1.4', asPath: [65020] },
+    })
     const assessments = await call('get_evidence', { handle, section: 'assessments', limit: 16000 })
     expect(assessments.complete).toBe(true)
     expect(JSON.parse(assessments.jsonText)[0].outcome).toBe('satisfied')
+    topology.vnets[0].routeServer!.branchToBranchTraffic = false
+    const offRequest = { ...base, operation: 'simulate' }
+    const offHandle = await run(offRequest)
+    const offChunks: string[] = []
+    for (let offset = 0; offset < 1_000_000;) {
+      const chunk = await call('get_evidence', { handle: offHandle, section: 'bgpNeighbors', offset, limit: 16000 })
+      offChunks.push(chunk.jsonText)
+      if (chunk.complete) break
+      expect(chunk.jsonText.length).toBeGreaterThan(0)
+      offset += chunk.jsonText.length
+    }
+    const directOff = executePlatform(offRequest).bgpNeighbors!
+    expect(JSON.parse(offChunks.join(''))).toEqual(directOff)
+    const readerNeighbors = directOff.neighbors.filter((neighbor) => neighbor.localResourceKey === JSON.stringify(['appliance', 'reader']))
+    expect(readerNeighbors).toHaveLength(4)
+    expect(readerNeighbors.every((neighbor) => neighbor.availability === 'available')).toBe(true)
+    expect(readerNeighbors.filter((neighbor) => neighbor.remoteResourceKey === JSON.stringify(['route-server', 'west-ars']))
+      .map((neighbor) => neighbor.received!.routes.length)).toEqual([1, 1])
+    expect(readerNeighbors.filter((neighbor) => neighbor.remoteResourceKey === JSON.stringify(['route-server', 'east-ars']))
+      .map((neighbor) => neighbor.received!.routes.length)).toEqual([3, 3])
   } finally { await client.close() }
 }, 20000)
 
