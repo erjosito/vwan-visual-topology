@@ -1,5 +1,10 @@
 # Guided course authoring contract
 
+For the consolidated product feedback, pedagogical requirements and reusable
+review checklist, see [Curriculum review guidelines](../../docs/curriculum-review-guidelines.md).
+Use that document for the current review baseline; edition-specific descriptions
+below also include historical implementation details.
+
 For curriculum readiness criteria and learner-experience guidelines, including
 requested changes that may not yet be implemented, see
 [Curriculum readiness](../../docs/curriculum-readiness.md).
