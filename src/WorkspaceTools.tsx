@@ -88,8 +88,6 @@ export function WorkspaceTools<Selection>({ creationActions, resourceActions = [
     const update = () => setTop(Math.max(0, header.getBoundingClientRect().bottom))
     const observer = new ResizeObserver(update)
     observer.observe(header)
-    const native = document.querySelector('.desktop-tools')
-    if (native) observer.observe(native)
     window.addEventListener('resize', update)
     window.addEventListener('scroll', update, true)
     update()

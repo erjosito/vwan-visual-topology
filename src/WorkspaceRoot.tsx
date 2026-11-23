@@ -25,7 +25,6 @@ import type { ArtifactDestination } from './document-commands'
 const App = lazy(() => import('./App'))
 const AzureNetApp = lazy(() => import('./azure-net/AzureNetApp').then((module) => ({ default: module.AzureNetApp })))
 const WorkspaceLibrary = lazy(() => import('./WorkspaceLibrary').then((module) => ({ default: module.WorkspaceLibrary })))
-const DesktopTools = lazy(() => import('./DesktopTools').then((module) => ({ default: module.DesktopTools })))
 const PracticeWorkspaceBar = lazy(() => import('./learning/PracticeWorkspaceBar').then((module) => ({ default: module.PracticeWorkspaceBar })))
 const SharedTopology = lazy(() => import('./cloud/SharedTopology'))
 const CloseDocumentsDialog = lazy(() => import('./CloseDocumentsDialog').then(module => ({ default: module.CloseDocumentsDialog })))
@@ -764,9 +763,6 @@ function Workspace({ visible = true }: { visible?: boolean }) {
       <div id="workspace-design-container">
       {!practiceReady && <p role="status">{t('Loading workspace…')}</p>}
       {visible && practiceReady && (active || practicing) && provider && <>
-        {window.desktopSimulator && <Suspense fallback={null}>
-          <DesktopTools key={`tools:${provider}:${practicing}`} />
-        </Suspense>}
         <WorkspaceBoundary key={editorKey} onRecover={() => { leavePractice(); setLibraryOpen(true) }}>
           <Suspense fallback={<section aria-label={t('Workspace loading')}><p role="status">{t('Loading workspace…')}</p></section>}>
             {provider === 'vwan' ? <App /> : <AzureNetApp simulatorMode="full" />}

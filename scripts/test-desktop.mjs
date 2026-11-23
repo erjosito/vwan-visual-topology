@@ -47,6 +47,7 @@ try {
   page.on('request', (request) => { if (/^https?:/.test(request.url())) outbound.push(request.url()) })
   page.on('pageerror', (error) => failures.push(error.message))
   await page.locator('[data-testid="vwan-app"], [data-testid="aznet-app"], dialog[aria-labelledby="workspace-library-title"]').waitFor()
+  await expect(page.locator('.desktop-tools')).toHaveCount(0)
   await page.evaluate(() => {
     for (const key of ['aznet-ui-preview:v1', 'network-simulator:workspace:v1', 'network-simulator:workspace-tabs:v1', 'network-simulator:originals:v1', 'network-simulator:practice-workspace:v1', 'network-simulator:learning-progress:v1', 'vwan-visual-topology:v1', 'aznet-visual-topology:v1']) localStorage.removeItem(key)
   })
