@@ -56,6 +56,8 @@ describe('browser-free platform contract', () => {
     expect(independent.status).toBe('complete')
     expect((independent.simulation as ReturnType<typeof simulateAzNet>).controlPlaneComplete).toBe(false)
     expect(validatePlatformResult(independent, { ...input, requirements: input.requirements!.slice(0, 1) })).toBe(independent)
+    expect(routeCoverage(topology, { ...independent.simulation as ReturnType<typeof simulateAzNet>, controlPlaneComplete: undefined },
+      { id: 'route', kind: 'route', table: 'isolated-subnet', prefix: '10.90.0.0/16', expectation: 'present' }, 'revision').coverage.complete).toBe(false)
     const flags = { allowVirtualNetworkAccess: true, allowForwardedTraffic: true, allowGatewayTransit: false, useRemoteGateways: false }
     topology.vnetPeerings.push({ id: 'configured-link', name: 'Disabled but retained relationship', vnetAId: 'hub', vnetBId: 'isolated',
       enabled: false, aToB: flags, bToA: { ...flags } })

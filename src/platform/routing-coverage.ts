@@ -63,8 +63,9 @@ export function routeCoverage(topology: AzNetTopology, simulation: AzSimulationR
   const tableComplete = hub ? !!simulation.vwanHubTables[hub.id]?.[requirement.hubTableId!]
     && simulation.vwanHubTableCoverage[hub.id]?.[requirement.hubTableId!]?.complete === true
     : !!vnet && !!simulation.subnetTables[requirement.table]
-  const missingCompleteness = simulation.controlPlaneComplete !== true && !records.some(record =>
-    record.completeness === 'not-assessed' && record.operations.includes('route'))
+  const missingCompleteness = simulation.controlPlaneComplete === undefined
+    || simulation.controlPlaneComplete === false && !records.some(record =>
+      record.completeness === 'not-assessed' && record.operations.includes('route'))
   return { limitations, coverage: {
     provider: 'azure-net', engineVersion, revision, requestRevision, scope,
     complete: tableComplete && !missingCompleteness && !limitations.length,
