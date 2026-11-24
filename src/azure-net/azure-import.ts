@@ -1,6 +1,7 @@
 import { azureObjectId } from '../azure-import'
 import { parseVnetBgpCommunities } from '../vnet-communities'
 import { cidr, ipv4 } from '../validation'
+import { contains, ipv4 as ipv4Address } from '../ipv4'
 import { importNatCapture } from './nat-capture'
 import { importConnectivityCapture } from './connectivity-capture'
 import { validateInventory } from '../inventory'
@@ -37,6 +38,8 @@ export interface AzCapturedNicObservation {
   nicId: string
   vnetName: string
   subnetName: string
+  vnetPrefixes?: string[]
+  subnetPrefix?: string
   privateIp?: string
   enableIPForwarding?: boolean
   effectiveRoutes: AzCapturedEffectiveRoute[]
@@ -136,6 +139,7 @@ export interface AzSubnetComparisonSummary {
   rows: AzSubnetRouteComparisonRow[]
   coverage: 'complete' | 'partial' | 'unknown'
   unknownCount: number
+  mappingNote?: string
 }
 
 export interface AzNetComparisonReport {
@@ -935,11 +939,16 @@ export function importAzNetCapture(input: unknown): AzNetImportResult {
     const nicEffectiveRoutes: AzCapturedNicObservation[] = asArray(root.nicEffectiveRoutes).map(
       (rawObs) => {
         const o = asObject(rawObs, 'NicObservation')
+        const owners = vnets.filter((vnet) => vnet.name.toLowerCase() === asString(o.vnetName).toLowerCase())
+        const owner = owners.length === 1 ? owners[0] : undefined
+        const subnets = owner?.subnets.filter((subnet) => subnet.name.toLowerCase() === asString(o.subnetName).toLowerCase())
         return {
           nicName: asString(o.nicName),
           nicId: asString(o.nicId),
           vnetName: asString(o.vnetName),
           subnetName: asString(o.subnetName),
+          ...(owner ? { vnetPrefixes: [...owner.prefixes] } : {}),
+          ...(subnets?.length === 1 ? { subnetPrefix: subnets[0].prefix } : {}),
           privateIp: asString(o.privateIp) || undefined,
           enableIPForwarding: Boolean(o.enableIPForwarding),
           effectiveRoutes: asArray(o.effectiveRoutes).map((rawEr) => {
@@ -1066,24 +1075,43 @@ export function compareAzNetWithObservations(
     }
   }
 
+  const prefixKey = (prefixes: string[]) => [...new Set(prefixes)].sort().join('|')
   for (const nicObs of observations.nicEffectiveRoutes) {
-    const vnet = topology.vnets.find(
-      (v) => v.name.toLowerCase() === nicObs.vnetName.toLowerCase(),
-    )
+    const localPrefixes = nicObs.vnetPrefixes ?? nicObs.effectiveRoutes
+      .filter((route) => route.source === 'Default' && route.nextHopType === 'VnetLocal')
+      .flatMap((route) => route.addressPrefix)
+    const address = nicObs.privateIp ? ipv4Address(nicObs.privateIp) : undefined
+    const hasAddressing = localPrefixes.length > 0 || nicObs.subnetPrefix !== undefined || nicObs.privateIp !== undefined
+    const validAddressing = localPrefixes.every((prefix) => cidr(prefix))
+      && (nicObs.subnetPrefix === undefined || cidr(nicObs.subnetPrefix))
+      && (nicObs.privateIp === undefined || address !== undefined)
+    const candidates = hasAddressing && validAddressing ? topology.vnets.flatMap((vnet) => {
+      if (localPrefixes.length && prefixKey(vnet.prefixes) !== prefixKey(localPrefixes)) return []
+      return vnet.subnets.filter((subnet) => {
+        if (nicObs.subnetPrefix !== undefined && subnet.prefix !== nicObs.subnetPrefix) return false
+        if (address !== undefined && !contains(subnet.prefix, address)) return false
+        return true
+      }).map((subnet) => ({ vnet, subnet }))
+    }) : []
+    const identity = candidates.length === 1 ? candidates[0] : undefined
+    const vnet = identity?.vnet
+    const subnet = identity?.subnet
+    const simTable = subnet ? simulation.subnetTables[subnet.id] : undefined
+    const mappingNote = identity
+      ? `Matched by address space and subnet context: ${identity.vnet.name}/${identity.subnet.name}${simTable ? '' : '. No simulated route table is available; routes are unassessed.'}`
+      : candidates.length > 1
+        ? 'Ambiguous address/subnet mapping. Multiple design objects match; routes are unassessed.'
+        : 'No unique design VNet/subnet matches the captured addressing. Routes are unassessed.'
     if (!vnet) {
-      const localPrefixes = nicObs.effectiveRoutes
-        .filter((r) => r.source === 'Default' && r.nextHopType === 'VnetLocal')
-        .flatMap((r) => r.addressPrefix)
-      const representedAsSite = topology.sites.some((site) =>
+      const representedAsSite = !candidates.length
+        && !topology.vnets.some((candidate) => prefixKey(candidate.prefixes) === prefixKey(localPrefixes))
+        && topology.sites.some((site) =>
         site.prefixes.some((sp) => localPrefixes.includes(sp)),
       )
       if (representedAsSite) {
         continue
       }
     }
-    const subnet = vnet?.subnets.find(
-      (s) => s.name.toLowerCase() === nicObs.subnetName.toLowerCase(),
-    )
     const gwSubnet = vnet?.subnets.find((s) => s.name === 'GatewaySubnet')
     const proxyForGatewaySubnet = Boolean(
       subnet &&
@@ -1093,15 +1121,14 @@ export function compareAzNetWithObservations(
         subnet.routeTableId === gwSubnet.routeTableId,
     )
 
-    const simTable = subnet ? simulation.subnetTables[subnet.id] : undefined
     const simRoutes = simTable?.routes ?? []
     const matchedSimRouteIds = new Set<string>()
     const rows: AzSubnetRouteComparisonRow[] = []
     const configurationKnown = observations.configurationComplete !== false && !observations.unknownAddressing?.length
-    const coverage = observations.observationVersion === 1
+    const coverage = !simTable ? 'unknown' : observations.observationVersion === 1
       ? nicObs.observation?.complete && configurationKnown ? 'complete' : 'partial'
       : 'unknown'
-    const assessPresent = configurationKnown && (!nicObs.observation || nicObs.observation.complete)
+    const assessPresent = !!simTable && configurationKnown && (!nicObs.observation || nicObs.observation.complete)
 
     const isArsRouteMatch = (
       sr: (typeof simRoutes)[number],
@@ -1175,7 +1202,7 @@ export function compareAzNetWithObservations(
           matchedSimRouteIds.add(simMatch.id)
         }
 
-        const simState = simMatch ? (simMatch.active ? 'Active' : 'Invalid') : 'Invalid'
+        const simState = simMatch ? (simMatch.active ? 'Active' : 'Invalid') : simTable ? 'Invalid' : 'Unknown'
         // Azure SDN programs ARS-learned NVA routes into NIC effective routes with source="VirtualNetworkGateway"
         // and nextHopType="VirtualNetworkGateway" pointing to the NVA's private IP address.
         const isArsEquivalent = Boolean(
@@ -1196,16 +1223,16 @@ export function compareAzNetWithObservations(
         rows.push({
           prefix,
           azureSource: azRoute.source,
-          simSource: simMatch ? simMatch.source : 'Missing',
+          simSource: simMatch ? simMatch.source : simTable ? 'Missing' : 'Not assessed',
           azureNextHopType: azRoute.nextHopType,
-          simNextHopType: simMatch ? simMatch.nextHopType : 'Missing',
+          simNextHopType: simMatch ? simMatch.nextHopType : simTable ? 'Missing' : 'Not assessed',
           azureNextHopIp: azNextHopIp,
           simNextHopIp: simMatch?.nextHopIp,
           azureState: azRoute.state,
           simState,
           matched,
           assessment: assessPresent && (simMatch || coverage === 'complete') ? 'compared' : 'unknown',
-          note: isArsEquivalent
+          note: !simTable ? mappingNote : isArsEquivalent
             ? `Azure programs ARS-learned NVA routes as VirtualNetworkGateway -> ${azNextHopIp}`
             : isUdrVngBlackholeEquivalent
               ? 'Azure SDN compiles UDR NextHopType=VirtualNetworkGateway to None when no static VNG connection owns the prefix'
@@ -1271,6 +1298,7 @@ export function compareAzNetWithObservations(
       rows,
       coverage,
       unknownCount,
+      mappingNote,
     })
   }
 

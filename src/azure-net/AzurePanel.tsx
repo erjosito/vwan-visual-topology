@@ -53,6 +53,7 @@ export function AzurePanel({ topology, simulation, observations, comparison, not
               {nic.coverage !== 'complete' ? `COVERAGE ${nic.coverage.toUpperCase()} (${nic.matchedCount} matched)` : nic.mismatchCount === 0 ? `MATCHED (${nic.matchedCount})` : `${nic.mismatchCount} DIFF`}
             </span>
           </div>
+          {nic.mappingNote && <p>{t(nic.mappingNote)}</p>}
           <div className="table-scroll"><table className="aznet-route-table">
             <thead><tr><th>Status</th><th>Prefix</th><th>Azure Observed</th><th>Simulator Predicted</th></tr></thead>
             <tbody>{nic.rows.map((row, index) => <tr key={index}>

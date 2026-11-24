@@ -190,8 +190,19 @@ workflow without resetting the open design or undo history. VWAN comparison
 separates captured structural fields from route evidence; mixed-network comparison
 is explicitly NIC-route-only, not configuration-drift detection. Observations
 and mappings remain transient and are not saved as deployment bindings.
+NIC comparison matches the captured VNet address-space set and subnet CIDR to
+the design, independently of resource names and region labels. Older captures
+can use local VNet routes and the NIC's private address to identify the subnet.
+Overlapping or conflicting identities stay unassessed; names do not break CIDR
+ties. Observations without enough addressing evidence also stay unassessed.
+Each NIC result explains its matched design context or mapping gap.
 **Import Azure as a new design** is a separate, explicit import/review action;
 it is never the result of the direct Capture → Compare operation.
+
+Mixed-network Bicep validation failures appear inside the export card and disable
+its download, without blocking capture/comparison or replacing the saved design.
+For example, an unused legacy route table needs an explicit region for export;
+opening Azure does not assign one automatically.
 
 The reported v0.7.0 `┬╖` banner is not reproduced by source/browser fixture
 qualification: the source contains Unicode middle dots and the desktop-renderer
