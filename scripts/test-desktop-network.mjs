@@ -38,6 +38,7 @@ try {
     ],
   })
   const page = await application.firstWindow()
+  await application.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1200, 900) })
   await page.getByTestId('aznet-app').waitFor()
   const runtime = await application.evaluate(() => ({
     electron: process.versions.electron, chromium: process.versions.chrome, node: process.versions.node,
@@ -80,6 +81,8 @@ try {
   }
   await page.goto('app://simulator/?mode=vwan')
   await page.getByTestId('vwan-app').waitFor()
+  const workspaceActions = page.getByRole('button', { name: 'Workspace actions', exact: true })
+  if (await workspaceActions.isVisible() && await workspaceActions.getAttribute('aria-expanded') === 'false') await workspaceActions.click()
   await page.locator('.presentation-group > summary').filter({ hasText: /^Help$/ }).click()
   const [documentation] = await Promise.all([
     application.waitForEvent('window'),
