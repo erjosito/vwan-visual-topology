@@ -370,7 +370,11 @@ describe('scenario edition routing qualification', () => {
       { connectionId: 'branch-er', outboundMapId: 'branch-er-summary', inboundMapId: 'return-drop' },
       { connectionId: 'branch-vpn', inboundMapId: 'return-drop' },
     ]
-    expect(evaluate().assessments[1].outcome).toBe('not assessed')
+    const filtered = evaluate()
+    expect(filtered.assessments[1].outcome).toBe('violated')
+    expect(filtered.routingLimitations).toContainEqual(expect.objectContaining({
+      code: 'SITE_ROUTE_MAP_FILTERED', completeness: 'complete',
+    }))
     topology.sites[0].routeMapAssignments.forEach((assignment) => { delete assignment.inboundMapId })
     expect(evaluate().assessments.every((entry) => entry.outcome === 'satisfied')).toBe(true)
     topology.udrTables.push({ id: 'bad-repair', name: 'Broken Operations', disableBgpRoutePropagation: false, routes: [
