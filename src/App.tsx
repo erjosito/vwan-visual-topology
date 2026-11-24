@@ -761,7 +761,7 @@ function App() {
           <button onClick={() => setPanel('samples')}>{t("Sample topologies")}</button>
           {!workspaceSession?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t("Docs")}</button>}
         </PresentationGroup>
-        {workspaceSession?.presentationPreview && <PresentationGroup label={t('Routing checks')}>
+        {workspaceSession?.presentationPreview && <PresentationGroup label={t('Checks')} title={t('Routing checks')}>
           <button disabled={currentCheck?.status === 'running'} onClick={checkRouting}
             title={t('Check connectivity across the modeled landscape')}>{t('Check routing')}</button>
           <button onClick={openDiagnostics} title={t('Inspect findings and assess declared connectivity requirements')}>{t('Advanced checks')}</button>
@@ -771,7 +771,7 @@ function App() {
           <button onClick={() => setPanel('azure')}>{t("Azure files")}</button>
           <button onClick={() => setClearRequested(true)}>{t("Clear topology")}</button>
         </PresentationGroup>
-        <PresentationToggle />
+        {!workspaceSession?.presentationPreview && <PresentationToggle />}
         <input data-desktop-import ref={importer} hidden type="file" accept=".json,application/json" aria-label={t("Import topology file")} onChange={(e) => { void importTopology(e.target.files?.[0]); e.target.value = '' }} /></div>
       <WorkspaceAccountStatus />
     </header>

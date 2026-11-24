@@ -80,7 +80,7 @@ try {
   }
   await page.goto('app://simulator/?mode=vwan')
   await page.getByTestId('vwan-app').waitFor()
-  await page.locator('.presentation-group > summary').filter({ hasText: /^Help & feedback$/ }).click()
+  await page.locator('.presentation-group > summary').filter({ hasText: /^Help$/ }).click()
   const [documentation] = await Promise.all([
     application.waitForEvent('window'),
     page.getByRole('button', { name: 'Docs', exact: true }).click(),

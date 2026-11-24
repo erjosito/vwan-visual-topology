@@ -989,6 +989,22 @@ for (const language of ['en', 'ja'] as const) {
 
 test.describe('new UI account and belt summary', () => {
   test.use({ storageState: { cookies: [], origins: [] } })
+  test('compact belt keeps a failed cloud synchronization visible and explains it on activation', async ({ page }) => {
+    await setup(page)
+    await page.route('**/api/cloud/progress', route => route.fulfill({ status: 503, body: '{}' }))
+    await page.goto('/?mode=full')
+    await page.getByTestId('cloud-account-open').click()
+    await page.getByRole('button', { name: 'Sign in with Microsoft', exact: true }).click()
+    await expect(page.getByTestId('cloud-progress-status')).toContainText('Not synced')
+    await page.keyboard.press('Escape')
+    const belt = page.getByTestId('learning-status')
+    await expect(belt.locator('.learning-status-warning')).toHaveText('!')
+    await expect(belt).toHaveAccessibleName(/White belt.*Cloud: Not synced/)
+    await expect(belt).toHaveAttribute('title', /Cloud: Not synced/)
+    await belt.click()
+    await expect(page.getByTestId('learning-cloud-status')).toContainText('Not synced')
+  })
+
   test('shows highest local belt independently of enrollment and updates on account changes', async ({ page }) => {
     await setup(page)
     const raw = JSON.stringify({ version: 1, policyVersion: 1, enrollment: 'azure-routing-scenarios',
@@ -1004,29 +1020,29 @@ test.describe('new UI account and belt summary', () => {
     await page.goto('/?mode=full')
     const status = page.getByTestId('account-belt-status')
     await expect(status).toContainText('Not signed in')
-    await expect(status).toContainText('Black belt')
+    await expect(status.getByTestId('learning-status')).toHaveAccessibleName(/Black belt/)
     await expect(status).not.toContainText('x2')
     await signIn(page)
     await expect(status).toContainText('Test Alice')
-    await expect(status).toContainText('White belt')
+    await expect(status.getByTestId('learning-status')).toHaveAccessibleName(/White belt/)
     await page.getByRole('button', { name: 'Sign out of this app', exact: true }).click()
     await expect(status).toContainText('Not signed in')
-    await expect(status).toContainText('Black belt')
+    await expect(status.getByTestId('learning-status')).toHaveAccessibleName(/Black belt/)
     await page.getByRole('dialog', { name: 'Cloud account', exact: true }).getByRole('button', { name: 'Close', exact: true }).click()
     await page.getByTestId('learning-status').click()
     await learningAdvancedOptions(page)
     await page.getByRole('button', { name: 'Reset guided learning progress', exact: true }).click()
     await page.getByRole('button', { name: 'Delete guided history & points', exact: true }).click()
-    await expect(status).toContainText('White belt')
+    await expect(status.getByTestId('learning-status')).toHaveAccessibleName(/White belt/)
   })
 })
 
 for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 'ja']) {
   test(`${mode} ${language}: identity opens account actions and the adjacent belt opens learning`, async ({ page }, info) => {
     const text = (en: string, ja: string) => language === 'ja' ? ja : en
-    const identity = language === 'ja' ? 'A long signed-in identity with multiple names '.repeat(3).trim() : 'Test Alice'
+    const identity = 'A long signed-in identity with multiple names '.repeat(3).trim()
     const service = await setup(page, identity)
-    await page.setViewportSize({ width: language === 'ja' ? 390 : 1440, height: 1000 })
+    await page.setViewportSize({ width: language === 'ja' ? 390 : 1366, height: 1000 })
     await page.addInitScript(({ language, topology, classic }) => {
       localStorage.setItem('aznet-ui-preview:v1', 'true')
       localStorage.setItem('vwan-visual-topology:language:v1', language)
@@ -1050,6 +1066,13 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 
     await dialog.getByRole('button', { name: text('Sign in with Microsoft', 'Microsoft でサインイン'), exact: true }).click()
     await expect(account).toHaveText(identity)
     await expect(account).toHaveAttribute('title', `${text('Cloud account', 'クラウド アカウント')}: ${identity}`)
+    await expect(belt.locator('svg')).toBeVisible()
+    await expect(belt).toHaveAttribute('title', new RegExp(text('White belt', '白帯')))
+    await expect(belt).not.toContainText(text('White belt', '白帯'))
+    if (language === 'en') {
+      const positions = await Promise.all([account, belt, page.getByTestId('workspace-azure-button')].map(locator => locator.boundingBox()))
+      expect(new Set(positions.map(box => Math.round(box!.y))).size).toBe(1)
+    }
     if (mode === 'full' && language === 'en') await expect(dialog.getByRole('alert')).toContainText('Check the backend deployment')
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)

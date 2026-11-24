@@ -1,6 +1,6 @@
 import { expect, test as base, type Page } from '@playwright/test'
 import { openLearning } from '../learning-helpers'
-import { downloadTopologyCopy } from '../document-action-helpers'
+import { downloadTopologyCopy, togglePresentation } from '../document-action-helpers'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { assetGraph } from '../../scripts/production-assets.mjs'
@@ -45,18 +45,18 @@ test.describe('default presentation', () => {
       await settings.getByRole('combobox', { name: 'Canvas style', exact: true }).selectOption('dots')
       await settings.getByRole('combobox', { name: 'Connection style', exact: true }).selectOption('curved')
       await page.keyboard.press('Escape')
-      const checks = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Routing checks$/ }) })
+      const checks = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Checks$/ }) })
       await checks.locator('summary').click()
       await checks.getByRole('button', { name: 'Check routing', exact: true }).click()
       await expect(page.locator('.routing-check-status')).toBeVisible()
-      const help = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Help & feedback$/ }) })
+      const help = page.locator('.presentation-group').filter({ has: page.locator('summary', { hasText: /^Help$/ }) })
       await help.locator('summary').click()
       const pendingDocs = page.context().waitForEvent('page')
       await help.getByRole('button', { name: 'Docs', exact: true }).click()
       const docs = await pendingDocs
       await expect(docs.getByRole('heading', { level: 1 })).toBeVisible()
       await docs.close()
-      await toggle.click()
+      await togglePresentation(page)
       await expect(toggle).toHaveText('Use new UI')
       await page.reload()
       await expect(toggle).toHaveAttribute('aria-pressed', 'false')

@@ -9,7 +9,7 @@ import '../src/route-map-messages-ja'
 
 const styleKey = 'aznet-canvas-style:v1'
 
-for (const mode of ['vwan', 'hub-spoke', 'full']) for (const width of [1366, 390]) for (const language of ['en', 'ja']) {
+for (const mode of ['vwan', 'hub-spoke', 'full']) for (const width of [1366, 1024, 800, 390]) for (const language of ['en', 'ja']) {
   test(`${mode}: ${language} menu and zoom controls remain in the main-app viewport at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 768 })
     await page.addInitScript(({ mode, language, classic, native }) => {
@@ -42,6 +42,7 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const width of [1366, 390
       await expect.poll(() => legend.evaluate(element => element.scrollTop)).toBeGreaterThan(0)
     }
     expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight && scrollY === 0)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
     expect(await page.evaluate(key => localStorage.getItem(key), key)).toBe(original)
   })
 }
@@ -107,7 +108,30 @@ for (const mode of ['vwan', 'hub-spoke', 'full']) for (const language of ['en', 
           height: Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)) }
       }, mode === 'vwan' ? '.diagram-scroll' : '[data-testid="aznet-diagram-svg"]')
       const normal = await bounds()
-      expect(normal.headerHeight).toBeLessThan(width < 760 ? 220 : 110)
+      expect(normal.headerHeight).toBeLessThanOrEqual(width < 760 ? 160 : 56)
+      if (width >= 1366) {
+        const row = await page.locator('header').evaluate(header => {
+          const controls = [...header.querySelectorAll('button, summary, .account-status-unavailable')]
+            .filter(element => element.checkVisibility({ checkVisibilityCSS: true })
+              && !element.closest('.workspace-tools-panel, .presentation-group-content'))
+            .map(element => {
+              const { left, right, top, bottom } = element.getBoundingClientRect()
+              return { left, right, top, bottom }
+            })
+          return {
+            tops: controls.map(control => Math.round(control.top)),
+            contained: controls.every(control => control.left >= 0 && control.right <= innerWidth),
+            overlaps: controls.some((control, index) => controls.slice(index + 1).some(other =>
+              control.left < other.right && control.right > other.left && control.top < other.bottom && control.bottom > other.top)),
+          }
+        })
+        expect(new Set(row.tops).size).toBe(1)
+        expect(row.contained).toBe(true)
+        expect(row.overlaps).toBe(false)
+        await expect(page.getByTestId('learning-status').locator('svg')).toBeVisible()
+        await expect(page.getByTestId('learning-status')).not.toContainText(/belt|帯/)
+        await info.attach('single-row-header', { body: await page.locator('header').screenshot(), contentType: 'image/png' })
+      }
       await page.getByRole('button', { name: text('Maximize canvas'), exact: true }).click()
       const restore = page.getByRole('button', { name: text('Restore panels'), exact: true })
       await expect(restore.locator('.canvas-maximize-label')).toBeVisible()

@@ -27,7 +27,7 @@ const nativeWarningId = 'peering-agt-no-gw:peer-hub-app:vnet-spoke-app'
 async function openNativeDiagnostics(page: Page) {
   const action = page.getByTestId('aznet-run-diagnostics-btn')
   await expect(action).toBeAttached()
-  if (!await action.isVisible()) await page.locator('.presentation-group > summary').filter({ hasText: 'Routing checks' }).click()
+  if (!await action.isVisible()) await page.locator('.presentation-group > summary').filter({ hasText: /^Checks$/ }).click()
   await action.click()
 }
 

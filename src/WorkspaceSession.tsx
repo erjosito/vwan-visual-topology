@@ -5,7 +5,7 @@ import { t, useLanguage } from './i18n'
 import { lazy, Suspense, useState } from 'react'
 import { LearningStatus } from './learning/LearningStatus'
 import { CloudMenu } from './cloud/CloudMenu'
-import { PresentationGroup } from './WorkspacePresentation'
+import { PresentationGroup, PresentationToggle } from './WorkspacePresentation'
 import { CanvasStyleSettings, WorkspaceActionsToggle } from './CanvasPresentation'
 import { DocumentSaveStatus } from './cloud/DocumentSaveStatus'
 import { DocumentArtifactStatus } from './DocumentActions'
@@ -20,14 +20,15 @@ export function WorkspaceMenu() {
   return <>
     <WorkspaceActionsToggle />
     {session && <button type="button" data-testid="workspace-library-open" onClick={session.openLibrary}>{language === 'ja' ? 'ワークスペース' : 'Workspace'}</button>}
-    <DocumentSaveStatus />
+    {!session?.presentationPreview && <DocumentSaveStatus />}
     <DocumentArtifactStatus />
     <PresentationGroup label={t(session?.presentationPreview ? 'Settings' : 'Settings & help')}>
     <ThemeSelector />
     <LanguageSelector />
     {session?.presentationPreview && <CanvasStyleSettings />}
+    {session?.presentationPreview && <PresentationToggle />}
     </PresentationGroup>
-    <PresentationGroup label={t('Help & feedback')}>
+    <PresentationGroup label={t('Help')} title={t('Help & feedback')}>
       {session?.presentationPreview && <button onClick={() => window.open(language === 'ja' ? '/docs/index.html?lang=ja' : '/docs/index.html', '_blank', 'noopener,noreferrer')}>{t('Docs')}</button>}
       <button disabled={!!window.desktopSimulator} onClick={() => setHelpDialog('feedback')}>{t('Feedback')}</button>
       {!window.desktopSimulator && <button type="button" onClick={() => setHelpDialog('platforms')}>
