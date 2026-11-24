@@ -5,6 +5,7 @@ import * as addressPrimitives from '../ipv4'
 import {
   compareAzNetWithObservations,
   importAzNetCapture,
+  type AzCapturedNicObservation,
 } from './azure-import'
 import { generateAzNetBicep } from './bicep-export'
 import { applyAzArsRouteMap, azArsPeers, validateAzArsRouteMaps } from './ars-route-maps'
@@ -2209,8 +2210,16 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     expect(legacy.totalMismatchedRoutes).toBe(0)
     const complete = {
       ...observations, observationVersion: 1 as const, configurationComplete: true,
-      nicEffectiveRoutes: [{ ...observations.nicEffectiveRoutes[0], observation: { state: 'empty' as const, complete: true } }],
+      nicEffectiveRoutes: [{ ...observations.nicEffectiveRoutes[0],
+        vnetPrefixes: ['10.1.0.0/16'], subnetPrefix: '10.1.1.0/24',
+        observation: { state: 'empty' as const, complete: true } }],
     }
+    const noAddressing = compareAzNetWithObservations(topology, simulation, {
+      ...complete, nicEffectiveRoutes: [{ ...observations.nicEffectiveRoutes[0], observation: { state: 'empty', complete: true } }],
+    })
+    expect(noAddressing.totalMismatchedRoutes).toBe(0)
+    expect(noAddressing.subnetComparisons[0].coverage).toBe('unknown')
+    expect(noAddressing.subnetComparisons[0].mappingNote).toContain('No unique')
     expect(compareAzNetWithObservations(topology, simulation, complete).totalMismatchedRoutes).toBeGreaterThan(0)
     const denied = { ...complete, nicEffectiveRoutes: [{ ...complete.nicEffectiveRoutes[0], observation: { state: 'denied' as const, complete: false } }] }
     const partial = compareAzNetWithObservations(topology, simulation, denied)
@@ -2226,6 +2235,104 @@ describe('AzNetSim VNet Engine & Diagnostics', () => {
     const unknown = compareAzNetWithObservations(topology, simulation, presentUnknown)
     expect(unknown.totalMismatchedRoutes).toBe(0)
     expect(unknown.totalUnknownRoutes).toBe(1)
+  })
+
+  it('compares renamed Azure VNets and subnets by captured CIDRs rather than misleading names', () => {
+    const topology = transitTopology()
+    const simulation = simulateAzNet(topology)
+    const routes = simulation.subnetTables.work.routes.map((route) => ({
+      addressPrefix: [route.prefix], source: route.source === 'System' ? 'Default' : route.source,
+      state: route.active ? 'Active' : 'Invalid', nextHopType: route.nextHopType,
+      nextHopIpAddress: route.nextHopIp ? [route.nextHopIp] : [],
+    }))
+    const imported = importAzNetCapture({
+      kind: 'azure-network-capture', version: 2, resourceGroup: 'rg',
+      vnets: [{ name: 'Hub', location: 'centralus', addressSpace: { addressPrefixes: ['10.1.0.0/16'] },
+        subnets: [{ name: 'renamed-work', addressPrefix: '10.1.1.0/24' }] }],
+      nicEffectiveRoutes: [{ nicName: 'probe', vnetName: 'Hub', subnetName: 'renamed-work', effectiveRoutes: routes }],
+    })
+    const original = JSON.stringify(topology)
+    const observations = imported.observations!
+    expect(observations.nicEffectiveRoutes[0]).toMatchObject({ vnetPrefixes: ['10.1.0.0/16'], subnetPrefix: '10.1.1.0/24' })
+    observations.observationVersion = 1
+    observations.configurationComplete = true
+    observations.nicEffectiveRoutes[0].observation = { state: 'succeeded', complete: true }
+    const originalObservations = JSON.stringify(observations)
+    const report = compareAzNetWithObservations(topology, simulation, observations)
+    expect(report.totalMatchedRoutes).toBeGreaterThan(0)
+    expect(report.totalMismatchedRoutes).toBe(0)
+    expect(report.totalUnknownRoutes).toBe(0)
+    expect(report.subnetComparisons[0].mappingNote).toContain('Spoke/Workload')
+    expect(JSON.stringify(topology)).toBe(original)
+    expect(JSON.stringify(observations)).toBe(originalObservations)
+    const missingRoute = structuredClone(observations)
+    missingRoute.nicEffectiveRoutes[0].effectiveRoutes = missingRoute.nicEffectiveRoutes[0].effectiveRoutes
+      .filter((route) => !route.addressPrefix.includes('10.1.0.0/16'))
+    const drift = compareAzNetWithObservations(topology, simulation, missingRoute)
+    expect(drift.subnetComparisons[0].rows).toContainEqual(expect.objectContaining({
+      prefix: '10.1.0.0/16', azureSource: 'Missing', matched: false,
+    }))
+    expect(drift.totalMismatchedRoutes).toBeGreaterThan(0)
+  })
+
+  it('uses the NIC address within its VNet context when legacy captures lack subnet CIDRs', () => {
+    const topology = transitTopology()
+    topology.vnets[1].subnets.push({ id: 'other', name: 'Other', prefix: '10.1.2.0/24' })
+    const observations = {
+      capturedAt: '', collectorVersion: 'test', resourceGroup: 'rg',
+      nicEffectiveRoutes: [{ nicName: 'probe', nicId: '', vnetName: 'renamed', subnetName: 'renamed',
+        privateIp: '10.1.1.4', effectiveRoutes: [
+          { addressPrefix: ['10.1.0.0/16'], source: 'Default', state: 'Active', nextHopType: 'VnetLocal' },
+        ] }],
+    }
+    const report = compareAzNetWithObservations(topology, simulateAzNet(topology), observations)
+    expect(report.totalMatchedRoutes).toBe(1)
+    expect(report.subnetComparisons[0].mappingNote).toContain('Spoke/Workload')
+  })
+
+  it.each(['ambiguous', 'missing', 'conflicting-address'])('keeps %s identities unassessed even with complete route evidence and matching names', (scenario) => {
+    const topology = transitTopology()
+    if (scenario === 'ambiguous') topology.vnets.push({
+      ...structuredClone(topology.vnets[1]), id: 'overlapping',
+      subnets: [{ id: 'overlapping-work', name: 'Other', prefix: '10.1.1.0/24' }],
+    })
+    const observations = {
+      capturedAt: '', collectorVersion: 'test', resourceGroup: 'rg', observationVersion: 1 as const, configurationComplete: true,
+      nicEffectiveRoutes: [{ nicName: 'probe', nicId: '', vnetName: 'Spoke', subnetName: 'Workload',
+        vnetPrefixes: [scenario === 'missing' ? '192.0.2.0/24' : '10.1.0.0/16'], subnetPrefix: '10.1.1.0/24',
+        privateIp: scenario === 'conflicting-address' ? '10.1.2.4' : '10.1.1.4',
+        observation: { state: 'succeeded' as const, complete: true },
+        effectiveRoutes: [{ addressPrefix: ['10.1.0.0/16'], source: 'Default', state: 'Active', nextHopType: 'VnetLocal' }] }],
+    }
+    const report = compareAzNetWithObservations(topology, simulateAzNet(topology), observations)
+    expect(report.totalMatchedRoutes).toBe(0)
+    expect(report.totalMismatchedRoutes).toBe(0)
+    expect(report.totalUnknownRoutes).toBe(1)
+    expect(report.subnetComparisons[0].coverage).toBe('unknown')
+    expect(report.subnetComparisons[0].rows[0].simSource).toBe('Not assessed')
+    expect(report.subnetComparisons[0].mappingNote).toContain(scenario === 'ambiguous' ? 'Ambiguous' : 'No unique')
+  })
+
+  it('does not use subnet names to break overlapping VNet ties, but accepts unique subnet context', () => {
+    const topology = transitTopology()
+    topology.vnets.push({
+      ...structuredClone(topology.vnets[1]), id: 'overlapping',
+      subnets: [{ id: 'other-work', name: 'Other', prefix: '10.1.2.0/24' }],
+    })
+    const nic: AzCapturedNicObservation = {
+      nicName: 'probe', nicId: '', vnetName: 'Spoke', subnetName: 'Workload',
+      vnetPrefixes: ['10.1.0.0/16'],
+      effectiveRoutes: [{ addressPrefix: ['10.1.0.0/16'], source: 'Default', state: 'Active', nextHopType: 'VnetLocal' }],
+    }
+    const observations = { capturedAt: '', collectorVersion: 'test', resourceGroup: 'rg', nicEffectiveRoutes: [nic] }
+    const simulation = simulateAzNet(topology)
+    const ambiguous = compareAzNetWithObservations(topology, simulation, observations)
+    expect(ambiguous.totalUnknownRoutes).toBe(1)
+    expect(ambiguous.totalMatchedRoutes).toBe(0)
+    nic.privateIp = '10.1.2.4'
+    const resolved = compareAzNetWithObservations(topology, simulation, observations)
+    expect(resolved.totalMatchedRoutes).toBe(1)
+    expect(resolved.subnetComparisons[0].mappingNote).toContain('Spoke/Other')
   })
 
   it('validates versioned section provenance and does not trust global completeness over denied configuration', () => {
