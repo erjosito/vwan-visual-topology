@@ -93,6 +93,7 @@ export interface AzBgpRibEntry {
   hubPath?: string[]
   vpnStatic?: boolean
   hubTransport?: Transport | 'VNet'
+  erVwanVnetOrigin?: boolean
   secureOrigin?: boolean
   localPreference?: number
   staticRouteName?: string
@@ -809,6 +810,8 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
               id: `erloc:${loc.id}:vhub:${link.id}:${route.nextHopId}:${route.prefix}`,
               connectionId: link.id,
               asPath: [12076, ...stripPrivateAsnsForMsee(route.asPath)],
+              erVwanVnetOrigin: route.erVwanVnetOrigin || route.originProtocol === 'VNet'
+                || route.originProtocol === 'InterHub' && route.hubTransport === 'VNet',
               hubPath: [...new Set([...(route.hubPath ?? []), hub.id])],
               nextHopName: `${hub.name} (${link.name})`,
               nextHopKind: 'vwan-hub',
@@ -1161,12 +1164,17 @@ function simulateAzNetPass(topology: AzNetTopology, previous?: AzSimulationResul
           !(r.nextHopKind === 'vwan-hub' && r.nextHopId === hub.id) &&
           r.nextHopKind !== 'er-location',
       )) {
+        let asPath = mseeAdvertisedAsPath(lr)
+        if (lr.nextHopKind === 'vwan-hub' && lr.erVwanVnetOrigin) {
+          // Learned-hub path hypothesis from Azure calibration; see ROUTING-LOGIC.md.
+          asPath = [...(hub.preference === 'ASPath' ? [12076, 12076] : [12076]), ...asPath]
+        }
         entries.push({
           ...lr,
           id: `vhub:${hub.id}:er:${link.id}:${lr.prefix}:${lr.nextHopId}`,
           connectionId: link.id,
           prefix: lr.prefix,
-          asPath: [...(link.prepend ?? []), ...mseeAdvertisedAsPath(lr)],
+          asPath: [...(link.prepend ?? []), ...asPath],
           nextHopName: `${loc.name} → ${lr.nextHopName}`,
           nextHopKind: lr.nextHopKind,
           nextHopId: lr.nextHopId,
