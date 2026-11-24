@@ -209,7 +209,7 @@ try {
     await page.getByRole('button', { name: 'Load', exact: true }).click()
     await page.getByRole('dialog', { name: 'Load topology', exact: true }).getByRole('button', { name: 'Load file', exact: true }).click()
     await expect(page.locator('.document-artifact-status')).toHaveText('Locally saved')
-    await expect(page.locator('.document-artifact-details summary')).toHaveAttribute('title', new RegExp(`^Saved .*roundtrip-${mode}\\.json$`))
+    await expect(page.locator('.document-artifact-details summary')).toHaveAttribute('title', new RegExp(`^Saved .*roundtrip-${mode}\\.json(?: · No cloud save linked in this tab)?$`))
     const readSaved = () => page.evaluate((mode) => {
       const value = JSON.parse(localStorage.getItem(mode === 'vwan' ? 'vwan-visual-topology:v1' : 'aznet-visual-topology:v1'))
       return mode === 'vwan' ? value : value.topology
