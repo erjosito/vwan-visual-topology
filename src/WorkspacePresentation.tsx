@@ -57,7 +57,7 @@ export function PresentationGroup({ label, title, children }: { label: string; t
     <summary title={title}>{label}</summary>
     <div className="presentation-group-content" onClick={(event) => {
       if ((event.target as Element).closest('dialog')) return
-      if ((event.target as Element).closest('button') && details.current?.open) {
+      if ((event.target as Element).closest('button, a[href]') && details.current?.open) {
         details.current.open = false
         details.current.querySelector('summary')?.focus()
       }

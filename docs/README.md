@@ -35,6 +35,11 @@ fit/reset view and layout controls stay beside the canvas for frequent use.
 **Routing checks** groups **Check routing** and **Advanced checks**; results and
 warnings remain visible in the workspace.
 
+On the web, **Help > Windows app** opens the Windows installer releases, and
+**Help > MCP server** opens the local MCP setup guide. Both links are also
+visible on an empty canvas, open in a new tab, and leave the current design
+unchanged. The standalone Windows development installer is unsigned.
+
 1. **Open a workspace**: New sessions start with an empty mixed-network design; **Workspace** opens saved designs or creates a new one. There is no architecture-mode selector. Classic VNets and Virtual WAN hubs can coexist. Legacy Virtual WAN files and samples open in their compatible native editor without lossy conversion.
 2. **Add Topology Objects**: Use the contextual workspace controls or right-click blank canvas to add Virtual WAN hubs, spoke/hub VNets, on-premises branch/datacenter sites, and ExpressRoute peering locations.
 3. **Add Optional Custom Node Labels**: Every node (Hub, Spoke/VNet, ExpressRoute Location, and On-Premises Site) supports an optional `label` text annotation (up to 120 characters) rendered as an amber pill badge directly on the diagram:
