@@ -51,6 +51,28 @@ for (const theme of ['light', 'dark']) {
   })
 }
 
+test('research focus scope is available only for focus and visibly changes original connection emphasis', async ({ page }) => {
+  await page.goto('/verification/dense-topology-comparison.html')
+  const before = await page.getByTestId('research-original').textContent()
+  const scope = page.getByLabel('Focus scope', { exact: true })
+  await expect(scope).toBeDisabled()
+  await expect(page.locator('#research-focus-help')).toContainText('Choose the focus alternative')
+  await page.getByLabel('Alternative', { exact: true }).selectOption('focus')
+  await expect(scope).toBeEnabled()
+  const peer = page.getByTestId('aznet-peering-mesh-0-2').locator('> .aznet-edge-path')
+  await page.mouse.move(0, 0)
+  await expect(peer).toHaveCSS('opacity', '1')
+  await scope.selectOption('chain')
+  await expect(peer).toHaveCSS('opacity', '0.2')
+  await expect(page.getByTestId('aznet-peering-mesh-0-1').locator('> .aznet-edge-path')).toHaveCSS('stroke-dasharray', /^12px,?\s+4px$/)
+  await expect(page.getByTestId('research-view-status')).toContainText('Focus scope: Connection chain')
+  await scope.selectOption('hub')
+  await expect(peer).toHaveCSS('opacity', '1')
+  await page.getByRole('button', { name: 'Restore saved overview', exact: true }).click()
+  await expect(scope).toBeDisabled()
+  expect(await page.getByTestId('research-original').textContent()).toBe(before)
+})
+
 for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
   test(`${count} regions: ${theme} comparative geometry and inspection`, async ({ page }, info) => {
     test.setTimeout(120_000)
@@ -64,7 +86,7 @@ for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
     let baselineFindings: string[] = []
     const findings = (report: Awaited<ReturnType<AxeBuilder['analyze']>>) => report.violations.flatMap(v =>
       v.nodes.map(node => `${v.id}:${JSON.stringify(node.target)}`)).sort()
-    for (const variant of visualizationVariants) {
+    for (const variant of visualizationVariants.filter(variant => !['matrix', 'regions', 'neighborhood'].includes(variant))) {
       const start = await page.evaluate(() => performance.now())
       await page.getByLabel('Alternative', { exact: true }).selectOption(variant)
       await page.getByRole('button', { name: 'Fit view', exact: true }).click()
@@ -90,6 +112,7 @@ for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
             const x = p.x + t * dx, y = p.y + t * dy
             if (!nodes.some(n => x >= n.x && x <= n.x + n.width && y >= n.y && y <= n.y + n.height)) found = true
           }
+
           if (found) crossingPairs++
         }
         return {
@@ -151,5 +174,79 @@ for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
       figure {margin:0} figcaption {padding:8px} img {width:800px;height:550px;display:block}
       </style>${screenshots.map(s => `<figure><figcaption>${count} regions - ${s.variant} - ${theme}</figcaption><img alt="${s.variant} comparison" src="data:image/png;base64,${s.png}"></figure>`).join('')}</html>`)
     await info.attach('comparison-contact-sheet', { body: await page.screenshot({ path: info.outputPath('comparison.png'), fullPage: true }), contentType: 'image/png' })
+  })
+}
+
+for (const count of [8, 2]) for (const theme of ['light', 'dark']) {
+  test(`${count} regions: ${theme} semantic alternatives preserve original inspection and expose omissions`, async ({ page }, info) => {
+    test.setTimeout(120_000)
+    await page.setViewportSize({ width: 1600, height: 1100 })
+    await page.goto('/verification/dense-topology-comparison.html')
+    await page.getByLabel('Workload', { exact: true }).selectOption(String(count))
+    await page.getByLabel('Theme', { exact: true }).selectOption(theme)
+    const before = await page.getByTestId('research-original').textContent()
+    const observations = []
+    for (const variant of ['saved', 'focus', 'matrix', 'regions', 'neighborhood']) {
+      const start = await page.evaluate(() => performance.now())
+      await page.getByLabel('Alternative', { exact: true }).selectOption(variant)
+      if (variant === 'saved' || variant === 'focus') await page.getByRole('button', { name: 'Fit view', exact: true }).click()
+      await page.evaluate(() => {
+        window.scrollTo(0, 0)
+        return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+      })
+      await page.mouse.move(0, 0)
+      observations.push(await page.evaluate(({ variant, start }) => {
+        const elements = [...document.querySelectorAll<HTMLElement | SVGTextElement>(
+          '.research-canvas text, .research-relationship-view th, .research-relationship-view button, .research-relationship-view h3, .research-relationship-view summary')]
+        const labels = elements.filter(element => {
+          if (element instanceof HTMLElement && !element.checkVisibility({ checkVisibilityCSS: true })) return false
+          const box = element.getBoundingClientRect()
+          return box.width > 0 && box.height > 0 && box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth
+        }).map(element => {
+          const matrix = element instanceof SVGTextElement ? element.getScreenCTM() : null
+          return parseFloat(getComputedStyle(element).fontSize) * (matrix ? Math.hypot(matrix.a, matrix.b) : 1)
+        }).sort((a, b) => a - b)
+        return { variant, scrollY, scriptedSwitchAndSettleMs: Math.round(performance.now() - start),
+          viewportLabels: labels.length, labelsAtLeast12px: labels.filter(size => size >= 12).length,
+          medianScreenFontPx: labels[Math.floor(labels.length / 2)] ?? null,
+          pageOverflow: document.documentElement.scrollWidth > innerWidth }
+      }, { variant, start }))
+      await info.attach(`semantic-${variant}`, { body: await page.screenshot({ path: info.outputPath(`semantic-${variant}.png`) }), contentType: 'image/png' })
+      expect(await page.getByTestId('research-original').textContent()).toBe(before)
+    }
+    await info.attach('semantic-observations', { body: JSON.stringify({ count, theme, observations }, null, 2), contentType: 'application/json' })
+    await page.getByLabel('Alternative', { exact: true }).selectOption('matrix')
+    await expect(page.getByTestId('research-view-status')).toContainText('not drawn here')
+    await page.getByTestId('matrix-hub-0-hub-1').getByRole('button').focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('research-view-selection')).toContainText('"peeringId":"mesh-0-1"')
+    await page.getByLabel('Relationship', { exact: true }).selectOption('bgp')
+    await page.getByRole('button', { name: 'Configured: Regional hub 1 ARS to Routing appliance 2.1; inspect original appliance', exact: true }).click()
+    await expect(page.getByTestId('research-view-selection')).toContainText('"vnetId":"hub-1","applianceId":"nva-1-0"')
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+    await page.getByLabel('Alternative', { exact: true }).selectOption('regions')
+    const region = page.getByTestId('region-westeurope')
+    await expect(region.getByRole('button', { name: 'OFF: On-premises ER attachment 1', exact: true })).toBeVisible()
+    await region.getByRole('button', { name: 'OFF: On-premises ER attachment 1', exact: true }).click()
+    await expect(page.getByTestId('research-view-selection')).toContainText('"linkId":"er-site-0"')
+    await region.locator('summary').click()
+    await region.getByRole('button', { name: 'IN: map-0-0 on nva:nva-0-0', exact: true }).focus()
+    await page.keyboard.press('Enter')
+    await expect(page.getByTestId('research-view-selection')).toContainText('"routeServerId":"ars-0"')
+    await expect(page.getByTestId('research-view-selection')).toContainText('"direction":"inbound"')
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([])
+    await page.setViewportSize({ width: 390, height: 1000 })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.getByLabel('Alternative', { exact: true }).selectOption('matrix')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    expect(await page.getByTestId('research-original').textContent()).toBe(before)
+    await page.getByLabel('Fixture scenario', { exact: true }).selectOption('missing')
+    await expect(page.getByTestId(`matrix-hub-0-hub-${count - 1}`)).toHaveText('Absent')
+    await expect(page.getByTestId(`matrix-hub-0-hub-${count - 1}`).getByRole('button')).toHaveCount(0)
+    const missing = await page.getByTestId('research-original').textContent()
+    await page.getByRole('button', { name: 'Restore saved overview', exact: true }).click()
+    await expect(page.getByTestId('aznet-diagram-svg')).toBeVisible()
+    await expect(page.getByLabel('Alternative', { exact: true })).toHaveValue('saved')
+    expect(await page.getByTestId('research-original').textContent()).toBe(missing)
   })
 }

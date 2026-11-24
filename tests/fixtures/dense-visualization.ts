@@ -1,6 +1,6 @@
 import type { AzNetTopology, AzPeeringDirectionFlags } from '../../src/azure-net/model'
 
-export const visualizationVariants = ['saved', 'circular', 'geographic', 'lanes', 'focus'] as const
+export const visualizationVariants = ['saved', 'circular', 'geographic', 'lanes', 'focus', 'matrix', 'regions', 'neighborhood'] as const
 export type VisualizationVariant = typeof visualizationVariants[number]
 export const researchRegions = ['westeurope', 'northeurope', 'eastus', 'westus2', 'southeastasia', 'australiaeast', 'japaneast', 'brazilsouth']
 
@@ -74,7 +74,7 @@ export function denseVisualizationTopology(count = 8): AzNetTopology {
 
 export function visualizationLayout(original: AzNetTopology, variant: VisualizationVariant): AzNetTopology {
   const copy = structuredClone(original)
-  if (variant === 'saved' || variant === 'focus') return copy
+  if (['saved', 'focus', 'matrix', 'regions', 'neighborhood'].includes(variant)) return copy
   const hubs = copy.vnets.filter(v => v.role === 'hub')
   const order = variant === 'geographic' ? [3, 2, 7, 0, 1, 4, 6, 5].filter(i => i < hubs.length) : hubs.map((_, i) => i)
   for (const [position, i] of order.entries()) {

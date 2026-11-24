@@ -12,3 +12,17 @@ p { margin: 6px 0; font-size: 13px; }
 .research-canvas .aznet-edge-group:focus-visible { outline: 3px solid var(--focus); }
 details { margin-top: 8px; }
 pre { max-height: 300px; overflow: auto; font-size: 11px; }
+.research-canvas[hidden] { display: none; }
+.research-relationship-view { margin-top: 12px; }
+.research-relationship-view h2 { font-size: 18px; }
+.research-relationship-view button { margin: 3px; padding: 6px; white-space: normal; }
+.research-table-scroll { overflow: auto; max-width: 100%; border: 1px solid var(--border); }
+.research-table-scroll:focus-visible { outline: 3px solid var(--focus); }
+.research-table-scroll table { border-collapse: collapse; font-size: 13px; }
+.research-table-scroll caption { text-align: left; padding: 8px; }
+.research-table-scroll th, .research-table-scroll td { border: 1px solid var(--border); padding: 6px; text-align: center; min-width: 70px; }
+.research-table-scroll th { background: var(--page); font-size: 13px; }
+.research-region-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.research-region { border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.research-region h3 { margin: 0 0 8px; font-size: 16px; }
+.research-region details { border-top: 1px solid var(--border); padding-top: 8px; }
